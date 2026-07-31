@@ -7,9 +7,9 @@
   <div>
     {{ page_title('plans', 'پلن‌های فروش') }}
     <div class="page-title-actions actions">
-      <button type="button" class="btn btn-ghost" data-modal-open="modal-trial">پلن تست</button>
-      <button type="button" class="btn btn-ghost" data-modal-open="modal-custom">پلن دلخواه</button>
-      <button type="button" class="btn" data-modal-open="modal-plan-create">افزودن پلن</button>
+      <button type="button" class="btn" data-modal-open="modal-trial">پلن تست</button>
+      <button type="button" class="btn" data-modal-open="modal-custom">پلن دلخواه</button>
+      <button type="button" class="btn" data-modal-open="modal-plan-create">پلن ثابت</button>
     </div>
   </div>
 </div>
@@ -50,7 +50,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">پلنی نیست — از «افزودن پلن» بسازید.</td></tr>
+      <tr><td colspan="7" class="muted">پلنی نیست — از «پلن ثابت» بسازید.</td></tr>
     {% endfor %}
     </tbody>
   </table>

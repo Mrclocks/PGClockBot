@@ -1716,14 +1716,17 @@ a.btn.btn-star:hover {
 }
 .naming-preview .mono { letter-spacing: 0.02em; }
 .plan-naming-block {
-  margin-top: 8px;
-  padding-top: 4px;
+  margin-top: 12px;
+  padding-top: 16px;
   border-top: 1px solid var(--border);
 }
-.plan-naming-title {
-  margin: 12px 0 4px;
+/* Higher specificity than .ui-modal-panel h3 { margin: 0 } so title isn't stuck to the rule */
+.plan-naming-block .plan-naming-title,
+.ui-modal-panel .plan-naming-block .plan-naming-title {
+  margin: 0 0 8px;
   font-size: var(--title-size);
   font-weight: 600;
+  line-height: 1.35;
 }
 .plan-naming-preview { margin-top: 8px; }
 
