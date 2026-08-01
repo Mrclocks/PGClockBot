@@ -79,10 +79,12 @@ class UpdateUiSourceTests(unittest.TestCase):
     def test_force_channels_match_304_markup(self):
         html = Path("app/web/templates/_settings_field.html").read_text(encoding="utf-8")
         js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
-        self.assertIn("force-channel-row", html)
+        self.assertIn("force-channels-list", html)
+        self.assertIn("force-channel-row", js)
         self.assertIn("force-channel-id", js)
         self.assertNotIn("force-channel-fields", js)
         self.assertNotIn("force-channel-id-wrap", js)
+        self.assertNotIn("force-channels-footer", html)
 
 
 if __name__ == "__main__":
