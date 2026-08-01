@@ -77,7 +77,7 @@
             </label>
           </div>
           <div class="setting-item">
-            <label class="support-enabled" style="margin-top: var(--space-3)">
+            <label class="support-enabled" style="margin-top:1.4rem">
               <span>فعال باشد</span>
               <span class="ui-switch">
                 <input type="checkbox" name="enabled" value="1" checked />
@@ -109,7 +109,7 @@
           </div>
         </div>
         {% if bot_status %}
-        <div class="flash {{ 'ok' if bot_status.ok else 'warn' }}" style="margin-top: var(--space-2)">
+        <div class="flash {{ 'ok' if bot_status.ok else 'warn' }}" style="margin-top:12px">
           وضعیت ربات:
           {% if bot_status.ok %}
             آنلاین · @{{ bot_status.username or '—' }} (id={{ bot_status.id or '—' }})

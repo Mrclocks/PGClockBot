@@ -98,7 +98,7 @@ class UploadBoxThemeTests(unittest.TestCase):
         self.assertIn(".upload-box {\n  position: relative;", css)
         block = css.split(".upload-box {", 1)[1].split(".upload-box:hover", 1)[0]
         self.assertIn("background: var(--background);", block)
-        img = css.split(".image-setting {\n  display: flex; flex-direction: column; gap: var(--space-1);", 1)[1]
+        img = css.split(".image-setting {\n  display: flex; flex-direction: column; gap: 8px;", 1)[1]
         img = img.split("}", 1)[0]
         self.assertIn("background: var(--background);", img)
 

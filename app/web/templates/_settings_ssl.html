@@ -20,7 +20,7 @@
     بعد خودتان «فعال‌سازی HTTPS» را بزنید.
   </p>
 
-  <div class="flash {% if st.certbot %}ok{% else %}warn{% endif %}" style="margin-bottom: var(--space-2)">
+  <div class="flash {% if st.certbot %}ok{% else %}warn{% endif %}" style="margin-bottom:12px">
     {% if st.certbot %}
       certbot آماده است{% if st.certbot_path %}: <code dir="ltr">{{ st.certbot_path }}</code>{% endif %}
     {% else %}
@@ -60,7 +60,7 @@
       </div>
     </div>
 
-    <div class="actions" style="margin-top: var(--space-2);gap: var(--space-1);flex-wrap:wrap">
+    <div class="actions" style="margin-top:14px;gap:8px;flex-wrap:wrap">
       <button type="submit" class="btn" name="action" value="issue" id="ssl-issue-btn" {% if st.running %}disabled{% endif %}>
         {% if st.has_cert %}صدور مجدد گواهی{% else %}دریافت گواهی{% endif %}
       </button>
@@ -80,7 +80,7 @@
 <div class="card settings-card">
   <h2>وضعیت گواهی</h2>
   {% if st.has_cert %}
-  <p style="margin: 0 0 var(--space-1)">
+  <p style="margin:0 0 10px">
     {% if st.ssl_enabled and not st.expired %}
     <span class="badge approved">فعال · HTTPS</span>
     {% elif st.expired %}
@@ -88,34 +88,34 @@
     {% else %}
     <span class="badge warn">صادر شده · منتظر فعال‌سازی</span>
     {% endif %}
-    <code dir="ltr" style="margin-inline-start: var(--space-1)">{{ st.domain }}</code>
+    <code dir="ltr" style="margin-inline-start:8px">{{ st.domain }}</code>
   </p>
   {% if st.public_https %}
-  <p class="muted" style="margin: 0 0 var(--space-1)">آدرس HTTPS پس از فعال‌سازی:
+  <p class="muted" style="margin:0 0 8px">آدرس HTTPS پس از فعال‌سازی:
     <a href="{{ st.public_https }}" dir="ltr" target="_blank" rel="noopener">{{ st.public_https }}</a>
   </p>
   {% endif %}
   {% if st.expires_at %}
-  <p class="muted" style="margin: 0 0 var(--space-1)">اعتبار تا: <span dir="ltr">{{ st.expires_at }}</span></p>
+  <p class="muted" style="margin:0 0 8px">اعتبار تا: <span dir="ltr">{{ st.expires_at }}</span></p>
   {% endif %}
   {% if st.issued_at %}
-  <p class="muted" style="margin: 0 0 var(--space-1)">صدور: <span dir="ltr">{{ st.issued_at }}</span></p>
+  <p class="muted" style="margin:0 0 8px">صدور: <span dir="ltr">{{ st.issued_at }}</span></p>
   {% endif %}
   {% else %}
-  <p class="muted" style="margin: 0">هنوز گواهی صادر نشده.</p>
+  <p class="muted" style="margin:0">هنوز گواهی صادر نشده.</p>
   {% endif %}
 
-  <h3 style="margin: var(--space-3) 0 var(--space-1);font-size:14px">مسیر فایل‌ها</h3>
+  <h3 style="margin:16px 0 8px;font-size:14px">مسیر فایل‌ها</h3>
   <pre class="ssl-pre" dir="ltr">fullchain: {{ st.cert_path }}
 privkey:   {{ st.key_path }}{% if st.letsencrypt_live %}
 letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
 
   {% if st.last_error %}
-  <h3 style="margin: var(--space-3) 0 var(--space-1);font-size:14px">آخرین خطا</h3>
+  <h3 style="margin:16px 0 8px;font-size:14px">آخرین خطا</h3>
   <pre class="update-log" style="display:block" dir="ltr">{{ st.last_error }}</pre>
   {% endif %}
 
-  <p class="muted" style="margin: var(--space-2) 0 0">
+  <p class="muted" style="margin:14px 0 0">
     ۱) DNS دامنه → IP سرور · ۲) پورت <code dir="ltr">80</code> آزاد · ۳) دریافت گواهی ·
     ۴) فعال‌سازی HTTPS · ۵) ورود با <code dir="ltr">https://دامنه:{{ st.web_port }}</code>
   </p>

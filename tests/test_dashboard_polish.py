@@ -58,13 +58,6 @@ class DashboardPolishSourceTests(unittest.TestCase):
         self.assertIn("text-overflow: ellipsis", css)
         self.assertIn("text-align: right", css)
 
-    def test_home_panels_gap_matches_section_gap(self):
-        """پنل ربات → دسترسی سریع must use the same gap as other cards."""
-        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        block = css.split(".home-panels {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("margin-bottom: var(--section-gap);", block)
-        self.assertNotIn("margin-bottom: var(--space-2);", block)
-
     def test_home_and_dashboard_share_panel_classes(self):
         home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
         dash = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")

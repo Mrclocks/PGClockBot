@@ -7,21 +7,23 @@ from pathlib import Path
 
 
 class PlansTitleActionsTests(unittest.TestCase):
-    def test_buttons_on_title_row(self):
-        """Plans actions sit beside the title like other list pages (not stacked/centered)."""
+    def test_buttons_under_title(self):
         html = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
+        self.assertIn("page-head--stack", html)
+        self.assertIn("page-title-actions", html)
+        # Buttons must not sit as a sibling .actions of the title column
         head = html.split("{% block content %}", 1)[1].split("{% if flash_ok %}", 1)[0]
-        self.assertNotIn("page-head--stack", head)
-        self.assertNotIn("page-title-actions", head)
-        self.assertIn('class="page-head"', head)
-        self.assertIn('<div class="actions">', head)
-        self.assertIn('data-modal-open="modal-trial"', head)
+        self.assertIn("page-title-actions", head)
+        self.assertNotIn(
+            '</div>\n  <div class="actions">\n    <button type="button" class="btn btn-ghost" data-modal-open="modal-trial"',
+            head,
+        )
 
 
 class UploadBoxContrastTests(unittest.TestCase):
     def test_image_setting_matches_body(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        block = css.split(".image-setting {\n  display: flex; flex-direction: column; gap: var(--space-1);", 1)[1]
+        block = css.split(".image-setting {\n  display: flex; flex-direction: column; gap: 8px;", 1)[1]
         block = block.split("}", 1)[0]
         self.assertIn("background: var(--background);", block)
 

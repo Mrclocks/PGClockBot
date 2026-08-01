@@ -2,7 +2,6 @@
 {% from "macros.html" import pg_tabs, row_actions, page_title %}
 {% block title %}هاست‌های پاسارگارد{% endblock %}
 {% block content %}
-<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('hosts', 'هاست‌ها', 'pg') }}
@@ -12,8 +11,8 @@
   {% endif %}
 </div>
 {{ pg_tabs('pg_hosts') }}
-</div>
-<div class="card card-flush">
+
+<div class="card">
   <h2>لیست هاست‌ها</h2>
   {% if not hosts %}
   <p class="muted">هاستی نیست.</p>

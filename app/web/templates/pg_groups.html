@@ -2,7 +2,6 @@
 {% from "macros.html" import switch, switch_chip, pg_tabs, row_actions, page_title %}
 {% block title %}گروه‌های پاسارگارد{% endblock %}
 {% block content %}
-<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('groups', 'گروه‌ها', 'pg') }}
@@ -12,7 +11,7 @@
   {% endif %}
 </div>
 {{ pg_tabs('pg_groups') }}
-</div>
+
 {% if edit_group and can_write %}
 <div class="card">
   <h2>ویرایش گروه #{{ edit_group.get('id') }}</h2>
@@ -27,7 +26,7 @@
       {{ switch_chip('tag_' ~ loop.index, tag, checked=(tag in selected), value=tag) }}
       {% endfor %}
     </div>
-    <div class="ui-switch-list" style="margin-top: var(--space-2)">
+    <div class="ui-switch-list" style="margin-top:14px">
       {{ switch('is_disabled', 'غیرفعال', checked=edit_group.get('is_disabled')) }}
     </div>
     <div class="actions">
@@ -38,7 +37,7 @@
 </div>
 {% endif %}
 
-<div class="card card-flush">
+<div class="card">
   <h2>گروه‌های موجود</h2>
   {% if not groups %}
   <p class="muted">گروهی نیست.</p>

@@ -2,7 +2,6 @@
 {% from "macros.html" import switch, pg_tabs, row_actions, page_title %}
 {% block title %}ادمین{% endblock %}
 {% block content %}
-<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('admins', 'ادمین', 'pg') }}
@@ -10,8 +9,8 @@
   <button type="button" class="btn" data-modal-open="modal-pg-admin-create">ساخت ادمین</button>
 </div>
 {{ pg_tabs('pg_admins') }}
-</div>
-<div class="card card-flush">
+
+<div class="card">
   <h2>لیست ادمین‌ها</h2>
   {% if not admins %}
   <p class="muted">ادمینی یافت نشد یا دسترسی کافی نیست.</p>

@@ -16,9 +16,9 @@
       {% if ap.get('bot_username') %}ربات فعلی: <strong dir="ltr">@{{ ap.bot_username }}</strong>{% endif %}
     </p>
     {% if appearance_sync_err %}
-    <div class="flash warn" style="margin-bottom: var(--space-2)">{{ appearance_sync_err }}</div>
+    <div class="flash warn" style="margin-bottom:12px">{{ appearance_sync_err }}</div>
     {% elif appearance_sync_ok %}
-    <div class="flash ok" style="margin-bottom: var(--space-2)">مقادیر فعلی از تلگرام خوانده شد.</div>
+    <div class="flash ok" style="margin-bottom:12px">مقادیر فعلی از تلگرام خوانده شد.</div>
     {% endif %}
     <div class="settings-grid">
       <div class="setting-item full">

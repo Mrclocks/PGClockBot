@@ -19,7 +19,7 @@ class UploadContrastTests(unittest.TestCase):
     def test_large_body_small_contrast(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         # Large chrome around image uploads matches body
-        block = css.split(".image-setting {\n  display: flex; flex-direction: column; gap: var(--space-1);", 1)[1]
+        block = css.split(".image-setting {\n  display: flex; flex-direction: column; gap: 8px;", 1)[1]
         block = block.split("}", 1)[0]
         self.assertIn("background: var(--background);", block)
         self.assertNotIn("background: var(--muted);", block)

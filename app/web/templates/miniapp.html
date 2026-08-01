@@ -14,15 +14,6 @@
       --btn: var(--tg-theme-button-color, #1f6f5b);
       --btn-text: var(--tg-theme-button-text-color, #fff);
       --sec: var(--tg-theme-secondary-bg-color, #ffffff);
-      /* Strict 8-point spacing scale (matches panel) */
-      --space-0: 4px;
-      --space-1: 8px;
-      --space-2: 16px;
-      --space-3: 24px;
-      --space-4: 32px;
-      --space-5: 48px;
-      --card-pad: 16px;
-      --section-gap: 24px;
     }
     * { box-sizing: border-box; }
     body {
@@ -32,35 +23,32 @@
         radial-gradient(700px 280px at 0% 0%, #dfeae5, transparent 60%),
         var(--bg);
       color: var(--text);
-      line-height: 1.5;
-      padding: var(--space-2) var(--space-2) var(--space-5);
+      padding: 18px 16px 40px;
     }
-    h1 { font-size: 22px; margin: 0 0 var(--space-0); line-height: 1.25; }
-    .muted { color: var(--hint); margin: 0 0 var(--space-3); font-size: 13px; line-height: 1.5; }
+    h1 { font-size: 22px; margin: 0 0 6px; }
+    .muted { color: var(--hint); margin: 0 0 18px; font-size: 13px; }
     .card {
       background: var(--sec);
       border: 1px solid #d7dde3;
       border-radius: 12px;
-      padding: var(--card-pad);
-      margin-bottom: var(--space-2);
+      padding: 14px;
+      margin-bottom: 12px;
     }
-    .card h3 { margin: 0 0 var(--space-1); font-size: 15px; line-height: 1.5; }
-    .row { display: flex; justify-content: space-between; gap: var(--space-1); align-items: center; }
+    .card h3 { margin: 0 0 8px; font-size: 15px; }
+    .row { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
     .pill {
       background: #e8efec; color: #0e4f40; border-radius: 999px;
-      padding: var(--space-0) var(--space-1); font-size: 12px; font-weight: 600;
-      line-height: 1.25;
+      padding: 4px 10px; font-size: 12px; font-weight: 600;
     }
     .btn {
       display: block; width: 100%; border: 0; border-radius: 10px;
-      padding: var(--space-2); margin-top: var(--space-1); font: inherit; font-weight: 700;
+      padding: 12px; margin-top: 10px; font: inherit; font-weight: 700;
       background: var(--btn); color: var(--btn-text); cursor: pointer;
-      line-height: 1.25;
     }
     .btn.secondary { background: transparent; color: var(--text); border: 1px solid #d7dde3; }
-    .grid { display: grid; gap: var(--space-1); }
+    .grid { display: grid; gap: 10px; }
     .price { font-weight: 700; color: #1f6f5b; }
-    .error { background: #fdecec; color: #9b2c2c; padding: var(--space-2); border-radius: 10px; line-height: 1.5; }
+    .error { background: #fdecec; color: #9b2c2c; padding: 12px; border-radius: 10px; }
     code { word-break: break-all; font-size: 12px; }
   </style>
 </head>
@@ -112,15 +100,15 @@
         if (!data.services.length) html += '<p class="muted">سرویسی ندارید</p>';
         for (const s of data.services) {
           const url = esc(s.subscription_url || '');
-          html += `<div class="row" style="margin: var(--space-1) 0"><div><strong>${esc(s.username)}</strong><br/><code>${url}</code></div>
-            <button class="btn secondary" style="width:auto;padding: var(--space-1) var(--space-1)" data-svc="${Number(s.id) || 0}">جزئیات</button></div>`;
+          html += `<div class="row" style="margin:8px 0"><div><strong>${esc(s.username)}</strong><br/><code>${url}</code></div>
+            <button class="btn secondary" style="width:auto;padding:8px 10px" data-svc="${Number(s.id) || 0}">جزئیات</button></div>`;
         }
         html += '</div><div class="card"><h3>خرید پلن</h3><div class="grid">';
         for (const p of data.plans) {
           html += `<div class="row"><div><strong>${esc(p.name)}</strong><div class="muted">${esc(p.days)} روز · ${esc(p.gb ?? '∞')} GB</div></div>
             <div class="price">${esc(money(p.price))}</div></div>`;
         }
-        html += '</div><p class="muted" style="margin-top: var(--space-2)">برای خرید از دکمه‌های ربات استفاده کنید؛ مینی‌اپ وضعیت و لینک را سریع نشان می‌دهد.</p></div>';
+        html += '</div><p class="muted" style="margin-top:12px">برای خرید از دکمه‌های ربات استفاده کنید؛ مینی‌اپ وضعیت و لینک را سریع نشان می‌دهد.</p></div>';
         html += '<div class="card" id="detail" style="display:none"></div>';
         root.innerHTML = html;
         root.querySelectorAll('[data-svc]').forEach((btn) => {

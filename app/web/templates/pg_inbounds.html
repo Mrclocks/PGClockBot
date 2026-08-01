@@ -2,15 +2,14 @@
 {% from "macros.html" import pg_tabs, page_title %}
 {% block title %}اینباندهای پاسارگارد{% endblock %}
 {% block content %}
-<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('inbounds', 'اینباندها', 'pg') }}
   </div>
 </div>
 {{ pg_tabs('pg_inbounds') }}
-</div>
-<div class="card card-flush">
+
+<div class="card">
   <h2>تگ‌های اینباند</h2>
   {% if not inbounds %}
   <p class="muted">اینباندی نیست.</p>
@@ -21,13 +20,13 @@
     {% endfor %}
   </div>
   {% endif %}
-  <p class="muted card-flush-note">
+  <p class="muted" style="margin-top:16px;font-size:12px">
     برای ساخت گروه و هاست از همین تگ‌ها استفاده کنید.
   </p>
 </div>
 
 {% if details %}
-<div class="card card-flush">
+<div class="card">
   <h2>جزئیات</h2>
   <div class="table-wrap">
   {% if details is mapping %}
@@ -43,7 +42,7 @@
     </tbody>
   </table>
   {% else %}
-  <pre class="mono muted" style="white-space:pre-wrap;margin: 0;padding: var(--space-2)">{{ details }}</pre>
+  <pre class="mono muted" style="white-space:pre-wrap;margin:0;padding:14px">{{ details }}</pre>
   {% endif %}
   </div>
 </div>

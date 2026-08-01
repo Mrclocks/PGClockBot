@@ -3,14 +3,14 @@
 {% from "macros.html" import row_actions %}
 {% block title %}پلن‌های فروش{% endblock %}
 {% block content %}
-<div class="page-head">
+<div class="page-head page-head--stack">
   <div>
     {{ page_title('plans', 'پلن‌های فروش') }}
-  </div>
-  <div class="actions">
-    <button type="button" class="btn" data-modal-open="modal-trial">پلن تست</button>
-    <button type="button" class="btn" data-modal-open="modal-custom">پلن دلخواه</button>
-    <button type="button" class="btn" data-modal-open="modal-plan-create">پلن ثابت</button>
+    <div class="page-title-actions actions">
+      <button type="button" class="btn" data-modal-open="modal-trial">پلن تست</button>
+      <button type="button" class="btn" data-modal-open="modal-custom">پلن دلخواه</button>
+      <button type="button" class="btn" data-modal-open="modal-plan-create">پلن ثابت</button>
+    </div>
   </div>
 </div>
 
@@ -148,13 +148,13 @@
           <input name="custom_plan_price_per_day" type="number" min="0" value="{{ values.get('custom_plan_price_per_day','500') }}" />
         </label>
         <label class="form-field">حداقل / حداکثر گیگ
-          <div class="form-row" style="margin: 0">
+          <div class="form-row" style="margin:0">
             <input name="custom_plan_min_gb" type="number" min="1" value="{{ values.get('custom_plan_min_gb','1') }}" />
             <input name="custom_plan_max_gb" type="number" min="1" value="{{ values.get('custom_plan_max_gb','500') }}" />
           </div>
         </label>
         <label class="form-field">حداقل / حداکثر روز
-          <div class="form-row" style="margin: 0">
+          <div class="form-row" style="margin:0">
             <input name="custom_plan_min_days" type="number" min="1" value="{{ values.get('custom_plan_min_days','1') }}" />
             <input name="custom_plan_max_days" type="number" min="1" value="{{ values.get('custom_plan_max_days','365') }}" />
           </div>

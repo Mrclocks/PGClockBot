@@ -63,7 +63,7 @@ class UpdateWiringTests(unittest.TestCase):
         tpl = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn("/update/start", tpl)
         self.assertIn("upd-start", tpl)
-        self.assertIn("rollback-version", tpl)
+        self.assertIn("snap-rollback", tpl)
         self.assertIn("/update/rollback", tpl)
 
     def test_pwa_tab_wired(self):

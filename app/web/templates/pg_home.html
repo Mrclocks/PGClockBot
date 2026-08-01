@@ -2,14 +2,13 @@
 {% from "macros.html" import pg_tabs, page_title %}
 {% block title %}مدیر پاسارگارد{% endblock %}
 {% block content %}
-<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('overview', 'پنل پاسارگارد', 'pg') }}
   </div>
 </div>
+
 {{ pg_tabs('pg') }}
-</div>
 
 {% if not is_admin %}
   {% set ov = reseller_overview or {} %}
@@ -148,7 +147,7 @@
 {% endif %}
 
 {% if nodes is defined %}
-<div class="card card-flush">
+<div class="card">
   <h2>نودها</h2>
   {% if not nodes %}
   <p class="muted">نودی نیست.</p>

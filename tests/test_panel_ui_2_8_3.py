@@ -29,7 +29,7 @@ class PlanNamingSpacingTests(unittest.TestCase):
     def test_title_not_stuck_to_border(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         block = css.split(".plan-naming-block {", 1)[1].split("}", 1)[0]
-        self.assertIn("padding-top: var(--space-3)", block)
+        self.assertIn("padding-top: 16px", block)
         self.assertIn("border-top:", block)
         self.assertIn(
             ".plan-naming-block .plan-naming-title",

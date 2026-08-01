@@ -195,7 +195,7 @@
       document.body.appendChild(menu);
       menu.classList.add('is-ported');
 
-      const gap = 8; /* --space-1 */
+      const gap = 4;
       const pad = 8;
       const rect = btn.getBoundingClientRect();
       /* Full natural height — never scroll / clamp with max-height */
@@ -498,23 +498,16 @@
         const req = !entry || entry.required !== false;
         return (
           '<div class="force-channel-row">' +
-            '<div class="force-channel-fields">' +
-              '<label class="force-channel-id-wrap">شناسه کانال' +
-                '<input type="text" class="force-channel-id" dir="ltr" placeholder="@channel یا 123456789" value="' +
-                  id.replace(/"/g, '&quot;') + '" />' +
-                '<small class="muted">@username یا آیدی عددی</small>' +
-              '</label>' +
-              '<label class="force-channel-req ui-switch-row">' +
-                '<span class="ui-switch-copy"><strong>عضویت الزامی</strong></span>' +
-                '<span class="ui-switch">' +
-                  '<input type="checkbox" class="force-channel-required" value="1"' + (req ? ' checked' : '') + ' />' +
-                  '<span class="ui-switch-track" aria-hidden="true"></span>' +
-                '</span>' +
-              '</label>' +
-            '</div>' +
-            '<div class="force-channel-actions">' +
-              '<button type="button" class="btn btn-danger btn-sm force-channel-remove" aria-label="حذف">حذف</button>' +
-            '</div>' +
+            '<input type="text" class="force-channel-id" dir="ltr" placeholder="@channel یا آیدی عددی" value="' +
+              id.replace(/"/g, '&quot;') + '" />' +
+            '<label class="force-channel-req ui-switch-row">' +
+              '<span class="ui-switch-copy"><strong>عضویت الزامی</strong></span>' +
+              '<span class="ui-switch">' +
+                '<input type="checkbox" class="force-channel-required" value="1"' + (req ? ' checked' : '') + ' />' +
+                '<span class="ui-switch-track" aria-hidden="true"></span>' +
+              '</span>' +
+            '</label>' +
+            '<button type="button" class="btn btn-ghost btn-sm force-channel-remove" aria-label="حذف">حذف</button>' +
           '</div>'
         );
       }

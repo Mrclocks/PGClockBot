@@ -5,7 +5,7 @@
     آرشیو ZIP شامل دیتابیس، آپلودها، یوزر وب‌پنل و (اختیاری) فایل <code dir="ltr">.env</code> است.
     قبل از هر ریستور، یک بکاپ ایمنی خودکار ساخته می‌شود.
   </p>
-  <div class="update-meta" style="margin-bottom: var(--space-2)">
+  <div class="update-meta" style="margin-bottom:12px">
     <div><span class="muted">نسخه فعلی</span> <strong>{{ local_version }}</strong></div>
     <div><span class="muted">دیتابیس</span> <strong class="mono" dir="ltr">{{ db_path }}</strong></div>
     <div><span class="muted">تعداد بکاپ‌ها</span> <strong>{{ backups|length }}</strong></div>
@@ -19,7 +19,7 @@
         </label>
       </div>
       <div class="setting-item">
-        <label class="support-enabled" style="margin-top: var(--space-3)">
+        <label class="support-enabled" style="margin-top:1.2rem">
           <span>شامل .env (توکن‌ها و اسرار)</span>
           <span class="ui-switch">
             <input type="checkbox" name="include_env" value="1" checked />
@@ -66,7 +66,7 @@
   {% else %}
   <div class="snap-list">
     {% for b in backups %}
-    <div class="snap-row" style="flex-wrap:wrap;gap: var(--space-1)">
+    <div class="snap-row" style="flex-wrap:wrap;gap:10px">
       <div style="flex:1;min-width:220px">
         <strong>{{ b.filename }}</strong>
         <small class="muted" style="display:block">
@@ -76,7 +76,7 @@
         </small>
         {% if b.sha256 %}<small class="mono muted" dir="ltr">sha256: {{ b.sha256[:16] }}…</small>{% endif %}
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap: var(--space-1);align-items:center">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
         <a class="btn btn-ghost btn-sm" href="/backup/download/{{ b.id }}">دانلود</a>
         <form method="post" action="/backup/delete/{{ b.id }}" onsubmit="return confirm('این بکاپ حذف شود؟')">
           <button class="btn btn-danger btn-sm" type="submit">حذف</button>
@@ -102,7 +102,7 @@
     </div>
     <form method="post" action="/backup/restore/0" class="form-stack" id="backup-restore-form">
       <input type="hidden" name="confirm" value="1" />
-      <p class="muted" style="margin: 0">
+      <p class="muted" style="margin:0">
         همه داده‌های فعلی با بکاپ
         <strong id="backup-restore-name">—</strong>
         جایگزین می‌شود. قبل از ریستور یک بکاپ ایمنی خودکار ساخته می‌شود.
@@ -124,7 +124,7 @@
 
 <div class="card settings-card">
   <h2>نکات مهم</h2>
-  <ol class="update-steps" style="margin: 0">
+  <ol class="update-steps" style="margin:0">
     <li class="done"><span class="step-dot"></span><span>بکاپ روی دیسک سرور در <code dir="ltr">data/backups/</code> ذخیره می‌شود (حداکثر ۲۰ مورد).</span></li>
     <li class="done"><span class="step-dot"></span><span>دانلود را در جای امن نگه دارید؛ آرشیو ممکن است توکن ربات و رمزها را داشته باشد.</span></li>
     <li class="done"><span class="step-dot"></span><span>ریستور سرویس را ری‌استارت می‌کند تا دیتابیس جدید لود شود.</span></li>

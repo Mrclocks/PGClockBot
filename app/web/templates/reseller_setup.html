@@ -10,12 +10,12 @@
     </div>
     {% if invalid %}
     <div class="error">{{ error }}</div>
-    <a class="btn" href="/login" style="margin-top: var(--space-3);display:inline-flex">ورود</a>
+    <a class="btn" href="/login" style="margin-top:16px;display:inline-flex">ورود</a>
     {% else %}
     <form class="auth-form" method="post" action="/rsetup/{{ token }}" autocomplete="off">
       {% if error %}<div class="error">{{ error }}</div>{% endif %}
       {% if bot_only %}
-      <p class="muted" style="margin: 0 0 var(--space-2)">یوزر وب‌پنل شما از قبل ساخته شده: <code>{{ web_username }}</code></p>
+      <p class="muted" style="margin:0 0 12px">یوزر وب‌پنل شما از قبل ساخته شده: <code>{{ web_username }}</code></p>
       {% else %}
       <label>نام کاربری وب‌پنل
         

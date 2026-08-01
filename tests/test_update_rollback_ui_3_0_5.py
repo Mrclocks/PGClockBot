@@ -1,10 +1,10 @@
-"""Update rollback versions + redesigned update/force-join UI (3.0.5)."""
+"""Rollback-to-version API (3.0.5+) — UI restored to 3.0.4 snapshot rollback."""
 
 from __future__ import annotations
 
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 
 class RecentVersionsTests(unittest.IsolatedAsyncioTestCase):
@@ -59,52 +59,30 @@ class RollbackStartTests(unittest.TestCase):
 
 
 class UpdateUiSourceTests(unittest.TestCase):
-    def test_update_page_has_rollback_select_no_terminal(self):
+    def test_update_page_uses_304_snapshot_rollback(self):
         src = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
-        self.assertIn('id="rollback-version"', src)
-        self.assertIn("settings-card", src)
-        self.assertIn("progress-wrap", src)
-        self.assertIn("rollback-row", src)
-        self.assertIn('id="rollback-start"', src)
-        self.assertIn("btn-danger", src)
-        self.assertNotIn("update-details", src)
-        self.assertNotIn("جزئیات عملیات", src)
-        self.assertNotIn("روش جایگزین", src)
-        self.assertNotIn("cmd-copy", src)
+        self.assertIn("snap-rollback", src)
+        self.assertIn("upd-log", src)
+        self.assertIn("upd-steps", src)
+        self.assertIn("get.sh", src)
+        self.assertNotIn('id="rollback-version"', src)
+        self.assertNotIn("rollback-row", src)
 
-    def test_rollback_button_beside_select_is_danger(self):
-        src = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
-        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn('class="rollback-row"', src)
-        self.assertLess(src.find('id="rollback-version"'), src.find('id="rollback-start"'))
-        btn = src.split('id="rollback-start"', 1)[0][-120:]
-        self.assertIn("btn-danger", btn)
-        self.assertIn(".rollback-row", css)
-        self.assertIn(".rollback-field", css)
-        self.assertIn("M4.5 6L8 3l3.5 3", css)
-        self.assertIn("M4.5 10L8 13l3.5-3", css)
-        field = css.split(".rollback-field select {", 1)[1].split("}", 1)[0]
-        self.assertIn("text-align: right", field)
-        self.assertIn("padding-left: var(--space-4)", field)
-        self.assertIn("background-position: left var(--space-2) center", field)
-
-    def test_context_exposes_rollback_versions(self):
+    def test_context_exposes_rollback_versions_and_snapshots(self):
         src = Path("app/services/panel_update.py").read_text(encoding="utf-8")
         self.assertIn("fetch_recent_versions", src)
         self.assertIn("rollback_versions", src)
+        self.assertIn("snapshots", src)
         self.assertIn("start_rollback_to_version", src)
         self.assertIn("_do_rollback_to_version", src)
 
-    def test_force_channels_match_settings_pattern(self):
+    def test_force_channels_match_304_markup(self):
         html = Path("app/web/templates/_settings_field.html").read_text(encoding="utf-8")
         js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
-        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn("force-channels-footer", html)
-        self.assertIn("force-channel-fields", js)
-        self.assertIn("force-channel-id-wrap", js)
-        self.assertIn("btn-danger", js)
-        self.assertIn(".force-channel-fields", css)
-        self.assertIn(".force-channels-footer", css)
+        self.assertIn("force-channel-row", html)
+        self.assertIn("force-channel-id", js)
+        self.assertNotIn("force-channel-fields", js)
+        self.assertNotIn("force-channel-id-wrap", js)
 
 
 if __name__ == "__main__":

@@ -2,15 +2,13 @@
 {% from "macros.html" import pg_tabs, row_actions, page_title %}
 {% block title %}نودهای پاسارگارد{% endblock %}
 {% block content %}
-<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('nodes', 'نودها', 'pg') }}
   </div>
 </div>
 {{ pg_tabs('pg_nodes') }}
-</div>
-<div class="card card-flush">
+<div class="card">
   {% if not nodes %}
   <p class="muted">نودی یافت نشد.</p>
   {% else %}

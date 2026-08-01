@@ -131,7 +131,7 @@
 {% macro pg_tabs(active='') -%}
 {% set perms = pg_perms if pg_perms is defined else [] %}
 {% set admin = is_admin if is_admin is defined else (staff is defined and staff.role == 'admin') %}
-<nav class="section-tabs pg-tabs" aria-label="بخش‌های پاسارگارد">
+<div class="section-tabs">
   {% if admin or 'pg_overview' in perms %}
   <a href="/pg" class="{% if active=='pg' %}active{% endif %}">نمای کلی</a>
   {% endif %}
@@ -156,5 +156,5 @@
   {% if admin or 'pg_inbounds' in perms %}
   <a href="/pg/inbounds" class="{% if active=='pg_inbounds' %}active{% endif %}">اینباند</a>
   {% endif %}
-</nav>
+</div>
 {%- endmacro %}

@@ -80,7 +80,7 @@
   </div>
 
   {% if bot_status %}
-  <div class="flash {{ 'ok' if bot_status.ok else 'warn' }}" style="margin: 0 0 var(--space-2)">
+  <div class="flash {{ 'ok' if bot_status.ok else 'warn' }}" style="margin:0 0 12px">
     وضعیت ربات:
     {% if bot_status.ok %}
       آنلاین · @{{ bot_status.username or '—' }} (id={{ bot_status.id or '—' }})

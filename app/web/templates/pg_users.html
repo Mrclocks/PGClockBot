@@ -2,7 +2,6 @@
 {% from "macros.html" import pg_tabs, row_actions, switch_chip, page_title %}
 {% block title %}کاربران پنل{% endblock %}
 {% block content %}
-<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('user', 'کاربران پنل', 'pg') }}
@@ -14,8 +13,8 @@
   </div>
 </div>
 {{ pg_tabs('pg_users') }}
-</div>
-<div class="card card-flush">
+
+<div class="card">
   <form method="get" action="/pg/users" class="search-bar">
     <label class="search-bar-field">
       <span class="search-bar-label">جستجوی نام کاربری</span>
@@ -257,8 +256,8 @@
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="form-stack">
-      <p id="pg-user-link-user" class="muted" style="margin: 0"></p>
-      <p id="pg-user-link-status" class="muted" style="margin: 0">در حال دریافت لینک…</p>
+      <p id="pg-user-link-user" class="muted" style="margin:0"></p>
+      <p id="pg-user-link-status" class="muted" style="margin:0">در حال دریافت لینک…</p>
       <label class="form-field" id="pg-user-link-field" hidden>
         آدرس اشتراک
         <input type="text" id="pg-user-link-url" class="mono" readonly dir="ltr" />

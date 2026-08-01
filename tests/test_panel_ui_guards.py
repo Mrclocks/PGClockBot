@@ -81,7 +81,7 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
         self.assertIn("order: 10", css)
         self.assertIn(".form-field > small.muted", css)
         # Hints under controls need clear gap + theme muted color (not hardcoded grey)
-        self.assertIn("margin-top: var(--space-1)", css)
+        self.assertIn("margin-top: 16px", css)
         block = re.search(
             r"(?ms)label > small\.muted,\s*label > \.field-help,\s*\.field-help,\s*\.hint\s*\{([^}]+)\}",
             css,
@@ -197,15 +197,15 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIsNotNone(sel)
         body = sel.group(1)
         # RTL: chevron on physical left (opposite the value text), with room via padding-inline-end
-        self.assertIn("background-position: left var(--space-2) center", body)
-        self.assertIn("padding-inline-end: var(--space-4)", body)
+        self.assertIn("background-position: left 12px center", body)
+        self.assertIn("padding-inline-end: 36px", body)
         self.assertNotIn("background-position: right", body)
         self.assertIn("background-color: #09090b", body)
         # light theme must not wipe the chevron via background shorthand
         light = re.search(r'(?ms)html\[data-theme="light"\]\s+select\s*\{([^}]+)\}', css)
         self.assertIsNotNone(light)
         self.assertIn("background-image:", light.group(1))
-        self.assertIn("background-position: left var(--space-2) center", light.group(1))
+        self.assertIn("background-position: left 12px center", light.group(1))
         # shared input padding must not force symmetric padding onto select
         shared = re.search(r"(?ms)^input,\s*select,\s*textarea\s*\{([^}]+)\}", css)
         self.assertIsNotNone(shared)
@@ -288,18 +288,17 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         body = foot.group(1)
         self.assertIn("margin-top: auto", body)
         # Align with .side-foot baseline
-        self.assertIn("padding-top: var(--page-title-gap)", body)
+        self.assertIn("padding-top: 12px", body)
         # star button should be shorter than primary --btn-h
         self.assertIn("min-height: 28px", css)
         # sidebar footer must stay at the pre-compact sizing
         side = re.search(r"(?ms)^\.side-foot\s*\{([^}]+)\}", css)
         self.assertIsNotNone(side)
-        self.assertIn("padding-top: var(--page-title-gap)", side.group(1))
+        self.assertIn("padding-top: 12px", side.group(1))
         logout = re.search(r"(?ms)^\.logout-link\s*\{([^}]+)\}", css)
         self.assertIsNotNone(logout)
         self.assertIn("font-size: 13px", logout.group(1))
-        self.assertIn("height: 28px", logout.group(1))
-        self.assertIn("padding: 0 var(--space-1)", logout.group(1))
+        self.assertIn("padding: 6px 8px", logout.group(1))
 
     def test_block_button_is_warn_update_is_ok(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")

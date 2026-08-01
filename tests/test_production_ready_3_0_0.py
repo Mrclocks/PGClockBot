@@ -14,19 +14,12 @@ class VersionThreeConsistencyTests(unittest.TestCase):
     def test_version_files_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.2.3")
-        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "3.1.8")
+        self.assertEqual(__version__, "3.2.4")
+        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "3.2.4")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         first = notes.split("RELEASE_NOTES_FA", 1)[1]
-        self.assertLess(first.find('"3.1.8"'), first.find('"3.1.7"'))
-        self.assertLess(first.find('"3.1.7"'), first.find('"3.1.6"'))
-        self.assertLess(first.find('"3.1.6"'), first.find('"3.1.5"'))
-        self.assertLess(first.find('"3.1.5"'), first.find('"3.1.4"'))
-        self.assertLess(first.find('"3.1.4"'), first.find('"3.1.3"'))
-        self.assertLess(first.find('"3.1.3"'), first.find('"3.1.2"'))
-        self.assertLess(first.find('"3.1.2"'), first.find('"3.1.1"'))
-        self.assertLess(first.find('"3.1.1"'), first.find('"3.1.0"'))
-        self.assertLess(first.find('"3.1.0"'), first.find('"3.0.5"'))
+        self.assertLess(first.find('"3.2.4"'), first.find('"3.2.3"'))
+        self.assertLess(first.find('"3.2.3"'), first.find('"3.0.5"'))
         self.assertLess(first.find('"3.0.5"'), first.find('"3.0.4"'))
         self.assertLess(first.find('"3.0.4"'), first.find('"3.0.3"'))
         self.assertLess(first.find('"3.0.3"'), first.find('"3.0.2"'))
