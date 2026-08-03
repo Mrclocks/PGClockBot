@@ -128,6 +128,46 @@ async def pop_nav_level(state: FSMContext | None) -> str:
     return level
 
 
+async def buyer_main_reply_keyboard(
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    order=None,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> tuple[ReplyKeyboardMarkup, dict]:
+    """Customer main menu after checkout/delivery (always shows «سرویس‌های من» when owned)."""
+    rid = reseller_owner_id
+    shop_bot = is_reseller_bot
+    if order is not None:
+        ord_rid = getattr(order, "reseller_id", None)
+        if ord_rid:
+            rid = int(ord_rid)
+            shop_bot = True
+    markup, ui, _role = await build_main_reply_keyboard(
+        session,
+        db_user,
+        is_reseller_bot=shop_bot,
+        reseller_owner_id=rid,
+        as_user=True,
+    )
+    return markup, ui
+
+
+async def clear_checkout_nav(state: FSMContext | None) -> None:
+    """Drop pay/topup FSM nav so reply buttons leave the payment menu."""
+    if state is None:
+        return
+    try:
+        await state.clear()
+    except Exception:
+        pass
+    try:
+        await state.update_data(**{NAV_LEVEL: NAV_MAIN, NAV_STACK: []})
+    except Exception:
+        pass
+
+
 async def restore_main_reply(
     message: Message,
     session: AsyncSession,

@@ -14,6 +14,7 @@ from app.db.models import BotUser, Order, PaymentMethod, UserService
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import (
+    apply_discount_to_order,
     calc_custom_plan_price,
     calc_wholesale_price,
     create_custom_order,
@@ -527,7 +528,9 @@ async def wholesale_start(callback: CallbackQuery, session: AsyncSession, state:
     if not plans:
         await callback.answer("پلنی برای فروش عمده نیست", show_alert=True)
         return
-    await state.clear()
+    # Keep shop nav stack; only reset wholesale qty FSM fields
+    await state.set_state(None)
+    await state.update_data(wholesale_plan_id=None, wholesale_qty=None)
     await callback.answer()
     text = format_message(
         "📦 فروش عمده",
@@ -711,8 +714,25 @@ async def wholesale_qty_entered(
         f"فعلی: <b>{qty}</b> عدد{disc_line}\n"
         f"جمع: <b>{format_toman(payable, get_settings().currency)}</b>",
     )
+    # Leave cancel_reply; restore shop chrome so user is not stuck on «انصراف»
+    from app.bot import menu_nav as nav
+
+    custom_on = on(ui.get("custom_plan_enabled"))
+    wholesale_on = True
+    await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_SHOP,
+        text=text,
+        state=state,
+        push=False,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
     await message.answer(
-        text,
+        "تعداد را با دکمه‌ها تنظیم کنید:",
         reply_markup=kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id),
     )
 
@@ -791,7 +811,9 @@ async def wholesale_buy(
     except ValueError as e:
         await callback.answer(str(e), show_alert=True)
         return
-    await state.clear()
+    # Drop wholesale qty FSM; present_order_pay sets NAV_PAY + order id
+    await state.set_state(None)
+    await state.update_data(wholesale_plan_id=None, wholesale_qty=None)
     await callback.answer()
     plan = await get_catalog_plan(session, plan_id)
     plan_name = plan.name if plan else "پلن"
@@ -970,7 +992,14 @@ async def apply_discount_msg(
 
 
 @router.callback_query(F.data.startswith("pay:wallet:"))
-async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def pay_wallet_cb(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     ui = await get_all_settings(session)
     if not on(ui.get("pay_wallet_enabled")):
         await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
@@ -990,6 +1019,17 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
         return
 
     await callback.answer()
+    from app.bot.menu_nav import buyer_main_reply_keyboard, clear_checkout_nav
+
+    await clear_checkout_nav(state)
+    main_kb, _ = await buyer_main_reply_keyboard(
+        session,
+        db_user,
+        order=order,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+
     if order.note and str(order.note).startswith("reseller_app:"):
         if callback.message:
             await safe_edit_text(callback.message, 
@@ -997,8 +1037,15 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
                     "✅ پرداخت ثبت شد",
                     "هزینه نمایندگی پرداخت شد.\nدرخواست شما برای تأیید ادمین ارسال شد.",
                 ),
-                reply_markup=kb.back_home(ui),
+                reply_markup=None,
             )
+            try:
+                await callback.message.answer(
+                    "🏠 منوی اصلی",
+                    reply_markup=main_kb,
+                )
+            except Exception:
+                pass
         for aid in get_settings().admin_ids:
             try:
                 app_id = int(str(order.note).split(":", 1)[1])
@@ -1019,7 +1066,7 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
         try:
             await safe_edit_text(callback.message, 
                 format_message("✅ خرید موفق", "سرویس در حال تحویل است…"),
-                reply_markup=kb.back_home(ui),
+                reply_markup=None,
             )
         except Exception:
             pass
@@ -1028,7 +1075,12 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
             callback.bot, db_user.telegram_id, session, None, order
         )
     except Exception:
-        pass
+        # Delivery failed to send — still put user back on main menu
+        if callback.message:
+            try:
+                await callback.message.answer("🏠 منوی اصلی", reply_markup=main_kb)
+            except Exception:
+                pass
     try:
         from app.services.notifications import notify_new_subscription
 
@@ -1046,8 +1098,45 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
         pass
 
 
+async def _await_order_receipt(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    title: str,
+    body: str,
+    reply_markup=None,
+    state: FSMContext | None = None,
+):
+    """Show pay instructions and switch reply KB off payment methods (cancel while waiting)."""
+    ui = await get_all_settings(session)
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(title, body),
+            reply_markup=reply_markup,
+        )
+        await callback.message.answer(
+            "پس از واریز، عکس رسید را در همین گفتگو بفرستید.\n"
+            "با ارسال رسید به منوی اصلی برمی‌گردید.",
+            reply_markup=kb.cancel_reply(ui),
+        )
+    if state is not None:
+        from app.bot import menu_nav as nav
+
+        try:
+            await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
+        except Exception:
+            pass
+
+
 @router.callback_query(F.data.startswith("pay:card:"))
-async def pay_card_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def pay_card_cb(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     ui = await get_all_settings(session)
     if not on(ui.get("pay_card_enabled")):
         await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
@@ -1073,15 +1162,18 @@ async def pay_card_cb(callback: CallbackQuery, session: AsyncSession, db_user: B
     except Exception:
         body = f"مبلغ {amount} را کارت به کارت کنید و رسید بفرستید."
     body += f"\n\n(پرداخت #{payment.id})"
-    if callback.message:
-        await safe_edit_text(callback.message, 
-            format_message("💳 کارت به کارت", body),
-            reply_markup=kb.back_home(ui),
-        )
+    await _await_order_receipt(
+        callback, session, db_user, title="💳 کارت به کارت", body=body, state=state
+    )
 
 
 @router.callback_query(F.data.startswith("pay:gateway:"))
-async def pay_gateway_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def pay_gateway_cb(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
     ui = await get_all_settings(session)
@@ -1119,16 +1211,24 @@ async def pay_gateway_cb(callback: CallbackQuery, session: AsyncSession, db_user
     rows: list[list[InlineKeyboardButton]] = []
     if link.startswith("http://") or link.startswith("https://"):
         rows.append([InlineKeyboardButton(text=f"🌐 ورود به {name}", url=link)])
-    rows.append([InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="menu:home")])
-    if callback.message:
-        await safe_edit_text(callback.message, 
-            format_message(f"🌐 {name}", body),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-        )
+    await _await_order_receipt(
+        callback,
+        session,
+        db_user,
+        title=f"🌐 {name}",
+        body=body,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
+        state=state,
+    )
 
 
 @router.callback_query(F.data.startswith("pay:crypto:"))
-async def pay_crypto_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def pay_crypto_cb(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     ui = await get_all_settings(session)
     if not on(ui.get("pay_crypto_enabled")):
         await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
@@ -1165,15 +1265,18 @@ async def pay_crypto_cb(callback: CallbackQuery, session: AsyncSession, db_user:
             f"<code>{address}</code>\n\nرسید را بفرستید."
         )
     body += f"\n\n(پرداخت #{payment.id})"
-    if callback.message:
-        await safe_edit_text(callback.message, 
-            format_message("💎 رمزارز", body),
-            reply_markup=kb.back_home(ui),
-        )
+    await _await_order_receipt(
+        callback, session, db_user, title="💎 رمزارز", body=body, state=state
+    )
 
 
 @router.callback_query(F.data.startswith("pay:stars:"))
-async def pay_stars_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def pay_stars_cb(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     from aiogram.types import LabeledPrice
 
     ui = await get_all_settings(session)
@@ -1215,10 +1318,22 @@ async def pay_stars_cb(callback: CallbackQuery, session: AsyncSession, db_user: 
                 format_message(
                     "⭐ استارز تلگرام",
                     f"فاکتور {stars} استارز برای سفارش #{order.id} ارسال شد.\n"
-                    f"(معادل تقریبی {format_toman(order.amount, get_settings().currency)})",
+                    f"(معادل تقریبی {format_toman(order.amount, get_settings().currency)})\n\n"
+                    "پس از پرداخت موفق، به منوی اصلی برمی‌گردید.",
                 ),
-                reply_markup=kb.back_home(ui),
+                reply_markup=None,
             )
+            await callback.message.answer(
+                "فاکتور استارز ارسال شد — پس از پرداخت منتظر بمانید:",
+                reply_markup=kb.cancel_reply(ui),
+            )
+        if state is not None:
+            from app.bot import menu_nav as nav
+
+            try:
+                await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
+            except Exception:
+                pass
     except Exception as e:
         if callback.message:
             await callback.message.answer(f"خطا در ساخت فاکتور استارز: {e}")

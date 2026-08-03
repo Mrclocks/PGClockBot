@@ -313,10 +313,10 @@ async def open_wallet_topup(
 async def open_wallet_tx(message: Message, session: AsyncSession, db_user: BotUser) -> None:
     from app.config import get_settings
     from app.services.formatting import format_toman
-    from app.services.wallet import list_transactions
+    from app.services.wallet import list_activity
 
     ui = await get_all_settings(session)
-    txs = await list_transactions(session, db_user.id, limit=15)
+    txs = await list_activity(session, db_user.id, limit=15)
     if not txs:
         await message.answer(
             "تراکنشی ثبت نشده.",
@@ -1198,15 +1198,15 @@ async def _handle_pay_action(
     cb = _SoftCallback(bubble, cb_data)
     try:
         if action == kb.REPLY_ACTION_PAY_WALLET:
-            await shop_h.pay_wallet_cb(cb, session, db_user)
+            await shop_h.pay_wallet_cb(cb, session, db_user, state=state)
         elif action == kb.REPLY_ACTION_PAY_CARD:
-            await shop_h.pay_card_cb(cb, session, db_user)
+            await shop_h.pay_card_cb(cb, session, db_user, state=state)
         elif action == kb.REPLY_ACTION_PAY_GATEWAY:
-            await shop_h.pay_gateway_cb(cb, session, db_user)
+            await shop_h.pay_gateway_cb(cb, session, db_user, state=state)
         elif action == kb.REPLY_ACTION_PAY_CRYPTO:
-            await shop_h.pay_crypto_cb(cb, session, db_user)
+            await shop_h.pay_crypto_cb(cb, session, db_user, state=state)
         elif action == kb.REPLY_ACTION_PAY_STARS:
-            await shop_h.pay_stars_cb(cb, session, db_user)
+            await shop_h.pay_stars_cb(cb, session, db_user, state=state)
         elif action == kb.REPLY_ACTION_PAY_DISCOUNT:
             await shop_h.ask_discount(cb, state, session)
     except Exception as e:

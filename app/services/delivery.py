@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from aiogram import Bot
-from aiogram.types import BufferedInputFile, InlineKeyboardMarkup
+from aiogram.types import BufferedInputFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -165,6 +165,28 @@ async def build_delivery_content(
     }
 
 
+async def _buyer_reply_markup(session: AsyncSession, payment: Payment | None, order):
+    """Main customer reply keyboard so pay-method menus do not stick after delivery."""
+    from app.bot.menu_nav import buyer_main_reply_keyboard
+    from app.db.models import BotUser
+
+    uid = None
+    if order is not None:
+        uid = getattr(order, "user_id", None)
+    if uid is None and payment is not None:
+        uid = getattr(payment, "user_id", None)
+    if uid is None:
+        return None
+    user = await session.get(BotUser, int(uid))
+    if not user:
+        return None
+    try:
+        markup, _ui = await buyer_main_reply_keyboard(session, user, order=order)
+        return markup
+    except Exception:
+        return None
+
+
 async def send_delivery_to_user(
     bot: Bot,
     chat_id: int,
@@ -177,18 +199,27 @@ async def send_delivery_to_user(
     also send QR as a photo. Returns the HTML text that was sent.
 
     Wholesale (qty > 1) never sends QR — all links are in the text message.
+
+    Always attaches the main customer reply keyboard so the user is not left on
+    payment-method menus after a successful purchase / receipt approval.
     """
     shop_rid = getattr(order, "reseller_id", None) if order is not None else None
     ui = await get_all_settings(session, reseller_id=shop_rid)
+    reply_kb = await _buyer_reply_markup(session, payment, order)
     if order and order.note and str(order.note).startswith("reseller_app:"):
         text = (
             "✅ هزینه نمایندگی پرداخت شد.\n"
             "درخواست شما ثبت شد و پس از تأیید ادمین، اطلاعات ورود برایتان ارسال می‌شود."
         )
         try:
-            await bot.send_message(chat_id, text, parse_mode="HTML")
+            await bot.send_message(
+                chat_id, text, reply_markup=reply_kb, parse_mode="HTML"
+            )
         except Exception:
-            pass
+            try:
+                await bot.send_message(chat_id, text, parse_mode="HTML")
+            except Exception:
+                pass
         try:
             app_id = int(str(order.note).split(":", 1)[1])
         except Exception:
@@ -240,14 +271,17 @@ async def send_delivery_to_user(
         session, payment, order, include_details=not use_short
     )
     text = payload["text"]
-    markup: InlineKeyboardMarkup | None = payload["markup"]
     ui = payload["ui"]
     sub_url = payload["sub_url"]
     sub_info = payload.get("sub_info")
     skip_qr = bool(payload.get("skip_qr")) or wholesale
 
+    # Prefer main reply keyboard over legacy empty inline stubs.
+    send_markup = reply_kb
     try:
-        await bot.send_message(chat_id, text, reply_markup=markup, parse_mode="HTML")
+        await bot.send_message(
+            chat_id, text, reply_markup=send_markup, parse_mode="HTML"
+        )
     except Exception:
         try:
             await bot.send_message(chat_id, text, parse_mode="HTML")

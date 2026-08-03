@@ -100,10 +100,14 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
     except Exception as e:
         await message.answer(f"پرداخت استارز دریافت شد ولی تحویل ناموفق بود: {e}")
         return
-    ui = await get_all_settings(session)
+    from app.bot.menu_nav import buyer_main_reply_keyboard, clear_checkout_nav
+
+    # Stars success → leave pay menus; delivery attaches main KB
+    await clear_checkout_nav(None)
+    main_kb, _ = await buyer_main_reply_keyboard(session, db_user, order=order)
     await message.answer(
         format_message("✅ پرداخت استارز", "پرداخت با موفقیت انجام شد."),
-        reply_markup=kb.back_home(ui),
+        reply_markup=main_kb,
     )
     try:
         await send_delivery_to_user(message.bot, db_user.telegram_id, session, payment, order)
@@ -217,10 +221,13 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
             "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
         )
         try:
+            from app.bot.menu_nav import buyer_main_reply_keyboard
+
+            main_kb, _ = await buyer_main_reply_keyboard(session, user)
             await callback.bot.send_message(
                 user.telegram_id,
                 format_message("❌ پرداخت رد شد", reject_body),
-                reply_markup=kb.back_home(ui),
+                reply_markup=main_kb,
                 parse_mode="HTML",
             )
         except Exception:
