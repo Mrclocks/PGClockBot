@@ -629,7 +629,7 @@ def order_quantity(order: Order) -> int:
     except (TypeError, ValueError):
         n = None
     if n is None or n < 1:
-        note = (order.note or "").strip()
+        note = (getattr(order, "note", None) or "").strip()
         if note.startswith("wholesale:"):
             try:
                 n = int(note.split(":", 1)[1])
@@ -728,7 +728,7 @@ async def _claim_payable_order(
 def wallet_purchase_reason(order: Order) -> str:
     """Human-readable wallet debit reason (shows wholesale clearly in تراکنش‌ها)."""
     qty = order_quantity(order)
-    note = (order.note or "").strip()
+    note = (getattr(order, "note", None) or "").strip()
     if note.startswith("wholesale:") or qty > 1:
         return f"خرید عمده #{order.id} ({qty} سرویس)"
     if note.startswith("renew:"):
