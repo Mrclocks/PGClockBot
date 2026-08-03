@@ -15,7 +15,7 @@ from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import attach_receipt, create_wallet_topup
 from app.services.receipts import process_receipt
 from app.services.users import get_all_settings, on
-from app.services.wallet import list_transactions
+from app.services.wallet import list_activity
 
 router = Router(name="wallet")
 
@@ -57,7 +57,7 @@ async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: B
 async def wallet_tx(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
     ui = await get_all_settings(session)
-    txs = await list_transactions(session, db_user.id, limit=15)
+    txs = await list_activity(session, db_user.id, limit=15)
     if not txs:
         body = "تراکنشی نیست."
     else:
@@ -289,6 +289,7 @@ async def wallet_receipt_photo(
         bot=message.bot,
         user_tg_id=message.from_user.id if message.from_user else None,
     )
+    # Always leave payment/cancel keyboards — delivery already attaches main KB on auto-approve
     if text:
         await restore_main_reply(
             message,
@@ -299,6 +300,10 @@ async def wallet_receipt_photo(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
+    else:
+        from app.bot.menu_nav import clear_checkout_nav
+
+        await clear_checkout_nav(state)
 
 
 @router.message(WalletStates.waiting_receipt)
@@ -331,8 +336,17 @@ async def wallet_receipt_cancel(
 
 
 @router.message(F.photo)
-async def generic_receipt(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext):
+async def generic_receipt(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     """Attach photo to latest awaiting payment for this user."""
+    from app.bot.menu_nav import restore_main_reply
+
     current = await state.get_state()
     if current:
         return
@@ -356,6 +370,19 @@ async def generic_receipt(message: Message, session: AsyncSession, db_user: BotU
         bot=message.bot,
         user_tg_id=message.from_user.id if message.from_user else None,
     )
+    # Leave pay-method / cancel reply keyboards after receipt (success or pending review)
     if text:
-        ui = await get_all_settings(session)
-        await message.answer(text, reply_markup=kb.back_home(ui))
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text=text,
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            as_user=True,
+        )
+    else:
+        from app.bot.menu_nav import clear_checkout_nav
+
+        await clear_checkout_nav(state)

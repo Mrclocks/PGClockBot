@@ -623,17 +623,20 @@ def wholesale_description(ui: dict | None) -> str:
 
 def order_quantity(order: Order) -> int:
     qty = getattr(order, "quantity", None)
+    n: int | None
     try:
-        n = int(qty or 1)
+        n = int(qty) if qty is not None else None
     except (TypeError, ValueError):
-        n = 1
-    if n < 1:
+        n = None
+    if n is None or n < 1:
         note = (order.note or "").strip()
         if note.startswith("wholesale:"):
             try:
                 n = int(note.split(":", 1)[1])
             except (TypeError, ValueError):
                 n = 1
+        else:
+            n = 1
     return max(1, n)
 
 
@@ -722,6 +725,19 @@ async def _claim_payable_order(
     return order
 
 
+def wallet_purchase_reason(order: Order) -> str:
+    """Human-readable wallet debit reason (shows wholesale clearly in تراکنش‌ها)."""
+    qty = order_quantity(order)
+    note = (order.note or "").strip()
+    if note.startswith("wholesale:") or qty > 1:
+        return f"خرید عمده #{order.id} ({qty} سرویس)"
+    if note.startswith("renew:"):
+        return f"تمدید سرویس #{order.id}"
+    if note.startswith("reseller_app:"):
+        return f"هزینه نمایندگی #{order.id}"
+    return f"خرید سفارش #{order.id}"
+
+
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     if order.status == OrderStatus.DELIVERED.value:
         return order
@@ -736,7 +752,7 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
         return order
     try:
         if order.amount > 0:
-            await debit_wallet(session, user, order.amount, f"خرید سفارش #{order.id}")
+            await debit_wallet(session, user, order.amount, wallet_purchase_reason(order))
             debited = True
         payment = Payment(
             order_id=order.id,
@@ -1265,6 +1281,14 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                     await pg.delete_user_by_id(int(pg_uid))
                 except Exception:
                     pass
+            # Drop flushed UserService rows so _release_delivery_claim() commit
+            # cannot leave orphans pointing at deleted PG users.
+            for svc in list(services):
+                try:
+                    await session.delete(svc)
+                except Exception:
+                    pass
+            services.clear()
             raise
 
         if profile is not None:
