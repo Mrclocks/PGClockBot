@@ -75,6 +75,16 @@ _PG_GATE_CACHE: dict[str, tuple[float, tuple[bool, str | None]]] = {}
 _PG_GATE_TTL_SEC = 45.0
 
 
+def invalidate_pg_gate_cache(pg_username: str | None = None) -> None:
+    """Evict one (or all) PG web-gate cache entries after revoke/disable."""
+    if not pg_username:
+        _PG_GATE_CACHE.clear()
+        return
+    uname = _norm_pg(pg_username)
+    if uname:
+        _PG_GATE_CACHE.pop(uname, None)
+
+
 async def enforce_pg_admin_web_gate(
     session: AsyncSession,
     pg_username: str,
@@ -572,6 +582,7 @@ async def revoke_web_access(session: AsyncSession, pg_username: str) -> bool:
         return False
     await session.delete(row)
     await session.commit()
+    invalidate_pg_gate_cache(pg_username)
     return True
 
 
@@ -585,6 +596,8 @@ async def set_active(session: AsyncSession, pg_username: str, active: bool) -> b
         return False
     row.is_active = bool(active)
     await session.commit()
+    # Immediate eviction so revoked/disabled staff cannot keep using a cached allow.
+    invalidate_pg_gate_cache(pg_username)
     return True
 
 

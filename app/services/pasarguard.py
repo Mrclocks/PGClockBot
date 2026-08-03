@@ -556,6 +556,8 @@ def as_list(data: Any, *keys: str) -> list[dict]:
 
 _pg: Optional[PasarGuardClient] = None
 _pg_reseller_cache: dict[int, PasarGuardClient] = {}
+_pg_reseller_cache_ts: dict[int, float] = {}
+_RESELLER_CLIENT_TTL_SEC = 3600.0
 
 
 def get_pg() -> PasarGuardClient:
@@ -568,9 +570,22 @@ def get_pg() -> PasarGuardClient:
 
 def reset_pg() -> None:
     """Drop cached clients (after PG_BASE_URL / credentials change)."""
-    global _pg, _pg_reseller_cache
+    global _pg, _pg_reseller_cache, _pg_reseller_cache_ts
     _pg = None
     _pg_reseller_cache = {}
+    _pg_reseller_cache_ts = {}
+
+
+def invalidate_reseller_pg_client(reseller_user_id: int | None = None) -> None:
+    """Drop one (or all) cached reseller PG clients after password/credential rotation."""
+    global _pg_reseller_cache, _pg_reseller_cache_ts
+    if reseller_user_id is None:
+        _pg_reseller_cache = {}
+        _pg_reseller_cache_ts = {}
+        return
+    rid = int(reseller_user_id)
+    _pg_reseller_cache.pop(rid, None)
+    _pg_reseller_cache_ts.pop(rid, None)
 
 
 async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClient:
@@ -578,6 +593,8 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
 
     Requires ``pg_admin_username`` + stored encrypted password on the profile.
     """
+    import time
+
     from sqlalchemy import select
 
     from app.db.models import ResellerProfile
@@ -585,7 +602,12 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
 
     rid = int(reseller_user_id)
     cached = _pg_reseller_cache.get(rid)
-    if cached is not None and cached._token:
+    ts = _pg_reseller_cache_ts.get(rid, 0.0)
+    if (
+        cached is not None
+        and cached._token
+        and (time.monotonic() - ts) < _RESELLER_CLIENT_TTL_SEC
+    ):
         return cached
 
     profile = (
@@ -607,7 +629,29 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
     )
     await client.ensure_token()
     _pg_reseller_cache[rid] = client
+    _pg_reseller_cache_ts[rid] = time.monotonic()
     return client
+
+
+async def get_pg_for_staff(session, staff: dict) -> tuple[PasarGuardClient, bool]:
+    """Return ``(client, as_owner)`` for the authenticated web/bot staff member.
+
+    - Platform admin → owner client (``as_owner=True``)
+    - Reseller with shop scope → shop PG admin client (never owner)
+    - Legacy ``pg_staff`` without a reseller profile → owner client only after
+      callers have already enforced ownership; prefer converting to reseller.
+    """
+    from app.services.shop_scope import is_platform_admin, shop_owner_id
+
+    if is_platform_admin(staff):
+        return get_pg(), True
+    rid = shop_owner_id(staff)
+    if rid:
+        return await get_pg_for_reseller(session, int(rid)), False
+    # Legacy pg_staff: no stored PG password — caller must ownership-gate first.
+    if staff.get("role") == "pg_staff" and str(staff.get("pg_admin_username") or "").strip():
+        return get_pg(), True
+    raise PasarGuardError("محدوده فروشگاه مشخص نیست — عملیات پاسارگارد مجاز نیست")
 
 
 def public_pg_api_base() -> str:

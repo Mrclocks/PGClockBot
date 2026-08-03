@@ -969,7 +969,7 @@ async def delete_bot_user(
         UserService,
         WalletTransaction,
     )
-    from app.services.pasarguard import get_pg
+    from app.services.pasarguard import get_pg, get_pg_for_reseller
 
     user = await session.get(BotUser, user_id)
     if not user:
@@ -1018,15 +1018,39 @@ async def delete_bot_user(
     svc_ids = [s.id for s in services]
     pg_services_deleted = 0
     if delete_pg_services:
+        from app.db.models import Plan
+
         for svc in services:
             if not svc.pg_user_id:
                 continue
+            # Prefer the shop's PG admin client when the service belongs to a reseller plan/order.
+            pg_client = get_pg()
             try:
-                await get_pg().delete_user_by_id(int(svc.pg_user_id))
+                reseller_id = None
+                if svc.plan_id:
+                    plan = await session.get(Plan, int(svc.plan_id))
+                    if plan and plan.owner_reseller_id:
+                        reseller_id = int(plan.owner_reseller_id)
+                if not reseller_id:
+                    order_row = (
+                        await session.execute(
+                            select(Order)
+                            .where(Order.service_id == int(svc.id))
+                            .limit(1)
+                        )
+                    ).scalar_one_or_none()
+                    if order_row and order_row.reseller_id:
+                        reseller_id = int(order_row.reseller_id)
+                if reseller_id:
+                    try:
+                        pg_client = await get_pg_for_reseller(session, reseller_id)
+                    except Exception:
+                        pg_client = get_pg()
+                await pg_client.delete_user_by_id(int(svc.pg_user_id))
                 pg_services_deleted += 1
             except Exception:
                 try:
-                    await get_pg().set_disabled_by_id(int(svc.pg_user_id), True)
+                    await pg_client.set_disabled_by_id(int(svc.pg_user_id), True)
                 except Exception:
                     pass
 

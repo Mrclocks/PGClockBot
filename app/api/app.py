@@ -32,7 +32,7 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal
 from app.services.orders import approve_payment, deliver_order, reject_payment
-from app.services.pasarguard import get_pg
+from app.services.pasarguard import get_pg, get_pg_for_staff
 from app.services.resellers import (
     parse_perms,
     setup_is_complete,
@@ -1460,7 +1460,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                         status_code=303,
                     )
                 try:
-                    created = await get_pg().create_user_template(
+                    # Create template as the staff's own PG admin — never owner token for shops.
+                    pg, _as_owner = await get_pg_for_staff(session, staff)
+                    created = await pg.create_user_template(
                         {
                             "name": name.strip(),
                             "group_ids": ids,

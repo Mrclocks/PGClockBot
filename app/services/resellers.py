@@ -255,7 +255,7 @@ async def apply_reseller_panel_password(
     sync_pg: bool = True,
 ) -> None:
     """Set web panel password and optionally the linked Pasarguard admin password (same secret)."""
-    from app.services.pasarguard import get_pg, reset_pg
+    from app.services.pasarguard import get_pg, invalidate_reseller_pg_client, reset_pg
     from app.services.secret_box import encrypt_secret
     from app.services.web_auth import hash_password
 
@@ -272,6 +272,7 @@ async def apply_reseller_panel_password(
         raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
     # Drop cached PG clients so next shop op uses the new password
     try:
+        invalidate_reseller_pg_client(int(profile.user_id))
         reset_pg()
     except Exception:
         pass
@@ -1119,12 +1120,13 @@ async def provision_existing_pg_admin(
     profile.is_active = True
     # Keep Pasarguard password in sync when operator sets a new shared password
     if pwd:
-        from app.services.pasarguard import get_pg, reset_pg
+        from app.services.pasarguard import get_pg, invalidate_reseller_pg_client, reset_pg
         from app.services.secret_box import encrypt_secret
 
         profile.pg_admin_password_enc = encrypt_secret(pwd)
         try:
             await get_pg().modify_admin(pg_u, {"password": pwd})
+            invalidate_reseller_pg_client(int(profile.user_id))
             reset_pg()
         except Exception as e:
             return None, None, f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}"
@@ -1217,7 +1219,7 @@ async def revoke_reseller(
     """
     from sqlalchemy import update
 
-    from app.services.pasarguard import get_pg
+    from app.services.pasarguard import get_pg, invalidate_reseller_pg_client
 
     user = await session.get(BotUser, user_id)
     if not user:
@@ -1255,6 +1257,19 @@ async def revoke_reseller(
     if commit:
         await session.commit()
         await session.refresh(user)
+
+    # Drop cached shop PG client + web gate so revoked credentials cannot linger.
+    try:
+        invalidate_reseller_pg_client(int(user_id))
+    except Exception:
+        pass
+    if pg_username:
+        try:
+            from app.services.pg_staff_access import invalidate_pg_gate_cache
+
+            invalidate_pg_gate_cache(pg_username)
+        except Exception:
+            pass
 
     try:
         from app.services.reseller_bots import get_reseller_bot_manager

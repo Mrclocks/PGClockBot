@@ -491,7 +491,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             from app.services.notifications import actor_label_from_staff, notify_account_edit
 
             old_role = user.role
-            profile.is_active = False
+            # Full teardown — do not leave an inactive ResellerProfile that can be reactivated.
+            try:
+                await revoke_reseller(
+                    session,
+                    user_id,
+                    delete_pg_admin=True,
+                    reason=reason or "ارتقا به مدیر",
+                    commit=False,
+                )
+            except ValueError as e:
+                return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
             user.role = Role.ADMIN.value
             await session.commit()
             await notify_account_edit(
@@ -504,7 +514,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 actor=actor_label_from_staff(staff),
             )
             return RedirectResponse(
-                f"/resellers?ok={_q('نقش به مدیر تغییر کرد (پروفایل نماینده غیرفعال شد)')}",
+                f"/resellers?ok={_q('نقش به مدیر تغییر کرد و پروفایل نماینده حذف شد')}",
                 status_code=303,
             )
 

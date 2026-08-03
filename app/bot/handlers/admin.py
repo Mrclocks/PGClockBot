@@ -1945,6 +1945,11 @@ async def adm_ticket_view(callback: CallbackQuery, session: AsyncSession, db_use
 
 @router.message(AdminStates.ticket_reply)
 async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+    # Re-validate admin ACL on every reply (role may have changed mid-FSM).
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید.")
+        return
     if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())

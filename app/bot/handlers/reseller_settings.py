@@ -741,6 +741,14 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
             reply_markup=kb.reseller_settings_reply_keyboard(),
         )
         return
+    # Re-validate FSM key against the whitelist — never trust stale/injected edit_key.
+    if key not in FIELDS:
+        await state.clear()
+        await message.answer(
+            "کلید نامعتبر است.",
+            reply_markup=kb.reseller_settings_reply_keyboard(),
+        )
+        return
     if key == "force_join_channel":
         from app.services.users import normalize_force_join_channel_value
 
