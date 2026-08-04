@@ -283,6 +283,9 @@ async def build_reseller_pg_overview(
                 out["error"] = e.user_message(fallback=PG_CREDENTIAL_MISSING_MSG)
                 return out
         admin = await pg.get_admin(owner)
+        if not admin and staff.get("role") != "admin":
+            # Limited clients cannot list /api/admins — own profile is enough.
+            admin = await pg.get_current_admin()
         if not admin:
             out["error"] = f"ادمین «{owner}» در پاسارگارد یافت نشد"
             return out

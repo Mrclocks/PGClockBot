@@ -25,17 +25,112 @@ PG_CREDENTIAL_MISSING_MSG = (
 
 
 def _rand_pg_password(length: int = 16) -> str:
-    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-    # Ensure mixed class for validate_password_strength-like rules
+    # Avoid shell/HTML-hostile specials that some PG validators reject.
+    special = "!@#_-+"
+    alphabet = string.ascii_letters + string.digits + special
     chars = [
         secrets.choice(string.ascii_uppercase),
         secrets.choice(string.ascii_lowercase),
         secrets.choice(string.digits),
-        secrets.choice("!@#$%^&*"),
+        secrets.choice(special),
     ]
     chars += [secrets.choice(alphabet) for _ in range(max(0, length - 4))]
     secrets.SystemRandom().shuffle(chars)
     return "".join(chars)
+
+
+def _pg_repair_error(exc: BaseException) -> str:
+    from app.services.pasarguard import PasarGuardError
+
+    if isinstance(exc, PasarGuardError):
+        return exc.user_message(fallback="همگام‌سازی رمز پاسارگارد ناموفق بود")
+    msg = str(exc or "").strip()
+    if not msg:
+        return "همگام‌سازی رمز پاسارگارد ناموفق بود"
+    # Keep short — avoid dumping raw stack/HTML into flash.
+    if len(msg) > 180:
+        msg = msg[:177] + "…"
+    return f"همگام‌سازی رمز پاسارگارد ناموفق بود: {msg}"
+
+
+async def _reset_pg_admin_password(uname: str, pwd: str) -> str | None:
+    """Owner API password reset. Returns error message or None on success."""
+    from app.services.pasarguard import get_pg
+
+    pg = get_pg()
+    try:
+        existing = await pg.get_admin(uname)
+    except Exception as exc:
+        return _pg_repair_error(exc)
+    if not existing:
+        return f"ادمین «{uname}» در پاسارگارد یافت نشد — ابتدا در پنل پاسارگارد بسازید"
+    try:
+        await pg.modify_admin(uname, {"password": pwd})
+    except Exception as exc:
+        return _pg_repair_error(exc)
+    return None
+
+
+async def repair_reseller_pg_credentials(
+    session: AsyncSession,
+    profile: ResellerProfile,
+    *,
+    password: str | None = None,
+    sync_web_password: bool = False,
+) -> tuple[str | None, str | None]:
+    """Reset PG admin password via Owner API and store ciphertext.
+
+    Returns ``(plaintext_password, error)``. Never returns Owner token usage
+    for subsequent staff ops — only stores the new limited-admin secret.
+    """
+    from app.services.pasarguard import invalidate_reseller_pg_client
+    from app.services.web_auth import hash_password, validate_password_strength
+
+    uname = (profile.pg_admin_username or "").strip()
+    if not uname:
+        return None, "ادمین پاسارگارد برای این نماینده تعریف نشده"
+    pwd = (password or "").strip() or _rand_pg_password()
+    ok, err = validate_password_strength(pwd)
+    if not ok:
+        return None, err
+    sync_err = await _reset_pg_admin_password(uname, pwd)
+    if sync_err:
+        return None, sync_err
+    profile.pg_admin_password_enc = encrypt_secret(pwd)
+    if sync_web_password:
+        profile.web_password_hash = hash_password(pwd)
+    await session.commit()
+    invalidate_reseller_pg_client(int(profile.user_id))
+    return pwd, None
+
+
+async def repair_pg_staff_credentials(
+    session: AsyncSession,
+    row: PgStaffAccess,
+    *,
+    password: str | None = None,
+    sync_web_password: bool = False,
+) -> tuple[str | None, str | None]:
+    """Reset PG admin password for a pg_staff row and store ciphertext."""
+    from app.services.pasarguard import invalidate_staff_pg_client
+    from app.services.web_auth import hash_password, validate_password_strength
+
+    uname = (row.pg_username or "").strip()
+    if not uname:
+        return None, "نام ادمین پاسارگارد نامعتبر است"
+    pwd = (password or "").strip() or _rand_pg_password()
+    ok, err = validate_password_strength(pwd)
+    if not ok:
+        return None, err
+    sync_err = await _reset_pg_admin_password(uname, pwd)
+    if sync_err:
+        return None, sync_err
+    row.pg_password_enc = encrypt_secret(pwd)
+    if sync_web_password:
+        row.web_password_hash = hash_password(pwd)
+    await session.commit()
+    invalidate_staff_pg_client(uname)
+    return pwd, None
 
 
 def enc_has_secret(enc: str | None) -> bool:
@@ -105,70 +200,6 @@ async def list_pg_staff_missing_credentials(
         )
     ).scalars().all()
     return [r for r in rows if not enc_has_secret(r.pg_password_enc)]
-
-
-async def repair_reseller_pg_credentials(
-    session: AsyncSession,
-    profile: ResellerProfile,
-    *,
-    password: str | None = None,
-    sync_web_password: bool = False,
-) -> tuple[str | None, str | None]:
-    """Reset PG admin password via Owner API and store ciphertext.
-
-    Returns ``(plaintext_password, error)``. Never returns Owner token usage
-    for subsequent staff ops — only stores the new limited-admin secret.
-    """
-    from app.services.pasarguard import get_pg, invalidate_reseller_pg_client
-    from app.services.web_auth import hash_password, validate_password_strength
-
-    uname = (profile.pg_admin_username or "").strip()
-    if not uname:
-        return None, "ادمین پاسارگارد برای این نماینده تعریف نشده"
-    pwd = (password or "").strip() or _rand_pg_password()
-    ok, err = validate_password_strength(pwd)
-    if not ok:
-        return None, err
-    try:
-        await get_pg().modify_admin(uname, {"password": pwd})
-    except Exception as exc:
-        return None, f"همگام‌سازی رمز پاسارگارد ناموفق بود: {exc}"
-    profile.pg_admin_password_enc = encrypt_secret(pwd)
-    if sync_web_password:
-        profile.web_password_hash = hash_password(pwd)
-    await session.commit()
-    invalidate_reseller_pg_client(int(profile.user_id))
-    return pwd, None
-
-
-async def repair_pg_staff_credentials(
-    session: AsyncSession,
-    row: PgStaffAccess,
-    *,
-    password: str | None = None,
-    sync_web_password: bool = False,
-) -> tuple[str | None, str | None]:
-    """Reset PG admin password for a pg_staff row and store ciphertext."""
-    from app.services.pasarguard import get_pg, invalidate_staff_pg_client
-    from app.services.web_auth import hash_password, validate_password_strength
-
-    uname = (row.pg_username or "").strip()
-    if not uname:
-        return None, "نام ادمین پاسارگارد نامعتبر است"
-    pwd = (password or "").strip() or _rand_pg_password()
-    ok, err = validate_password_strength(pwd)
-    if not ok:
-        return None, err
-    try:
-        await get_pg().modify_admin(uname, {"password": pwd})
-    except Exception as exc:
-        return None, f"همگام‌سازی رمز پاسارگارد ناموفق بود: {exc}"
-    row.pg_password_enc = encrypt_secret(pwd)
-    if sync_web_password:
-        row.web_password_hash = hash_password(pwd)
-    await session.commit()
-    invalidate_staff_pg_client(uname)
-    return pwd, None
 
 
 def credential_status_for_reseller(profile: ResellerProfile | None) -> dict[str, Any]:

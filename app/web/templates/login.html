@@ -11,9 +11,11 @@
     <form class="auth-form" method="post" action="/login" autocomplete="on">
       {% if error %}<div class="error" style="margin: 0">{{ error }}</div>{% endif %}
       {% if flash_ok %}<div class="flash ok" style="margin: 0">{{ flash_ok }}</div>{% endif %}
-      <div id="login-restart" class="flash warn" style="margin: 0" {% if not request.query_params.get('restarting') %}hidden{% endif %}>
+      {% if request.query_params.get('restarting') %}
+      <div id="login-restart" class="flash warn" style="margin: 0">
         راه‌اندازی ذخیره شد — در حال ری‌استارت سرویس…
       </div>
+      {% endif %}
       <label>نام کاربری
         <input name="username" value="{{ username or '' }}" required autocomplete="username" autofocus
                inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false"

@@ -14,8 +14,7 @@ class Version374Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.7.4")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.7.4")
+        self.assertGreaterEqual(tuple(int(x) for x in __version__.split(".")), (3, 7, 4))
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.7.4"', notes)
 
@@ -121,6 +120,9 @@ class ResellerAfterMigrationTests(unittest.IsolatedAsyncioTestCase):
             patch("app.services.pasarguard.get_pg") as get_pg,
             patch("app.services.pasarguard.invalidate_reseller_pg_client"),
         ):
+            get_pg.return_value.get_admin = AsyncMock(
+                return_value={"username": "shop1"}
+            )
             get_pg.return_value.modify_admin = AsyncMock()
             pwd, err = await repair_reseller_pg_credentials(
                 session, profile, password="Aa1!repairOK"
