@@ -51,6 +51,9 @@
             {% if not st.get('is_active') and st.get('web_username') %}
             <span class="badge neutral">غیرفعال</span>
             {% endif %}
+            {% if st.get('needs_pg_repair') %}
+            <span class="badge rejected">رمز PG نیست</span>
+            {% endif %}
             <small class="muted">دسترسی جداگانه ساخته نمی‌شود</small>
           </div>
           {% elif src == 'owner' %}
@@ -64,6 +67,9 @@
               {% if st.get('is_active') %}فعال{% else %}غیرفعال{% endif %}
             </span>
             <span class="mono" dir="ltr">{{ st.get('web_username') }}</span>
+            {% if st.get('needs_pg_repair') %}
+            <span class="badge rejected">رمز PG نیست</span>
+            {% endif %}
           </div>
           {% else %}
           <span class="muted">—</span>
@@ -73,9 +79,21 @@
           {% call row_actions() %}
             {% if src == 'reseller' and st.get('reseller_user_id') %}
             <a class="btn btn-sm btn-ghost" href="/resellers/{{ st.get('reseller_user_id') }}/edit">مدیریت نماینده</a>
+            {% if st.get('needs_pg_repair') and uname %}
+            <form method="post" action="/pg/admins/{{ uname }}/repair-pg-credentials"
+              data-confirm="رمز پاسارگارد این نماینده ریست و ذخیره شود؟ (توکن Owner برای عملیات بعدی استفاده نمی‌شود)" data-confirm-title="همگام‌سازی رمز PG" data-confirm-label="همگام‌سازی">
+              <button class="btn btn-sm" type="submit">همگام‌سازی رمز PG</button>
+            </form>
+            {% endif %}
             {% elif src == 'pg_staff' %}
             <button type="button" class="btn btn-sm btn-ghost"
               data-modal-open="modal-web-{{ loop.index }}">ویرایش دسترسی</button>
+            {% if st.get('needs_pg_repair') and uname %}
+            <form method="post" action="/pg/admins/{{ uname }}/repair-pg-credentials"
+              data-confirm="رمز پاسارگارد این ادمین ریست و ذخیره شود؟" data-confirm-title="همگام‌سازی رمز PG" data-confirm-label="همگام‌سازی">
+              <button class="btn btn-sm" type="submit">همگام‌سازی رمز PG</button>
+            </form>
+            {% endif %}
             <form method="post" action="/pg/admins/{{ uname }}/web-access/toggle">
               <button class="btn btn-sm btn-ghost" type="submit">
                 {% if st.get('is_active') %}غیرفعال کردن{% else %}فعال کردن{% endif %}

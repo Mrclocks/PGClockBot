@@ -197,9 +197,13 @@ class ScopedPgUserStatsTests(unittest.IsolatedAsyncioTestCase):
                 ]
             }
         )
-        with patch("app.services.pg_overview.get_pg", return_value=pg):
+        with patch(
+            "app.services.pasarguard.get_pg_for_staff",
+            new=AsyncMock(return_value=(pg, False)),
+        ):
             out = await build_reseller_pg_overview(
-                {"pg_admin_username": "res1", "role": "reseller"}
+                {"pg_admin_username": "res1", "role": "reseller", "pg_client_ready": True},
+                session=AsyncMock(),
             )
         self.assertTrue(out["ready"])
         self.assertIsNotNone(out.get("user_stats"))

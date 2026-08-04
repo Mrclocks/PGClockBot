@@ -339,7 +339,16 @@ async def web_access_status_map(
         reseller = reseller_map.get(key)
         staff = staff_map.get(key)
         if reseller is not None:
+            from app.services.pg_credentials import enc_has_secret
+
             has_web = bool(reseller.web_username and reseller.web_password_hash)
+            pg_ready = enc_has_secret(reseller.pg_admin_password_enc)
+            detail = (
+                f"نماینده"
+                f"{f' · {reseller.web_username}' if reseller.web_username else ' · بدون یوزر وب هنوز'}"
+            )
+            if not pg_ready and (reseller.pg_admin_username or "").strip():
+                detail += " · رمز PG ذخیره نشده"
             out[key] = ExistingWebAccess(
                 source="reseller",
                 pg_username=key,
@@ -349,13 +358,18 @@ async def web_access_status_map(
                 reseller_user_id=int(reseller.user_id),
                 reseller_profile_id=int(reseller.id),
                 staff_id=int(staff.id) if staff else None,
-                detail=(
-                    f"نماینده"
-                    f"{f' · {reseller.web_username}' if reseller.web_username else ' · بدون یوزر وب هنوز'}"
-                ),
+                detail=detail,
             ).as_dict()
+            out[key]["pg_client_ready"] = pg_ready
+            out[key]["needs_pg_repair"] = not pg_ready
             continue
         if staff is not None:
+            from app.services.pg_credentials import enc_has_secret
+
+            pg_ready = enc_has_secret(staff.pg_password_enc)
+            detail = "دسترسی وب ادمین پاسارگارد"
+            if not pg_ready:
+                detail += " · رمز PG ذخیره نشده"
             out[key] = ExistingWebAccess(
                 source="pg_staff",
                 pg_username=key,
@@ -363,8 +377,10 @@ async def web_access_status_map(
                 is_active=bool(staff.is_active),
                 staff_id=int(staff.id),
                 note=staff.note,
-                detail="دسترسی وب ادمین پاسارگارد",
+                detail=detail,
             ).as_dict()
+            out[key]["pg_client_ready"] = pg_ready
+            out[key]["needs_pg_repair"] = not pg_ready
             continue
         out[key] = ExistingWebAccess(source="none", pg_username=key).as_dict()
     return out

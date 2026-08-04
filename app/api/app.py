@@ -343,6 +343,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             else:
                 # No role → empty PG ACL (do not keep cookie elevation).
                 user = enrich_staff_pg_from_role(user, [], None)
+            from app.services.pg_credentials import enc_has_secret
+
+            # Data access requires stored PG password — never Owner fallback.
+            user["pg_client_ready"] = bool(
+                (profile.pg_admin_username or "").strip()
+                and enc_has_secret(profile.pg_admin_password_enc)
+            )
         elif user.get("role") == "pg_staff":
             from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
             from app.services.pg_staff_access import (
@@ -375,6 +382,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             features, role = await resolve_reseller_pg_features(user.get("pg_role_id"))
             # Owner-equivalent PG admins still get mapped features via is_owner on role
             user = enrich_staff_pg_from_role(user, features, role)
+            from app.services.pg_credentials import enc_has_secret
+
+            user["pg_client_ready"] = enc_has_secret(row.pg_password_enc)
             if not (user.get("pg_permissions") or []):
                 # No mapped features → deny panel use
                 raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
@@ -433,7 +443,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         return "/logout"
 
     def require_pg_perm(perm: str):
-        """Admin always; reseller/pg_staff need mapped PG feature (already on staff)."""
+        """Admin always; reseller/pg_staff need mapped PG feature + ready client."""
 
         async def _dep(
             request: Request,
@@ -446,6 +456,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             features = user.get("pg_permissions") or []
             if perm not in features:
                 raise NotAdmin(redirect=_live_pg_home(features))
+            # Feature bit without stored PG password → block empty confusing pages.
+            if not user.get("pg_client_ready"):
+                from app.services.pg_credentials import PG_CREDENTIAL_MISSING_MSG
+
+                raise NotAdmin(
+                    redirect=f"/pg/credentials-required?err={quote(PG_CREDENTIAL_MISSING_MSG, safe='')}"
+                )
             return user
 
         return _dep
@@ -640,6 +657,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_admin=require_admin,
         require_pg_perm=require_pg_perm,
         get_db=get_db,
+        require_staff=require_staff,
     )
     from app.api.reseller_pages import register_reseller_pages
     from app.api.reseller_setup import register_reseller_setup

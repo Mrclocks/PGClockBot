@@ -22,13 +22,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Version373Tests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-
-        self.assertEqual(__version__, "3.7.3")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.7.3")
+    def test_version_notes_retained(self):
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.7.3"', notes)
+        from app.version import __version__
+
+        self.assertGreaterEqual(tuple(int(x) for x in __version__.split(".")), (3, 7, 3))
 
 
 class OwnerTokenPgStaffTests(unittest.IsolatedAsyncioTestCase):

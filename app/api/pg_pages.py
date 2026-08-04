@@ -177,7 +177,29 @@ def register_pg_pages(
     require_admin,
     require_pg_perm,
     get_db,
+    require_staff=None,
 ):
+    staff_dep = require_staff or require_admin
+
+    @app.get("/pg/credentials-required", response_class=HTMLResponse)
+    async def pg_credentials_required(
+        request: Request,
+        staff: dict = Depends(staff_dep),
+    ):
+        from app.services.pg_credentials import PG_CREDENTIAL_MISSING_MSG
+
+        err = request.query_params.get("err") or PG_CREDENTIAL_MISSING_MSG
+        return render(
+            request,
+            "pg_credentials_required.html",
+            _pg_ctx(
+                staff,
+                flash_err=err,
+                active="pg",
+                pg_client_ready=bool(staff.get("pg_client_ready")),
+            ),
+        )
+
     @app.get("/pg", response_class=HTMLResponse)
     async def pg_home(
         request: Request,
@@ -192,8 +214,8 @@ def register_pg_pages(
         counts = {"admins": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
         reseller_overview = None
         try:
-            pg = get_pg()
             if _is_admin(staff):
+                pg = get_pg()
                 raw, nodes, admins, groups, hosts = await asyncio.gather(
                     pg.get_system_stats(),
                     pg.get_nodes_simple(),
@@ -248,7 +270,7 @@ def register_pg_pages(
                 counts["hosts"] = len(hosts) if isinstance(hosts, list) else 0
             else:
                 # Reseller: only own users/usage/limits — never server/hardware stats
-                reseller_overview = await build_reseller_pg_overview(staff)
+                reseller_overview = await build_reseller_pg_overview(staff, session=session)
                 # Keep overview.error in template; don't blank the page via flash_err
         except Exception as e:
             err = str(e)
@@ -1393,6 +1415,42 @@ def register_pg_pages(
             )
         msg = "دسترسی وب غیرفعال شد" if was_active else "دسترسی وب فعال شد"
         return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
+
+    @app.post("/pg/admins/{username}/repair-pg-credentials")
+    async def pg_admins_repair_credentials(
+        username: str,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Admin-initiated: reset PG password + store enc. Never Owner-token for staff ops."""
+        from app.services.pg_credentials import (
+            repair_pg_staff_credentials,
+            repair_reseller_pg_credentials,
+        )
+        from app.services.pg_staff_access import access_by_pg_username, reseller_by_pg_username
+
+        reseller = await reseller_by_pg_username(session, username)
+        if reseller is not None:
+            pwd, err = await repair_reseller_pg_credentials(session, reseller)
+            if err:
+                return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
+            return RedirectResponse(
+                f"/pg/admins?ok={_q('رمز پاسارگارد نماینده همگام شد — رمز جدید در اعلان ادمین ثبت نشد؛ از ویرایش نماینده قابل تنظیم است')}",
+                status_code=303,
+            )
+        row = await access_by_pg_username(session, username)
+        if not row:
+            return RedirectResponse(
+                f"/pg/admins?err={_q('دسترسی وب برای این ادمین وجود ندارد')}",
+                status_code=303,
+            )
+        pwd, err = await repair_pg_staff_credentials(session, row)
+        if err:
+            return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
+        return RedirectResponse(
+            f"/pg/admins?ok={_q('رمز پاسارگارد ادمین همگام و ذخیره شد')}",
+            status_code=303,
+        )
 
     @app.post("/pg/admins/{username}/delete")
     async def pg_admins_delete(
