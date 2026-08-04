@@ -1462,6 +1462,10 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   background: var(--bg-card);
   text-align: start;
 }
+/* class display:flex otherwise overrides the HTML hidden attribute */
+.flash[hidden] {
+  display: none !important;
+}
 .flash > .flash-copy,
 .flash > .home-update-copy,
 .flash > .dash-bot-setup-inner {

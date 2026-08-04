@@ -72,15 +72,7 @@
     </label>
     {% endif %}
 
-    {% if pg_cred and pg_cred.needs_repair %}
-    <div class="flash err" style="margin: 0.75rem 0;">
-      رمز پاسارگارد این نماینده ذخیره نشده — لیست‌های PG خالی می‌مانند تا همگام شود.
-    </div>
-    <form method="post" action="/resellers/{{ user.id }}/repair-pg-credentials" style="margin-bottom: 1rem;"
-      data-confirm="رمز پاسارگارد ریست و ذخیره شود؟ عملیات بعدی با کلاینت محدود نماینده انجام می‌شود." data-confirm-title="همگام‌سازی رمز PG" data-confirm-label="همگام‌سازی">
-      <button class="btn" type="submit">همگام‌سازی رمز پاسارگارد</button>
-    </form>
-    {% elif pg_cred and pg_cred.ready %}
+    {% if pg_cred and pg_cred.ready %}
     <p class="muted">وضعیت کلاینت PG: آماده ✓</p>
     {% endif %}
 
@@ -100,6 +92,17 @@
       <button class="btn" type="submit">ذخیره</button>
     </div>
   </form>
+
+  {% if pg_cred and pg_cred.needs_repair %}
+  <div class="flash err" style="margin: 0.75rem 0;">
+    رمز پاسارگارد این نماینده ذخیره نشده — لیست‌های PG خالی می‌مانند تا همگام شود.
+  </div>
+  {# Separate form — must NOT nest inside the edit form (browsers ignore nested forms). #}
+  <form method="post" action="/resellers/{{ user.id }}/repair-pg-credentials" style="margin-bottom: 1rem;"
+    data-confirm="رمز پاسارگارد ریست و ذخیره شود؟" data-confirm-title="همگام‌سازی رمز PG" data-confirm-label="همگام‌سازی">
+    <button class="btn" type="submit">همگام‌سازی رمز پاسارگارد</button>
+  </form>
+  {% endif %}
 </div>
 
 {% if is_payg %}

@@ -458,11 +458,33 @@ class PasarGuardClient:
         data = await self.request("GET", "/api/admins/simple")
         return as_list(data, "admins")
 
+    async def get_current_admin(self) -> dict | None:
+        """Authenticated admin's own profile — works for limited (non-sudo) admins.
+
+        ``GET /api/admins`` is sudo-only; limited staff must use ``GET /api/admin``.
+        """
+        try:
+            data = await self.request("GET", "/api/admin")
+            return data if isinstance(data, dict) and data else None
+        except Exception:
+            return None
+
     async def get_admin(self, username: str) -> dict | None:
-        """Fetch one admin (with usage metrics) by username."""
+        """Fetch one admin (with usage metrics) by username.
+
+        When this client is logged in as ``username``, prefer ``/api/admin`` so
+        limited resellers/pg_staff never depend on the sudo-only admins list.
+        """
         username = (username or "").strip()
         if not username:
             return None
+        login = (self._login_username or "").strip()
+        if login and login.lower() == username.lower():
+            cur = await self.get_current_admin()
+            if cur and str(cur.get("username") or "").lower() == username.lower():
+                return cur
+            if cur:
+                return cur
         try:
             data = await self.request("GET", "/api/admins", params={"username": username, "limit": 20})
             admins = as_list(data, "admins")
@@ -479,6 +501,9 @@ class PasarGuardClient:
                     return a
         except Exception:
             pass
+        # Last resort: if we are that admin, current profile still helps.
+        if login and login.lower() == username.lower():
+            return await self.get_current_admin()
         return None
 
     async def get_admin_roles(self) -> list[dict]:

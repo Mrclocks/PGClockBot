@@ -81,7 +81,7 @@
             <a class="btn btn-sm btn-ghost" href="/resellers/{{ st.get('reseller_user_id') }}/edit">مدیریت نماینده</a>
             {% if st.get('needs_pg_repair') and uname %}
             <form method="post" action="/pg/admins/{{ uname }}/repair-pg-credentials"
-              data-confirm="رمز پاسارگارد این نماینده ریست و ذخیره شود؟ (توکن Owner برای عملیات بعدی استفاده نمی‌شود)" data-confirm-title="همگام‌سازی رمز PG" data-confirm-label="همگام‌سازی">
+              data-confirm="رمز پاسارگارد این نماینده ریست و ذخیره شود؟" data-confirm-title="همگام‌سازی رمز PG" data-confirm-label="همگام‌سازی">
               <button class="btn btn-sm" type="submit">همگام‌سازی رمز PG</button>
             </form>
             {% endif %}
