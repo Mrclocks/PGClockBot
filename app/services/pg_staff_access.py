@@ -453,6 +453,29 @@ async def _username_taken(
     return None
 
 
+async def _sync_pg_admin_password(
+    pg_username: str, password: str
+) -> tuple[str | None, str | None]:
+    """Set PasarGuard admin password to match web credentials.
+
+    Returns ``(pg_password_enc, error_message)``.
+    Unified web/PG password (same model as reseller provision) so
+    ``get_pg_for_staff`` authenticates as the limited admin — never Owner.
+    """
+    from app.services.pasarguard import get_pg, invalidate_staff_pg_client
+    from app.services.secret_box import encrypt_secret
+
+    pwd = (password or "").strip()
+    if not pwd:
+        return None, "رمز عبور الزامی است"
+    try:
+        await get_pg().modify_admin(pg_username, {"password": pwd})
+    except Exception as exc:
+        return None, f"همگام‌سازی رمز پاسارگارد ناموفق بود: {exc}"
+    invalidate_staff_pg_client(pg_username)
+    return encrypt_secret(pwd), None
+
+
 async def grant_web_access(
     session: AsyncSession,
     *,
@@ -484,10 +507,15 @@ async def grant_web_access(
     if taken:
         return None, taken
 
+    enc, sync_err = await _sync_pg_admin_password(pg_u, password)
+    if sync_err or not enc:
+        return None, sync_err or "همگام‌سازی رمز پاسارگارد ناموفق بود"
+
     row = PgStaffAccess(
         pg_username=pg_u,
         web_username=cleaned,
         web_password_hash=hash_password(password),
+        pg_password_enc=enc,
         is_active=bool(is_active),
         note=(note or "").strip() or None,
     )
@@ -536,7 +564,11 @@ async def update_web_access(
 
     existing.web_username = cleaned
     if (password or "").strip():
+        enc, sync_err = await _sync_pg_admin_password(pg_u, password)
+        if sync_err or not enc:
+            return None, sync_err or "همگام‌سازی رمز پاسارگارد ناموفق بود"
         existing.web_password_hash = hash_password(password)
+        existing.pg_password_enc = enc
     if is_active is not None:
         existing.is_active = bool(is_active)
     if note is not None:
@@ -583,6 +615,9 @@ async def revoke_web_access(session: AsyncSession, pg_username: str) -> bool:
     await session.delete(row)
     await session.commit()
     invalidate_pg_gate_cache(pg_username)
+    from app.services.pasarguard import invalidate_staff_pg_client
+
+    invalidate_staff_pg_client(pg_username)
     return True
 
 
@@ -623,8 +658,12 @@ async def change_staff_credentials(
     taken = await _username_taken(session, cleaned, exclude_staff_id=row.id)
     if taken:
         return None, taken
+    enc, sync_err = await _sync_pg_admin_password(row.pg_username, new_password)
+    if sync_err or not enc:
+        return None, sync_err or "همگام‌سازی رمز پاسارگارد ناموفق بود"
     row.web_username = cleaned
     row.web_password_hash = hash_password(new_password)
+    row.pg_password_enc = enc
     await session.commit()
     await session.refresh(row)
     return row, None

@@ -15,13 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Version372Tests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-
-        self.assertEqual(__version__, "3.7.2")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.7.2")
+    def test_version_notes_retained(self):
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.7.2"', notes)
+        self.assertIn('"3.7.3"', notes)
 
 
 class OwnerTokenMutationWiringTests(unittest.TestCase):
@@ -109,17 +106,40 @@ class GetPgForStaffTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(PasarGuardError):
             await get_pg_for_staff(AsyncMock(), {"role": "reseller"})
 
-    async def test_pg_staff_legacy_uses_owner_only_with_pg_username(self):
+    async def test_pg_staff_never_falls_back_to_owner(self):
+        from app.services.pasarguard import PasarGuardError, get_pg_for_staff
+
+        with (
+            patch("app.services.pasarguard.get_pg", side_effect=AssertionError("owner used")),
+            patch(
+                "app.services.pasarguard.get_pg_for_staff_admin",
+                new=AsyncMock(side_effect=PasarGuardError("no creds")),
+            ),
+        ):
+            with self.assertRaises(PasarGuardError):
+                await get_pg_for_staff(
+                    AsyncMock(),
+                    {"role": "pg_staff", "pg_admin_username": "staff1"},
+                )
+
+    async def test_pg_staff_uses_staff_admin_client(self):
         from app.services.pasarguard import get_pg_for_staff
 
-        owner = object()
-        with patch("app.services.pasarguard.get_pg", return_value=owner):
+        staff_client = object()
+        with (
+            patch("app.services.pasarguard.get_pg", side_effect=AssertionError("owner used")),
+            patch(
+                "app.services.pasarguard.get_pg_for_staff_admin",
+                new=AsyncMock(return_value=staff_client),
+            ) as mock_staff,
+        ):
             client, as_owner = await get_pg_for_staff(
                 AsyncMock(),
                 {"role": "pg_staff", "pg_admin_username": "staff1"},
             )
-        self.assertIs(client, owner)
-        self.assertTrue(as_owner)
+        self.assertIs(client, staff_client)
+        self.assertFalse(as_owner)
+        mock_staff.assert_awaited_once()
 
     async def test_pg_staff_without_username_fails_closed(self):
         from app.services.pasarguard import PasarGuardError, get_pg_for_staff

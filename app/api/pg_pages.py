@@ -41,6 +41,21 @@ async def _staff_pg(session: AsyncSession, staff: dict):
     return await get_pg_for_staff(session, staff)
 
 
+async def _list_pg(session: AsyncSession, staff: dict):
+    """PG client for inventory lists — Owner only for platform admin.
+
+    Non-admin staff use their own credentials so PasarGuard scopes the view.
+    Returns ``None`` when staff credentials are missing (fail closed → empty UI).
+    """
+    if _is_admin(staff):
+        return get_pg()
+    try:
+        pg, _as_owner = await _staff_pg(session, staff)
+        return pg
+    except PasarGuardError:
+        return None
+
+
 def _pg_form_err(msg: str, *, modal: str, uid: str | int | None = None) -> RedirectResponse:
     url = f"/pg/users?form_err={_q(msg)}&modal={_q(modal)}"
     if uid is not None and str(uid).strip():
@@ -264,7 +279,11 @@ def register_pg_pages(
 
     # ---- VPN users ----
     @app.get("/pg/users", response_class=HTMLResponse)
-    async def pg_users(request: Request, staff: dict = Depends(require_pg_perm("pg_users"))):
+    async def pg_users(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_users")),
+        session: AsyncSession = Depends(get_db),
+    ):
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         form_err = request.query_params.get("form_err")
@@ -277,7 +296,11 @@ def register_pg_pages(
         access = staff.get("pg_access") or {}
         require_template = bool(access.get("require_template")) and not _is_admin(staff)
         try:
-            pg = get_pg()
+            pg = await _list_pg(session, staff)
+            if pg is None:
+                raise PasarGuardError(
+                    "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
+                )
             params: dict = {"offset": 0, "limit": 200}
             if q:
                 params["username"] = q
@@ -409,9 +432,31 @@ def register_pg_pages(
                 tid = int(raw_tid)
                 if not template_allowed_for_staff(staff, tid):
                     return _pg_form_err("این تمپلیت مجاز نیست", modal="create")
+                # Resolve template limits before quota check (blocks oversized bypass).
+                tpl_data_limit = None
+                tpl_expire_ts = None
+                try:
+                    pg_peek, _ = await _staff_pg(session, staff)
+                    tpl = await pg_peek.get_user_template(tid)
+                    if isinstance(tpl, dict):
+                        raw_dl = tpl.get("data_limit")
+                        if raw_dl is not None and int(raw_dl or 0) > 0:
+                            tpl_data_limit = int(raw_dl)
+                        raw_exp = tpl.get("expire_duration")
+                        if raw_exp is not None and int(raw_exp or 0) > 0:
+                            import time as _time
+
+                            tpl_expire_ts = int(_time.time()) + int(raw_exp)
+                except Exception:
+                    tpl_data_limit = None
+                    tpl_expire_ts = None
                 try:
                     await assert_provision_create(
-                        session, staff=staff, from_template=True
+                        session,
+                        staff=staff,
+                        data_limit=tpl_data_limit,
+                        expire_ts=tpl_expire_ts,
+                        from_template=True,
                     )
                 except (ProvisionError, PgQuotaError) as qe:
                     return _pg_form_err(getattr(qe, "message", str(qe)), modal="create")
@@ -729,12 +774,20 @@ def register_pg_pages(
 
     # ---- templates ----
     @app.get("/pg/templates", response_class=HTMLResponse)
-    async def pg_templates(request: Request, staff: dict = Depends(require_pg_perm("pg_templates"))):
+    async def pg_templates(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_templates")),
+        session: AsyncSession = Depends(get_db),
+    ):
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         templates, groups = [], []
         try:
-            pg = get_pg()
+            pg = await _list_pg(session, staff)
+            if pg is None:
+                raise PasarGuardError(
+                    "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
+                )
             templates_raw, groups_raw = await asyncio.gather(
                 pg.get_user_templates(),
                 pg.get_groups_simple(),
@@ -775,31 +828,43 @@ def register_pg_pages(
     ):
         if not staff_pg_action(staff, "templates", "create"):
             return RedirectResponse(f"/pg/templates?err={_q('اجازه ساخت ندارید')}", status_code=303)
-        try:
-            await assert_can_mutate_owned_users(staff)
-        except PgQuotaError as qe:
-            return RedirectResponse(f"/pg/templates?err={_q(qe.message)}", status_code=303)
         form = await request.form()
         group_ids = [int(v) for k, v in form.items() if str(k).startswith("g_") and str(v).isdigit()]
         if not group_ids:
             return RedirectResponse(f"/pg/templates?err={_q('حداقل یک گروه انتخاب کنید')}", status_code=303)
         from app.services.plans_catalog import groups_allowed_for_staff
+        from app.services.pg_quota import assert_can_create_user
 
         if not groups_allowed_for_staff(staff, group_ids):
             return RedirectResponse(f"/pg/templates?err={_q('گروه خارج از دسترسی شماست')}", status_code=303)
         try:
             days = int(expire_days or "30")
             gb = float(data_limit_gb) if str(data_limit_gb).strip() else None
+            data_limit = int(gb * (1024**3)) if gb is not None else None
+            expire_ts = None
+            if days:
+                import time as _time
+
+                expire_ts = int(_time.time()) + days * 86400
+            # Enforce role volume/expire bounds on template create (quota bypass fix).
+            await assert_can_create_user(
+                staff,
+                data_limit=data_limit,
+                expire_ts=expire_ts,
+                from_template=False,
+            )
             pg, _as_owner = await _staff_pg(session, staff)
             await pg.create_user_template(
                 {
                     "name": name.strip(),
                     "group_ids": group_ids,
                     "expire_duration": days * 86400 if days else None,
-                    "data_limit": int(gb * (1024**3)) if gb is not None else None,
+                    "data_limit": data_limit,
                     "status": "active",
                 }
             )
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/templates?err={_q(qe.message)}", status_code=303)
         except Exception as e:
             return RedirectResponse(f"/pg/templates?err={_q(e)}", status_code=303)
         return RedirectResponse(f"/pg/templates?ok={_q('تمپلیت ساخته شد')}", status_code=303)
@@ -829,14 +894,22 @@ def register_pg_pages(
 
     # ---- groups ----
     @app.get("/pg/groups", response_class=HTMLResponse)
-    async def pg_groups(request: Request, staff: dict = Depends(require_pg_perm("pg_groups"))):
+    async def pg_groups(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_groups")),
+        session: AsyncSession = Depends(get_db),
+    ):
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         groups, inbound_tags = [], []
         edit_id = request.query_params.get("edit")
         edit_group = None
         try:
-            pg = get_pg()
+            pg = await _list_pg(session, staff)
+            if pg is None:
+                raise PasarGuardError(
+                    "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
+                )
             full = await pg.get_groups()
             groups = full if isinstance(full, list) else as_list(full, "groups")
             if not groups:
@@ -948,12 +1021,20 @@ def register_pg_pages(
 
     # ---- hosts ----
     @app.get("/pg/hosts", response_class=HTMLResponse)
-    async def pg_hosts(request: Request, staff: dict = Depends(require_pg_perm("pg_hosts"))):
+    async def pg_hosts(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_hosts")),
+        session: AsyncSession = Depends(get_db),
+    ):
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         hosts, inbound_tags = [], []
         try:
-            pg = get_pg()
+            pg = await _list_pg(session, staff)
+            if pg is None:
+                raise PasarGuardError(
+                    "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
+                )
             hosts = await pg.get_hosts()
             inbound_tags = _inbound_tags(await pg.get_inbounds())
         except Exception as e:
@@ -1034,11 +1115,8 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_hosts")),
         session: AsyncSession = Depends(get_db),
     ):
-        # PasarGuard host ACL often exposes update without a distinct delete bit
-        if not (
-            staff_pg_action(staff, "hosts", "delete")
-            or staff_pg_action(staff, "hosts", "update")
-        ):
+        # Require explicit delete — update alone must not widen to destroy hosts.
+        if not staff_pg_action(staff, "hosts", "delete"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه حذف ندارید')}", status_code=303)
         try:
             await assert_can_mutate_owned_users(staff)
@@ -1053,12 +1131,21 @@ def register_pg_pages(
 
     # ---- nodes / inbounds / admins ----
     @app.get("/pg/nodes", response_class=HTMLResponse)
-    async def pg_nodes(request: Request, staff: dict = Depends(require_pg_perm("pg_nodes"))):
+    async def pg_nodes(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_nodes")),
+        session: AsyncSession = Depends(get_db),
+    ):
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         nodes = []
         try:
-            nodes = await get_pg().get_nodes()
+            pg = await _list_pg(session, staff)
+            if pg is None:
+                raise PasarGuardError(
+                    "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
+                )
+            nodes = await pg.get_nodes()
         except Exception as e:
             err = str(e)
         return render(
@@ -1094,11 +1181,19 @@ def register_pg_pages(
         return RedirectResponse(f"/pg/nodes?ok={_q('درخواست اتصال مجدد ارسال شد')}", status_code=303)
 
     @app.get("/pg/inbounds", response_class=HTMLResponse)
-    async def pg_inbounds(request: Request, staff: dict = Depends(require_pg_perm("pg_inbounds"))):
+    async def pg_inbounds(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_inbounds")),
+        session: AsyncSession = Depends(get_db),
+    ):
         err = request.query_params.get("err")
         inbounds, details = [], None
         try:
-            pg = get_pg()
+            pg = await _list_pg(session, staff)
+            if pg is None:
+                raise PasarGuardError(
+                    "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
+                )
             inbounds = await pg.get_inbounds()
             details = await pg.get_inbounds_details()
         except Exception as e:

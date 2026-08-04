@@ -35,6 +35,15 @@ _ROLE_CACHE: dict[int, tuple[float, list[str], dict]] = {}
 _ROLE_CACHE_TTL = 60.0
 
 
+def invalidate_role_cache(role_id: int | None = None) -> None:
+    """Drop one (or all) cached PG role ACL snapshots after role changes."""
+    global _ROLE_CACHE
+    if role_id is None:
+        _ROLE_CACHE = {}
+        return
+    _ROLE_CACHE.pop(int(role_id), None)
+
+
 def _action_allowed(value: Any) -> bool:
     """PasarGuard action: True | {scope: N>0} → allowed; else denied."""
     if value is True:
@@ -212,14 +221,14 @@ async def resolve_reseller_pg_features(pg_role_id: int | None) -> tuple[list[str
 
 
 def enrich_staff_pg_from_role(user: dict, features: list[str], role: dict | None) -> dict:
-    """Attach live PG ACL fields onto a staff dict (mutates a copy)."""
+    """Attach live PG ACL fields onto a staff dict (always replaces cookie ACL)."""
     out = dict(user)
     out["pg_permissions"] = list(features or [])
-    if role:
-        out["pg_writes"] = map_pg_role_writes(role)
-        out["pg_actions"] = map_pg_role_actions(role)
-        out["pg_user_actions"] = role_user_actions(role)
-        out["pg_access"] = role_access_limits(role)
+    # Always overwrite — never keep stale cookie pg_* after role removal.
+    out["pg_writes"] = map_pg_role_writes(role)
+    out["pg_actions"] = map_pg_role_actions(role)
+    out["pg_user_actions"] = role_user_actions(role)
+    out["pg_access"] = role_access_limits(role)
     return out
 
 

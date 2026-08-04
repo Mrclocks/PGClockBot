@@ -12,10 +12,12 @@ class Version367Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.6.8")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.6.8")
+        self.assertGreaterEqual(tuple(int(x) for x in __version__.split(".")), (3, 6, 7))
+        self.assertEqual(
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__
+        )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"3.6.8"', notes)
+        self.assertIn(f'"{__version__}"', notes)
 
 
 class ResellerHubStartTests(unittest.TestCase):
@@ -89,11 +91,11 @@ class ShopSettingsCompletenessTests(unittest.TestCase):
         self.assertIn("جفتی/تکی", src)
         self.assertIn("افزودن/حذف", src)
 
-    def test_web_permissions_never_empty(self):
+    def test_web_permissions_empty_string_lockdown(self):
+        """Empty web_permissions must not soft-upgrade on web (align with has_perm)."""
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("DEFAULT_FEATURE_PERMS", src)
-        self.assertIn("with_shop_settings(parsed)", src)
-        self.assertNotIn("with_shop_settings(parsed) if parsed else parsed", src)
+        self.assertIn("with_shop_settings(parsed) if parsed else parsed", src)
 
     def test_shop_buttons_filter_platform_labels(self):
         src = (ROOT / "app/api/shop_settings.py").read_text(encoding="utf-8")

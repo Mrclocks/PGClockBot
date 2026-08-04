@@ -359,7 +359,12 @@ async def make_reseller(
         if pg_admin_password_enc is not None:
             profile.pg_admin_password_enc = pg_admin_password_enc
         if pg_role_id is not None:
+            from app.services.pg_access import invalidate_role_cache
+
+            if profile.pg_role_id:
+                invalidate_role_cache(int(profile.pg_role_id))
             profile.pg_role_id = pg_role_id
+            invalidate_role_cache(int(pg_role_id))
         if web_username:
             profile.web_username = web_username
         if web_password_hash:
@@ -369,6 +374,10 @@ async def make_reseller(
         profile.plan_id = plan_id
         profile.is_active = True
     else:
+        if pg_role_id is not None:
+            from app.services.pg_access import invalidate_role_cache
+
+            invalidate_role_cache(int(pg_role_id))
         profile = ResellerProfile(
             user_id=user.id,
             commission_percent=commission_percent,

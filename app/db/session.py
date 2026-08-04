@@ -117,6 +117,13 @@ def _migrate_sqlite(sync_conn) -> None:
                 text("ALTER TABLE orders ADD COLUMN quantity INTEGER DEFAULT 1")
             )
 
+    if insp.has_table("pg_staff_access"):
+        scols = {c["name"] for c in insp.get_columns("pg_staff_access")}
+        if "pg_password_enc" not in scols:
+            sync_conn.execute(
+                text("ALTER TABLE pg_staff_access ADD COLUMN pg_password_enc TEXT")
+            )
+
     if insp.has_table("tickets"):
         ticols = {c["name"] for c in insp.get_columns("tickets")}
         if "reseller_id" not in ticols:

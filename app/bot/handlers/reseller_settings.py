@@ -840,6 +840,14 @@ async def support_del(callback: CallbackQuery, session: AsyncSession, db_user: B
     await _render_section(callback, session, "support", profile.user_id)
 
 
+def _is_shop_owner(db_user: BotUser, profile) -> bool:
+    """Bot token rotation is owner-only — bot_admin_ids must not take over the shop bot."""
+    try:
+        return int(db_user.id) == int(profile.user_id)
+    except (TypeError, ValueError):
+        return False
+
+
 @router.callback_query(F.data == "res:st:bot:token")
 async def bot_token_ask(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser,
     is_reseller_bot: bool = False,
@@ -847,6 +855,9 @@ async def bot_token_ask(callback: CallbackQuery, state: FSMContext, session: Asy
     profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await callback.answer(err, show_alert=True)
+        return
+    if not _is_shop_owner(db_user, profile):
+        await callback.answer("فقط مالک فروشگاه می‌تواند توکن ربات را تغییر دهد", show_alert=True)
         return
     await callback.answer()
     await state.set_state(ResellerSettingsStates.bot_token)
@@ -865,6 +876,10 @@ async def bot_token_save(message: Message, state: FSMContext, session: AsyncSess
     profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await state.clear()
+        return
+    if not _is_shop_owner(db_user, profile):
+        await state.clear()
+        await message.answer("فقط مالک فروشگاه می‌تواند توکن ربات را تغییر دهد")
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
