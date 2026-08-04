@@ -152,7 +152,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         if staff.get("pg_admin_username"):
             from app.services.pg_overview import build_reseller_pg_overview
 
-            ov = await build_reseller_pg_overview(staff)
+            ov = await build_reseller_pg_overview(staff, session=session)
             if ov.get("ready"):
                 pg_limits = ov
 

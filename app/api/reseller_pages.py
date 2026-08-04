@@ -206,6 +206,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         )
         from app.services.billing import is_payg, list_billing_transactions
         from app.services.formatting import format_toman
+        from app.services.pg_credentials import credential_status_for_reseller
         import secrets
 
         billing_txs = []
@@ -225,6 +226,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "billing_txs": billing_txs,
                 "format_toman": format_toman,
                 "topup_nonce": secrets.token_hex(8),
+                "pg_cred": credential_status_for_reseller(profile),
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -355,6 +357,30 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
         await session.commit()
         return RedirectResponse(f"/resellers/{user_id}/edit?ok={_q('ذخیره شد')}", status_code=303)
+
+    @app.post("/resellers/{user_id}/repair-pg-credentials")
+    async def reseller_repair_pg_credentials(
+        user_id: int,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_credentials import repair_reseller_pg_credentials
+
+        profile = (
+            await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == user_id))
+        ).scalar_one_or_none()
+        if not profile:
+            return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
+        _pwd, err = await repair_reseller_pg_credentials(session, profile)
+        if err:
+            return RedirectResponse(
+                f"/resellers/{user_id}/edit?err={_q(err)}",
+                status_code=303,
+            )
+        return RedirectResponse(
+            f"/resellers/{user_id}/edit?ok={_q('رمز پاسارگارد همگام و ذخیره شد — نماینده باید از کلاینت محدود خودش استفاده کند')}",
+            status_code=303,
+        )
 
     @app.post("/resellers/{user_id}/billing-topup")
     async def reseller_billing_topup(

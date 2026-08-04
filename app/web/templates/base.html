@@ -38,8 +38,11 @@
   {% set is_admin = staff.role == 'admin' %}
   {% set is_reseller = staff.role == 'reseller' %}
   {% set is_pg_staff = staff.role == 'pg_staff' %}
+  {% set pg_client_ready = is_admin or staff.get('pg_client_ready') %}
   {% set has_bot = is_admin or (perms|length > 0) or is_reseller %}
-  {% set has_pg = is_admin or (pg_nav|length > 0) %}
+  {% set has_pg_features = is_admin or (pg_nav|length > 0) %}
+  {% set has_pg = has_pg_features and pg_client_ready %}
+  {% set pg_needs_credentials = has_pg_features and (not pg_client_ready) and (not is_admin) %}
   <div class="shell">
     <header class="topbar mobile-only">
       <div class="topbar-brand">
@@ -183,7 +186,15 @@
         </div>
         {% endif %}
 
-        {% if has_pg %}
+        {% if pg_needs_credentials %}
+        <div class="nav-section nav-section-pg">
+          <span class="nav-label nav-label-pg">پنل پاسارگارد</span>
+          <a href="/pg/credentials-required" class="nav-item nav-item-pg {% if path.startswith('/pg/credentials-required') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M12 10v4M12 16.5h.01"/></svg>
+            <span>نیاز به همگام‌سازی رمز</span>
+          </a>
+        </div>
+        {% elif has_pg %}
         <div class="nav-section nav-section-pg">
           <span class="nav-label nav-label-pg">پنل پاسارگارد</span>
           {% if is_admin or 'pg_overview' in pg_nav %}

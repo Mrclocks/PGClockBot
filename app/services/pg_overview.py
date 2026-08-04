@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.formatting import format_bytes, format_number
 from app.services.pasarguard import get_pg
@@ -236,8 +238,18 @@ def _role_constraint_boxes(limits: dict) -> list[dict[str, Any]]:
     return boxes
 
 
-async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
-    """Metrics for a staff member's own PG admin account (reseller or pg_staff)."""
+async def build_reseller_pg_overview(
+    staff: dict,
+    session: Optional[AsyncSession] = None,
+) -> dict[str, Any]:
+    """Metrics for a staff member's own PG admin account (reseller or pg_staff).
+
+    Uses the staff-scoped PG client when ``session`` is provided — never the
+    Owner token for non-admin (avoids dashboard-count vs empty-list mismatch).
+    """
+    from app.services.pasarguard import PasarGuardError, get_pg, get_pg_for_staff
+    from app.services.pg_credentials import PG_CREDENTIAL_MISSING_MSG
+
     owner = str(staff.get("pg_admin_username") or "").strip()
     out: dict[str, Any] = {
         "username": owner or None,
@@ -259,7 +271,17 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
         return out
 
     try:
-        pg = get_pg()
+        if staff.get("role") == "admin":
+            pg = get_pg()
+        elif session is None:
+            out["error"] = PG_CREDENTIAL_MISSING_MSG
+            return out
+        else:
+            try:
+                pg, _as_owner = await get_pg_for_staff(session, staff)
+            except PasarGuardError as e:
+                out["error"] = e.user_message(fallback=PG_CREDENTIAL_MISSING_MSG)
+                return out
         admin = await pg.get_admin(owner)
         if not admin:
             out["error"] = f"ادمین «{owner}» در پاسارگارد یافت نشد"

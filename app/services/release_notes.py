@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.7.4": [
+        "رفع دسترسی نمایندگان: همگام‌سازی/تعمیر رمز PG برای حساب‌های قدیمی بدون Owner fallback",
+        "منوی پاسارگارد فقط وقتی کلاینت معتبر است نمایش داده می‌شود؛ در غیر این صورت پیام همگام‌سازی",
+        "نمای کلی نماینده از همان کلاینت محدود لیست‌ها استفاده می‌کند (دیگر mismatch شمارش/لیست خالی)",
+        "دکمه همگام‌سازی رمز در ادمین‌های پاسارگارد و ویرایش نماینده",
+    ],
     "3.7.3": [
         "امنیت Red Team: pg_staff دیگر هرگز با توکن Owner پاسارگارد عمل نمی‌کند — کلاینت محدود با رمز ذخیره‌شده",
         "امنیت: لیست hosts/nodes/templates/groups/users برای غیرادمین از کلاینت خود staff (نه Owner dump)",

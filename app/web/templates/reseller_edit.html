@@ -72,6 +72,18 @@
     </label>
     {% endif %}
 
+    {% if pg_cred and pg_cred.needs_repair %}
+    <div class="flash err" style="margin: 0.75rem 0;">
+      رمز پاسارگارد این نماینده ذخیره نشده — لیست‌های PG خالی می‌مانند تا همگام شود.
+    </div>
+    <form method="post" action="/resellers/{{ user.id }}/repair-pg-credentials" style="margin-bottom: 1rem;"
+      data-confirm="رمز پاسارگارد ریست و ذخیره شود؟ عملیات بعدی با کلاینت محدود نماینده انجام می‌شود." data-confirm-title="همگام‌سازی رمز PG" data-confirm-label="همگام‌سازی">
+      <button class="btn" type="submit">همگام‌سازی رمز پاسارگارد</button>
+    </form>
+    {% elif pg_cred and pg_cred.ready %}
+    <p class="muted">وضعیت کلاینت PG: آماده ✓</p>
+    {% endif %}
+
     <label class="form-field">آیدی ادمین‌های ربات اختصاصی
       
       <input name="bot_admin_ids" value="{{ profile.bot_admin_ids or '' }}" dir="ltr" placeholder="123456789, 987654321" />

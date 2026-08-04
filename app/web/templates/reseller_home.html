@@ -149,8 +149,10 @@
         <span class="badge neutral">{{ pg_limits.role_name }}</span>
         {% endif %}
       </div>
-      {% if 'pg_overview' in (staff.get('pg_permissions') or []) %}
+      {% if 'pg_overview' in (staff.get('pg_permissions') or []) and staff.get('pg_client_ready') %}
       <a class="btn btn-sm btn-ghost" href="/pg">نمای کلی</a>
+      {% elif 'pg_overview' in (staff.get('pg_permissions') or []) %}
+      <a class="btn btn-sm btn-ghost" href="/pg/credentials-required">همگام‌سازی رمز PG</a>
       {% endif %}
     </div>
     {% if pg_limits.users or pg_limits.traffic %}
