@@ -59,4 +59,5 @@ See full detail in `PHASE_D_PLAN.md` §1–2.
 4. Opt-in migrate staff→reseller: **allowed later**, never automatic.  
 5. Password digits: **yes** — PasarGuard requires ≥2 digits; mirror exactly.
 
-D1 implementation: see `docs/PHASE_D1_CREDENTIAL_POLICY.md`.
+D1 implementation: see `docs/PHASE_D1_CREDENTIAL_POLICY.md` (approved).  
+D2 planning: see `docs/PHASE_D2_PLAN.md` — **awaiting approval before code**.

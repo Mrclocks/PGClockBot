@@ -409,4 +409,5 @@ D0 decisions (answers)  →  D1 policy module  →  D2 sync + Owner UI dual gran
 - [x] Slice order D1 → D2 → D3 → D4.  
 - [x] Explicit staff→reseller only as opt-in migrate (not default).
 
-**D1 implemented** on `cursor/phase-d1-credential-policy-b96b`. **STOP — await approval before D2.**
+**D1 implemented** on `cursor/phase-d1-credential-policy-b96b` (approved).  
+**D2 plan:** `docs/PHASE_D2_PLAN.md` — **awaiting approval before implementation.**
