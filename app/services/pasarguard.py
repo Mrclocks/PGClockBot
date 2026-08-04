@@ -557,7 +557,10 @@ def as_list(data: Any, *keys: str) -> list[dict]:
 _pg: Optional[PasarGuardClient] = None
 _pg_reseller_cache: dict[int, PasarGuardClient] = {}
 _pg_reseller_cache_ts: dict[int, float] = {}
+_pg_staff_cache: dict[str, PasarGuardClient] = {}
+_pg_staff_cache_ts: dict[str, float] = {}
 _RESELLER_CLIENT_TTL_SEC = 3600.0
+_STAFF_CLIENT_TTL_SEC = 3600.0
 
 
 def get_pg() -> PasarGuardClient:
@@ -570,10 +573,12 @@ def get_pg() -> PasarGuardClient:
 
 def reset_pg() -> None:
     """Drop cached clients (after PG_BASE_URL / credentials change)."""
-    global _pg, _pg_reseller_cache, _pg_reseller_cache_ts
+    global _pg, _pg_reseller_cache, _pg_reseller_cache_ts, _pg_staff_cache, _pg_staff_cache_ts
     _pg = None
     _pg_reseller_cache = {}
     _pg_reseller_cache_ts = {}
+    _pg_staff_cache = {}
+    _pg_staff_cache_ts = {}
 
 
 def invalidate_reseller_pg_client(reseller_user_id: int | None = None) -> None:
@@ -586,6 +591,19 @@ def invalidate_reseller_pg_client(reseller_user_id: int | None = None) -> None:
     rid = int(reseller_user_id)
     _pg_reseller_cache.pop(rid, None)
     _pg_reseller_cache_ts.pop(rid, None)
+
+
+def invalidate_staff_pg_client(pg_username: str | None = None) -> None:
+    """Drop one (or all) cached pg_staff PG clients after password/credential rotation."""
+    global _pg_staff_cache, _pg_staff_cache_ts
+    if pg_username is None:
+        _pg_staff_cache = {}
+        _pg_staff_cache_ts = {}
+        return
+    key = str(pg_username or "").strip().lower()
+    if key:
+        _pg_staff_cache.pop(key, None)
+        _pg_staff_cache_ts.pop(key, None)
 
 
 async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClient:
@@ -633,13 +651,47 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
     return client
 
 
+async def get_pg_for_staff_admin(session, pg_username: str) -> PasarGuardClient:
+    """PasarGuard client authenticated as a linked ``pg_staff`` admin — never owner."""
+    import time
+
+    from app.services.pg_staff_access import access_by_pg_username
+    from app.services.secret_box import decrypt_secret
+
+    uname = str(pg_username or "").strip()
+    if not uname:
+        raise PasarGuardError("ادمین پاسارگارد برای این حساب تنظیم نشده است")
+    key = uname.lower()
+    cached = _pg_staff_cache.get(key)
+    ts = _pg_staff_cache_ts.get(key, 0.0)
+    if (
+        cached is not None
+        and cached._token
+        and (time.monotonic() - ts) < _STAFF_CLIENT_TTL_SEC
+    ):
+        return cached
+
+    row = await access_by_pg_username(session, uname)
+    if not row or not row.is_active:
+        raise PasarGuardError("دسترسی وب ادمین پاسارگارد فعال نیست")
+    password = decrypt_secret(row.pg_password_enc)
+    if not password:
+        raise PasarGuardError(
+            "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
+        )
+    client = PasarGuardClient(username=str(row.pg_username).strip(), password=password)
+    await client.ensure_token()
+    _pg_staff_cache[key] = client
+    _pg_staff_cache_ts[key] = time.monotonic()
+    return client
+
+
 async def get_pg_for_staff(session, staff: dict) -> tuple[PasarGuardClient, bool]:
     """Return ``(client, as_owner)`` for the authenticated web/bot staff member.
 
     - Platform admin → owner client (``as_owner=True``)
     - Reseller with shop scope → shop PG admin client (never owner)
-    - Legacy ``pg_staff`` without a reseller profile → owner client only after
-      callers have already enforced ownership; prefer converting to reseller.
+    - ``pg_staff`` → linked PG admin client from stored credentials (never owner)
     """
     from app.services.shop_scope import is_platform_admin, shop_owner_id
 
@@ -648,9 +700,11 @@ async def get_pg_for_staff(session, staff: dict) -> tuple[PasarGuardClient, bool
     rid = shop_owner_id(staff)
     if rid:
         return await get_pg_for_reseller(session, int(rid)), False
-    # Legacy pg_staff: no stored PG password — caller must ownership-gate first.
-    if staff.get("role") == "pg_staff" and str(staff.get("pg_admin_username") or "").strip():
-        return get_pg(), True
+    if staff.get("role") == "pg_staff":
+        uname = str(staff.get("pg_admin_username") or "").strip()
+        if not uname:
+            raise PasarGuardError("ادمین پاسارگارد برای این حساب تنظیم نشده است")
+        return await get_pg_for_staff_admin(session, uname), False
     raise PasarGuardError("محدوده فروشگاه مشخص نیست — عملیات پاسارگارد مجاز نیست")
 
 

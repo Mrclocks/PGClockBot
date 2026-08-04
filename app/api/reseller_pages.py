@@ -258,7 +258,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         profile.is_active = bool(form.get("is_active"))
         profile.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
+        old_role_id = int(profile.pg_role_id) if profile.pg_role_id else None
         profile.pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
+        from app.services.pg_access import invalidate_role_cache
+
+        if old_role_id:
+            invalidate_role_cache(old_role_id)
+        if profile.pg_role_id:
+            invalidate_role_cache(int(profile.pg_role_id))
         pg_user = str(form.get("pg_admin_username") or "").strip()
         if pg_user:
             from app.services.pg_staff_access import conflict_message_for_reseller_link

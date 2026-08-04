@@ -312,21 +312,37 @@ def create_api_app(lifespan=None) -> FastAPI:
                 if not allowed:
                     raise NotAuthenticated(login_error=deny_msg)
             # Always re-read ACL from DB — never trust stale cookie permissions.
-            # Soft-ensure core shop keys even when the stored list is empty.
+            # Align with has_perm: explicit empty string = lockdown (no soft DEFAULT).
+            from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
             from app.services.resellers import DEFAULT_FEATURE_PERMS, with_shop_settings
 
             user = dict(user)
-            parsed = parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
-            user["permissions"] = with_shop_settings(parsed)
+            raw_perms = profile.web_permissions
+            if raw_perms is None:
+                user["permissions"] = with_shop_settings(parse_perms(DEFAULT_FEATURE_PERMS))
+            else:
+                parsed = parse_perms(raw_perms)
+                user["permissions"] = with_shop_settings(parsed) if parsed else parsed
             user["bot_user_id"] = int(bot_user_id)
+            # Drop any cookie-sourced PG ACL before live resolve.
+            for stale_key in (
+                "pg_permissions",
+                "pg_writes",
+                "pg_actions",
+                "pg_user_actions",
+                "pg_access",
+                "pg_role_id",
+            ):
+                user.pop(stale_key, None)
             if profile.pg_admin_username:
                 user["pg_admin_username"] = profile.pg_admin_username
             if profile.pg_role_id:
                 user["pg_role_id"] = int(profile.pg_role_id)
-                from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
-
                 features, role = await resolve_reseller_pg_features(int(profile.pg_role_id))
                 user = enrich_staff_pg_from_role(user, features, role)
+            else:
+                # No role → empty PG ACL (do not keep cookie elevation).
+                user = enrich_staff_pg_from_role(user, [], None)
         elif user.get("role") == "pg_staff":
             from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
             from app.services.pg_staff_access import (

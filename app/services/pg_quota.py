@@ -246,10 +246,12 @@ async def assert_can_create_user(
     limits = merge_role_limits(admin, role)
     _check_max_users(admin, limits, need=max(1, int(quantity or 1)))
 
-    if from_template:
-        # PasarGuard: template create only checks max_users (+ write gate).
-        return
-
+    # from_template must NOT skip volume/expire checks — oversized templates
+    # were a quota bypass. Callers should pass resolved template/plan limits;
+    # when omitted, treat as unlimited and apply require_finite against role max.
+    if from_template and data_limit is None and expire_ts is None:
+        # Explicit unlimited-by-omission path still hits require_finite below.
+        pass
     _check_data_limit_bounds(limits, data_limit, require_finite=True)
     _check_expire_bounds(limits, expire_ts, require_finite=True)
 

@@ -150,7 +150,7 @@ class CreateQuotaTests(unittest.IsolatedAsyncioTestCase):
                 )
             self.assertIn("مدت", ctx.exception.message)
 
-    async def test_template_create_only_checks_max_users(self):
+    async def test_template_create_enforces_volume_bounds(self):
         admin = {
             "username": "r1",
             "status": "active",
@@ -162,9 +162,30 @@ class CreateQuotaTests(unittest.IsolatedAsyncioTestCase):
             client.get_admin = AsyncMock(return_value=admin)
             client.get_admin_role = AsyncMock(return_value={"limits": {}})
             get_pg.return_value = client
-            # Template path skips per-user volume/time bounds
+            # from_template must NOT skip volume/expire — unlimited omission fails closed
+            with self.assertRaises(PgQuotaError) as ctx:
+                await assert_can_create_user(
+                    {"role": "reseller", "pg_admin_username": "r1"},
+                    from_template=True,
+                )
+            self.assertIn("حجم", ctx.exception.message)
+
+    async def test_template_create_ok_with_resolved_limits(self):
+        admin = {
+            "username": "r1",
+            "status": "active",
+            "total_users": 1,
+            "permission_overrides": {"max_users": 2, "data_limit_max": 5 * GB},
+        }
+        with patch("app.services.pasarguard.get_pg") as get_pg:
+            client = AsyncMock()
+            client.get_admin = AsyncMock(return_value=admin)
+            client.get_admin_role = AsyncMock(return_value={"limits": {}})
+            get_pg.return_value = client
             await assert_can_create_user(
                 {"role": "reseller", "pg_admin_username": "r1"},
+                data_limit=1 * GB,
+                expire_ts=None,
                 from_template=True,
             )
 

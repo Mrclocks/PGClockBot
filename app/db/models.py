@@ -482,6 +482,9 @@ class PgStaffAccess(Base):
     pg_username: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     web_username: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     web_password_hash: Mapped[str] = mapped_column(String(255))
+    # Encrypted PasarGuard admin password — required for staff-scoped API calls.
+    # Never fall back to the platform Owner token when this is missing.
+    pg_password_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

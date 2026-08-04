@@ -385,15 +385,24 @@ async def debit_usage(
 
     if amount > 0:
         with session.no_autoflush:
-            await session.execute(
+            result = await session.execute(
                 update(ResellerProfile)
-                .where(ResellerProfile.user_id == rid)
+                .where(
+                    ResellerProfile.user_id == rid,
+                    ResellerProfile.billing_balance >= int(amount),
+                )
                 .values(
                     billing_balance=ResellerProfile.billing_balance - int(amount),
                     billing_watermark_bytes=int(watermark_after),
                 )
                 .execution_options(synchronize_session=False)
             )
+            if result.rowcount == 0:
+                # Floor: refuse debit that would drive balance negative (race-safe).
+                await session.refresh(profile)
+                raise BillingError(
+                    "موجودی صورتحساب برای کسر مصرف کافی نیست"
+                )
     else:
         profile.billing_watermark_bytes = int(watermark_after)
 
@@ -518,16 +527,26 @@ async def tick_reseller_usage(
         or RateContext(reseller_user_id=int(profile.user_id)),
     )
     key = f"usage:{int(profile.user_id)}:{watermark}:{used}"
-    return await debit_usage(
-        session,
-        profile,
-        delta,
-        rate_per_gb=rate,
-        watermark_after=used,
-        idempotency_key=key,
-        note="مصرف ترافیک",
-        commit=commit,
-    )
+    try:
+        return await debit_usage(
+            session,
+            profile,
+            delta,
+            rate_per_gb=rate,
+            watermark_after=used,
+            idempotency_key=key,
+            note="مصرف ترافیک",
+            commit=commit,
+        )
+    except BillingError as exc:
+        # Race / empty balance: do not advance watermark; retry next tick.
+        logger.warning(
+            "billing debit skipped reseller=%s amount_delta=%s: %s",
+            profile.user_id,
+            delta,
+            getattr(exc, "message", exc),
+        )
+        return None
 
 
 async def maybe_warn_low_balance(
