@@ -3,7 +3,8 @@
 **Status:** AWAITING APPROVAL — **no implementation**  
 **Depends on:** D3 approved (`cursor/phase-d3-legacy-remediation-b96b` / PR #146)  
 **Branch (docs):** `cursor/phase-d4-plan-b96b`  
-**Base for future impl:** D3 tip (not raw `main` / 3.8.3 — C0–C5 + D1–D3 required)
+**Base for future impl:** D3 tip (not raw `main` / 3.8.3 — C0–C5 + D1–D3 required)  
+**This PR:** docs only vs `main` (`PHASE_D4_PLAN.md`). Parent `PHASE_D_PLAN.md` pointer update lands with the D4 impl branch off D3.
 
 ---
 
