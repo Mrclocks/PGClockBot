@@ -65,6 +65,7 @@ async def assert_provision_create(
         if staff is not None and pg_admin_username is None:
             await assert_can_create_user(
                 staff,
+                session=session,
                 data_limit=data_limit,
                 expire_ts=expire_ts,
                 from_template=from_template,
@@ -82,6 +83,7 @@ async def assert_provision_create(
         elif staff is not None:
             await assert_can_create_user(
                 staff,
+                session=session,
                 data_limit=data_limit,
                 expire_ts=expire_ts,
                 from_template=from_template,
@@ -115,10 +117,11 @@ async def assert_provision_renew(
     try:
         if staff is not None and pg_admin_username is None:
             if from_template:
-                await assert_can_mutate_owned_users(staff)
+                await assert_can_mutate_owned_users(staff, session=session)
             else:
                 await assert_can_modify_user(
                     staff,
+                    session=session,
                     data_limit=data_limit,
                     expire_ts=expire_ts,
                     data_limit_changed=data_limit is not None,
@@ -156,6 +159,7 @@ async def assert_provision_modify(
     try:
         await assert_can_modify_user(
             staff,
+            session=session,
             data_limit=data_limit,
             expire_ts=expire_ts,
             data_limit_changed=data_limit_changed,
@@ -173,6 +177,6 @@ async def assert_provision_mutate(session: AsyncSession, staff: dict) -> None:
     except BillingError as e:
         raise _wrap(e) from e
     try:
-        await assert_can_mutate_owned_users(staff)
+        await assert_can_mutate_owned_users(staff, session=session)
     except PgQuotaError as e:
         raise _wrap(e) from e

@@ -47,16 +47,34 @@ async def _actor(
     )
 
 
-async def _staff_ctx(profile: ResellerProfile) -> dict:
+async def _staff_ctx(profile: ResellerProfile, session=None) -> dict:
+    """Build staff dict via the same enrich path as the web panel."""
+    from app.services.authz import enrich_reseller_actor
+    from app.services.pg_credentials import enc_has_secret
+
+    if session is not None:
+        return await enrich_reseller_actor(
+            session,
+            {"role": "reseller", "username": profile.web_username or ""},
+            profile,
+        )
+    # Fallback when no session (should be rare): map role features + readiness.
     from app.services.pg_access import map_pg_role_writes, resolve_reseller_pg_features, role_access_limits
 
     pg_permissions, pg_role = await resolve_reseller_pg_features(profile.pg_role_id)
+    ready = bool(
+        (profile.pg_admin_username or "").strip()
+        and enc_has_secret(profile.pg_admin_password_enc)
+    )
     return {
         "role": "reseller",
         "bot_user_id": profile.user_id,
+        "pg_admin_username": profile.pg_admin_username,
+        "pg_role_id": profile.pg_role_id,
         "pg_permissions": pg_permissions,
         "pg_access": role_access_limits(pg_role),
         "pg_writes": map_pg_role_writes(pg_role),
+        "pg_client_ready": ready,
     }
 
 
@@ -347,8 +365,8 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
         await state.clear()
         await message.answer("نماینده نیستید.")
         return
-    staff = await _staff_ctx(profile)
-    templates, groups, pg_error = await load_pg_plan_options(staff)
+    staff = await _staff_ctx(profile, session=session)
+    templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
     await state.update_data(templates=templates, groups=groups, owner_id=owner_id)
     rows: list[list[InlineKeyboardButton]] = []
     if groups:
@@ -460,7 +478,7 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
         return
     data = await state.get_data()
     selected = [int(x) for x in (data.get("selected_groups") or [])]
-    staff = await _staff_ctx(profile)
+    staff = await _staff_ctx(profile, session=session)
     if not selected or not groups_allowed_for_staff(staff, selected):
         await callback.answer("حداقل یک گروه مجاز انتخاب کنید", show_alert=True)
         return
@@ -523,7 +541,7 @@ async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session:
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     tid = int(callback.data.split(":")[-1])
-    staff = await _staff_ctx(profile)
+    staff = await _staff_ctx(profile, session=session)
     if not template_allowed_for_staff(staff, tid):
         await callback.answer("به این تمپلیت دسترسی ندارید", show_alert=True)
         return

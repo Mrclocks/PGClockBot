@@ -14,10 +14,11 @@ class Version375Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.7.5")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.7.5")
+        self.assertEqual(__version__, "3.8.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.8.0")
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.7.5"', notes)
+        self.assertIn('"3.8.0"', notes)
 
 
 class LoginRestartFlashTests(unittest.TestCase):

@@ -45,8 +45,11 @@ class OwnerTokenMutationWiringTests(unittest.TestCase):
 
     def test_staff_pg_helper_uses_shared_get_pg_for_staff(self):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
-        self.assertIn("get_pg_for_staff", src)
-        self.assertIn("return await get_pg_for_staff(session, staff)", src)
+        # 3.8.0: _staff_pg routes through authz.resolve_pg_client → get_pg_for_staff
+        self.assertIn("resolve_pg_client", src)
+        self.assertIn("return await resolve_pg_client(session, staff)", src)
+        authz = (ROOT / "app/services/authz.py").read_text(encoding="utf-8")
+        self.assertIn("get_pg_for_staff", authz)
 
     def test_assert_owned_user_prefers_staff_client(self):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
@@ -183,13 +186,34 @@ class OwnershipFailClosedTests(unittest.IsolatedAsyncioTestCase):
         pg = AsyncMock()
         info = {"id": 1, "admin": "shop_a", "username": "u"}
         pg.get_user_by_id = AsyncMock(return_value=info)
-        with patch("app.api.pg_pages.get_pg", return_value=pg):
+        # 3.8.0: limited actors require a session — never Owner via session=None.
+        with patch(
+            "app.services.authz.resolve_pg_client",
+            new=AsyncMock(return_value=(pg, False)),
+        ):
             out = await _assert_owned_user(
-                {"role": "reseller", "pg_admin_username": "shop_a"},
+                {
+                    "role": "reseller",
+                    "pg_admin_username": "shop_a",
+                    "pg_client_ready": True,
+                    "bot_user_id": 1,
+                },
+                1,
+                session=AsyncMock(),
+            )
+        self.assertEqual(out, info)
+
+    async def test_matching_owner_denied_without_session(self):
+        """Architectural guard: session=None must not open Owner for resellers."""
+        from app.api.pg_pages import _assert_owned_user
+
+        with patch("app.api.pg_pages.get_pg", side_effect=AssertionError("Owner")):
+            out = await _assert_owned_user(
+                {"role": "reseller", "pg_admin_username": "shop_a", "pg_client_ready": True},
                 1,
                 session=None,
             )
-        self.assertEqual(out, info)
+        self.assertIsNone(out)
 
 
 class GateCacheInvalidationTests(unittest.TestCase):

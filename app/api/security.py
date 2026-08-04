@@ -24,6 +24,35 @@ from app.services.web_auth import (
 )
 
 
+async def _sync_owner_pg_password(web_username: str, password: str) -> None:
+    """When panel Owner username matches PG_USERNAME, keep PG sudo password in sync.
+
+    Limited staff always sync via pg_staff/reseller paths. Platform Owner used
+    to diverge (web_admin.json vs .env PG_PASSWORD) — that is the root of
+    "Owner password updates do not propagate".
+    """
+    settings = get_settings()
+    pg_user = (settings.pg_username or "").strip()
+    if not pg_user:
+        return
+    if (web_username or "").strip().lower() != pg_user.lower():
+        return
+    pwd = (password or "").strip()
+    if not pwd:
+        return
+    try:
+        from app.services.pasarguard import get_pg, reset_pg
+
+        await get_pg().modify_admin(pg_user, {"password": pwd})
+        update_env_keys({"PG_PASSWORD": pwd})
+        get_settings.cache_clear()
+        reset_pg()
+    except Exception:
+        # Web password already saved — PG sync failure surfaces on next PG op.
+        # Do not roll back web credentials.
+        pass
+
+
 def register_security_pages(app, *, render, require_staff, get_db, get_signer, cookie_secure):
     def _refresh_session(request: Request, staff: dict, *, username: str, pv: str | None = None) -> RedirectResponse:
         from app.services.web_auth import admin_session_version
@@ -130,6 +159,8 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
                     saved = stored_user
                 if new_pass:
                     change_web_admin_password(new_pass)
+                    # Deterministic Owner PG sync when web admin IS the PG sudo user.
+                    await _sync_owner_pg_password(saved, new_pass)
             except ValueError as e:
                 return _err(str(e))
             return _refresh_session(request, staff, username=saved)
@@ -315,10 +346,12 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
                 return _err("رمز فعلی اشتباه است")
             try:
                 change_web_admin_password(new_password)
+                saved = load_web_admin().get("username") or staff.get("username") or "admin"
+                await _sync_owner_pg_password(saved, new_password)
             except ValueError as e:
                 return _err(str(e))
             return _refresh_session(
-                request, staff, username=load_web_admin().get("username") or staff.get("username") or "admin"
+                request, staff, username=saved
             )
 
         if role == "pg_staff":

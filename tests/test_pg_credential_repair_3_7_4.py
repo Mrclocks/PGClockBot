@@ -137,7 +137,7 @@ class ResellerAfterMigrationTests(unittest.IsolatedAsyncioTestCase):
 
         client = object()
         with patch(
-            "app.api.pg_pages.get_pg_for_staff",
+            "app.services.authz.resolve_pg_client",
             new=AsyncMock(return_value=(client, False)),
         ):
             out = await _list_pg(
@@ -183,8 +183,10 @@ class RestrictedAdminNodePermissionTests(unittest.TestCase):
     def test_require_pg_perm_blocks_without_ready(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
         block = src[src.index("def require_pg_perm") : src.index("def require_pg_perm") + 1200]
-        self.assertIn("pg_client_ready", block)
-        self.assertIn("credentials-required", block)
+        # 3.8.0: gate delegated to authz.decide_pg (NEED_CREDENTIALS → credentials URL)
+        self.assertIn("decide_pg", block)
+        self.assertIn("credentials_required_url", block)
+        self.assertIn("NEED_CREDENTIALS", block)
 
     def test_no_owner_fallback_in_get_pg_for_staff(self):
         src = (ROOT / "app/services/pasarguard.py").read_text(encoding="utf-8")

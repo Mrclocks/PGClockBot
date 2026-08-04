@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Plan
-from app.services.pasarguard import as_list, get_pg
+from app.services.pasarguard import as_list
 from app.services.shop_scope import ShopScopeError, is_platform_admin, shop_owner_id
 
 
@@ -134,13 +134,32 @@ def staff_can_create_pg_template(staff: dict | None) -> bool:
     return bool(writes.get("templates"))
 
 
-async def load_pg_plan_options(staff: dict | None = None) -> tuple[list[dict], list[dict], str | None]:
-    """Templates + groups for plan forms, filtered to staff PG access."""
+async def load_pg_plan_options(
+    staff: dict | None = None,
+    session=None,
+) -> tuple[list[dict], list[dict], str | None]:
+    """Templates + groups for plan forms, filtered to staff PG access.
+
+    Uses the staff-scoped PG client when ``session`` is provided for limited
+    actors — never dumps Owner inventory then hopes client-side filters hold.
+    Platform admin (or missing staff) may use Owner.
+    """
+    from app.services.authz import is_limited_pg_actor, resolve_pg_client
+    from app.services.pasarguard import PasarGuardError, get_pg
+
     templates: list[dict] = []
     groups: list[dict] = []
     pg_error = None
     try:
-        pg = get_pg()
+        if is_limited_pg_actor(staff):
+            if session is None:
+                return [], [], "جلسه پایگاه‌داده برای بارگذاری تمپلیت/گروه لازم است"
+            try:
+                pg, _ = await resolve_pg_client(session, staff)
+            except PasarGuardError as e:
+                return [], [], e.user_message(fallback="رمز پاسارگارد ذخیره نشده")
+        else:
+            pg = get_pg()
         templates = await pg.get_user_templates_simple()
         full = await pg.get_user_templates()
         if isinstance(full, list) and full:

@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.8.0": [
+        "معماری مجوز یکپارچه (authz): وب‌پنل، ربات و API از یک مسیر Identity→Role→Permission→Credential→Client→Scope تصمیم می‌گیرند",
+        "منو، داشبورد و صفحات جزئیات پاسارگارد دیگر ACL جداگانه ندارند؛ حساب قدیمی و جدید یکسان رفتار می‌کنند",
+        "بدون رمز ذخیره‌شده PG: هدایت به صفحه پیکربندی (نه صفحه خالی) — Owner fallback هرگز برنمی‌گردد",
+        "همگام‌سازی قطعی رمز Owner وب با PG وقتی یوزر یکی است؛ کلاینت محدود برای سهمیه/تمپلیت/حذف سرویس فروشگاه",
+    ],
     "3.7.5": [
         "رفع همگام‌سازی رمز: فرم تو در تو در ویرایش نماینده اصلاح شد (دیگر علت نمی‌خواهد)",
         "ادمین محدود با GET /api/admin پروفایل خودش را می‌گیرد — دیگر «ادمین وجود ندارد»",

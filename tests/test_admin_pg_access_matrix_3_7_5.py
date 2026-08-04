@@ -134,12 +134,9 @@ class ReadyAdminPanelDataTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_list_pg_none_without_credentials(self):
         from app.api.pg_pages import _list_pg
-        from app.services.pasarguard import PasarGuardError
 
-        with patch(
-            "app.api.pg_pages.get_pg_for_staff",
-            new=AsyncMock(side_effect=PasarGuardError("رمز ذخیره نشده")),
-        ):
+        # Ready flag false → fail closed without touching Owner / client factories.
+        with patch("app.api.pg_pages.get_pg", side_effect=AssertionError("Owner")):
             out = await _list_pg(
                 AsyncMock(),
                 {"role": "pg_staff", "pg_admin_username": "a1", "pg_client_ready": False},
@@ -151,7 +148,7 @@ class ReadyAdminPanelDataTests(unittest.IsolatedAsyncioTestCase):
 
         client = object()
         with patch(
-            "app.api.pg_pages.get_pg_for_staff",
+            "app.services.authz.resolve_pg_client",
             new=AsyncMock(return_value=(client, False)),
         ):
             out = await _list_pg(

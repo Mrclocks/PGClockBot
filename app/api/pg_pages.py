@@ -16,7 +16,6 @@ from app.services.pasarguard import (
     build_user_create_payload,
     build_user_modify_payload,
     get_pg,
-    get_pg_for_staff,
     user_group_ids,
     user_subscription_url,
 )
@@ -37,23 +36,36 @@ def _q(msg: str) -> str:
 
 
 async def _staff_pg(session: AsyncSession, staff: dict):
-    """Return (client, as_owner). Shop staff always use their PG admin credentials."""
-    return await get_pg_for_staff(session, staff)
+    """Return (client, as_owner). Sole request-scoped PG entry (authz.resolve_pg_client)."""
+    from app.services.authz import resolve_pg_client
+
+    return await resolve_pg_client(session, staff)
 
 
 async def _list_pg(session: AsyncSession, staff: dict):
     """PG client for inventory lists — Owner only for platform admin.
 
     Non-admin staff use their own credentials so PasarGuard scopes the view.
-    Returns ``None`` when staff credentials are missing (fail closed → empty UI).
+    Returns ``None`` when staff credentials are missing (fail closed).
+    Callers must redirect to credentials-required — never render a silent empty page.
     """
-    if _is_admin(staff):
+    from app.services.authz import client_ready, is_platform_admin
+
+    if is_platform_admin(staff):
         return get_pg()
+    if not client_ready(staff):
+        return None
     try:
         pg, _as_owner = await _staff_pg(session, staff)
         return pg
     except PasarGuardError:
         return None
+
+
+def _credentials_redirect() -> RedirectResponse:
+    from app.services.authz import credentials_required_url
+
+    return RedirectResponse(credentials_required_url(), status_code=303)
 
 
 def _pg_form_err(msg: str, *, modal: str, uid: str | int | None = None) -> RedirectResponse:
@@ -84,7 +96,9 @@ def _addr_set(raw: str) -> list[str]:
 
 
 def _is_admin(staff: dict) -> bool:
-    return staff.get("role") == "admin"
+    from app.services.authz import is_platform_admin
+
+    return is_platform_admin(staff)
 
 
 def _pg_owner(staff: dict) -> str:
@@ -124,18 +138,25 @@ async def _assert_owned_user(
     user_id: int,
     session: AsyncSession | None = None,
 ) -> dict | None:
-    """Fetch user via the staff's own PG client when possible (never owner for resellers)."""
-    if _is_admin(staff) or session is None:
+    """Fetch user via the staff's own PG client — never Owner for limited actors.
+
+    ``session`` is required for non-admin (architectural guard against the old
+    ``session is None → get_pg()`` Owner fallback).
+    """
+    from app.services.authz import assert_staff_pg_session, is_platform_admin
+
+    if is_platform_admin(staff):
         info = await get_pg().get_user_by_id(user_id)
     else:
         try:
+            assert_staff_pg_session(staff, session)
             pg, _as_owner = await _staff_pg(session, staff)
             info = await pg.get_user_by_id(user_id)
         except PasarGuardError:
             return None
     if not isinstance(info, dict):
         return None
-    if _is_admin(staff):
+    if is_platform_admin(staff):
         return info
     mine = _pg_owner(staff).lower()
     if not mine or _owner_of(info) != mine:
@@ -144,20 +165,12 @@ async def _assert_owned_user(
 
 
 def _pg_ctx(staff: dict, **extra) -> dict:
+    from app.services.authz import nav_context, pg_features
+
     writes = staff_pg_writes(staff)
     actions = staff_user_actions(staff)
-    pg_perms = list(staff.get("pg_permissions") or [])
-    if _is_admin(staff):
-        pg_perms = [
-            "pg_overview",
-            "pg_users",
-            "pg_templates",
-            "pg_groups",
-            "pg_hosts",
-            "pg_inbounds",
-            "pg_nodes",
-            "pg_admins",
-        ]
+    pg_perms = pg_features(staff)
+    nav = nav_context(staff)
     ctx = {
         "staff": staff,
         "is_admin": _is_admin(staff),
@@ -165,6 +178,7 @@ def _pg_ctx(staff: dict, **extra) -> dict:
         "pg_writes": writes,
         "pg_user_actions": actions,
         "pg_access": staff.get("pg_access") or {},
+        "authz_nav": nav,
     }
     ctx.update(extra)
     return ctx
@@ -320,9 +334,7 @@ def register_pg_pages(
         try:
             pg = await _list_pg(session, staff)
             if pg is None:
-                raise PasarGuardError(
-                    "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
-                )
+                return _credentials_redirect()
             params: dict = {"offset": 0, "limit": 200}
             if q:
                 params["username"] = q
@@ -697,7 +709,7 @@ def register_pg_pages(
         if await _assert_owned_user(staff, user_id, session) is None:
             return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/users?err={_q(qe.message)}", status_code=303)
         return None
@@ -807,9 +819,7 @@ def register_pg_pages(
         try:
             pg = await _list_pg(session, staff)
             if pg is None:
-                raise PasarGuardError(
-                    "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
-                )
+                return _credentials_redirect()
             templates_raw, groups_raw = await asyncio.gather(
                 pg.get_user_templates(),
                 pg.get_groups_simple(),
@@ -871,6 +881,7 @@ def register_pg_pages(
             # Enforce role volume/expire bounds on template create (quota bypass fix).
             await assert_can_create_user(
                 staff,
+                session=session,
                 data_limit=data_limit,
                 expire_ts=expire_ts,
                 from_template=False,
@@ -904,7 +915,7 @@ def register_pg_pages(
         if not template_allowed_for_staff(staff, template_id):
             return RedirectResponse(f"/pg/templates?err={_q('تمپلیت خارج از دسترسی شماست')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/templates?err={_q(qe.message)}", status_code=303)
         try:
@@ -929,9 +940,7 @@ def register_pg_pages(
         try:
             pg = await _list_pg(session, staff)
             if pg is None:
-                raise PasarGuardError(
-                    "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
-                )
+                return _credentials_redirect()
             full = await pg.get_groups()
             groups = full if isinstance(full, list) else as_list(full, "groups")
             if not groups:
@@ -973,7 +982,7 @@ def register_pg_pages(
         if not staff_pg_action(staff, "groups", "create"):
             return RedirectResponse(f"/pg/groups?err={_q('اجازه ساخت ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/groups?err={_q(qe.message)}", status_code=303)
         form = await request.form()
@@ -1002,7 +1011,7 @@ def register_pg_pages(
         if not groups_allowed_for_staff(staff, [group_id]):
             return RedirectResponse(f"/pg/groups?err={_q('گروه خارج از دسترسی شماست')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/groups?err={_q(qe.message)}", status_code=303)
         form = await request.form()
@@ -1031,7 +1040,7 @@ def register_pg_pages(
         if not groups_allowed_for_staff(staff, [group_id]):
             return RedirectResponse(f"/pg/groups?err={_q('گروه خارج از دسترسی شماست')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/groups?err={_q(qe.message)}", status_code=303)
         try:
@@ -1054,9 +1063,7 @@ def register_pg_pages(
         try:
             pg = await _list_pg(session, staff)
             if pg is None:
-                raise PasarGuardError(
-                    "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
-                )
+                return _credentials_redirect()
             hosts = await pg.get_hosts()
             inbound_tags = _inbound_tags(await pg.get_inbounds())
         except Exception as e:
@@ -1088,7 +1095,7 @@ def register_pg_pages(
         if not staff_pg_action(staff, "hosts", "create"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه ساخت ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         addrs = _addr_set(address)
@@ -1119,7 +1126,7 @@ def register_pg_pages(
         if not staff_pg_action(staff, "hosts", "update"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         try:
@@ -1141,7 +1148,7 @@ def register_pg_pages(
         if not staff_pg_action(staff, "hosts", "delete"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه حذف ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         try:
@@ -1164,9 +1171,7 @@ def register_pg_pages(
         try:
             pg = await _list_pg(session, staff)
             if pg is None:
-                raise PasarGuardError(
-                    "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
-                )
+                return _credentials_redirect()
             nodes = await pg.get_nodes()
         except Exception as e:
             err = str(e)
@@ -1192,7 +1197,7 @@ def register_pg_pages(
         if not staff_pg_action(staff, "nodes", "reconnect"):
             return RedirectResponse(f"/pg/nodes?err={_q('اجازه اتصال مجدد ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/nodes?err={_q(qe.message)}", status_code=303)
         try:
@@ -1213,9 +1218,7 @@ def register_pg_pages(
         try:
             pg = await _list_pg(session, staff)
             if pg is None:
-                raise PasarGuardError(
-                    "رمز پاسارگارد این ادمین ذخیره نشده — دسترسی وب را دوباره با رمز تنظیم کنید"
-                )
+                return _credentials_redirect()
             inbounds = await pg.get_inbounds()
             details = await pg.get_inbounds_details()
         except Exception as e:

@@ -1045,10 +1045,15 @@ async def delete_bot_user(
                     try:
                         pg_client = await get_pg_for_reseller(session, reseller_id)
                     except Exception:
-                        pg_client = get_pg()
+                        # Never fall back to Owner for shop-owned services.
+                        pg_client = None
+                if pg_client is None:
+                    continue
                 await pg_client.delete_user_by_id(int(svc.pg_user_id))
                 pg_services_deleted += 1
             except Exception:
+                if pg_client is None:
+                    continue
                 try:
                     await pg_client.set_disabled_by_id(int(svc.pg_user_id), True)
                 except Exception:

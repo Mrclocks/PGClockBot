@@ -162,9 +162,13 @@ class BotTokenOwnerOnlyTests(unittest.TestCase):
 
 class CookieAclTrustTests(unittest.TestCase):
     def test_require_staff_clears_stale_pg_acl(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn('user.pop(stale_key, None)', src)
-        self.assertIn('enrich_staff_pg_from_role(user, [], None)', src)
+        # 3.8.0: stale cookie ACL cleared inside authz.enrich_* / clear_stale_pg_acl
+        app_src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        authz_src = (ROOT / "app/services/authz.py").read_text(encoding="utf-8")
+        self.assertIn("enrich_reseller_actor", app_src)
+        self.assertIn("enrich_pg_staff_actor", app_src)
+        self.assertIn("clear_stale_pg_acl", authz_src)
+        self.assertIn('out.pop(key, None)', authz_src)
 
     def test_enrich_always_overwrites_acl_fields(self):
         from app.services.pg_access import enrich_staff_pg_from_role
@@ -185,8 +189,14 @@ class CookieAclTrustTests(unittest.TestCase):
         self.assertIsNone(out["pg_access"].get("allowed_template_ids"))
 
     def test_empty_web_permissions_lockdown_aligned(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        # Lockdown semantics live in authz.enrich_reseller_actor (same as has_perm).
+        src = (ROOT / "app/services/authz.py").read_text(encoding="utf-8")
         self.assertIn("with_shop_settings(parsed) if parsed else parsed", src)
+        from app.services.resellers import has_perm, parse_perms
+
+        profile = SimpleNamespace(is_active=True, web_permissions="")
+        self.assertFalse(has_perm(profile, "dashboard"))
+        self.assertEqual(parse_perms(""), [])
 
 
 class RoleCacheTests(unittest.TestCase):

@@ -33,16 +33,17 @@
 <body>
   {% if staff is defined and staff %}
   {% set path = request.url.path %}
-  {% set perms = staff.get('permissions') or [] %}
-  {% set pg_nav = staff.get('pg_permissions') or [] %}
-  {% set is_admin = staff.role == 'admin' %}
-  {% set is_reseller = staff.role == 'reseller' %}
-  {% set is_pg_staff = staff.role == 'pg_staff' %}
-  {% set pg_client_ready = is_admin or staff.get('pg_client_ready') %}
-  {% set has_bot = is_admin or (perms|length > 0) or is_reseller %}
-  {% set has_pg_features = is_admin or (pg_nav|length > 0) %}
-  {% set has_pg = has_pg_features and pg_client_ready %}
-  {% set pg_needs_credentials = has_pg_features and (not pg_client_ready) and (not is_admin) %}
+  {% set nav = authz_nav if authz_nav is defined and authz_nav else none %}
+  {% set perms = (nav.shop_permissions if nav else staff.get('permissions')) or [] %}
+  {% set pg_nav = (nav.pg_permissions if nav else staff.get('pg_permissions')) or [] %}
+  {% set is_admin = nav.is_admin if nav else (staff.role == 'admin') %}
+  {% set is_reseller = nav.is_reseller if nav else (staff.role == 'reseller') %}
+  {% set is_pg_staff = nav.is_pg_staff if nav else (staff.role == 'pg_staff') %}
+  {% set pg_client_ready = nav.pg_client_ready if nav else (is_admin or staff.get('pg_client_ready')) %}
+  {% set has_bot = nav.has_bot_section if nav else (is_admin or (perms|length > 0) or is_reseller) %}
+  {% set has_pg_features = nav.has_pg_features if nav else (is_admin or (pg_nav|length > 0)) %}
+  {% set has_pg = nav.has_pg if nav else (has_pg_features and pg_client_ready) %}
+  {% set pg_needs_credentials = nav.pg_needs_credentials if nav else (has_pg_features and (not pg_client_ready) and (not is_admin)) %}
   <div class="shell">
     <header class="topbar mobile-only">
       <div class="topbar-brand">

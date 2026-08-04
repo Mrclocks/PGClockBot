@@ -194,15 +194,42 @@ def _check_max_users(admin: dict, limits: dict[str, Any], *, need: int = 1) -> N
         )
 
 
-async def _load_admin_and_role(staff: dict) -> tuple[dict, dict | None]:
+async def _load_admin_and_role(
+    staff: dict,
+    session=None,
+) -> tuple[dict, dict | None]:
+    """Load admin + role for quota checks.
+
+    Prefer the staff-scoped PG client when a session is available so limited
+    admins never depend on Owner for their own profile. When ``session`` is
+    absent (shop delivery gate), Owner may read admin metadata only — never
+    used as a mutation client for that staff.
+    """
     owner = str(staff.get("pg_admin_username") or "").strip()
     if not owner:
         raise PgQuotaError("ادمین پاسارگارد برای این حساب تنظیم نشده است")
 
-    from app.services.pasarguard import get_pg
+    from app.services.authz import is_platform_admin, resolve_pg_client
+    from app.services.pasarguard import PasarGuardError, get_pg
 
-    pg = get_pg()
+    if is_platform_admin(staff):
+        pg = get_pg()
+    elif session is not None:
+        try:
+            pg, _ = await resolve_pg_client(session, staff)
+        except PasarGuardError as e:
+            raise PgQuotaError(e.user_message(fallback="رمز پاسارگارد ذخیره نشده")) from e
+    else:
+        # Delivery / renew gates without a web session: sudo metadata read only.
+        pg = get_pg()
+
     admin = await pg.get_admin(owner)
+    if not isinstance(admin, dict) or not admin:
+        if not is_platform_admin(staff) and session is not None:
+            try:
+                admin = await pg.get_current_admin()
+            except Exception:
+                admin = None
     if not isinstance(admin, dict) or not admin:
         raise PgQuotaError(f"ادمین «{owner}» در پاسارگارد یافت نشد")
 
@@ -232,6 +259,7 @@ def staff_needs_quota_check(staff: dict) -> bool:
 async def assert_can_create_user(
     staff: dict,
     *,
+    session=None,
     data_limit: int | None = None,
     expire_ts: int | None = None,
     from_template: bool = False,
@@ -241,7 +269,7 @@ async def assert_can_create_user(
     if not staff_needs_quota_check(staff):
         return
 
-    admin, role = await _load_admin_and_role(staff)
+    admin, role = await _load_admin_and_role(staff, session=session)
     assert_admin_can_write(admin, role)
     limits = merge_role_limits(admin, role)
     _check_max_users(admin, limits, need=max(1, int(quantity or 1)))
@@ -259,6 +287,7 @@ async def assert_can_create_user(
 async def assert_can_modify_user(
     staff: dict,
     *,
+    session=None,
     data_limit: int | None = None,
     expire_ts: int | None = None,
     data_limit_changed: bool = True,
@@ -268,7 +297,7 @@ async def assert_can_modify_user(
     if not staff_needs_quota_check(staff):
         return
 
-    admin, role = await _load_admin_and_role(staff)
+    admin, role = await _load_admin_and_role(staff, session=session)
     assert_admin_can_write(admin, role)
     limits = merge_role_limits(admin, role)
 
@@ -284,11 +313,11 @@ async def assert_can_modify_user(
     )
 
 
-async def assert_can_mutate_owned_users(staff: dict) -> None:
+async def assert_can_mutate_owned_users(staff: dict, *, session=None) -> None:
     """Block enable/disable/reset/revoke/delete when admin is limited/disabled."""
     if not staff_needs_quota_check(staff):
         return
-    admin, role = await _load_admin_and_role(staff)
+    admin, role = await _load_admin_and_role(staff, session=session)
     assert_admin_can_write(admin, role)
 
 

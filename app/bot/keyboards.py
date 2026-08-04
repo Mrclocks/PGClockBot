@@ -348,17 +348,12 @@ def _reply_admin_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     ]
 
 
-def _pg_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+def _pg_submenu_entries(ui: dict | None = None, *, actor: dict | None = None) -> list[tuple[str, str]]:
+    """PG reply submenu — feature set from authz (identical gates as web panel)."""
     _ = ui
-    return [
-        (REPLY_ACTION_PG_STATS, "🏠 نمای کلی"),
-        (REPLY_ACTION_PG_USERS, "👥 کاربران VPN"),
-        (REPLY_ACTION_PG_CREATE, "➕ ساخت کاربر"),
-        (REPLY_ACTION_PG_SEARCH, "🔎 جستجوی یوزر"),
-        (REPLY_ACTION_PG_NODES, "🕸 نودها"),
-        (REPLY_ACTION_PG_GROUP, "📁 ساخت گروه"),
-        (REPLY_ACTION_PG_TEMPLATE, "📋 ساخت تمپلیت"),
-    ]
+    from app.services.authz import bot_pg_feature_entries
+
+    return bot_pg_feature_entries(actor)
 
 
 def _admin_users_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
@@ -458,13 +453,13 @@ def _support_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
 
 
 def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
-    from app.services.resellers import has_bot_perm
+    from app.services.authz import can_shop_profile
 
     # Fail closed: without a live profile show nothing (matches reply_action_map)
     if profile is None:
         return []
     entries: list[tuple[str, str]] = []
-    if has_bot_perm(profile, "dashboard"):
+    if can_shop_profile(profile, "dashboard"):
         entries.append(("res_dash", "🏠 خانه نماینده"))
         entries.append(("res_users", "👥 مشتریان من"))
     # PAYG billing wallet — only when mode is payg
@@ -475,17 +470,17 @@ def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
             entries.append(("res_billing", "💰 کیف پول"))
     except Exception:
         pass
-    if has_bot_perm(profile, "stats"):
+    if can_shop_profile(profile, "stats"):
         entries.append(("res_stats", "📊 آمار و کمیسیون"))
-    if has_bot_perm(profile, "plans"):
+    if can_shop_profile(profile, "plans"):
         entries.append(("res_plans", "💎 پلن‌های فروش"))
-    if has_bot_perm(profile, "orders"):
+    if can_shop_profile(profile, "orders"):
         entries.append(("res_orders", "🛒 سفارش‌های مشتریان"))
-    if has_bot_perm(profile, "payments"):
+    if can_shop_profile(profile, "payments"):
         entries.append(("res_payments", "🧾 رسیدهای در انتظار"))
-    if has_bot_perm(profile, "tickets"):
+    if can_shop_profile(profile, "tickets"):
         entries.append(("res_tickets", "🎫 تیکت‌های مشتریان"))
-    if has_bot_perm(profile, "shop_settings"):
+    if can_shop_profile(profile, "shop_settings"):
         entries.append(("res_settings", "⚙️ تنظیمات فروشگاه"))
     # Shop owner is admin of their bot — preview customer keyboard
     entries.append((REPLY_ACTION_RES_PREVIEW, "👁 پیش‌نمایش منوی کاربر"))
@@ -818,16 +813,16 @@ def reply_action_map(
             mapping.setdefault((text or "").strip(), key)
 
         if reseller_actor:
-            from app.services.resellers import has_bot_perm
+            from app.services.authz import can_shop_profile
 
             # Fail closed: without a live profile, register no reseller panel labels
             if profile is not None:
                 for key, text in _reseller_submenu_entries(profile):
                     mapping[(text or "").strip()] = key
-                if has_bot_perm(profile, "shop_settings"):
+                if can_shop_profile(profile, "shop_settings"):
                     for key, text in _reseller_settings_submenu_entries(ui):
                         mapping[(text or "").strip()] = key
-                if has_bot_perm(profile, "plans"):
+                if can_shop_profile(profile, "plans"):
                     for key, text in _reseller_plans_submenu_entries(ui):
                         mapping[(text or "").strip()] = key
 

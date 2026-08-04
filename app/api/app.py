@@ -122,6 +122,15 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     ctx.setdefault("flash_ok", None)
     ctx.setdefault("flash_err", None)
     ctx.setdefault("app_version", local_version())
+    # Inject unified nav flags whenever staff is present (menus ≡ can_* decisions).
+    staff = ctx.get("staff")
+    if isinstance(staff, dict) and "authz_nav" not in ctx:
+        try:
+            from app.services.authz import nav_context
+
+            ctx["authz_nav"] = nav_context(staff)
+        except Exception:
+            ctx["authz_nav"] = None
     if "pwa_name" not in ctx:
         try:
             from app.services.pwa import panel_display_name
@@ -278,6 +287,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         request: Request,
         session: AsyncSession = Depends(get_db),
     ) -> dict:
+        """Identity → Role → live Permission/ACL. Never trust cookie PG bits."""
+        from app.services.authz import (
+            enrich_pg_staff_actor,
+            enrich_reseller_actor,
+            is_platform_admin,
+            pg_features,
+        )
+
         user = get_session_user(request)
         if not user or user.get("role") not in {"admin", "reseller", "pg_staff"}:
             raise NotAuthenticated()
@@ -285,7 +302,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             from sqlalchemy import select
 
             from app.db.models import ResellerProfile
-            from app.services.resellers import parse_perms, setup_is_complete
+            from app.services.resellers import setup_is_complete
 
             bot_user_id = user.get("bot_user_id")
             if not bot_user_id:
@@ -311,52 +328,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 )
                 if not allowed:
                     raise NotAuthenticated(login_error=deny_msg)
-            # Always re-read ACL from DB — never trust stale cookie permissions.
-            # Align with has_perm: explicit empty string = lockdown (no soft DEFAULT).
-            from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
-            from app.services.resellers import DEFAULT_FEATURE_PERMS, with_shop_settings
-
-            user = dict(user)
-            raw_perms = profile.web_permissions
-            if raw_perms is None:
-                user["permissions"] = with_shop_settings(parse_perms(DEFAULT_FEATURE_PERMS))
-            else:
-                parsed = parse_perms(raw_perms)
-                user["permissions"] = with_shop_settings(parsed) if parsed else parsed
-            user["bot_user_id"] = int(bot_user_id)
-            # Drop any cookie-sourced PG ACL before live resolve.
-            for stale_key in (
-                "pg_permissions",
-                "pg_writes",
-                "pg_actions",
-                "pg_user_actions",
-                "pg_access",
-                "pg_role_id",
-            ):
-                user.pop(stale_key, None)
-            if profile.pg_admin_username:
-                user["pg_admin_username"] = profile.pg_admin_username
-            if profile.pg_role_id:
-                user["pg_role_id"] = int(profile.pg_role_id)
-                features, role = await resolve_reseller_pg_features(int(profile.pg_role_id))
-                user = enrich_staff_pg_from_role(user, features, role)
-            else:
-                # No role → empty PG ACL (do not keep cookie elevation).
-                user = enrich_staff_pg_from_role(user, [], None)
-            from app.services.pg_credentials import enc_has_secret
-
-            # Data access requires stored PG password — never Owner fallback.
-            user["pg_client_ready"] = bool(
-                (profile.pg_admin_username or "").strip()
-                and enc_has_secret(profile.pg_admin_password_enc)
-            )
+            # Single enrichment path (legacy + new accounts identical).
+            user = await enrich_reseller_actor(session, user, profile)
         elif user.get("role") == "pg_staff":
-            from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
             from app.services.pg_staff_access import (
                 PG_ACCESS_DENIED_MSG,
                 access_by_web_username,
                 enforce_pg_admin_web_gate,
-                resolve_pg_role_id_for_admin,
             )
 
             web_u = (user.get("username") or "").strip().lower()
@@ -370,24 +348,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 session, row.pg_username, revoke_if_missing=True
             )
             if not allowed:
-                # Gate may have revoked the row — deny without a second DB round-trip
                 raise NotAuthenticated(login_error=deny_msg)
-            user = dict(user)
-            user["permissions"] = []
-            user["pg_admin_username"] = row.pg_username
-            user["pg_staff_id"] = int(row.id)
-            role_id = await resolve_pg_role_id_for_admin(row.pg_username)
-            if role_id:
-                user["pg_role_id"] = int(role_id)
-            features, role = await resolve_reseller_pg_features(user.get("pg_role_id"))
-            # Owner-equivalent PG admins still get mapped features via is_owner on role
-            user = enrich_staff_pg_from_role(user, features, role)
-            from app.services.pg_credentials import enc_has_secret
-
-            user["pg_client_ready"] = enc_has_secret(row.pg_password_enc)
-            if not (user.get("pg_permissions") or []):
-                # No mapped features → deny panel use
+            user = await enrich_pg_staff_actor(session, user, row)
+            if not pg_features(user):
                 raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
+        elif is_platform_admin(user):
+            user = dict(user)
+            user["pg_client_ready"] = True
         # Skip unread COUNT on mutations / JSON polls that never render the sidebar.
         try:
             from app.services.panel_tickets import should_skip_unread_count, sidebar_unread_count
@@ -404,8 +371,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         request: Request,
         session: AsyncSession = Depends(get_db),
     ) -> dict:
+        from app.services.authz import is_platform_admin
+
         user = await require_staff(request, session)
-        if user.get("role") != "admin":
+        if not is_platform_admin(user):
             raise NotAdmin()
         return user
 
@@ -414,56 +383,37 @@ def create_api_app(lifespan=None) -> FastAPI:
             request: Request,
             session: AsyncSession = Depends(get_db),
         ) -> dict:
+            from app.services.authz import can_shop
+
             user = await require_staff(request, session)
-            if user.get("role") == "admin":
-                return user
-            perms = user.get("permissions") or []
-            if perm not in perms:
+            if not can_shop(user, perm):
                 raise NotAdmin()
             return user
 
         return _dep
 
-    def _live_pg_home(features: list[str] | tuple[str, ...] | set[str]) -> str:
-        feats = set(features or [])
-        if "pg_overview" in feats:
-            return "/pg"
-        if "pg_users" in feats:
-            return "/pg/users"
-        if "pg_templates" in feats:
-            return "/pg/templates"
-        if "pg_groups" in feats:
-            return "/pg/groups"
-        if "pg_hosts" in feats:
-            return "/pg/hosts"
-        if "pg_nodes" in feats:
-            return "/pg/nodes"
-        if "pg_inbounds" in feats:
-            return "/pg/inbounds"
-        return "/logout"
-
     def require_pg_perm(perm: str):
-        """Admin always; reseller/pg_staff need mapped PG feature + ready client."""
+        """Single PG gate: Identity→Role→Feature→Credential (authz.decide_pg)."""
 
         async def _dep(
             request: Request,
             session: AsyncSession = Depends(get_db),
         ) -> dict:
-            user = await require_staff(request, session)
-            if user.get("role") == "admin":
-                return user
-            # require_staff already resolved + enriched pg_permissions — reuse it
-            features = user.get("pg_permissions") or []
-            if perm not in features:
-                raise NotAdmin(redirect=_live_pg_home(features))
-            # Feature bit without stored PG password → block empty confusing pages.
-            if not user.get("pg_client_ready"):
-                from app.services.pg_credentials import PG_CREDENTIAL_MISSING_MSG
+            from app.services.authz import (
+                PgDecision,
+                credentials_required_url,
+                decide_pg,
+                first_allowed_pg_path,
+            )
 
-                raise NotAdmin(
-                    redirect=f"/pg/credentials-required?err={quote(PG_CREDENTIAL_MISSING_MSG, safe='')}"
-                )
-            return user
+            user = await require_staff(request, session)
+            decision = decide_pg(user, perm)
+            if decision == PgDecision.ALLOW:
+                return user
+            if decision == PgDecision.NEED_CREDENTIALS:
+                raise NotAdmin(redirect=credentials_required_url())
+            # deny_feature / deny → live ACL home (never stale cookie)
+            raise NotAdmin(redirect=first_allowed_pg_path(user))
 
         return _dep
 
@@ -610,6 +560,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             if live != request.url.path:
                 return RedirectResponse(live, status_code=303)
             return RedirectResponse("/logout", status_code=303)
+        # Shop-perm deny (no live redirect): never trust cookie pg_permissions.
         user = None
         try:
             cookie = request.cookies.get("session")
@@ -618,21 +569,12 @@ def create_api_app(lifespan=None) -> FastAPI:
         except Exception:
             user = None
         role = (user or {}).get("role")
-        if role in {"reseller", "pg_staff"}:
-            pg = (user or {}).get("pg_permissions") or []
-            if role == "pg_staff":
-                return RedirectResponse("/pg", status_code=303)
-            for path in (
-                "/home",
-                "/pg/users" if "pg_users" in pg else None,
-                "/pg" if pg else None,
-            ):
-                if path and path != request.url.path:
-                    return RedirectResponse(path, status_code=303)
+        if role == "pg_staff":
+            return RedirectResponse("/pg", status_code=303)
+        if role == "reseller":
             perms = (user or {}).get("permissions") or []
             for path, key in (
                 ("/home", "dashboard"),
-                ("/dashboard", "dashboard"),
                 ("/plans", "plans"),
                 ("/orders", "orders"),
                 ("/payments", "payments"),
@@ -1006,17 +948,24 @@ def create_api_app(lifespan=None) -> FastAPI:
         bot_user_id = None
         pg_role_id = None
         reseller_pv = ""
+        pg_client_ready = False
 
         if verify_web_admin(u, p):
             role = "admin"
             display = load_web_admin()["username"]
+            pg_client_ready = True
         else:
             # Reseller web credentials (self-serve wizard only — no referral-code login)
+            from app.services.authz import (
+                enrich_pg_staff_actor,
+                enrich_reseller_actor,
+                first_allowed_pg_path,
+                pg_features,
+            )
             from app.services.pg_staff_access import (
                 PG_ACCESS_DENIED_MSG,
                 access_by_web_username,
                 enforce_pg_admin_web_gate,
-                resolve_pg_role_id_for_admin,
             )
 
             result = await session.execute(
@@ -1068,35 +1017,25 @@ def create_api_app(lifespan=None) -> FastAPI:
                                 },
                                 status_code=403,
                             )
-                    from app.services.pg_access import (
-                        map_pg_role_writes,
-                        resolve_reseller_pg_features,
-                        role_access_limits,
-                        role_user_actions,
+                    # Same enrichment as require_staff (legacy ≡ new).
+                    enriched = await enrich_reseller_actor(
+                        session,
+                        {"role": "reseller", "username": profile.web_username or ""},
+                        profile,
                     )
-
                     role = "reseller"
                     display = profile.web_username or ru.full_name or str(ru.telegram_id)
-                    # Use DB permissions as-is — do not soft-upgrade ACL past admin intent
-                    permissions = parse_perms(profile.web_permissions) or parse_perms(
-                        DEFAULT_FEATURE_PERMS
-                    )
+                    permissions = list(enriched.get("permissions") or [])
                     bot_user_id = ru.id
-                    pg_admin_username = profile.pg_admin_username
-                    pg_permissions, pg_role = await resolve_reseller_pg_features(profile.pg_role_id)
-                    pg_user_actions = role_user_actions(pg_role)
-                    pg_access = role_access_limits(pg_role)
-                    pg_writes = map_pg_role_writes(pg_role)
-                    pg_role_id = profile.pg_role_id
+                    pg_admin_username = enriched.get("pg_admin_username")
+                    pg_permissions = list(enriched.get("pg_permissions") or [])
+                    pg_user_actions = dict(enriched.get("pg_user_actions") or {})
+                    pg_access = dict(enriched.get("pg_access") or {})
+                    pg_writes = dict(enriched.get("pg_writes") or {})
+                    pg_role_id = enriched.get("pg_role_id")
+                    pg_client_ready = bool(enriched.get("pg_client_ready"))
                     reseller_pv = (profile.web_password_hash or "")[:24]
             if not role:
-                from app.services.pg_access import (
-                    map_pg_role_writes,
-                    resolve_reseller_pg_features,
-                    role_access_limits,
-                    role_user_actions,
-                )
-
                 staff_row = await access_by_web_username(session, u.strip().lower())
                 if staff_row and verify_password_hash(p, staff_row.web_password_hash):
                     if not staff_row.is_active:
@@ -1123,7 +1062,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                             },
                             status_code=403,
                         )
-                    # Re-load in case revoke removed the row
                     staff_row = await access_by_web_username(session, u.strip().lower())
                     if not staff_row or not staff_row.is_active:
                         for k in limit_keys:
@@ -1134,17 +1072,12 @@ def create_api_app(lifespan=None) -> FastAPI:
                             {"error": PG_ACCESS_DENIED_MSG, "username": typed_user},
                             status_code=403,
                         )
-                    role = "pg_staff"
-                    display = staff_row.web_username
-                    permissions = []
-                    pg_admin_username = staff_row.pg_username
-                    pg_role_id = await resolve_pg_role_id_for_admin(staff_row.pg_username)
-                    pg_permissions, pg_role = await resolve_reseller_pg_features(pg_role_id)
-                    pg_user_actions = role_user_actions(pg_role)
-                    pg_access = role_access_limits(pg_role)
-                    pg_writes = map_pg_role_writes(pg_role)
-                    reseller_pv = (staff_row.web_password_hash or "")[:24]
-                    if not pg_permissions:
+                    enriched = await enrich_pg_staff_actor(
+                        session,
+                        {"role": "pg_staff", "username": staff_row.web_username},
+                        staff_row,
+                    )
+                    if not pg_features(enriched):
                         for k in limit_keys:
                             _login_fail(k)
                         return render(
@@ -1156,6 +1089,17 @@ def create_api_app(lifespan=None) -> FastAPI:
                             },
                             status_code=400,
                         )
+                    role = "pg_staff"
+                    display = staff_row.web_username
+                    permissions = []
+                    pg_admin_username = enriched.get("pg_admin_username")
+                    pg_role_id = enriched.get("pg_role_id")
+                    pg_permissions = list(enriched.get("pg_permissions") or [])
+                    pg_user_actions = dict(enriched.get("pg_user_actions") or {})
+                    pg_access = dict(enriched.get("pg_access") or {})
+                    pg_writes = dict(enriched.get("pg_writes") or {})
+                    pg_client_ready = bool(enriched.get("pg_client_ready"))
+                    reseller_pv = (staff_row.web_password_hash or "")[:24]
 
         if not role:
             for k in limit_keys:
@@ -1177,6 +1121,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "username": display,
             "permissions": permissions,
             "pg_permissions": pg_permissions,
+            "pg_client_ready": pg_client_ready,
         }
         if role == "admin":
             payload["sv"] = admin_session_version()
@@ -1192,11 +1137,19 @@ def create_api_app(lifespan=None) -> FastAPI:
                 payload["pg_role_id"] = int(pg_role_id)
             if reseller_pv:
                 payload["pv"] = reseller_pv
-        home = "/home" if role == "admin" else "/home"
+        home = "/home"
         if role == "pg_staff":
-            home = "/pg"
+            # Landing uses same first_allowed_pg_path as deny redirects.
+            home = first_allowed_pg_path(
+                {
+                    "role": "pg_staff",
+                    "pg_permissions": pg_permissions,
+                    "pg_client_ready": pg_client_ready,
+                }
+            )
+            if home == "/logout":
+                home = "/pg"
         elif role == "reseller":
-            # Prefer web dashboard; fall back by shop/PG perms.
             home = "/home"
             if "dashboard" not in permissions and not pg_permissions:
                 home = ""
@@ -1211,14 +1164,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                         home = path
                         break
             if not home:
-                if "pg_users" in pg_permissions:
-                    home = "/pg/users"
-                elif "pg_overview" in pg_permissions:
-                    home = "/pg"
-                elif pg_permissions:
-                    home = "/pg"
-                else:
-                    home = "/logout"
+                home = first_allowed_pg_path(
+                    {
+                        "role": "reseller",
+                        "pg_permissions": pg_permissions,
+                        "pg_client_ready": pg_client_ready,
+                        "permissions": permissions,
+                    }
+                )
         resp = RedirectResponse(home, status_code=303)
         resp.set_cookie(
             "session",
@@ -1393,7 +1346,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         plans = await list_catalog_plans(session, staff, include_trial=True)
         trial = next((p for p in plans if p.is_trial), None)
         sale_plans = [p for p in plans if not p.is_trial]
-        templates, groups, pg_error = await load_pg_plan_options(staff)
+        templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
         rid = catalog_owner_id(staff)
         # Non-admin without shop id must never load platform (admin) settings.
         if not is_platform_admin(staff) and not rid:
@@ -1777,7 +1730,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.plans_catalog import list_catalog_plans, load_pg_plan_options
 
         plans = await list_catalog_plans(session, staff, include_trial=True)
-        templates, groups, pg_error = await load_pg_plan_options(staff)
+        templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
         ctx = {
             "staff": staff,
             "plans": plans,
