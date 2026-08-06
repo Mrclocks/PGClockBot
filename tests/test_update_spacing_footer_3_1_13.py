@@ -89,6 +89,8 @@ class FooterBaselineTests(unittest.TestCase):
         logout = css.split(".logout-link {\n", 1)[1].split("}", 1)[0]
         self.assertIn("height: 28px;", logout)
         self.assertIn("min-height: 28px;", logout)
+        self.assertIn("width: 28px;", logout)
+        self.assertIn("border-radius: var(--radius-pill);", logout)
 
     def test_mobile_main_bottom_pad_matches_side_drawer(self):
         css = CSS.read_text(encoding="utf-8")

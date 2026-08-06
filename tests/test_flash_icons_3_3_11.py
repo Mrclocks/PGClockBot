@@ -47,7 +47,7 @@ class FlashIconTests(unittest.TestCase):
         shared = CSS.split(".flash.ok::before,")[1].split("/* Green:")[0]
         self.assertIn("width: 28px", shared)
         self.assertIn("height: 28px", shared)
-        self.assertIn("border-radius: 8px", shared)
+        self.assertIn("border-radius: var(--radius-pill)", shared)
 
     def test_no_legacy_pulse_or_quota_banner_ico(self):
         self.assertNotIn("pg-gauge-pulse", CSS)

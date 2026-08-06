@@ -31,11 +31,12 @@ class LightNavHomeBoxTests(unittest.TestCase):
         )
         self.assertIsNone(bad, "nav-section-home must not share modal backdrop background")
 
-    def test_home_box_is_transparent_with_border(self):
+    def test_home_box_is_soft_fill_without_border(self):
         block = self._light_block()
         home = block.split("{", 1)[1].split("}", 1)[0]
-        self.assertIn("background: transparent;", home)
-        self.assertIn("border-color: var(--border);", home)
+        # Soft neutral fill replaces border framing (borderless soft UI)
+        self.assertIn("var(--foreground)", home)
+        self.assertIn("border: none;", home)
         self.assertNotIn("rgba(0, 0, 0", home)
 
     def test_home_active_and_hover_are_neutral(self):

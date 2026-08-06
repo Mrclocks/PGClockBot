@@ -200,7 +200,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("background-position: left var(--space-2) center", body)
         self.assertIn("padding-inline-end: calc(var(--space-2) + 14px)", body)
         self.assertNotIn("background-position: right", body)
-        self.assertIn("background-color: #09090b", body)
+        self.assertIn("background-color: var(--control-bg)", body)
         # light theme must not wipe the chevron via background shorthand
         light = re.search(r'(?ms)html\[data-theme="light"\]\s+select\s*\{([^}]+)\}', css)
         self.assertIsNotNone(light)
@@ -297,9 +297,12 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("padding-top: var(--page-title-gap)", side.group(1))
         logout = re.search(r"(?ms)^\.logout-link\s*\{([^}]+)\}", css)
         self.assertIsNotNone(logout)
-        self.assertIn("font-size: 13px", logout.group(1))
+        # Circular icon-only logout control
+        self.assertIn("font-size: 0", logout.group(1))
         self.assertIn("height: 28px", logout.group(1))
-        self.assertIn("padding: 0 var(--space-1)", logout.group(1))
+        self.assertIn("width: 28px", logout.group(1))
+        self.assertIn("border-radius: var(--radius-pill)", logout.group(1))
+        self.assertIn("padding: 0", logout.group(1))
 
     def test_block_button_is_warn_update_is_ok(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
@@ -330,7 +333,12 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         ):
             src = (ROOT / rel).read_text(encoding="utf-8")
             self.assertIn("btn-danger", src)
-            self.assertNotRegex(src, r'btn-ghost[^>]*>\s*حذف\s*<')
+            # Ignore wholesale tier row removers (data-tier-remove) — those are
+            # inline form controls, not destructive entity deletes.
+            self.assertNotRegex(
+                src,
+                r'btn-ghost(?![^>]*data-tier-remove)[^>]*>\s*حذف\s*<',
+            )
 
 
 if __name__ == "__main__":

@@ -29,9 +29,9 @@ class TableChromeTests(unittest.TestCase):
         self.assertIn("border-radius: var(--radius);", wrap)
         self.assertIn("isolation: isolate;", wrap)
         self.assertNotIn("scrollbar-gutter: stable;", wrap)
-        # Card tables keep a framed box so thead meets the edges
+        # Card tables stay radius-clipped; framing comes from surface contrast (no border)
         card = css.split(".card > .table-wrap {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("border: 1px solid var(--border);", card)
+        self.assertIn("border: none;", card)
         self.assertIn("border-radius: var(--radius);", card)
 
     def test_row_height_not_over_compact(self):
