@@ -71,7 +71,7 @@
         }
         const dark = resolve(pref) === 'dark';
         document.querySelectorAll('meta[name="theme-color"]').forEach(m => {
-          if (!m.media) m.setAttribute('content', dark ? '#09090b' : '#fafafa');
+          if (!m.media) m.setAttribute('content', dark ? '#09090b' : '#ffffff');
         });
       }
       function setMenu(open){

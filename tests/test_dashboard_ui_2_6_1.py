@@ -51,8 +51,8 @@ class FooterAndMobileTests(unittest.TestCase):
 class SidebarHoverTests(unittest.TestCase):
     def test_section_hovers_use_box_tints(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".nav-item-bot:hover {\n  background: color-mix(in srgb, #e08a3c", css)
-        self.assertIn(".nav-item-pg:hover {\n  background: color-mix(in srgb, #3d8fd1", css)
+        self.assertIn(".nav-item-bot:hover {\n  background: color-mix(in oklch, var(--section-bot)", css)
+        self.assertIn(".nav-item-pg:hover {\n  background: color-mix(in oklch, var(--section-pg)", css)
 
 
 class RamRingTests(unittest.TestCase):

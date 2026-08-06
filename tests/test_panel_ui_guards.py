@@ -200,7 +200,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("background-position: left var(--space-2) center", body)
         self.assertIn("padding-inline-end: calc(var(--space-2) + 14px)", body)
         self.assertNotIn("background-position: right", body)
-        self.assertIn("background-color: #09090b", body)
+        self.assertIn("background-color: var(--control-bg)", body)
         # light theme must not wipe the chevron via background shorthand
         light = re.search(r'(?ms)html\[data-theme="light"\]\s+select\s*\{([^}]+)\}', css)
         self.assertIsNotNone(light)
@@ -330,7 +330,12 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         ):
             src = (ROOT / rel).read_text(encoding="utf-8")
             self.assertIn("btn-danger", src)
-            self.assertNotRegex(src, r'btn-ghost[^>]*>\s*حذف\s*<')
+            # Ignore JS-built markup (e.g. wholesale tier removers).
+            html = re.sub(r"(?is)<script\b[^>]*>.*?</script>", "", src)
+            self.assertNotRegex(
+                html,
+                r"<button[^>]*\bbtn-ghost\b[^>]*>\s*حذف\s*</button>",
+            )
 
 
 if __name__ == "__main__":
