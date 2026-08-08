@@ -297,7 +297,7 @@ class VersionBumpTests(unittest.TestCase):
             tuple(int(x) for x in __version__.split(".")), (4, 5, 0)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.7.0"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.8.0"
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"4.5.0"', notes)

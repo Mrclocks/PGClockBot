@@ -80,8 +80,8 @@ class AdminResellerUnifySourceTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.7.0")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.7.0")
+        self.assertEqual(__version__, "4.8.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.8.0")
 
 
 class ConvertStaffTests(unittest.IsolatedAsyncioTestCase):
