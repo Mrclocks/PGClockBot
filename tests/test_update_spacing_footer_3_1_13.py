@@ -64,7 +64,7 @@ class TitleGapParityTests(unittest.TestCase):
     def test_bot_title_above_and_below_use_same_token(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) 0;",
             css,
         )
         head = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
@@ -74,6 +74,8 @@ class TitleGapParityTests(unittest.TestCase):
             "margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));",
             css,
         )
+        foot = css.split(".site-footer {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));", foot)
 
 
 class FooterBaselineTests(unittest.TestCase):
@@ -81,26 +83,26 @@ class FooterBaselineTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         site = css.split(".site-footer {\n", 1)[1].split("}", 1)[0]
         side = css.split(".side-foot {\n", 1)[1].split("}", 1)[0]
-        shared = "min-height: calc(var(--page-title-gap) + 28px + var(--space-1));"
+        shared = "min-height: calc(var(--page-title-gap) + 28px + var(--page-title-gap) + var(--safe-bottom));"
         self.assertIn(shared, site)
         self.assertIn(shared, side)
         self.assertIn("padding-top: var(--page-title-gap);", site)
         self.assertIn("padding-top: var(--page-title-gap);", side)
+        self.assertIn("padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));", site)
+        self.assertIn("padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));", side)
         logout = css.split(".logout-link {\n", 1)[1].split("}", 1)[0]
         self.assertIn("height: 28px;", logout)
         self.assertIn("min-height: 28px;", logout)
 
-    def test_mobile_main_bottom_pad_matches_side_drawer(self):
+    def test_mobile_main_footer_pad_matches_side_foot(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
-            mobile,
-        )
+        self.assertIn("padding: var(--page-title-gap) var(--space-2) 0;", mobile)
         self.assertIn(
             "padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));",
             mobile,
         )
+        self.assertIn("overflow: hidden;", mobile.split(".main {", 1)[1].split("}", 1)[0])
 
     def test_main_body_footer_gap_matches_page_title_gap(self):
         css = CSS.read_text(encoding="utf-8")

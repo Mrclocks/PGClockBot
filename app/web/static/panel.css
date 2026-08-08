@@ -152,16 +152,28 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
 *::-webkit-scrollbar { width: 6px; height: 6px; }
 *::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 999px; }
 
+/*
+  App shell owns the viewport. Footers are pinned to the bottom of each column
+  from first paint — content scrolls inside .main-body / .side-nav only.
+  Using stable svh (not dvh) avoids the classic “footer jumps down on first scroll”
+  when mobile browser chrome shows/hides.
+*/
+html:has(.shell),
+html:has(.shell) body {
+  height: 100%;
+  max-height: 100vh;
+  max-height: 100svh;
+  overflow: hidden;
+}
+
 /* —— Shell: desktop = main + sidebar (physical right for RTL content) —— */
 .shell {
   direction: ltr;
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--side-w);
   grid-template-areas: "main side";
-  height: 100vh;
-  height: 100dvh;
-  max-height: 100vh;
-  max-height: 100dvh;
+  height: 100%;
+  max-height: 100%;
   width: 100%;
   background: var(--background);
   overflow: hidden;
@@ -175,14 +187,14 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   grid-area: side;
   width: var(--side-w);
   height: 100%;
-  max-height: 100dvh;
+  max-height: 100%;
   position: relative;
   top: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  /* Nav scrolls; .side-foot stays pinned and baseline-aligned with .site-footer */
+  overflow: hidden;
   background: var(--bg-card);
   border-left: 1px solid var(--border);
-  padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) calc(var(--space-2) + var(--safe-bottom));
+  padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -193,23 +205,23 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   min-width: 0;
   min-height: 0;
   height: 100%;
-  max-height: 100dvh;
-  /* Top / bottom chrome equal: --page-title-gap above content and below footer */
-  padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));
+  max-height: 100%;
+  /* Body scrolls; site-footer pinned — bottom chrome lives on the footer itself */
+  padding: var(--page-title-gap) var(--space-4) 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.main-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-}
-.main-body {
-  /* flex-shrink:0 — long pages must grow so .main scrolls content+footer together.
-     flex-shrink:1 + min-height:0 pinned the footer over overflowing content. */
-  flex: 1 0 auto;
-  min-width: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
   /* Equal to .main padding-top — space before footer border matches top air */
   padding-bottom: var(--page-title-gap);
 }
@@ -271,7 +283,16 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
 .brand-ver-dot-warn { background: #ef4444; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2); }
 
 
-.side-nav { display: flex; flex-direction: column; gap: 0; flex: 1; }
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .nav-section {
   margin-top: var(--space-1);
   padding-top: var(--space-1);
@@ -336,14 +357,17 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
 
 .side-foot {
   margin-top: auto;
+  flex: 0 0 auto;
   padding-top: var(--page-title-gap);
+  /* Same bottom chrome as .site-footer → one shared baseline */
+  padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-1);
   /* Shared with .site-footer so both tops sit on one baseline */
-  min-height: calc(var(--page-title-gap) + 28px + var(--space-1));
+  min-height: calc(var(--page-title-gap) + 28px + var(--page-title-gap) + var(--safe-bottom));
   box-sizing: border-box;
 }
 .side-foot-user {
@@ -2102,8 +2126,12 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 }
 
 .site-footer {
-  margin-top: auto;
+  /* Pinned by flex column — do NOT use margin-top:auto inside a scrollport
+     (that caused short-page footers to sit high until the first scroll). */
+  margin-top: 0;
+  flex: 0 0 auto;
   padding-top: var(--page-title-gap);
+  padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));
   border-top: 1px solid var(--border);
   background: var(--background);
   display: flex;
@@ -2114,9 +2142,8 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   color: var(--muted-fg);
   font-size: 12px;
   line-height: 1.25;
-  flex: 0 0 auto;
-  /* Match .side-foot baseline height so both footer tops sit on one line */
-  min-height: calc(var(--page-title-gap) + 28px + var(--space-1));
+  /* Match .side-foot: top pad + row + bottom pad (shared baseline) */
+  min-height: calc(var(--page-title-gap) + 28px + var(--page-title-gap) + var(--safe-bottom));
   box-sizing: border-box;
 }
 .site-footer a { color: var(--muted-fg); text-decoration: none; }
@@ -3142,11 +3169,10 @@ form.settings-form > .actions.sticky-actions,
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    height: auto;
-    max-height: none;
-    min-height: 100vh;
-    min-height: 100dvh;
-    overflow: visible;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    overflow: hidden;
     /* Reserve space for fixed mobile topbar */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
   }
@@ -3159,9 +3185,8 @@ form.settings-form > .actions.sticky-actions,
     right: 0;
     left: auto;
     width: min(300px, 86vw);
-    height: calc(100vh - var(--topbar-h) - var(--safe-top));
-    height: calc(100dvh - var(--topbar-h) - var(--safe-top));
-    max-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
+    height: calc(100% - var(--topbar-h) - var(--safe-top));
+    max-height: calc(100% - var(--topbar-h) - var(--safe-top));
     z-index: 50;
     transform: translateX(105%);
     transition: transform .2s ease;
@@ -3169,25 +3194,33 @@ form.settings-form > .actions.sticky-actions,
     border-top: 1px solid var(--border);
     grid-area: unset;
     display: flex !important;
+    overflow: hidden;
     /* Match air above theme control to air below it → separator (--space-2) */
     padding-top: var(--space-2);
-    padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));
+    padding-bottom: 0;
   }
   .side.open { transform: translateX(0); }
 
   .main {
-    /* Bottom pad matches .side drawer so site-footer & side-foot share one baseline */
-    padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));
-    min-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
+    /* Body scrolls; footer stays pinned under the column (aligned with drawer foot) */
+    padding: var(--page-title-gap) var(--space-2) 0;
+    min-height: 0;
     height: auto;
     max-height: none;
     flex: 1 1 auto;
     width: 100%;
-    overflow: visible;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
   }
-  .main-body { flex: 1 0 auto; padding-bottom: var(--page-title-gap); }
+  .main-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: var(--page-title-gap);
+  }
   .site-footer {
     /* Keep one row like .side-foot so both footer tops sit on the same line */
     flex-direction: row;
@@ -3195,10 +3228,12 @@ form.settings-form > .actions.sticky-actions,
     align-items: center;
     justify-content: center;
     text-align: center;
-    margin-top: auto;
+    margin-top: 0;
+    flex: 0 0 auto;
     padding-top: var(--page-title-gap);
+    padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));
     gap: var(--space-1);
-    min-height: calc(var(--page-title-gap) + 28px + var(--space-1));
+    min-height: calc(var(--page-title-gap) + 28px + var(--page-title-gap) + var(--safe-bottom));
   }
   .footer-meta { justify-content: center; }
   .footer-actions { justify-content: center; }

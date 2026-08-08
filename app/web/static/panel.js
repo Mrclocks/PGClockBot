@@ -614,7 +614,8 @@
       if (e.key === 'Escape') closeUiSelects();
     });
     window.addEventListener('resize', () => closeUiSelects());
-    window.addEventListener('scroll', (e) => {
+    /* capture on document — .main-body / .side-nav are the scrollports (not window) */
+    document.addEventListener('scroll', (e) => {
       if (!document.querySelector('.ui-select.open')) return;
       if (e.target && e.target.closest && e.target.closest('.ui-select-menu')) return;
       closeUiSelects();
@@ -651,7 +652,7 @@
       }
     });
     window.addEventListener('resize', closeRowActions);
-    window.addEventListener('scroll', (e) => {
+    document.addEventListener('scroll', (e) => {
       if (!document.querySelector('.row-actions.open')) return;
       /* ignore scrolls inside the open menu or a nested select popup */
       if (e.target && e.target.closest && (

@@ -162,13 +162,15 @@ class SpacingSemanticParityTests(unittest.TestCase):
     def test_page_title_gaps_use_token(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) 0;",
             css,
         )
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) 0;",
             css,
         )
+        foot = css.split(".site-footer {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));", foot)
         head = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: var(--page-title-gap);", head)
 

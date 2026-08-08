@@ -16,14 +16,16 @@ PG_PAGES = ROOT / "app/api/pg_pages.py"
 
 
 class FooterScrollFixTests(unittest.TestCase):
-    def test_main_body_does_not_shrink_under_footer(self):
+    def test_main_body_is_scrollport_under_pinned_footer(self):
         css = CSS.read_text(encoding="utf-8")
         body = css.split(".main-body {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("flex: 1 0 auto;", body)
-        self.assertNotRegex(body, r"(?m)^\s*flex:\s*1 1 auto;")
-        self.assertNotRegex(body, r"(?m)^\s*min-height:\s*0;")
+        self.assertIn("flex: 1 1 auto;", body)
+        self.assertIn("min-height: 0;", body)
+        self.assertIn("overflow-y: auto;", body)
         mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn(".main-body { flex: 1 0 auto;", mobile)
+        self.assertIn("overflow-y: auto;", mobile.split(".main-body", 1)[1].split("}", 1)[0])
+        foot = css.split(".site-footer {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("margin-top: 0;", foot)
 
 
 class SidebarThemeGapTests(unittest.TestCase):

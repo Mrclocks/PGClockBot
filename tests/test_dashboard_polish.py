@@ -49,7 +49,9 @@ class DashboardPolishSourceTests(unittest.TestCase):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".dash-bot-setup-inner", css)
         self.assertIn("justify-content: center", css)
-        self.assertIn(".site-footer {\n  margin-top: auto;", css)
+        foot = css.split(".site-footer {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("margin-top: 0;", foot)
+        self.assertIn("flex: 0 0 auto;", foot)
 
     def test_overview_boxes_equal_and_rtl(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
