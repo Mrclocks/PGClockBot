@@ -136,7 +136,7 @@ class SettingsPaygUiTests(unittest.TestCase):
         from app.services.users import SETTING_GROUPS, SETTINGS_TABS, TAB_SETTING_GROUPS
 
         tabs = dict(SETTINGS_TABS)
-        self.assertEqual(tabs.get("billing"), "مدیریت PAYG")
+        self.assertEqual(tabs.get("billing"), "کیف پول و PAYG")
         self.assertIn("مدیریت PAYG", SETTING_GROUPS)
         keys = [item[0] for item in SETTING_GROUPS["مدیریت PAYG"]]
         self.assertNotIn("billing_price_per_gb", keys)

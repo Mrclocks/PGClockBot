@@ -26,9 +26,9 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
 
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.7.0")
+        self.assertEqual(__version__, "4.8.0")
         root = Path(__file__).resolve().parents[1]
-        self.assertEqual((root / "VERSION").read_text(encoding="utf-8").strip(), "4.7.0")
+        self.assertEqual((root / "VERSION").read_text(encoding="utf-8").strip(), "4.8.0")
 
     def test_user_cannot_map_admin_labels(self):
         ui = {"btn_menu_home": "🏠 منوی اصلی", "btn_back": "⬅️ بازگشت", "menu_order": "shop,wallet"}

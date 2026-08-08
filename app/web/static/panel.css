@@ -3500,6 +3500,102 @@ form.settings-form > .actions.sticky-actions,
 .settings-main { min-width: 0; }
 .settings-tabs { margin-bottom: var(--page-title-gap); }
 
+/* Shortcode help (?) next to message field titles */
+.setting-label-row { display: flex; flex-direction: column; gap: 6px; position: relative; }
+.setting-label-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.sc-help-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2, var(--bg));
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  flex: 0 0 auto;
+}
+.sc-help-btn:hover,
+.sc-help-btn[aria-expanded="true"] {
+  color: var(--fg);
+  border-color: var(--accent, var(--border));
+}
+.sc-help-pop {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 1.75rem;
+  z-index: 40;
+  min-width: min(280px, 92vw);
+  max-width: 320px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface, var(--card-bg, #fff));
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+}
+.sc-help-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sc-help-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 2px;
+}
+.sc-code {
+  font-size: 12px;
+  direction: ltr;
+  unicode-bidi: isolate;
+  background: var(--surface-2, rgba(0,0,0,.04));
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.sc-desc { font-size: 12px; color: var(--muted); }
+.sc-copy {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+.sc-copy:hover { color: var(--fg); background: var(--surface-2, rgba(0,0,0,.04)); }
+.sc-copy .ico { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.tg-bubble b, .tg-bubble strong { font-weight: 700; }
+.tg-bubble i, .tg-bubble em { font-style: italic; }
+.tg-bubble u { text-decoration: underline; }
+.tg-bubble s { text-decoration: line-through; }
+.tg-bubble code, .tg-bubble pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: rgba(255,255,255,.06);
+  padding: 0 4px;
+  border-radius: 4px;
+}
+.tg-bubble a { color: #6ab3f3; text-decoration: underline; }
+
+.order-pay-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.order-pay-details {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.order-pay-details summary { cursor: pointer; user-select: none; }
+.order-pay-list { margin: 6px 0 0; padding-inline-start: 1.1rem; }
+.orders-payments-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+
 .tg-preview-wrap {
   position: sticky;
   top: var(--space-1);

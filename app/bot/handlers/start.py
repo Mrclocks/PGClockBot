@@ -14,7 +14,7 @@ from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
 from app.services.pasarguard import extract_sub_token, get_pg
 from app.services.users import get_all_settings, on
-from app.services.safe_format import safe_format
+from app.services.shortcodes import render_user_message
 
 router = Router(name="start")
 
@@ -81,10 +81,11 @@ async def render_home(
     else:
         welcome = ui.get("welcome_text", "")
         title = ui.get("shop_title", "")
-        try:
-            body = safe_format(welcome, name=db_user.full_name or "دوست عزیز")
-        except Exception:
-            body = welcome
+        body = render_user_message(
+            welcome,
+            welcome or "سلام!",
+            name=db_user.full_name or "دوست عزیز",
+        )
         text = format_message(f"✨ {title}", body)
         reply_kb = kb.main_reply_keyboard(
             effective_role,

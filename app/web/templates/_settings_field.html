@@ -4,6 +4,7 @@
 {% set help = field[3] if field|length > 3 else '' %}
 {% set options = field[4] if field|length > 4 else [] %}
 {% set val = values.get(key, '') %}
+{% set sc_list = shortcodes_for(key) if shortcodes_for is defined else [] %}
 <div class="setting-item {% if kind in ['textarea', 'image', 'toggle', 'force_channels'] %}full{% endif %}">
   {% if kind == 'toggle' %}
   <label class="toggle-row ui-switch-row">
@@ -35,8 +36,31 @@
     <div class="force-channels-list" data-force-channels-list></div>
   </div>
   {% elif kind == 'textarea' %}
-  <label>{{ label }}
-    <textarea name="s_{{ key }}" rows="5">{{ val }}</textarea>
+  <label class="setting-label-row">
+    <span class="setting-label-text">
+      {{ label }}
+      {% if sc_list %}
+      <button type="button" class="sc-help-btn" aria-label="راهنمای شورت‌کد" title="شورت‌کدهای مجاز" data-sc-help>
+        <span aria-hidden="true">?</span>
+      </button>
+      {% endif %}
+    </span>
+    {% if sc_list %}
+    <div class="sc-help-pop" hidden data-sc-pop role="dialog" aria-label="شورت‌کدهای این پیام">
+      <ul class="sc-help-list">
+        {% for sc, sc_help in sc_list %}
+        <li class="sc-help-item">
+          <code class="sc-code" dir="ltr">{% raw %}{{% endraw %}{{ sc }}{% raw %}}{% endraw %}</code>
+          <span class="sc-desc">{{ sc_help }}</span>
+          <button type="button" class="sc-copy" title="کپی" aria-label="کپی شورت‌کد" data-sc-copy="{% raw %}{{% endraw %}{{ sc }}{% raw %}}{% endraw %}">
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h6a1 1 0 0 1 1 1v8h-1V3H6V2zm-3 3h6a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm0 1v8h6V6H3z"/></svg>
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    <textarea name="s_{{ key }}" rows="5" {% if sc_list %}data-sc-field="{{ key }}"{% endif %}>{{ val }}</textarea>
     {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </label>
   {% elif kind == 'number' %}
@@ -75,8 +99,31 @@
     {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </div>
   {% else %}
-  <label>{{ label }}
-    <input name="s_{{ key }}" value="{{ val }}" />
+  <label class="setting-label-row">
+    <span class="setting-label-text">
+      {{ label }}
+      {% if sc_list %}
+      <button type="button" class="sc-help-btn" aria-label="راهنمای شورت‌کد" title="شورت‌کدهای مجاز" data-sc-help>
+        <span aria-hidden="true">?</span>
+      </button>
+      {% endif %}
+    </span>
+    {% if sc_list %}
+    <div class="sc-help-pop" hidden data-sc-pop role="dialog" aria-label="شورت‌کدهای این پیام">
+      <ul class="sc-help-list">
+        {% for sc, sc_help in sc_list %}
+        <li class="sc-help-item">
+          <code class="sc-code" dir="ltr">{% raw %}{{% endraw %}{{ sc }}{% raw %}}{% endraw %}</code>
+          <span class="sc-desc">{{ sc_help }}</span>
+          <button type="button" class="sc-copy" title="کپی" aria-label="کپی شورت‌کد" data-sc-copy="{% raw %}{{% endraw %}{{ sc }}{% raw %}}{% endraw %}">
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h6a1 1 0 0 1 1 1v8h-1V3H6V2zm-3 3h6a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm0 1v8h6V6H3z"/></svg>
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    <input name="s_{{ key }}" value="{{ val }}" {% if sc_list %}data-sc-field="{{ key }}"{% endif %} />
     {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </label>
   {% endif %}

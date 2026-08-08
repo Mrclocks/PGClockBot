@@ -153,18 +153,20 @@ async def _topup_instructions(
         ui = await get_all_settings(session)
     amount = format_toman(payment.amount, get_settings().currency)
     rows: list[list[InlineKeyboardButton]] = []
+    from app.services.shortcodes import render_user_message
+
     if method == PaymentMethod.CARD.value:
-        try:
-            body = safe_format(ui["card_pay_text"], 
-                amount=amount,
-                card=ui.get("card_number") or "—",
-                holder=ui.get("card_holder") or "—",
-            )
-        except Exception:
-            body = (
+        body = render_user_message(
+            ui.get("card_pay_text"),
+            (
                 f"مبلغ {amount} را کارت به کارت کنید:\n"
                 f"<code>{ui.get('card_number') or '—'}</code>\n{ui.get('card_holder') or ''}"
-            )
+            ),
+            amount=amount,
+            card=ui.get("card_number") or "—",
+            holder=ui.get("card_holder") or "—",
+            payment_id=payment.id,
+        )
         title = "💳 کارت به کارت"
     elif method == PaymentMethod.GATEWAY.value:
         name = ui.get("gateway_name") or "درگاه"
@@ -174,26 +176,29 @@ async def _topup_instructions(
                 link = safe_format(link, amount=payment.amount, order_id=0, payment_id=payment.id)
             except Exception:
                 pass
-        try:
-            body = safe_format(ui.get("gateway_pay_text") or "", 
-                amount=amount, order_id=0, name=name
-            )
-        except Exception:
-            body = f"مبلغ {amount} را از طریق {name} پرداخت کنید."
+        body = render_user_message(
+            ui.get("gateway_pay_text") or "",
+            f"مبلغ {amount} را از طریق {name} پرداخت کنید.",
+            amount=amount,
+            order_id=0,
+            payment_id=payment.id,
+            name=name,
+            gateway_name=name,
+        )
         if link.startswith("http://") or link.startswith("https://"):
             rows.append([InlineKeyboardButton(text=f"ورود به {name}", url=link)])
         title = f"🌐 {name}"
     else:
         address = (ui.get("crypto_address") or "").strip() or "—"
-        try:
-            body = safe_format(ui.get("crypto_pay_text") or "", 
-                amount=amount,
-                asset=ui.get("crypto_asset") or "USDT",
-                network=ui.get("crypto_network") or "—",
-                address=address,
-            )
-        except Exception:
-            body = f"{ui.get('crypto_asset') or 'USDT'}: <code>{address}</code>\nمبلغ تقریبی {amount}"
+        body = render_user_message(
+            ui.get("crypto_pay_text") or "",
+            f"{ui.get('crypto_asset') or 'USDT'}: <code>{address}</code>\nمبلغ تقریبی {amount}",
+            amount=amount,
+            asset=ui.get("crypto_asset") or "USDT",
+            network=ui.get("crypto_network") or "—",
+            address=address,
+            payment_id=payment.id,
+        )
         title = "💎 رمزارز"
     body += f"\n\nسپس عکس رسید را بفرستید.\n(پرداخت #{payment.id})"
     rows.append([InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="wallet:home")])

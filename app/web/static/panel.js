@@ -1045,6 +1045,78 @@
       });
     })();
 
+    /* Shortcode help: desktop hover + mobile tap; copy only the {code}. */
+    (function setupShortcodeHelp(){
+      function closeAll(except){
+        document.querySelectorAll('[data-sc-pop]').forEach((pop) => {
+          if (except && pop === except) return;
+          pop.hidden = true;
+          const btn = pop.parentElement && pop.parentElement.querySelector('[data-sc-help]');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        });
+      }
+      document.addEventListener('click', (e) => {
+        const copyBtn = e.target.closest('[data-sc-copy]');
+        if (copyBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          const text = copyBtn.getAttribute('data-sc-copy') || '';
+          const done = () => {
+            copyBtn.setAttribute('title', 'کپی شد');
+            setTimeout(() => copyBtn.setAttribute('title', 'کپی'), 1200);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(() => {});
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (_) {}
+            ta.remove();
+            done();
+          }
+          return;
+        }
+        const helpBtn = e.target.closest('[data-sc-help]');
+        if (helpBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          const wrap = helpBtn.closest('.setting-label-row') || helpBtn.parentElement;
+          const pop = wrap && wrap.querySelector('[data-sc-pop]');
+          if (!pop) return;
+          const open = pop.hidden;
+          closeAll(pop);
+          pop.hidden = !open;
+          helpBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+          return;
+        }
+        if (!e.target.closest('[data-sc-pop]')) closeAll();
+      });
+      document.addEventListener('pointerover', (e) => {
+        if (window.matchMedia && window.matchMedia('(hover: none)').matches) return;
+        const helpBtn = e.target.closest('[data-sc-help]');
+        if (!helpBtn) return;
+        const wrap = helpBtn.closest('.setting-label-row') || helpBtn.parentElement;
+        const pop = wrap && wrap.querySelector('[data-sc-pop]');
+        if (!pop) return;
+        closeAll(pop);
+        pop.hidden = false;
+        helpBtn.setAttribute('aria-expanded', 'true');
+      });
+      document.addEventListener('pointerout', (e) => {
+        if (window.matchMedia && window.matchMedia('(hover: none)').matches) return;
+        const wrap = e.target.closest('.setting-label-row');
+        if (!wrap) return;
+        const to = e.relatedTarget;
+        if (to && wrap.contains(to)) return;
+        const pop = wrap.querySelector('[data-sc-pop]');
+        const btn = wrap.querySelector('[data-sc-help]');
+        if (pop) pop.hidden = true;
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      });
+    })();
+
     /* Shared confirm modal — replaces native confirm()/prompt() for panel mutations.
        Reason field is RENDERED only when requireReason=true (delete user/reseller/admin).
        Never leave a hidden .form-field in the DOM — author CSS display:flex beats [hidden]. */

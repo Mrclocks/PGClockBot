@@ -593,23 +593,28 @@ DEFAULT_SETTINGS = {
 
 # field kinds: text | textarea | toggle | select | number | image
 # (key, label, kind, help?, options?)
-# Tabs for /settings?tab=... (order matches product IA)
+# Tabs for /settings?tab=... (fewer logical categories — less clutter)
 SETTINGS_TABS: list[tuple[str, str]] = [
-    ("welcome", "خوش‌آمد و هویت"),
+    ("messages", "پیام‌ها و ظاهر"),
     ("appearance", "ظاهر ربات"),
-    ("messages", "متن پیام‌ها"),
-    ("buttons", "متن دکمه‌ها"),
     ("menu", "منوی بات"),
-    ("qr", "QR اشتراک"),
     ("payment", "پرداخت"),
-    ("supports", "پشتیبان‌ها"),
-    ("naming", "نام‌گذاری سرویس"),
-    ("forcejoin", "کانال اجباری"),
+    ("billing", "کیف پول و PAYG"),
+    ("services", "سرویس و فروش"),
+    ("notifications", "اعلان‌ها"),
     ("reseller", "نمایندگی"),
-    ("billing", "مدیریت PAYG"),
-    ("notifications", "نوتیفیکیشن"),
+    ("supports", "پشتیبانی"),
     ("bot", "ربات و اتصال"),
 ]
+
+# Legacy tab ids → current (bookmarks / old links / tests)
+SETTINGS_TAB_ALIASES: dict[str, str] = {
+    "welcome": "messages",
+    "buttons": "messages",
+    "qr": "messages",
+    "naming": "services",
+    "forcejoin": "services",
+}
 
 # Web-panel settings (sidebar under dashboard — not bot settings tabs)
 PANEL_SETTINGS_TABS: list[tuple[str, str]] = [
@@ -836,13 +841,15 @@ SETTING_GROUPS = {
     ],
 }
 
-# Map tab id → which SETTING_GROUPS cards to show (menu/notifications/update/naming special)
+# Map tab id → which SETTING_GROUPS cards to show (menu/notifications/update special)
 TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "menu": [],
-    "welcome": ["خوش‌آمد و هویت"],
-    "messages": ["متن پیام‌ها"],
-    "buttons": ["متن دکمه‌های منو"],
-    "qr": ["QR اشتراک"],
+    "messages": [
+        "خوش‌آمد و هویت",
+        "متن پیام‌ها",
+        "متن دکمه‌های منو",
+        "QR اشتراک",
+    ],
     "payment": [
         "روش‌های پرداخت",
         "پاکسازی سفارش‌های معلق",
@@ -853,8 +860,10 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "متن دکمه‌های پرداخت",
     ],
     "supports": [],
-    "naming": ["نام‌گذاری سرویس در پاسارگارد"],
-    "forcejoin": ["کانال اجباری"],
+    "services": [
+        "نام‌گذاری سرویس در پاسارگارد",
+        "کانال اجباری",
+    ],
     "reseller": ["نمایندگی"],
     "billing": ["مدیریت PAYG"],
     "notifications": ["هشدار سرویس کاربر"],
@@ -864,6 +873,12 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "ssl": [],
     "bot": [],
     "appearance": [],
+    # Legacy aliases kept for keys_for_tab / old save URLs
+    "welcome": ["خوش‌آمد و هویت"],
+    "buttons": ["متن دکمه‌های منو"],
+    "qr": ["QR اشتراک"],
+    "naming": ["نام‌گذاری سرویس در پاسارگارد"],
+    "forcejoin": ["کانال اجباری"],
 }
 
 TOGGLE_KEYS = {

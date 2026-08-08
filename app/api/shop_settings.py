@@ -19,6 +19,7 @@ from app.services.users import (
     TAB_SETTING_GROUPS,
     TOGGLE_KEYS,
     SETTING_GROUPS,
+    SETTINGS_TAB_ALIASES,
     get_all_settings,
     keys_for_tab,
 )
@@ -121,11 +122,15 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if staff.get("role") != "reseller":
             return RedirectResponse("/login", status_code=303)
 
-        tab = (request.query_params.get("tab") or "welcome").strip()
+        tab = (request.query_params.get("tab") or "messages").strip()
         if tab == "security":
             return RedirectResponse("/security", status_code=303)
+        if tab in SETTINGS_TAB_ALIASES:
+            return RedirectResponse(
+                f"/shop-settings?tab={SETTINGS_TAB_ALIASES[tab]}", status_code=303
+            )
         if tab not in allowed_tabs:
-            tab = "welcome"
+            tab = "messages"
 
         rid = _rid(staff)
         if not rid:
@@ -138,7 +143,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if tab == "menu":
             for name, fields in list(groups.items()):
                 groups[name] = [f for f in fields if f[0] != "show_reseller_apply"]
-        if tab == "buttons":
+        if tab == "messages":
             # Shop bots don't need platform-admin / apply button labels
             _shop_btn_block = {
                 "btn_admin",
@@ -226,7 +231,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         rid = _rid(staff)
         if not rid:
             return _deny_scope()
-        tab = (request.query_params.get("tab") or "welcome").strip()
+        tab = (request.query_params.get("tab") or "messages").strip()
+        tab = SETTINGS_TAB_ALIASES.get(tab, tab)
         if tab not in allowed_tabs:
             return RedirectResponse("/shop-settings", status_code=303)
 

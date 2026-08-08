@@ -12,8 +12,8 @@ class Version367Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.7.0")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.7.0")
+        self.assertEqual(__version__, "4.8.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.8.0")
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.6.8"', notes)
 
@@ -74,8 +74,8 @@ class ShopSettingsCompletenessTests(unittest.TestCase):
 
         keys = {k for k, _ in RESELLER_SETTINGS_TABS}
         self.assertIn("menu", keys)
-        self.assertIn("naming", keys)
-        self.assertIn("buttons", keys)
+        self.assertIn("services", keys)
+        self.assertIn("messages", keys)
 
     def test_telegram_menu_order(self):
         src = (ROOT / "app/bot/handlers/reseller_settings.py").read_text(encoding="utf-8")
@@ -101,6 +101,7 @@ class ShopSettingsCompletenessTests(unittest.TestCase):
         src = (ROOT / "app/api/shop_settings.py").read_text(encoding="utf-8")
         self.assertIn("btn_admin", src)
         self.assertIn("_shop_btn_block", src)
+        self.assertIn('tab == "messages"', src)
 
 
 if __name__ == "__main__":

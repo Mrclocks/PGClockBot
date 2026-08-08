@@ -16,18 +16,32 @@ from app.bot import keyboards as kb
 from app.config import get_settings
 from app.services.pasarguard import get_pg
 from app.services.qrcode_gen import make_subscription_qr
-from app.services.safe_format import safe_format
 from app.services.users import get_all_settings, on
 
 logger = logging.getLogger(__name__)
 
 
-def _subscription_success_body(ui: dict[str, str], order) -> str:
+def _subscription_success_body(ui: dict[str, str], order, **extra) -> str:
     raw = (ui.get("purchase_success_text") or "").strip()
+    default = f"سفارش #{order.id} با موفقیت فعال شد."
     if not raw:
-        return f"سفارش #{order.id} با موفقیت فعال شد."
-    success = safe_format(raw, order_id=order.id).strip()
-    return success or f"سفارش #{order.id} با موفقیت فعال شد."
+        return default
+    from app.services.shortcodes import render_user_message
+    from app.config import get_settings
+
+    plan_name = ""
+    plan = getattr(order, "plan", None)
+    if plan is not None:
+        plan_name = getattr(plan, "name", None) or ""
+    ctx = {
+        "order_id": order.id,
+        "amount": format_toman(getattr(order, "amount", 0) or 0, get_settings().currency),
+        "price": getattr(order, "amount", 0) or 0,
+        "currency": get_settings().currency or "تومان",
+        "plan": plan_name,
+        **extra,
+    }
+    return render_user_message(raw, default, **ctx)
 
 
 async def build_delivery_content(
@@ -103,6 +117,36 @@ async def build_delivery_content(
             except Exception:
                 if include_details and svc.pg_username:
                     body_parts.append(f"👤 {copyable(svc.pg_username)}")
+            # Re-render success with service shortcodes when available (no extra DB round-trip)
+            if sub_info or svc.pg_username:
+                from app.services.formatting import format_bytes, format_expire_short, expire_remaining_days
+
+                used = (sub_info or {}).get("used_traffic")
+                limit = (sub_info or {}).get("data_limit")
+                remain = None
+                if used is not None and limit is not None:
+                    try:
+                        remain = max(0, int(limit) - int(used))
+                    except (TypeError, ValueError):
+                        remain = None
+                expire_val = (sub_info or {}).get("expire") if sub_info else None
+                days_left = expire_remaining_days(expire_val)
+                success = _subscription_success_body(
+                    ui,
+                    order,
+                    username=svc.pg_username or "",
+                    service=svc.pg_username or str(svc.id),
+                    status=(sub_info or {}).get("status") or "فعال",
+                    traffic=format_bytes(limit) if limit is not None else "",
+                    traffic_used=format_bytes(used) if used is not None else "",
+                    traffic_remaining=format_bytes(remain) if remain is not None else "",
+                    expire=format_expire_short(expire_val) if expire_val else "",
+                    days_remaining=days_left if days_left is not None else "",
+                )
+                if body_parts:
+                    body_parts[0] = success
+                else:
+                    body_parts.append(success)
             sub_url = svc.subscription_url
             if include_details and sub_url and on(ui.get("show_sub_link_in_text", "1")):
                 body_parts.append(
@@ -129,14 +173,15 @@ async def build_delivery_content(
     if payment and payment.is_wallet_topup:
         title = ui.get("wallet_success_title") or "💰 شارژ کیف پول"
         amount_txt = format_toman(payment.amount, get_settings().currency)
-        body = safe_format(
-            ui.get("wallet_success_text")
-            or "✅ مبلغ {amount} به کیف پول شما اضافه شد.",
+        from app.services.shortcodes import render_user_message
+
+        body = render_user_message(
+            ui.get("wallet_success_text") or "✅ مبلغ {amount} به کیف پول شما اضافه شد.",
+            f"✅ کیف پول شما {amount_txt} شارژ شد.",
             amount=amount_txt,
             payment_id=payment.id,
-        ).strip()
-        if not body:
-            body = f"✅ کیف پول شما {amount_txt} شارژ شد."
+            currency=get_settings().currency or "تومان",
+        )
         return {
             "title": title,
             "text": format_message(title, body),
