@@ -2,16 +2,117 @@
 {% from "macros.html" import tkt_status, page_title, panel_tkt_status, panel_tkt_priority %}
 {% block title %}پشتیبانی{% endblock %}
 {% block content %}
+{% set support_tab = support_tab or 'tickets' %}
 <div class="page-head">
   <div>
     {{ page_title('tickets', 'پشتیبانی') }}
     <p class="muted page-sub">ارتباط مستقیم با ادمین اصلی پنل</p>
   </div>
-  {% if can_create %}
+  {% if can_create and support_tab == 'tickets' %}
   <button type="button" class="btn" data-modal-open="modal-ticket-new">تیکت جدید</button>
   {% endif %}
 </div>
 
+{% if can_support_settings %}
+<div class="tabs tabs-scroll" role="tablist" aria-label="پشتیبانی">
+  <a class="tab {% if support_tab=='tickets' %}active{% endif %}" href="/tickets?tab=tickets">تیکت‌ها</a>
+  <a class="tab {% if support_tab=='settings' %}active{% endif %}" href="/tickets?tab=settings">تنظیمات</a>
+</div>
+{% endif %}
+
+{% if support_tab == 'settings' and can_support_settings %}
+  {% set supports_save = supports_action or '/supports/save' %}
+  {% set supports_delete = supports_delete_action or '/supports/delete' %}
+  <form method="post" action="{{ support_text_action }}" enctype="multipart/form-data" class="settings-form" id="settings-form">
+    <div class="card settings-card">
+      <h2>متن پشتیبانی ربات</h2>
+      <div class="settings-grid">
+      {% for field in support_text_fields or [] %}
+        {% include "_settings_field.html" %}
+      {% endfor %}
+      </div>
+    </div>
+    <div class="actions sticky-actions">
+      <button class="btn" type="submit">ذخیره متن پشتیبانی</button>
+    </div>
+  </form>
+  <div class="card settings-card">
+    <h2>پشتیبان‌های تلگرام</h2>
+    <p class="muted update-card-caption">
+      اگر فقط یک پشتیبان فعال باشد، دکمه پشتیبانی در بات مستقیم به چت او می‌رود.
+      اگر چند پشتیبان فعال باشد، لیست برای انتخاب کاربر باز می‌شود.
+    </p>
+    {% if not support_contacts %}
+      <p class="muted">هنوز پشتیبانی تعریف نشده.</p>
+    {% else %}
+    <div class="support-list">
+      {% for c in support_contacts %}
+      <form method="post" action="{{ supports_save }}" class="support-row">
+        <input type="hidden" name="id" value="{{ c.id }}" />
+        <div class="support-fields">
+          <label>عنوان
+            <input name="title" value="{{ c.title }}" required maxlength="80" />
+          </label>
+          <label>آیدی / یوزرنیم تلگرام
+            <input name="telegram" value="{{ c.telegram }}" required dir="ltr" />
+          </label>
+          <label>ترتیب
+            <input name="sort" type="number" value="{{ c.sort }}" dir="ltr" />
+          </label>
+          <label class="support-enabled">
+            <span>فعال</span>
+            <span class="ui-switch">
+              <input type="checkbox" name="enabled" value="1" {% if c.enabled %}checked{% endif %} />
+              <span class="ui-switch-track" aria-hidden="true"></span>
+            </span>
+          </label>
+        </div>
+        <div class="support-actions">
+          <button class="btn" type="submit">ذخیره</button>
+          <button class="btn btn-danger" type="submit" formaction="{{ supports_delete }}" formmethod="post"
+                  data-confirm="این پشتیبان حذف شود؟" data-confirm-title="تأیید" data-confirm-danger="1" data-confirm-label="تأیید">حذف</button>
+        </div>
+      </form>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  <form method="post" action="{{ supports_save }}" class="settings-form">
+    <div class="card settings-card">
+      <h2>افزودن پشتیبان</h2>
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label>عنوان
+            <input name="title" required maxlength="80" placeholder="پشتیبان ربات" />
+          </label>
+        </div>
+        <div class="setting-item">
+          <label>آیدی یا یوزرنیم تلگرام
+            <input name="telegram" required dir="ltr" placeholder="@support" />
+          </label>
+        </div>
+        <div class="setting-item">
+          <label>ترتیب نمایش
+            <input name="sort" type="number" value="0" dir="ltr" />
+          </label>
+        </div>
+        <div class="setting-item">
+          <label class="support-enabled">
+            <span>فعال باشد</span>
+            <span class="ui-switch">
+              <input type="checkbox" name="enabled" value="1" checked />
+              <span class="ui-switch-track" aria-hidden="true"></span>
+            </span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="actions sticky-actions">
+      <button class="btn" type="submit">افزودن پشتیبان</button>
+    </div>
+  </form>
+
+{% else %}
 <div class="card card-flush">
   <div class="table-wrap">
   <table>
@@ -56,7 +157,7 @@
         </td>
         <td class="muted mono" dir="ltr">{{ t.updated_at }}</td>
         <td>
-          <a class="btn btn-sm btn-ghost" href="/tickets?view={{ t.id }}">مشاهده</a>
+          <a class="btn btn-sm btn-ghost" href="/tickets?tab=tickets&view={{ t.id }}">مشاهده</a>
         </td>
       </tr>
     {% else %}
@@ -97,8 +198,9 @@
   </div>
 </section>
 {% endif %}
+{% endif %}
 
-{% if can_create %}
+{% if can_create and support_tab == 'tickets' %}
 <div class="ui-modal{% if open_new %} open{% endif %}" id="modal-ticket-new" {% if not open_new %}hidden{% endif %}>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="ticket-new-title">
@@ -140,15 +242,15 @@
 
 {% if active_ticket %}
 {% set t = active_ticket %}
-<div class="ui-modal open" id="modal-ticket-view" data-modal-escape-href="/tickets">
-  <div class="ui-modal-backdrop" data-modal-close-nav="/tickets"></div>
+<div class="ui-modal open" id="modal-ticket-view" data-modal-escape-href="/tickets?tab=tickets">
+  <div class="ui-modal-backdrop" data-modal-close-nav="/tickets?tab=tickets"></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="ticket-view-title">
     <div class="ui-modal-head">
       <div>
         <h2 id="ticket-view-title">تیکت #{{ t.id }}</h2>
         <p class="muted ticket-view-sub">{{ t.subject }}</p>
       </div>
-      <a class="icon-btn" href="/tickets" aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+      <a class="icon-btn" href="/tickets?tab=tickets" aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
     </div>
 
     <div class="ticket-meta">

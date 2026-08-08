@@ -593,17 +593,14 @@ DEFAULT_SETTINGS = {
 
 # field kinds: text | textarea | toggle | select | number | image
 # (key, label, kind, help?, options?)
-# Tabs for /settings?tab=... (fewer logical categories — less clutter)
+# Tabs for /settings?tab=... — bot/identity/UX only (finance+support live on their domains)
 SETTINGS_TABS: list[tuple[str, str]] = [
     ("messages", "پیام‌ها و ظاهر"),
     ("appearance", "ظاهر ربات"),
     ("menu", "منوی بات"),
-    ("payment", "پرداخت"),
-    ("billing", "کیف پول و PAYG"),
     ("services", "سرویس و فروش"),
     ("notifications", "اعلان‌ها"),
     ("reseller", "نمایندگی"),
-    ("supports", "پشتیبانی"),
     ("bot", "ربات و اتصال"),
 ]
 
@@ -614,6 +611,14 @@ SETTINGS_TAB_ALIASES: dict[str, str] = {
     "qr": "messages",
     "naming": "services",
     "forcejoin": "services",
+}
+
+# Domain hubs outside /settings (preserve old deep-links)
+SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
+    "payment": "/orders?tab=settings",
+    "billing": "/orders?tab=settings",
+    "finance": "/orders?tab=settings",
+    "supports": "/tickets?tab=settings",
 }
 
 # Web-panel settings (sidebar under dashboard — not bot settings tabs)
@@ -639,13 +644,14 @@ SETTING_GROUPS = {
     "متن پیام‌ها": [
         ("guide_text", "متن راهنما", "textarea", "دستور /help در تلگرام"),
         ("faq_text", "متن سوالات متداول", "textarea", "قابل استفاده در پیام‌ها"),
-        ("support_text", "متن صفحه پشتیبانی", "textarea", "بالای فرم تیکت نمایش داده می‌شود"),
         ("referral_text", "متن دعوت دوستان", "textarea", "متغیرها: {code} و {link}"),
         ("empty_services_text", "وقتی سرویسی ندارد", "textarea", "پیام بخش سرویس‌های من اگر لیست خالی باشد"),
         ("shop_empty_text", "وقتی پلنی نیست", "textarea", "پیام فروشگاه اگر پلن فعالی نباشد"),
         ("delivery_title", "عنوان پیام تحویل سرویس", "text", "مثلاً: ✅ سرویس آماده است"),
         ("purchase_success_text", "متن موفقیت خرید", "textarea", "متغیر: {order_id} — پیام کوتاه موفقیت (جزئیات روی QR است)"),
-        ("wallet_success_text", "متن موفقیت شارژ کیف پول", "textarea", "متغیر: {amount}"),
+    ],
+    "متن پشتیبانی": [
+        ("support_text", "متن صفحه پشتیبانی", "textarea", "بالای فرم تیکت نمایش داده می‌شود"),
     ],
     "متن دکمه‌های منو": [
         ("btn_shop", "دکمه خرید", "text", ""),
@@ -765,6 +771,7 @@ SETTING_GROUPS = {
         ("auto_approve_payments", "تأیید خودکار رسید", "toggle", "روشن = بلافاصله بعد از رسید خرید، سرویس تحویل می‌شود. شارژ کیف‌پول هرگز خودکار تأیید نمی‌شود."),
         ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
         ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
+        ("wallet_success_text", "متن موفقیت شارژ کیف پول", "textarea", "متغیر: {amount}"),
     ],
     "پاکسازی سفارش‌های معلق": [
         (
@@ -850,6 +857,17 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "متن دکمه‌های منو",
         "QR اشتراک",
     ],
+    # Finance hub (/orders?tab=settings) — not listed in SETTINGS_TABS
+    "finance": [
+        "روش‌های پرداخت",
+        "پاکسازی سفارش‌های معلق",
+        "کارت به کارت",
+        "درگاه پرداخت",
+        "رمزارز",
+        "استارز تلگرام",
+        "متن دکمه‌های پرداخت",
+        "مدیریت PAYG",
+    ],
     "payment": [
         "روش‌های پرداخت",
         "پاکسازی سفارش‌های معلق",
@@ -859,7 +877,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "استارز تلگرام",
         "متن دکمه‌های پرداخت",
     ],
-    "supports": [],
+    "supports": ["متن پشتیبانی"],
     "services": [
         "نام‌گذاری سرویس در پاسارگارد",
         "کانال اجباری",

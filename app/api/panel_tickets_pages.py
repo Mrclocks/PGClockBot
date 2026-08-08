@@ -48,6 +48,68 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
         if not can_access_panel_tickets(staff):
             return RedirectResponse("/home", status_code=303)
 
+        support_tab = (request.query_params.get("tab") or "tickets").strip()
+        if support_tab not in {"tickets", "settings"}:
+            support_tab = "tickets"
+
+        # Bot support contacts config: admin or reseller with shop_settings
+        perms = staff.get("permissions") or []
+        can_support_settings = staff.get("role") == "admin" or (
+            staff.get("role") == "reseller" and "shop_settings" in perms
+        )
+        if support_tab == "settings" and not can_support_settings:
+            return RedirectResponse("/tickets?tab=tickets", status_code=303)
+
+        if support_tab == "settings":
+            from app.services.support_contacts import get_support_contacts
+            from app.services.users import SETTING_GROUPS, get_all_settings
+
+            rid = None
+            if staff.get("role") == "reseller":
+                rid = shop_owner_id(staff)
+            values = await get_all_settings(session, reseller_id=rid)
+            support_contacts = await get_support_contacts(session, reseller_id=rid)
+            fields = SETTING_GROUPS.get("متن پشتیبانی") or []
+            ok_key = (request.query_params.get("ok") or "").strip()
+            flash_ok = _OK_FLASH.get(ok_key, ok_key or None)
+            if request.query_params.get("saved") == "1":
+                flash_ok = request.query_params.get("msg") or "ذخیره شد."
+            return render(
+                request,
+                "tickets.html",
+                {
+                    "staff": staff,
+                    "support_tab": "settings",
+                    "can_support_settings": can_support_settings,
+                    "support_contacts": support_contacts,
+                    "values": values,
+                    "support_text_fields": fields,
+                    "supports_action": "/shop-supports/save"
+                    if staff.get("role") == "reseller"
+                    else "/supports/save",
+                    "supports_delete_action": "/shop-supports/delete"
+                    if staff.get("role") == "reseller"
+                    else "/supports/delete",
+                    "support_text_action": "/shop-settings?tab=supports"
+                    if staff.get("role") == "reseller"
+                    else "/settings?tab=supports",
+                    "panel_tickets": [],
+                    "tg_tickets": [],
+                    "show_tg": False,
+                    "active_ticket": None,
+                    "open_new": False,
+                    "status_labels": STATUS_LABELS,
+                    "priority_labels": PRIORITY_LABELS,
+                    "status_badge": STATUS_BADGE,
+                    "priority_badge": PRIORITY_BADGE,
+                    "is_owner": is_platform_admin(staff),
+                    "can_create": False,
+                    "flash_ok": flash_ok,
+                    "flash_err": request.query_params.get("err"),
+                    "tickets_unread": getattr(request.state, "panel_tickets_unread", 0) or 0,
+                },
+            )
+
         panel_tickets = await list_tickets(session, staff, limit=150)
         tg_tickets: list[Ticket] = []
         show_tg = False
@@ -120,6 +182,8 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             "tickets.html",
             {
                 "staff": staff,
+                "support_tab": "tickets",
+                "can_support_settings": can_support_settings,
                 "panel_tickets": panel_tickets,
                 "tg_tickets": tg_tickets,
                 "show_tg": show_tg,

@@ -20,6 +20,7 @@ from app.services.users import (
     TOGGLE_KEYS,
     SETTING_GROUPS,
     SETTINGS_TAB_ALIASES,
+    SETTINGS_DOMAIN_REDIRECTS,
     get_all_settings,
     keys_for_tab,
 )
@@ -125,6 +126,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         tab = (request.query_params.get("tab") or "messages").strip()
         if tab == "security":
             return RedirectResponse("/security", status_code=303)
+        if tab in SETTINGS_DOMAIN_REDIRECTS:
+            return RedirectResponse(SETTINGS_DOMAIN_REDIRECTS[tab], status_code=303)
         if tab in SETTINGS_TAB_ALIASES:
             return RedirectResponse(
                 f"/shop-settings?tab={SETTINGS_TAB_ALIASES[tab]}", status_code=303
@@ -233,7 +236,12 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             return _deny_scope()
         tab = (request.query_params.get("tab") or "messages").strip()
         tab = SETTINGS_TAB_ALIASES.get(tab, tab)
-        if tab not in allowed_tabs:
+        if tab in {"payment", "billing"}:
+            tab = "finance"
+        # finance/supports are saved from domain hubs; allow even if not in RESELLER_SETTINGS_TABS
+        if tab in {"finance", "supports"}:
+            pass
+        elif tab not in allowed_tabs:
             return RedirectResponse("/shop-settings", status_code=303)
 
         form = await request.form()
@@ -308,7 +316,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                 status_code=303,
             )
 
-        known = keys_for_tab(tab)
+        # Reseller finance hub must not touch platform PAYG keys (not shown in form)
+        known = keys_for_tab("payment" if tab == "finance" else tab)
         if tab == "menu":
             known = known | {"menu_order"}
             known.discard("show_reseller_apply")
@@ -367,6 +376,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         from app.services.users import set_settings_bulk
 
         await set_settings_bulk(session, payload, reseller_id=rid)
+        if tab == "finance":
+            return RedirectResponse("/orders?tab=settings&saved=1", status_code=303)
+        if tab == "supports":
+            return RedirectResponse("/tickets?tab=settings&saved=1", status_code=303)
         return RedirectResponse(f"/shop-settings?tab={tab}&saved=1", status_code=303)
 
     @app.post("/shop-settings/cancel-pending-orders")
@@ -376,7 +389,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
-            return RedirectResponse("/settings?tab=payment", status_code=303)
+            return RedirectResponse("/orders?tab=settings", status_code=303)
         rid = _rid(staff)
         if not rid:
             return _deny_scope()
@@ -388,12 +401,12 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             )
         except Exception as e:
             return RedirectResponse(
-                f"/shop-settings?tab=payment&err={quote(str(e)[:200])}",
+                f"/orders?tab=settings&err={quote(str(e)[:200])}",
                 status_code=303,
             )
         msg = f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود"
         return RedirectResponse(
-            f"/shop-settings?tab=payment&saved=1&msg={quote(msg)}",
+            f"/orders?tab=settings&saved=1&msg={quote(msg)}",
             status_code=303,
         )
 
@@ -481,7 +494,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
-            return RedirectResponse("/settings?tab=supports", status_code=303)
+            return RedirectResponse("/tickets?tab=settings", status_code=303)
         from app.services.support_contacts import upsert_support_contact
 
         rid = _rid(staff)
@@ -509,10 +522,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         )
         if err:
             return RedirectResponse(
-                f"/shop-settings?tab=supports&err={quote(err)}",
+                f"/tickets?tab=settings&err={quote(err)}",
                 status_code=303,
             )
-        return RedirectResponse("/shop-settings?tab=supports&saved=1", status_code=303)
+        return RedirectResponse("/tickets?tab=settings&saved=1", status_code=303)
 
     @app.post("/shop-supports/delete")
     async def shop_supports_delete(
@@ -521,7 +534,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
-            return RedirectResponse("/settings?tab=supports", status_code=303)
+            return RedirectResponse("/tickets?tab=settings", status_code=303)
         from app.services.support_contacts import delete_support_contact
 
         rid = _rid(staff)
@@ -531,4 +544,4 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         contact_id = str(form.get("id") or "").strip()
         if contact_id:
             await delete_support_contact(session, contact_id, reseller_id=rid)
-        return RedirectResponse("/shop-settings?tab=supports&saved=1", status_code=303)
+        return RedirectResponse("/tickets?tab=settings&saved=1", status_code=303)

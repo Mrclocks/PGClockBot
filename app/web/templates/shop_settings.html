@@ -11,86 +11,10 @@
 
 {{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path) }}
 
-<div class="settings-layout {% if tab in ['menu','messages','appearance','payment'] %}has-preview{% endif %}">
+<div class="settings-layout {% if tab in ['menu','messages','appearance'] %}has-preview{% endif %}">
   <div class="settings-main">
 
-  {% if tab == 'supports' %}
-    <div class="card settings-card">
-      <h2>پشتیبان‌های تلگرام</h2>
-      <p class="muted update-card-caption">
-        اگر فقط یک پشتیبان فعال باشد، دکمه پشتیبانی در بات مستقیم به چت او می‌رود.
-      </p>
-      {% if not support_contacts %}
-      <p class="muted">هنوز پشتیبانی تعریف نشده.</p>
-      {% else %}
-      <div class="support-list">
-        {% for c in support_contacts %}
-        <form method="post" action="/shop-supports/save" class="support-row">
-          <input type="hidden" name="id" value="{{ c.id }}" />
-          <div class="support-fields">
-            <label>عنوان
-              <input name="title" value="{{ c.title }}" required maxlength="80" />
-            </label>
-            <label>آیدی / یوزرنیم تلگرام
-              <input name="telegram" value="{{ c.telegram }}" required dir="ltr" />
-            </label>
-            <label>ترتیب
-              <input name="sort" type="number" value="{{ c.sort }}" dir="ltr" />
-            </label>
-            <label class="support-enabled">
-              <span>فعال</span>
-              <span class="ui-switch">
-                <input type="checkbox" name="enabled" value="1" {% if c.enabled %}checked{% endif %} />
-                <span class="ui-switch-track" aria-hidden="true"></span>
-              </span>
-            </label>
-          </div>
-          <div class="support-actions">
-            <button class="btn" type="submit">ذخیره</button>
-            <button class="btn btn-danger" type="submit" formaction="/shop-supports/delete" formmethod="post"
-                    data-confirm="این پشتیبان حذف شود؟" data-confirm-title="تأیید" data-confirm-danger="1" data-confirm-label="تأیید">حذف</button>
-          </div>
-        </form>
-        {% endfor %}
-      </div>
-      {% endif %}
-    </div>
-    <form method="post" action="/shop-supports/save" class="settings-form">
-      <div class="card settings-card">
-        <h2>افزودن پشتیبان</h2>
-        <div class="settings-grid">
-          <div class="setting-item">
-            <label>عنوان
-              <input name="title" required maxlength="80" placeholder="پشتیبان ربات" />
-            </label>
-          </div>
-          <div class="setting-item">
-            <label>آیدی یا یوزرنیم تلگرام
-              <input name="telegram" required dir="ltr" placeholder="@support" />
-            </label>
-          </div>
-          <div class="setting-item">
-            <label>ترتیب نمایش
-              <input name="sort" type="number" value="0" dir="ltr" />
-            </label>
-          </div>
-          <div class="setting-item">
-            <label class="support-enabled">
-              <span>فعال باشد</span>
-              <span class="ui-switch">
-                <input type="checkbox" name="enabled" value="1" checked />
-                <span class="ui-switch-track" aria-hidden="true"></span>
-              </span>
-            </label>
-          </div>
-        </div>
-      </div>
-      <div class="actions sticky-actions">
-        <button class="btn" type="submit">افزودن پشتیبان</button>
-      </div>
-    </form>
-
-  {% elif tab == 'notifications' %}
+  {% if tab == 'notifications' %}
     {% include "_shop_settings_notifications.html" %}
 
   {% elif tab == 'bot' %}
@@ -230,9 +154,6 @@
         <button class="btn" type="submit">ذخیره تنظیمات</button>
       </div>
     </form>
-    {% if tab == 'payment' %}
-      {% set pending_orders_action = '/shop-settings/cancel-pending-orders' %}
-      {% include "_settings_pending_orders.html" %}
     {% endif %}
   {% endif %}
 
@@ -240,7 +161,7 @@
 
   {% if tab == 'appearance' %}
   {% include "_tg_preview_appearance.html" %}
-  {% elif tab in ['menu','messages','payment'] %}
+  {% elif tab in ['menu','messages'] %}
   {% include "_tg_preview_chat.html" %}
   {% endif %}
 </div>
@@ -248,7 +169,7 @@
 {% if tab == 'appearance' %}
 {% include "_tg_preview_appearance_js.html" %}
 {% endif %}
-{% if tab in ['menu','messages','payment'] %}
+{% if tab in ['menu','messages'] %}
 {% include "_tg_preview_chat_js.html" %}
 {% endif %}
 {% if tab == 'services' %}

@@ -20,7 +20,7 @@
 {{ settings_tabs(tab, tabs) }}
 {% endif %}
 
-<div class="settings-layout {% if tab in ['menu','messages','appearance','payment'] %}has-preview{% endif %}">
+<div class="settings-layout {% if tab in ['menu','messages','appearance'] %}has-preview{% endif %}">
   <div class="settings-main">
 
   {% if tab == 'update' %}
@@ -33,8 +33,6 @@
     {% include "_settings_backup.html" %}
   {% elif tab == 'notifications' %}
     {% include "_settings_notifications.html" %}
-  {% elif tab == 'supports' %}
-    {% include "_settings_supports.html" %}
   {% elif tab == 'bot' %}
     {% include "_settings_bot.html" %}
   {% elif tab == 'appearance' %}
@@ -103,17 +101,13 @@
         <button class="btn" type="submit">ذخیره تنظیمات</button>
       </div>
     </form>
-    {% if tab == 'payment' %}
-      {% set pending_orders_action = '/settings/cancel-pending-orders' %}
-      {% include "_settings_pending_orders.html" %}
-    {% endif %}
   {% endif %}
 
   </div>
 
   {% if tab == 'appearance' %}
   {% include "_tg_preview_appearance.html" %}
-  {% elif tab in ['menu','messages','payment'] %}
+  {% elif tab in ['menu','messages'] %}
   {% include "_tg_preview_chat.html" %}
   {% endif %}
 </div>
@@ -121,7 +115,7 @@
 {% if tab == 'appearance' %}
 {% include "_tg_preview_appearance_js.html" %}
 {% endif %}
-{% if tab in ['menu','messages','payment'] %}
+{% if tab in ['menu','messages'] %}
 {% include "_tg_preview_chat_js.html" %}
 {% endif %}
 {% if tab == 'services' %}

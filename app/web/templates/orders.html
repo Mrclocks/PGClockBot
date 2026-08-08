@@ -1,19 +1,35 @@
 {% extends "base.html" %}
 {% from "macros.html" import ord_status, pay_status, row_actions, page_title %}
-{% block title %}سفارش‌ها{% endblock %}
+{% block title %}
+{%- if finance_tab == 'payments' -%}پرداخت‌ها
+{%- elif finance_tab == 'settings' -%}تنظیمات پرداخت
+{%- else -%}سفارشات
+{%- endif -%}
+{% endblock %}
 {% block content %}
+{% set finance_tab = finance_tab or 'orders' %}
 <div class="page-head">
   <div>
-    {{ page_title('orders', 'سفارش‌ها') }}
-  </div>
-  <div class="orders-payments-nav">
-    {% if 'payments' in (staff.permissions or []) or staff.role == 'admin' %}
-    <a class="btn btn-ghost" href="/payments">پرداخت‌ها / رسیدها</a>
-    {% endif %}
+    {{ page_title('orders', 'سفارشات') }}
   </div>
 </div>
+
+<div class="tabs tabs-scroll" role="tablist" aria-label="سفارشات و پرداخت‌ها">
+  {% if can_orders %}
+  <a class="tab {% if finance_tab=='orders' %}active{% endif %}" href="/orders?tab=orders">سفارشات</a>
+  {% endif %}
+  {% if can_payments %}
+  <a class="tab {% if finance_tab=='payments' %}active{% endif %}" href="/orders?tab=payments">پرداخت‌ها</a>
+  {% endif %}
+  {% if can_finance_settings %}
+  <a class="tab {% if finance_tab=='settings' %}active{% endif %}" href="/orders?tab=settings">تنظیمات</a>
+  {% endif %}
+</div>
+
+{% if finance_tab == 'orders' %}
 <div class="card card-flush">
   <form method="get" action="/orders" class="search-bar">
+    <input type="hidden" name="tab" value="orders" />
     <label class="search-bar-field">
       <span class="search-bar-label">جستجو</span>
       <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، پلن، سفارش، وضعیت…" autocomplete="off" />
@@ -164,4 +180,129 @@
   </table>
   </div>
 </div>
+
+{% elif finance_tab == 'payments' %}
+<div class="card card-flush">
+  <form method="get" action="/orders" class="search-bar">
+    <input type="hidden" name="tab" value="payments" />
+    <label class="search-bar-field">
+      <span class="search-bar-label">جستجو</span>
+      <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، مبلغ، سفارش، پرداخت…" autocomplete="off" />
+    </label>
+    <label class="search-bar-field">
+      <span class="search-bar-label">وضعیت</span>
+      <select name="status">
+        <option value="">همه</option>
+        <option value="pending" {% if status_filter=='pending' %}selected{% endif %}>در انتظار</option>
+        <option value="approved" {% if status_filter=='approved' %}selected{% endif %}>تأییدشده</option>
+        <option value="rejected" {% if status_filter=='rejected' %}selected{% endif %}>ردشده</option>
+      </select>
+    </label>
+    <label class="search-bar-field">
+      <span class="search-bar-label">نوع</span>
+      <select name="kind">
+        <option value="">همه</option>
+        <option value="buy" {% if kind_filter=='buy' %}selected{% endif %}>خرید</option>
+        <option value="wallet" {% if kind_filter=='wallet' %}selected{% endif %}>شارژ کیف</option>
+      </select>
+    </label>
+    <label class="search-bar-field">
+      <span class="search-bar-label">روش</span>
+      <select name="method">
+        <option value="">همه</option>
+        {% for m, lab in [('card','کارت'),('wallet','کیف پول'),('gateway','درگاه'),('crypto','رمزارز'),('stars','استارز')] %}
+        <option value="{{ m }}" {% if method_filter==m %}selected{% endif %}>{{ lab }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn btn-ghost" type="submit">اعمال</button>
+  </form>
+  <div class="table-wrap">
+  <table class="table-compact" data-sortable>
+    <thead><tr>
+      <th data-sort-type="num">#</th>
+      <th data-sort-type="text">کاربر</th>
+      <th data-sort-type="num">مبلغ</th>
+      <th class="col-hide-sm" data-sort-type="text">نوع</th>
+      <th class="col-hide-sm" data-sort-type="text">روش</th>
+      <th data-sort-type="text">وضعیت</th>
+      <th class="col-hide-sm" data-sort-type="num">سفارش</th>
+      <th class="col-hide-sm" data-sort-type="text">زمان</th>
+      <th class="col-actions"></th>
+    </tr></thead>
+    <tbody>
+    {% for p in payments %}
+      {% set payer = (payers or {}).get(p.user_id) %}
+      {% set uname = (payer.full_name or payer.username or p.user_id) if payer else p.user_id %}
+      <tr>
+        <td class="mono" data-sort-value="{{ p.id }}">{{ p.id }}</td>
+        <td data-sort-value="{{ uname }}">{{ uname }}</td>
+        <td class="mono" data-sort-value="{{ p.amount }}">{{ "{:,}".format(p.amount).replace(",", "٬") }}</td>
+        <td class="col-hide-sm" data-sort-value="{{ 'wallet' if p.is_wallet_topup else 'buy' }}">{{ "شارژ کیف" if p.is_wallet_topup else "خرید" }}</td>
+        <td class="col-hide-sm" data-sort-value="{{ p.method or '' }}">
+          {% if p.method=='card' %}کارت{% elif p.method=='wallet' %}کیف پول{% elif p.method=='gateway' %}درگاه{% elif p.method=='crypto' %}رمزارز{% elif p.method=='stars' %}استارز{% else %}{{ p.method or "—" }}{% endif %}
+        </td>
+        <td data-sort-value="{{ p.status }}">
+          <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">
+            {{ pay_status(p.status) }}
+          </span>
+        </td>
+        <td class="col-hide-sm" data-sort-value="{{ p.order_id or 0 }}">
+          {% if p.order_id %}
+          <a href="/orders?tab=orders&q={{ p.order_id }}" class="mono">#{{ p.order_id }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td class="muted col-hide-sm" data-sort-value="{{ p.created_at }}">{{ p.created_at }}</td>
+        <td class="col-actions">
+          {% if p.status == 'pending' %}
+          {% call row_actions() %}
+            <form method="post" action="/payments/{{ p.id }}/approve" data-confirm="این پرداخت تأیید شود؟ در صورت خرید، محصول هم ارسال می‌شود." data-confirm-title="تأیید پرداخت" data-confirm-label="تأیید"><button class="btn btn-ok btn-sm" type="submit">تأیید</button></form>
+            <form method="post" action="/payments/{{ p.id }}/reject" data-confirm="این پرداخت رد شود؟" data-confirm-title="رد پرداخت" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-danger btn-sm" type="submit">رد</button></form>
+          {% endcall %}
+          {% else %}
+          <span class="muted">—</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9" class="muted">پرداختی نیست</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% elif finance_tab == 'settings' %}
+<div class="settings-layout {% if finance_preview %}has-preview{% endif %}">
+  <div class="settings-main">
+    <form method="post" action="{{ finance_settings_action }}" enctype="multipart/form-data" class="settings-form" id="settings-form">
+      {% for group_name in tab_groups %}
+      {% set fields = groups[group_name] %}
+      <div class="card settings-card">
+        <h2>{{ group_name }}</h2>
+        <div class="settings-grid">
+        {% for field in fields %}
+          {% include "_settings_field.html" %}
+        {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      <div class="actions sticky-actions">
+        <button class="btn" type="submit">ذخیره تنظیمات</button>
+      </div>
+    </form>
+    {% if pending_orders_action %}
+      {% include "_settings_pending_orders.html" %}
+    {% endif %}
+  </div>
+  {% if finance_preview %}
+  {% set tab = 'payment' %}
+  {% include "_tg_preview_chat.html" %}
+  {% endif %}
+</div>
+{% if finance_preview %}
+{% set tab = 'payment' %}
+{% include "_tg_preview_chat_js.html" %}
+{% endif %}
+{% endif %}
 {% endblock %}

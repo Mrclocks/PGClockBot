@@ -144,16 +144,10 @@
             <span>نمایندگان</span>
           </a>
           {% endif %}
-          {% if is_admin or 'orders' in perms %}
-          <a href="/orders" class="nav-item nav-item-bot {% if path.startswith('/orders') %}active{% endif %}">
+          {% if is_admin or 'orders' in perms or 'payments' in perms %}
+          <a href="/orders" class="nav-item nav-item-bot {% if path.startswith('/orders') or path.startswith('/payments') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-1.2 9.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.7L6 4H3"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>
             <span>سفارشات</span>
-          </a>
-          {% endif %}
-          {% if is_admin or 'payments' in perms %}
-          <a href="/payments" class="nav-item nav-item-bot {% if path.startswith('/payments') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h4"/></svg>
-            <span>پرداخت‌ها</span>
           </a>
           {% endif %}
           {% if is_admin or 'plans' in perms %}

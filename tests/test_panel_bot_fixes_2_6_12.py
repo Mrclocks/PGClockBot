@@ -9,9 +9,10 @@ from unittest.mock import AsyncMock, patch
 
 class PaymentsShortcutTests(unittest.TestCase):
     def test_payments_link_opens_payment_tab(self):
-        src = Path("app/web/templates/payments.html").read_text(encoding="utf-8")
-        self.assertIn('href="/settings?tab=payment"', src)
-        self.assertNotIn('href="/settings"', src.replace('href="/settings?tab=payment"', ""))
+        src = Path("app/web/templates/orders.html").read_text(encoding="utf-8")
+        self.assertIn('href="/orders?tab=settings"', src)
+        dash = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
+        self.assertIn('href="/orders?tab=payments"', dash)
 
 
 class PlansModalTests(unittest.TestCase):

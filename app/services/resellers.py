@@ -40,10 +40,8 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("messages", "پیام‌ها و ظاهر"),
     ("appearance", "ظاهر ربات"),
     ("menu", "منوی بات"),
-    ("payment", "پرداخت"),
     ("services", "سرویس و فروش"),
     ("notifications", "اعلان‌ها"),
-    ("supports", "پشتیبانی"),
     ("bot", "ربات اختصاصی"),
 ]
 

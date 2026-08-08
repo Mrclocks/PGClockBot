@@ -100,7 +100,7 @@
   <h2>دسترسی سریع</h2>
   <div class="quick-links">
     {% if can_payments %}
-    <a href="/payments">پرداخت‌ها{% if stats.pending %} ({{ stats.pending }}){% endif %}</a>
+    <a href="/orders?tab=payments">پرداخت‌ها{% if stats.pending %} ({{ stats.pending }}){% endif %}</a>
     {% endif %}
     {% if can_orders %}
     <a href="/orders">سفارش‌ها</a>

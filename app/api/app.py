@@ -73,6 +73,7 @@ from app.services.users import (
     SETTING_GROUPS,
     SETTINGS_TABS,
     SETTINGS_TAB_ALIASES,
+    SETTINGS_DOMAIN_REDIRECTS,
     PANEL_SETTINGS_KEYS,
     PANEL_SETTINGS_TABS,
     TAB_SETTING_GROUPS,
@@ -453,6 +454,23 @@ def create_api_app(lifespan=None) -> FastAPI:
             if not can_shop(authz_from_staff(user), perm):
                 raise NotAdmin()
             return user
+
+        return _dep
+
+    def require_any_shop_perm(*perms: str):
+        """Allow access when staff has ANY of the listed shop permissions (admin always)."""
+
+        async def _dep(
+            request: Request,
+            session: AsyncSession = Depends(get_db),
+        ) -> dict:
+            from app.services.authz import authz_from_staff, can_shop
+
+            user = await require_staff(request, session)
+            ctx = authz_from_staff(user)
+            if any(can_shop(ctx, p) for p in perms):
+                return user
+            raise NotAdmin()
 
         return _dep
 
@@ -2048,9 +2066,185 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.get("/orders", response_class=HTMLResponse)
     async def orders_page(
         request: Request,
-        staff: dict = Depends(require_perm("orders")),
+        staff: dict = Depends(require_any_shop_perm("orders", "payments", "shop_settings")),
         session: AsyncSession = Depends(get_db),
     ):
+        """Finance hub: سفارشات | پرداخت‌ها | تنظیمات — ACL checked per-tab."""
+        from app.services.authz import authz_from_staff, can_shop
+        from app.services.shop_scope import is_platform_admin, shop_owner_id
+
+        ctx = authz_from_staff(staff)
+        can_orders = can_shop(ctx, "orders")
+        can_payments = can_shop(ctx, "payments")
+        can_finance_settings = can_shop(ctx, "shop_settings") or staff.get("role") == "admin"
+        # Platform admin always has shop_settings via can_shop; reseller needs explicit perm.
+
+        raw_tab = (request.query_params.get("tab") or "").strip()
+        if raw_tab in {"orders", "payments", "settings"}:
+            finance_tab = raw_tab
+        else:
+            finance_tab = "orders" if can_orders else ("payments" if can_payments else "settings")
+
+        if finance_tab == "orders" and not can_orders:
+            finance_tab = "payments" if can_payments else "settings"
+        if finance_tab == "payments" and not can_payments:
+            finance_tab = "orders" if can_orders else "settings"
+        if finance_tab == "settings" and not can_finance_settings:
+            finance_tab = "orders" if can_orders else "payments"
+
+        base_ctx = {
+            "staff": staff,
+            "finance_tab": finance_tab,
+            "can_orders": can_orders,
+            "can_payments": can_payments,
+            "can_finance_settings": can_finance_settings,
+            "flash_ok": request.query_params.get("ok") or request.query_params.get("saved_msg"),
+            "flash_err": request.query_params.get("err"),
+            "q": "",
+            "status_filter": "",
+            "pay_status_filter": "",
+            "kind_filter": "",
+            "method_filter": "",
+            "orders": [],
+            "payments": [],
+            "payments_by_order": {},
+            "payments_list_by_order": {},
+            "payers": {},
+            "values": {},
+            "groups": {},
+            "tab_groups": [],
+            "finance_settings_action": "/settings?tab=finance",
+            "finance_preview": False,
+            "pending_orders_action": None,
+        }
+        if request.query_params.get("saved") == "1":
+            base_ctx["flash_ok"] = request.query_params.get("msg") or "ذخیره شد."
+
+        if finance_tab == "settings":
+            if not can_finance_settings:
+                raise NotAdmin()
+            values = await get_all_settings(session)
+            tab_groups = list(TAB_SETTING_GROUPS.get("finance") or [])
+            if staff.get("role") != "admin":
+                # Reseller shop: payment methods only (no platform PAYG billing)
+                tab_groups = [g for g in tab_groups if g != "مدیریت PAYG"]
+                rid = shop_owner_id(staff)
+                if rid:
+                    values = await get_all_settings(session, reseller_id=rid)
+                base_ctx["finance_settings_action"] = "/shop-settings?tab=finance"
+                base_ctx["pending_orders_action"] = "/shop-settings/cancel-pending-orders"
+            else:
+                base_ctx["finance_settings_action"] = "/settings?tab=finance"
+                base_ctx["pending_orders_action"] = "/settings/cancel-pending-orders"
+            groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}
+            base_ctx.update(
+                {
+                    "values": values,
+                    "groups": groups,
+                    "tab_groups": tab_groups,
+                    "finance_preview": True,
+                }
+            )
+            return render(request, "orders.html", base_ctx)
+
+        if finance_tab == "payments":
+            if not can_payments:
+                raise NotAdmin()
+            from sqlalchemy import or_
+
+            search_q = normalize_search_q(request.query_params.get("q"))
+            status_filter = (request.query_params.get("status") or "").strip()
+            kind_filter = (request.query_params.get("kind") or "").strip()
+            method_filter = (request.query_params.get("method") or "").strip()
+            fetch_limit = 500 if search_q or status_filter or kind_filter or method_filter else 100
+
+            if is_platform_admin(staff):
+                q = (
+                    select(Payment)
+                    .outerjoin(Order, Order.id == Payment.order_id)
+                    .where(
+                        or_(
+                            Payment.is_wallet_topup.is_(True),
+                            Order.reseller_id.is_(None),
+                        )
+                    )
+                    .order_by(Payment.id.desc())
+                    .limit(fetch_limit)
+                )
+            else:
+                rid = shop_owner_id(staff)
+                if not rid:
+                    base_ctx.update(
+                        {
+                            "q": search_q,
+                            "status_filter": status_filter,
+                            "kind_filter": kind_filter,
+                            "method_filter": method_filter,
+                            "flash_err": request.query_params.get("err") or "محدوده فروشگاه مشخص نیست",
+                        }
+                    )
+                    return render(request, "orders.html", base_ctx)
+                q = (
+                    select(Payment)
+                    .join(Order, Order.id == Payment.order_id)
+                    .where(
+                        Order.reseller_id == rid,
+                        Payment.is_wallet_topup.is_(False),
+                    )
+                    .order_by(Payment.id.desc())
+                    .limit(fetch_limit)
+                )
+            if status_filter:
+                q = q.where(Payment.status == status_filter)
+            if method_filter:
+                q = q.where(Payment.method == method_filter)
+            if kind_filter == "wallet":
+                q = q.where(Payment.is_wallet_topup.is_(True))
+            elif kind_filter == "buy":
+                q = q.where(Payment.is_wallet_topup.is_(False))
+            payments = list((await session.execute(q)).scalars().all())
+            payer_ids = {int(p.user_id) for p in payments if p.user_id}
+            payers: dict[int, BotUser] = {}
+            if payer_ids:
+                payers = {
+                    int(u.id): u
+                    for u in (
+                        await session.execute(select(BotUser).where(BotUser.id.in_(payer_ids)))
+                    ).scalars().all()
+                }
+            if search_q:
+                payments = filter_by_search(
+                    payments,
+                    search_q,
+                    lambda p: (
+                        p.id,
+                        p.user_id,
+                        p.order_id,
+                        p.amount,
+                        p.status,
+                        p.method,
+                        p.review_note,
+                        "شارژ" if p.is_wallet_topup else "خرید",
+                        (payers.get(int(p.user_id)).username if payers.get(int(p.user_id)) else None),
+                        (payers.get(int(p.user_id)).full_name if payers.get(int(p.user_id)) else None),
+                        (payers.get(int(p.user_id)).telegram_id if payers.get(int(p.user_id)) else None),
+                    ),
+                )
+            base_ctx.update(
+                {
+                    "payments": payments,
+                    "payers": payers,
+                    "q": search_q,
+                    "status_filter": status_filter,
+                    "kind_filter": kind_filter,
+                    "method_filter": method_filter,
+                }
+            )
+            return render(request, "orders.html", base_ctx)
+
+        # orders tab
+        if not can_orders:
+            raise NotAdmin()
         search_q = normalize_search_q(request.query_params.get("q"))
         status_filter = (request.query_params.get("status") or "").strip()
         pay_status_filter = (request.query_params.get("pay_status") or "").strip()
@@ -2064,36 +2258,24 @@ def create_api_app(lifespan=None) -> FastAPI:
             .order_by(Order.id.desc())
             .limit(fetch_limit)
         )
-        from app.services.shop_scope import is_platform_admin, shop_owner_id
-
         if is_platform_admin(staff):
-            # Match payments + bot isolation: platform admin sees main-bot orders only
             q = q.where(Order.reseller_id.is_(None))
         else:
             rid = shop_owner_id(staff)
             if not rid:
-                orders = []
-                return render(
-                    request,
-                    "orders.html",
+                base_ctx.update(
                     {
-                        "staff": staff,
-                        "orders": orders,
-                        "payments_by_order": {},
-                        "payments_list_by_order": {},
                         "q": search_q,
                         "status_filter": status_filter,
                         "pay_status_filter": pay_status_filter,
-                        "flash_ok": request.query_params.get("ok"),
-                        "flash_err": request.query_params.get("err")
-                        or "محدوده فروشگاه مشخص نیست",
-                    },
+                        "flash_err": request.query_params.get("err") or "محدوده فروشگاه مشخص نیست",
+                    }
                 )
+                return render(request, "orders.html", base_ctx)
             q = q.where(Order.reseller_id == rid)
         if status_filter:
             q = q.where(Order.status == status_filter)
-        result = await session.execute(q)
-        orders = list(result.scalars().all())
+        orders = list((await session.execute(q)).scalars().all())
         if search_q:
             orders = filter_by_search(
                 orders,
@@ -2138,21 +2320,17 @@ def create_api_app(lifespan=None) -> FastAPI:
                 for o in orders
                 if (payments_by_order.get(o.id) and payments_by_order[o.id].status == pay_status_filter)
             ]
-        return render(
-            request,
-            "orders.html",
+        base_ctx.update(
             {
-                "staff": staff,
                 "orders": orders,
                 "payments_by_order": payments_by_order,
                 "payments_list_by_order": payments_list_by_order,
                 "q": search_q,
                 "status_filter": status_filter,
                 "pay_status_filter": pay_status_filter,
-                "flash_ok": request.query_params.get("ok"),
-                "flash_err": request.query_params.get("err"),
-            },
+            }
         )
+        return render(request, "orders.html", base_ctx)
 
     async def _notify_order_user(session: AsyncSession, payment: Payment, order: Order | None) -> None:
         user = await session.get(BotUser, payment.user_id)
@@ -2351,121 +2529,23 @@ def create_api_app(lifespan=None) -> FastAPI:
         return _redirect_msg("/orders", ok="سفارش لغو شد")
 
     @app.get("/payments", response_class=HTMLResponse)
-    async def payments_page(
-        request: Request,
-        staff: dict = Depends(require_perm("payments")),
-        session: AsyncSession = Depends(get_db),
-    ):
-        from sqlalchemy import or_
+    async def payments_page(request: Request):
+        """Legacy URL → finance hub payments tab (preserve bookmarks)."""
+        qs = request.url.query
+        target = "/orders?tab=payments"
+        if qs:
+            # Drop legacy bare path; keep filters
+            from urllib.parse import parse_qs, urlencode
 
-        from app.services.shop_scope import is_platform_admin, shop_owner_id
-
-        search_q = normalize_search_q(request.query_params.get("q"))
-        status_filter = (request.query_params.get("status") or "").strip()
-        kind_filter = (request.query_params.get("kind") or "").strip()
-        method_filter = (request.query_params.get("method") or "").strip()
-        fetch_limit = 500 if search_q or status_filter or kind_filter or method_filter else 100
-
-        if is_platform_admin(staff):
-            # Platform admin: wallet top-ups + main-bot orders only (hard shop isolation)
-            q = (
-                select(Payment)
-                .outerjoin(Order, Order.id == Payment.order_id)
-                .where(
-                    or_(
-                        Payment.is_wallet_topup.is_(True),
-                        Order.reseller_id.is_(None),
-                    )
-                )
-                .order_by(Payment.id.desc())
-                .limit(fetch_limit)
-            )
-        else:
-            rid = shop_owner_id(staff)
-            if not rid:
-                return render(
-                    request,
-                    "payments.html",
-                    {
-                        "staff": staff,
-                        "payments": [],
-                        "payers": {},
-                        "q": search_q,
-                        "status_filter": status_filter,
-                        "kind_filter": kind_filter,
-                        "method_filter": method_filter,
-                        "flash_ok": request.query_params.get("ok"),
-                        "flash_err": request.query_params.get("err")
-                        or "محدوده فروشگاه مشخص نیست",
-                    },
-                )
-            # Shop-scoped order payments only — wallet top-ups are platform-admin only
-            q = (
-                select(Payment)
-                .join(Order, Order.id == Payment.order_id)
-                .where(
-                    Order.reseller_id == rid,
-                    Payment.is_wallet_topup.is_(False),
-                )
-                .order_by(Payment.id.desc())
-                .limit(fetch_limit)
-            )
-        if status_filter:
-            q = q.where(Payment.status == status_filter)
-        if method_filter:
-            q = q.where(Payment.method == method_filter)
-        if kind_filter == "wallet":
-            q = q.where(Payment.is_wallet_topup.is_(True))
-        elif kind_filter == "buy":
-            q = q.where(Payment.is_wallet_topup.is_(False))
-        result = await session.execute(q)
-        payments = list(result.scalars().all())
-        payer_ids = {int(p.user_id) for p in payments if p.user_id}
-        payers: dict[int, BotUser] = {}
-        if payer_ids:
-            payers = {
-                int(u.id): u
-                for u in (
-                    await session.execute(select(BotUser).where(BotUser.id.in_(payer_ids)))
-                ).scalars().all()
-            }
-        if search_q:
-            payments = filter_by_search(
-                payments,
-                search_q,
-                lambda p: (
-                    p.id,
-                    p.user_id,
-                    p.order_id,
-                    p.amount,
-                    p.status,
-                    p.method,
-                    p.review_note,
-                    "شارژ" if p.is_wallet_topup else "خرید",
-                    (payers.get(int(p.user_id)).username if payers.get(int(p.user_id)) else None),
-                    (payers.get(int(p.user_id)).full_name if payers.get(int(p.user_id)) else None),
-                    (payers.get(int(p.user_id)).telegram_id if payers.get(int(p.user_id)) else None),
-                ),
-            )
-        return render(
-            request,
-            "payments.html",
-            {
-                "staff": staff,
-                "payments": payments,
-                "payers": payers,
-                "q": search_q,
-                "status_filter": status_filter,
-                "kind_filter": kind_filter,
-                "method_filter": method_filter,
-                "flash_ok": request.query_params.get("ok"),
-                "flash_err": request.query_params.get("err"),
-            },
-        )
+            params = parse_qs(qs, keep_blank_values=True)
+            flat = {k: v[0] for k, v in params.items() if v}
+            flat["tab"] = "payments"
+            target = "/orders?" + urlencode(flat)
+        return RedirectResponse(target, status_code=303)
 
     @app.get("/payments/{payment_id}/approve")
     async def payment_approve_get(payment_id: int):
-        return _redirect_msg("/payments", err="برای تأیید از دکمه داخل صفحه پرداخت‌ها استفاده کنید")
+        return _redirect_msg("/orders?tab=payments", err="برای تأیید از دکمه داخل صفحه پرداخت‌ها استفاده کنید")
 
     @app.post("/payments/{payment_id}/approve")
     async def payment_approve(
@@ -2475,22 +2555,22 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         payment = await session.get(Payment, payment_id)
         if not payment:
-            return _redirect_msg("/payments", err="پرداخت یافت نشد")
+            return _redirect_msg("/orders?tab=payments", err="پرداخت یافت نشد")
         if staff.get("role") != "admin":
             from app.services.shop_scope import ShopScopeError, require_shop_owner_id
 
             # Wallet top-ups mint global balance — tenant reviewers cannot approve them.
             if payment.is_wallet_topup:
-                return _redirect_msg("/payments", err="شارژ کیف پول فقط توسط مدیر اصلی تأیید می‌شود")
+                return _redirect_msg("/orders?tab=payments", err="شارژ کیف پول فقط توسط مدیر اصلی تأیید می‌شود")
             try:
                 rid = require_shop_owner_id(staff)
             except ShopScopeError as e:
-                return _redirect_msg("/payments", err=e.message)
+                return _redirect_msg("/orders?tab=payments", err=e.message)
             if not payment.order_id:
-                return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
+                return _redirect_msg("/orders?tab=payments", err="دسترسی به این پرداخت ندارید")
             order_row = await session.get(Order, payment.order_id)
             if not order_row or order_row.reseller_id != rid:
-                return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
+                return _redirect_msg("/orders?tab=payments", err="دسترسی به این پرداخت ندارید")
         elif payment.order_id and not payment.is_wallet_topup:
             # Platform admin must not approve shop-tenant payments (match bot isolation)
             order_row = await session.get(Order, payment.order_id)
@@ -2500,11 +2580,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                     err="پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود",
                 )
         if payment.status != PaymentStatus.PENDING.value:
-            return _redirect_msg("/payments", err="این پرداخت قابل تأیید نیست")
+            return _redirect_msg("/orders?tab=payments", err="این پرداخت قابل تأیید نیست")
         try:
             order = await approve_payment(session, payment, reviewer_tg=0)
         except Exception as e:
-            return _redirect_msg("/payments", err=str(e))
+            return _redirect_msg("/orders?tab=payments", err=str(e))
         user = await session.get(BotUser, payment.user_id)
         if user:
             try:
@@ -2535,7 +2615,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         await bot.session.close()
             except Exception:
                 pass
-        return _redirect_msg("/payments", ok="پرداخت تأیید شد")
+        return _redirect_msg("/orders?tab=payments", ok="پرداخت تأیید شد")
 
     @app.post("/payments/{payment_id}/reject")
     async def payment_reject(
@@ -2545,21 +2625,21 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         payment = await session.get(Payment, payment_id)
         if not payment:
-            return _redirect_msg("/payments", err="پرداخت یافت نشد")
+            return _redirect_msg("/orders?tab=payments", err="پرداخت یافت نشد")
         if staff.get("role") != "admin":
             from app.services.shop_scope import ShopScopeError, require_shop_owner_id
 
             if payment.is_wallet_topup:
-                return _redirect_msg("/payments", err="شارژ کیف پول فقط توسط مدیر اصلی رد می‌شود")
+                return _redirect_msg("/orders?tab=payments", err="شارژ کیف پول فقط توسط مدیر اصلی رد می‌شود")
             try:
                 rid = require_shop_owner_id(staff)
             except ShopScopeError as e:
-                return _redirect_msg("/payments", err=e.message)
+                return _redirect_msg("/orders?tab=payments", err=e.message)
             if not payment.order_id:
-                return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
+                return _redirect_msg("/orders?tab=payments", err="دسترسی به این پرداخت ندارید")
             order_row = await session.get(Order, payment.order_id)
             if not order_row or order_row.reseller_id != rid:
-                return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
+                return _redirect_msg("/orders?tab=payments", err="دسترسی به این پرداخت ندارید")
         elif payment.order_id and not payment.is_wallet_topup:
             order_row = await session.get(Order, payment.order_id)
             if order_row and order_row.reseller_id is not None:
@@ -2570,7 +2650,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         try:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
         except Exception as e:
-            return _redirect_msg("/payments", err=str(e))
+            return _redirect_msg("/orders?tab=payments", err=str(e))
         body = "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
         user = await session.get(BotUser, payment.user_id)
         if user:
@@ -2586,7 +2666,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             title="❌ پرداخت رد شد",
             body=body,
         )
-        return _redirect_msg("/payments", ok="پرداخت رد شد")
+        return _redirect_msg("/orders?tab=payments", ok="پرداخت رد شد")
 
     @app.get("/users", response_class=HTMLResponse)
     async def users_page(
@@ -3001,10 +3081,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
         if err:
             return RedirectResponse(
-                f"/settings?tab=supports&err={quote(err)}",
+                f"/tickets?tab=settings&err={quote(err)}",
                 status_code=303,
             )
-        return RedirectResponse("/settings?tab=supports&saved=1", status_code=303)
+        return RedirectResponse("/tickets?tab=settings&saved=1", status_code=303)
 
     @app.post("/supports/delete")
     async def supports_delete(
@@ -3018,7 +3098,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         contact_id = str(form.get("id") or "").strip()
         if contact_id:
             await delete_support_contact(session, contact_id)
-        return RedirectResponse("/settings?tab=supports&saved=1", status_code=303)
+        return RedirectResponse("/tickets?tab=settings&saved=1", status_code=303)
 
     def _menu_tab_context(values: dict) -> dict:
         from app.bot.keyboards import DEFAULT_MENU_ORDER
@@ -3096,6 +3176,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         tab = (request.query_params.get("tab") or "messages").strip()
         if tab == "security":
             return RedirectResponse("/security", status_code=303)
+        if tab in SETTINGS_DOMAIN_REDIRECTS:
+            return RedirectResponse(SETTINGS_DOMAIN_REDIRECTS[tab], status_code=303)
         if tab in SETTINGS_TAB_ALIASES:
             return RedirectResponse(f"/settings?tab={SETTINGS_TAB_ALIASES[tab]}", status_code=303)
         if tab == "users":
@@ -3216,11 +3298,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             )
         except Exception as e:
             return _redirect_msg(
-                "/settings?tab=payment",
+                "/orders?tab=settings",
                 err=f"لغو سفارش‌ها ناموفق: {e}",
             )
         return _redirect_msg(
-            "/settings?tab=payment",
+            "/orders?tab=settings",
             ok=f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود",
         )
 
@@ -3261,6 +3343,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         tab = (request.query_params.get("tab") or "messages").strip()
         # Accept legacy tab ids on save so in-flight forms don't wipe keys
         tab = SETTINGS_TAB_ALIASES.get(tab, tab)
+        if tab in {"payment", "billing"}:
+            tab = "finance"
         form = await request.form()
 
         if tab == "ssl":
@@ -3479,6 +3563,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     payload[key] = f"uploads/{dest_name}"
         if payload:
             await set_settings_bulk(session, payload)
+        if tab == "finance":
+            return RedirectResponse("/orders?tab=settings&saved=1", status_code=303)
+        if tab == "supports":
+            return RedirectResponse("/tickets?tab=settings&saved=1", status_code=303)
         return RedirectResponse(f"/settings?tab={tab}&saved=1", status_code=303)
 
     @app.get("/broadcast", response_class=HTMLResponse)
