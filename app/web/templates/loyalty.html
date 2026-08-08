@@ -16,17 +16,17 @@
 <div class="flash err">{{ flash_err }}</div>
 {% endif %}
 
-<div class="tabs tabs-scroll">
-  <a class="tab {% if tab=='overview' %}active{% endif %}" href="/loyalty?tab=overview">نمای کلی</a>
-  <a class="tab {% if tab=='rules' %}active{% endif %}" href="/loyalty?tab=rules">قوانین امتیاز</a>
-  <a class="tab {% if tab=='rewards' %}active{% endif %}" href="/loyalty?tab=rewards">جوایز</a>
-  <a class="tab {% if tab=='tiers' %}active{% endif %}" href="/loyalty?tab=tiers">سطوح</a>
-  <a class="tab {% if tab=='transactions' %}active{% endif %}" href="/loyalty?tab=transactions">تراکنش‌ها</a>
-  <a class="tab {% if tab=='settings' %}active{% endif %}" href="/loyalty?tab=settings">تنظیمات</a>
-</div>
+<nav class="section-tabs" aria-label="دعوت و باشگاه امتیاز">
+  <a class="{% if tab=='overview' %}active{% endif %}" href="/loyalty?tab=overview">نمای کلی</a>
+  <a class="{% if tab=='rules' %}active{% endif %}" href="/loyalty?tab=rules">قوانین امتیاز</a>
+  <a class="{% if tab=='rewards' %}active{% endif %}" href="/loyalty?tab=rewards">جوایز</a>
+  <a class="{% if tab=='tiers' %}active{% endif %}" href="/loyalty?tab=tiers">سطوح</a>
+  <a class="{% if tab=='transactions' %}active{% endif %}" href="/loyalty?tab=transactions">تراکنش‌ها</a>
+  <a class="{% if tab=='settings' %}active{% endif %}" href="/loyalty?tab=settings">تنظیمات</a>
+</nav>
 
 {% if tab == 'overview' %}
-<div class="home-panel-grid" style="margin-top:1rem">
+<div class="home-panel-grid">
   <div class="stat"><div class="stat-label">کل دعوت‌ها</div><div class="stat-value">{{ metrics.total_referrals }}</div></div>
   <div class="stat"><div class="stat-label">واجد شرایط</div><div class="stat-value">{{ metrics.qualified_referrals }}</div></div>
   <div class="stat"><div class="stat-label">امتیاز صادرشده</div><div class="stat-value">{{ metrics.points_issued }}</div></div>
@@ -34,7 +34,7 @@
   <div class="stat"><div class="stat-label">اعتبار کیف از جوایز</div><div class="stat-value">{{ metrics.wallet_credits_issued }}</div></div>
   <div class="stat"><div class="stat-label">جوایز فعال</div><div class="stat-value">{{ metrics.active_rewards }}</div></div>
 </div>
-<div class="card" style="margin-top:1rem">
+<div class="card" style="margin-top: var(--section-gap)">
   <h2>برترین معرف‌ها</h2>
   <div class="table-wrap">
   <table class="table-compact">
@@ -52,7 +52,7 @@
 {% endif %}
 
 {% if tab == 'rules' %}
-<div class="card" style="margin-top:1rem">
+<div class="card" style="margin-top: var(--section-gap)">
   <h2>قوانین امتیاز</h2>
   <p class="muted">قوانین را بدون نیاز به شناسه‌های فنی مدیریت کنید. فقط رویدادهای فعال امتیاز می‌دهند.</p>
   {% for rule in rules %}
@@ -108,7 +108,7 @@
 {% endif %}
 
 {% if tab == 'rewards' %}
-<div class="card" style="margin-top:1rem">
+<div class="card" style="margin-top: var(--section-gap)">
   <h2>افزودن جایزه</h2>
   <form method="post" action="/loyalty/rewards/create" class="form-stack">
     <label class="form-field">نام<input name="name" required placeholder="مثلاً ۱۰ گیگ رایگان" /></label>
@@ -171,7 +171,7 @@
 {% endif %}
 
 {% if tab == 'tiers' %}
-<div class="card" style="margin-top:1rem">
+<div class="card" style="margin-top: var(--section-gap)">
   <h2>سطوح باشگاه</h2>
   {% if not is_platform_admin %}
   <p class="muted">سطوح سراسری هستند و فقط ادمین اصلی می‌تواند آن‌ها را ویرایش کند.</p>
@@ -203,7 +203,7 @@
 {% endif %}
 
 {% if tab == 'transactions' %}
-<div class="card" style="margin-top:1rem">
+<div class="card" style="margin-top: var(--section-gap)">
   <h2>تعدیل دستی امتیاز</h2>
   <p class="muted">فقط ادمین — دلیل الزامی است و در دفترکل ثبت می‌شود.</p>
   <form method="post" action="/loyalty/adjust" class="form-stack">
@@ -240,7 +240,7 @@
 {% endif %}
 
 {% if tab == 'settings' %}
-<div class="card" style="margin-top:1rem">
+<div class="card" style="margin-top: var(--section-gap)">
   <h2>تنظیمات باشگاه</h2>
   <form method="post" action="/loyalty/settings" class="form-stack">
     <label class="form-field" style="display:flex;align-items:center;gap:.5rem">

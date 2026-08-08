@@ -14,17 +14,17 @@
   </div>
 </div>
 
-<div class="tabs tabs-scroll" role="tablist" aria-label="سفارشات و پرداخت‌ها">
+<nav class="section-tabs" role="tablist" aria-label="سفارشات و پرداخت‌ها">
   {% if can_orders %}
-  <a class="tab {% if finance_tab=='orders' %}active{% endif %}" href="/orders?tab=orders">سفارشات</a>
+  <a class="{% if finance_tab=='orders' %}active{% endif %}" href="/orders?tab=orders">سفارشات</a>
   {% endif %}
   {% if can_payments %}
-  <a class="tab {% if finance_tab=='payments' %}active{% endif %}" href="/orders?tab=payments">پرداخت‌ها</a>
+  <a class="{% if finance_tab=='payments' %}active{% endif %}" href="/orders?tab=payments">پرداخت‌ها</a>
   {% endif %}
   {% if can_finance_settings %}
-  <a class="tab {% if finance_tab=='settings' %}active{% endif %}" href="/orders?tab=settings">تنظیمات</a>
+  <a class="{% if finance_tab=='settings' %}active{% endif %}" href="/orders?tab=settings">تنظیمات</a>
   {% endif %}
-</div>
+</nav>
 
 {% if finance_tab == 'orders' %}
 <div class="card card-flush">

@@ -14,10 +14,10 @@
 </div>
 
 {% if can_support_settings %}
-<div class="tabs tabs-scroll" role="tablist" aria-label="پشتیبانی">
-  <a class="tab {% if support_tab=='tickets' %}active{% endif %}" href="/tickets?tab=tickets">تیکت‌ها</a>
-  <a class="tab {% if support_tab=='settings' %}active{% endif %}" href="/tickets?tab=settings">تنظیمات</a>
-</div>
+<nav class="section-tabs" role="tablist" aria-label="پشتیبانی">
+  <a class="{% if support_tab=='tickets' %}active{% endif %}" href="/tickets?tab=tickets">تیکت‌ها</a>
+  <a class="{% if support_tab=='settings' %}active{% endif %}" href="/tickets?tab=settings">تنظیمات</a>
+</nav>
 {% endif %}
 
 {% if support_tab == 'settings' and can_support_settings %}
