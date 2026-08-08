@@ -14,6 +14,16 @@
   let focusKey = null;
   let qrObjectUrl = null;
   const REMOVED_MENU = {guide:1, faq:1, restart:1, help:1};
+  const SAMPLE = {
+    name:'نمونه کاربر', username:'user_demo', status:'فعال', service:'سرویس نمونه',
+    plan:'پلن ۳۰ روزه', traffic:'100 GB', traffic_used:'27 GB', traffic_remaining:'73 GB',
+    expire:'۱۴۰۵/۰۱/۱۵', days_remaining:'۲۲', price:'۵۰٬۰۰۰', amount:'۵۰٬۰۰۰ تومان',
+    currency:'تومان', order_id:'1024', payment_id:'2048', card:'6037-****-****-1234',
+    holder:'نام دارنده', code:'CLK42', link:'https://t.me/example_bot?start=CLK42',
+    referral_code:'CLK42', referral_count:'۳', points:'۱۲۰', wallet_balance:'۲۵٬۰۰۰ تومان',
+    url:'https://example.com/sub/demo', asset:'USDT', network:'TRC20',
+    address:'TXampleAddressForPreviewOnly', gateway_name:'زرین‌پال'
+  };
 
   function val(name, fallback){
     if (!form) return (values[name] || fallback || '');
@@ -71,15 +81,23 @@
     return values.menu_layout || 'compact';
   }
   function fillVars(text){
-    return String(text||'')
-      .replaceAll('{name}','کاربر')
-      .replaceAll('{order_id}','1024')
-      .replaceAll('{amount}','۵۰٬۰۰۰ تومان')
-      .replaceAll('{code}','CLK42')
-      .replaceAll('{link}','https://t.me/example_bot?start=CLK42')
-      .replaceAll('{card}','6037-****-****-1234')
-      .replaceAll('{holder}','نام دارنده')
-      .replaceAll('{url}','https://example.com/sub/demo');
+    let out = String(text||'');
+    Object.keys(SAMPLE).forEach(function(k){
+      out = out.split('{'+k+'}').join(SAMPLE[k]);
+    });
+    return out;
+  }
+  /** Safe Telegram-like HTML preview: allow a small tag set; escape the rest. */
+  function tgHtml(text){
+    const raw = String(text||'');
+    const tokens = [];
+    const marked = raw.replace(/<\/?(?:b|i|u|s|code|pre|a)(?:\s+href="[^"]*")?\s*>/gi, function(m){
+      tokens.push(m);
+      return '\u0000'+(tokens.length-1)+'\u0000';
+    });
+    let html = esc(marked);
+    html = html.replace(/\u0000(\d+)\u0000/g, function(_, i){ return tokens[+i]; });
+    return html.replace(/\n/g,'<br>');
   }
   function renderReplyKeys(labels, opts){
     if (!keysEl) return;
@@ -108,11 +126,9 @@
     let text = '';
     let showQr = false;
     let showKeys = false;
-    if (tab === 'welcome') {
-      text = fillVars(val('welcome_text','سلام {name} 👋'));
-      showKeys = true;
-    } else if (tab === 'messages') {
+    if (tab === 'messages') {
       const map = {
+        s_welcome_text: 'welcome_text',
         s_guide_text: 'guide_text',
         s_faq_text: 'faq_text',
         s_support_text: 'support_text',
@@ -122,15 +138,38 @@
         s_delivery_title: 'delivery_title',
         s_purchase_success_text: 'purchase_success_text',
         s_wallet_success_text: 'wallet_success_text',
-        s_payment_reject_text: 'payment_reject_text',
+        s_qr_caption: 'qr_caption',
       };
-      const key = map[focusKey] || 'purchase_success_text';
+      const key = map[focusKey] || 'welcome_text';
       if (key === 'delivery_title') {
         text = fillVars(val('delivery_title','✅ سرویس آماده است')) + '\n\n' +
           fillVars(val('purchase_success_text','پرداخت تأیید شد'));
+      } else if (key === 'qr_caption' || focusKey === 's_qr_caption') {
+        text = fillVars(val('purchase_success_text','سرویس فعال شد.'));
+        showQr = val('qr_enabled','1') === '1';
+        let cap = fillVars(val('qr_caption','QR اشتراک'));
+        if (val('show_sub_link_in_text','1')==='1') {
+          cap += '\n\n🔗 https://example.com/sub/demo\n📦 ۱۰ گیگ · 📅 ۳۰ روز';
+        }
+        if (qrCap) qrCap.textContent = cap;
+        applyQrBackground();
+      } else if (key.indexOf('btn_') === 0) {
+        text = fillVars(val('welcome_text','سلام {name} 👋'));
+        showKeys = true;
       } else {
         text = fillVars(val(key, values[key] || 'متن پیام…'));
+        if (key === 'welcome_text') showKeys = true;
       }
+    } else if (tab === 'payment') {
+      const map = {
+        s_card_pay_text: 'card_pay_text',
+        s_gateway_pay_text: 'gateway_pay_text',
+        s_crypto_pay_text: 'crypto_pay_text',
+        s_payment_reject_text: 'payment_reject_text',
+        s_wallet_success_text: 'wallet_success_text',
+      };
+      const key = map[focusKey] || 'card_pay_text';
+      text = fillVars(val(key, values[key] || 'راهنمای پرداخت…'));
     } else if (tab === 'buttons' || tab === 'menu') {
       text = fillVars(values.welcome_text || val('welcome_text','سلام {name} 👋'));
       showKeys = true;
@@ -143,6 +182,9 @@
       }
       if (qrCap) qrCap.textContent = cap;
       applyQrBackground();
+    } else if (tab === 'welcome') {
+      text = fillVars(val('welcome_text','سلام {name} 👋'));
+      showKeys = true;
     }
     if (showKeys) {
       const order = menuOrder();
@@ -155,15 +197,13 @@
         reseller_apply: values.btn_reseller_apply || '🤝 درخواست نمایندگی',
         miniapp: values.btn_miniapp || '📱 مینی‌اپ',
       };
-      if (tab === 'buttons') {
-        map.shop = val('btn_shop', map.shop);
-        map.services = val('btn_services', map.services);
-        map.wallet = val('btn_wallet', map.wallet);
-        map.support = val('btn_support', map.support);
-        map.referral = val('btn_referral', map.referral);
-        map.reseller_apply = val('btn_reseller_apply', map.reseller_apply);
-        map.miniapp = val('btn_miniapp', map.miniapp);
-      }
+      map.shop = val('btn_shop', map.shop);
+      map.services = val('btn_services', map.services);
+      map.wallet = val('btn_wallet', map.wallet);
+      map.support = val('btn_support', map.support);
+      map.referral = val('btn_referral', map.referral);
+      map.reseller_apply = val('btn_reseller_apply', map.reseller_apply);
+      map.miniapp = val('btn_miniapp', map.miniapp);
   // miniapp is WebApp (inline only) — skip on reply keyboard preview
   // Static menus/submenus → reply keyboard; dynamic entity lists stay inline under messages.
   const labels = order.filter(k => k !== 'miniapp').map(k => map[k]).filter(Boolean);
@@ -171,7 +211,7 @@
     } else if (keysEl) {
       keysEl.innerHTML = '';
     }
-    if (textEl) textEl.innerHTML = esc(text).replace(/\n/g,'<br>');
+    if (textEl) textEl.innerHTML = tgHtml(text);
     if (qrCard) qrCard.hidden = !showQr;
   }
   if (form) {

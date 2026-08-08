@@ -11,7 +11,7 @@
 
 {{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path) }}
 
-<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance'] %}has-preview{% endif %}">
+<div class="settings-layout {% if tab in ['menu','messages','appearance','payment'] %}has-preview{% endif %}">
   <div class="settings-main">
 
   {% if tab == 'supports' %}
@@ -194,6 +194,25 @@
       </div>
     </form>
 
+  {% elif tab == 'services' %}
+    {% include "_settings_naming.html" %}
+    <form method="post" action="/shop-settings?tab=services" enctype="multipart/form-data" class="settings-form" id="settings-form">
+      {% for group_name in tab_groups %}
+      {% set fields = groups[group_name] %}
+      <div class="card settings-card">
+        <h2>{{ group_name }}</h2>
+        <div class="settings-grid">
+        {% for field in fields %}
+          {% include "_settings_field.html" %}
+        {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      <div class="actions sticky-actions">
+        <button class="btn" type="submit">ذخیره تنظیمات</button>
+      </div>
+    </form>
+
   {% else %}
     <form method="post" action="/shop-settings?tab={{ tab }}" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}
@@ -221,7 +240,7 @@
 
   {% if tab == 'appearance' %}
   {% include "_tg_preview_appearance.html" %}
-  {% elif tab in ['menu','welcome','messages','buttons','qr'] %}
+  {% elif tab in ['menu','messages','payment'] %}
   {% include "_tg_preview_chat.html" %}
   {% endif %}
 </div>
@@ -229,8 +248,37 @@
 {% if tab == 'appearance' %}
 {% include "_tg_preview_appearance_js.html" %}
 {% endif %}
-{% if tab in ['menu','welcome','messages','buttons','qr'] %}
+{% if tab in ['menu','messages','payment'] %}
 {% include "_tg_preview_chat_js.html" %}
+{% endif %}
+{% if tab == 'services' %}
+<script>
+(function(){
+  const form = document.getElementById('settings-form');
+  const sample = document.getElementById('naming-sample');
+  if (!form || !sample) return;
+  function rnd(){ return Math.random().toString(36).slice(2,10); }
+  function render(){
+    const prefix = (form.querySelector('[name="s_pg_username_prefix"]')||{}).value || 'clk';
+    const suffix = (form.querySelector('[name="s_pg_username_suffix"]')||{}).value || '';
+    const pattern = (form.querySelector('[name="s_pg_username_pattern"]')||{}).value || '{prefix}_{random}{suffix}';
+    let out;
+    try {
+      out = pattern
+        .replaceAll('{prefix}', prefix)
+        .replaceAll('{suffix}', suffix)
+        .replaceAll('{random}', rnd())
+        .replaceAll('{id}', '42');
+    } catch (e) {
+      out = prefix + '_' + rnd() + suffix;
+    }
+    sample.textContent = out;
+  }
+  form.addEventListener('input', render);
+  form.addEventListener('change', render);
+  render();
+})();
+</script>
 {% endif %}
 {% if tab == 'menu' %}
 <script>

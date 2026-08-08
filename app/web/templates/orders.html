@@ -1,19 +1,46 @@
 {% extends "base.html" %}
-{% from "macros.html" import ord_status, row_actions, page_title %}
+{% from "macros.html" import ord_status, pay_status, row_actions, page_title %}
 {% block title %}سفارش‌ها{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     {{ page_title('orders', 'سفارش‌ها') }}
   </div>
+  <div class="orders-payments-nav">
+    {% if 'payments' in (staff.permissions or []) or staff.role == 'admin' %}
+    <a class="btn btn-ghost" href="/payments">پرداخت‌ها / رسیدها</a>
+    {% endif %}
+  </div>
 </div>
 <div class="card card-flush">
   <form method="get" action="/orders" class="search-bar">
     <label class="search-bar-field">
       <span class="search-bar-label">جستجو</span>
-      <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، پلن، وضعیت…" autocomplete="off" />
+      <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، پلن، سفارش، وضعیت…" autocomplete="off" />
     </label>
-    <button class="btn btn-ghost" type="submit">جستجو</button>
+    <label class="search-bar-field">
+      <span class="search-bar-label">وضعیت سفارش</span>
+      <select name="status">
+        <option value="">همه</option>
+        {% for st, lab in [
+          ('pending','در انتظار'),('awaiting_receipt','منتظر رسید'),('awaiting_approval','منتظر تأیید'),
+          ('paid','پرداخت‌شده'),('delivered','تحویل‌شده'),('rejected','ردشده'),('cancelled','لغوشده')
+        ] %}
+        <option value="{{ st }}" {% if status_filter==st %}selected{% endif %}>{{ lab }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="search-bar-field">
+      <span class="search-bar-label">وضعیت پرداخت</span>
+      <select name="pay_status">
+        <option value="">همه</option>
+        <option value="pending" {% if pay_status_filter=='pending' %}selected{% endif %}>در انتظار</option>
+        <option value="approved" {% if pay_status_filter=='approved' %}selected{% endif %}>تأییدشده</option>
+        <option value="rejected" {% if pay_status_filter=='rejected' %}selected{% endif %}>ردشده</option>
+        <option value="none" {% if pay_status_filter=='none' %}selected{% endif %}>بدون پرداخت</option>
+      </select>
+    </label>
+    <button class="btn btn-ghost" type="submit">اعمال</button>
   </form>
   <div class="table-wrap">
   <table class="table-compact" data-sortable>
@@ -23,7 +50,8 @@
         <th data-sort-type="text">کاربر</th>
         <th class="col-hide-sm" data-sort-type="text">پلن</th>
         <th data-sort-type="num">مبلغ</th>
-        <th data-sort-type="text">وضعیت</th>
+        <th data-sort-type="text">سفارش</th>
+        <th data-sort-type="text">پرداخت</th>
         <th class="col-hide-sm" data-sort-type="text">روش</th>
         <th class="col-hide-sm" data-sort-type="text">زمان</th>
         <th class="col-actions"></th>
@@ -31,6 +59,7 @@
     </thead>
     <tbody>
     {% for o in orders %}
+      {% set pays = payments_list_by_order.get(o.id) or [] %}
       {% set pay = payments_by_order.get(o.id) %}
       {% set uname = (o.user.full_name or o.user.username or o.user_id) if o.user else o.user_id %}
       {% set pname = o.plan.name if o.plan else (o.plan_id or "—") %}
@@ -38,13 +67,43 @@
         <td class="mono" data-sort-value="{{ o.id }}">{{ o.id }}</td>
         <td data-sort-value="{{ uname }}">{{ uname }}</td>
         <td class="col-hide-sm" data-sort-value="{{ pname }}">{{ pname }}</td>
-        <td class="mono" data-sort-value="{{ o.amount }}">{{ o.amount | num }}</td>
+        <td class="mono" data-sort-value="{{ o.amount }}">
+          {{ o.amount | num }}
+          {% if o.discount_amount %}
+          <div class="muted" style="font-size:11px">تخفیف {{ o.discount_amount | num }}{% if o.discount_code %} · {{ o.discount_code }}{% endif %}</div>
+          {% endif %}
+        </td>
         <td data-sort-value="{{ o.status }}">
           <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled','failed'] %}rejected{% else %}neutral{% endif %}">
             {{ ord_status(o.status) }}
           </span>
         </td>
-        <td class="col-hide-sm" data-sort-value="{{ o.payment_method or '' }}">{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
+        <td data-sort-value="{{ pay.status if pay else '' }}">
+          {% if pay %}
+          <div class="order-pay-meta">
+            <span class="badge {% if pay.status=='pending' %}pending{% elif pay.status=='approved' %}approved{% else %}rejected{% endif %}">
+              {{ pay_status(pay.status) }}
+            </span>
+            <span class="muted mono">#{{ pay.id }}</span>
+          </div>
+          {% if pays|length > 1 %}
+          <details class="order-pay-details">
+            <summary>{{ pays|length }} تلاش پرداخت</summary>
+            <ul class="order-pay-list">
+              {% for p in pays %}
+              <li class="mono">#{{ p.id }} · {{ pay_status(p.status) }} · {{ p.amount | num }} · {{ p.method or '—' }} · {{ p.created_at }}</li>
+              {% endfor %}
+            </ul>
+          </details>
+          {% endif %}
+          {% else %}
+          <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td class="col-hide-sm" data-sort-value="{{ o.payment_method or (pay.method if pay else '') }}">
+          {% set pm = o.payment_method or (pay.method if pay else '') %}
+          {% if pm=='card' %}کارت{% elif pm=='wallet' %}کیف پول{% elif pm=='gateway' %}درگاه{% elif pm=='crypto' %}رمزارز{% elif pm=='stars' %}استارز{% else %}{{ pm or "—" }}{% endif %}
+        </td>
         <td class="muted col-hide-sm" data-sort-value="{{ o.created_at }}">{{ o.created_at }}</td>
         <td class="col-actions">
           {% if o.status in ['delivered', 'cancelled'] %}
@@ -99,7 +158,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">سفارشی نیست</td></tr>
+      <tr><td colspan="9" class="muted">سفارشی نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>

@@ -20,7 +20,7 @@
 {{ settings_tabs(tab, tabs) }}
 {% endif %}
 
-<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance'] %}has-preview{% endif %}">
+<div class="settings-layout {% if tab in ['menu','messages','appearance','payment'] %}has-preview{% endif %}">
   <div class="settings-main">
 
   {% if tab == 'update' %}
@@ -68,9 +68,9 @@
         <button class="btn" type="submit">ذخیره تنظیمات</button>
       </div>
     </form>
-  {% elif tab == 'naming' %}
+  {% elif tab == 'services' %}
     {% include "_settings_naming.html" %}
-    <form method="post" action="/settings?tab=naming" enctype="multipart/form-data" class="settings-form" id="settings-form">
+    <form method="post" action="/settings?tab=services" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}
       {% set fields = groups[group_name] %}
       <div class="card settings-card">
@@ -83,7 +83,7 @@
       </div>
       {% endfor %}
       <div class="actions sticky-actions">
-        <button class="btn" type="submit">ذخیره نام‌گذاری</button>
+        <button class="btn" type="submit">ذخیره تنظیمات</button>
       </div>
     </form>
   {% else %}
@@ -113,7 +113,7 @@
 
   {% if tab == 'appearance' %}
   {% include "_tg_preview_appearance.html" %}
-  {% elif tab in ['menu','welcome','messages','buttons','qr'] %}
+  {% elif tab in ['menu','messages','payment'] %}
   {% include "_tg_preview_chat.html" %}
   {% endif %}
 </div>
@@ -121,10 +121,10 @@
 {% if tab == 'appearance' %}
 {% include "_tg_preview_appearance_js.html" %}
 {% endif %}
-{% if tab in ['menu','welcome','messages','buttons','qr'] %}
+{% if tab in ['menu','messages','payment'] %}
 {% include "_tg_preview_chat_js.html" %}
 {% endif %}
-{% if tab == 'naming' %}
+{% if tab == 'services' %}
 <script>
 (function(){
   const form = document.getElementById('settings-form');

@@ -37,17 +37,13 @@ DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_sett
 
 # Tabs a reseller may edit for their own shop bot
 RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
-    ("welcome", "خوش‌آمد و هویت"),
+    ("messages", "پیام‌ها و ظاهر"),
     ("appearance", "ظاهر ربات"),
-    ("messages", "متن پیام‌ها"),
-    ("buttons", "متن دکمه‌ها"),
     ("menu", "منوی بات"),
-    ("qr", "QR اشتراک"),
     ("payment", "پرداخت"),
-    ("supports", "پشتیبان‌ها"),
-    ("forcejoin", "کانال اجباری"),
-    ("naming", "نام‌گذاری سرویس"),
-    ("notifications", "نوتیفیکیشن"),
+    ("services", "سرویس و فروش"),
+    ("notifications", "اعلان‌ها"),
+    ("supports", "پشتیبانی"),
     ("bot", "ربات اختصاصی"),
 ]
 

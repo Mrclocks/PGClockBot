@@ -1336,14 +1336,17 @@ async def pay_card_cb(
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
-    try:
-        body = safe_format(ui["card_pay_text"], 
-            amount=amount,
-            card=ui.get("card_number") or "—",
-            holder=ui.get("card_holder") or "—",
-        )
-    except Exception:
-        body = f"مبلغ {amount} را کارت به کارت کنید و رسید بفرستید."
+    from app.services.shortcodes import render_user_message
+
+    body = render_user_message(
+        ui.get("card_pay_text"),
+        f"مبلغ {amount} را کارت به کارت کنید و رسید بفرستید.",
+        amount=amount,
+        card=ui.get("card_number") or "—",
+        holder=ui.get("card_holder") or "—",
+        order_id=order.id,
+        payment_id=payment.id,
+    )
     body += f"\n\n(پرداخت #{payment.id})"
     await _await_order_receipt(
         callback, session, db_user, title="💳 کارت به کارت", body=body, state=state
@@ -1384,12 +1387,17 @@ async def pay_gateway_cb(
             link = safe_format(link, amount=order.amount, order_id=order.id, payment_id=payment.id)
         except Exception:
             pass
-    try:
-        body = safe_format(ui.get("gateway_pay_text") or "", 
-            amount=amount, order_id=order.id, name=name
-        )
-    except Exception:
-        body = f"مبلغ {amount} را از طریق {name} پرداخت کنید و رسید بفرستید."
+    from app.services.shortcodes import render_user_message
+
+    body = render_user_message(
+        ui.get("gateway_pay_text") or "",
+        f"مبلغ {amount} را از طریق {name} پرداخت کنید و رسید بفرستید.",
+        amount=amount,
+        order_id=order.id,
+        payment_id=payment.id,
+        name=name,
+        gateway_name=name,
+    )
     body += f"\n\n(پرداخت #{payment.id})"
     rows: list[list[InlineKeyboardButton]] = []
     if link.startswith("http://") or link.startswith("https://"):
@@ -1434,19 +1442,22 @@ async def pay_crypto_cb(
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
-    try:
-        body = safe_format(ui.get("crypto_pay_text") or "", 
-            amount=amount,
-            asset=ui.get("crypto_asset") or "USDT",
-            network=ui.get("crypto_network") or "—",
-            address=address,
-        )
-    except Exception:
-        body = (
+    from app.services.shortcodes import render_user_message
+
+    body = render_user_message(
+        ui.get("crypto_pay_text") or "",
+        (
             f"مبلغ {amount}\n"
             f"{ui.get('crypto_asset') or 'USDT'} ({ui.get('crypto_network') or '—'})\n"
             f"<code>{address}</code>\n\nرسید را بفرستید."
-        )
+        ),
+        amount=amount,
+        asset=ui.get("crypto_asset") or "USDT",
+        network=ui.get("crypto_network") or "—",
+        address=address,
+        order_id=order.id,
+        payment_id=payment.id,
+    )
     body += f"\n\n(پرداخت #{payment.id})"
     await _await_order_receipt(
         callback, session, db_user, title="💎 رمزارز", body=body, state=state

@@ -6,17 +6,48 @@
   <div>
     {{ page_title('payments', 'پرداخت‌ها') }}
   </div>
-  {% if staff.role == 'admin' %}
-  <a class="btn btn-ghost" href="/settings?tab=payment">تنظیمات پرداخت</a>
-  {% endif %}
+  <div class="orders-payments-nav">
+    {% if 'orders' in (staff.permissions or []) or staff.role == 'admin' %}
+    <a class="btn btn-ghost" href="/orders">سفارش‌ها</a>
+    {% endif %}
+    {% if staff.role == 'admin' %}
+    <a class="btn btn-ghost" href="/settings?tab=payment">تنظیمات پرداخت</a>
+    {% endif %}
+  </div>
 </div>
 <div class="card card-flush">
   <form method="get" action="/payments" class="search-bar">
     <label class="search-bar-field">
       <span class="search-bar-label">جستجو</span>
-      <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، مبلغ، وضعیت…" autocomplete="off" />
+      <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، مبلغ، سفارش، پرداخت…" autocomplete="off" />
     </label>
-    <button class="btn btn-ghost" type="submit">جستجو</button>
+    <label class="search-bar-field">
+      <span class="search-bar-label">وضعیت</span>
+      <select name="status">
+        <option value="">همه</option>
+        <option value="pending" {% if status_filter=='pending' %}selected{% endif %}>در انتظار</option>
+        <option value="approved" {% if status_filter=='approved' %}selected{% endif %}>تأییدشده</option>
+        <option value="rejected" {% if status_filter=='rejected' %}selected{% endif %}>ردشده</option>
+      </select>
+    </label>
+    <label class="search-bar-field">
+      <span class="search-bar-label">نوع</span>
+      <select name="kind">
+        <option value="">همه</option>
+        <option value="buy" {% if kind_filter=='buy' %}selected{% endif %}>خرید</option>
+        <option value="wallet" {% if kind_filter=='wallet' %}selected{% endif %}>شارژ کیف</option>
+      </select>
+    </label>
+    <label class="search-bar-field">
+      <span class="search-bar-label">روش</span>
+      <select name="method">
+        <option value="">همه</option>
+        {% for m, lab in [('card','کارت'),('wallet','کیف پول'),('gateway','درگاه'),('crypto','رمزارز'),('stars','استارز')] %}
+        <option value="{{ m }}" {% if method_filter==m %}selected{% endif %}>{{ lab }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn btn-ghost" type="submit">اعمال</button>
   </form>
   <div class="table-wrap">
   <table class="table-compact" data-sortable>
@@ -25,8 +56,10 @@
       <th data-sort-type="text">کاربر</th>
       <th data-sort-type="num">مبلغ</th>
       <th class="col-hide-sm" data-sort-type="text">نوع</th>
+      <th class="col-hide-sm" data-sort-type="text">روش</th>
       <th data-sort-type="text">وضعیت</th>
       <th class="col-hide-sm" data-sort-type="num">سفارش</th>
+      <th class="col-hide-sm" data-sort-type="text">زمان</th>
       <th class="col-actions"></th>
     </tr></thead>
     <tbody>
@@ -38,12 +71,20 @@
         <td data-sort-value="{{ uname }}">{{ uname }}</td>
         <td class="mono" data-sort-value="{{ p.amount }}">{{ "{:,}".format(p.amount).replace(",", "٬") }}</td>
         <td class="col-hide-sm" data-sort-value="{{ 'wallet' if p.is_wallet_topup else 'buy' }}">{{ "شارژ کیف" if p.is_wallet_topup else "خرید" }}</td>
+        <td class="col-hide-sm" data-sort-value="{{ p.method or '' }}">
+          {% if p.method=='card' %}کارت{% elif p.method=='wallet' %}کیف پول{% elif p.method=='gateway' %}درگاه{% elif p.method=='crypto' %}رمزارز{% elif p.method=='stars' %}استارز{% else %}{{ p.method or "—" }}{% endif %}
+        </td>
         <td data-sort-value="{{ p.status }}">
           <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">
             {{ pay_status(p.status) }}
           </span>
         </td>
-        <td class="col-hide-sm" data-sort-value="{{ p.order_id or 0 }}">{{ p.order_id or "—" }}</td>
+        <td class="col-hide-sm" data-sort-value="{{ p.order_id or 0 }}">
+          {% if p.order_id %}
+          <a href="/orders?q={{ p.order_id }}" class="mono">#{{ p.order_id }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td class="muted col-hide-sm" data-sort-value="{{ p.created_at }}">{{ p.created_at }}</td>
         <td class="col-actions">
           {% if p.status == 'pending' %}
           {% call row_actions() %}
@@ -56,7 +97,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">پرداختی نیست</td></tr>
+      <tr><td colspan="9" class="muted">پرداختی نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>

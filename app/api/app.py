@@ -72,6 +72,7 @@ from app.services.updates import local_version
 from app.services.users import (
     SETTING_GROUPS,
     SETTINGS_TABS,
+    SETTINGS_TAB_ALIASES,
     PANEL_SETTINGS_KEYS,
     PANEL_SETTINGS_TABS,
     TAB_SETTING_GROUPS,
@@ -107,6 +108,10 @@ templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
 templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
+
+from app.services.shortcodes import shortcodes_for as _shortcodes_for
+
+templates.env.globals["shortcodes_for"] = _shortcodes_for
 
 # Login brute-force tracking: ip -> list of failure timestamps
 _LOGIN_FAILURES: dict[str, list[float]] = defaultdict(list)
@@ -2047,7 +2052,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         search_q = normalize_search_q(request.query_params.get("q"))
-        fetch_limit = 500 if search_q else 100
+        status_filter = (request.query_params.get("status") or "").strip()
+        pay_status_filter = (request.query_params.get("pay_status") or "").strip()
+        fetch_limit = 500 if search_q or status_filter or pay_status_filter else 100
         q = (
             select(Order)
             .options(
@@ -2073,13 +2080,18 @@ def create_api_app(lifespan=None) -> FastAPI:
                         "staff": staff,
                         "orders": orders,
                         "payments_by_order": {},
+                        "payments_list_by_order": {},
                         "q": search_q,
+                        "status_filter": status_filter,
+                        "pay_status_filter": pay_status_filter,
                         "flash_ok": request.query_params.get("ok"),
                         "flash_err": request.query_params.get("err")
                         or "محدوده فروشگاه مشخص نیست",
                     },
                 )
             q = q.where(Order.reseller_id == rid)
+        if status_filter:
+            q = q.where(Order.status == status_filter)
         result = await session.execute(q)
         orders = list(result.scalars().all())
         if search_q:
@@ -2093,6 +2105,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     o.amount,
                     o.note,
                     o.user_id,
+                    o.discount_code,
                     (o.user.username if o.user else None),
                     (o.user.full_name if o.user else None),
                     (o.user.telegram_id if o.user else None),
@@ -2101,6 +2114,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 ),
             )
         payments_by_order: dict[int, Payment] = {}
+        payments_list_by_order: dict[int, list[Payment]] = {}
         if orders:
             ids = [o.id for o in orders]
             pay_rows = (
@@ -2111,8 +2125,19 @@ def create_api_app(lifespan=None) -> FastAPI:
                 )
             ).scalars().all()
             for p in pay_rows:
-                if p.order_id is not None and p.order_id not in payments_by_order:
+                if p.order_id is None:
+                    continue
+                payments_list_by_order.setdefault(p.order_id, []).append(p)
+                if p.order_id not in payments_by_order:
                     payments_by_order[p.order_id] = p
+        if pay_status_filter == "none":
+            orders = [o for o in orders if o.id not in payments_by_order]
+        elif pay_status_filter:
+            orders = [
+                o
+                for o in orders
+                if (payments_by_order.get(o.id) and payments_by_order[o.id].status == pay_status_filter)
+            ]
         return render(
             request,
             "orders.html",
@@ -2120,7 +2145,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "staff": staff,
                 "orders": orders,
                 "payments_by_order": payments_by_order,
+                "payments_list_by_order": payments_list_by_order,
                 "q": search_q,
+                "status_filter": status_filter,
+                "pay_status_filter": pay_status_filter,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -2333,7 +2361,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.shop_scope import is_platform_admin, shop_owner_id
 
         search_q = normalize_search_q(request.query_params.get("q"))
-        fetch_limit = 500 if search_q else 100
+        status_filter = (request.query_params.get("status") or "").strip()
+        kind_filter = (request.query_params.get("kind") or "").strip()
+        method_filter = (request.query_params.get("method") or "").strip()
+        fetch_limit = 500 if search_q or status_filter or kind_filter or method_filter else 100
 
         if is_platform_admin(staff):
             # Platform admin: wallet top-ups + main-bot orders only (hard shop isolation)
@@ -2360,6 +2391,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                         "payments": [],
                         "payers": {},
                         "q": search_q,
+                        "status_filter": status_filter,
+                        "kind_filter": kind_filter,
+                        "method_filter": method_filter,
                         "flash_ok": request.query_params.get("ok"),
                         "flash_err": request.query_params.get("err")
                         or "محدوده فروشگاه مشخص نیست",
@@ -2376,6 +2410,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                 .order_by(Payment.id.desc())
                 .limit(fetch_limit)
             )
+        if status_filter:
+            q = q.where(Payment.status == status_filter)
+        if method_filter:
+            q = q.where(Payment.method == method_filter)
+        if kind_filter == "wallet":
+            q = q.where(Payment.is_wallet_topup.is_(True))
+        elif kind_filter == "buy":
+            q = q.where(Payment.is_wallet_topup.is_(False))
         result = await session.execute(q)
         payments = list(result.scalars().all())
         payer_ids = {int(p.user_id) for p in payments if p.user_id}
@@ -2413,6 +2455,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "payments": payments,
                 "payers": payers,
                 "q": search_q,
+                "status_filter": status_filter,
+                "kind_filter": kind_filter,
+                "method_filter": method_filter,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -3048,14 +3093,16 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.notifications import NOTIFY_PREFS, get_notify_prefs
         from app.services.updates import clear_update_cache, local_version
 
-        tab = (request.query_params.get("tab") or "welcome").strip()
-        valid = {t[0] for t in SETTINGS_TABS} | PANEL_SETTINGS_KEYS
-        if tab == "users":
-            return RedirectResponse("/settings?tab=naming", status_code=303)
+        tab = (request.query_params.get("tab") or "messages").strip()
         if tab == "security":
             return RedirectResponse("/security", status_code=303)
+        if tab in SETTINGS_TAB_ALIASES:
+            return RedirectResponse(f"/settings?tab={SETTINGS_TAB_ALIASES[tab]}", status_code=303)
+        if tab == "users":
+            return RedirectResponse("/settings?tab=services", status_code=303)
+        valid = {t[0] for t in SETTINGS_TABS} | PANEL_SETTINGS_KEYS
         if tab not in valid:
-            tab = "welcome"
+            tab = "messages"
 
         values = await get_all_settings(session)
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
@@ -3211,7 +3258,9 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from app.services.users import IMAGE_KEYS, TOGGLE_KEYS, keys_for_tab
 
-        tab = (request.query_params.get("tab") or "welcome").strip()
+        tab = (request.query_params.get("tab") or "messages").strip()
+        # Accept legacy tab ids on save so in-flight forms don't wipe keys
+        tab = SETTINGS_TAB_ALIASES.get(tab, tab)
         form = await request.form()
 
         if tab == "ssl":

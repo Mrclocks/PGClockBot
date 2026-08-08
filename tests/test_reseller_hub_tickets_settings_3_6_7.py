@@ -74,8 +74,8 @@ class ShopSettingsCompletenessTests(unittest.TestCase):
 
         keys = {k for k, _ in RESELLER_SETTINGS_TABS}
         self.assertIn("menu", keys)
-        self.assertIn("naming", keys)
-        self.assertIn("buttons", keys)
+        self.assertIn("services", keys)
+        self.assertIn("messages", keys)
 
     def test_telegram_menu_order(self):
         src = (ROOT / "app/bot/handlers/reseller_settings.py").read_text(encoding="utf-8")
@@ -101,6 +101,7 @@ class ShopSettingsCompletenessTests(unittest.TestCase):
         src = (ROOT / "app/api/shop_settings.py").read_text(encoding="utf-8")
         self.assertIn("btn_admin", src)
         self.assertIn("_shop_btn_block", src)
+        self.assertIn('tab == "messages"', src)
 
 
 if __name__ == "__main__":
