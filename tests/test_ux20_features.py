@@ -105,13 +105,25 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertNotIn('href="/tools"', home)
         self.assertNotIn("_home_inbox.html", home)
         self.assertNotIn("مرکز اقدام امروز", home)
+        self.assertNotIn("_funnel_panel.html", home)
+        self.assertNotIn("home-panel-bot", home)
+        self.assertNotIn("home-panel-pg", home)
+        self.assertIn("home-dash--pulse", home)
+        self.assertIn("home-vitals", home)
         self.assertIn("home-pg-health", home)
-        self.assertIn("settings?tab=links", home)
-        self.assertIn('_funnel_panel.html', home)
         self.assertIn("funnel_enabled", home)
-        panel = Path("app/web/templates/_funnel_panel.html").read_text(encoding="utf-8")
-        self.assertIn("رفتار کاربر", panel)
-        self.assertIn("home-panel-neutral", panel)
+        self.assertIn("رفتار کاربر", home)
+        self.assertIn("settings?tab=bot", home)
+        reseller = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
+        self.assertIn("home-dash--pulse", reseller)
+        self.assertIn("home-vitals", reseller)
+        self.assertNotIn("_funnel_panel.html", reseller)
+        src = Path("app/api/home_pages.py").read_text(encoding="utf-8")
+        self.assertIn("lite=True", src)
+        self.assertNotIn("_safe_funnel", src)
+        ov = Path("app/services/home_overview.py").read_text(encoding="utf-8")
+        self.assertIn("pg_nodes_pulse", ov)
+        self.assertIn("lite: bool = False", ov)
 
     def test_inbox_page_and_sidebar(self):
         inbox = Path("app/web/templates/inbox.html").read_text(encoding="utf-8")
@@ -133,6 +145,8 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         home_src = Path("app/api/home_pages.py").read_text(encoding="utf-8")
         self.assertIn('"/inbox"', home_src)
         self.assertIn("build_inbox_context", home_src)
+
+    def test_pg_home_has_quick_open_in_stats_box(self):
         html = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
         self.assertIn("ورود به پاسارگارد", html)
         self.assertIn("آمار پنل", html)
@@ -490,9 +504,10 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.8")
-        self.assertEqual(__version__, "5.2.8")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.9")
+        self.assertEqual(__version__, "5.2.9")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.2.9"', notes)
         self.assertIn('"5.2.8"', notes)
         self.assertIn('"5.2.7"', notes)
         self.assertIn('"5.2.1"', notes)

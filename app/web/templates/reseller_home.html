@@ -2,6 +2,7 @@
 {% from "macros.html" import page_title %}
 {% block title %}داشبورد{% endblock %}
 {% block content %}
+<div class="home-dash home-dash--pulse" id="home-dash">
 {% if dashboard_degraded %}
 <div class="flash warn home-update-banner">
   <div class="home-update-copy">
@@ -15,6 +16,7 @@
 <div class="page-head">
   <div>
     {{ page_title('home', 'داشبورد', 'neutral') }}
+    <p class="muted page-sub">وضعیت فروشگاه شما</p>
   </div>
 </div>
 
@@ -33,20 +35,23 @@
 {{ pg_quota_exhausted_banners(users=pg_limits.users, traffic=pg_limits.traffic) }}
 {% endif %}
 
-{% if billing_card %}
-<div class="card home-conn-card">
-  <h2>کیف پول (PAYG)</h2>
-  <p class="muted">مصرف ترافیک از همین کیف پول فروشگاهی کسر می‌شود</p>
-  <p class="home-balance"><strong>{{ billing_card.balance_fa }}</strong></p>
-  {% if billing_card.suspended %}
-  <p class="flash err">حساب به‌خاطر موجودی صفر مسدود است</p>
+{# —— Pulse: connection (+ optional PAYG) —— #}
+<section class="card home-pulse" aria-label="وضعیت فروشگاه">
+  {% if billing_card %}
+  <div class="home-pulse-payg{% if billing_card.suspended %} is-suspended{% endif %}">
+    <div class="home-pulse-payg-copy">
+      <span class="home-vital-k">کیف پول PAYG</span>
+      <strong class="home-balance">{{ billing_card.balance_fa }}</strong>
+      {% if billing_card.suspended %}
+      <span class="badge danger">مسدود</span>
+      {% else %}
+      <span class="muted">مصرف ترافیک از این کیف پول</span>
+      {% endif %}
+    </div>
+  </div>
   {% endif %}
-</div>
-{% endif %}
 
-<div class="card home-conn-card">
-  <h2>وضعیت اتصال</h2>
-  <div class="home-conn-row">
+  <div class="home-pulse-conn home-pulse-conn--solo" aria-label="وضعیت اتصال">
     <a class="home-conn {% if bot.unchecked %}is-neutral{% elif bot.ok %}is-ok{% else %}is-err{% endif %}" href="/shop-settings?tab=bot">
       <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
       <span class="home-conn-text">
@@ -86,102 +91,17 @@
       {% endif %}
     </a>
   </div>
-</div>
 
-<div class="home-panels">
-  <section class="home-panel home-panel-bot">
-    <div class="home-panel-head">
-      <div class="home-panel-title">
-        <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-        <h2 class="home-panel-h">پنل ربات</h2>
-      </div>
-      {% if 'dashboard' in (staff.get('permissions') or []) or staff.role == 'reseller' %}
-      <a class="btn btn-sm btn-ghost" href="/dashboard">نمای کلی</a>
-      {% endif %}
-    </div>
-    <div class="home-panel-grid">
-      <div class="stat">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
-          </span>
-          <span>کاربران</span>
-        </div>
-        <strong>{{ stats.users | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M7 7h13l-1.2 9.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.7L6 4H3"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>
-          </span>
-          <span>سفارش‌ها</span>
-        </div>
-        <strong>{{ stats.orders | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h4"/></svg>
-          </span>
-          <span>سرویس‌ها</span>
-        </div>
-        <strong>{{ stats.services | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
-          </span>
-          <span>رسید معلق</span>
-        </div>
-        <strong>{{ stats.pending | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
-          </span>
-          <span>تیکت باز</span>
-        </div>
-        <strong>{{ stats.tickets | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg>
-          </span>
-          <span>درآمد</span>
-        </div>
-        <strong>{{ stats.revenue | num }}</strong>
-      </div>
-    </div>
-  </section>
-
-  {% if pg_limits and pg_limits.ready %}
+  {% if pg_limits and pg_limits.ready and (pg_limits.users or pg_limits.traffic) %}
   {% from "_pg_quota_gauges.html" import pg_quota_gauge %}
-  <section class="home-panel home-panel-pg">
-    <div class="home-panel-head">
-      <div class="home-panel-title">
-        <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-        <h2 class="home-panel-h">پنل پاسارگارد</h2>
-        {% if pg_limits.username %}
-        <span class="pg-admin-name pg-admin-name-inline" dir="ltr">{{ pg_limits.username }}</span>
-        {% endif %}
-        {% if pg_limits.status_label %}
-        <span class="badge {{ pg_limits.status_badge or 'neutral' }}">{{ pg_limits.status_label }}</span>
-        {% endif %}
-        {% if pg_limits.role_name %}
-        <span class="badge neutral">{{ pg_limits.role_name }}</span>
-        {% endif %}
-      </div>
+  <div class="home-pulse-quota">
+    <div class="home-pulse-quota-head">
+      <span class="home-vital-k">سهمیه پاسارگارد</span>
       {% if 'pg_overview' in (staff.get('pg_permissions') or []) %}
-      <div class="home-panel-actions">
-        <a class="btn btn-sm btn-ghost" href="/pg">نمای کلی</a>
-      </div>
+      <a class="btn btn-sm btn-ghost" href="/pg">نمای کلی</a>
       {% endif %}
     </div>
-    {% if pg_limits.users or pg_limits.traffic %}
-    <div class="home-gauges pg-quota-gauges pg-quota-gauges-embed">
+    <div class="home-gauges home-gauges--sm pg-quota-gauges pg-quota-gauges-embed">
       {% if pg_limits.users %}
       {{ pg_quota_gauge(pg_limits.users, 'کاربران', 'Users', 'pg-users') }}
       {% endif %}
@@ -189,41 +109,43 @@
       {{ pg_quota_gauge(pg_limits.traffic, 'حجم', 'Traffic', 'pg-traffic') }}
       {% endif %}
     </div>
-    {% endif %}
-    {% if pg_limits.lifetime_text %}
-    <p class="muted stack-mt">مصرف lifetime (مبنای PAYG): <b dir="ltr">{{ pg_limits.lifetime_text }}</b></p>
-    {% endif %}
-    {% if pg_limits.constraints %}
-    <div class="home-panel-grid stack-mt-section">
-      {% for c in pg_limits.constraints or [] %}
-      <div class="stat">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
-          </span>
-          <span>{{ c.label }}</span>
-        </div>
-        <strong>{{ c.value_text }}</strong>
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
-  </section>
+  </div>
   {% endif %}
-</div>
+</section>
 
-{% if funnel_enabled %}
-{% set funnel_details_href = '/finance?tab=behavior' %}
-{% set funnel_extra_class = 'funnel-panel-home' %}
-{% include "_funnel_panel.html" %}
-{% endif %}
+{# —— Three vital shop signals (tenant-scoped) —— #}
+<section class="home-vitals" aria-label="اقدام‌های فروشگاه">
+  <a class="home-vital{% if stats.pending %} is-hot{% endif %}" href="/finance?tab=payments">
+    <span class="home-vital-k">رسید معلق</span>
+    <strong class="home-vital-v">{{ stats.pending | num }}</strong>
+    <span class="muted home-vital-h">تأیید پرداخت</span>
+  </a>
+  <a class="home-vital{% if stats.tickets %} is-hot{% endif %}" href="/tickets">
+    <span class="home-vital-k">تیکت باز</span>
+    <strong class="home-vital-v">{{ stats.tickets | num }}</strong>
+    <span class="muted home-vital-h">پشتیبانی</span>
+  </a>
+  <a class="home-vital" href="/finance">
+    <span class="home-vital-k">درآمد</span>
+    <strong class="home-vital-v">{{ stats.revenue | num }}</strong>
+    <span class="muted home-vital-h">تحویل‌شده</span>
+  </a>
+</section>
 
-<div class="card">
-  <h2>میانبرها</h2>
-  <div class="quick-links">
+<div class="home-pulse-foot">
+  {% if funnel_enabled %}
+  <a class="home-pulse-behavior" href="/finance?tab=behavior">
+    <span>رفتار کاربر</span>
+    <span class="muted">جزئیات قیف خرید در مالی</span>
+  </a>
+  {% endif %}
+  <div class="quick-links home-pulse-links">
+    {% if 'dashboard' in (staff.get('permissions') or []) or staff.role == 'reseller' %}
+    <a href="/dashboard">نمای کلی ربات</a>
+    {% endif %}
     <a href="/shop-settings?tab=links">لینک‌های سریع</a>
-    <a href="/finance?tab=behavior">رفتار کاربر</a>
     <a href="/finance?tab=delivery">تحویل ناموفق</a>
   </div>
+</div>
 </div>
 {% endblock %}

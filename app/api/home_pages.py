@@ -17,14 +17,6 @@ from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_ow
 
 logger = logging.getLogger(__name__)
 
-_EMPTY_FUNNEL = {
-    "shop_open": 0,
-    "plan_view": 0,
-    "pay_start": 0,
-    "receipt": 0,
-    "delivered": 0,
-}
-# Probe not run — templates must show «—» / neutral, never fake «قطع».
 _UNCHECKED_CONN = {"ok": None, "error": None, "version": None, "unchecked": True}
 
 
@@ -62,18 +54,6 @@ def _unchecked_overview():
         "unchecked": True,
     }
     return ov
-
-
-async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
-    from app.services.db_safe import rollback_quiet
-    from app.services.ux20 import funnel_summary
-
-    try:
-        return await funnel_summary(session, reseller_id=reseller_id, days=7)
-    except Exception:
-        logger.exception("funnel_summary failed reseller_id=%s", reseller_id)
-        await rollback_quiet(session)
-        return dict(_EMPTY_FUNNEL)
 
 
 async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
@@ -204,7 +184,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "overview": _unchecked_overview(),
                     "pg_health": dict(_UNCHECKED_CONN),
                     "funnel_enabled": False,
-                    "funnel": dict(_EMPTY_FUNNEL),
                     "dashboard_degraded": True,
                 },
             )
@@ -225,7 +204,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "billing_card": None,
                 "pg_health": dict(_UNCHECKED_CONN),
                 "funnel_enabled": False,
-                "funnel": dict(_EMPTY_FUNNEL),
                 "dashboard_degraded": True,
             },
         )
@@ -238,7 +216,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
 
             await recover_session(session)
             try:
-                overview = await build_home_overview(session)
+                overview = await build_home_overview(session, lite=True)
             except Exception:
                 logger.exception("build_home_overview failed")
                 await rollback_quiet(session)
@@ -253,11 +231,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 ui = {}
             pg_health = await _safe_pg_health()
             funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
-            funnel = (
-                await _safe_funnel(session, reseller_id=None)
-                if funnel_enabled
-                else dict(_EMPTY_FUNNEL)
-            )
             return (
                 "home.html",
                 {
@@ -265,7 +238,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "overview": overview,
                     "pg_health": pg_health,
                     "funnel_enabled": funnel_enabled,
-                    "funnel": funnel,
                     "dashboard_degraded": False,
                 },
             )
@@ -382,11 +354,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             session=session if staff.get("pg_admin_username") else None,
         )
         funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
-        funnel = (
-            await _safe_funnel(session, reseller_id=int(rid))
-            if funnel_enabled
-            else dict(_EMPTY_FUNNEL)
-        )
         return (
             "reseller_home.html",
             {
@@ -398,7 +365,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "billing_card": billing_card,
                 "pg_health": pg_health,
                 "funnel_enabled": funnel_enabled,
-                "funnel": funnel,
                 "dashboard_degraded": False,
             },
         )
