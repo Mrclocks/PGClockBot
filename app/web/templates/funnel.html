@@ -6,33 +6,8 @@
   <div>
     {{ page_title('orders', 'رفتار کاربر', 'neutral') }}
   </div>
-  <a class="btn btn-ghost btn-sm" href="/finance">مدیریت مالی</a>
+  <a class="btn btn-ghost btn-sm" href="/finance?tab=behavior">مدیریت مالی</a>
 </div>
 
-<div class="card">
-  <h2>۷ روز اخیر</h2>
-  <p class="muted">از باز کردن فروشگاه تا تحویل — برای پیدا کردن جایی که کاربرها رها می‌کنند.</p>
-  <div class="home-panel-grid">
-    <div class="stat">
-      <div class="stat-top"><span>باز کردن فروشگاه</span></div>
-      <strong>{{ funnel.shop_open | num }}</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top"><span>مشاهده پلن</span></div>
-      <strong>{{ funnel.plan_view | num }}</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top"><span>شروع پرداخت</span></div>
-      <strong>{{ funnel.pay_start | num }}</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top"><span>رسید / تأیید</span></div>
-      <strong>{{ funnel.receipt | num }}</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top"><span>تحویل</span></div>
-      <strong>{{ funnel.delivered | num }}</strong>
-    </div>
-  </div>
-</div>
+{% include "_funnel_panel.html" %}
 {% endblock %}

@@ -419,8 +419,12 @@ class ButtonStyleTests(unittest.TestCase):
         self.assertIn('_style(ui, "confirm"', admin_py)
         self.assertIn('_style(ui, "reject"', admin_py)
         self.assertNotIn('style="success"', admin_py.split("def _order_actions", 1)[1].split("\n\n", 1)[0])
-        self.assertNotIn("فانل خرید", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
-        self.assertIn("رفتار کاربر", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
+        funnel_page = Path("app/web/templates/funnel.html").read_text(encoding="utf-8")
+        self.assertNotIn("فانل خرید", funnel_page)
+        self.assertIn("رفتار کاربر", funnel_page)
+        self.assertIn('_funnel_panel.html', funnel_page)
+        self.assertNotIn("رها می‌کنند", funnel_page)
+        self.assertNotIn("٪", funnel_page)
         self.assertNotIn("/orders/{order_id}/staff-note", Path("app/api/ux20_pages.py").read_text(encoding="utf-8"))
 
     def test_reseller_plan_kind_styles(self):
