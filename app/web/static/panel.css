@@ -5899,6 +5899,203 @@ html[data-theme="light"] .setup-progress span.done {
 .home-top {
   margin-bottom: var(--section-gap);
 }
+
+/* —— Home pulse (compact dashboard) —— */
+.home-dash--pulse {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+}
+.home-pulse {
+  margin: 0;
+  padding: var(--card-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.home-pulse-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: stretch;
+}
+.home-pulse-gauges {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.home-gauge--sm {
+  padding: var(--space-2);
+  gap: var(--space-1);
+  background: rgba(255, 255, 255, 0.03);
+}
+.home-gauge--sm .home-gauge-ring {
+  width: 64px;
+  height: 64px;
+}
+.home-gauge--sm .home-gauge-center strong {
+  font-size: 13px;
+}
+.home-gauge--sm .home-gauge-center span {
+  font-size: 10px;
+}
+.home-gauge--sm .home-gauge-label {
+  font-size: 12px;
+}
+.home-pulse-conn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.home-pulse-conn .home-conn {
+  width: 100%;
+}
+.home-pulse-conn--solo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+}
+.home-pulse-payg {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+.home-pulse-payg.is-suspended {
+  border-color: color-mix(in srgb, var(--danger, #ef4444) 35%, var(--border));
+}
+.home-pulse-payg-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+.home-pulse-quota {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.home-pulse-quota-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.home-gauges--sm {
+  gap: var(--space-2);
+}
+
+.home-vitals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.home-vital {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.home-vital:hover {
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 1;
+}
+.home-vital.is-hot {
+  border-color: color-mix(in srgb, var(--warn, #f59e0b) 40%, var(--border));
+}
+.home-vital-k {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-fg);
+}
+.home-vital-v {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.home-vital-h {
+  font-size: 11px;
+}
+.home-pulse-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.home-pulse-behavior {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  color: inherit;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.home-pulse-behavior:hover {
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 1;
+}
+.home-pulse-behavior .muted {
+  font-weight: 500;
+  font-size: 12px;
+}
+.home-pulse-links {
+  margin: 0;
+}
+
+html[data-theme="light"] .home-gauge--sm,
+html[data-theme="light"] .home-pulse-payg,
+html[data-theme="light"] .home-pulse-behavior {
+  background: rgba(0, 0, 0, 0.02);
+}
+html[data-theme="light"] .home-vital:hover,
+html[data-theme="light"] .home-pulse-behavior:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+@media (max-width: 860px) {
+  .home-pulse-top {
+    grid-template-columns: 1fr;
+  }
+  .home-pulse-conn--solo {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .home-vitals {
+    grid-template-columns: 1fr;
+  }
+  .home-pulse-gauges {
+    grid-template-columns: 1fr 1fr;
+  }
+  .home-pulse-behavior {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .home-vital-v {
+    font-size: 1.25rem;
+  }
+}
+
 .home-gauges {
   display: grid;
   grid-template-columns: 1fr 1fr;

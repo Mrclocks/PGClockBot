@@ -194,6 +194,32 @@ async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
     }
 
 
+async def pg_nodes_pulse() -> dict[str, Any]:
+    """Lite PasarGuard probe for home pulse — nodes status only (no admin/group/host lists)."""
+    nodes_status = {
+        "ok": False,
+        "error": None,
+        "nodes": [],
+        "total": 0,
+        "connected": 0,
+        "warn": 0,
+        "error_count": 0,
+        "overall": "neutral",
+    }
+    try:
+        pg = get_pg()
+        nodes = await pg.get_nodes_simple()
+        if isinstance(nodes, Exception):
+            nodes_status["error"] = str(nodes) or "خطا در دریافت نودها"
+            nodes_status["overall"] = "err"
+        else:
+            nodes_status = _summarize_nodes(nodes if isinstance(nodes, list) else [])
+    except Exception as exc:
+        nodes_status["error"] = str(exc) or "اتصال به پاسارگارد برقرار نشد"
+        nodes_status["overall"] = "err"
+    return nodes_status
+
+
 async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
     """Fetch PasarGuard summary + node status in one pass (shared nodes call)."""
     nodes_status = {
@@ -333,8 +359,14 @@ def empty_home_overview() -> dict[str, Any]:
     }
 
 
-async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
-    """Build admin home payloads; never raise — partial failures return defaults."""
+async def build_home_overview(
+    session: AsyncSession, *, lite: bool = False
+) -> dict[str, Any]:
+    """Build admin home payloads; never raise — partial failures return defaults.
+
+    ``lite=True`` (pulse dashboard): skip heavy PasarGuard admin/group/host lists;
+    only host metrics, bot probe, shop KPIs, and node status.
+    """
     import logging
 
     from app.services.db_safe import rollback_quiet
@@ -345,11 +377,18 @@ async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
     # Platform admin overview only — pass main token explicitly (no silent fallback).
     bot_task = check_bot_connection(current_setup_values().get("BOT_TOKEN"))
     bot_sum_task = bot_panel_summary(session)
-    pg_task = pg_home_bundle()
-
-    metrics, bot, bot_sum, pg_pair = await asyncio.gather(
-        metrics_task, bot_task, bot_sum_task, pg_task, return_exceptions=True
-    )
+    if lite:
+        nodes_task = pg_nodes_pulse()
+        metrics, bot, bot_sum, nodes = await asyncio.gather(
+            metrics_task, bot_task, bot_sum_task, nodes_task, return_exceptions=True
+        )
+        pg_pair = None
+    else:
+        pg_task = pg_home_bundle()
+        metrics, bot, bot_sum, pg_pair = await asyncio.gather(
+            metrics_task, bot_task, bot_sum_task, pg_task, return_exceptions=True
+        )
+        nodes = None
 
     if isinstance(metrics, Exception):
         log.exception("home host_metrics failed: %s", metrics)
@@ -376,7 +415,19 @@ async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
     elif isinstance(bot_sum, dict):
         out["bot_summary"] = bot_sum
 
-    if isinstance(pg_pair, Exception):
+    if lite:
+        if isinstance(nodes, Exception):
+            log.exception("home pg_nodes_pulse failed: %s", nodes)
+            out["nodes"] = {
+                **_empty_nodes(),
+                "overall": "err",
+                "error": "اتصال به پاسارگارد برقرار نشد",
+            }
+        elif isinstance(nodes, dict):
+            out["nodes"] = nodes
+        # pg_summary unused on pulse home — keep empty ok shell
+        out["pg_summary"] = {**_empty_pg_summary(), "unchecked": True}
+    elif isinstance(pg_pair, Exception):
         log.exception("home pg_home_bundle failed: %s", pg_pair)
         out["pg_summary"] = {
             **_empty_pg_summary(),
@@ -384,10 +435,10 @@ async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
         }
         out["nodes"] = {**_empty_nodes(), "overall": "err", "error": out["pg_summary"]["error"]}
     elif isinstance(pg_pair, tuple) and len(pg_pair) == 2:
-        pg_sum, nodes = pg_pair
+        pg_sum, nodes_st = pg_pair
         if isinstance(pg_sum, dict):
             out["pg_summary"] = pg_sum
-        if isinstance(nodes, dict):
-            out["nodes"] = nodes
+        if isinstance(nodes_st, dict):
+            out["nodes"] = nodes_st
 
     return out

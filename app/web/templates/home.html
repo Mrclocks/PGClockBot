@@ -7,9 +7,8 @@
 {% set bot = ov.bot %}
 {% set nodes = ov.nodes %}
 {% set bs = ov.bot_summary %}
-{% set pg = ov.pg_summary %}
 
-<div class="home-dash" id="home-dash">
+<div class="home-dash home-dash--pulse" id="home-dash">
   {% if dashboard_degraded %}
   <div class="flash warn home-update-banner">
     <div class="home-update-copy">
@@ -23,270 +22,146 @@
   <div class="page-head">
     <div>
       {{ page_title('home', 'داشبورد', 'neutral') }}
+      <p class="muted page-sub">وضعیت لحظه‌ای سرور و فروشگاه</p>
     </div>
   </div>
 
-  <section class="home-top" aria-label="وضعیت سرور">
-    <div class="home-gauges">
-      <article class="home-gauge home-gauge-{{ host.cpu_tone }}" data-metric="cpu">
-        <div class="home-gauge-ring" style="--p: {{ host.cpu_percent or 0 }}">
-          <svg viewBox="0 0 120 120" aria-hidden="true">
-            <circle class="home-gauge-track" cx="60" cy="60" r="52" />
-            <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
-          </svg>
-          <div class="home-gauge-center">
-            <strong id="home-cpu-val">{% if host.cpu_percent is number %}{{ '%.0f'|format(host.cpu_percent) }}٪{% else %}—{% endif %}</strong>
-            <span>CPU</span>
+  {# —— Pulse: host + connections in one composition —— #}
+  <section class="card home-pulse" aria-label="وضعیت سیستم">
+    <div class="home-pulse-top">
+      <div class="home-pulse-gauges" aria-label="منابع سرور">
+        <article class="home-gauge home-gauge--sm home-gauge-{{ host.cpu_tone }}" data-metric="cpu">
+          <div class="home-gauge-ring" style="--p: {{ host.cpu_percent or 0 }}">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="home-gauge-track" cx="60" cy="60" r="52" />
+              <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
+            </svg>
+            <div class="home-gauge-center">
+              <strong id="home-cpu-val">{% if host.cpu_percent is number %}{{ '%.0f'|format(host.cpu_percent) }}٪{% else %}—{% endif %}</strong>
+              <span>CPU</span>
+            </div>
           </div>
-        </div>
-        <div class="home-gauge-meta">
-          <span class="home-gauge-label">پردازنده</span>
-          {% if host.cpu_cores %}
-          <span class="muted" id="home-cpu-cores">{{ host.cpu_cores }} هسته</span>
-          {% endif %}
-        </div>
-      </article>
+          <div class="home-gauge-meta">
+            <span class="home-gauge-label">پردازنده</span>
+            {% if host.cpu_cores %}
+            <span class="muted" id="home-cpu-cores">{{ host.cpu_cores }} هسته</span>
+            {% endif %}
+          </div>
+        </article>
+        <article class="home-gauge home-gauge--sm home-gauge-{{ host.mem_tone }}" data-metric="mem">
+          <div class="home-gauge-ring" style="--p: {{ host.memory_percent or 0 }}">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="home-gauge-track" cx="60" cy="60" r="52" />
+              <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
+            </svg>
+            <div class="home-gauge-center">
+              <strong id="home-mem-val">{% if host.memory_percent is number %}{{ '%.0f'|format(host.memory_percent) }}٪{% else %}—{% endif %}</strong>
+              <span>RAM</span>
+            </div>
+          </div>
+          <div class="home-gauge-meta">
+            <span class="home-gauge-label">حافظه</span>
+            <span class="muted num-ratio" id="home-mem-hint">{{ host.memory_ratio_text or (host.memory_used_text ~ ' / ' ~ host.memory_total_text) }}</span>
+          </div>
+        </article>
+      </div>
 
-      <article class="home-gauge home-gauge-{{ host.mem_tone }}" data-metric="mem">
-        <div class="home-gauge-ring" style="--p: {{ host.memory_percent or 0 }}">
-          <svg viewBox="0 0 120 120" aria-hidden="true">
-            <circle class="home-gauge-track" cx="60" cy="60" r="52" />
-            <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
-          </svg>
-          <div class="home-gauge-center">
-            <strong id="home-mem-val">{% if host.memory_percent is number %}{{ '%.0f'|format(host.memory_percent) }}٪{% else %}—{% endif %}</strong>
-            <span>RAM</span>
-          </div>
-        </div>
-        <div class="home-gauge-meta">
-          <span class="home-gauge-label">حافظه</span>
-          <span class="muted num-ratio" id="home-mem-hint">{{ host.memory_ratio_text or (host.memory_used_text ~ ' / ' ~ host.memory_total_text) }}</span>
-        </div>
-      </article>
+      <div class="home-pulse-conn" aria-label="وضعیت اتصال">
+        <a class="home-conn {% if bot.unchecked %}is-neutral{% elif bot.ok %}is-ok{% else %}is-err{% endif %}" href="/settings?tab=bot">
+          <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+          <span class="home-conn-text">
+            <span class="home-conn-k">ربات</span>
+            <span class="home-conn-cap muted">
+              {% if bot.unchecked %}بررسی نشده
+              {% elif bot.ok and bot.username %}<span dir="ltr">@{{ bot.username }}</span>
+              {% elif bot.error %}{{ bot.error }}
+              {% else %}—{% endif %}
+            </span>
+          </span>
+          {% if bot.unchecked %}
+          <span class="badge neutral home-conn-badge">—</span>
+          {% elif bot.ok %}
+          <span class="badge ok home-conn-badge">متصل</span>
+          {% else %}
+          <span class="badge danger home-conn-badge">قطع</span>
+          {% endif %}
+        </a>
+        <a class="home-conn {% if (pg_health and pg_health.unchecked) %}is-neutral{% elif (pg_health and pg_health.ok) %}is-ok{% else %}is-err{% endif %}" href="/pg" id="home-pg-health">
+          <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+          <span class="home-conn-text">
+            <span class="home-conn-k">پاسارگارد</span>
+            <span class="home-conn-cap muted" id="home-pg-health-cap">
+              {% if pg_health and pg_health.unchecked %}بررسی نشده
+              {% elif pg_health and pg_health.ok %}{% if pg_health.version %}v{{ pg_health.version }}{% else %}آنلاین{% endif %}
+              {% elif pg_health and pg_health.error %}{{ pg_health.error }}
+              {% else %}—{% endif %}
+            </span>
+          </span>
+          {% if pg_health and pg_health.unchecked %}
+          <span class="badge neutral home-conn-badge" id="home-pg-health-badge">—</span>
+          {% elif pg_health and pg_health.ok %}
+          <span class="badge ok home-conn-badge" id="home-pg-health-badge">متصل</span>
+          {% else %}
+          <span class="badge danger home-conn-badge" id="home-pg-health-badge">قطع</span>
+          {% endif %}
+        </a>
+        <a class="home-conn {% if nodes.overall == 'ok' %}is-ok{% elif nodes.overall == 'err' %}is-err{% elif nodes.overall == 'warn' %}is-warn{% else %}is-neutral{% endif %}" href="/pg/nodes">
+          <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
+          <span class="home-conn-text">
+            <span class="home-conn-k">نود</span>
+            <span class="home-conn-cap muted">
+              {% if nodes.ok and nodes.total %}{{ nodes.connected }}/{{ nodes.total }}
+              {% elif nodes.error %}{{ nodes.error }}
+              {% else %}ثبت‌نشده{% endif %}
+            </span>
+          </span>
+          {% if nodes.ok and nodes.overall == 'ok' %}
+          <span class="badge ok home-conn-badge">آنلاین</span>
+          {% elif nodes.ok and nodes.overall == 'warn' %}
+          <span class="badge warn home-conn-badge">هشدار</span>
+          {% elif not nodes.ok or nodes.overall == 'err' %}
+          <span class="badge danger home-conn-badge">قطع</span>
+          {% else %}
+          <span class="badge neutral home-conn-badge">—</span>
+          {% endif %}
+        </a>
+      </div>
     </div>
   </section>
 
-  <div class="card home-conn-card">
-    <h2>وضعیت اتصال</h2>
-    <div class="home-conn-row">
-      <a class="home-conn {% if bot.unchecked %}is-neutral{% elif bot.ok %}is-ok{% else %}is-err{% endif %}" href="/settings?tab=bot">
-        <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-        <span class="home-conn-text">
-          <span class="home-conn-k">ربات</span>
-          <span class="home-conn-cap muted">
-            {% if bot.unchecked %}بررسی نشده
-            {% elif bot.ok and bot.username %}<span dir="ltr">@{{ bot.username }}</span>
-            {% elif bot.error %}{{ bot.error }}
-            {% else %}—{% endif %}
-          </span>
-        </span>
-        {% if bot.unchecked %}
-        <span class="badge neutral home-conn-badge">—</span>
-        {% elif bot.ok %}
-        <span class="badge ok home-conn-badge">متصل</span>
-        {% else %}
-        <span class="badge danger home-conn-badge">قطع</span>
-        {% endif %}
-      </a>
-      <a class="home-conn {% if (pg_health and pg_health.unchecked) %}is-neutral{% elif (pg_health and pg_health.ok) %}is-ok{% else %}is-err{% endif %}" href="/pg" id="home-pg-health">
-        <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-        <span class="home-conn-text">
-          <span class="home-conn-k">پاسارگارد</span>
-          <span class="home-conn-cap muted" id="home-pg-health-cap">
-            {% if pg_health and pg_health.unchecked %}بررسی نشده
-            {% elif pg_health and pg_health.ok %}{% if pg_health.version %}v{{ pg_health.version }}{% else %}آنلاین{% endif %}
-            {% elif pg_health and pg_health.error %}{{ pg_health.error }}
-            {% else %}—{% endif %}
-          </span>
-        </span>
-        {% if pg_health and pg_health.unchecked %}
-        <span class="badge neutral home-conn-badge" id="home-pg-health-badge">—</span>
-        {% elif pg_health and pg_health.ok %}
-        <span class="badge ok home-conn-badge" id="home-pg-health-badge">متصل</span>
-        {% else %}
-        <span class="badge danger home-conn-badge" id="home-pg-health-badge">قطع</span>
-        {% endif %}
-      </a>
-      <a class="home-conn {% if nodes.overall == 'ok' %}is-ok{% elif nodes.overall == 'err' %}is-err{% elif nodes.overall == 'warn' %}is-warn{% else %}is-neutral{% endif %}" href="/pg/nodes">
-        <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
-        <span class="home-conn-text">
-          <span class="home-conn-k">نود</span>
-          <span class="home-conn-cap muted">
-            {% if nodes.ok and nodes.total %}{{ nodes.connected }}/{{ nodes.total }}
-            {% elif nodes.error %}{{ nodes.error }}
-            {% else %}ثبت‌نشده{% endif %}
-          </span>
-        </span>
-        {% if nodes.ok and nodes.overall == 'ok' %}
-        <span class="badge ok home-conn-badge">آنلاین</span>
-        {% elif nodes.ok and nodes.overall == 'warn' %}
-        <span class="badge warn home-conn-badge">هشدار</span>
-        {% elif not nodes.ok or nodes.overall == 'err' %}
-        <span class="badge danger home-conn-badge">قطع</span>
-        {% else %}
-        <span class="badge neutral home-conn-badge">—</span>
-        {% endif %}
-      </a>
-    </div>
-  </div>
+  {# —— Three vital shop signals —— #}
+  <section class="home-vitals" aria-label="اقدام‌های فروشگاه">
+    <a class="home-vital{% if bs.pending %} is-hot{% endif %}" href="/finance?tab=payments">
+      <span class="home-vital-k">رسید معلق</span>
+      <strong class="home-vital-v">{{ bs.pending | num }}</strong>
+      <span class="muted home-vital-h">تأیید پرداخت</span>
+    </a>
+    <a class="home-vital{% if bs.tickets %} is-hot{% endif %}" href="/tickets">
+      <span class="home-vital-k">تیکت باز</span>
+      <strong class="home-vital-v">{{ bs.tickets | num }}</strong>
+      <span class="muted home-vital-h">پشتیبانی</span>
+    </a>
+    <a class="home-vital" href="/finance">
+      <span class="home-vital-k">درآمد</span>
+      <strong class="home-vital-v">{{ bs.revenue | num }}</strong>
+      <span class="muted home-vital-h">تحویل‌شده</span>
+    </a>
+  </section>
 
-  <div class="card">
-    <h2>میانبرها</h2>
-    <div class="quick-links">
-      <a href="/broadcast">پیام گروهی</a>
-      <a href="/resellers">نماینده‌ها{% if bs.resellers %} ({{ bs.resellers }}){% endif %}</a>
+  <div class="home-pulse-foot">
+    {% if funnel_enabled %}
+    <a class="home-pulse-behavior" href="/finance?tab=behavior">
+      <span>رفتار کاربر</span>
+      <span class="muted">جزئیات قیف خرید در مالی</span>
+    </a>
+    {% endif %}
+    <div class="quick-links home-pulse-links">
       <a href="/users">کاربرها{% if bs.users %} ({{ bs.users }}){% endif %}</a>
-      <a href="/finance">مالی{% if bs.orders %} ({{ bs.orders }}){% endif %}</a>
-      <a href="/settings?tab=links">لینک‌های سریع</a>
-      <a href="/settings?tab=update">آپدیت</a>
+      <a href="/resellers">نماینده‌ها{% if bs.resellers %} ({{ bs.resellers }}){% endif %}</a>
+      <a href="/broadcast">پیام گروهی</a>
+      <a href="/dashboard">نمای کلی ربات</a>
     </div>
   </div>
-
-  <div class="home-panels">
-    <section class="home-panel home-panel-bot">
-      <div class="home-panel-head">
-        <div class="home-panel-title">
-          <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-          <h2 class="home-panel-h">پنل ربات</h2>
-        </div>
-        <a class="btn btn-sm btn-ghost" href="/dashboard">نمای کلی</a>
-      </div>
-      <div class="home-panel-grid">
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
-            </span>
-            <span>کاربران</span>
-          </div>
-          <strong>{{ bs.users | num }}</strong>
-        </div>
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M7 7h13l-1.2 9.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.7L6 4H3"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>
-            </span>
-            <span>سفارش‌ها</span>
-          </div>
-          <strong>{{ bs.orders | num }}</strong>
-        </div>
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h4"/></svg>
-            </span>
-            <span>سرویس‌ها</span>
-          </div>
-          <strong>{{ bs.services | num }}</strong>
-        </div>
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
-            </span>
-            <span>رسید معلق</span>
-          </div>
-          <strong>{{ bs.pending | num }}</strong>
-        </div>
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
-            </span>
-            <span>تیکت باز</span>
-          </div>
-          <strong>{{ bs.tickets | num }}</strong>
-        </div>
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg>
-            </span>
-            <span>درآمد</span>
-          </div>
-          <strong>{{ bs.revenue | num }}</strong>
-        </div>
-      </div>
-    </section>
-
-    <section class="home-panel home-panel-pg">
-      <div class="home-panel-head">
-        <div class="home-panel-title">
-          <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-          <h2 class="home-panel-h">پنل پاسارگارد</h2>
-        </div>
-        <div class="home-panel-actions">
-          <a class="btn btn-sm btn-ghost" href="/pg">نمای کلی</a>
-        </div>
-      </div>
-      {% if pg.ok %}
-      <div class="home-panel-grid">
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
-            </span>
-            <span>کاربران</span>
-          </div>
-          <strong>{% if pg.users is not none %}{{ pg.users | num }}{% else %}—{% endif %}</strong>
-        </div>
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.2 2.8 7.2 7 8.5 4.2-1.3 7-4.3 7-8.5V6l-7-3z"/></svg>
-            </span>
-            <span>ادمین‌ها</span>
-          </div>
-          <strong>{{ pg.admins | num }}</strong>
-        </div>
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
-            </span>
-            <span>گروه‌ها</span>
-          </div>
-          <strong>{{ pg.groups | num }}</strong>
-        </div>
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-            </span>
-            <span>هاست‌ها</span>
-          </div>
-          <strong>{{ pg.hosts | num }}</strong>
-        </div>
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
-            </span>
-            <span>نودها</span>
-          </div>
-          <strong>{{ pg.nodes | num }}</strong>
-        </div>
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-            </span>
-            <span>آنلاین</span>
-          </div>
-          <strong>{% if nodes.total %}{{ nodes.connected }}/{{ nodes.total }}{% else %}{{ nodes.connected | num }}{% endif %}</strong>
-        </div>
-      </div>
-      {% else %}
-      <p class="muted" style="margin: 0;font-size:12px">{{ pg.error or 'اتصال برقرار نشد.' }}</p>
-      {% endif %}
-    </section>
-  </div>
-
-  {% if funnel_enabled %}
-  {% set funnel_details_href = '/finance?tab=behavior' %}
-  {% set funnel_extra_class = 'funnel-panel-home' %}
-  {% include "_funnel_panel.html" %}
-  {% endif %}
 </div>
 
 <script>
@@ -303,7 +178,8 @@
     if (!article) return;
     var ring = article.querySelector('.home-gauge-ring');
     if (ring && pct != null) ring.style.setProperty('--p', String(pct));
-    article.className = 'home-gauge home-gauge-' + (tone || 'neutral');
+    var sm = article.classList.contains('home-gauge--sm') ? ' home-gauge--sm' : '';
+    article.className = 'home-gauge' + sm + ' home-gauge-' + (tone || 'neutral');
   }
   function fmtPct(n) {
     if (n == null || isNaN(n)) return '—';
