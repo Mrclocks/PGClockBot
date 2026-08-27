@@ -5,6 +5,8 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+from css_blocks import at_rule, has_rule, rule
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CSS = ROOT / "app/web/static/panel.css"
@@ -15,7 +17,7 @@ PWA = ROOT / "app/services/pwa.py"
 
 class MobileViewportShellFixTests(unittest.TestCase):
     def _mobile(self) -> str:
-        return CSS.read_text(encoding="utf-8").split("@media (max-width: 900px)", 1)[1]
+        return at_rule(CSS.read_text(encoding="utf-8"), "@media (max-width: 900px)")
 
     def _css(self) -> str:
         return CSS.read_text(encoding="utf-8")
@@ -109,7 +111,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_sw_fallback_ignores_query_for_panel_assets(self):
         sw = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v30", sw)
+        self.assertIn("pgclock-shell-v31", sw)
         self.assertIn("matchIgnoreSearch", sw)
         self.assertIn("isVersionedPanelAsset", sw)
 
@@ -122,10 +124,13 @@ class MobileViewportShellFixTests(unittest.TestCase):
         js = JS.read_text(encoding="utf-8")
         self.assertIn("side-nav-closing", js)
         self.assertIn("setOpen(false, true)", js)
-        back = mobile.split(".side-backdrop,", 1)[1][:300]
-        self.assertIn("left: 0;", back)
-        self.assertIn("right: 0;", back)
-        self.assertIn("bottom: 0;", back)
+        # One backdrop geometry rule, full-bleed, defined once outside the
+        # media query — the drawer and the dim must share one bottom edge.
+        self.assertFalse(has_rule(mobile, ".side-backdrop"))
+        self.assertFalse(has_rule(mobile, ".side-backdrop, .side-backdrop.show"))
+        back = rule(css, ".side-backdrop")
+        self.assertIn("inset: 0;", back)
+        self.assertIn("position: fixed;", back)
 
 
 if __name__ == "__main__":

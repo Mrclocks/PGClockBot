@@ -191,6 +191,9 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   width: 100%;
   background: var(--background);
   overflow: hidden;
+  /* Single owner of the notch insets on desktop/tablet layout: .side and .main
+     must not add --safe-top again or the two would stack. */
+  padding-top: var(--safe-top);
   padding-left: var(--safe-left);
   padding-right: var(--safe-right);
 }
@@ -210,7 +213,8 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   -webkit-overflow-scrolling: touch;
   background: var(--bg-card);
   border-left: 1px solid var(--border);
-  padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) var(--bottom-inset);
+  /* --safe-top is owned by .shell — never re-add it here */
+  padding: var(--space-2) var(--space-2) var(--bottom-inset);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -4078,15 +4082,23 @@ form.settings-form > .actions.sticky-actions,
 .side-backdrop {
   display: none !important;
   position: fixed;
-  top: calc(var(--topbar-h) + var(--safe-top));
-  right: 0;
-  bottom: 0;
-  left: 0;
+  /* Full-bleed: the backdrop is the element that swallows background touches
+     while the drawer is open, so it must cover every pixel the page can paint.
+     The opaque .topbar (z-index 55) still draws above it, so the top chrome
+     never looks dimmed. */
+  inset: 0;
   background: rgba(0, 0, 0, 0.55);
   z-index: 45;
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--motion-med) var(--ease-standard);
+  /* Background containment lives HERE, never on html/body. Making the root
+     scroller unscrollable (overflow:hidden / touch-action:none) is what made
+     iOS Safari snap its bottom toolbar to the expanded state and stop painting
+     the strip it had covered — the solid bar that stayed after the drawer
+     closed. touch-action:none still lets the tap-to-close click through. */
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 .side-backdrop.show {
   display: block !important;
@@ -4100,33 +4112,37 @@ form.settings-form > .actions.sticky-actions,
   .topbar.mobile-only { display: flex !important; }
 
   /*
-    FINAL mobile geometry (v8.5.34) — one model, no parallel hacks.
+    Mobile geometry — ONE model, no parallel paths.
 
-    Screenshot proof on v8.5.33: shell AND fixed sidebar ended ABOVE the visible
-    bottom, and main footer separator sat HIGHER than side-foot separator.
-    Root causes:
-      1) Fill height < visible viewport (min-height:0 on .shell; empty safe pad on
-         .shell looked like a black gap; fill-available AFTER 100svh collapses to
-         stretch in Chromium).
-      2) Two inset paths: .main {padding-bottom:inset} vs .side-foot {padding-bottom:inset}
-         with unequal content-box heights → separators at different Y.
+    Invariants (each has exactly one owner; never re-state them elsewhere):
 
-    Invariants:
-      A) html/body/shell min-height fills the visible viewport (100svh last).
-      B) ONE inset owner: both footers use padding-bottom:var(--bottom-inset) and
-         min-height: calc(var(--footer-bar-h) + var(--bottom-inset)). .main has NO
-         bottom inset. Separators share one Y; content-bottom → viewport-bottom
-         == --bottom-inset on every page and in the open sidebar.
-      C) Document/viewport scrolls; .main is NOT a vertical scroller.
-      D) Fixed .side pins to the viewport (html/body/shell never create a scrollport CB).
+      A) The root (viewport) is the only vertical scroller, and it must STAY
+         scrollable at all times. Never set overflow/touch-action/overscroll on
+         html or body to block scrolling: iOS Safari reacts by snapping its
+         bottom toolbar to the expanded state and then stops painting the strip
+         the toolbar had covered. That black/solid bar sticks around after the
+         overlay closes, because Safari only retracts the toolbar again on a
+         real page scroll. Overlays contain background touches themselves
+         (.side-backdrop, .ui-modal-backdrop).
+
+      B) Fill height is 100svh — the SMALLEST height the visible viewport can
+         take. The footer is then reachable no matter how much retractable
+         browser chrome is on screen, and the extra strip that appears once the
+         chrome retracts is painted by the html canvas in --background, so it
+         reads as page, not as a gap. Never dvh/lvh here: they change while the
+         chrome animates and would reflow the document on every frame.
+
+      C) ONE bottom-inset owner: both footers use padding-bottom:var(--bottom-inset)
+         plus min/max-height: calc(var(--footer-bar-h) + var(--bottom-inset)).
+         .main carries NO bottom inset, so both separators share one Y.
+
+      D) .side / .side-backdrop are fixed to the viewport. html, body and .shell
+         must never become scroll containers, or they would capture the fixed
+         containing block and the drawer would follow page length.
   */
   html:has(.shell) {
     height: auto;
-    /* Order matters: -webkit-fill-available computes to stretch and MUST NOT
-       override 100svh on engines that support both (Chromium → content-sized shell).
-       Old iOS without svh keeps fill-available; modern iOS/Safari uses 100svh. */
     min-height: 100%;
-    min-height: -webkit-fill-available;
     min-height: 100svh;
     overflow-x: visible;
     overflow-y: visible;
@@ -4135,7 +4151,6 @@ form.settings-form > .actions.sticky-actions,
   }
   html:has(.shell) body {
     min-height: 100%;
-    min-height: -webkit-fill-available;
     min-height: 100svh;
     display: flex;
     flex-direction: column;
@@ -4144,8 +4159,10 @@ form.settings-form > .actions.sticky-actions,
     background-color: var(--background);
     background: var(--background);
   }
-  body.nav-open {
-    overscroll-behavior: none;
+  /* The fixed .topbar is the only chrome the backdrop cannot cover (it paints
+     above it), so it swallows drag-to-scroll while the drawer is open. Nothing
+     here touches the root scroller. */
+  body.nav-open .topbar {
     touch-action: none;
   }
 
@@ -4155,10 +4172,8 @@ form.settings-form > .actions.sticky-actions,
     grid-template-columns: none;
     grid-template-areas: none;
     flex: 1 0 auto;
-    /* Must fill the visible viewport on short pages — min-height:0 prevented that.
-       100svh MUST be last (see html/body comment). */
+    /* Fills the visible viewport on short pages — see invariant B. */
     min-height: 100%;
-    min-height: -webkit-fill-available;
     min-height: 100svh;
     height: auto;
     max-height: none;
@@ -4188,8 +4203,9 @@ form.settings-form > .actions.sticky-actions,
     max-height: none;
     z-index: 50;
     left: auto;
+    /* Slid with `right`, never `transform`: a transformed fixed box gets its own
+       containing block on WebKit and stops tracking the viewport bottom. */
     right: calc(-1 * min(300px, 86vw) - 24px);
-    transform: none;
     transition: right .2s ease;
     border-left: 1px solid var(--border);
     border-top: 1px solid var(--border);
@@ -4228,16 +4244,6 @@ form.settings-form > .actions.sticky-actions,
     max-width: 100%;
   }
   .side .identity-chips { display: none; }
-
-  .side-backdrop,
-  .side-backdrop.show {
-    top: calc(var(--topbar-h) + var(--safe-top));
-    bottom: 0;
-    left: 0;
-    right: 0;
-    transform: none;
-    background: rgba(0, 0, 0, 0.55);
-  }
 
   /* Instant close on navigation — disable slide so PWA paints closed before unload */
   html.ios .side.side-nav-closing {
@@ -4587,6 +4593,15 @@ form.settings-form > .actions.sticky-actions,
   .mobile-only { display: none !important; }
   .side-backdrop,
   .side-backdrop.show { display: none !important; pointer-events: none !important; }
+  /* Desktop only: .main / .side are the scrollers here (the root never scrolls),
+     so freezing them while a modal is open is safe. On mobile the root IS the
+     scroller and locking anything in that chain breaks Safari's toolbar. */
+  body.modal-open .main,
+  body.modal-open .side {
+    overflow: hidden !important;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
 }
 
 @media (max-width: 560px) {
@@ -5064,18 +5079,9 @@ form.settings-form > .actions.sticky-actions,
 }
 
 /* ── Modals (ported to body; above sidebar/topbar/kebab) ── */
-html.modal-open,
-body.modal-open {
-  overflow: hidden !important;
-  overscroll-behavior: none;
-}
-/* Panel scroll lives on .main / .side — lock them while a modal is open */
-body.modal-open .main,
-body.modal-open .side {
-  overflow: hidden !important;
-  overscroll-behavior: none;
-  touch-action: none;
-}
+/* No scroll lock on html/body — see invariant A in the mobile block. The modal
+   backdrop covers the viewport and owns touch containment, and panel.js blocks
+   wheel/touch that lands outside the open modal. */
 .ui-modal {
   position: fixed;
   inset: 0;

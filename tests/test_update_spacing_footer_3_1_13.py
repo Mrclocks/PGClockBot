@@ -6,6 +6,8 @@ import re
 import unittest
 from pathlib import Path
 
+from css_blocks import at_rule, rule
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CSS = ROOT / "app/web/static/panel.css"
@@ -96,19 +98,19 @@ class FooterBaselineTests(unittest.TestCase):
 
     def test_mobile_main_bottom_pad_matches_side_drawer(self):
         css = CSS.read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 900px)", 1)[1]
+        mobile = at_rule(css, "@media (max-width: 900px)")
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-2) 0;",
-            mobile,
+            rule(mobile, ".main"),
         )
-        self.assertIn("padding-bottom: 0;", mobile.split(".shell {", 1)[1].split(".topbar",1)[0])
+        self.assertIn("padding-bottom: 0;", rule(mobile, ".shell"))
+        # Both bottom bars carry the same inset, so the drawer footer and the
+        # page footer land on the same line.
         self.assertIn(
-            "padding-bottom: var(--bottom-inset);",
-            mobile.split(".side .side-foot", 1)[1][:200],
+            "padding-bottom: var(--bottom-inset);", rule(mobile, ".side .side-foot")
         )
         self.assertIn(
-            "padding-bottom: var(--bottom-inset);",
-            mobile.split("  .site-footer {", 1)[1][:240],
+            "padding-bottom: var(--bottom-inset);", rule(mobile, ".site-footer")
         )
 
     def test_main_body_footer_gap_matches_page_title_gap(self):

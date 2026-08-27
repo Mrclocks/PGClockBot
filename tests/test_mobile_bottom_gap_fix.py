@@ -33,13 +33,16 @@ class MobileBottomGapCssTests(unittest.TestCase):
         self.assertIn("flex: 1 0 auto;", shell)
         self.assertIn("height: auto;", shell)
         self.assertIn("min-height: 100svh;", html)
-        self.assertIn("min-height: -webkit-fill-available;", html)
+        # -webkit-fill-available computes to `stretch` in Chromium and silently
+        # collapses the fill chain; 100% + 100svh is the whole ladder now.
+        self.assertNotIn("-webkit-fill-available", mobile)
+        self.assertIn("min-height: 100%;", html)
         self.assertIn("height: auto;", html)
         self.assertIn("overflow-x: visible;", html)
         self.assertIn("overflow-y: visible;", html)
         self.assertNotIn("overflow-x: hidden;", html)
         self.assertIn("min-height: 100svh;", body)
-        self.assertIn("min-height: -webkit-fill-available;", body)
+        self.assertIn("min-height: 100%;", body)
         self.assertIn("overflow-x: visible;", body)
         self.assertIn("overflow-y: visible;", body)
         self.assertNotIn("overflow-y: auto;", body)
@@ -63,7 +66,7 @@ class MobileBottomGapCssTests(unittest.TestCase):
         self.assertIn("padding-bottom: var(--bottom-inset);", foot)
         self.assertIn("padding-bottom: var(--bottom-inset);", mobile.split(".side .side-foot", 1)[1][:200])
         self.assertIn("padding-bottom: 0;", side)
-        self.assertIn("min-height: -webkit-fill-available;", shell)
+        self.assertIn("min-height: 100svh;", shell)
 
     def test_no_viewport_js_hacks(self):
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")

@@ -56,7 +56,9 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("function lockPageScroll", js)
         self.assertIn("function unlockPageScroll", js)
         self.assertIn("installModalScrollGuards", js)
-        self.assertIn("document.documentElement.classList.add('modal-open')", js)
+        # <html> is never flagged/locked — that froze iOS Safari's toolbar.
+        self.assertNotIn("documentElement.classList.add('modal-open')", js)
+        self.assertIn("document.body.classList.add('modal-open')", js)
         self.assertIn("Always-on guards", js)
         self.assertIn("Prefer the inner scroll shell", js)
         self.assertIn("isModalInteriorScroller", js)

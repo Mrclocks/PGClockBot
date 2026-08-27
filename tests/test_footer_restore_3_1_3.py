@@ -5,9 +5,12 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+from css_blocks import at_rule, declarations, rule
 
-CSS = Path("app/web/static/panel.css")
-BASE = Path("app/web/templates/base.html")
+
+ROOT = Path(__file__).resolve().parents[1]
+CSS = ROOT / "app/web/static/panel.css"
+BASE = ROOT / "app/web/templates/base.html"
 
 
 class FooterRestore303Tests(unittest.TestCase):
@@ -28,35 +31,41 @@ class FooterRestore303Tests(unittest.TestCase):
         self.assertNotIn("--chrome-pad", css)
         self.assertNotIn("--main-pad-", css)
         self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)
-        mobile = css.split("@media (max-width: 900px)", 1)[1]
+        mobile = at_rule(css, "@media (max-width: 900px)")
         self.assertNotIn("--chrome-pad", mobile)
         # Desktop .main keeps --bottom-inset; mobile moves it onto both footers
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-4) var(--bottom-inset);",
-            css,
+            rule(css, ".main"),
         )
-        mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn("padding-bottom: 0;", mobile.split(".shell {", 1)[1].split(".topbar",1)[0])
+        self.assertIn("padding-bottom: 0;", rule(mobile, ".shell"))
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-2) 0;",
-            mobile,
+            rule(mobile, ".main"),
         )
-        self.assertIn("padding-bottom: var(--bottom-inset);", mobile.split("  .site-footer {", 1)[1][:240])
+        self.assertIn(
+            "padding-bottom: var(--bottom-inset);", rule(mobile, ".site-footer")
+        )
 
     def test_side_scrolls_as_a_column(self):
         css = CSS.read_text(encoding="utf-8")
-        side = css.split(".side {\n", 1)[1].split(".main {", 1)[0]
+        side = rule(css, ".side")
         self.assertIn("overflow-y: auto;", side)
+        # .shell is the single owner of the notch insets on desktop/tablet, so
+        # .side must not add --safe-top a second time.
         self.assertIn(
-            "padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) var(--bottom-inset);",
+            "padding: var(--space-2) var(--space-2) var(--bottom-inset);",
             side,
         )
+        self.assertNotIn("--safe-top", declarations(side))
+        self.assertIn("padding-top: var(--safe-top);", rule(css, ".shell"))
         self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)
 
     def test_site_footer_classic_sticky(self):
         css = CSS.read_text(encoding="utf-8")
-        self.assertIn(".site-footer {\n  margin-top: auto;\n  padding-top: var(--page-title-gap);", css)
-        foot = css.split(".site-footer {\n", 1)[1].split("}", 1)[0]
+        foot = rule(css, ".site-footer")
+        self.assertIn("margin-top: auto;", foot)
+        self.assertIn("padding-top: var(--page-title-gap);", foot)
         self.assertNotIn("position: fixed", foot)
         self.assertNotIn("position: sticky", foot)
 

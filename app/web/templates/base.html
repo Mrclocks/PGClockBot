@@ -14,15 +14,10 @@
   (function () {
     try {
       var d = document.documentElement;
-      /* ios class: instant sidebar-close (side-nav-closing) only. */
+      /* Single consumer: html.ios .side.side-nav-closing (instant drawer close). */
       var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
         (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-      var isStandalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
-        !!window.navigator.standalone;
-      if (isIOS) {
-        d.classList.add("ios");
-        d.classList.add(isStandalone ? "ios-standalone" : "ios-safari");
-      }
+      if (isIOS) d.classList.add("ios");
       var pref = localStorage.getItem("panel-theme") || "system";
       var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       var theme = pref === "light" ? "light" : pref === "dark" ? "dark" : dark ? "dark" : "light";

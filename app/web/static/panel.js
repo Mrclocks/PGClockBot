@@ -800,7 +800,6 @@
     /* Lightweight modals — always render on document.body above sidebar */
     const modalHomes = new WeakMap();
     let modalScrollLockDepth = 0;
-    let modalScrollY = 0;
     let modalMainScrollTop = 0;
     let modalWheelGuard = null;
     let modalTouchGuard = null;
@@ -954,8 +953,6 @@
       if (modalScrollLockDepth === 0) {
         const main = document.querySelector('.main');
         modalMainScrollTop = main ? main.scrollTop : 0;
-        modalScrollY = window.scrollY || window.pageYOffset || 0;
-        document.documentElement.classList.add('modal-open');
         document.body.classList.add('modal-open');
         if (main) main.scrollTop = modalMainScrollTop;
       }
@@ -970,13 +967,12 @@
         modalScrollLockDepth = 1;
         return;
       }
-      document.documentElement.classList.remove('modal-open');
       document.body.classList.remove('modal-open');
+      /* Desktop restores .main's scrollTop because body.modal-open froze it with
+         overflow:hidden. The document scroll is never locked, so it needs no
+         restore — see invariant A in panel.css. */
       const main = document.querySelector('.main');
       if (main) main.scrollTop = modalMainScrollTop;
-      if (modalScrollY) {
-        try { window.scrollTo(0, modalScrollY); } catch (e) {}
-      }
     }
 
     function restoreModalHome(el){
@@ -1027,7 +1023,6 @@
       if (wasOpen) unlockPageScroll();
       else if (!document.querySelector('.ui-modal.open')) {
         modalScrollLockDepth = 0;
-        document.documentElement.classList.remove('modal-open');
         document.body.classList.remove('modal-open');
       }
     }
@@ -1117,17 +1112,6 @@
     window.openModal = openModal;
     /* Always-on guards: catch wheel/touch even when a page sets body.modal-open itself */
     installModalScrollGuards();
-    /* Keep <html> in sync if something toggles body.modal-open directly */
-    try {
-      const syncHtmlModal = () => {
-        const on = document.body.classList.contains('modal-open')
-          || !!document.querySelector('.ui-modal.open');
-        document.documentElement.classList.toggle('modal-open', on);
-      };
-      const mo = new MutationObserver(syncHtmlModal);
-      mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-      syncHtmlModal();
-    } catch (e) {}
     /* SSR-open modals (e.g. ticket view/create) — portal like button-opened modals */
     document.querySelectorAll('.ui-modal.open').forEach((el) => {
       ensureModalPorted(el);
