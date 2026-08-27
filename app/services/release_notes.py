@@ -16,6 +16,15 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.40": [
+        "ریشهٔ واقعی نوار سالید پایین صفحه (بعد از ۴۰ آپدیت): قفل کردن اسکرولر ریشه هنگام باز شدن سایدبار/مودال — body.nav-open با touch-action:none و html/body.modal-open با overflow:hidden",
+        "این قفل باعث می‌شد Safari نوار پایین خودش را باز کند و دیگر جمع نکند (Safari فقط با اسکرول واقعی صفحه جمع می‌شود)؛ ارتفاع دیده‌شده کوتاه می‌شد و باند پوشیده‌شده رنگ نمی‌گرفت — همان نواری که بعد از بستن سایدبار هم می‌ماند",
+        "فیکس: هیچ‌وقت html/body قفل نمی‌شود؛ مهار لمس پس‌زمینه روی خود لایه‌ها است — backdrop تمام‌صفحه (inset:0) با touch-action:none و overscroll-behavior:contain، و topbar که بالای backdrop کشیده می‌شود",
+        "دسکتاپ بدون تغییر: آنجا .main/.side اسکرولر هستند و هنگام مودال قفل می‌شوند (ریشه هرگز اسکرول نمی‌کند)",
+        "حذف کد مرده و منطق موازی: کلاس‌های بی‌مصرف ios-standalone/ios-safari، کلاس html.modal-open و ذخیره/بازگردانی scrollY، دو مسیر -webkit-fill-available، تعریف تکراری backdrop، CSS بی‌استفادهٔ .risk-dot",
+        "تست واقعی: WebKit + Chromium روی ۱۰ اندازهٔ نمایش (موبایل/تبلت/دسکتاپ، عمودی و افقی) × ۳ طول صفحه × ۴ حالت = ۲۲۸ اندازه‌گیری، همه سالم؛ اسکرین‌شات بستنِ سایدبار پیکسل‌به‌پیکسل با قبل از باز شدن یکسان است",
+        "SW v31؛ ریستور: v8.5.34",
+    ],
     "8.5.39": [
         "ریشه نوار سفید تم تیره: نبود color-scheme:dark — Safari canvas را سفید می‌کشید؛ الان color-scheme و theme-color با تم هم‌گام‌اند",
         "html/body/shell/main رنگ پس‌زمینهٔ صریح؛ سایدبار bottom:0 با background کامل",
