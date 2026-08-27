@@ -419,15 +419,6 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   background: color-mix(in srgb, var(--warn, #eab308) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--warn, #eab308) 38%, transparent);
 }
-.risk-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--warn-fg, #facc15);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn, #eab308) 28%, transparent);
-  flex: 0 0 auto;
-}
 /* Entity alert (expiring / low volume) — orange dot only */
 .alert-dot {
   display: inline-block;
@@ -8297,10 +8288,6 @@ html[data-theme="light"] tr.is-unread td {
   white-space: nowrap;
 }
 html[data-theme="light"] .nav-dot {
-  background: #d97706;
-  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.18);
-}
-html[data-theme="light"] .risk-dot {
   background: #d97706;
   box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.18);
 }
