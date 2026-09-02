@@ -289,12 +289,13 @@
 {% endif %}
 
 {% if manage %}
-<div class="ui-modal" id="modal-user-edit" hidden>
-  <div class="ui-modal-backdrop" data-modal-close></div>
+<div class="ui-modal" id="modal-user-edit" hidden
+     data-modal-strip-keys="edit,ok,err,_">
+  <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl" role="dialog" aria-modal="true" aria-labelledby="user-edit-title">
     <div class="ui-modal-head">
       <h2 id="user-edit-title">ویرایش کاربر</h2>
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div id="user-edit-body" class="edit-modal-body">
       <p class="muted">در حال بارگذاری…</p>
@@ -428,6 +429,17 @@
     var open = function(){
       if (window.openModal) window.openModal('modal-user-edit');
       loadEdit(url, 'ویرایش کاربر #' + openId);
+      /* One-shot flash: drop ok/err from the page URL so a refresh does not
+         re-show the save banner. Keep ?edit= until the modal is closed
+         (data-modal-strip-keys / close-strip). */
+      try {
+        var u = new URL(window.location.href);
+        u.searchParams.delete('ok');
+        u.searchParams.delete('err');
+        u.searchParams.delete('_');
+        var qs = u.searchParams.toString();
+        window.history.replaceState({}, '', u.pathname + (qs ? '?' + qs : '') + u.hash);
+      } catch (e) {}
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', open);
     else setTimeout(open, 0);

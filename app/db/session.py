@@ -480,6 +480,27 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
                 )
             )
 
+    if insp.has_table("user_services"):
+        uscols = {c["name"] for c in insp.get_columns("user_services")}
+        if "quota_expire_at" not in uscols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE user_services ADD COLUMN quota_expire_at DATETIME"
+                )
+            )
+        if "quota_data_limit_bytes" not in uscols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE user_services ADD COLUMN quota_data_limit_bytes BIGINT"
+                )
+            )
+        if "quota_synced_at" not in uscols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE user_services ADD COLUMN quota_synced_at DATETIME"
+                )
+            )
+
     marker = None
     try:
         from app.config import DATA_DIR

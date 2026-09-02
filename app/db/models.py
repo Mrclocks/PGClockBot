@@ -282,6 +282,16 @@ class UserService(Base):
     remark: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     notified_expire: Mapped[bool] = mapped_column(Boolean, default=False)
     notified_traffic: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Cached live PG quota for users-list (modal reads PG; list must not fan-out).
+    # When quota_synced_at is set: prefer these over plan/created_at approximations.
+    # quota_expire_at None + synced ⇒ unlimited time; quota_data_limit_bytes 0 + synced ⇒ unlimited volume.
+    quota_expire_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    quota_data_limit_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    quota_synced_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     renew_nudge_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

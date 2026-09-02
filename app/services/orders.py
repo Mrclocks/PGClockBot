@@ -1650,6 +1650,14 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                 subscription_token=extract_sub_token(sub_url),
                 remark=f"order:{order.id}",
             )
+            from app.services.bot_user_admin import sync_service_quota_cache
+
+            if isinstance(pg_user, dict):
+                sync_service_quota_cache(service, pg_user)
+            else:
+                sync_service_quota_cache(
+                    service, expire_ts=expire, data_limit_bytes=data_limit
+                )
             session.add(service)
             await session.flush()
             return service
@@ -1845,6 +1853,14 @@ async def apply_renewal(session: AsyncSession, order: Order, service: UserServic
         service.plan_id = plan.id
         service.notified_expire = False
         service.notified_traffic = False
+        from app.services.bot_user_admin import sync_service_quota_cache
+
+        if isinstance(pg_user, dict):
+            sync_service_quota_cache(service, pg_user)
+        else:
+            sync_service_quota_cache(
+                service, expire_ts=expire, data_limit_bytes=data_limit
+            )
         order.status = OrderStatus.DELIVERED.value
         await session.commit()
         await session.refresh(order)

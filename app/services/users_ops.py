@@ -1,8 +1,9 @@
 """Users list ops: service summaries, filters, alert dots (no live PG fan-out).
 
-Expire/volume on the list use DB + plan metadata (same approx as action center)
-plus ``notified_*`` flags from the alert scheduler. Live PasarGuard snapshots stay
-on the per-user edit modal.
+Expire/volume prefer ``UserService.quota_*`` when ``quota_synced_at`` is set
+(admin adjust / renew / live modal snapshot). Otherwise fall back to plan +
+``created_at`` approximations (action-center parity) plus ``notified_*`` flags.
+Live PasarGuard snapshots stay on the per-user edit modal.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ VALID_FILTERS: frozenset[str] = frozenset(
 )
 
 DEFAULT_EXPIRE_DAYS = 3
+_GB = 1024**3
 
 
 def _utcnow() -> datetime:
@@ -171,15 +173,25 @@ def _summarize_service(
     now: datetime,
 ) -> ServiceSummary:
     plan = getattr(svc, "plan", None)
-    exp = approx_expire_at(svc, plan)
+    synced = getattr(svc, "quota_synced_at", None) is not None
+    if synced:
+        exp = _aware(getattr(svc, "quota_expire_at", None))
+    else:
+        exp = approx_expire_at(svc, plan)
     left = days_until(exp, now=now)
-    expiring = bool(exp is not None and now <= exp <= now + timedelta(days=expire_days))
+    # Synced + no expire ⇒ unlimited time (never "expiring")
+    expiring = bool(
+        exp is not None and now <= exp <= now + timedelta(days=expire_days)
+    )
     # Scheduler flag: still marked until renew resets it.
     low_volume = bool(getattr(svc, "notified_traffic", False))
     has_alert = expiring or low_volume or (
         bool(getattr(svc, "notified_expire", False)) and left is not None and left <= expire_days
     )
-    if exp is not None:
+    if synced and exp is None:
+        expire_text = "نامحدود"
+        left = None
+    elif exp is not None:
         if left is None:
             expire_text = "—"
         elif left <= 0:
@@ -189,20 +201,32 @@ def _summarize_service(
     else:
         expire_text = "—"
 
-    vol = format_plan_volume(plan)
+    gb_sort = float("inf")
+    if synced:
+        try:
+            lim_b = getattr(svc, "quota_data_limit_bytes", None)
+            lim_n = 0 if lim_b is None else int(lim_b)
+        except (TypeError, ValueError):
+            lim_n = 0
+        if lim_n <= 0:
+            vol = "نامحدود"
+        else:
+            vol = format_bytes(lim_n)
+            gb_sort = lim_n / _GB
+    else:
+        vol = format_plan_volume(plan)
+        if plan is not None and getattr(plan, "data_limit_gb", None) is not None:
+            try:
+                gb_v = float(plan.data_limit_gb)
+                if gb_v > 0:
+                    gb_sort = gb_v
+            except (TypeError, ValueError):
+                pass
+
     if low_volume and vol != "—":
         volume_text = f"{vol} · کم"
     else:
         volume_text = vol
-
-    gb_sort = float("inf")
-    if plan is not None and getattr(plan, "data_limit_gb", None) is not None:
-        try:
-            gb_v = float(plan.data_limit_gb)
-            if gb_v > 0:
-                gb_sort = gb_v
-        except (TypeError, ValueError):
-            pass
 
     return ServiceSummary(
         id=int(svc.id),

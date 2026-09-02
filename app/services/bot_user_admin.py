@@ -122,6 +122,8 @@ async def service_snapshot(session: AsyncSession, service: UserService) -> Servi
             if tok:
                 service.subscription_token = tok
         lim_for_ratio = limit_n if limit_n > 0 else None
+        # Keep users-list cache warm whenever we successfully read live PG.
+        sync_service_quota_cache(service, info)
         return ServiceSnapshot(
             service=service,
             pg=info,
@@ -206,6 +208,63 @@ async def get_owned_service(
     return svc
 
 
+def sync_service_quota_cache(
+    service: UserService,
+    info: dict[str, Any] | None = None,
+    *,
+    expire_ts: int | None = None,
+    data_limit_bytes: int | None = None,
+) -> None:
+    """Persist PG expire/data_limit onto UserService for users-list summaries.
+
+    Prefer a live PG ``info`` dict when present. Otherwise apply absolute
+    ``expire_ts`` / ``data_limit_bytes`` from the write just issued (partial OK).
+    ``quota_expire_at is None`` + synced ⇒ unlimited time;
+    ``quota_data_limit_bytes == 0`` + synced ⇒ unlimited volume.
+    """
+    from app.services.formatting import parse_expire
+
+    touched = False
+    if isinstance(info, dict):
+        has_expire = "expire" in info or "expire_date" in info
+        if has_expire:
+            exp_raw = info["expire"] if "expire" in info else info.get("expire_date")
+            # PG: 0 / null ⇒ unlimited (parse_expire(0) would be epoch — wrong)
+            if exp_raw in (None, "", 0, 0.0) or (
+                isinstance(exp_raw, (int, float)) and int(exp_raw) <= 0
+            ):
+                service.quota_expire_at = None
+            else:
+                exp_dt = parse_expire(exp_raw)
+                if exp_dt is not None and exp_dt.tzinfo is None:
+                    exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                service.quota_expire_at = exp_dt
+            touched = True
+        if "data_limit" in info:
+            try:
+                lim = info.get("data_limit")
+                service.quota_data_limit_bytes = (
+                    0 if lim in (None, "") else max(0, int(lim))
+                )
+            except (TypeError, ValueError):
+                service.quota_data_limit_bytes = 0
+            touched = True
+    else:
+        if expire_ts is not None:
+            if int(expire_ts) <= 0:
+                service.quota_expire_at = None
+            else:
+                service.quota_expire_at = datetime.fromtimestamp(
+                    int(expire_ts), tz=timezone.utc
+                )
+            touched = True
+        if data_limit_bytes is not None:
+            service.quota_data_limit_bytes = max(0, int(data_limit_bytes))
+            touched = True
+    if touched:
+        service.quota_synced_at = datetime.now(timezone.utc)
+
+
 async def admin_set_service_quota(
     session: AsyncSession,
     service: UserService,
@@ -215,7 +274,7 @@ async def admin_set_service_quota(
     reset_traffic: bool = False,
     activate: bool = True,
 ) -> ServiceSnapshot:
-    """Set absolute quota on the linked PG user and refresh local link cache."""
+    """Set absolute quota on the linked PG user and refresh local link + list cache."""
     if not service.pg_user_id:
         raise ValueError("سرویس به پاسارگارد وصل نیست")
     pg = _pg_client_for_service(service)
@@ -231,6 +290,7 @@ async def admin_set_service_quota(
     )
     if not payload and not reset_traffic:
         raise ValueError("تغییری برای اعمال نیست")
+    info: dict | None = None
     if payload:
         info = await pg.modify_user_by_id(int(service.pg_user_id), payload)
         if isinstance(info, dict):
@@ -242,10 +302,29 @@ async def admin_set_service_quota(
                 tok = extract_sub_token(live)
                 if tok:
                     service.subscription_token = tok
+            sync_service_quota_cache(service, info)
+        # Absolute values we just wrote win when PG GET/modify is laggy or partial
+        if expire_ts is not None or data_limit_bytes is not None:
+            sync_service_quota_cache(
+                service,
+                expire_ts=expire_ts,
+                data_limit_bytes=data_limit_bytes,
+            )
+    else:
+        # Traffic reset only — refresh cache from live PG when possible
+        try:
+            live_info = await pg.get_user_by_id(int(service.pg_user_id))
+            if isinstance(live_info, dict):
+                sync_service_quota_cache(service, live_info)
+        except Exception:
+            logger.debug("quota cache refresh failed uid=%s", service.pg_user_id, exc_info=True)
     service.notified_expire = False
     service.notified_traffic = False
     await session.commit()
-    return await service_snapshot(session, service)
+    snap = await service_snapshot(session, service)
+    # Persist any cache refresh from the live snapshot read
+    await session.commit()
+    return snap
 
 
 async def admin_renew_service(
