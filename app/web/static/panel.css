@@ -2536,11 +2536,65 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   padding: calc(var(--space-3) + var(--safe-top)) calc(var(--space-2) + var(--safe-right)) calc(var(--space-3) + var(--safe-bottom)) calc(var(--space-2) + var(--safe-left));
   background: var(--background);
 }
+.auth-wrap--atmo {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.auth-atmosphere {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+}
+.auth-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(48px);
+  opacity: 0.55;
+  will-change: transform;
+}
+.auth-orb-a {
+  width: min(52vw, 420px);
+  height: min(52vw, 420px);
+  top: -12%;
+  inset-inline-end: -8%;
+  background: color-mix(in srgb, var(--primary) 34%, transparent);
+  animation: panel-status-drift-a 14s var(--ease-standard, ease) infinite alternate;
+}
+.auth-orb-b {
+  width: min(42vw, 320px);
+  height: min(42vw, 320px);
+  bottom: 8%;
+  inset-inline-start: -10%;
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+  animation: panel-status-drift-b 18s var(--ease-standard, ease) infinite alternate;
+}
+.auth-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--border) 80%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--border) 80%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 42%, #000 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 42%, #000 20%, transparent 75%);
+}
+html[data-theme="light"] .auth-orb { opacity: 0.35; }
+html[data-theme="light"] .auth-grid { opacity: 0.35; }
+
 .auth-panel {
   width: min(380px, 100%);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+.auth-panel--stage {
+  position: relative;
+  width: min(100%, 26.5rem);
+  animation: panel-status-in 480ms var(--ease-out, ease) both;
 }
 .auth-brand { text-align: center; }
 .auth-brand .brand-logo {
@@ -2548,6 +2602,8 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   height: 56px;
   border-radius: 18px;
   margin: 0 auto var(--space-2);
+  box-shadow: 0 0 0 1px var(--border);
+  animation: panel-status-in 520ms var(--ease-out, ease) 80ms both;
 }
 .auth-brand h1 {
   line-height: 1.25;
@@ -2571,6 +2627,41 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--bg-card);
+}
+/* Atmospheric login card — same language as status pages, no top accent line */
+.auth-form--card {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--foreground) 4%, transparent),
+    0 24px 48px -28px color-mix(in srgb, #000 55%, transparent);
+  animation: panel-status-card-in 560ms var(--ease-out, ease) 60ms both;
+}
+html[data-theme="light"] .auth-form--card {
+  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--foreground) 4%, transparent),
+    0 28px 50px -30px color-mix(in srgb, #000 18%, transparent);
+}
+/* Detect WebKit autofill without showing a visual flash */
+.auth-form--card input:-webkit-autofill {
+  animation-name: auth-autofill-mark;
+  animation-duration: 0.01s;
+}
+@keyframes auth-autofill-mark {
+  from { opacity: 0.99; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-panel--stage,
+  .auth-brand .brand-logo,
+  .auth-form--card,
+  .auth-orb {
+    animation: none !important;
+  }
 }
 .auth-form[hidden],
 .setup-step[hidden] {
@@ -6878,8 +6969,10 @@ html[data-theme="light"] .side-theme.open .side-theme-btn {
 html[data-theme="light"] .side-theme-menu {
   box-shadow: 0 12px 28px rgba(24, 24, 27, 0.12);
 }
-html[data-theme="light"] .auth-wrap,
-html[data-theme="light"] .auth-panel {
+html[data-theme="light"] .auth-wrap {
+  background: var(--background);
+}
+html[data-theme="light"] .auth-panel:not(.auth-panel--stage) {
   background: var(--bg-card);
 }
 html[data-theme="light"] th { color: var(--foreground); }

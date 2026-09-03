@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -235,4 +237,92 @@ async def svc_renew_pay(
             order.id,
             state=state,
             text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+        )
+
+
+@router.callback_query(F.data.startswith("svc:delask:"))
+async def svc_delete_ask(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    svc_id = int(callback.data.split(":")[-1])
+    svc = await session.get(UserService, svc_id)
+    if not svc or svc.bot_user_id != db_user.id:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await callback.answer()
+    label = html.escape(svc.pg_username or f"#{svc_id}")
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🗑 بله، حذف شود",
+                    callback_data=f"svc:del:{svc_id}",
+                ),
+                InlineKeyboardButton(
+                    text="انصراف",
+                    callback_data=f"svc:view:{svc_id}",
+                ),
+            ]
+        ]
+    )
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(
+                "⚠️ حذف سرویس",
+                (
+                    f"سرویس <b>{label}</b> برای همیشه حذف شود؟\n"
+                    "لینک اشتراک از کار می‌افتد و برگشت‌ناپذیر است."
+                ),
+            ),
+            reply_markup=markup,
+        )
+
+
+@router.callback_query(F.data.startswith("svc:del:"))
+async def svc_delete(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
+    # Match svc:del:{id} only — not svc:delask:
+    parts = (callback.data or "").split(":")
+    if len(parts) != 3 or parts[1] != "del":
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    svc_id = int(parts[2])
+    svc = await session.get(UserService, svc_id)
+    if not svc or svc.bot_user_id != db_user.id:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    from app.services.bot_user_admin import admin_delete_service
+
+    try:
+        await admin_delete_service(session, svc, delete_pg=True)
+    except Exception as e:
+        await callback.answer(str(e)[:160], show_alert=True)
+        return
+    await callback.answer("سرویس حذف شد", show_alert=True)
+    ui = await get_all_settings(session)
+    if state is not None:
+        from app.bot import menu_nav as nav
+
+        data = await state.get_data()
+        if int(data.get(nav.SERVICE_ID) or 0) == svc_id:
+            await state.update_data(**{nav.SERVICE_ID: None})
+    if callback.message:
+        from app.bot.menu_nav import restore_main_reply
+
+        await safe_edit_text(
+            callback.message,
+            format_message("✅ حذف شد", f"سرویس #{svc_id} حذف شد."),
+            reply_markup=kb.back_home(ui),
+        )
+        await restore_main_reply(
+            callback.message,
+            session,
+            db_user,
+            text="🏠 منوی اصلی",
+            state=state,
         )

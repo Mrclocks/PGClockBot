@@ -367,6 +367,37 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return _redirect_user(user_id, err=f"تغییر مانده ناموفق: {e}")
         return _redirect_user(user_id, ok=f"مانده سرویس #{service_id} به‌روز شد")
 
+    @app.post("/users/{user_id}/services/{service_id}/delete")
+    async def user_service_delete(
+        user_id: int,
+        service_id: int,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.bot_user_admin import admin_delete_service, get_owned_service
+
+        loaded = await _require_scoped_user(session, staff, user_id)
+        if isinstance(loaded, RedirectResponse):
+            return loaded
+
+        try:
+            svc = await get_owned_service(
+                session, bot_user_id=user_id, service_id=service_id
+            )
+        except ValueError as e:
+            return _redirect_user(user_id, err=str(e))
+
+        try:
+            info = await admin_delete_service(session, svc, delete_pg=True)
+        except ValueError as e:
+            return _redirect_user(user_id, err=str(e))
+        except Exception as e:
+            return _redirect_user(user_id, err=f"حذف سرویس ناموفق: {e}")
+        note = " (پاسارگارد حذف شد)" if info.get("pg_deleted") else (
+            " (پاسارگارد غیرفعال شد)" if info.get("pg_disabled") else ""
+        )
+        return _redirect_user(user_id, ok=f"سرویس #{service_id} حذف شد{note}")
+
     @app.get("/users/{user_id}/services/{service_id}/link")
     async def user_service_link(
         user_id: int,

@@ -1,7 +1,9 @@
 {# Progressive widget fill — shell already passed server authz.
    Body URL re-runs the same Depends authz; shell permission does not grant body.
    redirect:manual avoids injecting login HTML into #home-dash / #pg-dash.
-   Uses #panel-nav-clock (not the deleted page-load veil) while /body loads. #}
+   Uses #panel-nav-clock (not the deleted page-load veil) while /body loads.
+   Flag data-panel-widgets-pending so panel.js pageshow cannot hide the clock
+   before the fragment swap paints. #}
 {% set body_url = widgets_body_url or '/home/body' %}
 <noscript>
   <div class="flash warn home-update-banner">
@@ -24,7 +26,13 @@
     }
   };
 
+  function markPending(on) {
+    if (on) document.documentElement.setAttribute('data-panel-widgets-pending', '1');
+    else document.documentElement.removeAttribute('data-panel-widgets-pending');
+  }
+
   function armClock() {
+    markPending(true);
     document.dispatchEvent(new CustomEvent('panel-widgets-loading'));
     var clock = document.getElementById('panel-nav-clock');
     if (!clock) return;
@@ -32,11 +40,17 @@
     clock.setAttribute('aria-hidden', 'false');
   }
   function disarmClock() {
+    markPending(false);
     document.dispatchEvent(new CustomEvent('panel-widgets-ready', { detail: { id: '' } }));
     var clock = document.getElementById('panel-nav-clock');
     if (!clock) return;
-    clock.hidden = true;
-    clock.setAttribute('aria-hidden', 'true');
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        if (document.documentElement.getAttribute('data-panel-widgets-pending') === '1') return;
+        clock.hidden = true;
+        clock.setAttribute('aria-hidden', 'true');
+      });
+    });
   }
 
   function swap(htmlText) {
@@ -48,13 +62,19 @@
     var next = tmp.firstElementChild;
     if (next && root.parentNode) {
       root.parentNode.replaceChild(next, root);
+      markPending(false);
       document.dispatchEvent(new CustomEvent('panel-widgets-ready', {
         detail: { id: next.id || '' }
       }));
       var clock = document.getElementById('panel-nav-clock');
       if (clock) {
-        clock.hidden = true;
-        clock.setAttribute('aria-hidden', 'true');
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            if (document.documentElement.getAttribute('data-panel-widgets-pending') === '1') return;
+            clock.hidden = true;
+            clock.setAttribute('aria-hidden', 'true');
+          });
+        });
       }
     } else {
       disarmClock();

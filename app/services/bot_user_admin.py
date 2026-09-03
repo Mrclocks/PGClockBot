@@ -357,6 +357,114 @@ async def admin_extend_service(
     )
 
 
+async def admin_delete_service(
+    session: AsyncSession,
+    service: UserService,
+    *,
+    delete_pg: bool = True,
+) -> dict[str, Any]:
+    """Hard-delete one shop service and optionally its linked PasarGuard user.
+
+    Caller must verify ownership / shop scope before invoking. Nulls FK refs on
+    orders / loyalty / wheel spins, then removes the ``UserService`` row.
+    """
+    from sqlalchemy import delete, update
+
+    from app.db.models import LuckyWheelSpin, Order, RewardRedemption
+
+    svc_id = int(service.id)
+    bot_user_id = int(service.bot_user_id)
+    pg_uid = int(service.pg_user_id) if service.pg_user_id else None
+    pg_deleted = False
+    pg_disabled = False
+
+    if delete_pg and pg_uid:
+        pg = _pg_client_for_service(service)
+        try:
+            await pg.delete_user_by_id(pg_uid)
+            pg_deleted = True
+        except Exception:
+            logger.warning(
+                "PG delete failed service=%s pg=%s — trying disable",
+                svc_id,
+                pg_uid,
+                exc_info=True,
+            )
+            try:
+                await pg.set_disabled_by_id(pg_uid, True)
+                pg_disabled = True
+            except Exception:
+                logger.debug("PG disable fallback failed uid=%s", pg_uid, exc_info=True)
+
+    await session.execute(
+        update(Order).where(Order.service_id == svc_id).values(service_id=None)
+    )
+    await session.execute(
+        update(RewardRedemption)
+        .where(RewardRedemption.service_id == svc_id)
+        .values(service_id=None)
+    )
+    await session.execute(
+        update(LuckyWheelSpin)
+        .where(LuckyWheelSpin.service_id == svc_id)
+        .values(service_id=None)
+    )
+    await session.execute(delete(UserService).where(UserService.id == svc_id))
+    await session.commit()
+    return {
+        "service_id": svc_id,
+        "bot_user_id": bot_user_id,
+        "pg_user_id": pg_uid,
+        "pg_deleted": pg_deleted,
+        "pg_disabled": pg_disabled,
+    }
+
+
+async def detach_local_services_for_pg_user(
+    session: AsyncSession,
+    pg_user_id: int,
+    *,
+    commit: bool = True,
+) -> int:
+    """Remove local ``UserService`` rows after a PasarGuard user was deleted.
+
+    Does not call PasarGuard again — used by web/bot PG delete paths (admin +
+    reseller) so shop records do not orphan.
+    """
+    from sqlalchemy import delete, update
+
+    from app.db.models import LuckyWheelSpin, Order, RewardRedemption
+
+    pg_uid = int(pg_user_id)
+    rows = list(
+        (
+            await session.execute(
+                select(UserService).where(UserService.pg_user_id == pg_uid)
+            )
+        ).scalars().all()
+    )
+    if not rows:
+        return 0
+    svc_ids = [int(s.id) for s in rows]
+    await session.execute(
+        update(Order).where(Order.service_id.in_(svc_ids)).values(service_id=None)
+    )
+    await session.execute(
+        update(RewardRedemption)
+        .where(RewardRedemption.service_id.in_(svc_ids))
+        .values(service_id=None)
+    )
+    await session.execute(
+        update(LuckyWheelSpin)
+        .where(LuckyWheelSpin.service_id.in_(svc_ids))
+        .values(service_id=None)
+    )
+    await session.execute(delete(UserService).where(UserService.id.in_(svc_ids)))
+    if commit:
+        await session.commit()
+    return len(svc_ids)
+
+
 def snapshot_telegram_lines(snap: ServiceSnapshot) -> str:
     svc = snap.service
     plan_name = svc.plan.name if svc.plan else "—"

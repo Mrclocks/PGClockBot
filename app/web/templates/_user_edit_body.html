@@ -164,6 +164,15 @@
             <button class="btn btn-sm" type="submit">تغییر مانده</button>
           </div>
         </form>
+        <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/delete" class="form-stack"
+              data-confirm="سرویس #{{ s.service.id }}{% if s.service.pg_username %} ({{ s.service.pg_username }}){% endif %} و کاربر پاسارگارد مرتبط برای همیشه حذف شوند؟ این عمل برگشت‌ناپذیر است."
+              data-confirm-title="تأیید حذف سرویس"
+              data-confirm-danger="1"
+              data-confirm-label="حذف سرویس">
+          <div class="actions user-edit-actions">
+            <button class="btn btn-sm btn-danger" type="submit">حذف سرویس</button>
+          </div>
+        </form>
       </div>
     </li>
     {% endfor %}

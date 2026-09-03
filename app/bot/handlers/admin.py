@@ -2237,6 +2237,94 @@ async def adm_users_service_renew(
         )
 
 
+@router.callback_query(F.data.startswith("adm:users:svcdelask:"))
+@require_bot_owner_handler
+async def adm_users_service_delete_ask(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    user_id = int(parts[3])
+    service_id = int(parts[4])
+    _user, deny = await _platform_shop_user(session, user_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
+    from app.services.bot_user_admin import get_owned_service
+
+    try:
+        svc = await get_owned_service(
+            session, bot_user_id=user_id, service_id=service_id
+        )
+    except ValueError as e:
+        await callback.answer(str(e)[:160], show_alert=True)
+        return
+    await callback.answer()
+    label = svc.pg_username or f"#{service_id}"
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            (
+                f"⚠️ <b>حذف سرویس #{service_id}</b>\n\n"
+                f"سرویس <code>{html.escape(str(label))}</code> و کاربر پاسارگارد مرتبط "
+                f"برای همیشه حذف شوند؟\nاین عمل برگشت‌ناپذیر است."
+            ),
+            reply_markup=kb.admin_user_service_delete_confirm(user_id, service_id),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:users:svcdel:"))
+@require_bot_owner_handler
+async def adm_users_service_delete(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    # adm:users:svcdel:{uid}:{sid} — not svcdelask
+    if len(parts) < 5 or parts[2] != "svcdel":
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    user_id = int(parts[3])
+    service_id = int(parts[4])
+    _user, deny = await _platform_shop_user(session, user_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
+    from app.services.bot_user_admin import admin_delete_service, get_owned_service
+
+    try:
+        svc = await get_owned_service(
+            session, bot_user_id=user_id, service_id=service_id
+        )
+        await admin_delete_service(session, svc, delete_pg=True)
+    except ValueError as e:
+        await callback.answer(str(e)[:160], show_alert=True)
+        return
+    except Exception as e:
+        await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+        return
+    await callback.answer("سرویس حذف شد", show_alert=True)
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            f"✅ سرویس #{service_id} حذف شد.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="⬅️ سرویس‌ها",
+                            callback_data=f"adm:users:svcs:{user_id}",
+                        )
+                    ]
+                ]
+            ),
+        )
+
+
 @router.callback_query(F.data.startswith("adm:users:svcadj:"))
 @require_bot_owner_handler
 async def adm_users_service_adjust(

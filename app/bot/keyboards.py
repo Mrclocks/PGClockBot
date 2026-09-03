@@ -2124,6 +2124,7 @@ def services_keyboard(services: list, ui: dict | None = None) -> InlineKeyboardM
 REPLY_ACTION_SVC_LINK = "svc_link"
 REPLY_ACTION_SVC_RENEW = "svc_renew"
 REPLY_ACTION_SVC_REFRESH = "svc_refresh"
+REPLY_ACTION_SVC_DELETE = "svc_delete"
 
 
 def _service_action_entries(ui: dict | None = None) -> list[tuple[str, str]]:
@@ -2131,6 +2132,7 @@ def _service_action_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         (REPLY_ACTION_SVC_LINK, _t(ui, "btn_sub_link")),
         (REPLY_ACTION_SVC_RENEW, _t(ui, "btn_renew")),
         (REPLY_ACTION_SVC_REFRESH, "♻️ رفرش وضعیت"),
+        (REPLY_ACTION_SVC_DELETE, "🗑 حذف سرویس"),
     ]
 
 
@@ -2869,10 +2871,33 @@ def admin_user_service_actions(user_id: int, service_id: int) -> InlineKeyboardM
             ],
             [
                 InlineKeyboardButton(
+                    text="🗑 حذف سرویس",
+                    callback_data=f"adm:users:svcdelask:{user_id}:{service_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="⬅️ سرویس‌ها",
                     callback_data=f"adm:users:svcs:{user_id}",
                 )
             ],
+        ]
+    )
+
+
+def admin_user_service_delete_confirm(user_id: int, service_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🗑 بله، حذف شود",
+                    callback_data=f"adm:users:svcdel:{user_id}:{service_id}",
+                ),
+                InlineKeyboardButton(
+                    text="انصراف",
+                    callback_data=f"adm:users:svc:{user_id}:{service_id}",
+                ),
+            ]
         ]
     )
 

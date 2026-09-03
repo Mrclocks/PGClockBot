@@ -1041,6 +1041,9 @@ def register_pg_pages(
                 return denied
             pg, _ = await _staff_pg(session, staff)
             await pg.delete_user_by_id(user_id)
+            from app.services.bot_user_admin import detach_local_services_for_pg_user
+
+            await detach_local_services_for_pg_user(session, user_id, commit=True)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q('کاربر حذف شد')}", status_code=303)

@@ -72,15 +72,34 @@
     (function () {
       const clock = document.getElementById('panel-nav-clock');
       if (!clock) return;
+      /* Shell-first /home|/pg|/reseller home: defer script may fire
+         panel-widgets-loading before this listener exists. Track pending via
+         DOM flag + empty aria-busy mount so pageshow cannot hide the clock
+         before /body swaps in. */
+      function shellWidgetsPending() {
+        if (document.documentElement.getAttribute('data-panel-widgets-pending') === '1') {
+          return true;
+        }
+        const dash = document.getElementById('home-dash') || document.getElementById('pg-dash');
+        return !!(dash && dash.getAttribute('aria-busy') === 'true' && !dash.firstElementChild);
+      }
+      let widgetsPending = shellWidgetsPending() ? 1 : 0;
       function arm() {
         clock.hidden = false;
         clock.setAttribute('aria-hidden', 'false');
         void clock.offsetWidth;
       }
       function disarm() {
+        if (widgetsPending > 0 || shellWidgetsPending()) return;
         clock.hidden = true;
         clock.setAttribute('aria-hidden', 'true');
       }
+      function disarmAfterPaint() {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(disarm);
+        });
+      }
+      if (widgetsPending > 0) arm();
       function sameDocumentNav(url) {
         return url.origin === location.origin
           && url.pathname === location.pathname
@@ -125,12 +144,38 @@
         if (side && side.contains(form)) setOpen(false, true);
         arm();
       }, true);
-      window.addEventListener('pageshow', disarm);
-      window.addEventListener('pagehide', disarm);
-      window.addEventListener('popstate', disarm);
+      window.addEventListener('pageshow', function () {
+        if (widgetsPending > 0 || shellWidgetsPending()) {
+          widgetsPending = Math.max(widgetsPending, 1);
+          arm();
+          return;
+        }
+        disarm();
+      });
+      window.addEventListener('pagehide', function () {
+        widgetsPending = 0;
+        document.documentElement.removeAttribute('data-panel-widgets-pending');
+        clock.hidden = true;
+        clock.setAttribute('aria-hidden', 'true');
+      });
+      window.addEventListener('popstate', function () {
+        if (widgetsPending > 0 || shellWidgetsPending()) {
+          arm();
+          return;
+        }
+        disarm();
+      });
       /* Shell-first home/PG: keep the clock up until /body swaps widgets in. */
-      document.addEventListener('panel-widgets-loading', arm);
-      document.addEventListener('panel-widgets-ready', disarm);
+      document.addEventListener('panel-widgets-loading', function () {
+        widgetsPending = Math.max(widgetsPending, 1);
+        document.documentElement.setAttribute('data-panel-widgets-pending', '1');
+        arm();
+      });
+      document.addEventListener('panel-widgets-ready', function () {
+        widgetsPending = 0;
+        document.documentElement.removeAttribute('data-panel-widgets-pending');
+        disarmAfterPaint();
+      });
     })();
 
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */

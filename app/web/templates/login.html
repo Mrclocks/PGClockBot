@@ -1,21 +1,27 @@
 {% extends "base.html" %}
 {% block title %}ورود{% endblock %}
 {% block auth %}
-<div class="auth-wrap">
-  <div class="auth-panel">
+<div class="auth-wrap auth-wrap--atmo">
+  <div class="auth-atmosphere" aria-hidden="true">
+    <span class="auth-orb auth-orb-a"></span>
+    <span class="auth-orb auth-orb-b"></span>
+    <span class="auth-grid"></span>
+  </div>
+  <div class="auth-panel auth-panel--stage">
     <div class="auth-brand">
       <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" /></span>
       <h1 dir="ltr">MrClockBot</h1>
       <p>ورود به پنل مدیریت فروش — نمایندگان: همان یوزر/رمز پاسارگارد</p>
     </div>
-    <form class="auth-form" method="post" action="/login" autocomplete="on">
+    <form class="auth-form auth-form--card" method="post" action="/login" autocomplete="on" id="login-form"
+          data-no-nav-clock>
       {% if error %}<div class="error">{{ error }}</div>{% endif %}
       {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
       <p id="login-restart" class="auth-restart-hint muted" {% if request.query_params.get('restarting') != '1' %}hidden{% endif %}>
         در حال ری‌استارت سرویس…
       </p>
       <label>نام کاربری
-        <input name="username" value="{{ username or '' }}" required autocomplete="username"
+        <input name="username" id="login-username" value="{{ username or '' }}" required autocomplete="username"
                dir="ltr" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false"
                placeholder="user_name" />
         <small class="muted">برای نماینده: همان یوزر پاسارگارد</small>
@@ -30,7 +36,7 @@
         </div>
         <small class="muted">برای نماینده: همان رمز پاسارگارد</small>
       </label>
-      <button class="btn" type="submit">ورود به پنل</button>
+      <button class="btn" type="submit" id="login-submit">ورود به پنل</button>
     </form>
     <div class="auth-foot">© ۲۰۲۶ MrClockBot</div>
   </div>
@@ -50,6 +56,65 @@
     });
   }
   bindPwToggle('login-password', 'pw-toggle');
+
+  /* Autofill auto-submit: when both fields are filled by the browser/password
+     manager (not by typing), submit once. Skip on error flash / restarting. */
+  (function autoSubmitAutofill(){
+    const form = document.getElementById('login-form');
+    const user = document.getElementById('login-username');
+    const pass = document.getElementById('login-password');
+    if (!form || !user || !pass) return;
+    if (form.querySelector('.error')) return;
+    if (document.getElementById('login-restart') && !document.getElementById('login-restart').hidden) return;
+
+    let submitted = false;
+    let typed = false;
+    let lastTypeAt = 0;
+
+    function markTyped(){
+      typed = true;
+      lastTypeAt = Date.now();
+    }
+    form.addEventListener('keydown', markTyped, true);
+    form.addEventListener('beforeinput', markTyped, true);
+
+    function isAutofilled(el){
+      try {
+        if (el.matches && (el.matches(':-webkit-autofill') || el.matches(':autofill'))) return true;
+      } catch (_) {}
+      return false;
+    }
+
+    function filled(){
+      return !!(String(user.value || '').trim() && String(pass.value || ''));
+    }
+
+    function trySubmit(reason){
+      if (submitted || !filled()) return;
+      /* Recent typing = user is filling manually — never auto-submit. */
+      if (typed && (Date.now() - lastTypeAt) < 1500) return;
+      const auto = isAutofilled(user) || isAutofilled(pass);
+      const quietPrefill = !typed && filled();
+      if (!auto && !quietPrefill) return;
+      submitted = true;
+      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+      else form.submit();
+    }
+
+    /* Chrome often fills without input events — poll briefly after load. */
+    let ticks = 0;
+    const poll = setInterval(function(){
+      ticks++;
+      trySubmit('poll');
+      if (submitted || ticks > 25) clearInterval(poll);
+    }, 120);
+
+    user.addEventListener('change', function(){ trySubmit('change'); });
+    pass.addEventListener('change', function(){ trySubmit('change'); });
+    form.addEventListener('animationstart', function(e){
+      if (e.animationName === 'auth-autofill-mark') trySubmit('autofill-anim');
+    }, true);
+  })();
 })();
 </script>
 {% if request.query_params.get('restarting') == '1' %}
