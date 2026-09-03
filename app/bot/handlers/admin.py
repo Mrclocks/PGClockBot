@@ -1827,15 +1827,16 @@ async def adm_users_search(
     )
     user = result.scalar_one_or_none()
     await state.clear()
-    from app.bot.tg_utils import seed_persistent_reply_kb
-
-    await seed_persistent_reply_kb(message)
+    # cancel_reply() replaced the submenu — restore on a *lasting* message.
+    # Tip-delete seeding drops the custom keyboard on many mobile clients.
+    users_kb = kb.admin_users_reply_keyboard()
     if not user:
         await message.answer(
             "کاربری با این آیدی در فروشگاه پلتفرم یافت نشد.",
-            reply_markup=kb.admin_users_reply_keyboard(),
+            reply_markup=users_kb,
         )
         return
+    await message.answer("👤 نتیجه جستجو", reply_markup=users_kb)
     await _render_user_card(message, session, user)
 
 
@@ -2041,11 +2042,14 @@ async def adm_users_wallet_credit_save(
     user, deny = await _platform_shop_user(session, user_id) if user_id else (None, "یافت نشد")
     if deny:
         await state.clear()
-        await message.answer(deny)
+        await message.answer(deny, reply_markup=kb.admin_users_reply_keyboard())
         return
     amount = parse_bot_int(message.text or "")
     if amount is None or amount < 1000:
-        await message.answer("مبلغ نامعتبر — حداقل ۱۰۰۰ تومان")
+        await message.answer(
+            "مبلغ نامعتبر — حداقل ۱۰۰۰ تومان",
+            reply_markup=kb.cancel_reply(),
+        )
         return
     from app.services.bot_user_admin import admin_credit_user_wallet
 
@@ -2058,14 +2062,16 @@ async def adm_users_wallet_credit_save(
             note="شارژ از ربات ادمین",
         )
     except ValueError as e:
-        await message.answer(str(e))
+        await message.answer(str(e), reply_markup=kb.admin_users_reply_keyboard())
+        await state.clear()
         return
     await state.clear()
     await session.refresh(user)
     await message.answer(
         f"✅ کیف پول شارژ شد.\n"
         f"مبلغ: {format_toman(amount, get_settings().currency)}\n"
-        f"مانده: {format_toman(user.wallet_balance, get_settings().currency)}"
+        f"مانده: {format_toman(user.wallet_balance, get_settings().currency)}",
+        reply_markup=kb.admin_users_reply_keyboard(),
     )
     await _render_user_card(message, session, user)
 
@@ -2378,30 +2384,38 @@ async def adm_svc_adjust_days_entered(
         return
     if kb.is_cancel_text(message.text):
         await state.set_state(None)
-        await message.answer("لغو شد.")
+        await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
         return
     from app.services.bot_user_admin import MAX_EXTEND_DAYS
 
     try:
         days = parse_bot_int(message.text)
     except ValueError:
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer("عدد معتبر بفرستید", reply_markup=kb.cancel_reply())
         return
     if abs(days) > MAX_EXTEND_DAYS:
-        await message.answer(f"روز باید بین ±{MAX_EXTEND_DAYS} باشد")
+        await message.answer(
+            f"روز باید بین ±{MAX_EXTEND_DAYS} باشد",
+            reply_markup=kb.cancel_reply(),
+        )
         return
     data = await state.get_data()
     user_id = int(data.get("svcadj_uid") or 0)
     service_id = int(data.get("svcadj_sid") or 0)
     if not user_id or not service_id:
         await state.set_state(None)
-        await message.answer("نشست منقضی شد — دوباره از منوی سرویس وارد شوید.")
+        await message.answer(
+            "نشست منقضی شد — دوباره از منوی سرویس وارد شوید.",
+            reply_markup=kb.admin_users_reply_keyboard(),
+        )
         return
     adj_key = f"svcadj:{user_id}:{service_id}"
     stored = data.get(adj_key) if isinstance(data.get(adj_key), dict) else {}
     gb = float(stored.get("gb") or 0)
     await state.set_state(None)
     await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+    # Restore reply submenu (cancel_reply displaced it); then show inline adjust UI.
+    await message.answer("👥 کاربران", reply_markup=kb.admin_users_reply_keyboard())
     await message.answer(
         f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\n"
         f"روز: <b>{days}</b> · گیگ: <b>{gb}</b>",
@@ -2420,30 +2434,38 @@ async def adm_svc_adjust_gb_entered(
         return
     if kb.is_cancel_text(message.text):
         await state.set_state(None)
-        await message.answer("لغو شد.")
+        await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
         return
     from app.services.bot_user_admin import MAX_EXTEND_GB
 
     try:
         gb = parse_bot_float(message.text)
     except ValueError:
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer("عدد معتبر بفرستید", reply_markup=kb.cancel_reply())
         return
     if abs(gb) > MAX_EXTEND_GB:
-        await message.answer(f"گیگ باید بین ±{MAX_EXTEND_GB} باشد")
+        await message.answer(
+            f"گیگ باید بین ±{MAX_EXTEND_GB} باشد",
+            reply_markup=kb.cancel_reply(),
+        )
         return
     data = await state.get_data()
     user_id = int(data.get("svcadj_uid") or 0)
     service_id = int(data.get("svcadj_sid") or 0)
     if not user_id or not service_id:
         await state.set_state(None)
-        await message.answer("نشست منقضی شد — دوباره از منوی سرویس وارد شوید.")
+        await message.answer(
+            "نشست منقضی شد — دوباره از منوی سرویس وارد شوید.",
+            reply_markup=kb.admin_users_reply_keyboard(),
+        )
         return
     adj_key = f"svcadj:{user_id}:{service_id}"
     stored = data.get(adj_key) if isinstance(data.get(adj_key), dict) else {}
     days = int(stored.get("days") or 0)
     await state.set_state(None)
     await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+    # Restore reply submenu (cancel_reply displaced it); then show inline adjust UI.
+    await message.answer("👥 کاربران", reply_markup=kb.admin_users_reply_keyboard())
     await message.answer(
         f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\n"
         f"روز: <b>{days}</b> · گیگ: <b>{gb}</b>",
@@ -2522,14 +2544,17 @@ async def adm_users_block_reason(
     user, deny = await _platform_shop_user(session, user_id) if user_id else (None, "یافت نشد")
     if deny:
         await state.clear()
-        await message.answer(deny)
+        await message.answer(deny, reply_markup=kb.admin_users_reply_keyboard())
         return
     from app.services.notifications import notify_account_edit
     from app.services.users import is_protected_admin
 
     if is_protected_admin(user):
         await state.clear()
-        await message.answer("مسدود کردن ادمین مجاز نیست.")
+        await message.answer(
+            "مسدود کردن ادمین مجاز نیست.",
+            reply_markup=kb.admin_users_reply_keyboard(),
+        )
         return
     user.is_blocked = True
     await session.commit()
@@ -2541,7 +2566,10 @@ async def adm_users_block_reason(
         actor=db_user.username or db_user.full_name or "ادمین ربات",
     )
     await state.clear()
-    await message.answer(f"🚫 کاربر مسدود شد.\nعلت: {reason}")
+    await message.answer(
+        f"🚫 کاربر مسدود شد.\nعلت: {reason}",
+        reply_markup=kb.admin_users_reply_keyboard(),
+    )
     await _render_user_card(message, session, user, edit=False)
 
 

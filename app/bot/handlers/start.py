@@ -149,7 +149,8 @@ async def render_home(
 async def seed_main_reply_kb(message: Message, reply_kb, *, tip: str = "⌨️") -> None:
     from app.bot.tg_utils import seed_reply_keyboard
 
-    await seed_reply_keyboard(message, reply_kb, tip=tip)
+    # Welcome already carries the reply KB; ephemeral tip is polish only.
+    await seed_reply_keyboard(message, reply_kb, tip=tip, ephemeral=True)
 
 
 @router.message(F.text.func(kb.is_restart_text))

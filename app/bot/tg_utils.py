@@ -5,7 +5,7 @@ import logging
 from typing import Any
 
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import InlineKeyboardMarkup, Message
+from aiogram.types import InlineKeyboardMarkup, Message, ReplyKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("pgclock.bot")
@@ -63,12 +63,44 @@ async def safe_edit_text(
             return False
 
 
-async def seed_reply_keyboard(message: Message, reply_markup, *, tip: str = "·") -> None:
-    """Attach a reply keyboard without leaving a lasting second bubble."""
+async def attach_reply_keyboard(
+    message: Message,
+    reply_markup: ReplyKeyboardMarkup,
+    *,
+    text: str = "⌨️",
+) -> Message | None:
+    """Attach a reply keyboard on a *lasting* message.
+
+    Never delete this message. On many Telegram clients (especially iOS),
+    deleting the message that set ``ReplyKeyboardMarkup`` drops the custom
+    keyboard and leaves the system keyboard after FSM text input.
+    """
+    try:
+        return await message.answer(text or "⌨️", reply_markup=reply_markup)
+    except Exception:
+        logger.warning("Could not attach reply keyboard", exc_info=True)
+        return None
+
+
+async def seed_reply_keyboard(
+    message: Message,
+    reply_markup,
+    *,
+    tip: str = "·",
+    ephemeral: bool = False,
+) -> None:
+    """Register a reply keyboard with Telegram.
+
+    ``ephemeral=True`` deletes the tip (legacy start-menu polish). Do **not**
+    use ephemeral seeding as the *only* restore after ``cancel_reply()`` —
+    tip-delete often hides the custom keyboard on mobile clients.
+    """
     try:
         tip_msg = await message.answer(tip or "·", reply_markup=reply_markup)
     except Exception:
         logger.warning("Could not seed reply keyboard", exc_info=True)
+        return
+    if not ephemeral:
         return
     try:
         await tip_msg.delete()
@@ -77,10 +109,22 @@ async def seed_reply_keyboard(message: Message, reply_markup, *, tip: str = "·"
 
 
 async def seed_persistent_reply_kb(message: Message) -> None:
-    """Backward-compat: seed home-only reply keyboard."""
+    """Seed home reply keyboard on a lasting chrome message (safe after FSM)."""
     from app.bot import keyboards as kb
 
-    await seed_reply_keyboard(message, kb.persistent_reply_keyboard())
+    await attach_reply_keyboard(
+        message, kb.persistent_reply_keyboard(), text="🏠 منوی اصلی"
+    )
+
+
+async def finish_text_input(
+    message: Message,
+    reply_markup: ReplyKeyboardMarkup,
+    *,
+    note: str,
+) -> None:
+    """End an FSM prompt that used ``cancel_reply`` — restore lasting reply KB."""
+    await message.answer(note, reply_markup=reply_markup)
 
 
 async def clear_fsm_with_reply(
