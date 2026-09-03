@@ -200,7 +200,14 @@ async def list_wallet_txs(
 async def get_owned_service(
     session: AsyncSession, *, bot_user_id: int, service_id: int
 ) -> UserService:
-    svc = await session.get(UserService, int(service_id))
+    """Load one owned shop service with plan eagerly (async-safe for Telegram cards)."""
+    svc = (
+        await session.execute(
+            select(UserService)
+            .where(UserService.id == int(service_id))
+            .options(selectinload(UserService.plan))
+        )
+    ).scalar_one_or_none()
     if svc is None or int(svc.bot_user_id) != int(bot_user_id):
         raise ValueError("سرویس یافت نشد")
     return svc

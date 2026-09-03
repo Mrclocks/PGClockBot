@@ -35,16 +35,36 @@ class BotUserAdminServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_owned_service_guards(self):
         from app.services.bot_user_admin import get_owned_service
+        from unittest.mock import MagicMock
 
         session = AsyncMock()
-        session.get = AsyncMock(return_value=None)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=result)
         with self.assertRaises(ValueError):
             await get_owned_service(session, bot_user_id=1, service_id=9)
 
         svc = MagicMock(bot_user_id=2)
-        session.get = AsyncMock(return_value=svc)
+        result.scalar_one_or_none.return_value = svc
+        session.execute = AsyncMock(return_value=result)
         with self.assertRaises(ValueError):
             await get_owned_service(session, bot_user_id=1, service_id=9)
+
+    def test_get_owned_service_eager_loads_plan(self):
+        """Regression: session.get without selectinload → MissingGreenlet on svc.plan
+        when rendering Telegram service cards after commit (async SQLAlchemy)."""
+        src = Path("app/services/bot_user_admin.py").read_text(encoding="utf-8")
+        fn = src.split("async def get_owned_service", 1)[1].split(
+            "\nasync def ", 1
+        )[0]
+        self.assertIn("selectinload(UserService.plan)", fn)
+        self.assertNotIn("session.get(UserService", fn)
+        self.assertIn("snapshot_telegram_lines", src)
+        # Card reads plan.name — must stay compatible with eager-loaded plan
+        lines_fn = src.split("def snapshot_telegram_lines", 1)[1].split(
+            "\ndef ", 1
+        )[0]
+        self.assertIn("svc.plan", lines_fn)
 
 
 class UserEditUiTests(unittest.TestCase):
