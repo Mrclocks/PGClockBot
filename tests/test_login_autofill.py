@@ -26,6 +26,12 @@ class LoginAutofillTests(unittest.TestCase):
         self.assertNotIn("Form(...)", chunk)
         self.assertIn("نام کاربری و رمز دسترسی الزامی است", chunk)
 
+    def test_login_autofill_auto_submits(self):
+        src = Path("app/web/templates/login.html").read_text(encoding="utf-8")
+        self.assertIn("autoSubmitAutofill", src)
+        self.assertIn("requestSubmit", src)
+        self.assertIn("auth-autofill-mark", Path("app/web/static/panel.css").read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()
