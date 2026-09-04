@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "9.0.4": [
+        "رفع خطای ارسال پیام ادمین به کاربر (تگ HTML نامعتبر <small>)",
+        "ریستور: restore/pre-v9.0.4-v9.0.3",
+    ],
     "9.0.3": [
         "ورود: طراحی اتمسفری مثل صفحات ۴۰۴ (بدون خط بالای باکس) + autofill با submit خودکار",
         "داشبورد: ساعت لودینگ تا آماده شدن کامل ویجت‌ها (/home و /pg)",
