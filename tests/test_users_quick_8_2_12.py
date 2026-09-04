@@ -26,6 +26,18 @@ class StaffMessageSanitizeTests(unittest.TestCase):
         out = wrap_staff_dm("متن", actor="admin")
         self.assertIn("پیام پشتیبانی", out)
         self.assertIn("متن", out)
+        self.assertIn("<i>از: admin</i>", out)
+        self.assertNotIn("<small>", out)
+
+    def test_wrap_telegram_html_tags_only(self):
+        """Telegram parse_mode=HTML rejects <small> (admin DM crash)."""
+        from app.services.users_quick import wrap_staff_dm
+
+        out = wrap_staff_dm("تست ارسال", actor="Owner")
+        for bad in ("<small>", "</small>", "<div>", "<span>"):
+            self.assertNotIn(bad, out)
+        self.assertIn("<b>", out)
+        self.assertIn("<i>", out)
 
 
 class QuickRenewPickTests(unittest.TestCase):

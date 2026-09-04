@@ -40,9 +40,10 @@ def sanitize_staff_message(raw: str) -> str:
 
 
 def wrap_staff_dm(body_html: str, *, actor: str | None = None) -> str:
+    # Telegram HTML has no <small>; use <i> for the actor line.
     head = "📩 <b>پیام پشتیبانی</b>"
     if actor:
-        head += f"\n<small>از: {html.escape(str(actor)[:64])}</small>"
+        head += f"\n<i>از: {html.escape(str(actor)[:64])}</i>"
     return f"{head}\n\n{body_html}"
 
 
