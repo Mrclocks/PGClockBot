@@ -226,6 +226,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
 
         if tab == "menu":
             ctx.update(_menu_tab_context(values))
+        elif tab == "terms":
+            from app.services.button_styles import STYLE_OPTIONS
+
+            ctx["style_options"] = STYLE_OPTIONS
         elif tab == "colors":
             from app.services.button_styles import STYLE_OPTIONS, colors_page_grouped_sections
 

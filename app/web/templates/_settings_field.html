@@ -4,7 +4,7 @@
 {% set help = field[3] if field|length > 3 else '' %}
 {% set options = field[4] if field|length > 4 else [] %}
 {% set val = values.get(key, '') %}
-<div class="setting-item {% if kind in ['textarea', 'image', 'toggle', 'force_channels', 'payment_cards', 'payment_gateways', 'payment_crypto_wallets'] %}full{% endif %}">
+<div class="setting-item {% if kind in ['textarea', 'image', 'toggle', 'btn_color', 'force_channels', 'payment_cards', 'payment_gateways', 'payment_crypto_wallets'] %}full{% endif %}">
   {% if kind == 'toggle' %}
   <label class="toggle-row ui-switch-row">
     <span class="ui-switch-copy">
@@ -25,6 +25,29 @@
     </select>
     {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </label>
+  {% elif kind == 'btn_color' %}
+  {# Same tone-aware select as رنگبندی دکمه‌ها / plan color fields #}
+  {% set cur_tone = 'default' if not val else val %}
+  <div class="plan-color-field item-color-field">
+    <div class="btn-color-card plan-color-card">
+      <span class="btn-color-label">{{ label }}</span>
+      <select
+        name="s_{{ key }}"
+        class="btn-color-select"
+        data-tone="{{ cur_tone }}"
+        aria-label="{{ label }}"
+      >
+        {% for opt_val, opt_label, opt_tone in style_options|default([]) %}
+        <option
+          value="{{ opt_val }}"
+          data-tone="{{ opt_tone }}"
+          {% if val == opt_val %}selected{% endif %}
+        >{{ opt_label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+  </div>
   {% elif kind == 'force_channels' %}
   <div class="force-channels" data-force-channels>
     <div class="force-channels-head">

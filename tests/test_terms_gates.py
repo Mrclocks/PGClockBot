@@ -36,6 +36,23 @@ class TermsSettingsTests(unittest.TestCase):
     def test_button_styles(self):
         ids = {i["id"] for i in BUTTON_STYLE_CATALOG}
         self.assertTrue({"terms_entry", "terms_buy_user", "terms_buy_reseller"} <= ids)
+        by_id = {i["id"]: i for i in BUTTON_STYLE_CATALOG}
+        for sid in ("terms_entry", "terms_buy_user", "terms_buy_reseller"):
+            self.assertEqual(by_id[sid]["group"], "قوانین")
+        from app.services.users import keys_for_tab
+
+        style_keys = {
+            "btn_style_terms_entry",
+            "btn_style_terms_buy_user",
+            "btn_style_terms_buy_reseller",
+        }
+        self.assertTrue(style_keys <= keys_for_tab("terms"))
+        self.assertTrue(style_keys <= keys_for_tab("colors"))
+        from app.services.button_styles import colors_page_grouped_sections
+
+        user_sec = next(s for s in colors_page_grouped_sections() if s[0] == "user")
+        group_names = [g[0] for g in user_sec[3]]
+        self.assertIn("قوانین", group_names)
 
     def test_shop_scope(self):
         self.assertEqual(shop_scope_id(), 0)

@@ -1285,6 +1285,12 @@ SETTING_GROUPS = {
         ),
         ("terms_entry_btn", "متن دکمه موافقت", "text", "برچسب دکمه اینلاین (ایموجی عادی؛ پریمیوم از ربات)"),
         (
+            "btn_style_terms_entry",
+            "رنگ دکمه موافقت",
+            "btn_color",
+            "همان رنگ‌بندی تلگرام؛ از تب رنگبندی هم قابل تغییر است",
+        ),
+        (
             "terms_entry_reaccept",
             "پذیرش مجدد با تغییر متن",
             "toggle",
@@ -1301,6 +1307,12 @@ SETTING_GROUPS = {
         ),
         ("terms_buy_user_btn", "متن دکمه موافقت", "text", ""),
         (
+            "btn_style_terms_buy_user",
+            "رنگ دکمه موافقت",
+            "btn_color",
+            "همان رنگ‌بندی تلگرام؛ از تب رنگبندی هم قابل تغییر است",
+        ),
+        (
             "terms_buy_user_reaccept",
             "پذیرش مجدد با تغییر متن",
             "toggle",
@@ -1316,6 +1328,12 @@ SETTING_GROUPS = {
             "برای ایموجی پریمیوم از ویرایش داخل ربات استفاده کنید",
         ),
         ("terms_buy_reseller_btn", "متن دکمه موافقت", "text", ""),
+        (
+            "btn_style_terms_buy_reseller",
+            "رنگ دکمه موافقت",
+            "btn_color",
+            "همان رنگ‌بندی تلگرام؛ از تب رنگبندی هم قابل تغییر است",
+        ),
         (
             "terms_buy_reseller_reaccept",
             "پذیرش مجدد با تغییر متن",
