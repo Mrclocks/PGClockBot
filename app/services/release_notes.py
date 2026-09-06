@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "9.1.0": [
+        "قوانین ربات: سه گیت ورود / خرید کاربر / خرید نماینده (سوئیچ + متن + دکمه)",
+        "رنگ دکمه موافقت در تب قوانین و دسته رنگ‌بندی «قوانین»",
+        "مایگریشن: 0025 terms_acceptances",
+        "ریستور: restore/pre-v9.1.0-v9.0.4",
+    ],
     "9.0.4": [
         "رفع خطای ارسال پیام ادمین به کاربر (تگ HTML نامعتبر <small>)",
         "ریستور: restore/pre-v9.0.4-v9.0.3",
