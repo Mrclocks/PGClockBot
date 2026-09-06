@@ -1021,6 +1021,18 @@ async def resapply_buy(
         await callback.answer(deny, show_alert=True)
         return
     ui = await get_all_settings(session)
+    from app.bot.handlers.terms import prompt_terms_if_needed
+
+    if await prompt_terms_if_needed(
+        callback,
+        session,
+        db_user,
+        state,
+        ui,
+        "buy_reseller",
+        reseller_owner_id=reseller_owner_id,
+    ):
+        return
     plan_id = int(callback.data.split(":")[-1])
     plans = {p.id: p for p in await list_active_reseller_plans(session)}
     plan = plans.get(plan_id)

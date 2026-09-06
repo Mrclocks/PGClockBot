@@ -43,6 +43,24 @@
     {% include "_settings_bot.html" %}
   {% elif tab == 'links' %}
     {% include "_settings_links.html" %}
+  {% elif tab == 'terms' %}
+    {% include "_terms_admin_notice.html" %}
+    <form method="post" action="/settings?tab=terms" enctype="multipart/form-data" class="settings-form" id="settings-form">
+      {% for group_name in tab_groups %}
+      {% set fields = groups[group_name] %}
+      <div class="card settings-card">
+        <h2>{{ group_name }}</h2>
+        <div class="settings-grid">
+        {% for field in fields %}
+          {% include "_settings_field.html" %}
+        {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      <div class="actions sticky-actions">
+        <button class="btn" type="submit">ذخیره تنظیمات</button>
+      </div>
+    </form>
   {% elif tab == 'forcejoin' %}
     {% include "_forcejoin_admin_notice.html" %}
     <form method="post" action="/settings?tab=forcejoin" enctype="multipart/form-data" class="settings-form" id="settings-form">

@@ -12,6 +12,7 @@ from app.bot.middlewares import (
     DbSessionMiddleware,
     ErrorLogMiddleware,
     ForceJoinMiddleware,
+    TermsEntryMiddleware,
     RateLimitMiddleware,
     UserMiddleware,
 )
@@ -95,6 +96,7 @@ def create_dispatcher() -> Dispatcher:
     dp.update.middleware(DbSessionMiddleware())
     dp.update.middleware(UserMiddleware())
     dp.update.middleware(ForceJoinMiddleware())
+    dp.update.middleware(TermsEntryMiddleware())
 
     from app.bot.handlers import (
         admin,
@@ -112,6 +114,7 @@ def create_dispatcher() -> Dispatcher:
         reseller_settings,
         shop,
         start,
+        terms,
         support,
         services,
         ticket_actions,
@@ -119,6 +122,7 @@ def create_dispatcher() -> Dispatcher:
     )
 
     dp.include_router(start.router)
+    dp.include_router(terms.router)
     # Reply-keyboard nav early so menu labels win over FSM amount parsers
     dp.include_router(reply_nav.router)
     dp.include_router(loyalty.router)

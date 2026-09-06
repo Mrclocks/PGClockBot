@@ -1526,6 +1526,22 @@ def force_join_inline_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+
+def terms_inline_keyboard(prompt, ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Single accept button for a terms gate (entry / purchase)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                _ikb(
+                    prompt.btn_label,
+                    callback_data=f"terms:ok:{prompt.gate}",
+                    style=_style(ui, prompt.style_id, fallback="primary"),
+                )
+            ]
+        ]
+    )
+
+
 def admin_main_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
     """Legacy stub — live admin home uses admin_reply_keyboard / main_reply_keyboard."""
     _ = ui

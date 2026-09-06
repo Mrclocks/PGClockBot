@@ -1130,3 +1130,26 @@ class LuckyWheelUserState(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+
+
+class TermsAcceptance(Base):
+    """Per-user acceptance of a terms gate (entry / purchase), scoped per shop."""
+
+    __tablename__ = "terms_acceptances"
+    __table_args__ = (
+        UniqueConstraint(
+            "bot_user_id",
+            "shop_owner_id",
+            "gate",
+            name="uq_terms_acceptances_user_shop_gate",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    shop_owner_id: Mapped[int] = mapped_column(Integer, default=0, index=True)  # 0 = platform
+    gate: Mapped[str] = mapped_column(String(32))  # entry | buy_user | buy_reseller
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
+    accepted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

@@ -602,9 +602,23 @@ async def _notify_new_order(bot, session, order, db_user, plan_name: str | None)
 
 
 @router.callback_query(F.data == "shop:custom:buy")
-async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
+async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
+    reseller_owner_id: int | None = None,
+):
     ui = await get_all_settings(session)
     if await _answer_shop_maintenance(callback, session, ui):
+        return
+    from app.bot.handlers.terms import prompt_terms_if_needed
+
+    if await prompt_terms_if_needed(
+        callback,
+        session,
+        db_user,
+        state,
+        ui,
+        "buy_user",
+        reseller_owner_id=reseller_owner_id,
+    ):
         return
     if not await _custom_available_for_users(session, ui):
         await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
@@ -946,10 +960,23 @@ async def wholesale_confirm(callback: CallbackQuery, session: AsyncSession, stat
 
 @router.callback_query(F.data == "shop:wholesale:buy")
 async def wholesale_buy(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
+    reseller_owner_id: int | None = None,
 ):
     ui = await get_all_settings(session)
     if await _answer_shop_maintenance(callback, session, ui):
+        return
+    from app.bot.handlers.terms import prompt_terms_if_needed
+
+    if await prompt_terms_if_needed(
+        callback,
+        session,
+        db_user,
+        state,
+        ui,
+        "buy_user",
+        reseller_owner_id=reseller_owner_id,
+    ):
         return
     if not on(ui.get("wholesale_enabled")):
         await callback.answer("فروش عمده فعال نیست", show_alert=True)
@@ -1026,9 +1053,23 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 
 
 @router.callback_query(F.data.startswith("shop:buy:"))
-async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
+async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
+    reseller_owner_id: int | None = None,
+):
     ui = await get_all_settings(session)
     if await _answer_shop_maintenance(callback, session, ui):
+        return
+    from app.bot.handlers.terms import prompt_terms_if_needed
+
+    if await prompt_terms_if_needed(
+        callback,
+        session,
+        db_user,
+        state,
+        ui,
+        "buy_user",
+        reseller_owner_id=reseller_owner_id,
+    ):
         return
     plan_id = int(callback.data.split(":")[-1])
     plan = await get_catalog_plan(session, plan_id)

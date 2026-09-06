@@ -3772,6 +3772,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         values = await get_all_settings(session)
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
         groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}
+        if tab == "terms":
+            from app.services.rich_text import prepare_settings_values_for_web
+
+            values = prepare_settings_values_for_web(values)
 
         if tab == "colors":
             from app.services.payment_destinations import enrich_payment_settings
@@ -4325,6 +4329,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 if content:
                     dest.write_bytes(content)
                     payload[key] = f"uploads/{dest_name}"
+        if tab == "terms" and payload:
+            from app.services.rich_text import merge_rich_settings_on_save
+
+            existing = await get_all_settings(session)
+            payload = merge_rich_settings_on_save(existing, payload)
         if payload:
             await set_settings_bulk(session, payload)
         next_url = safe_internal_next(request.query_params.get("next"), "")

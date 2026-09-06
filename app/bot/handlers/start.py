@@ -233,6 +233,20 @@ async def cmd_start(
                 ),
             )
             return
+    # Entry terms gate (after force-join, before welcome/menu)
+    from app.services.terms import needs_entry_gate
+    from app.bot.handlers.terms import show_terms_prompt
+
+    entry_prompt = await needs_entry_gate(
+        session,
+        db_user,
+        ui,
+        menu_role=role_for_force,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if entry_prompt is not None:
+        await show_terms_prompt(message, entry_prompt, ui)
+        return
     if args.startswith("sub_"):
         token = args[4:].strip()
         await _link_subscription(
@@ -568,6 +582,20 @@ async def cb_force_join_check(
 
     await callback.answer("عضویت تأیید شد ✅")
     await state.clear()
+    from app.services.terms import needs_entry_gate
+    from app.bot.handlers.terms import show_terms_prompt
+
+    entry_prompt = await needs_entry_gate(
+        session,
+        db_user,
+        ui,
+        menu_role=role_for_force,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if entry_prompt is not None:
+        if callback.message:
+            await show_terms_prompt(callback.message, entry_prompt, ui)
+        return
     if callback.message:
         await render_home(
             callback.message,

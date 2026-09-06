@@ -132,6 +132,8 @@
   {% else %}
     {% if tab == 'forcejoin' %}
       {% include "_forcejoin_admin_notice.html" %}
+    {% elif tab == 'terms' %}
+      {% include "_terms_admin_notice.html" %}
     {% endif %}
     <form method="post" action="/shop-settings?tab={{ tab }}" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}

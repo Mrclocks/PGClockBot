@@ -173,6 +173,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             tab = "welcome"
 
         values = await get_all_settings(session, reseller_id=rid)
+        if tab == "terms":
+            from app.services.rich_text import prepare_settings_values_for_web
+
+            values = prepare_settings_values_for_web(values)
         values["show_reseller_apply"] = "0"
         if tab == "colors":
             from app.services.payment_destinations import enrich_payment_settings
@@ -469,6 +473,11 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                 payload.pop(k, None)
         from app.services.users import set_settings_bulk
 
+        if tab == "terms":
+            from app.services.rich_text import merge_rich_settings_on_save
+
+            existing = await get_all_settings(session, reseller_id=rid)
+            payload = merge_rich_settings_on_save(existing, payload)
         await set_settings_bulk(session, payload, reseller_id=rid)
         return _redirect_after_save(request, f"/shop-settings?tab={tab}")
 

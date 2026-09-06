@@ -628,7 +628,7 @@ class ForceJoinMiddleware(BaseMiddleware):
             return await handler(event, data)
         # Allow re-check callback (must not be blocked before the handler runs)
         cb = _callback_data(event)
-        if cb and cb.startswith("forcejoin:"):
+        if cb and (cb.startswith("forcejoin:") or cb.startswith("terms:")):
             return await handler(event, data)
 
         from app.services.users import (
@@ -701,6 +701,80 @@ def _is_bare_start(event: TelegramObject) -> bool:
     if not text:
         return False
     return text.split()[0].startswith("/start")
+
+
+
+class TermsEntryMiddleware(BaseMiddleware):
+    """Block end-user actions until entry terms are accepted (after force-join)."""
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any],
+    ) -> Any:
+        session: AsyncSession | None = data.get("session")
+        db_user = data.get("db_user")
+        if not session or not db_user:
+            return await handler(event, data)
+
+        if _extract_start_payload(event) is not None or _is_bare_start(event):
+            return await handler(event, data)
+        cb = _callback_data(event)
+        if cb and cb.startswith("terms:"):
+            return await handler(event, data)
+        # Force-join re-check must still run before terms
+        if cb and cb.startswith("forcejoin:"):
+            return await handler(event, data)
+
+        from app.services.users import get_all_settings
+        from app.services.reseller_access import effective_menu_role
+        from app.services.terms import needs_entry_gate
+        from app.bot import keyboards as kb
+
+        ui = await get_all_settings(session)
+        role = data.get("menu_role")
+        if role is None:
+            role = await effective_menu_role(
+                session,
+                db_user,
+                is_reseller_bot=bool(data.get("is_reseller_bot")),
+                reseller_owner_id=data.get("reseller_owner_id"),
+            )
+            data["menu_role"] = role
+        if role != "user":
+            return await handler(event, data)
+
+        prompt = await needs_entry_gate(
+            session,
+            db_user,
+            ui,
+            menu_role=role,
+            reseller_owner_id=data.get("reseller_owner_id"),
+        )
+        if prompt is None:
+            return await handler(event, data)
+
+        msg = _reply_message(event)
+        kwargs = {}
+        if prompt.entities:
+            kwargs["entities"] = prompt.entities
+            kwargs["parse_mode"] = None
+        markup = kb.terms_inline_keyboard(prompt, ui)
+        if msg:
+            try:
+                await msg.answer(prompt.text, reply_markup=markup, **kwargs)
+            except Exception:
+                pass
+        cq = event.callback_query if isinstance(event, Update) else (
+            event if isinstance(event, CallbackQuery) else None
+        )
+        if cq is not None:
+            try:
+                await cq.answer("ابتدا قوانین را بپذیرید", show_alert=True)
+            except Exception:
+                pass
+        return None
 
 
 class ErrorLogMiddleware(BaseMiddleware):

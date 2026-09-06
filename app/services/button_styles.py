@@ -115,6 +115,9 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     },
     {"id": "buy_continue", "label": "ادامه خرید / تأیید پلن", "group": "فروشگاه", "default": "primary"},
     {"id": "force_join_check", "label": "عضو شدم (کانال اجباری)", "group": "فروشگاه", "default": "primary"},
+    {"id": "terms_entry", "label": "موافقم (قوانین ورود)", "group": "فروشگاه", "default": "primary"},
+    {"id": "terms_buy_user", "label": "موافقم (قوانین خرید کاربر)", "group": "فروشگاه", "default": "primary"},
+    {"id": "terms_buy_reseller", "label": "موافقم (قوانین خرید نماینده)", "group": "فروشگاه", "default": "primary"},
     {"id": "one_tap_renew", "label": "تمدید یک‌ضربی (هشدار انقضا)", "group": "فروشگاه", "default": "primary"},
     # Reseller audience plans (admin configures kinds; submenu rows inherit these colors)
     {

@@ -90,6 +90,7 @@ async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
         raise HTTPException(403, "دسترسی شما مسدود شده است")
     # Parity with bot: users cannot use the app until channel membership is confirmed.
     await assert_mini_force_join(session, user)
+    await assert_mini_terms_entry(session, user)
     return user
 
 
@@ -146,6 +147,30 @@ async def assert_mini_force_join(session: AsyncSession, user: BotUser) -> None:
             "ابتدا در کانال‌های اجباری عضو شوید و از ربات عضویت را تأیید کنید",
         )
 
+
+
+async def assert_mini_terms_entry(session: AsyncSession, user: BotUser) -> None:
+    """Mirror bot TermsEntryMiddleware for Mini App (users only)."""
+    if resolve_mini_persona(user) != "user":
+        return
+    from app.services.terms import needs_entry_gate
+    from app.services.users import get_all_settings
+
+    ui = await get_all_settings(session)
+    prompt = await needs_entry_gate(
+        session,
+        user,
+        ui,
+        menu_role="user",
+        reseller_owner_id=None,
+    )
+    if prompt is not None:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            403,
+            "ابتدا قوانین ربات را در تلگرام بپذیرید",
+        )
 
 async def load_reseller_profile(
     session: AsyncSession, user: BotUser

@@ -205,6 +205,20 @@ SECTIONS: dict[str, dict] = {
                 ("btn_force_join", "متن دکمه لینک کانال", "text"),
                 ("btn_force_join_check", "متن دکمه بررسی", "text"),
             ]),
+            ("terms", "قوانین", [
+                ("terms_entry_enabled", "فعال ورود", "toggle"),
+                ("terms_entry_text", "متن قوانین ورود", "textarea"),
+                ("terms_entry_btn", "دکمه موافقت ورود", "text"),
+                ("terms_entry_reaccept", "پذیرش مجدد ورود", "toggle"),
+                ("terms_buy_user_enabled", "فعال خرید کاربر", "toggle"),
+                ("terms_buy_user_text", "متن قوانین خرید کاربر", "textarea"),
+                ("terms_buy_user_btn", "دکمه موافقت خرید کاربر", "text"),
+                ("terms_buy_user_reaccept", "پذیرش مجدد خرید کاربر", "toggle"),
+                ("terms_buy_reseller_enabled", "فعال خرید نماینده", "toggle"),
+                ("terms_buy_reseller_text", "متن قوانین خرید نماینده", "textarea"),
+                ("terms_buy_reseller_btn", "دکمه موافقت خرید نماینده", "text"),
+                ("terms_buy_reseller_reaccept", "پذیرش مجدد خرید نماینده", "toggle"),
+            ]),
         ],
     },
     # Deep plan/naming tools — kept for callback compatibility (plans hub),
@@ -289,7 +303,9 @@ def _is_toggleable_setting_key(key: str) -> bool:
 
 
 def _preview(value: str | None, *, limit: int = 120) -> str:
-    text = (value or "").strip()
+    from app.services.rich_text import rich_plain_text
+
+    text = rich_plain_text(value).strip()
     if not text:
         return "—"
     if len(text) > limit:
@@ -799,6 +815,10 @@ async def settings_edit_save(
         from app.services.users import normalize_force_join_channel_value
 
         text = normalize_force_join_channel_value(text)
+    from app.services.rich_text import TERMS_RICH_KEYS, pack_rich_text, rich_plain_text
+
+    if key in TERMS_RICH_KEYS:
+        text = pack_rich_text(message.text or "", message.entities)
     await set_setting(session, key, text)
     await state.clear()
     jump = "adm:st:hub"
