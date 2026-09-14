@@ -158,6 +158,38 @@
   let canStart = root && root.dataset.canStart === '1';
   let blockLeave = false;
 
+  function csrfToken(){
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta && meta.content) return meta.content;
+    const m = document.cookie.match(/(?:^|; )csrf=([^;]*)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function updateFetchHeaders(){
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    const tok = csrfToken();
+    if (tok) headers['X-CSRF-Token'] = tok;
+    return headers;
+  }
+
+  async function readUpdateResponse(res){
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch (_) { data = null; }
+    if (!res.ok) {
+      const err = (data && data.error) || (
+        res.status === 403
+          ? 'نشست امنیتی منقضی شده؛ صفحه را تازه کنید و دوباره تلاش کنید.'
+          : ('خطای سرور (' + res.status + ')')
+      );
+      return { ok: false, error: err };
+    }
+    if (!data || typeof data !== 'object') {
+      return { ok: false, error: 'پاسخ نامعتبر از سرور' };
+    }
+    return data;
+  }
+
   function setBlockLeave(on){ blockLeave = !!on; }
   window.addEventListener('beforeunload', function (e) {
     if (!blockLeave) return;
@@ -388,13 +420,18 @@
     baselinePid = null;
     expectedVersion = '';
     try {
+      const tok = csrfToken();
       const res = await fetch('/update/start', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: targetRemote || null, force: !!isRetry })
+        headers: updateFetchHeaders(),
+        body: JSON.stringify({
+          target: targetRemote || null,
+          force: !!isRetry,
+          csrf_token: tok || undefined,
+        })
       });
-      const data = await res.json();
+      const data = await readUpdateResponse(res);
       if (!data.ok) {
         if (stateEl) stateEl.textContent = data.error || 'شروع آپدیت ممکن نشد';
         canStart = true;
@@ -404,7 +441,7 @@
       if (data.status) applyStatus(data.status);
       startPolling();
     } catch (e) {
-      if (stateEl) stateEl.textContent = 'خطا در شروع آپدیت';
+      if (stateEl) stateEl.textContent = 'خطا در شروع آپدیت — اتصال یا نشست را بررسی کنید';
       canStart = true;
       setBusy(false, 'تلاش دوباره');
     }
@@ -440,13 +477,14 @@
       expectedVersion = ver;
       if (toEl) toEl.textContent = ver;
       try {
+        const tok = csrfToken();
         const res = await fetch('/update/rollback', {
           method: 'POST',
           credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ version: ver })
+          headers: updateFetchHeaders(),
+          body: JSON.stringify({ version: ver, csrf_token: tok || undefined })
         });
-        const data = await res.json();
+        const data = await readUpdateResponse(res);
         if (!data.ok) {
           if (stateEl) stateEl.textContent = data.error || 'بازگشت ممکن نشد';
           setBusy(false);
@@ -455,7 +493,7 @@
         if (data.status) applyStatus(data.status);
         startPolling();
       } catch (e) {
-        if (stateEl) stateEl.textContent = 'خطا در شروع بازگشت';
+        if (stateEl) stateEl.textContent = 'خطا در شروع بازگشت — اتصال یا نشست را بررسی کنید';
         setBusy(false);
       }
     });

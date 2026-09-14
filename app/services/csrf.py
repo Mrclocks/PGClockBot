@@ -54,11 +54,24 @@ def csrf_tokens_match(cookie_token: str, submitted: str) -> bool:
 
 
 async def extract_csrf_from_request(request: Request) -> str:
-    """Best-effort CSRF from header or already-parsed / buffered form body."""
+    """Best-effort CSRF from header, JSON body, or already-parsed / buffered form."""
     header = (request.headers.get(CSRF_HEADER) or "").strip()
     if header:
         return header
     ctype = (request.headers.get("content-type") or "").lower()
+    if "application/json" in ctype:
+        # Panel fetch() updates send JSON; accept csrf_token in the body so a
+        # missed X-CSRF-Token header (or a race before panel.js wraps fetch)
+        # cannot silently block /update/start.
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
+        if isinstance(body, dict):
+            raw = body.get(CSRF_FORM_FIELD)
+            if raw is not None and not isinstance(raw, (dict, list)):
+                return str(raw).strip()
+        return ""
     if "application/x-www-form-urlencoded" in ctype or "multipart/form-data" in ctype:
         try:
             form = await request.form()

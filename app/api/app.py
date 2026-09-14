@@ -812,12 +812,34 @@ def create_api_app(lifespan=None) -> FastAPI:
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             has_session = bool(request.cookies.get("session") or request.cookies.get("setup_gate"))
             if has_session:
+                path_now = request.url.path
+
+                def _csrf_reject(message: str, *, token_fail: bool = False):
+                    # Panel update UI (and other JSON fetch clients) must get JSON —
+                    # HTML 403 made res.json() throw and hid the real cause.
+                    wants_json = (
+                        path_now.startswith("/update/")
+                        or "application/json"
+                        in (request.headers.get("accept") or "").lower()
+                        or "application/json"
+                        in (request.headers.get("content-type") or "").lower()
+                    )
+                    if wants_json:
+                        return JSONResponse(
+                            {"ok": False, "error": message},
+                            status_code=403,
+                        )
+                    label = "CSRF token rejected" if token_fail else "CSRF rejected"
+                    return HTMLResponse(label, status_code=403)
+
                 origin = request.headers.get("origin")
                 referer = request.headers.get("referer")
                 host = request.headers.get("host")
                 # Require Origin or Referer for cookie-authenticated mutations
                 if not origin and not referer:
-                    return HTMLResponse("CSRF rejected", status_code=403)
+                    return _csrf_reject(
+                        "درخواست امنیتی رد شد؛ صفحه را تازه کنید و دوباره تلاش کنید."
+                    )
                 allowed = (
                     request_host_allowed(host, origin)
                     or request_host_allowed(host, referer)
@@ -839,10 +861,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                     except Exception:
                         pass
                 if not allowed:
-                    return HTMLResponse("CSRF rejected", status_code=403)
+                    return _csrf_reject(
+                        "درخواست امنیتی رد شد؛ صفحه را تازه کنید و دوباره تلاش کنید."
+                    )
                 # Token check for logged-in panel sessions only — never for /login
                 # (stale/expired session cookies must not block re-authentication).
-                path_now = request.url.path
                 if request.cookies.get("session") and path_now not in {
                     "/login",
                     "/setup",
@@ -857,7 +880,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     cookie_tok = (request.cookies.get(CSRF_COOKIE) or "").strip()
                     submitted = await extract_csrf_from_request(request)
                     if not csrf_tokens_match(cookie_tok, submitted):
-                        return HTMLResponse("CSRF token rejected", status_code=403)
+                        return _csrf_reject(
+                            "نشست امنیتی منقضی شده؛ صفحه را تازه کنید و دوباره تلاش کنید.",
+                            token_fail=True,
+                        )
         path = request.url.path
         if request.method == "POST" and path in {"/login", "/setup", "/setup/save", "/"}:
             if not content_length_ok(request.headers.get("content-length"), PUBLIC_FORM_MAX_BODY_BYTES):
@@ -931,7 +957,9 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                 response = await buffer_and_inject_nonce(response, nonce)
             except Exception:
-                pass
+                logging.getLogger(__name__).exception(
+                    "CSP nonce injection failed; inline scripts may be blocked"
+                )
         path = request.url.path
         ct = (response.headers.get("content-type") or "").lower()
         # Authenticated panel HTML must never be cached — flash + table must stay in sync
