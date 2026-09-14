@@ -21,6 +21,20 @@
       input.value = tok;
       form.appendChild(input);
     }
+    /* form.submit() skips the submit event — always stamp CSRF before programmatic posts. */
+    function submitFormWithCsrf(form) {
+      if (!form) return;
+      ensureCsrfField(form);
+      if (typeof form.requestSubmit === 'function') {
+        try {
+          form.requestSubmit();
+          return;
+        } catch (_) {}
+      }
+      form.submit();
+    }
+    window.panelEnsureCsrfField = ensureCsrfField;
+    window.panelSubmitForm = submitFormWithCsrf;
     document.addEventListener('submit', function (e) {
       ensureCsrfField(e.target);
     }, true);
@@ -1458,6 +1472,7 @@
         e.preventDefault();
         form.dataset.uploadXhr = '1';
         activeBoxes.forEach((box) => setProgress(box, 4));
+        ensureCsrfField(form);
         const fd = new FormData(form);
         const submitter = e.submitter;
         if (submitter && submitter.name) {
@@ -1465,6 +1480,8 @@
         }
         const xhr = new XMLHttpRequest();
         xhr.open((form.method || 'POST').toUpperCase(), form.action || window.location.href, true);
+        var tok = csrfToken();
+        if (tok) xhr.setRequestHeader('X-CSRF-Token', tok);
         xhr.upload.onprogress = (ev) => {
           if (!ev.lengthComputable) return;
           const pct = Math.round((ev.loaded / ev.total) * 100);
@@ -2134,8 +2151,7 @@
           applyReason(form, opts, result.reason);
           applyPhrase(form, opts, result.phrase);
           form.dataset.confirmSkip = '1';
-          if (typeof form.requestSubmit === 'function') form.requestSubmit();
-          else form.submit();
+          submitFormWithCsrf(form);
         });
       }, true);
 
@@ -2167,6 +2183,7 @@
               h.value = btn.value || '1';
               form.appendChild(h);
             }
+            ensureCsrfField(form);
             form.submit();
           }
         });
@@ -2852,6 +2869,7 @@
           form.appendChild(inp);
         });
         document.body.appendChild(form);
+        ensureCsrfField(form);
         form.submit();
       }
       document.querySelectorAll('table[data-bulk-select]').forEach((table) => {
@@ -3011,6 +3029,9 @@
         }
       });
       if (typeof form.requestSubmit === 'function') form.requestSubmit();
-      else form.submit();
+      else {
+        ensureCsrfField(form);
+        form.submit();
+      }
     });
   })();

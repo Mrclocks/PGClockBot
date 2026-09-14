@@ -531,6 +531,7 @@
       baselinePid = null;
       if (restoreModal) restoreModal.hidden = true;
       try {
+        if (window.panelEnsureCsrfField) window.panelEnsureCsrfField(restoreForm);
         const body = new FormData(restoreForm);
         const res = await fetch(action, {
           method: 'POST',
@@ -538,7 +539,21 @@
           headers: { 'Accept': 'application/json', 'X-Requested-With': 'fetch' },
           body,
         });
-        const data = await res.json();
+        const text = await res.text();
+        let data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (_) { data = null; }
+        if (!res.ok || !data || typeof data !== 'object') {
+          const err = (data && data.error) || (
+            res.status === 403
+              ? 'نشست امنیتی منقضی شده؛ صفحه را تازه کنید و دوباره تلاش کنید.'
+              : (res.ok ? 'پاسخ نامعتبر از سرور' : ('خطای سرور (' + res.status + ')'))
+          );
+          if (stateEl) stateEl.textContent = err;
+          setFormBusy(restoreForm, false);
+          setBlockLeave(false);
+          showOp('ریستور ناموفق', err, 'err');
+          return;
+        }
         if (!data.ok) {
           if (stateEl) stateEl.textContent = data.error || 'شروع ریستور ممکن نشد';
           setFormBusy(restoreForm, false);
@@ -549,7 +564,7 @@
         if (data.status) applyRestoreStatus(data.status);
         startPoll();
       } catch (err) {
-        if (stateEl) stateEl.textContent = 'خطا در شروع ریستور';
+        if (stateEl) stateEl.textContent = 'خطا در شروع ریستور — اتصال یا نشست را بررسی کنید';
         setFormBusy(restoreForm, false);
         setBlockLeave(false);
         showOp('خطا', 'خطا در شروع ریستور', 'err');

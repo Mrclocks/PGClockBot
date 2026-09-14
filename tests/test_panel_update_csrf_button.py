@@ -56,6 +56,7 @@ class UpdateUiTemplateTests(unittest.TestCase):
     def test_app_returns_json_csrf_error_for_update(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
         self.assertIn('path_now.startswith("/update/")', src)
+        self.assertIn('path_now.startswith("/backup/")', src)
         self.assertIn("نشست امنیتی منقضی شده", src)
         self.assertIn("درخواست امنیتی رد شد", src)
         self.assertIn("def _csrf_reject", src)

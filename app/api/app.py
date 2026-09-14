@@ -815,14 +815,18 @@ def create_api_app(lifespan=None) -> FastAPI:
                 path_now = request.url.path
 
                 def _csrf_reject(message: str, *, token_fail: bool = False):
-                    # Panel update UI (and other JSON fetch clients) must get JSON —
-                    # HTML 403 made res.json() throw and hid the real cause.
+                    # Panel AJAX clients expect JSON — HTML 403 made res.json() throw
+                    # and only showed a generic failure.
+                    accept = (request.headers.get("accept") or "").lower()
+                    ctype = (request.headers.get("content-type") or "").lower()
+                    xrw = (request.headers.get("x-requested-with") or "").lower()
                     wants_json = (
                         path_now.startswith("/update/")
-                        or "application/json"
-                        in (request.headers.get("accept") or "").lower()
-                        or "application/json"
-                        in (request.headers.get("content-type") or "").lower()
+                        or path_now.startswith("/backup/")
+                        or path_now.startswith("/api/")
+                        or "application/json" in accept
+                        or "application/json" in ctype
+                        or xrw in {"fetch", "xmlhttprequest", "setup-probe"}
                     )
                     if wants_json:
                         return JSONResponse(
@@ -866,11 +870,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                     )
                 # Token check for logged-in panel sessions only — never for /login
                 # (stale/expired session cookies must not block re-authentication).
+                # Mini App POSTs authenticate via Telegram initData, not the panel
+                # session cookie; skip the double-submit token there so a leftover
+                # panel login in the same browser cannot block /api/mini/*.
                 if request.cookies.get("session") and path_now not in {
                     "/login",
                     "/setup",
                     "/setup/save",
-                }:
+                } and not path_now.startswith("/api/mini"):
                     from app.services.csrf import (
                         CSRF_COOKIE,
                         csrf_tokens_match,

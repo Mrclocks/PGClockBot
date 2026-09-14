@@ -16,11 +16,18 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.5": [
+        "CSRF: عملیات گروهی و submit برنامه‌ای توکن را قبل از ارسال می‌گذارند (form.submit دیگر رویداد را رد نمی‌کند)",
+        "CSRF: آپلود XHR هدر X-CSRF-Token می‌فرستد؛ ریستور بکاپ خطای JSON را درست نشان می‌دهد",
+        "CSRF: مسیرهای /api/mini از توکن پنل معاف‌اند (احراز هویت تلگرام)؛ پاسخ JSON برای /backup و AJAX",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.5-v10.1.4",
+    ],
     "10.1.4": [
         "باکس راهنما در سایدبار هم‌سبک بقیه باکس‌ها با رنگ سبز؛ فاصله یکسان با پاسارگارد",
         "صفحه /help در PWA: هدر و safe-area مثل وب‌پنل (دیگر زیر نوتچ گم نمی‌شود)",
         "پاپ‌اور ؟ کنار تیترها بازطراحی شد و داخل قاب می‌ماند",
         "هماهنگی کامل‌تر ظاهر راهنما با زبان طراحی وب‌پنل",
+        "رفع دکمه آپدیت پنل: CSRF برای /update پاسخ JSON + csrf_token در بدنه JSON",
         "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.4-v10.1.3",
     ],
     "10.1.3": [
