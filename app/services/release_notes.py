@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.4": [
+        "رفع دکمه آپدیت پنل: CSRF برای /update/* پاسخ JSON می‌دهد و توکن از بدنه JSON پذیرفته می‌شود",
+        "تب آپدیت: ارسال صریح X-CSRF-Token + csrf_token و پیام خطای واضح به‌جای شکست خاموش",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.4-v10.1.3",
+    ],
     "10.1.3": [
         "لینک راهنما با آیکون مناسب در انتهای سایدبار وب‌پنل (رفتن به /help)",
         "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.3-v10.1.2",
