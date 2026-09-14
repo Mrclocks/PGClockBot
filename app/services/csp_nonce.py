@@ -132,6 +132,27 @@ async def buffer_and_inject_nonce(response: Response, nonce: Optional[str]) -> R
 
     if not raw:
         return response
+
+    encoding = (response.headers.get("content-encoding") or "").lower().strip()
+    # Defense in depth: if an inner middleware already gzipped the body (wrong
+    # order), decompress so we can still stamp nonces, then drop Content-Encoding
+    # so an outer GZipMiddleware can recompress cleanly.
+    if encoding == "gzip":
+        import gzip as _gzip
+
+        try:
+            raw = _gzip.decompress(raw)
+        except Exception:
+            return _rebuild_response(
+                content=raw,
+                status_code=response.status_code,
+                source=response,
+                drop_content_encoding=False,
+            )
+    elif encoding in {"br", "brotli", "deflate", "zstd"}:
+        # Cannot safely rewrite opaque compressed payloads here.
+        return response
+
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:

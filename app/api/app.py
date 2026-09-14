@@ -216,7 +216,7 @@ def render(request: Request, name: str, context: dict | None = None, status_code
                 CSRF_COOKIE,
                 token,
                 httponly=False,  # panel.js reads meta/cookie for XHR; value is not a secret session
-                samesite="strict",
+                samesite="lax",  # match session cookie; strict dropped csrf after cross-site landings
                 secure=_cookie_secure(request),
                 max_age=60 * 60 * 12,
                 path="/",
@@ -307,9 +307,9 @@ def create_api_app(lifespan=None) -> FastAPI:
     routers already live under ``register_*_pages``.
     """
     app = FastAPI(title="PGClockBot Panel", docs_url=None, redoc_url=None, lifespan=lifespan)
-    from starlette.middleware.gzip import GZipMiddleware
-
-    app.add_middleware(GZipMiddleware, minimum_size=400)
+    # GZipMiddleware is registered LAST (outermost) near ``return app`` so CSP
+    # nonce injection sees uncompressed HTML. Adding it here compresses first and
+    # silently breaks every bare <script> under a nonce-based CSP.
     class _CachedStatic(StaticFiles):
         async def get_response(self, path, scope):  # type: ignore[override]
             response = await super().get_response(path, scope)
@@ -4568,4 +4568,10 @@ def create_api_app(lifespan=None) -> FastAPI:
             return _redirect_msg("/broadcast", err="رکورد یافت نشد")
         return _redirect_msg("/broadcast", ok="رکورد حذف شد")
 
+    # Outermost: compress AFTER CSP nonce injection. If GZip runs first, HTML is
+    # binary gzip and bare <script> tags never receive nonces → browsers block them
+    # (update button, backup restore, bot settings, … all look like “click does nothing”).
+    from starlette.middleware.gzip import GZipMiddleware
+
+    app.add_middleware(GZipMiddleware, minimum_size=400)
     return app

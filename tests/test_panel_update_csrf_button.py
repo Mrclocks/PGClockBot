@@ -1,4 +1,4 @@
-"""Panel in-app update button: CSRF JSON body + JSON 403 for /update/*."""
+"""Panel in-app update button: CSRF JSON + UI wired from panel.js (not inline)."""
 
 from __future__ import annotations
 
@@ -20,7 +20,9 @@ class UpdateCsrfJsonTests(unittest.IsolatedAsyncioTestCase):
     async def test_extract_csrf_from_json_body(self):
         req = MagicMock()
         req.headers = {"content-type": "application/json"}
-        req.json = AsyncMock(return_value={CSRF_FORM_FIELD: "tok-from-json", "target": "10.1.2"})
+        req.json = AsyncMock(
+            return_value={CSRF_FORM_FIELD: "tok-from-json", "target": "10.1.7"}
+        )
         tok = await extract_csrf_from_request(req)
         self.assertEqual(tok, "tok-from-json")
 
@@ -42,16 +44,18 @@ class UpdateCsrfJsonTests(unittest.IsolatedAsyncioTestCase):
 
 
 class UpdateUiTemplateTests(unittest.TestCase):
-    def test_update_script_sends_csrf_explicitly(self):
+    def test_update_logic_lives_in_panel_js(self):
         html = (ROOT / "app/web/templates/_settings_update.html").read_text(
             encoding="utf-8"
         )
-        self.assertIn("function csrfToken()", html)
-        self.assertIn("X-CSRF-Token", html)
-        self.assertIn("csrf_token", html)
-        self.assertIn("readUpdateResponse", html)
-        self.assertIn("/update/start", html)
-        self.assertIn("نشست امنیتی منقضی شده", html)
+        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertNotIn("<script", html.lower())
+        self.assertIn("function csrfToken()", js)
+        self.assertIn("X-CSRF-Token", js)
+        self.assertIn("csrf_token", js)
+        self.assertIn("readUpdateResponse", js)
+        self.assertIn("/update/start", js)
+        self.assertIn("نشست امنیتی منقضی شده", js)
 
     def test_app_returns_json_csrf_error_for_update(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")

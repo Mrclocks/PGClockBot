@@ -49,10 +49,36 @@
             var tok = csrfToken();
             if (tok) headers.set('X-CSRF-Token', tok);
           }
+          if (!headers.has('Accept')) headers.set('Accept', 'application/json');
           init.headers = headers;
           if (init.credentials == null) init.credentials = 'same-origin';
         }
         return _fetch.call(this, input, init);
+      };
+      /** Canonical panel mutation helper — always CSRF + JSON Accept + credentials. */
+      window.panelFetch = function (url, init) {
+        init = init || {};
+        init.credentials = init.credentials || 'same-origin';
+        init.headers = new Headers(init.headers || {});
+        if (!init.headers.has('Accept')) init.headers.set('Accept', 'application/json');
+        return window.fetch(url, init);
+      };
+      window.panelReadJson = async function (res) {
+        var text = await res.text();
+        var data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (_) { data = null; }
+        if (!res.ok) {
+          var err = (data && (data.error || data.message)) || (
+            res.status === 403
+              ? 'نشست امنیتی منقضی شده؛ صفحه را تازه کنید و دوباره تلاش کنید.'
+              : ('خطای سرور (' + res.status + ')')
+          );
+          return { ok: false, error: err, status: res.status };
+        }
+        if (!data || typeof data !== 'object') {
+          return { ok: false, error: 'پاسخ نامعتبر از سرور', status: res.status };
+        }
+        return data;
       };
     }
 
@@ -3035,3 +3061,390 @@
       }
     });
   })();
+
+/* === Panel Update tab (moved out of inline template so CSP nonce always applies via panel.js) === */
+(function initPanelUpdateTab() {
+  function boot() {
+    if (!document.getElementById('upd-root')) return;
+const root = document.getElementById('upd-root');
+  const startBtn = document.getElementById('upd-start');
+  const refreshBtn = document.getElementById('upd-refresh');
+  const fill = document.getElementById('upd-fill');
+  const percentEl = document.getElementById('upd-percent');
+  const stepEl = document.getElementById('upd-step');
+  const stateEl = document.getElementById('upd-state-label');
+  const toEl = document.getElementById('upd-to');
+  const fromEl = document.getElementById('upd-from');
+  const ops = document.getElementById('upd-ops');
+  const rollbackBtn = document.getElementById('rollback-start');
+  const rollbackSelect = document.getElementById('rollback-version');
+  let timer = null;
+  let waitingRestart = false;
+  let sawDown = false;
+  let restartStartedAt = 0;
+  let baselineBoot = null;
+  let baselinePid = null;
+  let expectedVersion = '';
+  const RESTART_MSG = 'سرویس در حال راه‌اندازی مجدد است — ممکن است چند دقیقه طول بکشد. از صفحه خارج نشوید و رفرش نکنید.';
+  const STAY_WARN = 'لطفاً تا پایان عملیات از این صفحه خارج نشوید و صفحه را رفرش نکنید.';
+  const targetRemote = (root && root.dataset.remote) || '';
+  let canStart = root && root.dataset.canStart === '1';
+  let blockLeave = false;
+
+  function csrfToken(){
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta && meta.content) return meta.content;
+    const m = document.cookie.match(/(?:^|; )csrf=([^;]*)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function updateFetchHeaders(){
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    const tok = csrfToken();
+    if (tok) headers['X-CSRF-Token'] = tok;
+    return headers;
+  }
+
+  async function readUpdateResponse(res){
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch (_) { data = null; }
+    if (!res.ok) {
+      const err = (data && data.error) || (
+        res.status === 403
+          ? 'نشست امنیتی منقضی شده؛ صفحه را تازه کنید و دوباره تلاش کنید.'
+          : ('خطای سرور (' + res.status + ')')
+      );
+      return { ok: false, error: err };
+    }
+    if (!data || typeof data !== 'object') {
+      return { ok: false, error: 'پاسخ نامعتبر از سرور' };
+    }
+    return data;
+  }
+
+  function setBlockLeave(on){ blockLeave = !!on; }
+  window.addEventListener('beforeunload', function (e) {
+    if (!blockLeave) return;
+    e.preventDefault();
+    e.returnValue = STAY_WARN;
+    return STAY_WARN;
+  });
+
+  function showOps(on){
+    if (ops) ops.hidden = !on;
+    if (root) root.dataset.showOps = on ? '1' : '0';
+    if (!on) setBlockLeave(false);
+  }
+
+  function setBusy(busy, label){
+    if (startBtn) {
+      if (busy) {
+        startBtn.disabled = true;
+        startBtn.textContent = label || 'در حال اجرا…';
+      } else {
+        const retry = label === 'تلاش دوباره';
+        startBtn.disabled = !canStart && !retry;
+        startBtn.textContent = retry ? 'تلاش دوباره' : (canStart ? 'شروع آپدیت' : 'آپدیتی نیست');
+      }
+    }
+    if (rollbackBtn) rollbackBtn.disabled = !!busy;
+    if (rollbackSelect) rollbackSelect.disabled = !!busy;
+    if (busy) setBlockLeave(true);
+  }
+
+  function markRestartUi(extra){
+    showOps(true);
+    setBusy(true, 'در حال راه‌اندازی مجدد…');
+    if (stateEl) stateEl.textContent = (extra || RESTART_MSG);
+    if (stepEl) stepEl.textContent = 'راه‌اندازی مجدد سرویس';
+    if (fill) fill.style.width = '98%';
+    if (percentEl) percentEl.textContent = '۹۸٪';
+  }
+
+  async function probeHealth(){
+    // Use authenticated diagnostics — public /health is intentionally minimal ({ok:true})
+    // and does not expose version/boot_id/pid needed to confirm a successful restart.
+    try {
+      const r = await fetch('/health/detail?_=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (_) { return null; }
+  }
+
+  function finishReload(verifiedVersion){
+    waitingRestart = false;
+    setBlockLeave(false);
+    showOps(false);
+    if (stateEl) stateEl.textContent = 'آماده';
+    clearInterval(timer); timer = null;
+    const verNote = verifiedVersion ? (' · نسخه ' + verifiedVersion) : '';
+    setTimeout(() => {
+      const url = new URL(location.href);
+      url.searchParams.set('tab', 'update');
+      url.searchParams.set('ok', 'آپدیت با موفقیت اعمال شد' + verNote);
+      url.searchParams.set('force', '1');
+      location.href = url.pathname + '?' + url.searchParams.toString();
+    }, 400);
+  }
+
+  function versionMatches(h){
+    if (!expectedVersion) return true;
+    if (!h || !h.version) return false;
+    return String(h.version).trim() === expectedVersion;
+  }
+
+  function processChanged(h){
+    if (!h) return false;
+    if (baselineBoot && h.boot_id && String(h.boot_id) !== baselineBoot) return true;
+    if (baselinePid && h.pid && Number(h.pid) !== baselinePid) return true;
+    return false;
+  }
+
+  async function beginWaitingRestart(st){
+    if (waitingRestart) return;
+    expectedVersion = String(
+      (st && (st.to_version || st.current_version)) ||
+      (toEl && toEl.textContent) ||
+      targetRemote || ''
+    ).trim();
+    if (expectedVersion === '—' || expectedVersion === '-') expectedVersion = '';
+    waitingRestart = true;
+    sawDown = false;
+    restartStartedAt = Date.now();
+    markRestartUi();
+    if (st && st.pre_boot_id) baselineBoot = String(st.pre_boot_id);
+    const h0 = await probeHealth();
+    if (!baselineBoot && h0 && h0.boot_id) baselineBoot = String(h0.boot_id);
+    if (h0 && h0.pid) baselinePid = Number(h0.pid);
+    if (st && st.pre_boot_id && h0 && processChanged(h0) && versionMatches(h0)) {
+      finishReload(h0.version || expectedVersion);
+      return;
+    }
+    startPolling();
+  }
+
+  function applyStatus(st){
+    if (!fill) return;
+    if (st.to_version && toEl) toEl.textContent = st.to_version;
+    if (st.from_version && fromEl) fromEl.textContent = st.from_version;
+    if (st.pre_boot_id && !baselineBoot) baselineBoot = String(st.pre_boot_id);
+
+    if (waitingRestart) {
+      if (!st.awaiting_restart && st.state !== 'running') {
+        if (st.state === 'error' || st.restart_required) {
+          waitingRestart = false;
+          showOps(true);
+          setBusy(false, 'تلاش دوباره');
+          if (stateEl) stateEl.textContent = st.message || st.error || 'خطا';
+          canStart = true;
+          clearInterval(timer); timer = null;
+          return;
+        }
+        if (st.state === 'idle' || st.state === 'done') {
+          finishReload(st.current_version || expectedVersion);
+          return;
+        }
+      }
+      markRestartUi();
+      return;
+    }
+    if (st.awaiting_restart) {
+      beginWaitingRestart(st);
+      return;
+    }
+    if (st.state === 'idle' || (st.state === 'done' && !st.restart_required)) {
+      showOps(false);
+      setBusy(false);
+      if (stateEl) stateEl.textContent = canStart ? 'آپدیت آماده است' : 'آماده';
+      return;
+    }
+    if (st.state === 'running' || st.state === 'error' || st.restart_required) showOps(true);
+    const pct = Number(st.percent || 0);
+    fill.style.width = pct + '%';
+    if (percentEl) percentEl.textContent = pct + '٪';
+    if (stepEl) {
+      stepEl.textContent = (st.state === 'error' || st.restart_required)
+        ? 'خطا — دوباره تلاش کنید'
+        : (st.state === 'running' ? 'در حال اعمال…' : 'آماده');
+    }
+    if (stateEl) stateEl.textContent = st.message || st.state || '';
+    const modeLabel = st.mode === 'rollback' ? 'بازگشت' : 'آپدیت';
+    if (st.state === 'running') {
+      setBusy(true, 'در حال ' + modeLabel + '…');
+      showOps(true);
+    } else if (st.state === 'error' || st.restart_required) {
+      showOps(true);
+      canStart = true;
+      setBusy(false, 'تلاش دوباره');
+    } else {
+      setBusy(false);
+    }
+  }
+
+  async function poll(){
+    if (waitingRestart) {
+      const elapsed = Date.now() - restartStartedAt;
+      const h = await probeHealth();
+      if (!h) {
+        sawDown = true;
+        markRestartUi(elapsed > 180000 ? (RESTART_MSG + ' در صورت نیاز: sudo systemctl restart pgclockbot') : RESTART_MSG);
+        return;
+      }
+      const changed = processChanged(h);
+      const verOk = versionMatches(h);
+      if (!changed && !sawDown) {
+        markRestartUi('منتظر راه‌اندازی مجدد…' + (expectedVersion ? (' نسخه هدف: ' + expectedVersion) : ''));
+        try {
+          const res = await fetch('/update/status', { credentials: 'same-origin', cache: 'no-store' });
+          if (res.ok) {
+            const data = await res.json();
+            if (!data.awaiting_restart) applyStatus(data);
+          }
+        } catch (_) {}
+        return;
+      }
+      if (!changed && sawDown) {
+        markRestartUi('سرویس برگشت؛ در حال تأیید نسخه…');
+        return;
+      }
+      if (changed && verOk) {
+        finishReload(h.version || expectedVersion);
+        return;
+      }
+      if (changed && !verOk) {
+        markRestartUi('منتظر نسخه ' + (expectedVersion || 'جدید') + ' (الان: ' + (h.version || '—') + ')…');
+        if (!expectedVersion && sawDown) finishReload(h.version || '');
+        return;
+      }
+      markRestartUi();
+      return;
+    }
+    try {
+      const res = await fetch('/update/status', { credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) throw new Error('status ' + res.status);
+      const data = await res.json();
+      applyStatus(data);
+      if (data.state === 'running' || data.awaiting_restart) return;
+      clearInterval(timer); timer = null;
+    } catch (e) {
+      if (stateEl) stateEl.textContent = 'خطا در دریافت وضعیت؛ دوباره تلاش می‌شود…';
+    }
+  }
+
+  function startPolling(){
+    if (timer) return;
+    timer = setInterval(function () {
+      if (document.hidden) return;
+      poll();
+    }, 1500);
+    poll();
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && timer) poll();
+  });
+
+  async function beginUpdate(isRetry){
+    showOps(true);
+    setBusy(true, 'شروع…');
+    waitingRestart = false;
+    sawDown = false;
+    baselineBoot = null;
+    baselinePid = null;
+    expectedVersion = '';
+    try {
+      const tok = csrfToken();
+      const res = await fetch('/update/start', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: updateFetchHeaders(),
+        body: JSON.stringify({
+          target: targetRemote || null,
+          force: !!isRetry,
+          csrf_token: tok || undefined,
+        })
+      });
+      const data = await readUpdateResponse(res);
+      if (!data.ok) {
+        if (stateEl) stateEl.textContent = data.error || 'شروع آپدیت ممکن نشد';
+        canStart = true;
+        setBusy(false, 'تلاش دوباره');
+        return;
+      }
+      if (data.status) applyStatus(data.status);
+      startPolling();
+    } catch (e) {
+      if (stateEl) stateEl.textContent = 'خطا در شروع آپدیت — اتصال یا نشست را بررسی کنید';
+      canStart = true;
+      setBusy(false, 'تلاش دوباره');
+    }
+  }
+
+  if (startBtn) startBtn.addEventListener('click', () => {
+    beginUpdate(/تلاش دوباره/.test(startBtn.textContent || ''));
+  });
+  if (refreshBtn) refreshBtn.addEventListener('click', () => {
+    location.href = '/settings?tab=update&force=1';
+  });
+
+  if (rollbackBtn && rollbackSelect) {
+    rollbackBtn.addEventListener('click', async () => {
+      const ver = (rollbackSelect.value || '').trim();
+      if (!ver) return;
+      const ask = (window.panelConfirm
+        ? window.panelConfirm({
+            title: 'بازگشت نسخه',
+            message: 'بازگشت به نسخه v' + ver + '؟ سرویس بعد از اعمال دوباره راه‌اندازی می‌شود.',
+            warn: true,
+            confirmLabel: 'شروع بازگشت',
+          })
+        : Promise.resolve({ ok: window.confirm('بازگشت به نسخه v' + ver + '؟') }));
+      const result = await ask;
+      if (!result || !result.ok) return;
+      showOps(true);
+      setBusy(true, 'شروع بازگشت…');
+      waitingRestart = false;
+      sawDown = false;
+      baselineBoot = null;
+      baselinePid = null;
+      expectedVersion = ver;
+      if (toEl) toEl.textContent = ver;
+      try {
+        const tok = csrfToken();
+        const res = await fetch('/update/rollback', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: updateFetchHeaders(),
+          body: JSON.stringify({ version: ver, csrf_token: tok || undefined })
+        });
+        const data = await readUpdateResponse(res);
+        if (!data.ok) {
+          if (stateEl) stateEl.textContent = data.error || 'بازگشت ممکن نشد';
+          setBusy(false);
+          return;
+        }
+        if (data.status) applyStatus(data.status);
+        startPolling();
+      } catch (e) {
+        if (stateEl) stateEl.textContent = 'خطا در شروع بازگشت — اتصال یا نشست را بررسی کنید';
+        setBusy(false);
+      }
+    });
+  }
+
+  if (root && root.dataset.running === '1') startPolling();
+  const params = new URLSearchParams(location.search);
+  if (!params.get('ok') && root && root.dataset.awaitingRestart === '1') {
+    beginWaitingRestart({
+      to_version: (toEl && toEl.textContent) || targetRemote || '',
+      pre_boot_id: root.dataset.preBoot || ''
+    });
+  }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
