@@ -273,6 +273,12 @@ GROUP_ICONS: dict[str, str] = {
     "سایر": "book",
 }
 
+# Match web-panel chrome: bot = orange, Pasarguard = blue
+GROUP_TONES: dict[str, str] = {
+    "پنل ربات": "bot",
+    "پاسارگارد": "pg",
+}
+
 
 def nav_groups_list():
     groups: OrderedDict[str, list] = OrderedDict()
@@ -280,10 +286,12 @@ def nav_groups_list():
         g = t.get("nav_group") or "سایر"
         item = dict(t)
         item["icon_svg"] = icon_svg(item.get("icon") or "book")
+        item["tone"] = GROUP_TONES.get(g, "")
         groups.setdefault(g, []).append(item)
     return [
         {
             "title": title,
+            "tone": GROUP_TONES.get(title, ""),
             "icon_svg": icon_svg(GROUP_ICONS.get(title, "book")),
             "topics": items,
         }
@@ -367,6 +375,7 @@ def main() -> int:
             body_html=page["body_html"],
             page_id=page["id"],
             icon_svg=page["icon_svg"],
+            page_tone=GROUP_TONES.get((TOPICS[page["id"]].get("nav_group") if page["id"] in TOPICS else ""), ""),
             root="../",
             nav_groups=groups,
             panel_path=page["panel"],

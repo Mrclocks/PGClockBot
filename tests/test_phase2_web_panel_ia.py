@@ -28,11 +28,14 @@ class Phase2NavAccordionTests(unittest.TestCase):
         self.assertIn('data-nav-mode="system"', html)
         self.assertIn('data-nav-mode="shop"', html)
         self.assertIn('data-nav-mode="pg"', html)
-        self.assertIn('data-nav-mode="help"', html)
+        self.assertNotIn('data-nav-mode="help"', html)
         # Keep established section labels for IA continuity
         self.assertIn("پنل ربات", html)
         self.assertIn("پنل پاسارگارد", html)
         self.assertIn("وب پنل", html)
+        # Help is a bottom chip (outside accordion), styled like active tags
+        self.assertIn("side-help-btn", html)
+        self.assertIn('href="/help/"', html)
 
     def test_sections_are_collapsible(self):
         html = BASE.read_text(encoding="utf-8")
@@ -40,7 +43,7 @@ class Phase2NavAccordionTests(unittest.TestCase):
         self.assertIn('data-nav-collapse="system"', html)
         self.assertIn('data-nav-collapse="shop"', html)
         self.assertIn('data-nav-collapse="pg"', html)
-        self.assertIn('data-nav-collapse="help"', html)
+        self.assertNotIn('data-nav-collapse="help"', html)
         self.assertIn("nav-empty", html)
 
     def test_additive_css_and_js_wired(self):

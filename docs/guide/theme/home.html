@@ -58,7 +58,7 @@
 
         <nav class="guide-nav" aria-label="بخش‌ها">
           {% for group in nav_groups %}
-          <div class="guide-nav-group">
+          <div class="guide-nav-group{% if group.tone %} guide-nav-group--{{ group.tone }}{% endif %}">
             <div class="guide-nav-group-title">
               {{ group.icon_svg }}
               <span>{{ group.title }}</span>

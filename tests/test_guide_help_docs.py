@@ -40,6 +40,13 @@ class GuideCatalogTests(unittest.TestCase):
         self.assertIn("guide-nav-group-title", html)
         self.assertIn("guide-pager-btn", html)
         self.assertIn("guide-hero-icon", html)
+        self.assertIn("guide-nav-group--bot", html)
+        self.assertIn("guide-nav-group--pg", html)
+        css = (guide / "guide.css").read_text(encoding="utf-8")
+        self.assertIn("--bot-line", css)
+        self.assertIn("--pg-line", css)
+        self.assertIn(".guide-hero--bot", css)
+        self.assertIn(".guide-hero--pg", css)
         self.assertIn('class="guide-callout guide-callout--error"', html)
         self.assertNotIn("&lt;div", html)
         self.assertNotIn("{% for", html)
@@ -119,18 +126,22 @@ class GuideCatalogTests(unittest.TestCase):
         base = (ROOT / "app" / "web" / "templates" / "base.html").read_text(
             encoding="utf-8"
         )
-        self.assertIn("nav-section-help", base)
+        self.assertIn("side-help-btn", base)
         self.assertIn('href="/help/"', base)
-        self.assertIn("راهنمای پنل", base)
+        self.assertIn("راهنما", base)
+        self.assertNotIn("nav-section-help", base)
+        self.assertNotIn('data-nav-mode="help"', base)
+        # Footer no longer carries a second help entry
+        self.assertNotIn('href="/help/">راهنما</a>', base.split("site-footer", 1)[-1] if "site-footer" in base else "")
         css = (ROOT / "app" / "web" / "static" / "panel.css").read_text(encoding="utf-8")
-        self.assertIn(".nav-section-help", css)
-        self.assertIn("var(--ok)", css)
-        self.assertIn("color: var(--ok-fg)", css)
-        self.assertNotIn(".nav-section-help {\n  margin-top: auto", css)
+        self.assertIn(".side-help-btn", css)
+        self.assertIn("rgba(34, 197, 94", css)
+        self.assertNotIn(".nav-section-help", css)
         self.assertIn(".page-help-pop", css)
         self.assertIn("position: fixed", css)
         js = (ROOT / "app" / "web" / "static" / "panel.js").read_text(encoding="utf-8")
         self.assertIn("placeHelpPop", js)
+
 
 
 if __name__ == "__main__":

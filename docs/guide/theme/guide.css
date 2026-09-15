@@ -13,6 +13,13 @@
   --brand-2: #fb923c;
   --brand-soft: rgba(249, 115, 22, 0.14);
   --brand-ring: rgba(249, 115, 22, 0.35);
+  /* Match web-panel section chrome */
+  --bot-line: #e08a3c;
+  --bot-soft: color-mix(in srgb, var(--bot-line) 14%, transparent);
+  --bot-ring: color-mix(in srgb, var(--bot-line) 35%, transparent);
+  --pg-line: #3d8fd1;
+  --pg-soft: color-mix(in srgb, var(--pg-line) 14%, transparent);
+  --pg-ring: color-mix(in srgb, var(--pg-line) 35%, transparent);
   --ok: #22c55e;
   --warn: #eab308;
   --danger: #ef4444;
@@ -477,6 +484,65 @@ pre code {
   flex-shrink: 0;
 }
 
+/* Bot / Pasarguard tones — same orange/blue language as web panel */
+.guide-nav-group--bot .guide-nav-group-title {
+  color: var(--bot-line);
+}
+.guide-nav-group--bot .guide-nav-group-title svg {
+  opacity: 1;
+  color: var(--bot-line);
+}
+.guide-nav-group--bot .guide-nav-icon {
+  color: var(--bot-line);
+  border-color: color-mix(in srgb, var(--bot-line) 28%, var(--border));
+  background: color-mix(in srgb, var(--bot-line) 10%, transparent);
+}
+.guide-nav-group--bot .guide-nav-link:hover {
+  background: color-mix(in srgb, var(--bot-line) 8%, transparent);
+  border-color: color-mix(in srgb, var(--bot-line) 22%, transparent);
+  color: var(--text);
+}
+.guide-nav-group--bot .guide-nav-link.is-active {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bot-line) 22%, transparent), color-mix(in srgb, var(--bot-line) 8%, transparent));
+  border-color: color-mix(in srgb, var(--bot-line) 38%, transparent);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bot-line) 10%, transparent);
+}
+.guide-nav-group--bot .guide-nav-link.is-active .guide-nav-icon {
+  background: var(--bot-soft);
+  border-color: var(--bot-ring);
+  color: var(--bot-line);
+}
+
+.guide-nav-group--pg .guide-nav-group-title {
+  color: var(--pg-line);
+}
+.guide-nav-group--pg .guide-nav-group-title svg {
+  opacity: 1;
+  color: var(--pg-line);
+}
+.guide-nav-group--pg .guide-nav-icon {
+  color: var(--pg-line);
+  border-color: color-mix(in srgb, var(--pg-line) 28%, var(--border));
+  background: color-mix(in srgb, var(--pg-line) 10%, transparent);
+}
+.guide-nav-group--pg .guide-nav-link:hover {
+  background: color-mix(in srgb, var(--pg-line) 8%, transparent);
+  border-color: color-mix(in srgb, var(--pg-line) 22%, transparent);
+  color: var(--text);
+}
+.guide-nav-group--pg .guide-nav-link.is-active {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--pg-line) 22%, transparent), color-mix(in srgb, var(--pg-line) 8%, transparent));
+  border-color: color-mix(in srgb, var(--pg-line) 38%, transparent);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pg-line) 10%, transparent);
+}
+.guide-nav-group--pg .guide-nav-link.is-active .guide-nav-icon {
+  background: var(--pg-soft);
+  border-color: var(--pg-ring);
+  color: var(--pg-line);
+}
+
 .guide-nav-link {
   display: flex;
   align-items: center;
@@ -617,6 +683,22 @@ pre code {
   width: 26px;
   height: 26px;
 }
+
+.guide-hero--bot .guide-hero-icon {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--bot-line) 28%, transparent), color-mix(in srgb, var(--bot-line) 8%, transparent));
+  border-color: var(--bot-ring);
+  color: var(--bot-line);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--bot-line) 18%, transparent);
+}
+.guide-hero--bot .guide-kicker { color: var(--bot-line); }
+
+.guide-hero--pg .guide-hero-icon {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--pg-line) 28%, transparent), color-mix(in srgb, var(--pg-line) 8%, transparent));
+  border-color: var(--pg-ring);
+  color: var(--pg-line);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--pg-line) 18%, transparent);
+}
+.guide-hero--pg .guide-kicker { color: var(--pg-line); }
 
 .guide-kicker {
   margin: 0 0 0.45rem;

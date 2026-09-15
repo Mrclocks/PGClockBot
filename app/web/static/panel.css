@@ -86,6 +86,8 @@
   --control-fs: 16px;
   /* Notch / status bar / home indicator (PWA + iOS Safari) */
   --safe-top: env(safe-area-inset-top, 0px);
+  /* Extra top breathing room on mobile topbar (safe-area alone feels tight) */
+  --safe-top-extra: 0px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
@@ -297,6 +299,20 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   padding: var(--space-1) var(--space-1) var(--space-1);
   margin-bottom: var(--space-1);
   border-bottom: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+}
+a.brand:hover,
+a.topbar-brand:hover {
+  opacity: 1;
+  color: inherit;
+  text-decoration: none;
+}
+a.brand:focus-visible,
+a.topbar-brand:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--bot-line) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
 }
 .brand-logo {
   display: inline-flex;
@@ -601,7 +617,7 @@ a.cell-user-link:hover {
 }
 
 .side-foot {
-  margin-top: auto;
+  margin-top: 0;
   padding-top: var(--page-title-gap);
   /* Same inset owner as .site-footer — desktop/mobile/PWA one path */
   padding-bottom: var(--bottom-inset);
@@ -4315,6 +4331,8 @@ form.settings-form > .actions.sticky-actions,
   gap: var(--space-1);
   flex: 0 1 auto;
   min-width: 0;
+  color: inherit;
+  text-decoration: none;
 }
 .topbar-brand .brand-logo {
   width: var(--btn-h);
@@ -4412,6 +4430,9 @@ form.settings-form > .actions.sticky-actions,
 
 /* —— Mobile layout: toolbar + hamburger drawer —— */
 @media (max-width: 900px) {
+  /* Slightly roomier top safe margin on phones / PWA notch */
+  --safe-top-extra: 8px;
+  --safe-top: calc(env(safe-area-inset-top, 0px) + var(--safe-top-extra));
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
@@ -5365,20 +5386,29 @@ form.settings-form > .actions.sticky-actions,
   }
 }
 
-/* ── Panel split: Home / Bot / PasarGuard / Help ── */
+/* ── Panel split: Home / Bot / PasarGuard (+ help button below) ── */
 .nav-section-bot,
 .nav-section-pg,
-.nav-section-home,
-.nav-section-help {
+.nav-section-home {
   margin-top: var(--space-2);
   padding: var(--space-1);
   border-radius: var(--radius);
   border-top: none;
   gap: var(--space-0);
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
 }
 .nav-section-home {
   margin-top: var(--space-1);
   border: 1px solid var(--border);
+  background: transparent;
+}
+/* Closed: soft tinted fill. Open: border only (transparent fill). */
+.nav-section-home.is-collapsed {
+  background: color-mix(in srgb, var(--muted-fg) 8%, transparent);
+}
+.nav-section-home:not(.is-collapsed) {
   background: transparent;
 }
 .nav-section-home:first-child { margin-top: var(--space-1); }
@@ -5386,6 +5416,14 @@ form.settings-form > .actions.sticky-actions,
   color: var(--foreground);
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+.nav-section-home > .nav-label-toggle:hover,
+.nav-section-home > .nav-label-toggle:focus-visible,
+.nav-section-home > .nav-label-toggle:active,
+.nav-section-home:not(.is-collapsed) > .nav-label-toggle {
+  background: color-mix(in srgb, var(--muted-fg) 12%, var(--muted));
+  border-color: var(--border);
+  color: var(--foreground);
 }
 .nav-item-home.active {
   background: var(--muted);
@@ -5402,35 +5440,21 @@ form.settings-form > .actions.sticky-actions,
   border: 1px solid color-mix(in srgb, var(--bot-line) 38%, var(--border));
   background: transparent;
 }
+.nav-section-bot.is-collapsed {
+  background: color-mix(in srgb, var(--bot-line) 10%, transparent);
+}
+.nav-section-bot:not(.is-collapsed) {
+  background: transparent;
+}
 .nav-section-pg {
   border: 1px solid color-mix(in srgb, var(--pg-line) 35%, var(--border));
   background: transparent;
 }
-/* Help box — same chrome as bot/pg, green accent; same gap as other boxes */
-.nav-section-help {
-  border: 1px solid color-mix(in srgb, var(--ok) 38%, var(--border));
+.nav-section-pg.is-collapsed {
+  background: color-mix(in srgb, var(--pg-line) 10%, transparent);
+}
+.nav-section-pg:not(.is-collapsed) {
   background: transparent;
-}
-.side-nav > .nav-section-help:last-child {
-  margin-bottom: var(--space-1);
-}
-.nav-label-help {
-  color: var(--ok-fg);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.nav-section-help .nav-ico { color: var(--ok); }
-.nav-item-help.active,
-.nav-item-help.active:hover {
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
-  border-color: transparent;
-  color: var(--foreground);
-}
-.nav-item-help.active .nav-ico { color: var(--ok); }
-.nav-item-help:hover {
-  background: color-mix(in srgb, var(--ok) 8%, transparent);
-  border-color: color-mix(in srgb, var(--ok) 36%, transparent);
-  color: var(--foreground);
 }
 .nav-label-bot {
   color: var(--bot-line);
@@ -5444,6 +5468,23 @@ form.settings-form > .actions.sticky-actions,
 }
 .nav-section-bot .nav-ico { color: var(--bot-line); }
 .nav-section-pg .nav-ico { color: var(--pg-line); }
+/* Accordion header select = same language as inner nav-item hover/active */
+.nav-section-bot > .nav-label-toggle:hover,
+.nav-section-bot > .nav-label-toggle:focus-visible,
+.nav-section-bot > .nav-label-toggle:active,
+.nav-section-bot:not(.is-collapsed) > .nav-label-toggle {
+  background: color-mix(in srgb, var(--bot-line) 8%, transparent);
+  border-color: color-mix(in srgb, var(--bot-line) 36%, transparent);
+  color: var(--bot-line);
+}
+.nav-section-pg > .nav-label-toggle:hover,
+.nav-section-pg > .nav-label-toggle:focus-visible,
+.nav-section-pg > .nav-label-toggle:active,
+.nav-section-pg:not(.is-collapsed) > .nav-label-toggle {
+  background: color-mix(in srgb, var(--pg-line) 8%, transparent);
+  border-color: color-mix(in srgb, var(--pg-line) 36%, transparent);
+  color: var(--pg-line);
+}
 .nav-item-bot.active,
 .nav-item-bot.active:hover {
   background: var(--bot-fill);
@@ -5467,6 +5508,63 @@ form.settings-form > .actions.sticky-actions,
   background: color-mix(in srgb, var(--pg-line) 8%, transparent);
   border-color: color-mix(in srgb, var(--pg-line) 36%, transparent);
   color: var(--foreground);
+}
+
+/* Help — bottom sidebar chip, same language as «فعال» status tags */
+.side-help-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  width: 100%;
+  margin-top: auto;
+  margin-bottom: var(--space-1);
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  box-sizing: border-box;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 197, 94, 0.22);
+  background: rgba(34, 197, 94, 0.1);
+  color: #86efac;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-decoration: none;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard);
+}
+.side-help-btn .nav-ico {
+  width: 16px;
+  height: 16px;
+  color: inherit;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+.side-help-btn:hover {
+  background: rgba(34, 197, 94, 0.16);
+  border-color: rgba(34, 197, 94, 0.36);
+  color: #86efac;
+  opacity: 1;
+  text-decoration: none;
+}
+.side-help-btn:focus-visible {
+  outline: 2px solid rgba(34, 197, 94, 0.45);
+  outline-offset: 2px;
+}
+.side-help-btn.is-active,
+.side-help-btn.is-active:hover {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #86efac;
 }
 
 /* ── Modals (ported to body; above sidebar/topbar/kebab) ── */
@@ -6795,8 +6893,13 @@ html[data-theme="light"] .nav-item.active {
 }
 /* Web-panel box stays colorless (border only) — never share backdrop fill */
 html[data-theme="light"] .nav-section-home {
-  background: transparent;
   border-color: var(--border);
+}
+html[data-theme="light"] .nav-section-home.is-collapsed {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+html[data-theme="light"] .nav-section-home:not(.is-collapsed) {
+  background: transparent;
 }
 html[data-theme="light"] .ui-modal-backdrop {
   background: rgba(0, 0, 0, 0.28);
@@ -6820,32 +6923,37 @@ html[data-theme="light"] .nav-item-home:hover {
 }
 html[data-theme="light"] .nav-section-bot {
   border-color: color-mix(in srgb, var(--bot-line) 28%, var(--border));
+}
+html[data-theme="light"] .nav-section-bot.is-collapsed {
+  background: color-mix(in srgb, var(--bot-line) 8%, transparent);
+}
+html[data-theme="light"] .nav-section-bot:not(.is-collapsed) {
   background: transparent;
 }
 html[data-theme="light"] .nav-section-pg {
   border-color: color-mix(in srgb, var(--pg-line) 28%, var(--border));
-  background: transparent;
 }
-html[data-theme="light"] .nav-section-help {
-  border-color: color-mix(in srgb, var(--ok) 28%, var(--border));
+html[data-theme="light"] .nav-section-pg.is-collapsed {
+  background: color-mix(in srgb, var(--pg-line) 8%, transparent);
+}
+html[data-theme="light"] .nav-section-pg:not(.is-collapsed) {
   background: transparent;
 }
 html[data-theme="light"] .nav-label-bot,
 html[data-theme="light"] .nav-section-bot .nav-ico { color: var(--bot-line); }
 html[data-theme="light"] .nav-label-pg,
 html[data-theme="light"] .nav-section-pg .nav-ico { color: var(--pg-line); }
-html[data-theme="light"] .nav-label-help,
-html[data-theme="light"] .nav-section-help .nav-ico { color: var(--ok); }
-html[data-theme="light"] .nav-item-help.active,
-html[data-theme="light"] .nav-item-help.active:hover {
-  background: color-mix(in srgb, var(--ok) 12%, transparent);
-  border-color: transparent;
-  color: var(--foreground);
+html[data-theme="light"] .side-help-btn {
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+  border-color: rgba(22, 163, 74, 0.22);
 }
-html[data-theme="light"] .nav-item-help:hover {
-  background: color-mix(in srgb, var(--ok) 6%, transparent);
-  border-color: color-mix(in srgb, var(--ok) 28%, transparent);
-  color: var(--foreground);
+html[data-theme="light"] .side-help-btn:hover,
+html[data-theme="light"] .side-help-btn.is-active,
+html[data-theme="light"] .side-help-btn.is-active:hover {
+  background: rgba(22, 163, 74, 0.16);
+  color: #15803d;
+  border-color: rgba(22, 163, 74, 0.36);
 }
 html[data-theme="light"] .nav-item-bot.active,
 html[data-theme="light"] .nav-item-bot.active:hover {

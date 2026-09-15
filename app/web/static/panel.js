@@ -3726,7 +3726,7 @@ const root = document.getElementById('upd-root');
     function sectionFromPath(pathname, search) {
       var path = pathname || '/';
       var q = search || '';
-      if (path.indexOf('/help') === 0) return 'help';
+      if (path.indexOf('/help') === 0) return ''; /* help is a bottom chip, not an accordion */
       if (path.indexOf('/pg') === 0) return 'pg';
       if (path === '/home' || path.indexOf('/inbox') === 0 || path.indexOf('/security') === 0) {
         return 'system';
@@ -3760,15 +3760,17 @@ const root = document.getElementById('upd-root');
     function setOpenSection(openKey) {
       var sections = nav.querySelectorAll('.nav-section[data-nav-mode]');
       var found = false;
-      for (var i = 0; i < sections.length; i++) {
-        if (sections[i].getAttribute('data-nav-mode') === openKey) found = true;
+      if (openKey) {
+        for (var i = 0; i < sections.length; i++) {
+          if (sections[i].getAttribute('data-nav-mode') === openKey) found = true;
+        }
+        if (!found && sections.length) openKey = sections[0].getAttribute('data-nav-mode');
       }
-      if (!found && sections.length) openKey = sections[0].getAttribute('data-nav-mode');
       for (var j = 0; j < sections.length; j++) {
         var section = sections[j];
         var key = section.getAttribute('data-nav-mode');
         var btn = section.querySelector('[data-nav-collapse]');
-        var collapsed = key !== openKey;
+        var collapsed = !openKey || key !== openKey;
         section.classList.toggle('is-collapsed', collapsed);
         if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       }
