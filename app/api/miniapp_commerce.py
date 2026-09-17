@@ -21,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import (
     BotUser,
     Order,
-    OrderStatus,
     Payment,
     PaymentMethod,
     PaymentStatus,
@@ -400,14 +399,13 @@ def register_miniapp_commerce(app, *, get_db, helpers: dict) -> None:
             raise HTTPException(403, "از بخش عملیات استفاده کنید")
         if not commerce_allowed_persona(persona) and persona != "reseller":
             raise HTTPException(403)
-        tickets = await list_user_tickets(session, user.id)
-        # Platform Mini App: only tickets without foreign shop scope for end users.
+        # Sticky shop customers see their shop-scoped tickets; platform users see platform.
+        shop_rid = int(user.reseller_id) if user.reseller_id else None
+        tickets = await list_user_tickets(session, user.id, reseller_id=shop_rid)
         out = []
         for t in tickets:
-            if t.reseller_id is not None and persona == "user":
-                # User sticky to a shop should still see their own tickets.
-                if int(t.user_id) != int(user.id):
-                    continue
+            if int(t.user_id) != int(user.id):
+                continue
             out.append(
                 {
                     "id": t.id,
@@ -441,6 +439,8 @@ def register_miniapp_commerce(app, *, get_db, helpers: dict) -> None:
         # Prepend diagnose tips for staff (not secret).
         if diag.get("tips"):
             text = "🔎 تشخیص خودکار:\n- " + "\n- ".join(diag["tips"][:5]) + "\n\n" + text
+        # Scope to sticky shop when present — never dump shop traffic into platform queue.
+        shop_rid = int(user.reseller_id) if user.reseller_id else None
         try:
             ticket = await create_ticket(
                 session,
@@ -448,7 +448,7 @@ def register_miniapp_commerce(app, *, get_db, helpers: dict) -> None:
                 subject,
                 text,
                 int(user.telegram_id),
-                reseller_id=None,
+                reseller_id=shop_rid,
             )
         except Exception:
             await rollback_quiet(session)
@@ -631,7 +631,6 @@ def register_miniapp_commerce(app, *, get_db, helpers: dict) -> None:
         from app.config import get_settings
         from app.services.delivery import send_delivery_to_user
         from app.services.orders import approve_payment
-        from app.services.receipts import process_receipt  # noqa: F401 — symmetry
 
         user = await load_mini_user(session, request)
         persona, profile = await load_ops_context(session, user)
@@ -659,26 +658,44 @@ def register_miniapp_commerce(app, *, get_db, helpers: dict) -> None:
                 result_order = await approve_payment(
                     session, payment, int(user.telegram_id)
                 )
+                payer = await session.get(BotUser, payment.user_id)
                 token = (get_settings().bot_token or "").strip()
-                if token and result_order is not None:
+                if token and payer is not None:
                     bot = Bot(token=token)
                     try:
-                        await send_delivery_to_user(bot, session, result_order)
-                    except Exception:
+                        await send_delivery_to_user(
+                            bot,
+                            int(payer.telegram_id),
+                            session,
+                            payment,
+                            result_order,
+                        )
+                    except Exception as send_exc:
                         log.exception("mini ops delivery notify failed")
+                        if result_order is not None:
+                            try:
+                                from app.services.ux20 import note_delivery_send_failure
+
+                                await note_delivery_send_failure(
+                                    session,
+                                    order=result_order,
+                                    payment=payment,
+                                    error=str(send_exc),
+                                )
+                            except Exception:
+                                pass
                     finally:
                         await bot.session.close()
                 return _no_store({"ok": True, "message": "تأیید شد"})
-            # reject
-            payment.status = PaymentStatus.REJECTED.value
-            payment.reviewed_by = int(user.telegram_id)
-            payment.review_note = (body.get("note") or "رد از مینی‌اپ")[:250]
-            if order and order.status in {
-                OrderStatus.AWAITING_APPROVAL.value,
-                OrderStatus.AWAITING_RECEIPT.value,
-            }:
-                order.status = OrderStatus.REJECTED.value
-            await session.commit()
+            # Atomic reject — never overwrite APPROVED / never skip discount release.
+            from app.services.orders import reject_payment
+
+            await reject_payment(
+                session,
+                payment,
+                int(user.telegram_id),
+                note=(body.get("note") or "رد از مینی‌اپ")[:250],
+            )
             return _no_store({"ok": True, "message": "رد شد"})
         except ValueError as exc:
             await rollback_quiet(session)
@@ -750,7 +767,7 @@ def register_miniapp_commerce(app, *, get_db, helpers: dict) -> None:
             if not has_bot_perm(profile, "users"):
                 raise HTTPException(403, "دسترسی ندارید")
         try:
-            _svc, label = await quick_renew_user(session, customer, staff=user)
+            _svc, label = await quick_renew_user(session, customer, staff=None)
             return _no_store({"ok": True, "message": f"تمدید شد: {label}"[:180]})
         except ValueError as exc:
             await rollback_quiet(session)
@@ -865,16 +882,18 @@ def register_miniapp_commerce(app, *, get_db, helpers: dict) -> None:
         path = resolve_local_receipt_path(payment.receipt_file_id)
         if not path:
             raise HTTPException(404, "رسید محلی نیست")
+        from app.services.receipt_uploads import sniff_local_receipt_mime
+
         data = path.read_bytes()
-        ctype = "image/jpeg"
-        if path.suffix.lower() == ".png":
-            ctype = "image/png"
-        elif path.suffix.lower() == ".webp":
-            ctype = "image/webp"
+        ctype = sniff_local_receipt_mime(path)
         return Response(
             content=data,
             media_type=ctype,
-            headers={"Cache-Control": "private, no-store"},
+            headers={
+                "Cache-Control": "private, no-store",
+                "Content-Disposition": f'inline; filename="receipt-{payment_id}"',
+                "X-Content-Type-Options": "nosniff",
+            },
         )
 
 

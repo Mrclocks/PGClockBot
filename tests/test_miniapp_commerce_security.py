@@ -9,6 +9,7 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 COMMERCE = (ROOT / "app/api/miniapp_commerce.py").read_text(encoding="utf-8")
 ACL = (ROOT / "app/services/miniapp_acl.py").read_text(encoding="utf-8")
+AUTH = (ROOT / "app/services/miniapp_auth.py").read_text(encoding="utf-8")
 PAGES = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
 UPLOADS = (ROOT / "app/services/receipt_uploads.py").read_text(encoding="utf-8")
 
@@ -39,6 +40,38 @@ class MiniCommerceSecuritySourceTests(unittest.TestCase):
         chunk = COMMERCE.split("async def mini_ops_review")[1].split("async def ")[0]
         self.assertIn("mini_can_review_payment", chunk)
         self.assertIn("load_ops_context", chunk)
+        self.assertIn("reject_payment", chunk)
+        self.assertIn("send_delivery_to_user", chunk)
+        # Must pass chat_id (telegram_id), not (bot, session, order) arity bug.
+        self.assertIn("int(payer.telegram_id)", chunk)
+        self.assertNotIn("payment.status = PaymentStatus.REJECTED.value", chunk)
+
+    def test_sticky_admin_demotion_in_auth(self):
+        self.assertIn("_sync_sticky_admin_role", AUTH)
+        self.assertIn("admin_ids", AUTH)
+        # Persona must not trust sticky role alone.
+        from app.services.miniapp_auth import resolve_mini_persona
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        with patch("app.services.miniapp_auth.get_settings") as gs:
+            gs.return_value.admin_ids = []
+            self.assertEqual(
+                resolve_mini_persona(SimpleNamespace(role="admin", telegram_id=1)),
+                "user",
+            )
+
+    def test_tickets_scoped_to_sticky_shop(self):
+        chunk = COMMERCE.split("async def mini_create_ticket")[1].split("async def ")[0]
+        self.assertIn("user.reseller_id", chunk)
+        self.assertIn("reseller_id=shop_rid", chunk)
+        self.assertNotIn("reseller_id=None", chunk)
+
+    def test_receipt_magic_and_nosniff(self):
+        self.assertIn("_sniff_image", UPLOADS)
+        self.assertIn("nosniff", COMMERCE)
+        chunk = COMMERCE.split("async def mini_ops_receipt")[1]
+        self.assertIn("X-Content-Type-Options", chunk)
 
     def test_ops_customers_scoped(self):
         chunk = COMMERCE.split("async def mini_ops_customers")[1].split("async def ")[0]

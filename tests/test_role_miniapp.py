@@ -48,17 +48,19 @@ class MiniAppAuthUnitTests(unittest.TestCase):
 
     def test_persona_matrix(self):
         from types import SimpleNamespace
+        from unittest.mock import patch
 
         from app.services.miniapp_auth import resolve_mini_persona
 
         admin = SimpleNamespace(role="admin", telegram_id=1)
+        sticky = SimpleNamespace(role="admin", telegram_id=99)
         reseller = SimpleNamespace(role="reseller", telegram_id=2)
         user = SimpleNamespace(role="user", telegram_id=3)
-        with unittest.mock.patch(
-            "app.services.miniapp_auth.is_bot_platform_admin",
-            side_effect=lambda u: getattr(u, "role", None) == "admin",
-        ):
+        with patch("app.services.miniapp_auth.get_settings") as gs:
+            gs.return_value.admin_ids = [1]
             self.assertEqual(resolve_mini_persona(admin), "admin")
+            # Sticky role=admin without ADMIN_IDS must never be Mini App admin.
+            self.assertEqual(resolve_mini_persona(sticky), "user")
             self.assertEqual(resolve_mini_persona(reseller), "reseller")
             self.assertEqual(resolve_mini_persona(user), "user")
 

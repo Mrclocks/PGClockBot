@@ -13,6 +13,26 @@ ALLOWED_RECEIPT_EXT = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
 MAX_RECEIPT_BYTES = 8 * 1024 * 1024  # 8 MiB
 LOCAL_PREFIX = "local:"
 
+# Magic-byte sniffs (fail closed if content does not match an image type).
+_IMAGE_MAGIC: tuple[tuple[bytes, str], ...] = (
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+)
+
+
+def _sniff_image(content: bytes) -> str | None:
+    if not content:
+        return None
+    for magic, mime in _IMAGE_MAGIC:
+        if content.startswith(magic):
+            return mime
+    # WEBP: RIFF....WEBP
+    if len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
 
 def _receipts_dir() -> Path:
     d = DATA_DIR / "private" / "receipts"
@@ -52,6 +72,15 @@ def resolve_local_receipt_path(file_id: str | None) -> Path | None:
     return full if full.is_file() else None
 
 
+def sniff_local_receipt_mime(path: Path) -> str:
+    """Best-effort mime for serving; default jpeg when unknown."""
+    try:
+        head = path.read_bytes()[:32]
+    except OSError:
+        return "image/jpeg"
+    return _sniff_image(head) or "image/jpeg"
+
+
 async def save_mini_receipt_upload(upload, *, payment_id: int) -> str:
     """Persist UploadFile; return stored receipt id (``local:private/receipts/...``)."""
     if upload is None:
@@ -68,6 +97,18 @@ async def save_mini_receipt_upload(upload, *, payment_id: int) -> str:
         raise ValueError("فایل خالی است")
     if len(content) > MAX_RECEIPT_BYTES:
         raise ValueError("حجم رسید حداکثر ۸ مگابایت است")
+    mime = _sniff_image(content)
+    if not mime:
+        raise ValueError("محتوای فایل تصویر معتبر نیست")
+    # Normalize extension to sniffed type (ignore attacker-controlled suffix).
+    if mime == "image/png":
+        ext = ".png"
+    elif mime == "image/webp":
+        ext = ".webp"
+    elif mime == "image/gif":
+        ext = ".gif"
+    else:
+        ext = ".jpg"
     stem = f"p{int(payment_id)}_{uuid.uuid4().hex[:20]}{ext}"
     dest = _receipts_dir() / stem
     dest.write_bytes(content)

@@ -918,7 +918,14 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
         await session.commit()
         await session.refresh(order)
         await session.refresh(payment)
-        return await _resume_paid_wallet_order(session, order, user)
+        order = await _resume_paid_wallet_order(session, order, user)
+        try:
+            from app.services.commerce_extras import repay_emergency_credit_if_needed
+
+            await repay_emergency_credit_if_needed(session, user=user, order=order)
+        except Exception:
+            pass
+        return order
     except Exception:
         # Only refund when we actually debited — never mint balance on debit failure.
         if debited and order.amount > 0:
@@ -1287,6 +1294,12 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
             await session.commit()
             raise
         await session.commit()
+        try:
+            from app.services.commerce_extras import repay_emergency_credit_if_needed
+
+            await repay_emergency_credit_if_needed(session, user=user, order=None)
+        except Exception:
+            pass
         return None
     order = await session.get(Order, payment.order_id)
     if not order:
@@ -1370,8 +1383,30 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
         plan = await session.get(Plan, order.plan_id)
         if not service or not plan:
             raise ValueError("سرویس یا پلن تمدید یافت نشد")
-        return await apply_renewal(session, order, service, plan)
-    return await deliver_order(session, order)
+        renewed = await apply_renewal(session, order, service, plan)
+        try:
+            payer = await session.get(BotUser, order.user_id)
+            if payer is not None:
+                from app.services.commerce_extras import repay_emergency_credit_if_needed
+
+                await repay_emergency_credit_if_needed(
+                    session, user=payer, order=renewed
+                )
+        except Exception:
+            pass
+        return renewed
+    delivered = await deliver_order(session, order)
+    try:
+        payer = await session.get(BotUser, order.user_id)
+        if payer is not None:
+            from app.services.commerce_extras import repay_emergency_credit_if_needed
+
+            await repay_emergency_credit_if_needed(
+                session, user=payer, order=delivered
+            )
+    except Exception:
+        pass
+    return delivered
 
 
 async def reject_payment(session: AsyncSession, payment: Payment, reviewer_tg: int, note: str = "") -> None:

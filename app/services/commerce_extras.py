@@ -162,6 +162,9 @@ async def set_auto_renew(
 ) -> UserService:
     if int(service.bot_user_id) != int(user.id):
         raise ValueError("سرویس متعلق به شما نیست")
+    ui = await get_all_settings(session)
+    if enabled and not on(ui.get("auto_renew_enabled", "0")):
+        raise ValueError("تمدید خودکار در تنظیمات فروشگاه غیرفعال است")
     if enabled:
         if not plan_id:
             plan_id = service.plan_id or service.auto_renew_plan_id
@@ -213,15 +216,14 @@ async def grant_emergency_credit(
     session: AsyncSession, *, user: BotUser
 ) -> dict[str, Any]:
     """Small wallet credit for eligible users; debt repaid on next paid order."""
+    from sqlalchemy import update
+
     ui = await get_all_settings(session)
     if not on(ui.get("emergency_credit_enabled", "0")):
         raise ValueError("اعتبار اضطراری غیرفعال است")
     max_amt = max(0, _as_int(ui.get("emergency_credit_max_toman"), 20000))
     if max_amt <= 0:
         raise ValueError("سقف اعتبار تنظیم نشده")
-    debt = int(getattr(user, "emergency_credit_debt", 0) or 0)
-    if debt > 0:
-        raise ValueError("اعتبار قبلی هنوز تسویه نشده")
     # Eligibility: delivered order history + low/zero wallet
     delivered = (
         await session.execute(
@@ -237,53 +239,83 @@ async def grant_emergency_credit(
         raise ValueError("فقط مشتریان با سابقه خرید مجازند")
     if int(user.wallet_balance or 0) >= max_amt:
         raise ValueError("موجودی کافی است؛ نیازی به اعتبار اضطراری نیست")
+
+    # Atomic debt claim — only one concurrent grant can win.
+    with session.no_autoflush:
+        claim = await session.execute(
+            update(BotUser)
+            .where(
+                BotUser.id == int(user.id),
+                BotUser.emergency_credit_debt == 0,
+            )
+            .values(emergency_credit_debt=int(max_amt))
+            .execution_options(synchronize_session=False)
+        )
+    if claim.rowcount != 1:
+        raise ValueError("اعتبار قبلی هنوز تسویه نشده")
+    await session.refresh(user)
+
     from app.services.wallet import credit_wallet
 
-    await credit_wallet(
-        session,
-        user.id,
-        max_amt,
-        reason=f"emergency_credit:{max_amt}",
-    )
-    await session.refresh(user)
-    user.emergency_credit_debt = max_amt
-    await session.commit()
-    await session.refresh(user)
+    try:
+        await credit_wallet(
+            session,
+            user,
+            max_amt,
+            reason=f"emergency_credit:{max_amt}",
+            commit=False,
+        )
+        await session.commit()
+        await session.refresh(user)
+    except Exception:
+        # Roll debt claim back so the user can retry after a credit failure.
+        user.emergency_credit_debt = 0
+        await session.commit()
+        raise
     return {"credited": max_amt, "debt": int(user.emergency_credit_debt or 0)}
 
 
 async def repay_emergency_credit_if_needed(
-    session: AsyncSession, *, user: BotUser, order: Order
+    session: AsyncSession, *, user: BotUser, order: Order | None = None
 ) -> int:
     """Debit outstanding debt after a successful paid order (best-effort)."""
+    from sqlalchemy import update
+
     debt = int(getattr(user, "emergency_credit_debt", 0) or 0)
     if debt <= 0:
         return 0
-    if int(order.user_id) != int(user.id):
-        return 0
-    take = min(debt, int(order.amount or 0))
-    if take <= 0:
+    if order is not None and int(order.user_id) != int(user.id):
         return 0
     bal = int(user.wallet_balance or 0)
-    # Only reclaim if wallet still has headroom after purchase path; soft repay.
     if bal <= 0:
+        return 0
+    pay = min(debt, bal)
+    if pay <= 0:
         return 0
     from app.services.wallet import debit_wallet
 
-    pay = min(take, bal)
+    reason = (
+        f"emergency_credit_repay:{order.id}"
+        if order is not None
+        else "emergency_credit_repay"
+    )
     try:
-        await debit_wallet(
-            session,
-            user.id,
-            pay,
-            reason=f"emergency_credit_repay:{order.id}",
-        )
+        await debit_wallet(session, user, pay, reason=reason, commit=False)
+        with session.no_autoflush:
+            await session.execute(
+                update(BotUser)
+                .where(
+                    BotUser.id == int(user.id),
+                    BotUser.emergency_credit_debt >= int(pay),
+                )
+                .values(emergency_credit_debt=BotUser.emergency_credit_debt - int(pay))
+                .execution_options(synchronize_session=False)
+            )
+        await session.commit()
+        await session.refresh(user)
     except Exception:
         await session.rollback()
         return 0
-    await session.refresh(user)
-    user.emergency_credit_debt = max(0, debt - pay)
-    await session.commit()
     return pay
 
 

@@ -217,15 +217,27 @@ class MiniAppOwnedServiceUnitTests(unittest.TestCase):
         self.assertIs(_owned_service_or_404(own, user), own)
 
     def test_commerce_matrix(self):
+        from unittest.mock import patch
+
         from app.api.miniapp_pages import _require_commerce, commerce_allowed
         from fastapi import HTTPException
 
         self.assertTrue(commerce_allowed("user"))
         self.assertTrue(commerce_allowed("reseller"))
         self.assertFalse(commerce_allowed("admin"))
-        with self.assertRaises(HTTPException) as ctx:
-            _require_commerce(SimpleNamespace(role="admin", telegram_id=1))
-        self.assertEqual(ctx.exception.status_code, 403)
+        # Live ADMIN_IDS member → admin persona → no commerce.
+        with patch("app.services.miniapp_auth.get_settings") as gs:
+            gs.return_value.admin_ids = [1]
+            with self.assertRaises(HTTPException) as ctx:
+                _require_commerce(SimpleNamespace(role="admin", telegram_id=1))
+            self.assertEqual(ctx.exception.status_code, 403)
+        # Sticky role=admin without ADMIN_IDS is treated as end-user (demoted path).
+        with patch("app.services.miniapp_auth.get_settings") as gs:
+            gs.return_value.admin_ids = []
+            self.assertEqual(
+                _require_commerce(SimpleNamespace(role="admin", telegram_id=99)),
+                "user",
+            )
 
 
 class MiniAppBlockedUserUnitTests(unittest.IsolatedAsyncioTestCase):

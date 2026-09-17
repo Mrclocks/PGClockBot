@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models import BotUser, ResellerProfile, Role
-from app.services.platform_identity import is_bot_platform_admin
 
 
 # Telegram initData is typically <2KiB; hard-cap stops oversized header DoS.
@@ -77,7 +76,9 @@ async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
     """Validate initData and load the BotUser row (must have /start'd).
 
     Blocked accounts are rejected; end-users must pass force-join
-    (parity with bot ForceJoinMiddleware).
+    (parity with bot ForceJoinMiddleware). Sticky ``role=admin`` is demoted
+    when the Telegram id is no longer in ``ADMIN_IDS`` (parity with
+    ``get_or_create_user``) so Mini App ops cannot outlive env revocation.
     """
     assert_miniapp_feature_enabled()
     tg_user = validate_webapp_init_data(init_data_from_request(request))
@@ -88,16 +89,54 @@ async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
         raise HTTPException(404, "start the bot first")
     if bool(getattr(user, "is_blocked", False)):
         raise HTTPException(403, "دسترسی شما مسدود شده است")
+    await _sync_sticky_admin_role(session, user)
     # Parity with bot: users cannot use the app until channel membership is confirmed.
     await assert_mini_force_join(session, user)
     await assert_mini_terms_entry(session, user)
     return user
 
 
+async def _sync_sticky_admin_role(session: AsyncSession, user: BotUser) -> None:
+    """Demote sticky ADMIN when removed from ADMIN_IDS (bot ``get_or_create_user`` parity)."""
+    settings = get_settings()
+    tid = int(user.telegram_id or 0)
+    in_admin_ids = tid in set(settings.admin_ids or ())
+    if in_admin_ids:
+        if (user.role or "") != Role.ADMIN.value:
+            user.role = Role.ADMIN.value
+            await session.commit()
+            await session.refresh(user)
+        return
+    if (user.role or "") != Role.ADMIN.value:
+        return
+    # Sticky admin no longer in ADMIN_IDS — demote to reseller (if active) or user.
+    profile = (
+        await session.execute(
+            select(ResellerProfile).where(ResellerProfile.user_id == user.id)
+        )
+    ).scalar_one_or_none()
+    if profile and profile.is_active:
+        user.role = Role.RESELLER.value
+    else:
+        user.role = Role.USER.value
+    await session.commit()
+    await session.refresh(user)
+
+
 def resolve_mini_persona(user: BotUser) -> str:
-    """Map BotUser → miniapp shell: admin | reseller | user."""
-    if is_bot_platform_admin(user):
+    """Map BotUser → miniapp shell: admin | reseller | user.
+
+    Admin persona requires a live ``ADMIN_IDS`` membership (not sticky role alone).
+    Call ``load_mini_user`` first so sticky demotion has already run.
+    """
+    settings = get_settings()
+    try:
+        tid = int(getattr(user, "telegram_id", 0) or 0)
+    except (TypeError, ValueError):
+        tid = 0
+    if tid > 0 and tid in set(settings.admin_ids or ()):
         return "admin"
+    # Fail closed: sticky role=admin without ADMIN_IDS is never Mini App admin.
     if (user.role or "").strip() == Role.RESELLER.value:
         return "reseller"
     return "user"

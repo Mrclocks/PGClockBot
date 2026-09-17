@@ -83,11 +83,12 @@ async def process_receipt(
                     needs_approval=False,
                 )
             return None
-        except Exception as e:
+        except Exception:
             await notify_pending_approval(bot, session, payment, user_tg_id)
+            # Never echo internal exception text to the end-user client.
             return format_message(
                 "⚠️ رسید ثبت شد",
-                f"تأیید خودکار ناموفق بود ({e}).\nمنتظر تأیید دستی ادمین بمانید.",
+                "تأیید خودکار ناموفق بود.\nمنتظر تأیید دستی ادمین بمانید.",
             )
 
     await notify_pending_approval(bot, session, payment, user_tg_id)
