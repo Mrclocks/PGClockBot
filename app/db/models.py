@@ -103,6 +103,8 @@ class BotUser(Base):
     # Kept for DBs that ran 0027 during v10.1.22; unused in UI after rollback.
     color_tag: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, index=True)
     risk_flags: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # CSV
+    # Outstanding emergency credit (toman) — repaid on next successful paid order.
+    emergency_credit_debt: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     services: Mapped[list["UserService"]] = relationship(
@@ -163,6 +165,10 @@ class Order(Base):
     service_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("user_services.id"), nullable=True, index=True
     )
+    cart_reminded_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cart_remind_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -295,6 +301,26 @@ class UserService(Base):
         DateTime(timezone=True), nullable=True
     )
     renew_nudge_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Wallet auto-renew (platform Mini App / bot jobs) — never crosses shop tenants.
+    auto_renew_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    auto_renew_plan_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    auto_renew_fail_count: Mapped[int] = mapped_column(Integer, default=0)
+    auto_renew_last_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    paused_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    pause_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    quota_used_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    traffic_sample_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    predicted_exhaust_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    notified_traffic_predict: Mapped[bool] = mapped_column(Boolean, default=False)
+    onboarding_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

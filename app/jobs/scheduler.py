@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -109,6 +109,7 @@ async def check_expiring_services(bot: Bot) -> None:
                     or_(
                         UserService.notified_expire.is_(False),
                         UserService.notified_traffic.is_(False),
+                        UserService.notified_traffic_predict.is_(False),
                     ),
                     UserService.id > last_id,
                 )
@@ -283,6 +284,38 @@ async def check_expiring_services(bot: Bot) -> None:
                                     logger.debug(
                                         "traffic alert send failed tg=%s", user.telegram_id, exc_info=True
                                     )
+
+                # --- predictive traffic ETA (optional) ---
+                try:
+                    used_b = float(info.get("used_traffic") or 0)
+                    lim_b = float(info.get("data_limit") or 0)
+                    if lim_b > 0:
+                        from app.services.commerce_extras import update_traffic_prediction
+
+                        await update_traffic_prediction(
+                            session, svc, used_bytes=used_b, limit_bytes=lim_b
+                        )
+                        pred_ui = await ui_for(shop_rid)
+                        if (
+                            on(pred_ui.get("predictive_traffic_enabled", "0"))
+                            and not svc.notified_traffic_predict
+                            and svc.predicted_exhaust_at is not None
+                        ):
+                            warn_h = max(
+                                1,
+                                min(168, _as_int(pred_ui.get("predictive_traffic_warn_hours"), 24)),
+                            )
+                            if svc.predicted_exhaust_at <= now + timedelta(hours=warn_h):
+                                await send_bot.send_message(
+                                    user.telegram_id,
+                                    f"📈 با مصرف فعلی، حجم سرویس <b>{svc.pg_username}</b> "
+                                    f"حدوداً تا {warn_h} ساعت دیگر تمام می‌شود.\n"
+                                    "از مینی‌اپ یا ربات تمدید/تاپ‌آپ کنید.",
+                                    parse_mode="HTML",
+                                )
+                                svc.notified_traffic_predict = True
+                except Exception:
+                    logger.debug("predictive traffic failed svc=%s", svc.id, exc_info=True)
 
             await session.commit()
             if len(services) < batch_size:
@@ -526,6 +559,20 @@ async def run_pg_admin_subscription_tick() -> None:
         logger.exception("pg admin subscription tick failed")
 
 
+async def run_commerce_extras_tick(bot: Bot) -> None:
+    """Auto-renew + cart recovery (platform shop). Failures are logged, not raised."""
+    try:
+        async with SessionLocal() as session:
+            from app.services.commerce_extras import run_auto_renew_tick, run_cart_recovery_tick
+
+            ar = await run_auto_renew_tick(session, bot)
+            cr = await run_cart_recovery_tick(session, bot)
+            if ar.get("ok") or ar.get("fail") or cr.get("sent"):
+                logger.info("commerce extras tick auto_renew=%s cart=%s", ar, cr)
+    except Exception:
+        logger.exception("commerce extras tick failed")
+
+
 def start_scheduler(bot: Bot) -> None:
     if scheduler.running:
         return
@@ -566,6 +613,16 @@ def start_scheduler(bot: Bot) -> None:
         max_instances=1,
         coalesce=True,
         misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        run_commerce_extras_tick,
+        "interval",
+        minutes=30,
+        args=[bot],
+        id="commerce_extras",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=1800,
     )
     scheduler.add_job(
         run_scheduled_backup,

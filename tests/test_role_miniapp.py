@@ -107,16 +107,18 @@ class MiniAppSourceTests(unittest.TestCase):
         html = (ROOT / "app/web/templates/miniapp.html").read_text(encoding="utf-8")
         self.assertIn("ma-nav-wrap", html)
         js = (ROOT / "app/web/static/miniapp.js").read_text(encoding="utf-8")
-        self.assertIn("data-buy", js)
-        self.assertIn("data-renew", js)
+        self.assertIn("data-checkout-buy", js)
+        self.assertIn("data-checkout-renew", js)
         self.assertIn("data-qr", js)
         self.assertIn("data-copy", js)
+        self.assertIn("data-topup", js)
+        self.assertIn("/api/mini/order", js)
+        self.assertIn("/api/mini/ops/pending-payments", js)
         self.assertIn("ICONS", js)
         self.assertIn("servicePeekHtml", js)
         self.assertIn("commerce_allowed", js)
         self.assertIn("function markCopied(", js)
         self.assertIn("کپی شد", js)
-        self.assertIn("qr-frame", js)
         # Link text must not be dumped into service cards
         self.assertNotIn("word-break:break-all", js)
         css = (ROOT / "app/web/static/miniapp.css").read_text(encoding="utf-8")
@@ -125,20 +127,25 @@ class MiniAppSourceTests(unittest.TestCase):
         self.assertIn("meter", css)
         self.assertIn("svc-peek", css)
         self.assertIn("var(--brand)", css)
-        self.assertIn("qr-frame", css)
-        self.assertIn(".btn.is-copied", css)
+        self.assertIn("--bg-card", css)
+        self.assertIn(".is-copied", css)
+        # Panel language: no body glow / radial atmosphere
+        self.assertNotIn("radial-gradient", css)
 
     def test_nav_includes_wallet(self):
         from app.api.miniapp_pages import _nav_for, commerce_allowed
 
         ids = [x["id"] for x in _nav_for("user")]
-        self.assertEqual(ids, ["home", "services", "shop", "wallet"])
+        self.assertEqual(ids, ["home", "services", "shop", "wallet", "support"])
         admin_ids = [x["id"] for x in _nav_for("admin")]
         self.assertEqual(admin_ids, ["home", "ops"])
         self.assertNotIn("shop", admin_ids)
         self.assertNotIn("wallet", admin_ids)
         self.assertNotIn("services", admin_ids)
-        self.assertIn("ops", [x["id"] for x in _nav_for("reseller")])
+        self.assertNotIn("support", admin_ids)
+        reseller_ids = [x["id"] for x in _nav_for("reseller")]
+        self.assertIn("ops", reseller_ids)
+        self.assertIn("support", reseller_ids)
         self.assertFalse(commerce_allowed("admin"))
         self.assertTrue(commerce_allowed("user"))
         self.assertTrue(commerce_allowed("reseller"))

@@ -642,6 +642,32 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             return Response(status_code=403, content="دسترسی ندارید")
         order, payer_reseller_id = scoped
 
+        # Mini App private uploads (local:) — never fetch from Telegram.
+        if file_id.startswith("local:"):
+            from app.services.receipt_uploads import resolve_local_receipt_path
+
+            path = resolve_local_receipt_path(file_id)
+            if not path:
+                return Response(status_code=404, content="رسید یافت نشد")
+            body = path.read_bytes()
+            ctype = "image/jpeg"
+            suf = path.suffix.lower()
+            if suf == ".png":
+                ctype = "image/png"
+            elif suf == ".webp":
+                ctype = "image/webp"
+            elif suf == ".gif":
+                ctype = "image/gif"
+            return Response(
+                content=body,
+                media_type=ctype,
+                headers={
+                    "Cache-Control": "private, no-store",
+                    "Content-Disposition": f'inline; filename="receipt-{payment_id}"',
+                    "X-Content-Type-Options": "nosniff",
+                },
+            )
+
         token = await _payment_bot_token(
             session,
             payment,

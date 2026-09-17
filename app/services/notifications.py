@@ -647,13 +647,18 @@ async def notify_pending_approval(
     # Always payrev so shop staff can act on their own bot; ordrev is platform-only.
     markup = _approval_markup(payment_id=payment.id)
     # Wallet top-ups are platform-only; shop prefs never apply.
+    # Local Mini App uploads are not Telegram file_ids — text-only notify.
+    photo = payment.receipt_file_id
+    if photo and str(photo).startswith("local:"):
+        photo = None
+        text = text + "\n\n📎 رسید در مینی‌اپ / پنل وب قابل مشاهده است."
     await _dispatch_dual_notify(
         bot,
         session,
         "notify_pending_approval",
         text,
         markup=markup,
-        photo=payment.receipt_file_id,
+        photo=photo,
         payment=payment,
         shop=not payment.is_wallet_topup,
     )

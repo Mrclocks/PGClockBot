@@ -70,9 +70,10 @@ def _nav_for(persona: str) -> list[dict[str, str]]:
         {"id": "services", "label": "سرویس", "icon": "svc"},
         {"id": "shop", "label": "خرید", "icon": "shop"},
         {"id": "wallet", "label": "کیف پول", "icon": "wallet"},
+        {"id": "support", "label": "پشتیبانی", "icon": "support"},
     ]
     if persona == "reseller":
-        return base + [{"id": "ops", "label": "پنل", "icon": "ops"}]
+        return base + [{"id": "ops", "label": "عملیات", "icon": "ops"}]
     return base
 
 
@@ -177,6 +178,14 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         if info.get("online_at") and not upstream_err
         else None,
         "error": "upstream_unavailable" if upstream_err else None,
+        "auto_renew_enabled": bool(getattr(svc, "auto_renew_enabled", False)),
+        "auto_renew_plan_id": getattr(svc, "auto_renew_plan_id", None),
+        "paused": getattr(svc, "paused_at", None) is not None,
+        "predicted_exhaust_at": (
+            svc.predicted_exhaust_at.astimezone(timezone.utc).isoformat()
+            if getattr(svc, "predicted_exhaust_at", None) is not None
+            else None
+        ),
     }
 
 
@@ -232,10 +241,40 @@ async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
     wallet_pay = on(ui.get("pay_wallet_enabled"))
     enriched = await _enrich_services(services)
     activity = await list_activity(session, user.id, limit=25)
+    # Personalized renew hint from first service needing attention.
+    suggest = None
+    try:
+        from app.services.commerce_extras import suggest_renew_plan
+
+        focus = next(
+            (
+                s
+                for s in enriched
+                if (s.get("expire_days") is not None and s["expire_days"] <= 5)
+                or (s.get("traffic_pct") is not None and s["traffic_pct"] >= 70)
+            ),
+            enriched[0] if enriched else None,
+        )
+        if focus:
+            plan = suggest_renew_plan(
+                plans + ([trial] if trial else []),
+                traffic_pct=focus.get("traffic_pct"),
+                expire_days=focus.get("expire_days"),
+            )
+            if plan:
+                suggest = {
+                    "service_id": focus.get("id"),
+                    "plan_id": plan.id,
+                    "plan_name": plan.name,
+                    "price": int(plan.price or 0),
+                }
+    except Exception:
+        suggest = None
     return {
         "wallet": int(user.wallet_balance or 0),
         "wallet_pay_enabled": wallet_pay,
         "commerce_allowed": True,
+        "emergency_credit_debt": int(getattr(user, "emergency_credit_debt", 0) or 0),
         "services": enriched,
         "plans": [
             {
@@ -258,6 +297,7 @@ async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
             }
             for a in activity
         ],
+        "renew_suggest": suggest,
     }
 
 
@@ -280,9 +320,11 @@ def _empty_customer() -> dict:
         "wallet": 0,
         "wallet_pay_enabled": False,
         "commerce_allowed": False,
+        "emergency_credit_debt": 0,
         "services": [],
         "plans": [],
         "activity": [],
+        "renew_suggest": None,
     }
 
 
@@ -323,6 +365,7 @@ async def _admin_ops_payload(session: AsyncSession) -> dict:
         if base
         else [],
         "panel_base": base,
+        "inline_ops": True,
     }
 
 
@@ -374,6 +417,7 @@ async def _reseller_ops_payload(
         if base
         else [],
         "panel_base": base,
+        "inline_ops": True,
     }
 
 
@@ -560,3 +604,20 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
                 "message": "تمدید با موفقیت انجام شد",
             }
         )
+
+    from app.api.miniapp_commerce import register_miniapp_commerce
+
+    register_miniapp_commerce(
+        app,
+        get_db=get_db,
+        helpers={
+            "_no_store": _no_store,
+            "_require_commerce": _require_commerce,
+            "_require_commerce_ready": _require_commerce_ready,
+            "_owned_service_or_404": _owned_service_or_404,
+            "_safe_client_message": _safe_client_message,
+            "_serialize_service": _serialize_service,
+            "_fetch_pg_info": _fetch_pg_info,
+            "_enrich_services": _enrich_services,
+        },
+    )

@@ -18,6 +18,9 @@ AUDIENCE_LABELS = {
     "users": "کاربران عادی",
     "resellers": "نمایندگان",
     "admins": "ادمین‌ها",
+    "expiring_soon": "نزدیک به انقضا",
+    "abandoned_cart": "سبد رهاشده",
+    "low_traffic": "هشدار ترافیک",
 }
 
 
@@ -31,7 +34,16 @@ async def list_broadcast_targets(
     ``users`` = customer-facing audience: role user **and** reseller.
     Dual-role shop owners (role=reseller) still receive «کاربران عادی» messages
     because they use the bot as customers too. Admins are excluded from ``users``.
+
+    Behavioral segments (expiring_soon / abandoned_cart / low_traffic) are
+    platform-scoped only (no shop ContextVar) — never leak shop tenants.
     """
+    if audience in {"expiring_soon", "abandoned_cart", "low_traffic"}:
+        from app.services.commerce_extras import list_segment_targets
+
+        return await list_segment_targets(
+            session, segment=audience, reseller_id=None, limit=2000
+        )
     q = select(BotUser).where(BotUser.is_blocked.is_(False))
     if audience == "users":
         q = q.where(BotUser.role.in_([Role.USER.value, Role.RESELLER.value]))

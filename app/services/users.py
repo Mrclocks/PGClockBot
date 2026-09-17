@@ -859,6 +859,17 @@ DEFAULT_SETTINGS = {
     "action_center_expire_days": "3",
     "funnel_tracking_enabled": "1",
     "one_tap_renew_enabled": "1",
+    # Mini App / commerce extras (platform shop toggles)
+    "auto_renew_enabled": "0",
+    "auto_renew_days_before": "1",
+    "cart_recovery_enabled": "0",
+    "cart_recovery_after_hours": "2",
+    "cart_recovery_max_sends": "2",
+    "user_self_pause_enabled": "1",
+    "emergency_credit_enabled": "0",
+    "emergency_credit_max_toman": "20000",
+    "predictive_traffic_enabled": "0",
+    "predictive_traffic_warn_hours": "24",
 }
 DEFAULT_SETTINGS.update(button_style_defaults())
 
