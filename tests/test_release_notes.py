@@ -73,10 +73,10 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertEqual(list(parsed.keys())[0], "0.1.6")
+        self.assertEqual(list(parsed.keys())[0], "0.1.7")
         self.assertIn("0.1.0", parsed)
-        self.assertTrue(parsed["0.1.6"])
-        self.assertTrue(any("پریمیوم" in n or "pg_dump" in n or "بکاپ" in n for n in parsed["0.1.6"]))
+        self.assertTrue(parsed["0.1.7"])
+        self.assertTrue(any("نمایندگی" in n or "باشگاه" in n or "گردونه" in n for n in parsed["0.1.7"]))
         self.assertTrue(parsed["0.1.4"])
         self.assertTrue(any("مودال" in n or "گوشه" in n for n in parsed["0.1.4"]))
         self.assertTrue(parsed["0.1.3"])
@@ -112,9 +112,9 @@ class ReleaseNotesTests(unittest.TestCase):
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
         self.assertEqual(
-            set(parsed), {"0.1.6", "0.1.5", "0.1.4", "0.1.3", "0.1.2", "0.1.1", "0.1.0"}
+            set(parsed), {"0.1.7", "0.1.6", "0.1.5", "0.1.4", "0.1.3", "0.1.2", "0.1.1", "0.1.0"}
         )
-        self.assertTrue(any("پریمیوم" in n or "pg_dump" in n or "بکاپ" in n for n in parsed["0.1.6"]))
+        self.assertTrue(any("نمایندگی" in n or "باشگاه" in n or "گردونه" in n for n in parsed["0.1.7"]))
         self.assertTrue(any("کیف پول" in n or "امنیت" in n for n in parsed["0.1.2"]))
         self.assertTrue(any("راه‌اندازی" in n or "۰٫۱٫۱" in n for n in parsed["0.1.1"]))
 

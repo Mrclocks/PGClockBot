@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.1.7": [
+        "نمایندگی: درخواست منتظر پرداخت دیگر نامرئی نیست — ادمین می‌تواند رد/لغو کند",
+        "نمایندگی: کنسل سفارش یا درخواست یتیم، قفل «درخواست باز» را برمی‌دارد",
+        "باشگاه: دکمه باشگاه/گردونه با خاموش بودن فیچر مخفی می‌شود",
+        "باشگاه: ترتیب زیرمنو با مخزن واقعی؛ جوایز ترتیب نمایش (sort_order) دارند",
+    ],
     "0.1.6": [
         "ایموجی پریمیوم در متن پیام‌های تنظیم‌شده ربات حفظ می‌شود (entities)",
         "دکمه‌ها: ایموجی پریمیوم با icon_custom_emoji_id روی کیبورد reply/inline",
