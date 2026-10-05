@@ -70,9 +70,9 @@ SECTIONS: dict[str, dict] = {
             ("methods", "روش‌های فعال", [
                 ("pay_wallet_enabled", "کیف پول", "toggle"),
                 ("pay_card_enabled", "کارت به کارت", "toggle"),
+                ("pay_card_auto_enabled", "تأیید خودکار کارت به کارت", "toggle"),
                 ("pay_gateway_enabled", "درگاه لینک", "toggle"),
                 ("pay_psp_enabled", "درگاه API", "toggle"),
-                ("pay_card_auto_enabled", "تأیید خودکار کارت", "toggle"),
                 ("pay_crypto_enabled", "رمزارز", "toggle"),
                 ("pay_stars_enabled", "استارز", "toggle"),
                 ("pay_discount_enabled", "کد تخفیف", "toggle"),
@@ -82,6 +82,11 @@ SECTIONS: dict[str, dict] = {
                 ("card_number", "شماره کارت", "text"),
                 ("card_holder", "صاحب کارت", "text"),
                 ("card_pay_text", "راهنمای پرداخت", "textarea"),
+            ]),
+            ("card_auto", "تأیید خودکار کارت به کارت", [
+                ("card_auto_provider", "ارائه‌دهنده", "text"),
+                ("card_auto_webhook_secret", "رمز وب‌هوک", "text"),
+                ("card_auto_hint_text", "راهنما", "textarea"),
             ]),
             ("gateway", "درگاه لینک", [
                 ("gateway_name", "نام درگاه", "text"),
@@ -94,11 +99,6 @@ SECTIONS: dict[str, dict] = {
                 ("psp_sandbox", "سندباکس", "toggle"),
                 ("psp_pay_text", "راهنما", "textarea"),
                 ("btn_pay_psp", "متن دکمه", "text"),
-            ]),
-            ("card_auto", "تأیید خودکار کارت", [
-                ("card_auto_provider", "ارائه‌دهنده", "text"),
-                ("card_auto_webhook_secret", "رمز وب‌هوک", "text"),
-                ("card_auto_hint_text", "راهنما", "textarea"),
             ]),
             ("crypto", "رمزارز", [
                 ("crypto_asset", "رمزارز", "text"),
