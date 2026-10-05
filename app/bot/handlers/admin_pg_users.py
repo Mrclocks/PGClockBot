@@ -24,6 +24,7 @@ from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.formatting import format_message, service_card
 from app.services.pasarguard import (
+    PasarGuardError,
     as_list,
     build_user_create_payload,
     build_user_modify_payload,
@@ -34,6 +35,13 @@ from app.services.pasarguard import (
 from app.services.pg_quota import PgQuotaError, assert_can_create_user
 
 router = Router(name="admin_pg_users")
+
+
+def _err_msg(exc: Exception) -> str:
+    """Persian-friendly PasarGuard / local error for bot replies."""
+    if isinstance(exc, PasarGuardError):
+        return exc.user_message(fallback="خطا در ارتباط با پاسارگارد")
+    return str(exc) or "خطا"
 
 async def _require_users(db_user: BotUser, callback=None, message=None, *, action: str | None = None) -> bool:
     """Legacy platform-admin page gate (kept for source contracts).
@@ -235,7 +243,7 @@ async def _render_users_list(
             gate, page=page, username=query, page_size=PAGE_SIZE
         )
     except Exception as e:
-        text = format_message("❌ خطا", str(e))
+        text = format_message("❌ خطا", _err_msg(e))
         markup = None  # navigation is on reply keyboard (pg_reply_keyboard)
         if edit:
             await safe_edit_text(target, text, reply_markup=markup)
@@ -414,7 +422,7 @@ async def adm_pg_group_hint(
         groups = await list_scoped_pg_catalog(gate, kind="groups")
     except Exception as e:
         groups = []
-        lines.append(f"خطا: {e}")
+        lines.append(f"خطا: {_err_msg(e)}")
     if groups:
         for g in groups[:15]:
             if not isinstance(g, dict):
@@ -471,7 +479,7 @@ async def adm_pg_template_hint(
         templates = await list_scoped_pg_catalog(gate, kind="templates")
     except Exception as e:
         templates = []
-        lines.append(f"خطا: {e}")
+        lines.append(f"خطا: {_err_msg(e)}")
     if templates:
         for t in templates[:15]:
             if not isinstance(t, dict):
@@ -731,7 +739,7 @@ async def pg_reset(
                     callback.message, uid, notice="♻️ حجم ریست شد", user=gate.pg_user
                 )
     except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(_err_msg(e), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("adm:pg:dis:"))
@@ -768,7 +776,7 @@ async def pg_dis(
                     callback.message, uid, notice="🚫 کاربر غیرفعال شد", user=gate.pg_user
                 )
     except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(_err_msg(e), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("adm:pg:en:"))
@@ -804,7 +812,7 @@ async def pg_en(
                     callback.message, uid, notice="✅ کاربر فعال شد", user=gate.pg_user
                 )
     except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(_err_msg(e), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("adm:pg:rev:"))
@@ -840,7 +848,7 @@ async def pg_rev(
                     callback.message, uid, notice="🔏 سابسکریپشن باطل شد", user=gate.pg_user
                 )
     except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(_err_msg(e), show_alert=True)
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:delask$"))
@@ -929,7 +937,7 @@ async def pg_user_del(
                 gate=list_gate,
             )
     except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(_err_msg(e), show_alert=True)
 
 
 # ----- create -----
@@ -995,6 +1003,9 @@ async def pg_create_tpl_pick(
     if not gate.allowed:
         return
     await callback.answer()
+    # Never leave create_username active with a null template id (stale inline
+    # «از تمپلیت» while mid-create previously poisoned FSM → wrong error).
+    await state.clear()
     await state.update_data(pg_create_mode="template", pg_template_id=None, pg_selected_groups=[])
     try:
         templates = await gate.pg_client.get_user_templates_simple()
@@ -1093,6 +1104,7 @@ async def pg_create_custom_groups(
     if not gate.allowed:
         return
     await callback.answer()
+    await state.clear()
     await state.update_data(pg_create_mode="custom", pg_template_id=None, pg_selected_groups=[])
     await _show_create_group_picker(callback, state, pg=gate.pg_client, staff=gate.staff)
 
@@ -1230,6 +1242,7 @@ async def pg_create_grpdone(
         await callback.answer("اجازه این عمل را ندارید", show_alert=True)
         return
     await callback.answer()
+    await state.update_data(pg_create_mode="custom")
     await state.set_state(PgUserStates.create_username)
     if callback.message:
         await callback.message.answer(
@@ -1271,51 +1284,84 @@ async def pg_create_username(
         await message.answer("نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ باشد.")
         return
     data = await state.get_data()
-    mode = data.get("pg_create_mode") or "template"
+    mode = data.get("pg_create_mode")
     await state.update_data(pg_create_username=uname)
-    if mode == "template":
-        tid = data.get("pg_template_id")
-        if not tid:
-            await state.clear()
-            await message.answer("تمپلیت انتخاب نشده.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
-            return
-        from app.services.bot_pg_catalog_authz import catalog_template_allowed
-
-        if not catalog_template_allowed(gate.staff, int(tid)):
-            await state.clear()
-            await message.answer("اجازه این عمل را ندارید", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
-            return
-        try:
-            await assert_can_create_user(gate.staff or {}, from_template=True, session=session, client=gate.pg_client)
-        except PgQuotaError as qe:
-            await message.answer(f"❌ {qe.message}")
-            return
-        try:
-            payload = sanitize_pg_user_write_payload(
-                {
-                    "username": uname,
-                    "user_template_id": int(tid),
-                    "note": f"telegram admin · {db_user.telegram_id}",
-                }
-            )
-            user = await gate.pg_client.create_user_from_template(payload)
-        except Exception as e:
-            await message.answer(f"خطا در ساخت: {e}")
-            return
-        await state.clear()
-        uid = int((user or {}).get("id") or 0) if isinstance(user, dict) else 0
-        if uid:
-            await _show_user_card(
-                message, uid, edit=False, notice="✅ کاربر ساخته شد", user=user if isinstance(user, dict) else None, pg=gate.pg_client
-            )
-        else:
-            await message.answer("✅ کاربر ساخته شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+    if mode == "custom":
+        await state.set_state(PgUserStates.create_gb)
+        await message.answer(
+            "حجم به گیگابایت را بفرستید (عدد؛ برای نامحدود ۰ بفرستید):",
+            reply_markup=kb.cancel_reply(),
+        )
         return
-    await state.set_state(PgUserStates.create_gb)
-    await message.answer(
-        "حجم به گیگابایت را بفرستید (عدد؛ برای نامحدود ۰ بفرستید):",
-        reply_markup=kb.cancel_reply(),
-    )
+    if mode != "template":
+        await state.clear()
+        await message.answer(
+            "اطلاعات ساخت ناقص است. دوباره از «ساخت کاربر» شروع کنید.",
+            reply_markup=await filtered_pg_reply_keyboard(
+                db_user, session=session, is_reseller_bot=is_reseller_bot
+            ),
+        )
+        return
+    tid = data.get("pg_template_id")
+    if not tid:
+        await state.clear()
+        await message.answer(
+            "تمپلیت انتخاب نشده. از منوی ساخت کاربر دوباره یک تمپلیت انتخاب کنید.",
+            reply_markup=await filtered_pg_reply_keyboard(
+                db_user, session=session, is_reseller_bot=is_reseller_bot
+            ),
+        )
+        return
+    from app.services.bot_pg_catalog_authz import catalog_template_allowed
+
+    if not catalog_template_allowed(gate.staff, int(tid)):
+        await state.clear()
+        await message.answer(
+            "اجازه این عمل را ندارید",
+            reply_markup=await filtered_pg_reply_keyboard(
+                db_user, session=session, is_reseller_bot=is_reseller_bot
+            ),
+        )
+        return
+    try:
+        await assert_can_create_user(
+            gate.staff or {}, from_template=True, session=session, client=gate.pg_client
+        )
+    except PgQuotaError as qe:
+        await message.answer(f"❌ {qe.message}")
+        return
+    try:
+        payload = sanitize_pg_user_write_payload(
+            {
+                "username": uname,
+                "user_template_id": int(tid),
+                "note": f"telegram admin · {db_user.telegram_id}",
+            }
+        )
+        user = await gate.pg_client.create_user_from_template(payload)
+    except Exception as e:
+        # Keep create_username so the operator can retry with another name
+        # (duplicate username must not look like a missing-template failure).
+        await message.answer(f"❌ {_err_msg(e)}\nنام دیگری بفرستید یا لغو کنید.")
+        return
+    await state.clear()
+    uid = int((user or {}).get("id") or 0) if isinstance(user, dict) else 0
+    if uid:
+        await _show_user_card(
+            message,
+            uid,
+            edit=False,
+            notice="✅ کاربر ساخته شد",
+            user=user if isinstance(user, dict) else None,
+            pg=gate.pg_client,
+        )
+    else:
+        await message.answer(
+            "✅ کاربر ساخته شد.",
+            reply_markup=await filtered_pg_reply_keyboard(
+                db_user, session=session, is_reseller_bot=is_reseller_bot
+            ),
+        )
 
 
 @router.message(PgUserStates.create_gb)
@@ -1440,7 +1486,12 @@ async def pg_create_days(
     try:
         user = await gate.pg_client.create_user(payload)
     except Exception as e:
-        await message.answer(f"خطا در ساخت: {e}")
+        # Recoverable (e.g. duplicate username): go back to username step.
+        await state.set_state(PgUserStates.create_username)
+        await message.answer(
+            f"❌ {_err_msg(e)}\nنام کاربری دیگری بفرستید:",
+            reply_markup=kb.cancel_reply(),
+        )
         return
     await state.clear()
     uid = int((user or {}).get("id") or 0) if isinstance(user, dict) else 0
@@ -1574,7 +1625,7 @@ async def pg_edit_name_save(
         )
         await gate.pg_client.modify_user_by_id(uid, payload)
     except Exception as e:
-        await message.answer(f"خطا: {e}")
+        await message.answer(f"❌ {_err_msg(e)}\nنام دیگری بفرستید یا لغو کنید.")
         return
     await state.clear()
     await _show_user_card(message, uid, edit=False, notice="✅ نام کاربری به‌روز شد", pg=gate.pg_client)
@@ -1668,7 +1719,7 @@ async def pg_edit_gb_save(
         )
         await gate.pg_client.modify_user_by_id(uid, payload)
     except Exception as e:
-        await message.answer(f"خطا: {e}")
+        await message.answer(f"❌ {_err_msg(e)}")
         return
     await state.clear()
     await _show_user_card(message, uid, edit=False, notice="✅ حجم به‌روز شد", pg=gate.pg_client)
@@ -1763,7 +1814,7 @@ async def pg_edit_days_save(
         )
         await gate.pg_client.modify_user_by_id(uid, payload)
     except Exception as e:
-        await message.answer(f"خطا: {e}")
+        await message.answer(f"❌ {_err_msg(e)}")
         return
     await state.clear()
     await _show_user_card(message, uid, edit=False, notice="✅ انقضا به‌روز شد", pg=gate.pg_client)
@@ -1897,4 +1948,4 @@ async def pg_edit_grpdone(
                 callback.message, uid, notice="✅ گروه‌ها به‌روز شد", pg=gate.pg_client
             )
     except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(_err_msg(e), show_alert=True)

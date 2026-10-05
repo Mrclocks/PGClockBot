@@ -19,13 +19,11 @@ class PasarGuardError(Exception):
 
     def user_message(self, *, fallback: str | None = None) -> str:
         """Short Persian-friendly message extracted from API error body."""
-        from app.services.credential_policy import humanize_pg_validation_error
+        from app.services.credential_policy import friendly_pg_error
 
         detail = _pg_error_detail(self.body)
-        if detail:
-            return humanize_pg_validation_error(detail)[:500]
-        base = str(self.args[0] if self.args else "") or (fallback or "خطای پاسارگارد")
-        return humanize_pg_validation_error(base)[:500]
+        base = detail or str(self.args[0] if self.args else "") or (fallback or "خطای پاسارگارد")
+        return friendly_pg_error(base, status_code=self.status_code)[:500]
 
 
 def is_pg_permission_denied(exc: Exception) -> bool:

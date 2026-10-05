@@ -19,6 +19,38 @@ _PG_SPECIAL_CHARS = "!@#$%^&*()-_=+[]{}|;:,.<>?/~`"
 _PG_USERNAME_RE = re.compile(r"^[a-zA-Z0-9-_@.]+$")
 _PG_USERNAME_CONSEC_SPECIAL_RE = re.compile(r"[-_@.]{2,}")
 
+# Business / conflict API errors → standalone Persian (no validation wrapper).
+_PG_BUSINESS_MSG_MAP: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(
+            r"(username|user).{0,40}(already\s*(exists|taken|in\s*use)|exists|taken|duplicate)"
+            r"|(already\s*(exists|taken)|duplicate).{0,40}(username|user)"
+            r"|user\s+already\s+exists|username\s+already\s+exists",
+            re.I,
+        ),
+        "این نام کاربری قبلاً ثبت شده است. یک نام دیگر بفرستید.",
+    ),
+    (
+        re.compile(
+            r"unique\s*constraint|duplicate\s*key|(?:username|user).{0,20}conflict",
+            re.I,
+        ),
+        "این نام کاربری قبلاً ثبت شده است. یک نام دیگر بفرستید.",
+    ),
+    (
+        re.compile(r"permission\s*denied|not\s*allowed|forbidden|access\s*denied", re.I),
+        "اجازه این عمل را ندارید.",
+    ),
+    (
+        re.compile(r"template.{0,30}(not\s*found|invalid|required)|invalid\s*template", re.I),
+        "تمپلیت نامعتبر است یا در دسترس نیست.",
+    ),
+    (
+        re.compile(r"group.{0,30}(not\s*found|invalid|required)|invalid\s*group", re.I),
+        "گروه انتخاب‌شده نامعتبر است یا در دسترس نیست.",
+    ),
+]
+
 # English fragments from PasarGuard / pydantic validation → Persian cause
 _PG_API_MSG_MAP: list[tuple[re.Pattern[str], str]] = [
     (
@@ -233,6 +265,26 @@ def humanize_pg_validation_error(text: str) -> str:
         "پاسارگارد درخواست را رد کرد چون با محدودیت‌های نام کاربری/رمز "
         f"هماهنگ نیست. علت: {out}"
     )
+
+
+def friendly_pg_error(text: str, *, status_code: int | None = None) -> str:
+    """Map PG API / HTTP errors to a short Persian operator message.
+
+    Business conflicts (duplicate username, 409, 403) return a standalone line.
+    Credential validation fragments keep the existing humanize wrapper.
+    Unknown text is returned unchanged.
+    """
+    raw = (text or "").strip()
+    if status_code == 409:
+        return "این نام کاربری قبلاً ثبت شده است. یک نام دیگر بفرستید."
+    if status_code == 403:
+        return "اجازه این عمل را ندارید."
+    if not raw:
+        return raw
+    for pat, fa in _PG_BUSINESS_MSG_MAP:
+        if pat.search(raw):
+            return fa
+    return humanize_pg_validation_error(raw)
 
 
 def generate_compliant_password(length: int = 14) -> str:
