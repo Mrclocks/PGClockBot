@@ -63,7 +63,6 @@ async def render_home(
         text, home_send_kw = outbound_setting_text(
             "پنل مدیریت فروشگاه\nاز کیبورد پایین گزینه را انتخاب کنید.",
             title_raw=ui.get("shop_title") or "کلاک",
-            title_prefix="🛠 ",
         )
         reply_kb, ui, _ = await build_main_reply_keyboard(
             session,
@@ -85,7 +84,6 @@ async def render_home(
             "پنل مدیریت فروشگاه شما\nاز کیبورد پایین گزینه را انتخاب کنید.\n"
             "برای دیدن منوی مشتری: «پیش‌نمایش منوی کاربر».",
             title_raw=ui.get("shop_title") or "فروشگاه",
-            title_prefix="🛠 ",
         )
         reply_kb = kb.reseller_hub_main_keyboard(profile, ui)
     else:
@@ -98,7 +96,6 @@ async def render_home(
             text, home_send_kw = outbound_setting_text(
                 welcome,
                 title_raw=shop_title_raw or "",
-                title_prefix="✨ ",
                 domain=DOMAIN_USER,
                 user_name=db_user.full_name or "دوست عزیز",
                 user_id=getattr(db_user, "telegram_id", "") or "",
@@ -106,10 +103,7 @@ async def render_home(
                 shop_title=title_plain or "",
             )
         except Exception:
-            text = format_message(
-                f"✨ {title_plain}" if title_plain else "✨",
-                rich_plain_text(welcome),
-            )
+            text = format_message(title_plain or "", rich_plain_text(welcome))
             home_send_kw = {}
         reply_kb = kb.main_reply_keyboard(
             effective_role,

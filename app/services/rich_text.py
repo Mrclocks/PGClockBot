@@ -419,9 +419,10 @@ def outbound_setting_text(
     Otherwise → existing HTML ``format_message`` card (default bot parse_mode).
 
     ``title_raw`` accepts a packed setting (e.g. ``shop_title``) so premium emoji
-    in the title survive; ``title_prefix`` is plain text before that title
-    (e.g. ``\"✨ \"``). If the title already carries a custom/premium emoji,
-    the decorative prefix is omitted so a leftover sparkle does not sit beside it.
+    in the title survive; ``title_prefix`` is optional plain text before that title.
+    If the title already carries a custom/premium emoji, any prefix is omitted
+    so it is not duplicated beside the icon. Prefer putting icons inside
+    ``shop_title`` itself rather than hardcoding prefixes at call sites.
     Plain ``title=`` still works for callers without rich titles.
     """
     text, ents = unpack_rich_text(raw)
