@@ -19,8 +19,8 @@ class VersionThreeConsistencyTests(unittest.TestCase):
         self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), __version__)
         from app.services.release_notes import RELEASE_NOTES_FA
 
-        self.assertEqual(list(RELEASE_NOTES_FA.keys())[0], "0.1.10")
-        self.assertEqual(__version__, "0.1.10")
+        self.assertEqual(list(RELEASE_NOTES_FA.keys())[0], "0.1.11")
+        self.assertEqual(__version__, "0.1.11")
 
 
 class WalletDebitGuardTests(unittest.IsolatedAsyncioTestCase):

@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.1.11": [
+        "نماینده: لیست گروه‌ها در ربات با وب‌پنل یکی شد — دیگر با نقش بدون allow-list خالی نمی‌ماند",
+        "صفحه گیت راه‌اندازی و خطاهای CSRF/۴۱۳ هم‌سبک با صفحه ۴۰۴؛ راهنمای گرفتن توکن/?gate=",
+    ],
     "0.1.10": [
         "حذف نماینده/استف: دیگر با FK مربوط به org_principals گیر نمی‌کند — پاک‌سازی درخت Principal قبل از حذف",
         "حذف دسترسی وب pg_staff هم Principal و تیکت پنل وابسته را جدا می‌کند",
