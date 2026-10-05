@@ -531,7 +531,20 @@ class Phase5CBotL2PgParityTests(unittest.IsolatedAsyncioTestCase):
                     session, db_user=fx.l2_user, **self._l2_kw(fx), kind="templates", action="read",
                     callback_data="adm:pg:settpl:10",
                 )
-            self.assertFalse(missing.allowed)
+            # Open allow-list (None) on credentialed L2 → own-client IDs OK (web parity / #502).
+            self.assertTrue(missing.allowed, missing.reason)
+
+            closed = self._l2_patches(
+                CATALOG_FULL,
+                fake_pg,
+                access={"allowed_template_ids": [], "allowed_group_ids": []},
+            )
+            with closed[0], closed[1], closed[2], closed[3], closed[4], closed[5], closed[6]:
+                empty_list = await authorize_bot_pg_catalog_op(
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="templates", action="read",
+                    callback_data="adm:pg:settpl:10",
+                )
+            self.assertFalse(empty_list.allowed)
 
     async def test_12_13_l2_client_is_own_principal_only(self) -> None:
         async with self.Session() as session:
