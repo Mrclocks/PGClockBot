@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.1.13": [
+        "ساخت کاربر در ربات: نام تکراری دیگر «تمپلیت انتخاب نشده» نمی‌گوید — پیام واضح و امکان تلاش مجدد",
+        "خطاهای ساخت/ویرایش کاربر پاسارگارد در ربات فارسی و هم‌راستا با وب شد",
+    ],
     "0.1.12": [
         "نماینده: انتخاب گروه/تمپلیت در ربات با وب یکی شد — allow-list باز دیگر «اجازه این عمل را ندارید» نمی‌دهد",
     ],
