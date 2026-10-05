@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.1.10": [
+        "حذف نماینده/استف: دیگر با FK مربوط به org_principals گیر نمی‌کند — پاک‌سازی درخت Principal قبل از حذف",
+        "حذف دسترسی وب pg_staff هم Principal و تیکت پنل وابسته را جدا می‌کند",
+        "تنظیمات پرداخت: «تأیید خودکار کارت به کارت» با عنوان درست، دقیقاً زیر باکس کارت به کارت",
+    ],
     "0.1.9": [
         "عنوان خانه ربات: فقط نام فروشگاه قابل‌ویرایش — بدون ایموجی ثابت ✨/🛠 کنار عنوان",
         "اگر نام فروشگاه ایموجی پریمیوم داشته باشد، دیگر ستارهٔ اضافی کنارش نمی‌آید",
