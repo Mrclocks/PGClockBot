@@ -105,7 +105,8 @@ def _filter_staff_templates(items, staff) -> list:
 
     if not isinstance(items, list):
         return []
-    return filter_templates_for_staff(items, staff or {}, trust_client_scope=False)
+    # Match web panel / list_scoped_pg_catalog (trust own-client when ready).
+    return filter_templates_for_staff(items, staff or {})
 
 
 def _filter_staff_groups(items, staff) -> list:
@@ -113,7 +114,7 @@ def _filter_staff_groups(items, staff) -> list:
 
     if not isinstance(items, list):
         return []
-    return filter_groups_for_staff(items, staff or {}, trust_client_scope=False)
+    return filter_groups_for_staff(items, staff or {})
 
 
 _PAGE_RE = re.compile(r"^adm:pg:users:p:(\d+)$")

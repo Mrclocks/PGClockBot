@@ -423,18 +423,22 @@ async def list_scoped_pg_catalog(
     if use_kind not in {"templates", "groups"}:
         return []
     if use_kind == "templates":
-        lister = getattr(gate.pg_client, "get_user_templates", None) or getattr(
-            gate.pg_client, "get_user_templates_simple", None
-        )
+        primary = getattr(gate.pg_client, "get_user_templates", None)
+        fallback = getattr(gate.pg_client, "get_user_templates_simple", None)
     else:
-        lister = getattr(gate.pg_client, "get_groups", None) or getattr(
-            gate.pg_client, "get_groups_simple", None
-        )
-    if lister is None:
+        primary = getattr(gate.pg_client, "get_groups", None)
+        fallback = getattr(gate.pg_client, "get_groups_simple", None)
+    if primary is None and fallback is None:
         return []
-    raw = await lister()
+    raw = await primary() if primary is not None else await fallback()
     items = _unwrap_list(raw, use_kind)
-    # Non-Owner unresolved allow-list → empty (never treat as global).
+    # Match web panel: empty full list → try simple endpoint.
+    if not items and primary is not None and fallback is not None and fallback is not primary:
+        raw = await fallback()
+        items = _unwrap_list(raw, use_kind)
+    # Same trust rule as web ``filter_*_for_staff`` default (own-client keep;
+    # no credentials → fail closed). Never hardcode False — that emptied
+    # reseller bot lists when PasarGuard role has no explicit allow-list.
     if use_kind == "templates":
-        return filter_templates_for_staff(items, gate.staff, trust_client_scope=False)
-    return filter_groups_for_staff(items, gate.staff, trust_client_scope=False)
+        return filter_templates_for_staff(items, gate.staff)
+    return filter_groups_for_staff(items, gate.staff)
