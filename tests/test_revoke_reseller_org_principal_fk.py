@@ -339,15 +339,23 @@ class RevokeResellerOrgPrincipalFkTests(unittest.IsolatedAsyncioTestCase):
         from pathlib import Path
 
         src = Path("app/services/pg_staff_access.py").read_text(encoding="utf-8")
-        block = src.split("async def revoke_web_access", 1)[1].split(
+        revoke_block = src.split("async def revoke_web_access", 1)[1].split(
             "\nasync def set_active", 1
         )[0]
-        self.assertIn("purge_principal_for_pg_staff", block)
-        self.assertIn("opener_pg_staff_id", block)
+        purge_block = src.split("async def purge_orphaned_staff_access", 1)[1].split(
+            "\n@dataclass", 1
+        )[0]
+        self.assertIn("_detach_pg_staff_fk_deps", revoke_block)
+        self.assertIn("_detach_pg_staff_fk_deps", purge_block)
         self.assertLess(
-            block.find("purge_principal_for_pg_staff"),
-            block.find("await session.delete(row)"),
+            revoke_block.find("_detach_pg_staff_fk_deps"),
+            revoke_block.find("await session.delete(row)"),
         )
+        helper = src.split("async def _detach_pg_staff_fk_deps", 1)[1].split(
+            "\nasync def purge_orphaned_staff_access", 1
+        )[0]
+        self.assertIn("purge_principal_for_pg_staff", helper)
+        self.assertIn("opener_pg_staff_id", helper)
 
 
 if __name__ == "__main__":

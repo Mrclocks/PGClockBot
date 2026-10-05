@@ -125,8 +125,8 @@ class PurgeOrphanTests(unittest.IsolatedAsyncioTestCase):
     async def test_purge_deletes_missing_admins(self):
         from app.services.pg_staff_access import purge_orphaned_staff_access
 
-        keep = SimpleNamespace(pg_username="alive")
-        drop = SimpleNamespace(pg_username="dead")
+        keep = SimpleNamespace(id=1, pg_username="alive")
+        drop = SimpleNamespace(id=2, pg_username="dead")
         session = AsyncMock()
         with (
             patch(
@@ -134,12 +134,17 @@ class PurgeOrphanTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=[keep, drop]),
             ),
             patch("app.services.pasarguard.get_pg") as get_pg,
+            patch(
+                "app.services.pg_staff_access._detach_pg_staff_fk_deps",
+                new=AsyncMock(),
+            ) as detach,
         ):
             get_pg.return_value.get_admins = AsyncMock(
                 return_value=[{"username": "alive"}]
             )
             n = await purge_orphaned_staff_access(session)
         self.assertEqual(n, 1)
+        detach.assert_awaited_once_with(session, 2)
         session.delete.assert_awaited()
         session.commit.assert_awaited()
 
