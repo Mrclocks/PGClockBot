@@ -1702,10 +1702,16 @@ async def revoke_reseller(
     delete_pg_admin: bool = True,
     commit: bool = True,
     reason: str | None = None,
+    _seen_profile_ids: set[int] | None = None,
 ) -> dict:
     """Remove reseller profile, unlink customers, demote role to user.
 
     Does not delete the BotUser row. Optional PasarGuard admin cleanup.
+
+    Before deleting ``ResellerProfile``, purges the linked OrgPrincipal tree
+    (children, web identities, provisions, owner_principal_id refs) so the
+    ``org_principals.reseller_profile_id`` FK cannot block the delete.
+    Descendant shop profiles are revoked recursively (no remount as L1).
     """
     from sqlalchemy import update
 
@@ -1718,8 +1724,19 @@ async def revoke_reseller(
     if not profile:
         raise ValueError("این کاربر نماینده نیست")
 
+    seen = _seen_profile_ids if _seen_profile_ids is not None else set()
+    profile_id = int(profile.id)
+    if profile_id in seen:
+        return {
+            "user_id": user_id,
+            "telegram_id": user.telegram_id,
+            "pg_admin_username": (profile.pg_admin_username or "").strip() or None,
+            "pg_admin_deleted": False,
+            "reason": (reason or "").strip() or None,
+        }
+    seen.add(profile_id)
+
     pg_username = (profile.pg_admin_username or "").strip() or None
-    profile_id = profile.id
     pg_deleted = False
     if delete_pg_admin and pg_username:
         try:
@@ -1727,6 +1744,34 @@ async def revoke_reseller(
             pg_deleted = True
         except Exception:
             pg_deleted = False
+
+    # OrgPrincipal.reseller_profile_id FK — purge tree before profile delete.
+    from app.services.org_principals import purge_principal_for_reseller_profile
+
+    purge_info = await purge_principal_for_reseller_profile(session, profile_id)
+
+    # Cascade: child shops under this principal must not remount as L1.
+    for child_profile_id in purge_info.detached_reseller_profile_ids:
+        if int(child_profile_id) == profile_id or int(child_profile_id) in seen:
+            continue
+        child_profile = await session.get(ResellerProfile, int(child_profile_id))
+        if child_profile is None:
+            continue
+        child_uid = int(getattr(child_profile, "user_id", 0) or 0)
+        if child_uid <= 0 or child_uid == int(user_id):
+            continue
+        try:
+            await revoke_reseller(
+                session,
+                child_uid,
+                delete_pg_admin=delete_pg_admin,
+                commit=False,
+                reason=reason,
+                _seen_profile_ids=seen,
+            )
+        except ValueError:
+            # Profile may already be gone / not a reseller — continue.
+            pass
 
     await session.execute(
         update(BotUser).where(BotUser.reseller_id == user_id).values(reseller_id=None)

@@ -151,6 +151,18 @@ async def purge_orphaned_staff_access(session: AsyncSession) -> int:
     for row in rows:
         key = _norm_pg(row.pg_username)
         if key and key not in alive:
+            # Same FK cleanup as revoke_web_access (principal + panel tickets).
+            from sqlalchemy import update
+
+            from app.db.models import PanelTicket
+            from app.services.org_principals import purge_principal_for_pg_staff
+
+            await purge_principal_for_pg_staff(session, int(row.id))
+            await session.execute(
+                update(PanelTicket)
+                .where(PanelTicket.opener_pg_staff_id == int(row.id))
+                .values(opener_pg_staff_id=None)
+            )
             await session.delete(row)
             removed += 1
     if removed:
@@ -815,6 +827,20 @@ async def revoke_web_access(
     row = await access_by_pg_username(session, pg_username)
     if not row:
         return False
+
+    # OrgPrincipal.pg_staff_id / panel_tickets.opener_pg_staff_id FKs.
+    from sqlalchemy import update
+
+    from app.db.models import PanelTicket
+    from app.services.org_principals import purge_principal_for_pg_staff
+
+    await purge_principal_for_pg_staff(session, int(row.id))
+    await session.execute(
+        update(PanelTicket)
+        .where(PanelTicket.opener_pg_staff_id == int(row.id))
+        .values(opener_pg_staff_id=None)
+    )
+
     await session.delete(row)
     if commit:
         await session.commit()

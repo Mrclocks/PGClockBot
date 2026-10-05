@@ -7,13 +7,26 @@ adapters only — never invent parents for legacy pg_staff.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import OrgPrincipal, PgStaffAccess, ResellerProfile
+from app.db.models import (
+    BotUser,
+    Order,
+    OrgPrincipal,
+    OrgPrincipalProvision,
+    OrgPrincipalWebIdentity,
+    PgStaffAccess,
+    ResellerProfile,
+    Ticket,
+    UserService,
+)
+
+log = logging.getLogger(__name__)
 
 STATUS_ACTIVE = "active"
 STATUS_DISABLED = "disabled"
@@ -494,3 +507,171 @@ def attach_org_principal_fields(
     if is_owner_principal(principal):
         out["web_owner"] = True
     return out
+
+
+@dataclass(frozen=True)
+class PrincipalPurgeResult:
+    """Ids touched while removing a principal tree ahead of adapter deletes."""
+
+    purged_principal_ids: tuple[int, ...]
+    detached_reseller_profile_ids: tuple[int, ...]
+    detached_pg_staff_ids: tuple[int, ...]
+
+
+async def list_direct_child_principals(
+    session: AsyncSession, parent_id: int
+) -> list[OrgPrincipal]:
+    result = await session.execute(
+        select(OrgPrincipal)
+        .where(OrgPrincipal.parent_id == int(parent_id))
+        .order_by(OrgPrincipal.id.asc())
+    )
+    return list(result.scalars().all())
+
+
+async def _clear_owner_principal_refs(session: AsyncSession, principal_id: int) -> None:
+    """Null business-resource FKs so principal rows can be deleted safely."""
+    pid = int(principal_id)
+    for model in (BotUser, Order, Ticket, UserService):
+        col = getattr(model, "owner_principal_id", None)
+        if col is None:
+            continue
+        await session.execute(update(model).where(col == pid).values(owner_principal_id=None))
+
+
+async def _delete_principal_side_rows(session: AsyncSession, principal_id: int) -> None:
+    pid = int(principal_id)
+    identities = (
+        await session.execute(
+            select(OrgPrincipalWebIdentity).where(
+                OrgPrincipalWebIdentity.principal_id == pid
+            )
+        )
+    ).scalars().all()
+    for identity in identities:
+        await session.delete(identity)
+
+    provisions = (
+        await session.execute(
+            select(OrgPrincipalProvision).where(
+                or_(
+                    OrgPrincipalProvision.principal_id == pid,
+                    OrgPrincipalProvision.created_by_principal_id == pid,
+                )
+            )
+        )
+    ).scalars().all()
+    for prov in provisions:
+        await session.delete(prov)
+
+
+def _invalidate_pg_principal_cache(principal_id: int) -> None:
+    try:
+        from app.services.pasarguard import invalidate_pg_principal_cache
+
+        invalidate_pg_principal_cache(int(principal_id))
+    except Exception:
+        log.error(
+            "Failed to invalidate PG cache after principal purge id=%s",
+            int(principal_id),
+        )
+
+
+async def _purge_principal_node(session: AsyncSession, row: OrgPrincipal) -> None:
+    """Delete one principal after dependents are gone. Never deletes Owner."""
+    if is_owner_principal(row) or (
+        int(row.depth) == DEPTH_OWNER and row.parent_id is None
+    ):
+        raise OrgPrincipalError("cannot purge Owner principal")
+
+    pid = int(row.id)
+    await _clear_owner_principal_refs(session, pid)
+    await _delete_principal_side_rows(session, pid)
+
+    # Detach adapter FKs so ResellerProfile / PgStaffAccess can be deleted next.
+    row.reseller_profile_id = None
+    row.pg_staff_id = None
+    row.bot_user_id = None
+    await session.flush()
+
+    await session.delete(row)
+    await session.flush()
+    _invalidate_pg_principal_cache(pid)
+
+
+async def purge_org_principal_tree(
+    session: AsyncSession,
+    root: OrgPrincipal,
+) -> PrincipalPurgeResult:
+    """Delete ``root`` and all descendants (children first).
+
+    Clears ``owner_principal_id`` refs, web identities, and provision ledger
+    rows. Nulls adapter FKs on each principal before delete so
+    ``ResellerProfile`` / ``PgStaffAccess`` rows can be removed afterward.
+
+    Does **not** delete ResellerProfile, PgStaffAccess, or BotUser rows.
+    Refuses Owner. Safe for revoke/delete adapter paths.
+    """
+    if root is None or not getattr(root, "id", None):
+        return PrincipalPurgeResult((), (), ())
+    if is_owner_principal(root) or (
+        int(root.depth) == DEPTH_OWNER and root.parent_id is None
+    ):
+        raise OrgPrincipalError("cannot purge Owner principal")
+
+    purged: list[int] = []
+    detached_profiles: list[int] = []
+    detached_staff: list[int] = []
+
+    async def _walk(node: OrgPrincipal) -> None:
+        children = await list_direct_child_principals(session, int(node.id))
+        for child in children:
+            await _walk(child)
+
+        rpid = int(node.reseller_profile_id or 0)
+        if rpid > 0:
+            detached_profiles.append(rpid)
+        sid = int(node.pg_staff_id or 0)
+        if sid > 0:
+            detached_staff.append(sid)
+        purged.append(int(node.id))
+        await _purge_principal_node(session, node)
+
+    await _walk(root)
+    return PrincipalPurgeResult(
+        purged_principal_ids=tuple(purged),
+        detached_reseller_profile_ids=tuple(dict.fromkeys(detached_profiles)),
+        detached_pg_staff_ids=tuple(dict.fromkeys(detached_staff)),
+    )
+
+
+async def purge_principal_for_reseller_profile(
+    session: AsyncSession, reseller_profile_id: int
+) -> PrincipalPurgeResult:
+    """Purge the org principal tree linked to a ResellerProfile (if any)."""
+    try:
+        pid = int(reseller_profile_id)
+    except (TypeError, ValueError):
+        return PrincipalPurgeResult((), (), ())
+    if pid <= 0:
+        return PrincipalPurgeResult((), (), ())
+    root = await get_principal_by_reseller_profile(session, pid)
+    if root is None:
+        return PrincipalPurgeResult((), (), ())
+    return await purge_org_principal_tree(session, root)
+
+
+async def purge_principal_for_pg_staff(
+    session: AsyncSession, pg_staff_id: int
+) -> PrincipalPurgeResult:
+    """Purge the org principal tree linked to a PgStaffAccess row (if any)."""
+    try:
+        sid = int(pg_staff_id)
+    except (TypeError, ValueError):
+        return PrincipalPurgeResult((), (), ())
+    if sid <= 0:
+        return PrincipalPurgeResult((), (), ())
+    root = await get_principal_by_pg_staff(session, sid)
+    if root is None:
+        return PrincipalPurgeResult((), (), ())
+    return await purge_org_principal_tree(session, root)

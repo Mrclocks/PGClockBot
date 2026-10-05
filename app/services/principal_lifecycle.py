@@ -417,6 +417,18 @@ async def hard_delete_level1_principal(
             code="must_disable_first",
         )
 
+    # Fail closed when depth-2 children still reference this parent.
+    child_n = await session.scalar(
+        select(func.count())
+        .select_from(OrgPrincipal)
+        .where(OrgPrincipal.parent_id == int(row.id))
+    )
+    if int(child_n or 0) > 0:
+        raise PrincipalLifecycleError(
+            "Principal دارای فرزند وابسته است — ابتدا فرزندان را غیرفعال/حذف کنید",
+            code="has_children",
+        )
+
     # Detach web identity rows (no orphan login mapping).
     identities = (
         await session.execute(
@@ -428,16 +440,24 @@ async def hard_delete_level1_principal(
     for identity in identities:
         await session.delete(identity)
 
-    # Provision ledger rows reference principal_id — remove after identity.
+    # Provision ledger rows reference principal_id / created_by — remove both.
     provisions = (
         await session.execute(
             select(OrgPrincipalProvision).where(
-                OrgPrincipalProvision.principal_id == int(row.id)
+                (OrgPrincipalProvision.principal_id == int(row.id))
+                | (OrgPrincipalProvision.created_by_principal_id == int(row.id))
             )
         )
     ).scalars().all()
     for prov in provisions:
         await session.delete(prov)
+
+    # Detach adapter FKs so a later ResellerProfile / PgStaff delete is safe
+    # if this principal was the only remaining link.
+    row.reseller_profile_id = None
+    row.pg_staff_id = None
+    row.bot_user_id = None
+    await session.flush()
 
     pid = int(row.id)
     await session.delete(row)
