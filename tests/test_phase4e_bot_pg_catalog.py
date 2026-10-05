@@ -469,6 +469,7 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             fx = await self._fixtures(session)
             fake_pg = self._pg(fx)
+            # Open allow-list (None) on credentialed L1 → own-client IDs OK (web parity).
             missing = await self._auth(
                 session,
                 db_user=fx.ua,
@@ -499,7 +500,7 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
                 callback_data="adm:pg:template",
                 access={"allowed_template_ids": [], "allowed_group_ids": [1]},
             )
-            self.assertFalse(missing.allowed)
+            self.assertTrue(missing.allowed, missing.reason)
             self.assertFalse(invalid.allowed)
             self.assertTrue(empty.allowed, empty.reason)
             self.assertEqual(await list_scoped_pg_catalog(empty, kind="templates"), [])
@@ -551,6 +552,7 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             fx = await self._fixtures(session)
             fake_pg = self._pg(fx)
+            # Open allow-list on credentialed L1 → selecting listed groups is allowed.
             missing = await self._auth(
                 session,
                 db_user=fx.ua,
@@ -571,7 +573,7 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
                 object_id=1,
                 access={"allowed_group_ids": "nope", "allowed_template_ids": [10]},
             )
-            self.assertFalse(missing.allowed)
+            self.assertTrue(missing.allowed, missing.reason)
             self.assertFalse(invalid.allowed)
 
     async def test_i_view_only_mutation_deny(self) -> None:
