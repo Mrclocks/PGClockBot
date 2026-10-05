@@ -654,7 +654,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
             reseller_id=db_user.reseller_id,
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await state.clear()
     await callback.answer()
@@ -1012,7 +1012,7 @@ async def wholesale_buy(
             reseller_id=db_user.reseller_id,
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     # Drop wholesale qty FSM; present_order_pay sets NAV_PAY + order id
     await state.set_state(None)
@@ -1100,7 +1100,7 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
             reseller_id=db_user.reseller_id,
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
 
     await callback.answer()
@@ -1220,7 +1220,7 @@ async def apply_loyalty_discount_btn(
     try:
         order = await apply_discount_to_order(session, order, ent.code)
     except ValueError as e:
-        await callback.answer(str(e)[:180], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
     await callback.answer("تخفیف اعمال شد ✅")
     if callback.message:
@@ -1276,7 +1276,7 @@ async def apply_discount_msg(
     try:
         order = await apply_discount_to_order(session, order, code_raw)
     except ValueError as e:
-        await message.answer(str(e))
+        await message.answer(user_safe_error(e))
         await present_order_pay(message, session, db_user, order.id, state=state)
         return
     await message.answer(
@@ -1306,7 +1306,7 @@ async def pay_wallet_cb(
     try:
         order = await pay_with_wallet(session, order, db_user)
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     except Exception as e:
         await callback.answer(f"خطا در تحویل: {user_safe_error(e)}", show_alert=True)
@@ -1515,7 +1515,7 @@ async def pay_card_cb(
     try:
         payment = await start_card_payment(session, order, db_user.id)
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
@@ -1607,7 +1607,7 @@ async def pay_gateway_cb(
             session, order, db_user.id, PaymentMethod.GATEWAY.value
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
@@ -1709,7 +1709,7 @@ async def pay_crypto_cb(
             session, order, db_user.id, PaymentMethod.CRYPTO.value
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
@@ -1771,7 +1771,7 @@ async def pay_stars_cb(
             session, order, db_user.id, PaymentMethod.STARS.value
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await callback.answer()
     try:
@@ -1848,7 +1848,7 @@ async def pay_psp_cb(
             description=f"سفارش #{order.id}",
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)

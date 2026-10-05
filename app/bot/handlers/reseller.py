@@ -33,6 +33,7 @@ from app.services.resellers import (
 )
 from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
+from app.services.redact import user_safe_error
 
 router = Router(name="reseller")
 
@@ -518,9 +519,9 @@ async def res_user_message_send(
         await session.commit()
         await message.answer("پیام ارسال شد ✅")
     except ValueError as e:
-        await message.answer(str(e))
+        await message.answer(user_safe_error(e))
     except Exception as e:
-        await message.answer(f"خطا: {e}")
+        await message.answer(f"خطا: {user_safe_error(e)}")
 
 
 @router.callback_query(F.data.startswith("res:userrenew:"))
@@ -556,9 +557,9 @@ async def res_user_quick_renew(
         await session.commit()
         await callback.answer(f"تمدید شد: {label}"[:180], show_alert=True)
     except ValueError as e:
-        await callback.answer(str(e)[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
     except Exception as e:
-        await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("res:reports"))
@@ -1058,7 +1059,7 @@ async def resapply_buy(
     try:
         app, order = await create_application(session, user=db_user, plan=plan)
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
 
     await callback.answer()
@@ -1226,7 +1227,7 @@ async def res_renew_go(
             session, user=owner, profile=profile, plan=plan
         )
     except ValueError as e:
-        await callback.answer(str(e)[:180], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
     await callback.answer("تمدید شد")
     if callback.message:
@@ -1332,7 +1333,7 @@ async def res_buy_gb_go(
             session, user=owner, profile=profile, plan=plan, gb=gb
         )
     except ValueError as e:
-        await callback.answer(str(e)[:180], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
     await callback.answer("خرید شد")
     if callback.message:
@@ -1429,7 +1430,7 @@ async def res_buy_users_go(
             session, user=owner, profile=profile, plan=plan, count=n
         )
     except ValueError as e:
-        await callback.answer(str(e)[:180], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
     await callback.answer("خرید شد")
     if callback.message:
@@ -1566,7 +1567,7 @@ async def res_addon_buy(
             session, sub=sub, addon_plan=addon, payer=owner, charge_wallet=True
         )
     except ValueError as e:
-        await callback.answer(str(e)[:180], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
     await callback.answer("خرید شد")
     if callback.message:

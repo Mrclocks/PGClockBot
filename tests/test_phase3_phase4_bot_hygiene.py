@@ -51,7 +51,9 @@ class UserSafeErrorPhase3Tests(unittest.TestCase):
         raw = "Client error '401' for url 'https://api.telegram.org/bot123456:AAHdeadbeefdeadbeefdeadbeefdeadbee/getMe'"
         out = user_safe_error(raw)
         self.assertNotIn("AAHdeadbeef", out)
-        self.assertIn("<bot-token>", out)
+        # 401 maps to a clear Persian login message (token must never leak).
+        self.assertIn("پاسارگارد", out)
+        self.assertNotIn("bot123456", out)
 
     def test_fallback_on_traceback_like_text(self):
         from app.services.redact import user_safe_error

@@ -16,7 +16,8 @@ from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.tg_utils import parse_bot_int, safe_edit_text
 from app.db.models import BotUser
 from app.services.formatting import node_status_fa
-from app.services.pasarguard import PasarGuardError, get_pg
+from app.services.redact import user_safe_error
+from app.services.pasarguard import get_pg
 
 router = Router(name="admin_pg_nodes")
 
@@ -102,9 +103,8 @@ class PgNodeStates(StatesGroup):
 
 
 def _err_msg(exc: Exception) -> str:
-    if isinstance(exc, PasarGuardError):
-        return exc.user_message(fallback=str(exc))
-    return str(exc) or "خطا"
+    return user_safe_error(exc, fallback="خطا در ارتباط با پاسارگارد")
+
 
 
 def _nodes_list_kb(items: list) -> InlineKeyboardMarkup:

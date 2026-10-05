@@ -20,6 +20,7 @@ from app.bot.menu_nav import restore_main_reply, user_has_services
 from app.db.models import BotUser, Order, Role, UserService
 from app.services.formatting import format_message
 from app.services.users import get_all_settings
+from app.services.redact import user_safe_error
 
 router = Router(name="reply_nav")
 
@@ -1366,7 +1367,7 @@ async def _soft_admin(
             await bubble.edit_text("این بخش در دسترس نیست.")
     except Exception as e:
         try:
-            await bubble.edit_text(f"خطا: {e}")
+            await bubble.edit_text(f"خطا: {user_safe_error(e)}")
         except Exception:
             pass
 
@@ -1658,9 +1659,9 @@ async def _handle_pay_action(
             await shop_h.ask_discount(cb, state, session)
     except Exception as e:
         try:
-            await bubble.edit_text(f"خطا: {e}")
+            await bubble.edit_text(f"خطا: {user_safe_error(e)}")
         except Exception:
-            await message.answer(f"خطا: {e}")
+            await message.answer(f"خطا: {user_safe_error(e)}")
 
 
 async def _handle_topup_action(
@@ -1686,9 +1687,9 @@ async def _handle_topup_action(
         await wallet_h.wtop_choose_method(cb, session, state, db_user)
     except Exception as e:
         try:
-            await bubble.edit_text(f"خطا: {e}")
+            await bubble.edit_text(f"خطا: {user_safe_error(e)}")
         except Exception:
-            await message.answer(f"خطا: {e}")
+            await message.answer(f"خطا: {user_safe_error(e)}")
 
 
 async def _soft_reseller(
@@ -1776,7 +1777,7 @@ async def _soft_reseller(
             )
         except Exception as e:
             try:
-                await bubble.edit_text(f"خطا: {e}")
+                await bubble.edit_text(f"خطا: {user_safe_error(e)}")
             except Exception:
                 pass
         return
@@ -1807,7 +1808,7 @@ async def _soft_reseller(
             )
         except Exception as e:
             try:
-                await bubble.edit_text(f"خطا: {e}")
+                await bubble.edit_text(f"خطا: {user_safe_error(e)}")
             except Exception:
                 pass
         return

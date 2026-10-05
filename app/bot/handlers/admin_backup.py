@@ -22,6 +22,7 @@ from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner_handler
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
+from app.services.redact import user_safe_error
 from app.services.backup import (
     create_backup,
     delete_backup,
@@ -126,7 +127,7 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser):
         )
     except Exception as e:
         if callback.message:
-            await callback.message.answer(f"❌ ساخت بکاپ ناموفق:\n{e}")
+            await callback.message.answer(f"❌ ساخت بکاپ ناموفق:\n{user_safe_error(e)}")
         return
     path = Path(result["path"])
     caption = (
@@ -199,7 +200,9 @@ async def backup_download(callback: CallbackQuery, db_user: BotUser):
                 caption=f"⬇️ {path.name}",
             )
         except Exception as e:
-            await callback.message.answer(f"❌ ارسال ممکن نشد (حجم زیاد؟):\n{e}")
+            await callback.message.answer(
+                f"❌ ارسال ممکن نشد (حجم زیاد؟):\n{user_safe_error(e)}"
+            )
 
 
 @router.callback_query(F.data.startswith("adm:backup:del:"))
@@ -339,7 +342,7 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
         )
     except Exception as e:
         await state.clear()
-        await message.answer(f"❌ آپلود ناموفق:\n{e}")
+        await message.answer(f"❌ آپلود ناموفق:\n{user_safe_error(e)}")
         return
     await state.clear()
     if not result.get("ok"):

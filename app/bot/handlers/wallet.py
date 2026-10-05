@@ -73,7 +73,7 @@ async def redeem_gift_for_user(
         row, balance = await redeem_charge_code(session, user=db_user, code=code)
         await session.commit()
     except ValueError as e:
-        await message.answer(format_message("⚠️ کد هدیه", str(e)))
+        await message.answer(format_message("⚠️ کد هدیه", user_safe_error(e)))
         return False
     except Exception as e:
         await message.answer(format_message("❌ خطا", user_safe_error(e)))

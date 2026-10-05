@@ -24,7 +24,6 @@ from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.formatting import format_message, service_card
 from app.services.pasarguard import (
-    PasarGuardError,
     as_list,
     build_user_create_payload,
     build_user_modify_payload,
@@ -33,15 +32,14 @@ from app.services.pasarguard import (
     user_subscription_url,
 )
 from app.services.pg_quota import PgQuotaError, assert_can_create_user
+from app.services.redact import user_safe_error
 
 router = Router(name="admin_pg_users")
 
 
 def _err_msg(exc: Exception) -> str:
     """Persian-friendly PasarGuard / local error for bot replies."""
-    if isinstance(exc, PasarGuardError):
-        return exc.user_message(fallback="خطا در ارتباط با پاسارگارد")
-    return str(exc) or "خطا"
+    return user_safe_error(exc, fallback="خطا در ارتباط با پاسارگارد")
 
 async def _require_users(db_user: BotUser, callback=None, message=None, *, action: str | None = None) -> bool:
     """Legacy platform-admin page gate (kept for source contracts).
@@ -326,7 +324,7 @@ async def _show_user_card(
         try:
             user = await pg.get_user_by_id(uid)
         except Exception as e:
-            text = format_message("❌ خطا", str(e))
+            text = format_message("❌ خطا", user_safe_error(e))
             if edit:
                 await safe_edit_text(target, text, reply_markup=None)
             else:

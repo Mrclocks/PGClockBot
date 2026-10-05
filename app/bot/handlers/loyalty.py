@@ -42,6 +42,7 @@ from app.services.lucky_wheel import (
 )
 from app.services.message_variables import DOMAIN_REFERRAL, render_message_template
 from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.services.redact import user_safe_error
 
 router = Router(name="loyalty")
 
@@ -1072,7 +1073,7 @@ async def _do_redeem(
             idempotency_key=key,
         )
     except ValueError as e:
-        await callback.answer(str(e)[:180], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
     except Exception:
         await callback.answer("خطا در بازخرید. دوباره تلاش کنید.", show_alert=True)
@@ -1163,7 +1164,7 @@ async def loyalty_wheel_spin(callback: CallbackQuery, session: AsyncSession, db_
     try:
         result = await wheel_spin(session, db_user, idempotency_key=key)
     except ValueError as e:
-        await callback.answer(str(e)[:180], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         body, can_spin = await _build_wheel_hub_text(session, db_user)
         if callback.message:
             await safe_edit_text(

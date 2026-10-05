@@ -20,6 +20,7 @@ from app.services.formatting import (
     order_status_fa,
 )
 from app.services.orders import approve_payment, deliver_order, reject_payment
+from app.services.redact import user_safe_error
 from app.services.pasarguard import get_pg
 from app.services.tickets import get_ticket, list_open_tickets, reply_ticket
 from app.services.updates import local_version
@@ -638,7 +639,7 @@ async def order_approve_cb(callback: CallbackQuery, session: AsyncSession, db_us
         msg = await _approve_order_bot(session, order, callback.bot)
         await callback.answer(msg, show_alert=True)
     except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await session.refresh(order)
     text = f"🛒 سفارش #{order.id}\nوضعیت: <b>{order_status_fa(order.status)}</b>\n✅ انجام شد"
@@ -1975,9 +1976,9 @@ async def adm_users_message_send(
         await session.commit()
         await message.answer("پیام ارسال شد ✅", reply_markup=kb.admin_users_reply_keyboard())
     except ValueError as e:
-        await message.answer(str(e), reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(user_safe_error(e), reply_markup=kb.admin_users_reply_keyboard())
     except Exception as e:
-        await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=kb.admin_users_reply_keyboard())
     await _render_user_card(message, session, user)
 
 
@@ -2096,9 +2097,9 @@ async def adm_users_quick_renew(
         await session.commit()
         await callback.answer(f"تمدید شد: {label}"[:180], show_alert=True)
     except ValueError as e:
-        await callback.answer(str(e)[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
     except Exception as e:
-        await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
     if callback.message and user:
         await _render_user_card(callback.message, session, user, edit=True)
 
@@ -2161,7 +2162,7 @@ async def adm_users_wallet_credit_save(
             note="شارژ از ربات ادمین",
         )
     except ValueError as e:
-        await message.answer(str(e), reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(user_safe_error(e), reply_markup=kb.admin_users_reply_keyboard())
         await state.clear()
         return
     await state.clear()
@@ -2247,7 +2248,7 @@ async def adm_users_service_one(
         snap = await service_snapshot(session, svc)
         await session.commit()
     except ValueError as e:
-        await callback.answer(str(e)[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     await callback.answer()
     if callback.message:
@@ -2282,7 +2283,7 @@ async def adm_users_service_link(
         snap = await service_snapshot(session, svc)
         await session.commit()
     except ValueError as e:
-        await callback.answer(str(e)[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     url = snap.subscription_url
     if not url:
@@ -2328,10 +2329,10 @@ async def adm_users_service_renew(
         await admin_renew_service(session, svc, plan=plan, reset_traffic=True)
         snap = await service_snapshot(session, svc)
     except ValueError as e:
-        await callback.answer(str(e)[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     except Exception as e:
-        await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     await callback.answer("تمدید شد")
     if callback.message:
@@ -2364,7 +2365,7 @@ async def adm_users_service_delete_ask(
             session, bot_user_id=user_id, service_id=service_id
         )
     except ValueError as e:
-        await callback.answer(str(e)[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     await callback.answer()
     label = svc.pg_username or f"#{service_id}"
@@ -2407,10 +2408,10 @@ async def adm_users_service_delete(
         )
         await admin_delete_service(session, svc, delete_pg=True)
     except ValueError as e:
-        await callback.answer(str(e)[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     except Exception as e:
-        await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     await callback.answer("سرویس حذف شد", show_alert=True)
     if callback.message:
@@ -2528,10 +2529,10 @@ async def adm_users_service_adjust(
             )
             snap = await service_snapshot(session, svc)
         except ValueError as e:
-            await callback.answer(str(e)[:160], show_alert=True)
+            await callback.answer(user_safe_error(e, limit=160), show_alert=True)
             return
         except Exception as e:
-            await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+            await callback.answer(user_safe_error(e, limit=160), show_alert=True)
             return
         await state.update_data(**{adj_key: {"days": 0, "gb": 0.0}})
         await callback.answer("مانده به‌روز شد")
@@ -2863,10 +2864,10 @@ async def adm_users_delete_reason(
             actor_user_id=db_user.id,
         )
     except ValueError as e:
-        await message.answer(str(e), reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(user_safe_error(e), reply_markup=kb.admin_users_reply_keyboard())
         return
     except Exception as e:
-        await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=kb.admin_users_reply_keyboard())
         return
 
     # ReplyKeyboard cannot be attached via edit_text — that threw and surfaced
@@ -2941,10 +2942,10 @@ async def adm_users_unreseller_reason(
             session, user_id, delete_pg_admin=True, reason=reason
         )
     except ValueError as e:
-        await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=kb.admin_users_reply_keyboard())
         return
     except Exception as e:
-        await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=kb.admin_users_reply_keyboard())
         return
 
     user = await session.get(BotUser, user_id)
@@ -3278,10 +3279,10 @@ async def adm_resellers_capacity_adjust(
                 session, profile, extra_days=days, extra_gb=gb
             )
         except ValueError as e:
-            await callback.answer(str(e)[:160], show_alert=True)
+            await callback.answer(user_safe_error(e, limit=160), show_alert=True)
             return
         except Exception as e:
-            await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+            await callback.answer(user_safe_error(e, limit=160), show_alert=True)
             return
         await state.update_data(**{adj_key: {"days": 0, "gb": 0}})
         await callback.answer("ظرفیت به‌روز شد")
@@ -3467,7 +3468,7 @@ async def adm_resellers_services(
         if callback.message:
             await safe_edit_text(
                 callback.message,
-                f"❌ خطا در دریافت سرویس‌ها:\n{html.escape(str(e)[:200])}",
+                f"❌ خطا در دریافت سرویس‌ها:\n{html.escape(user_safe_error(e, limit=200))}",
                 reply_markup=back_kb,
             )
         return
@@ -3658,7 +3659,7 @@ async def adm_resapp_ok(callback: CallbackQuery, session: AsyncSession, db_user:
             panel_base_url=await get_reseller_panel_base_url(session),
         )
     except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     user = await session.get(BotUser, app.user_id)
     if user:
@@ -3694,7 +3695,7 @@ async def adm_resapp_no(callback: CallbackQuery, session: AsyncSession, db_user:
     try:
         await reject_application(session, app, reviewer_tg=db_user.telegram_id)
     except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     user = await session.get(BotUser, app.user_id)
     if user:
@@ -3761,7 +3762,7 @@ async def make_res(
             panel_base_url=await get_reseller_panel_base_url(session),
         )
     except Exception as e:
-        await message.answer(f"خطا: {e}")
+        await message.answer(f"خطا: {user_safe_error(e)}")
         return
     await state.clear()
     try:
@@ -3943,10 +3944,10 @@ async def adm_broadcast_send(message: Message, state: FSMContext, session: Async
             created_by=str(db_user.telegram_id),
         )
     except ValueError as e:
-        await message.answer(str(e), reply_markup=await _admin_hub_kb(session, db_user))
+        await message.answer(user_safe_error(e), reply_markup=await _admin_hub_kb(session, db_user))
         return
     except Exception as e:
-        await message.answer(f"خطا: {e}", reply_markup=await _admin_hub_kb(session, db_user))
+        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=await _admin_hub_kb(session, db_user))
         return
     await message.answer(
         f"✅ ارسال شد\nموفق: {result['ok']} / {result['total']}\nناموفق: {result['fail']}",
@@ -3970,7 +3971,7 @@ async def pg_stats(callback: CallbackQuery, db_user: BotUser):
         stats = await get_pg().get_system_stats()
     except Exception as e:
         if callback.message:
-            await callback.message.edit_text(f"خطا: {e}", reply_markup=None)
+            await callback.message.edit_text(f"خطا: {user_safe_error(e)}", reply_markup=None)
         return
     text = "🏠 <b>نمای کلی پاسارگارد</b>\n\n" + format_system_stats(stats)
     if callback.message:

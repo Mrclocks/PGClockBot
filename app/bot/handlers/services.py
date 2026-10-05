@@ -16,6 +16,7 @@ from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import get_plan, list_active_plans
 from app.services.pasarguard import get_pg
 from app.services.users import get_all_settings
+from app.services.redact import user_safe_error
 
 router = Router(name="services")
 
@@ -211,7 +212,7 @@ async def svc_renew_pay(
             plan=plan,
         )
     except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
 
     await callback.answer()
@@ -322,7 +323,7 @@ async def svc_delete(
     try:
         await admin_delete_service(session, svc, delete_pg=delete_pg)
     except Exception as e:
-        await callback.answer(str(e)[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     await callback.answer(
         "اتصال حذف شد" if not delete_pg else "سرویس حذف شد",

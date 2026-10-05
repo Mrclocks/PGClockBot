@@ -267,6 +267,48 @@ def humanize_pg_validation_error(text: str) -> str:
     )
 
 
+# Transport / generic HTTP noise → short Persian (bot + panel).
+_PG_TRANSPORT_MSG_MAP: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(r"timed?\s*out|timeout|deadline exceeded", re.I),
+        "اتصال به پاسارگارد طول کشید. کمی بعد دوباره تلاش کنید.",
+    ),
+    (
+        re.compile(
+            r"connection\s*(refused|reset|aborted)|network\s*unreachable|"
+            r"name\s*or\s*service\s*not\s*known|temporary\s*failure|"
+            r"failed\s*to\s*establish|connect\s*error",
+            re.I,
+        ),
+        "ارتباط با پاسارگارد برقرار نشد. آدرس/شبکه را بررسی کنید.",
+    ),
+    (
+        re.compile(r"\b401\b|unauthorized", re.I),
+        "ورود به پاسارگارد ناموفق بود. نام کاربری یا رمز را بررسی کنید.",
+    ),
+    (
+        re.compile(r"\b404\b|not\s*found", re.I),
+        "مورد درخواستی در پاسارگارد پیدا نشد.",
+    ),
+    (
+        re.compile(r"\b429\b|too\s*many\s*requests|rate\s*limit", re.I),
+        "درخواست‌ها زیاد شده است. کمی صبر کنید و دوباره تلاش کنید.",
+    ),
+    (
+        re.compile(r"\b50[0-4]\b|bad\s*gateway|service\s*unavailable|internal\s*server", re.I),
+        "پاسارگارد موقتاً در دسترس نیست. کمی بعد دوباره تلاش کنید.",
+    ),
+    (
+        re.compile(r"failed\s*\(\s*409\s*\)", re.I),
+        "این نام کاربری قبلاً ثبت شده است. یک نام دیگر بفرستید.",
+    ),
+    (
+        re.compile(r"failed\s*\(\s*403\s*\)", re.I),
+        "اجازه این عمل را ندارید.",
+    ),
+]
+
+
 def friendly_pg_error(text: str, *, status_code: int | None = None) -> str:
     """Map PG API / HTTP errors to a short Persian operator message.
 
@@ -279,9 +321,25 @@ def friendly_pg_error(text: str, *, status_code: int | None = None) -> str:
         return "این نام کاربری قبلاً ثبت شده است. یک نام دیگر بفرستید."
     if status_code == 403:
         return "اجازه این عمل را ندارید."
+    if status_code == 401:
+        return "ورود به پاسارگارد ناموفق بود. نام کاربری یا رمز را بررسی کنید."
+    if status_code == 404:
+        return "مورد درخواستی در پاسارگارد پیدا نشد."
+    if status_code in {500, 502, 503, 504}:
+        return "پاسارگارد موقتاً در دسترس نیست. کمی بعد دوباره تلاش کنید."
+    if status_code == 429:
+        return "درخواست‌ها زیاد شده است. کمی صبر کنید و دوباره تلاش کنید."
     if not raw:
         return raw
+    # Already Persian / operator-facing — keep as-is.
+    if re.search(r"[\u0600-\u06FF]", raw) and not re.search(
+        r"\b(failed|error|exception|traceback)\b", raw, re.I
+    ):
+        return raw
     for pat, fa in _PG_BUSINESS_MSG_MAP:
+        if pat.search(raw):
+            return fa
+    for pat, fa in _PG_TRANSPORT_MSG_MAP:
         if pat.search(raw):
             return fa
     return humanize_pg_validation_error(raw)

@@ -41,15 +41,37 @@ def user_safe_error(
     fallback: str = "خطای داخلی. دوباره تلاش کنید.",
     limit: int = 180,
 ) -> str:
-    """Redact secrets from an exception for Telegram user-facing replies.
+    """Persian, secret-safe message for Telegram user-facing replies.
 
-    Phase 3/4: never echo raw httpx/Bot API errors that may embed tokens.
+    Prefer PasarGuard ``user_message`` / ``friendly_pg_error`` so operators see
+    clear causes (duplicate username, timeout, 403) instead of raw English.
+    Still redacts tokens and never echoes tracebacks.
     """
-    msg = redact(exc, limit=limit).strip()
+    from app.services.credential_policy import friendly_pg_error
+
+    status_code = getattr(exc, "status_code", None)
+    status_code = status_code if isinstance(status_code, int) else None
+
+    msg = ""
+    if callable(getattr(exc, "user_message", None)):
+        try:
+            msg = str(exc.user_message(fallback="") or "").strip()
+        except Exception:
+            msg = ""
+    if not msg:
+        msg = "" if exc is None else str(exc)
+
+    msg = friendly_pg_error(msg, status_code=status_code)
+    msg = redact(msg, limit=limit).strip()
     if not msg:
         return fallback
     low = msg.lower()
-    if "traceback" in low or "/app/" in msg or "file \"" in low:
+    if "traceback" in low or "/app/" in msg or 'file "' in low:
+        return fallback
+    # Unmapped English HTTP/API noise → generic Persian, never raw status lines.
+    if re.search(r"\b(failed\s*\(|traceback|exception)\b", low) and not re.search(
+        r"[\u0600-\u06FF]", msg
+    ):
         return fallback
     return msg
 
