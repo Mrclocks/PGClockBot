@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.1.12": [
+        "نماینده: انتخاب گروه/تمپلیت در ربات با وب یکی شد — allow-list باز دیگر «اجازه این عمل را ندارید» نمی‌دهد",
+    ],
     "0.1.11": [
         "نماینده: لیست گروه‌ها در ربات با وب‌پنل یکی شد — دیگر با نقش بدون allow-list خالی نمی‌ماند",
         "صفحه گیت راه‌اندازی و خطاهای CSRF/۴۱۳ هم‌سبک با صفحه ۴۰۴؛ راهنمای گرفتن توکن/?gate=",
