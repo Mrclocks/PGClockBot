@@ -121,6 +121,59 @@ templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
 templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
+
+
+def render_panel_status(
+    request: Request,
+    *,
+    code: int,
+    title: str,
+    message: str,
+    ref: str | None = None,
+    primary_href: str | None = "/home",
+    primary_label: str = "بازگشت به داشبورد",
+    secondary_href: str | None = "/logout",
+    secondary_label: str = "خروج",
+    guide_heading: str | None = None,
+    guide_steps: list[dict] | None = None,
+    code_block: str | None = None,
+    guide_note: str | None = None,
+    footer: str | None = None,
+):
+    """Shared branded status page (404 / 403 / 500 / setup gate)."""
+    from app.version import __version__ as _ver
+
+    try:
+        from app.services.pwa import panel_display_name
+
+        pname = panel_display_name()
+    except Exception:
+        pname = "MrClockBot"
+    return templates.TemplateResponse(
+        request,
+        "panel_status.html",
+        {
+            "code": int(code),
+            "title": title,
+            "message": message,
+            "ref": ref,
+            "primary_href": primary_href or "",
+            "primary_label": primary_label,
+            "secondary_href": secondary_href or "",
+            "secondary_label": secondary_label,
+            "guide_heading": guide_heading or "",
+            "guide_steps": guide_steps or [],
+            "code_block": code_block or "",
+            "guide_note": guide_note or "",
+            "footer": footer
+            or "اگر مشکل ادامه داشت، از حساب خارج شوید و دوباره وارد شوید.",
+            "app_version": _ver,
+            "pwa_name": pname,
+        },
+        status_code=int(code),
+    )
+
+
 def _load_guide_topics() -> dict:
     """Populate Jinja globals so macros see help topics without ``with context``."""
     try:
@@ -791,23 +844,49 @@ def create_api_app(lifespan=None) -> FastAPI:
                             path="/",
                         )
                 return response
-            return HTMLResponse(
-                "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'/>"
-                "<meta name='viewport' content='width=device-width,initial-scale=1'/>"
-                "<title>Setup link required</title></head><body style='font-family:system-ui,sans-serif;"
-                "max-width:42rem;margin:3rem auto;padding:0 1rem;line-height:1.6;color:#18181b'>"
-                "<h1>First-run setup</h1>"
-                "<p>For security, internet access to the setup wizard requires the "
-                "<b>one-time Setup URL</b> from the install output "
-                "(valid up to 15 minutes; disabled after setup finishes).</p>"
-                "<p><b>On the server</b>, print it with:</p>"
-                "<p><code style='background:#f4f4f5;padding:6px 10px;border-radius:4px;display:block'>"
-                "bash pgclock.sh status</code></p>"
-                "<p style='font-size:14px;color:#71717a'>"
-                "Loopback (<code>127.0.0.1</code> / <code>::1</code>) works without the link. "
-                "Remote access needs the URL that includes <code>?gate=…</code>."
-                "</p></body></html>",
-                status_code=403,
+            return render_panel_status(
+                request,
+                code=403,
+                title="راه‌اندازی اولیه",
+                message=(
+                    "برای امنیت، دسترسی اینترنتی به ویزارد راه‌اندازی فقط با "
+                    "لینک یک‌بارمصرف نصب ممکن است (حدود ۱۵ دقیقه اعتبار؛ "
+                    "بعد از اتمام راه‌اندازی غیرفعال می‌شود)."
+                ),
+                primary_href="",
+                secondary_href="",
+                guide_heading="چطور توکن / لینک راه‌اندازی بگیرم؟",
+                guide_steps=[
+                    {
+                        "title": "۱. به سرور وصل شوید",
+                        "body": "با SSH به همان سروری که PGClockBot روی آن نصب است وارد شوید.",
+                    },
+                    {
+                        "title": "۲. وضعیت را چاپ کنید",
+                        "body": "این دستور لینک یک‌بارمصرف راه‌اندازی را نشان می‌دهد:",
+                    },
+                    {
+                        "title": "۳. لینک را در مرورگر باز کنید",
+                        "body": (
+                            "آدرسی که شامل پارامتر "
+                            "<code dir=\"ltr\">?gate=…</code> "
+                            "است را کپی کنید. همان مقدار "
+                            "<code dir=\"ltr\">gate</code> "
+                            "توکن شماست — آن را در نوار آدرس مرورگر باز کنید."
+                        ),
+                    },
+                ],
+                code_block="bash pgclock.sh status",
+                guide_note=(
+                    "از خود سرور با "
+                    "<code dir=\"ltr\">127.0.0.1</code> "
+                    "یا "
+                    "<code dir=\"ltr\">::1</code> "
+                    "بدون لینک هم باز می‌شود. دسترسی از راه دور حتماً به "
+                    "<code dir=\"ltr\">?gate=…</code> "
+                    "نیاز دارد."
+                ),
+                footer="بعد از اتمام راه‌اندازی، این لینک و توکن دیگر کار نمی‌کنند.",
             )
         return await call_next(request)
 
@@ -826,6 +905,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 def _csrf_reject(message: str, *, token_fail: bool = False):
                     # Panel AJAX clients expect JSON — HTML 403 made res.json() throw
                     # and only showed a generic failure.
+                    # token_fail marks double-submit mismatch (CSRF token rejected).
                     accept = (request.headers.get("accept") or "").lower()
                     ctype = (request.headers.get("content-type") or "").lower()
                     xrw = (request.headers.get("x-requested-with") or "").lower()
@@ -842,8 +922,20 @@ def create_api_app(lifespan=None) -> FastAPI:
                             {"ok": False, "error": message},
                             status_code=403,
                         )
-                    label = "CSRF token rejected" if token_fail else "CSRF rejected"
-                    return HTMLResponse(label, status_code=403)
+                    return render_panel_status(
+                        request,
+                        code=403,
+                        title="درخواست امنیتی رد شد",
+                        message=message,
+                        primary_href="/login",
+                        primary_label="صفحه ورود",
+                        secondary_href="/",
+                        secondary_label="تلاش دوباره",
+                        footer=(
+                            "صفحه را تازه کنید و دوباره ارسال کنید. "
+                            "اگر ادامه داشت، از حساب خارج شوید و دوباره وارد شوید."
+                        ),
+                    )
 
                 origin = request.headers.get("origin")
                 referer = request.headers.get("referer")
@@ -903,7 +995,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         path = request.url.path
         if request.method == "POST" and path in {"/login", "/setup", "/setup/save", "/"}:
             if not content_length_ok(request.headers.get("content-length"), PUBLIC_FORM_MAX_BODY_BYTES):
-                return HTMLResponse("Request too large", status_code=413)
+                return render_panel_status(
+                    request,
+                    code=413,
+                    title="درخواست خیلی بزرگ است",
+                    message="حجم دادهٔ ارسالی از حد مجاز بیشتر است. صفحه را تازه کنید و دوباره تلاش کنید.",
+                    primary_href="/",
+                    primary_label="تلاش دوباره",
+                    secondary_href="",
+                )
         return await call_next(request)
 
     @app.middleware("http")
@@ -1056,30 +1156,16 @@ def create_api_app(lifespan=None) -> FastAPI:
         secondary_href: str = "/logout",
         secondary_label: str = "خروج",
     ):
-        from app.version import __version__ as _ver
-
-        try:
-            from app.services.pwa import panel_display_name
-
-            pname = panel_display_name()
-        except Exception:
-            pname = "MrClockBot"
-        return templates.TemplateResponse(
+        return render_panel_status(
             request,
-            "panel_status.html",
-            {
-                "code": code,
-                "title": title,
-                "message": message,
-                "ref": ref,
-                "primary_href": primary_href,
-                "primary_label": primary_label,
-                "secondary_href": secondary_href,
-                "secondary_label": secondary_label,
-                "app_version": _ver,
-                "pwa_name": pname,
-            },
-            status_code=code,
+            code=code,
+            title=title,
+            message=message,
+            ref=ref,
+            primary_href=primary_href,
+            primary_label=primary_label,
+            secondary_href=secondary_href,
+            secondary_label=secondary_label,
         )
 
     @app.exception_handler(StarletteHTTPException)
