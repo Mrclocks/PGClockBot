@@ -74,7 +74,8 @@ class OutboundSettingTextTests(unittest.TestCase):
         # Title prefix shifts entity offsets
         self.assertGreater(kw["entities"][0].offset, 2)
 
-    def test_shop_title_raw_preserves_premium_emoji(self):
+    def test_shop_title_raw_preserves_premium_emoji_without_sparkle(self):
+        # Title already has premium emoji — decorative ✨ prefix must not appear beside it.
         title_body = "کلاک🐸"
         ent = MessageEntity(
             type="custom_emoji", offset=4, length=2, custom_emoji_id="pepe1"
@@ -88,9 +89,20 @@ class OutboundSettingTextTests(unittest.TestCase):
         self.assertIn("entities", kw)
         self.assertEqual(kw.get("parse_mode"), None)
         self.assertEqual(kw["entities"][0].custom_emoji_id, "pepe1")
-        # prefix "✨ " is UTF-16 length 2 → emoji moves from 4 to 6
-        self.assertEqual(kw["entities"][0].offset, 6)
-        self.assertTrue(text.startswith("✨ کلاک"))
+        self.assertEqual(kw["entities"][0].offset, 4)
+        self.assertTrue(text.startswith("کلاک"))
+        self.assertFalse(text.startswith("✨"))
+
+    def test_plain_shop_title_keeps_decorative_prefix(self):
+        text, kw = outbound_setting_text(
+            "بدنه پیام",
+            title_raw="کلاک بات",
+            title_prefix="✨ ",
+        )
+        self.assertEqual(kw, {})
+        from app.services.formatting import format_message
+
+        self.assertEqual(text, format_message("✨ کلاک بات", "بدنه پیام"))
 
     def test_pack_setting_from_message_message_and_button_keys(self):
         class Msg:

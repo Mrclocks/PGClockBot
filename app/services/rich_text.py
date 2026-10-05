@@ -420,7 +420,9 @@ def outbound_setting_text(
 
     ``title_raw`` accepts a packed setting (e.g. ``shop_title``) so premium emoji
     in the title survive; ``title_prefix`` is plain text before that title
-    (e.g. ``\"✨ \"``). Plain ``title=`` still works for callers without rich titles.
+    (e.g. ``\"✨ \"``). If the title already carries a custom/premium emoji,
+    the decorative prefix is omitted so a leftover sparkle does not sit beside it.
+    Plain ``title=`` still works for callers without rich titles.
     """
     text, ents = unpack_rich_text(raw)
     if domain:
@@ -440,9 +442,13 @@ def outbound_setting_text(
     title_ents: list[MessageEntity] | None = None
     if title_raw is not None:
         t_text, title_ents = unpack_rich_text(title_raw)
-        title_s = f"{title_prefix}{(t_text or '').strip()}".strip()
-        if title_ents and title_prefix:
-            title_ents = shift_entities(title_ents, utf16_len(title_prefix))
+        # Premium titles already brand themselves — don't also prepend ✨/🛠.
+        prefix = ""
+        if title_prefix and not first_custom_emoji_id(title_ents):
+            prefix = title_prefix
+        title_s = f"{prefix}{(t_text or '').strip()}".strip()
+        if title_ents and prefix:
+            title_ents = shift_entities(title_ents, utf16_len(prefix))
     else:
         title_s = (title or "").strip()
 
