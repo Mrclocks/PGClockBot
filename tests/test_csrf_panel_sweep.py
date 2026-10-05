@@ -38,8 +38,8 @@ def test_backup_restore_parses_non_json_safely():
 def test_release_notes_mention_csrf_sweep():
     notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
     assert '"0.1.1"' in notes
-    assert '"0.1.7"' in notes
+    assert '"0.1.8"' in notes
     from app.version import __version__
 
     ver = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    assert ver == __version__ == "0.1.7"
+    assert ver == __version__ == "0.1.8"
