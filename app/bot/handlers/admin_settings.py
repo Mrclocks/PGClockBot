@@ -656,6 +656,163 @@ async def _rerender_after_key(callback: CallbackQuery, session: AsyncSession, ke
         await _render_sub(callback, session, sec_id, sub_id)
 
 
+async def _keep_settings_nav(state: FSMContext | None) -> None:
+    """After FSM clear, stay inside Settings so adm:st:* callbacks keep working."""
+    if state is None:
+        return
+    from app.bot import menu_nav as nav
+
+    await nav.set_nav_level(state, nav.NAV_ADMIN_SETTINGS, push=False)
+
+
+async def _answer_fields(
+    message: Message,
+    session: AsyncSession,
+    *,
+    title: str,
+    fields: list[Field],
+    back_cb: str,
+    extra_rows: list[list[InlineKeyboardButton]] | None = None,
+) -> None:
+    ui = await get_all_settings(session)
+    rows = [[_field_button(ui, k, lab, kind)] for k, lab, kind in fields]
+    if extra_rows:
+        rows.extend(extra_rows)
+    rows.append(_back_row(("⬅️ بازگشت", back_cb)))
+    await message.answer(
+        f"<b>{title}</b>\nبرای تغییر، روی مورد بزنید.",
+        reply_markup=_kb(rows),
+    )
+
+
+async def _answer_settings_location(
+    message: Message,
+    session: AsyncSession,
+    loc: tuple[str, str] | None,
+) -> None:
+    """Re-open the subsection the operator was editing (new message, one Back)."""
+    if not loc:
+        return
+    sec_id, sub_id = loc
+    if sec_id == "notify":
+        ui = await get_all_settings(session)
+        rows: list[list[InlineKeyboardButton]] = []
+        for key, title, _, default in NOTIFY_PREFS:
+            mark = "✅" if on(ui.get(key, default)) else "⬜️"
+            rows.append(
+                [InlineKeyboardButton(text=f"{mark} {title}", callback_data=f"adm:st:tog:{key}")]
+            )
+        rows.append(_back_row(("⬅️ بازگشت", "adm:st:hub")))
+        await message.answer(
+            "🔔 <b>اعلان‌های ادمین اصلی</b>\n"
+            "روشن/خاموش کنید (مستقل از نمایندگان):",
+            reply_markup=_kb(rows),
+        )
+        return
+    if not sub_id:
+        sec = SECTIONS.get(sec_id)
+        if not sec:
+            return
+        rows: list[list[InlineKeyboardButton]] = []
+        for sub in sec.get("subs") or []:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=sub[1],
+                        callback_data=f"adm:st:sub:{sec_id}:{sub[0]}",
+                    )
+                ]
+            )
+        rows.append(_back_row(("⬅️ بازگشت", "adm:st:hub")))
+        await message.answer(
+            f"⚙️ <b>{sec['title']}</b>\nزیر‌بخش را انتخاب کنید:",
+            reply_markup=_kb(rows),
+        )
+        return
+
+    sec = SECTIONS.get(sec_id) or {}
+    sub = next((s for s in (sec.get("subs") or []) if s[0] == sub_id), None)
+    if not sub:
+        return
+    title = sub[1]
+    payload = sub[2]
+    back = f"adm:st:sec:{sec_id}"
+    if payload == "trial":
+        await message.answer(
+            "🧪 <b>پلن تست</b>\nاز دکمه زیر ادامه دهید.",
+            reply_markup=_kb(
+                [
+                    [
+                        InlineKeyboardButton(
+                            text="⬅️ بازگشت به پلن تست",
+                            callback_data="adm:st:sub:service:trial",
+                        )
+                    ]
+                ]
+            ),
+        )
+        return
+    if payload == "custom":
+        ui = await get_all_settings(session)
+        extra = [
+            [
+                InlineKeyboardButton(
+                    text=f"{'✅' if on(ui.get('custom_plan_enabled')) else '⬜️'} فعال در فروشگاه",
+                    callback_data="adm:st:tog:custom_plan_enabled",
+                )
+            ],
+            [InlineKeyboardButton(text="اتصال پاسارگارد", callback_data="adm:custom")],
+        ]
+        await _answer_fields(
+            message,
+            session,
+            title=title,
+            fields=CUSTOM_PRICE,
+            back_cb=back,
+            extra_rows=extra,
+        )
+        return
+    if isinstance(payload, list):
+        await _answer_fields(message, session, title=title, fields=payload, back_cb=back)
+        return
+    # menu_layout / menu_order — one Back into that sub (callback still works with nav kept)
+    await message.answer(
+        f"<b>{title}</b>",
+        reply_markup=_kb(
+            [
+                [
+                    InlineKeyboardButton(
+                        text="⬅️ بازگشت",
+                        callback_data=f"adm:st:sub:{sec_id}:{sub_id}",
+                    )
+                ]
+            ]
+        ),
+    )
+
+
+async def _finish_settings_text_edit(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    loc: tuple[str, str] | None,
+    note: str = "✅ ذخیره شد.",
+) -> None:
+    """Confirm save, restore settings reply KB, return to previous subsection.
+
+    No dual «بازگشت» rows — hub chrome is never forced here.
+    """
+    await state.clear()
+    await _keep_settings_nav(state)
+    await message.answer(note, reply_markup=kb.admin_settings_reply_keyboard())
+    try:
+        await _answer_settings_location(message, session, loc)
+    except Exception:
+        pass
+
+
+
 # ----- callbacks: navigation -----
 
 
@@ -806,6 +963,7 @@ async def settings_edit_save(
     text = (message.text or "").strip()
     if kb.is_cancel_text(text) or not key:
         await state.clear()
+        await _keep_settings_nav(state)
         await message.answer(
             "لغو شد.",
             reply_markup=kb.admin_settings_reply_keyboard(),
@@ -821,32 +979,18 @@ async def settings_edit_save(
             await message.answer("عدد معتبر بفرستید")
             return
         text = raw
-    if key == "force_join_channel":
+        await set_setting(session, key, text)
+    elif key == "force_join_channel":
         from app.services.users import normalize_force_join_channel_value
 
         text = normalize_force_join_channel_value(text)
-    from app.services.rich_text import pack_setting_from_message
+        await set_setting(session, key, text)
+    else:
+        from app.services.rich_text import pack_setting_from_message
 
-    text = pack_setting_from_message(key, message)
-    await set_setting(session, key, text)
-    await state.clear()
-    jump = "adm:st:hub"
-    if loc:
-        sec_id, sub_id = loc
-        jump = f"adm:st:sub:{sec_id}:{sub_id}" if sub_id else f"adm:st:sec:{sec_id}"
-        if sec_id == "notify":
-            jump = "adm:st:sec:notify"
-        if sub_id == "trial":
-            jump = "adm:st:sub:service:trial"
-    await message.answer(
-        "ذخیره شد ✅",
-        reply_markup=_kb(
-            [
-                [InlineKeyboardButton(text="بازگشت", callback_data=jump)],
-                [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:st:hub")],
-            ]
-        ),
-    )
+        text = pack_setting_from_message(key, message)
+        await set_setting(session, key, text)
+    await _finish_settings_text_edit(message, state, session, loc=loc)
 
 
 @settings_actor_required
@@ -947,6 +1091,7 @@ async def support_title_msg(
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
+        await _keep_settings_nav(state)
         await message.answer(
             "لغو شد.",
             reply_markup=kb.admin_settings_reply_keyboard(),
@@ -972,6 +1117,7 @@ async def support_telegram_msg(
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
+        await _keep_settings_nav(state)
         await message.answer(
             "لغو شد.",
             reply_markup=kb.admin_settings_reply_keyboard(),
@@ -1257,6 +1403,7 @@ async def trial_save_name(
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
+        await _keep_settings_nav(state)
         await message.answer(
             "لغو شد.",
             reply_markup=kb.admin_settings_reply_keyboard(),
@@ -1265,10 +1412,11 @@ async def trial_save_name(
     trial = await _ensure_trial(session)
     trial.name = text[:128]
     await session.commit()
-    await state.clear()
-    await message.answer(
-        "ذخیره شد ✅",
-        reply_markup=_kb([[InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial")]]),
+    await _finish_settings_text_edit(
+        message,
+        state,
+        session,
+        loc=("service", "trial"),
     )
 
 
@@ -1296,6 +1444,7 @@ async def trial_save_days(
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
+        await _keep_settings_nav(state)
         await message.answer(
             "لغو شد.",
             reply_markup=kb.admin_settings_reply_keyboard(),
@@ -1309,10 +1458,11 @@ async def trial_save_days(
     trial = await _ensure_trial(session)
     trial.duration_days = days
     await session.commit()
-    await state.clear()
-    await message.answer(
-        "ذخیره شد ✅",
-        reply_markup=_kb([[InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial")]]),
+    await _finish_settings_text_edit(
+        message,
+        state,
+        session,
+        loc=("service", "trial"),
     )
 
 
@@ -1340,6 +1490,7 @@ async def trial_save_gb(
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
+        await _keep_settings_nav(state)
         await message.answer(
             "لغو شد.",
             reply_markup=kb.admin_settings_reply_keyboard(),
@@ -1353,10 +1504,11 @@ async def trial_save_gb(
     trial = await _ensure_trial(session)
     trial.data_limit_gb = None if gb <= 0 else gb
     await session.commit()
-    await state.clear()
-    await message.answer(
-        "ذخیره شد ✅",
-        reply_markup=_kb([[InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial")]]),
+    await _finish_settings_text_edit(
+        message,
+        state,
+        session,
+        loc=("service", "trial"),
     )
 
 

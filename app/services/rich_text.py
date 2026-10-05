@@ -321,9 +321,12 @@ MESSAGE_RICH_KEYS = frozenset(
         "card_pay_text",
         "gateway_pay_text",
         "crypto_pay_text",
+        "psp_pay_text",
         "card_auto_hint_text",
         "shop_maintenance_text",
         "admin_daily_report_template",
+        "stars_title",
+        "stars_description",
         *TERMS_RICH_KEYS,
     }
 )
@@ -404,6 +407,8 @@ def outbound_setting_text(
     raw: str | None,
     *,
     title: str | None = None,
+    title_raw: str | None = None,
+    title_prefix: str = "",
     domain: str | None = None,
     append: str | None = None,
     **template_kwargs: Any,
@@ -412,6 +417,10 @@ def outbound_setting_text(
 
     When custom-emoji entities exist → plain text + ``entities`` + ``parse_mode=None``.
     Otherwise → existing HTML ``format_message`` card (default bot parse_mode).
+
+    ``title_raw`` accepts a packed setting (e.g. ``shop_title``) so premium emoji
+    in the title survive; ``title_prefix`` is plain text before that title
+    (e.g. ``\"✨ \"``). Plain ``title=`` still works for callers without rich titles.
     """
     text, ents = unpack_rich_text(raw)
     if domain:
@@ -428,16 +437,30 @@ def outbound_setting_text(
                 **template_kwargs,
             )
 
-    title_s = (title or "").strip()
+    title_ents: list[MessageEntity] | None = None
+    if title_raw is not None:
+        t_text, title_ents = unpack_rich_text(title_raw)
+        title_s = f"{title_prefix}{(t_text or '').strip()}".strip()
+        if title_ents and title_prefix:
+            title_ents = shift_entities(title_ents, utf16_len(title_prefix))
+    else:
+        title_s = (title or "").strip()
+
     body = (text or "").strip()
-    if ents:
+    if ents or title_ents:
+        merged: list[MessageEntity] = []
         if title_s:
             prefix = f"{title_s}\n━━━━━━━━━━━━\n"
-            ents = shift_entities(ents, utf16_len(prefix))
+            if title_ents:
+                merged.extend(title_ents)
+            if ents:
+                merged.extend(shift_entities(ents, utf16_len(prefix)) or [])
             body = prefix + body
+        elif ents:
+            merged.extend(ents)
         if append:
             body = body + (append if append.startswith("\n") else f"\n{append}")
-        return body, {"entities": ents, "parse_mode": None}
+        return body, {"entities": merged, "parse_mode": None}
 
     from app.services.formatting import format_message
 

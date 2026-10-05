@@ -24,6 +24,7 @@ class MessageRichKeysTests(unittest.TestCase):
     def test_covers_user_facing_bodies(self):
         required = {
             "welcome_text",
+            "shop_title",
             "guide_text",
             "faq_text",
             "support_text",
@@ -33,9 +34,12 @@ class MessageRichKeysTests(unittest.TestCase):
             "wallet_success_text",
             "payment_reject_text",
             "card_pay_text",
+            "psp_pay_text",
             "qr_caption",
             "shop_maintenance_text",
             "admin_daily_report_template",
+            "stars_title",
+            "stars_description",
         }
         self.assertTrue(required <= MESSAGE_RICH_KEYS)
         self.assertTrue(TERMS_RICH_KEYS <= MESSAGE_RICH_KEYS)
@@ -70,6 +74,24 @@ class OutboundSettingTextTests(unittest.TestCase):
         # Title prefix shifts entity offsets
         self.assertGreater(kw["entities"][0].offset, 2)
 
+    def test_shop_title_raw_preserves_premium_emoji(self):
+        title_body = "کلاک🐸"
+        ent = MessageEntity(
+            type="custom_emoji", offset=4, length=2, custom_emoji_id="pepe1"
+        )
+        packed = pack_rich_text(title_body, [ent])
+        text, kw = outbound_setting_text(
+            "بدنه پیام",
+            title_raw=packed,
+            title_prefix="✨ ",
+        )
+        self.assertIn("entities", kw)
+        self.assertEqual(kw.get("parse_mode"), None)
+        self.assertEqual(kw["entities"][0].custom_emoji_id, "pepe1")
+        # prefix "✨ " is UTF-16 length 2 → emoji moves from 4 to 6
+        self.assertEqual(kw["entities"][0].offset, 6)
+        self.assertTrue(text.startswith("✨ کلاک"))
+
     def test_pack_setting_from_message_message_and_button_keys(self):
         class Msg:
             text = "x😀"
@@ -87,6 +109,26 @@ class OutboundSettingTextTests(unittest.TestCase):
         self.assertTrue(packed_btn.startswith("\x1eRICH1:"))
         self.assertEqual(rich_plain_text(packed_btn), "x😀")
         self.assertEqual(button_icon_custom_emoji_id(packed_btn), "1")
+        packed_shop = pack_setting_from_message("shop_title", Msg())
+        self.assertTrue(packed_shop.startswith("\x1eRICH1:"))
+
+
+class SettingsPostSaveNavTests(unittest.TestCase):
+    def test_admin_settings_save_has_no_dual_back(self):
+        from pathlib import Path
+
+        src = Path("app/bot/handlers/admin_settings.py").read_text(encoding="utf-8")
+        self.assertIn("_finish_settings_text_edit", src)
+        self.assertIn("_keep_settings_nav", src)
+        # Old dual-back confirmation must be gone
+        self.assertNotIn(
+            '[InlineKeyboardButton(text="بازگشت", callback_data=jump)]',
+            src,
+        )
+        self.assertNotIn(
+            '[InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:st:hub")],',
+            src,
+        )
 
 
 if __name__ == "__main__":

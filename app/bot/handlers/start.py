@@ -60,9 +60,10 @@ async def render_home(
     if effective_role == "admin":
         from app.bot.menu_nav import build_main_reply_keyboard
 
-        text = format_message(
-            f"🛠 {rich_plain_text(ui.get('shop_title', 'کلاک'))}",
+        text, home_send_kw = outbound_setting_text(
             "پنل مدیریت فروشگاه\nاز کیبورد پایین گزینه را انتخاب کنید.",
+            title_raw=ui.get("shop_title") or "کلاک",
+            title_prefix="🛠 ",
         )
         reply_kb, ui, _ = await build_main_reply_keyboard(
             session,
@@ -80,29 +81,35 @@ async def render_home(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
-        text = format_message(
-            f"🛠 {rich_plain_text(ui.get('shop_title', 'فروشگاه'))}",
+        text, home_send_kw = outbound_setting_text(
             "پنل مدیریت فروشگاه شما\nاز کیبورد پایین گزینه را انتخاب کنید.\n"
             "برای دیدن منوی مشتری: «پیش‌نمایش منوی کاربر».",
+            title_raw=ui.get("shop_title") or "فروشگاه",
+            title_prefix="🛠 ",
         )
         reply_kb = kb.reseller_hub_main_keyboard(profile, ui)
     else:
         show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
         has = await _has_services(session, db_user.id)
         welcome = ui.get("welcome_text", "")
-        title = rich_plain_text(ui.get("shop_title", ""))
+        shop_title_raw = ui.get("shop_title", "")
+        title_plain = rich_plain_text(shop_title_raw)
         try:
             text, home_send_kw = outbound_setting_text(
                 welcome,
-                title=f"✨ {title}" if title else "✨",
+                title_raw=shop_title_raw or "",
+                title_prefix="✨ ",
                 domain=DOMAIN_USER,
                 user_name=db_user.full_name or "دوست عزیز",
                 user_id=getattr(db_user, "telegram_id", "") or "",
                 username=(f"@{db_user.username}" if getattr(db_user, "username", None) else ""),
-                shop_title=title or "",
+                shop_title=title_plain or "",
             )
         except Exception:
-            text = format_message(f"✨ {title}", rich_plain_text(welcome))
+            text = format_message(
+                f"✨ {title_plain}" if title_plain else "✨",
+                rich_plain_text(welcome),
+            )
             home_send_kw = {}
         reply_kb = kb.main_reply_keyboard(
             effective_role,
