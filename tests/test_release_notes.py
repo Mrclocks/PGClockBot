@@ -73,11 +73,11 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertEqual(list(parsed.keys())[0], "0.1.13")
+        self.assertEqual(list(parsed.keys())[0], "0.1.14")
         self.assertIn("0.1.0", parsed)
-        self.assertTrue(parsed["0.1.13"])
+        self.assertTrue(parsed["0.1.14"])
         self.assertTrue(
-            any("تکراری" in n or "تمپلیت" in n or "ساخت" in n for n in parsed["0.1.13"])
+            any("فارسی" in n or "خطا" in n or "پاسارگارد" in n for n in parsed["0.1.14"])
         )
         self.assertTrue(parsed["0.1.4"])
         self.assertTrue(any("مودال" in n or "گوشه" in n for n in parsed["0.1.4"]))
@@ -116,6 +116,7 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(
             set(parsed),
             {
+                "0.1.14",
                 "0.1.13",
                 "0.1.12",
                 "0.1.11",
@@ -131,6 +132,9 @@ class ReleaseNotesTests(unittest.TestCase):
                 "0.1.1",
                 "0.1.0",
             },
+        )
+        self.assertTrue(
+            any("فارسی" in n or "خطا" in n or "پاسارگارد" in n for n in parsed["0.1.14"])
         )
         self.assertTrue(
             any("تکراری" in n or "تمپلیت" in n or "ساخت" in n for n in parsed["0.1.13"])
