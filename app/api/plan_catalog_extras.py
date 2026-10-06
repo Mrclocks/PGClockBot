@@ -25,12 +25,21 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
         description: str = Form(""),
         sort_order: int = Form(0),
         audience: str = Form("users"),
+        button_style: str = Form("inherit"),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.services.button_styles import parse_plan_button_style_form
         from app.services.plan_categories import create_category
 
         try:
+            style = parse_plan_button_style_form(
+                {"button_style": button_style}, field="button_style"
+            )
+            # parse returns None for inherit; distinguish explicit white "" via form
+            raw = str(button_style).strip().lower()
+            if raw == "":
+                style = ""
             await create_category(
                 session,
                 staff,
@@ -38,6 +47,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
                 description=description,
                 sort_order=sort_order,
                 audience=audience,
+                button_style=style,
             )
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(
@@ -92,12 +102,20 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
         description: str = Form(""),
         sort_order: int = Form(0),
         audience: str = Form("users"),
+        button_style: str = Form("inherit"),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.services.button_styles import parse_plan_button_style_form
         from app.services.plan_categories import update_category
 
         try:
+            style = parse_plan_button_style_form(
+                {"button_style": button_style}, field="button_style"
+            )
+            raw = str(button_style).strip().lower()
+            if raw == "":
+                style = ""
             await update_category(
                 session,
                 staff,
@@ -106,6 +124,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
                 description=description,
                 sort_order=sort_order,
                 audience=audience,
+                button_style=style,
             )
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(

@@ -133,6 +133,8 @@ class PlanCategory(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # NULL = inherit shop_kind_fixed; "" = Telegram default white; else primary/success/danger
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

@@ -264,6 +264,12 @@ PLAN_BUTTON_STYLE_OPTIONS: list[tuple[str, str, str]] = [
     *STYLE_OPTIONS,
 ]
 
+# Category shop-menu buttons: inherit → shop_kind_fixed color.
+CATEGORY_BUTTON_STYLE_OPTIONS: list[tuple[str, str, str]] = [
+    ("inherit", "ارث از پلن ثابت", "default"),
+    *STYLE_OPTIONS,
+]
+
 # JSON list items (payment destinations, support contacts): inherit → parent style.
 ITEM_BUTTON_STYLE_OPTIONS: list[tuple[str, str, str]] = [
     ("inherit", "ارث از پیش‌فرض", "default"),
@@ -545,6 +551,15 @@ def resolve_plan_button_style(
         "shop_kind_fixed" if audience == "users" else "plan_res_fixed"
     )
     return style_or_none(ui, sid, fallback="primary")
+
+
+def resolve_category_button_style(ui: dict | None, category: object | None) -> str | None:
+    """Telegram style for a shop category menu button."""
+    stored = getattr(category, "button_style", None) if category is not None else None
+    if stored is not None:
+        explicit = normalize_style(stored)
+        return explicit or None
+    return style_or_none(ui, "shop_kind_fixed", fallback="primary")
 
 
 def resolve_custom_plan_button_style(ui: dict | None) -> str | None:

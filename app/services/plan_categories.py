@@ -104,6 +104,50 @@ async def list_shop_categories(
     return list((await session.execute(q)).scalars().all())
 
 
+async def shop_categories_for_menu(
+    session: AsyncSession,
+    *,
+    fixed_plans: list[Plan],
+    reseller_id: int | None = None,
+) -> list[PlanCategory]:
+    """Active user-audience categories that have ≥1 active fixed plan (shop menu).
+
+    Empty list ⇒ legacy shop shows «ثابت» instead of category buttons.
+    """
+    cats = await list_shop_categories(
+        session,
+        reseller_id=reseller_id,
+        active_only=True,
+        audience=AUDIENCE_USERS,
+    )
+    if not cats:
+        return []
+    used_ids = {
+        int(p.category_id)
+        for p in fixed_plans
+        if getattr(p, "category_id", None) is not None
+    }
+    # Show categories that own at least one listed fixed plan.
+    # If shop has categories but none linked yet, still return [] so legacy
+    # «ثابت» remains (avoids empty category taps).
+    return [c for c in cats if int(c.id) in used_ids]
+
+
+def uncategorized_fixed_plans(fixed_plans: list[Plan]) -> list[Plan]:
+    return [p for p in fixed_plans if getattr(p, "category_id", None) is None]
+
+
+def plans_in_category(fixed_plans: list[Plan], category_id: int | None) -> list[Plan]:
+    if category_id is None:
+        return uncategorized_fixed_plans(fixed_plans)
+    cid = int(category_id)
+    return [
+        p
+        for p in fixed_plans
+        if getattr(p, "category_id", None) is not None and int(p.category_id) == cid
+    ]
+
+
 async def get_owned_category(
     session: AsyncSession, category_id: int, staff: dict | None
 ) -> PlanCategory | None:
@@ -121,6 +165,7 @@ async def create_category(
     description: str | None = None,
     sort_order: int = 0,
     audience: str = AUDIENCE_USERS,
+    button_style: str | None = None,
 ) -> PlanCategory:
     owner_id = require_catalog_owner_id(staff)
     cleaned = (name or "").strip()
@@ -135,12 +180,25 @@ async def create_category(
     # Only platform Owner may create reseller-audience labels (ResellerPlan packages).
     if aud == AUDIENCE_RESELLERS and not is_platform_admin(staff):
         raise ShopScopeError("برچسب نمایندگان فقط برای ادمین اصلی است")
+    from app.services.button_styles import normalize_style
+
+    # None = inherit; "" = white; primary/success/danger explicit
+    style_val: str | None
+    if button_style is None:
+        style_val = None
+    else:
+        raw = str(button_style).strip().lower()
+        if raw in {"inherit", "__inherit__"}:
+            style_val = None
+        else:
+            style_val = normalize_style(raw)  # may be ""
     cat = PlanCategory(
         name=cleaned,
         description=desc,
         audience=aud,
         owner_reseller_id=owner_id,
         sort_order=int(sort_order or 0),
+        button_style=style_val,
         is_active=True,
     )
     session.add(cat)
@@ -159,6 +217,7 @@ async def update_category(
     sort_order: int | None = None,
     is_active: bool | None = None,
     audience: str | None = None,
+    button_style: str | None | object = ...,
 ) -> PlanCategory:
     cat = await get_owned_category(session, category_id, staff)
     if not cat:
@@ -191,6 +250,17 @@ async def update_category(
                     "اول پلن‌های این برچسب را جدا کنید، بعد مخاطب را عوض کنید"
                 )
         cat.audience = aud
+    if button_style is not ...:
+        from app.services.button_styles import normalize_style
+
+        if button_style is None:
+            cat.button_style = None
+        else:
+            raw = str(button_style).strip().lower()
+            if raw in {"inherit", "__inherit__"}:
+                cat.button_style = None
+            else:
+                cat.button_style = normalize_style(raw)
     await session.commit()
     await session.refresh(cat)
     return cat

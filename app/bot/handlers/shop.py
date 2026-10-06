@@ -227,6 +227,33 @@ async def _shop_kind_flags(
     )
 
 
+async def _shop_category_menu(
+    session: AsyncSession, fixed_plans: list
+) -> tuple[list, bool]:
+    """Return (categories_for_buttons, include_uncategorized_other)."""
+    from app.services.plan_categories import (
+        shop_categories_for_menu,
+        uncategorized_fixed_plans,
+    )
+
+    cats = await shop_categories_for_menu(session, fixed_plans=fixed_plans)
+    other = bool(cats) and bool(uncategorized_fixed_plans(fixed_plans))
+    return cats, other
+
+
+def _shop_picker_copy(*, use_categories: bool) -> tuple[str, str]:
+    """(body_html, inline_caption) for the shop kind/category step."""
+    if use_categories:
+        return (
+            "ابتدا <b>دسته</b> را از دکمه‌های زیر پیام انتخاب کنید.",
+            "📁 دسته:",
+        )
+    return (
+        "ابتدا <b>نوع پلن</b> را از دکمه‌های زیر پیام انتخاب کنید.",
+        "📦 نوع پلن:",
+    )
+
+
 @router.callback_query(F.data == "shop:list")
 async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     ui_gate = await get_all_settings(session)
@@ -234,8 +261,8 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         return
     await callback.answer()
     await state.clear()
-    ui, fixed_on, trial_on, custom_on, wholesale_on, *_rest = await _shop_kind_flags(
-        session, db_user
+    ui, fixed_on, trial_on, custom_on, wholesale_on, _plans, fixed_plans, _trial = (
+        await _shop_kind_flags(session, db_user)
     )
     await _record_shop_funnel(session, db_user, "shop_open", ui=ui)
     if not any((fixed_on, trial_on, custom_on, wholesale_on)):
@@ -252,19 +279,20 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
                 text, reply_markup=kb.persistent_reply_keyboard(ui), **send_kw
             )
         return
+    cats, include_other = await _shop_category_menu(session, fixed_plans)
+    body, _cap = _shop_picker_copy(use_categories=bool(cats))
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message(
-                "🛒 فروشگاه",
-                "ابتدا <b>نوع پلن</b> را انتخاب کنید (مثل وب‌پنل):",
-            ),
+            format_message("🛒 فروشگاه", body),
             reply_markup=kb.shop_kind_keyboard(
                 ui,
                 fixed_on=fixed_on,
                 trial_on=trial_on,
                 custom_on=custom_on,
                 wholesale_on=wholesale_on,
+                categories=cats,
+                include_uncategorized=include_other,
             ),
         )
         await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
@@ -285,10 +313,32 @@ async def shop_kind_fixed(
     if not fixed_on:
         await callback.answer("پلن ثابت فعال نیست.", show_alert=True)
         return
+    # If shop uses categories, bounce to category picker (legacy callback safety).
+    cats, include_other = await _shop_category_menu(session, fixed_plans)
+    if cats:
+        body, _cap = _shop_picker_copy(use_categories=True)
+        _, _f, trial_on, custom_on, wholesale_on, *_r = await _shop_kind_flags(
+            session, db_user
+        )
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                format_message("🛒 فروشگاه", body),
+                reply_markup=kb.shop_kind_keyboard(
+                    ui,
+                    fixed_on=True,
+                    trial_on=trial_on,
+                    custom_on=custom_on,
+                    wholesale_on=wholesale_on,
+                    categories=cats,
+                    include_uncategorized=include_other,
+                ),
+            )
+        return
     from app.services.plan_categories import list_shop_categories
 
-    cats = await list_shop_categories(session, active_only=True)
-    cat_names = {int(c.id): c.name for c in cats}
+    all_cats = await list_shop_categories(session, active_only=True)
+    cat_names = {int(c.id): c.name for c in all_cats}
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -299,6 +349,58 @@ async def shop_kind_fixed(
                 back_callback="shop:list",
                 kind="fixed",
                 category_names=cat_names,
+            ),
+        )
+
+
+@router.callback_query(F.data.startswith("shop:cat:"))
+async def shop_category_pick(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+):
+    if await _answer_shop_maintenance(callback, session):
+        return
+    raw = (callback.data or "").split(":")[-1]
+    ui, fixed_on, *_rest, fixed_plans, _trial = await _shop_kind_flags(session, db_user)
+    if not fixed_on:
+        await callback.answer("پلن ثابت فعال نیست.", show_alert=True)
+        return
+    from app.services.plan_categories import (
+        category_matches_shop,
+        list_shop_categories,
+        plans_in_category,
+    )
+    from app.services.users import current_shop_reseller_id
+
+    if raw == "none":
+        cat_id = None
+        title = "📂 سایر"
+        plans = plans_in_category(fixed_plans, None)
+    else:
+        try:
+            cat_id = int(raw)
+        except ValueError:
+            await callback.answer("دسته نامعتبر است.", show_alert=True)
+            return
+        cats = await list_shop_categories(session, active_only=True)
+        cat = next((c for c in cats if int(c.id) == cat_id), None)
+        if not cat or not category_matches_shop(cat, current_shop_reseller_id()):
+            await callback.answer("دسته یافت نشد.", show_alert=True)
+            return
+        title = f"📁 {cat.name}"
+        plans = plans_in_category(fixed_plans, cat_id)
+    if not plans:
+        await callback.answer("پلنی در این دسته نیست.", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(title, "یکی از پلن‌ها را انتخاب کنید:"),
+            reply_markup=kb.plans_keyboard(
+                plans,
+                ui,
+                back_callback="shop:list",
+                kind="fixed",
             ),
         )
 

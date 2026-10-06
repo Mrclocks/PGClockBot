@@ -42,4 +42,4 @@ def test_release_notes_mention_csrf_sweep():
     from app.version import __version__
 
     ver = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    assert ver == __version__ == "0.2.4"
+    assert ver == __version__ == "0.2.5"

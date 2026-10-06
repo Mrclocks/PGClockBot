@@ -815,10 +815,40 @@ def shop_kind_keyboard(
     trial_on: bool = False,
     custom_on: bool = False,
     wholesale_on: bool = False,
+    categories: list | None = None,
+    include_uncategorized: bool = False,
 ) -> InlineKeyboardMarkup:
-    """Step 1 of user shop — mirrors web modal user kinds."""
+    """Step 1 of user shop — categories replace «ثابت» when configured.
+
+    Legacy shops with no linked categories still get the «ثابت» button.
+    Trial / custom / wholesale remain sibling entries when enabled.
+    """
+    from app.services.button_styles import resolve_category_button_style
+
     rows: list[list[InlineKeyboardButton]] = []
-    if fixed_on:
+    cats = list(categories or [])
+    if fixed_on and cats:
+        for cat in cats:
+            rows.append(
+                [
+                    _ikb(
+                        f"📁 {getattr(cat, 'name', '') or 'دسته'}",
+                        callback_data=f"shop:cat:{int(cat.id)}",
+                        style=resolve_category_button_style(ui, cat),
+                    )
+                ]
+            )
+        if include_uncategorized:
+            rows.append(
+                [
+                    _ikb(
+                        "📂 سایر",
+                        callback_data="shop:cat:none",
+                        style=_style(ui, "shop_kind_fixed", fallback="primary"),
+                    )
+                ]
+            )
+    elif fixed_on:
         rows.append(
             [
                 _ikb(

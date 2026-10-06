@@ -194,6 +194,12 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
                     "ALTER TABLE plan_categories ADD COLUMN audience VARCHAR(16) DEFAULT 'users' NOT NULL"
                 )
             )
+        if "button_style" not in cat_cols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE plan_categories ADD COLUMN button_style VARCHAR(16)"
+                )
+            )
     if not insp.has_table("service_addon_packs"):
         sync_conn.execute(
             sql_text(

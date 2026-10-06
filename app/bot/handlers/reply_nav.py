@@ -248,12 +248,14 @@ async def open_shop_list(
 ) -> None:
     from app.bot.handlers.shop import (
         _record_shop_funnel,
+        _shop_category_menu,
         _shop_kind_flags,
+        _shop_picker_copy,
         shop_under_maintenance,
     )
 
-    ui, fixed_on, trial_on, custom_on, wholesale_on, *_rest = await _shop_kind_flags(
-        session, db_user
+    ui, fixed_on, trial_on, custom_on, wholesale_on, _plans, fixed_plans, _trial = (
+        await _shop_kind_flags(session, db_user)
     )
     maint = await shop_under_maintenance(session, ui)
     if maint:
@@ -276,26 +278,27 @@ async def open_shop_list(
         return
     await state.set_state(None)
     await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
+    cats, include_other = await _shop_category_menu(session, fixed_plans)
+    body, cap = _shop_picker_copy(use_categories=bool(cats))
     await nav.show_nav_keyboard(
         message,
         session,
         db_user,
         nav.NAV_SHOP,
-        text=format_message(
-            "🛒 فروشگاه",
-            "ابتدا <b>نوع پلن</b> را از دکمه‌های زیر پیام انتخاب کنید.",
-        ),
+        text=format_message("🛒 فروشگاه", body),
         state=state,
         push=push,
     )
     await message.answer(
-        "📦 نوع پلن:",
+        cap,
         reply_markup=kb.shop_kind_keyboard(
             ui,
             fixed_on=fixed_on,
             trial_on=trial_on,
             custom_on=custom_on,
             wholesale_on=wholesale_on,
+            categories=cats,
+            include_uncategorized=include_other,
         ),
     )
 

@@ -865,7 +865,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="plan-categories-title">
     <div class="ui-modal-head">
-      {{ modal_title('plans', 'برچسب دسته', caption='برچسب اختیاری برای پلن‌های ثابت کاربران یا اشتراک نمایندگان — نوع پلن (ثابت/تست/…) جدا می‌ماند', tone='brand', heading_id='plan-categories-title') }}
+      {{ modal_title('plans', 'برچسب دسته', caption='در ربات فروشگاه، به‌جای «ثابت» دکمه‌های دسته نشان داده می‌شوند — رنگ دکمه را اینجا تنظیم کنید', tone='brand', heading_id='plan-categories-title') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/plans/categories" class="form-stack plan-cat-form" id="plan-category-form" data-create-action="/plans/categories">
@@ -888,6 +888,13 @@
         <label class="form-field">توضیح (اختیاری)
           <input name="description" id="plan-category-desc" maxlength="255" placeholder="نمایش داخلی" />
         </label>
+        {% set plan_button_style = 'inherit' %}
+        {% set button_style_name = 'button_style' %}
+        {% set plan_style_options = category_style_options if category_style_options is defined else plan_style_options %}
+        {% set plan_color_hint = 'رنگ دکمه دسته در منوی خرید ربات — «ارث» یعنی همان رنگ «ثابت» در تنظیمات رنگبندی' %}
+        <div class="form-field plan-cat-color-field" id="plan-category-color-field">
+          {% include "_plan_button_style_field.html" %}
+        </div>
       </div>
       <div class="actions">
         <button class="btn" type="submit" id="plan-category-submit">افزودن برچسب</button>
@@ -903,6 +910,7 @@
             <tr>
               <th>نام</th>
               <th>مخاطب</th>
+              <th class="col-hide-sm">رنگ دکمه</th>
               <th class="col-hide-sm">پلن‌ها</th>
               <th class="col-hide-sm">ترتیب</th>
               <th>وضعیت</th>
@@ -912,12 +920,26 @@
           <tbody>
           {% for c in plan_categories or [] %}
             {% set linked = (category_linked_plans or {}).get(c.id) or [] %}
+            {% if c.button_style is none %}
+              {% set cat_style_label = 'ارث' %}
+            {% elif c.button_style == '' %}
+              {% set cat_style_label = 'سفید' %}
+            {% elif c.button_style == 'primary' %}
+              {% set cat_style_label = 'آبی' %}
+            {% elif c.button_style == 'success' %}
+              {% set cat_style_label = 'سبز' %}
+            {% elif c.button_style == 'danger' %}
+              {% set cat_style_label = 'قرمز' %}
+            {% else %}
+              {% set cat_style_label = c.button_style %}
+            {% endif %}
             <tr>
               <td>
                 {{ c.name }}
                 {% if c.description %}<br><small class="muted">{{ c.description }}</small>{% endif %}
               </td>
               <td>{% if (c.audience or 'users') == 'resellers' %}نمایندگان{% else %}کاربران{% endif %}</td>
+              <td class="col-hide-sm muted">{{ cat_style_label }}</td>
               <td class="col-hide-sm">
                 {% if linked %}
                   <span class="muted">{{ linked | join('، ') }}</span>
@@ -935,7 +957,8 @@
                           data-name="{{ c.name }}"
                           data-sort="{{ c.sort_order }}"
                           data-audience="{{ c.audience or 'users' }}"
-                          data-description="{{ c.description or '' }}">ویرایش</button>
+                          data-description="{{ c.description or '' }}"
+                          data-button-style="{% if c.button_style is none %}inherit{% else %}{{ c.button_style }}{% endif %}">ویرایش</button>
                   <form method="post" action="/plans/categories/{{ c.id }}/toggle">
                     <button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
                   </form>
@@ -950,7 +973,7 @@
               </td>
             </tr>
           {% else %}
-            <tr><td colspan="6" class="muted">هنوز برچسبی نیست — از فرم بالا بسازید.</td></tr>
+            <tr><td colspan="7" class="muted">هنوز برچسبی نیست — از فرم بالا بسازید.</td></tr>
           {% endfor %}
           </tbody>
         </table>
@@ -1511,6 +1534,7 @@
     const sortEl = document.getElementById('plan-category-sort');
     const descEl = document.getElementById('plan-category-desc');
     const audEl = document.getElementById('plan-category-audience');
+    const styleEl = form.querySelector('select[name="button_style"]');
     const submitEl = document.getElementById('plan-category-submit');
     const cancelEl = document.getElementById('plan-category-cancel-edit');
     function resetCreate(){
@@ -1519,6 +1543,10 @@
       if (sortEl) sortEl.value = '0';
       if (descEl) descEl.value = '';
       if (audEl) audEl.value = 'users';
+      if (styleEl) {
+        styleEl.value = 'inherit';
+        styleEl.dispatchEvent(new Event('change', { bubbles: true }));
+      }
       if (submitEl) submitEl.textContent = 'افزودن برچسب';
       if (cancelEl) cancelEl.hidden = true;
     }
@@ -1532,6 +1560,11 @@
         if (audEl) {
           const aud = btn.getAttribute('data-audience') || 'users';
           audEl.value = aud;
+        }
+        if (styleEl) {
+          const st = btn.getAttribute('data-button-style');
+          styleEl.value = (st === null || st === undefined) ? 'inherit' : st;
+          styleEl.dispatchEvent(new Event('change', { bubbles: true }));
         }
         if (submitEl) submitEl.textContent = 'ذخیره تغییرات';
         if (cancelEl) cancelEl.hidden = false;

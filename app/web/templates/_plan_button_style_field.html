@@ -23,6 +23,10 @@
     </select>
   </div>
   <p class="muted update-card-caption plan-color-hint">
+    {% if plan_color_hint is defined and plan_color_hint %}
+    {{ plan_color_hint }}
+    {% else %}
     «ارث از نوع پلن» همان رنگ بخش «نوع پلن» در تنظیمات رنگبندی است؛ هر پلن می‌تواند رنگ جدا داشته باشد.
+    {% endif %}
   </p>
 </div>
