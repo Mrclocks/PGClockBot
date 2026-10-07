@@ -123,13 +123,15 @@ class TimedSessionTests(unittest.TestCase):
 
 class TrustProxyTests(unittest.TestCase):
     def test_xff_gated_by_trust_proxy(self):
-        # Client-IP / XFF parsing lives in login_guard; cookie HTTPS still
-        # consults trust_proxy in app.py via x-forwarded-proto.
+        # Client-IP / XFF parsing lives in login_guard. Phase 3: cookie HTTPS
+        # also goes through login_guard.forwarded_proto_is_https (trusted peer),
+        # not a direct trust_proxy read inside app.py.
         guard = Path("app/api/login_guard.py").read_text(encoding="utf-8")
         self.assertIn("trust_proxy", guard)
         self.assertIn("x-forwarded-for", guard.lower())
+        self.assertIn("def forwarded_proto_is_https", guard)
         app_src = Path("app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("trust_proxy", app_src)
+        self.assertIn("forwarded_proto_is_https", app_src)
         self.assertIn("from app.api.login_guard import", app_src)
 
 
