@@ -15,6 +15,7 @@ from app.db.models import BotUser, ChargeCode, DeliveryFailure, Order
 from app.services.authz import authz_from_staff, can_shop
 from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope, assert_bot_user_in_scope
 from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.services.redact import user_safe_error
 from app.services.ux20 import (
     create_charge_code,
     export_shop_bundle,
@@ -47,7 +48,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             )
         except Exception as exc:
             return RedirectResponse(
-                f"/plans?err={quote(str(exc) or 'خطا در کپی پلن')}",
+                f"/plans?err={quote(user_safe_error(exc, fallback='خطا در کپی پلن'))}",
                 status_code=303,
             )
 
@@ -98,7 +99,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             )
         except Exception as exc:
             return RedirectResponse(
-                f"/finance?tab=delivery&err={quote(str(exc) or 'تلاش مجدد ناموفق')}",
+                f"/finance?tab=delivery&err={quote(user_safe_error(exc, fallback='تلاش مجدد ناموفق'))}",
                 status_code=303,
             )
 
@@ -196,7 +197,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             )
         except Exception as exc:
             return RedirectResponse(
-                f"/plans?gifts=1&err={quote(str(exc) or 'خطا')}",
+                f"/plans?gifts=1&err={quote(user_safe_error(exc, fallback='خطا'))}",
                 status_code=303,
             )
 
@@ -280,13 +281,14 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 status_code=303,
             )
         except Exception as exc:
+            safe = user_safe_error(exc, fallback="خطای ایمپورت")
             if is_platform_admin(staff):
                 return RedirectResponse(
-                    f"/settings?tab=backup&err={quote(str(exc) or 'خطای ایمپورت')}",
+                    f"/settings?tab=backup&err={quote(safe)}",
                     status_code=303,
                 )
             return RedirectResponse(
-                f"/shop-settings?err={quote(str(exc) or 'خطای ایمپورت')}",
+                f"/shop-settings?err={quote(safe)}",
                 status_code=303,
             )
 

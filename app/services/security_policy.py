@@ -40,6 +40,10 @@ PLACEHOLDER_SECRETS = frozenset(
 WEBHOOK_MAX_BODY_BYTES = 256 * 1024
 # Soft ceiling for unauthenticated form posts (login/setup) — DoS guard.
 PUBLIC_FORM_MAX_BODY_BYTES = 256 * 1024
+# Card-auto settlement webhooks — HMAC JSON, intentionally small.
+CARD_WEBHOOK_MAX_BODY_BYTES = 64 * 1024
+# Mini App JSON POSTs (Phase 4: documented; enforced when wired).
+MINIAPP_MAX_BODY_BYTES = 256 * 1024
 
 
 def is_placeholder_bot_token(token: str | None) -> bool:
@@ -317,4 +321,30 @@ def assert_safe_pg_base_url(
     if not allow_private and not saw_public:
         raise UnsafePgUrlError("میزبان پاسارگارد باید به IP عمومی resolve شود")
     return url
+
+
+def safe_pg_api_base_candidates(
+    raw: str,
+    *,
+    resolve_dns: bool = True,
+    allow_private: bool = True,
+) -> list[str]:
+    """Phase 4: candidate API roots that each pass ``assert_safe_pg_base_url``.
+
+    Never returns an unsanitized URL. Empty input or fully-blocked seeds → [].
+    Keeps ``allow_private`` default so LAN / same-host PasarGuard still works.
+    """
+    from app.config import pg_api_base_candidates
+
+    out: list[str] = []
+    for cand in pg_api_base_candidates(raw):
+        try:
+            safe = assert_safe_pg_base_url(
+                cand, resolve_dns=resolve_dns, allow_private=allow_private
+            )
+        except UnsafePgUrlError:
+            continue
+        if safe and safe not in out:
+            out.append(safe)
+    return out
 

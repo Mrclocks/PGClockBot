@@ -296,11 +296,14 @@ def _settings_next(request: Request, fallback: str) -> str:
 
 
 def _redirect_msg(path: str, *, ok: str | None = None, err: str | None = None) -> RedirectResponse:
+    from app.services.redact import user_safe_error
+
     q = []
     if ok:
         q.append(f"ok={quote(ok)}")
     if err:
-        q.append(f"err={quote(err)}")
+        # Phase 4: never flash raw exception / secret-bearing text in the URL.
+        q.append(f"err={quote(user_safe_error(err))}")
     # Bust caches that key only on stable ?ok= text (table must refresh with flash)
     q.append(f"_={int(time.time())}")
     sep = "&" if "?" in path else "?"
@@ -898,76 +901,102 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         Authenticated panel mutations also require a double-submit CSRF token
         (cookie ``csrf`` matching form field / ``X-CSRF-Token``).
+
+        Phase 4: POST /login always requires matching Origin/Referer; if neither
+        header is present, only loopback transport peers are allowed (curl/local).
         """
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            path_now = request.url.path
             has_session = bool(request.cookies.get("session") or request.cookies.get("setup_gate"))
-            if has_session:
-                path_now = request.url.path
 
-                def _csrf_reject(message: str, *, token_fail: bool = False):
-                    # Panel AJAX clients expect JSON — HTML 403 made res.json() throw
-                    # and only showed a generic failure.
-                    # token_fail marks double-submit mismatch (CSRF token rejected).
-                    accept = (request.headers.get("accept") or "").lower()
-                    ctype = (request.headers.get("content-type") or "").lower()
-                    xrw = (request.headers.get("x-requested-with") or "").lower()
-                    wants_json = (
-                        path_now.startswith("/update/")
-                        or path_now.startswith("/backup/")
-                        or path_now.startswith("/api/")
-                        or "application/json" in accept
-                        or "application/json" in ctype
-                        or xrw in {"fetch", "xmlhttprequest", "setup-probe"}
+            def _csrf_reject(message: str, *, token_fail: bool = False):
+                # Panel AJAX clients expect JSON — HTML 403 made res.json() throw
+                # and only showed a generic failure.
+                # token_fail marks double-submit mismatch (CSRF token rejected).
+                accept = (request.headers.get("accept") or "").lower()
+                ctype = (request.headers.get("content-type") or "").lower()
+                xrw = (request.headers.get("x-requested-with") or "").lower()
+                wants_json = (
+                    path_now.startswith("/update/")
+                    or path_now.startswith("/backup/")
+                    or path_now.startswith("/api/")
+                    or "application/json" in accept
+                    or "application/json" in ctype
+                    or xrw in {"fetch", "xmlhttprequest", "setup-probe"}
+                )
+                if wants_json:
+                    return JSONResponse(
+                        {"ok": False, "error": message},
+                        status_code=403,
                     )
-                    if wants_json:
-                        return JSONResponse(
-                            {"ok": False, "error": message},
-                            status_code=403,
-                        )
-                    return render_panel_status(
-                        request,
-                        code=403,
-                        title="درخواست امنیتی رد شد",
-                        message=message,
-                        primary_href="/login",
-                        primary_label="صفحه ورود",
-                        secondary_href="/",
-                        secondary_label="تلاش دوباره",
-                        footer=(
-                            "صفحه را تازه کنید و دوباره ارسال کنید. "
-                            "اگر ادامه داشت، از حساب خارج شوید و دوباره وارد شوید."
-                        ),
-                    )
+                return render_panel_status(
+                    request,
+                    code=403,
+                    title="درخواست امنیتی رد شد",
+                    message=message,
+                    primary_href="/login",
+                    primary_label="صفحه ورود",
+                    secondary_href="/",
+                    secondary_label="تلاش دوباره",
+                    footer=(
+                        "صفحه را تازه کنید و دوباره ارسال کنید. "
+                        "اگر ادامه داشت، از حساب خارج شوید و دوباره وارد شوید."
+                    ),
+                )
 
+            def _same_origin_ok() -> bool:
                 origin = request.headers.get("origin")
                 referer = request.headers.get("referer")
                 host = request.headers.get("host")
+                allowed = (
+                    request_host_allowed(host, origin)
+                    or request_host_allowed(host, referer)
+                )
+                if allowed:
+                    return True
+                # Prefer configured public host over raw Host (Host can be spoofed
+                # when the panel is reached via an unexpected name).
+                try:
+                    from urllib.parse import urlparse
+                    from app.services.ssl_certs import public_panel_base_url
+
+                    pub = (public_panel_base_url() or "").strip()
+                    pub_host = urlparse(pub).netloc if pub else ""
+                    if pub_host and (
+                        request_host_allowed(pub_host, origin)
+                        or request_host_allowed(pub_host, referer)
+                    ):
+                        return True
+                except Exception:
+                    pass
+                return False
+
+            # Phase 4: /login Origin mandatory (loopback peer fallback when absent).
+            if request.method == "POST" and path_now == "/login":
+                origin = request.headers.get("origin")
+                referer = request.headers.get("referer")
+                if origin or referer:
+                    if not _same_origin_ok():
+                        return _csrf_reject(
+                            "درخواست امنیتی رد شد؛ صفحه را تازه کنید و دوباره تلاش کنید."
+                        )
+                else:
+                    from app.api.login_guard import transport_peer_ip
+                    from app.services.security_policy import is_loopback_ip
+
+                    if not is_loopback_ip(transport_peer_ip(request)):
+                        return _csrf_reject(
+                            "درخواست امنیتی رد شد؛ صفحه را تازه کنید و دوباره تلاش کنید."
+                        )
+            elif has_session:
+                origin = request.headers.get("origin")
+                referer = request.headers.get("referer")
                 # Require Origin or Referer for cookie-authenticated mutations
                 if not origin and not referer:
                     return _csrf_reject(
                         "درخواست امنیتی رد شد؛ صفحه را تازه کنید و دوباره تلاش کنید."
                     )
-                allowed = (
-                    request_host_allowed(host, origin)
-                    or request_host_allowed(host, referer)
-                )
-                if not allowed:
-                    # Prefer configured public host over raw Host (Host can be spoofed
-                    # when the panel is reached via an unexpected name).
-                    try:
-                        from urllib.parse import urlparse
-                        from app.services.ssl_certs import public_panel_base_url
-
-                        pub = (public_panel_base_url() or "").strip()
-                        pub_host = urlparse(pub).netloc if pub else ""
-                        if pub_host and (
-                            request_host_allowed(pub_host, origin)
-                            or request_host_allowed(pub_host, referer)
-                        ):
-                            allowed = True
-                    except Exception:
-                        pass
-                if not allowed:
+                if not _same_origin_ok():
                     return _csrf_reject(
                         "درخواست امنیتی رد شد؛ صفحه را تازه کنید و دوباره تلاش کنید."
                     )
@@ -2716,8 +2745,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     if isinstance(created, dict) and created.get("id"):
                         tpl = int(created["id"])
                 except Exception as e:
+                    from app.services.redact import user_safe_error
+
                     return RedirectResponse(
-                        f"/plans?err={quote(f'ساخت تمپلیت در پاسارگارد ناموفق: {e}')}",
+                        f"/plans?err={quote('ساخت تمپلیت در پاسارگارد ناموفق: ' + user_safe_error(e))}",
                         status_code=303,
                     )
 
@@ -2732,7 +2763,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 session, staff, form.get("category_id")
             )
         except (ShopScopeError, ValueError) as e:
-            return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
+            from app.services.redact import user_safe_error
+
+            return RedirectResponse(
+                f"/plans?err={quote(user_safe_error(e))}", status_code=303
+            )
 
         session.add(
             Plan(
@@ -3183,8 +3218,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 allow_inactive_id=plan.category_id,
             )
         except (ShopScopeError, ValueError) as e:
+            from app.services.redact import user_safe_error
+
             return RedirectResponse(
-                f"/plans/{plan_id}/edit?err={quote(str(e))}",
+                f"/plans/{plan_id}/edit?err={quote(user_safe_error(e))}",
                 status_code=303,
             )
         await session.commit()
@@ -4832,7 +4869,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         except ValueError as e:
             return _redirect_msg("/broadcast", err=str(e))
         except Exception as e:
-            return _redirect_msg("/broadcast", err=f"خطا در ارسال: {e}")
+            from app.services.redact import user_safe_error
+
+            return _redirect_msg(
+                "/broadcast", err=f"خطا در ارسال: {user_safe_error(e)}"
+            )
         finally:
             await bot.session.close()
         msg = f"ارسال شد: {result['ok']} موفق از {result['total']} (ناموفق: {result['fail']})"
