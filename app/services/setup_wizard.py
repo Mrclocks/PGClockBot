@@ -197,6 +197,26 @@ def is_local_setup_client(host: str | None) -> bool:
     return is_loopback_ip(ip)
 
 
+def is_local_setup_request(request) -> bool:
+    """Phase 3: auto-open wizard only when the *transport peer* is loopback.
+
+    ``client_ip()`` alone is not enough: with ``TRUST_PROXY=1`` a remote
+    attacker (or anyone behind local nginx) could previously look like
+    loopback via X-Forwarded-For. Require:
+
+    1. TCP peer is really loopback (SSH tunnel / curl on the box), and
+    2. Resolved client IP is also loopback (consistent after trusted XFF).
+
+    Everyone else must use the one-time ``?gate=`` URL from the server.
+    """
+    from app.api.login_guard import client_ip, transport_peer_ip
+
+    peer = transport_peer_ip(request)
+    if not is_local_setup_client(peer):
+        return False
+    return is_local_setup_client(client_ip(request))
+
+
 def build_setup_entry_url(
     base_url: str | None = None,
     *,

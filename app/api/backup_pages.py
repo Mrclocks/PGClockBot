@@ -81,10 +81,12 @@ def register_backup_pages(app, *, render, require_admin, get_db):
                 created_by=f"web:{staff.get('username') or 'admin'}",
             )
         except Exception as e:
+            from app.services.redact import user_safe_error
+
             return RedirectResponse(
                 "/settings?tab=backup&err="
                 + quote(
-                    f"ساخت بکاپ ناموفق بود: {e}. "
+                    f"ساخت بکاپ ناموفق بود: {user_safe_error(e)}. "
                     "علت محتمل: فضای دیسک یا قفل فایل. "
                     "راه حل: فضای دیسک و دسترسی به data/backups را بررسی کنید و دوباره تلاش کنید."
                 ),

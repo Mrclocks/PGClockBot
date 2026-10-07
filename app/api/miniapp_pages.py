@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -40,6 +41,7 @@ from app.services.miniapp_auth import (
     resolve_mini_persona,
 )
 from app.services.pasarguard import get_pg
+from app.services.security_policy import MINIAPP_MAX_BODY_BYTES, content_length_ok
 from app.services.users import get_all_settings, on
 
 log = logging.getLogger(__name__)
@@ -117,6 +119,24 @@ async def _fetch_pg_info(subscription_token: str | None) -> dict:
         return await asyncio.wait_for(get_pg().subscription_info(token), timeout=5.0)
     except Exception:
         return {"error": "upstream_unavailable"}
+
+
+async def _read_mini_json(request: Request) -> dict:
+    """Phase 4: enforce body size *before* buffering Mini App JSON POSTs."""
+    if not content_length_ok(
+        request.headers.get("content-length"), MINIAPP_MAX_BODY_BYTES
+    ):
+        raise HTTPException(413, "payload too large")
+    raw = await request.body()
+    if len(raw) > MINIAPP_MAX_BODY_BYTES:
+        raise HTTPException(413, "payload too large")
+    try:
+        data = json.loads(raw.decode("utf-8") or "{}")
+    except Exception as exc:
+        raise HTTPException(400, "bad json") from exc
+    if not isinstance(data, dict):
+        raise HTTPException(400, "bad json")
+    return data
 
 
 def _safe_client_message(exc: BaseException, *, fallback: str) -> str:
@@ -470,10 +490,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        try:
-            body = await request.json()
-        except Exception:
-            raise HTTPException(400, "bad json")
+        body = await _read_mini_json(request)
         try:
             plan_id = int(body.get("plan_id"))
         except (TypeError, ValueError):
@@ -518,10 +535,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        try:
-            body = await request.json()
-        except Exception:
-            raise HTTPException(400, "bad json")
+        body = await _read_mini_json(request)
         try:
             service_id = int(body.get("service_id"))
             plan_id = int(body.get("plan_id"))

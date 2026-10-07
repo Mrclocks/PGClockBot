@@ -5,8 +5,12 @@ from typing import Any, Optional
 
 import httpx
 
-from app.config import get_settings, pg_api_base_candidates
-from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
+from app.config import get_settings
+from app.services.security_policy import (
+    UnsafePgUrlError,
+    assert_safe_pg_base_url,
+    safe_pg_api_base_candidates,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +199,27 @@ class PasarGuardClient:
     async def close(self) -> None:
         await self._client.aclose()
 
+    def _safe_base_seed(self) -> str:
+        """Phase 4: never re-introduce a cleared unsafe ``settings.pg_base_url``."""
+        if self.base_url:
+            return self.base_url
+        raw = (self.settings.pg_base_url or "").strip()
+        if not raw:
+            return ""
+        try:
+            return assert_safe_pg_base_url(raw)
+        except UnsafePgUrlError:
+            return ""
+
+    def _safe_api_candidates(self) -> list[str]:
+        seed = self._safe_base_seed()
+        if not seed:
+            return []
+        cands = safe_pg_api_base_candidates(seed)
+        if self.base_url:
+            cands = [self.base_url] + [c for c in cands if c != self.base_url]
+        return cands
+
     async def _rebind_base(self, base: str) -> None:
         base = (base or "").rstrip("/")
         if not base or base == self.base_url:
@@ -224,7 +249,7 @@ class PasarGuardClient:
         """If PG_BASE_URL includes a dashboard path, switch to the real API root."""
         if getattr(self, "_api_base_resolved", False):
             return
-        candidates = pg_api_base_candidates(self.settings.pg_base_url or self.base_url)
+        candidates = self._safe_api_candidates()
         if len(candidates) <= 1:
             self._api_base_resolved = True
             return
@@ -265,13 +290,12 @@ class PasarGuardClient:
             {"grant_type": "password", "username": username, "password": password},
             {"username": username, "password": password},
         ]
-        candidates = pg_api_base_candidates(self.settings.pg_base_url or self.base_url)
-        # Prefer already-resolved base first
-        if self.base_url:
-            candidates = [self.base_url] + [c for c in candidates if c != self.base_url]
+        candidates = self._safe_api_candidates()
+        if not candidates:
+            raise PasarGuardError("آدرس پاسارگارد امنی برای اتصال تنظیم نشده")
 
         last: httpx.Response | None = None
-        last_base = candidates[0] if candidates else self.base_url
+        last_base = candidates[0]
         for base in candidates:
             last_base = base
             # Never follow redirects on credential POSTs (prevents auth-forwarding SSRF)
@@ -1058,7 +1082,10 @@ def public_pg_api_base() -> str:
     client = _pg
     if client and client.base_url:
         return client.base_url.rstrip("/")
-    cands = pg_api_base_candidates(get_settings().pg_base_url or "")
+    # Phase 4: fail closed — never publish a raw unsafe settings URL.
+    cands = safe_pg_api_base_candidates(
+        get_settings().pg_base_url or "", resolve_dns=False
+    )
     return (cands[0] if cands else "").rstrip("/")
 
 
@@ -1071,15 +1098,16 @@ def public_pg_sub_origin() -> str:
     """
     from urllib.parse import urlparse, urlunparse
 
-    from app.config import normalize_pg_base_url
-
     raw = ""
     client = _pg
     if client and getattr(client, "base_url", None):
         raw = str(client.base_url or "")
     if not raw:
         raw = get_settings().pg_base_url or ""
-    base = normalize_pg_base_url(raw)
+    try:
+        base = assert_safe_pg_base_url(raw, resolve_dns=False) if raw else ""
+    except UnsafePgUrlError:
+        return ""
     if not base:
         return ""
     parsed = urlparse(base)

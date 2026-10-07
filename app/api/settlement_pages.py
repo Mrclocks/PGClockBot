@@ -220,9 +220,18 @@ def register_settlement_pages(app, *, get_db):
             notify_after_settlement,
         )
 
+        from app.services.security_policy import (
+            CARD_WEBHOOK_MAX_BODY_BYTES,
+            content_length_ok,
+        )
+
+        # Phase 4: reject oversized payloads before buffering the body.
+        if not content_length_ok(
+            request.headers.get("content-length"), CARD_WEBHOOK_MAX_BODY_BYTES
+        ):
+            return JSONResponse({"ok": False}, status_code=413)
         body = await request.body()
-        # Cap body size — fail closed on huge payloads
-        if len(body) > 64 * 1024:
+        if len(body) > CARD_WEBHOOK_MAX_BODY_BYTES:
             return JSONResponse({"ok": False}, status_code=413)
         try:
             settlement = await handle_card_auto_webhook(

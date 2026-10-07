@@ -123,7 +123,8 @@ class Settings(BaseSettings):
     public_base_url: str = Field(default="", alias="PUBLIC_BASE_URL")
     # Optional public docs site (e.g. https://docs.example.com). Empty = same-origin /help/
     docs_base_url: str = Field(default="", alias="DOCS_BASE_URL")
-    # When 1, trust X-Forwarded-For / X-Forwarded-Proto (only behind a real reverse proxy)
+    # When 1, trust X-Forwarded-For / X-Forwarded-Proto — but ONLY when the TCP
+    # peer is in TRUSTED_PROXIES (Phase 3). Never trust XFF from a random client.
     trust_proxy: bool = Field(default=False, alias="TRUST_PROXY")
     # Number of reverse-proxy hops in front of this app that are trusted to append
     # their own hop to X-Forwarded-For. The client IP is read from the Nth entry
@@ -131,6 +132,10 @@ class Settings(BaseSettings):
     # left-most entry (which is fully attacker-controlled). Default is a single
     # reverse proxy (e.g. nginx) directly in front of the app.
     trust_proxy_hops: int = Field(default=1, alias="TRUST_PROXY_HOPS")
+    # Comma-separated CIDRs/IPs of reverse proxies allowed to set X-Forwarded-*.
+    # Empty = loopback only (127.0.0.0/8, ::1) — safe for nginx on the same host.
+    # Docker / remote nginx must set this (e.g. 172.16.0.0/12,10.0.0.0/8).
+    trusted_proxies: str = Field(default="", alias="TRUSTED_PROXIES")
 
     currency: str = Field(default="تومان", alias="CURRENCY")
     default_locale: str = Field(default="fa", alias="DEFAULT_LOCALE")
@@ -153,6 +158,7 @@ class Settings(BaseSettings):
         "webhook_secret_token",
         "public_base_url",
         "docs_base_url",
+        "trusted_proxies",
         "currency",
         "default_locale",
         "database_url",

@@ -144,20 +144,41 @@ def _login_lock_save() -> None:
 _login_lock_load()
 
 
+def transport_peer_ip(request: Request) -> str:
+    """Raw TCP peer host — never influenced by X-Forwarded-For."""
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _trust_forwarded_headers(request: Request) -> bool:
+    """Phase 3: TRUST_PROXY only applies when the TCP peer is a trusted proxy."""
+    try:
+        settings = get_settings()
+        if not settings.trust_proxy:
+            return False
+        from app.services.security_policy import peer_is_trusted_proxy
+
+        return peer_is_trusted_proxy(
+            transport_peer_ip(request),
+            trusted_proxies_raw=getattr(settings, "trusted_proxies", "") or "",
+        )
+    except Exception:
+        return False
+
+
 def client_ip(request: Request) -> str:
     """Best-effort real client IP, resistant to X-Forwarded-For spoofing.
 
     X-Forwarded-For is fully attacker-controlled except for the hop(s) your
-    own trusted reverse proxy appends. Reading the LEFT-most entry (the
-    classic mistake) lets any client claim to be any IP — including
-    loopback/private ranges, which would bypass login lockouts and the
-    setup-wizard local-IP auto-open gate. Instead we read the entry counted
-    from the RIGHT that corresponds to ``trust_proxy_hops`` (default: a
-    single reverse proxy directly in front of the app).
+    own trusted reverse proxy appends. Phase 3: headers are ignored unless
+    ``TRUST_PROXY=1`` **and** the TCP peer is in ``TRUSTED_PROXIES``
+    (default: loopback only). When trusted, we read the entry counted from
+    the RIGHT by ``TRUST_PROXY_HOPS`` — never the left-most entry.
     """
     try:
-        settings = get_settings()
-        if settings.trust_proxy:
+        if _trust_forwarded_headers(request):
+            settings = get_settings()
             raw = request.headers.get("x-forwarded-for") or ""
             parts = [p.strip() for p in raw.split(",") if p.strip()]
             hops = max(1, int(getattr(settings, "trust_proxy_hops", 1) or 1))
@@ -167,9 +188,15 @@ def client_ip(request: Request) -> str:
                     return candidate
     except Exception:
         pass
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
+    return transport_peer_ip(request)
+
+
+def forwarded_proto_is_https(request: Request) -> bool:
+    """True when a trusted proxy reports ``X-Forwarded-Proto: https``."""
+    if not _trust_forwarded_headers(request):
+        return False
+    fwd = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    return fwd == "https"
 
 
 def login_blocked(ip: str) -> bool:
