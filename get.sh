@@ -11,6 +11,12 @@
 #   bash get.sh
 #   bash get.sh update
 #
+# After install: open the one-time setup URL from the server (data/ hint or
+# journal). Wizard auto-open is loopback-only — remote access needs ?gate=.
+# Firewall: allow WEB_PORT from .env (default 9000), not a hardcoded port.
+# Behind nginx on the same host: TRUST_PROXY=1 is enough. Behind Docker nginx:
+# also set TRUSTED_PROXIES to the proxy CIDR. Do not force HTTPS here.
+#
 set -euo pipefail
 
 REPO_URL="${PGCLOCK_REPO:-https://github.com/Mrclocks/PGClockBot.git}"
