@@ -67,12 +67,18 @@ class Phase3Phase4SourceGuards(unittest.TestCase):
         wallet = (ROOT / "app/bot/handlers/wallet.py").read_text(encoding="utf-8")
         payments = (ROOT / "app/bot/handlers/payments.py").read_text(encoding="utf-8")
         shop = (ROOT / "app/bot/handlers/shop.py").read_text(encoding="utf-8")
+        # Phase 1 moved payrev approve/resume/resend errors into the action module.
+        actions = (ROOT / "app/services/payment_review_actions.py").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("user_safe_error", wallet)
         self.assertIn("user_safe_error", payments)
         self.assertIn("user_safe_error", shop)
         self.assertIn("user_safe_error(e)", wallet)
         self.assertIn('format_message("❌ خطا"', wallet)
-        self.assertIn("user_safe_error(e)", payments)
+        self.assertIn("user_safe_error", actions)
+        self.assertIn("user_safe_error(exc)", actions)
+        self.assertIn("user_safe_error(send_exc)", actions)
 
     def test_scheduler_logs_shop_bot_close_failures(self):
         src = (ROOT / "app/jobs/scheduler.py").read_text(encoding="utf-8")
