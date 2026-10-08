@@ -9,11 +9,7 @@
     {% if is_panel_settings %}
     {{ page_title('panel-settings', 'تنظیمات وب پنل', 'neutral', help='settings-panel') }}
     {% else %}
-    {% if tab == 'pasarguard' %}
-    {{ page_title('panel-settings', 'تنظیمات اتصال پاسارگارد', 'neutral') }}
-    {% else %}
     {{ page_title('bot-settings', 'تنظیمات ربات', help='settings-bot') }}
-    {% endif %}
     {% endif %}
   </div>
 </div>
@@ -27,7 +23,9 @@
 <div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','daily_report'] %}can-preview{% endif %}" id="settings-layout">
   <div class="settings-main">
 
-  {% if tab == 'update' %}
+  {% if tab == 'general' %}
+    {% include "_settings_general.html" %}
+  {% elif tab == 'update' %}
     {% include "_settings_update.html" %}
   {% elif tab == 'pwa' %}
     {% include "_settings_pwa.html" %}
@@ -43,8 +41,6 @@
   {% elif tab == 'daily_report' %}
     {% set settings_action = '/settings?tab=daily_report' %}
     {% include "_settings_daily_report.html" %}
-  {% elif tab == 'pasarguard' %}
-    {% include "_settings_pasarguard.html" %}
   {% elif tab == 'bot' %}
     {% include "_settings_bot.html" %}
   {% elif tab == 'links' %}

@@ -195,6 +195,12 @@ class TemplateVariablePanelTests(unittest.TestCase):
         self.assertIn("aria-describedby", script)
         self.assertIn("aria-live", script)
 
+    def test_variable_tokens_are_capsule_chips(self):
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        token = css.split(".template-variable-token {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: 999px;", token)
+        self.assertNotIn("border-radius: 4px;", token)
+
 
 if __name__ == "__main__":
     unittest.main()

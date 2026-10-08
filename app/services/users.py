@@ -914,7 +914,6 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("notifications", "نوتیفیکیشن"),
     ("daily_report", "گزارش روزانه"),
     ("bot", "ربات و اتصال"),
-    ("pasarguard", "اتصال پاسارگارد"),
 ]
 
 # Legacy bot-settings tabs moved to page-level modals (finance / support / loyalty).
@@ -928,10 +927,13 @@ SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
     # Merged into «محدودیت»
     "forcejoin": "/settings?tab=limits",
     "terms": "/settings?tab=limits",
+    # PG connection lives under «ربات و اتصال»
+    "pasarguard": "/settings?tab=bot",
 }
 
 # Web-panel settings (sidebar under dashboard — not bot settings tabs)
 PANEL_SETTINGS_TABS: list[tuple[str, str]] = [
+    ("general", "عمومی"),
     ("backup", "بکاپ"),
     ("pwa", "وب‌اپ"),
     ("ssl", "SSL"),

@@ -217,5 +217,50 @@ class SafeNextTests(unittest.TestCase):
         self.assertEqual(safe_internal_next("  /tickets?supports=1  ", "/home"), "/tickets?supports=1")
 
 
+
+class PanelSettingsNavPolishTests(unittest.TestCase):
+    def test_panel_general_tab_and_pasarguard_removed(self):
+        from app.services.users import (
+            PANEL_SETTINGS_TABS,
+            SETTINGS_DOMAIN_REDIRECTS,
+            SETTINGS_TABS,
+        )
+
+        bot_keys = [k for k, _ in SETTINGS_TABS]
+        self.assertNotIn("pasarguard", bot_keys)
+        self.assertEqual(SETTINGS_DOMAIN_REDIRECTS.get("pasarguard"), "/settings?tab=bot")
+        panel_keys = [k for k, _ in PANEL_SETTINGS_TABS]
+        self.assertEqual(panel_keys[0], "general")
+        self.assertIn("general", panel_keys)
+        tabs = (TEMPLATES / "_panel_settings_tabs.html").read_text(encoding="utf-8")
+        self.assertIn('href="/settings?tab=general"', tabs)
+        # general link appears before backup
+        self.assertLess(tabs.index("tab=general"), tabs.index("tab=backup"))
+        bot = (TEMPLATES / "_settings_bot.html").read_text(encoding="utf-8")
+        self.assertNotIn("وب و عمومی", bot)
+        general = (TEMPLATES / "_settings_general.html").read_text(encoding="utf-8")
+        self.assertIn("وب و عمومی", general)
+        self.assertIn('name="WEB_PORT"', general)
+        base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
+        self.assertIn('href="/settings?tab=general"', base)
+        self.assertNotIn('href="/settings?tab=pasarguard"', base)
+        self.assertIn('href="/settings?tab=bot"', base)
+
+    def test_magic_links_copy_inside_field(self):
+        html = (TEMPLATES / "_settings_links.html").read_text(encoding="utf-8")
+        self.assertIn("magic-link-field", html)
+        self.assertIn("magic-link-copy", html)
+        self.assertIn("magic-link-input", html)
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        block = css.split(".magic-link-field {", 1)[1].split("}", 1)[0]
+        self.assertIn("position: relative", block)
+        inp = css.split(".magic-link-field .magic-link-input {", 1)[1].split("}", 1)[0]
+        self.assertIn("text-overflow: ellipsis", inp)
+        self.assertIn("font-size: 12px", inp)
+        logo = css.split(".brand-logo {", 1)[1].split("}", 1)[0]
+        self.assertIn("var(--brand-logo-size)", logo)
+        self.assertIn("--brand-logo-size: 40px", css)
+        self.assertIn("--topbar-h: 58px", css)
+
 if __name__ == "__main__":
     unittest.main()

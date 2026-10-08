@@ -46,14 +46,17 @@
   {% endif %}
 
   {% set ch_label = update_channel_label if update_channel_label is defined else (update_info.channel_label if update_info.channel_label is defined else 'پایدار') %}
-  {% if available and not show_ops and not migration_blocked %}
+  {# Version flash stays hidden while migration is blocked — same text must not appear twice. #}
+  {% if migration_blocked or show_ops %}
+  <div class="flash warn" id="upd-version-flash" role="status" hidden></div>
+  {% elif available %}
   <div class="flash warn" id="upd-version-flash" role="status">برای کانال {{ ch_label }} آپدیت جدید هست: {{ local_version }} → {{ update_info.remote_version }}</div>
-  {% elif update_info.checked and not available and not show_ops %}
+  {% elif update_info.checked and not available %}
   <div class="flash ok" id="upd-version-flash" role="status">برای کانال {{ ch_label }} آپدیت جدیدی نیست — روی آخرین نسخه هستید.</div>
-  {% elif not update_info.checked and not show_ops %}
+  {% elif not update_info.checked %}
   <div class="flash warn" id="upd-version-flash" role="status">{{ update_info.label }}</div>
   {% else %}
-  <div class="flash warn" id="upd-version-flash" role="status" {% if show_ops %}hidden{% endif %}></div>
+  <div class="flash warn" id="upd-version-flash" role="status" hidden></div>
   {% endif %}
 
   <div class="update-meta">

@@ -4401,14 +4401,10 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["backup_schedule_groups"] = {
                 name: SETTING_GROUPS[name] for name in names if name in SETTING_GROUPS
             }
-        elif tab == "pasarguard":
+        elif tab == "general":
             from app.services.setup_wizard import current_setup_values
 
-            current = current_setup_values()
-            ctx["env_values"] = {key: current.get(key, "") for key in (
-                "PG_BASE_URL", "PG_SUBSCRIPTION_PATH", "PG_USERNAME"
-            )}
-            ctx["pg_has_password"] = bool(current.get("PG_PASSWORD"))
+            ctx["env_values"] = current_setup_values()
         elif tab == "bot":
             from app.services.setup_wizard import current_setup_values
 
@@ -4682,20 +4678,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                     return _bot_err(str(exc))
             pg_user = str(form.get("PG_USERNAME") or "").strip()
             pg_pass = str(form.get("PG_PASSWORD") or "").strip()
-            web_port = str(form.get("WEB_PORT") or "9000").strip()
-            public_base = str(form.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
-            try:
-                from app.services.ssl_certs import https_is_active
-
-                if public_base.startswith("https://") and not https_is_active():
-                    public_base = "http://" + public_base[len("https://") :]
-            except Exception:
-                pass
-            currency = str(form.get("CURRENCY") or "").strip() or "تومان"
             update_mode_raw = str(form.get("BOT_UPDATE_MODE") or "").strip().lower()
             webhook_url_raw = str(form.get("WEBHOOK_URL") or "").strip()
             webhook_path_raw = str(form.get("WEBHOOK_PATH") or "").strip()
             current = current_setup_values()
+            # Web/public fields live on panel «عمومی» — keep current values here.
+            web_port = str(current.get("WEB_PORT") or "9000").strip()
+            public_base = str(current.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+            currency = str(current.get("CURRENCY") or "تومان").strip() or "تومان"
             try:
                 pg_sub_path = normalize_pg_subscription_path(
                     str(form.get("PG_SUBSCRIPTION_PATH") or current.get("PG_SUBSCRIPTION_PATH") or "/sub")
@@ -4831,6 +4821,55 @@ def create_api_app(lifespan=None) -> FastAPI:
                 )
             return RedirectResponse(
                 "/settings?tab=bot&restarting=1",
+                status_code=303,
+            )
+
+        if tab == "general":
+            from app.services.service_control import schedule_panel_restart
+            from app.services.setup_wizard import current_setup_values
+
+            current = current_setup_values()
+            web_port = str(form.get("WEB_PORT") or "9000").strip()
+            public_base = str(form.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+            currency = str(form.get("CURRENCY") or "").strip() or "تومان"
+            try:
+                from app.services.ssl_certs import https_is_active
+
+                if public_base.startswith("https://") and not https_is_active():
+                    public_base = "http://" + public_base[len("https://") :]
+            except Exception:
+                pass
+            try:
+                port_n = int(web_port)
+                if port_n < 1 or port_n > 65535:
+                    raise ValueError
+            except ValueError:
+                return RedirectResponse(
+                    "/settings?tab=general&err=" + quote("پورت نامعتبر است"),
+                    status_code=303,
+                )
+            payload = {
+                "WEB_PORT": str(port_n),
+                "PUBLIC_BASE_URL": public_base,
+                "CURRENCY": currency,
+            }
+            current_norm = {
+                "WEB_PORT": str(current.get("WEB_PORT") or "9000").strip(),
+                "PUBLIC_BASE_URL": str(current.get("PUBLIC_BASE_URL") or "").strip().rstrip("/"),
+                "CURRENCY": str(current.get("CURRENCY") or "تومان").strip() or "تومان",
+            }
+            needs_restart = any(
+                str(payload.get(k) or "").strip() != str(current_norm.get(k) or "").strip()
+                for k in payload
+            )
+            if not needs_restart:
+                return RedirectResponse("/settings?tab=general&saved=1", status_code=303)
+            update_env_keys(payload)
+            ensure_web_secret()
+            get_settings.cache_clear()
+            schedule_panel_restart(delay_sec=2.5, reason="panel general settings saved")
+            return RedirectResponse(
+                "/settings?tab=general&ok=" + quote("تنظیمات ذخیره شد — در حال ری‌استارت"),
                 status_code=303,
             )
 
