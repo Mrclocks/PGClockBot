@@ -179,33 +179,42 @@ async def bulk_shop_plan_action(
     staff: dict,
     plan_ids: list[int],
     action: str,
-) -> tuple[int, int]:
-    from app.services.plans_catalog import get_owned_plan
+) -> tuple[int, int, str | None]:
+    from app.services.plans_catalog import (
+        PlanDeleteBlocked,
+        delete_shop_plan,
+        get_owned_plan,
+    )
 
     ids = parse_bulk_ids(plan_ids)
     ok = fail = 0
+    first_err: str | None = None
     for pid in ids:
         plan = await get_owned_plan(session, pid, staff)
         if not plan or getattr(plan, "is_trial", False):
             fail += 1
             continue
         try:
-            if action == "toggle":
-                plan.is_active = not plan.is_active
-                await session.flush()
-                ok += 1
-            elif action == "delete":
-                await session.delete(plan)
-                await session.flush()
-                ok += 1
-            else:
-                fail += 1
+            async with session.begin_nested():
+                if action == "toggle":
+                    plan.is_active = not plan.is_active
+                    await session.flush()
+                    ok += 1
+                elif action == "delete":
+                    await delete_shop_plan(session, plan)
+                    ok += 1
+                else:
+                    fail += 1
+        except PlanDeleteBlocked as e:
+            fail += 1
+            if first_err is None:
+                first_err = e.message
         except Exception:
             logger.debug("bulk shop plan %s failed id=%s", action, pid, exc_info=True)
             fail += 1
     if ok:
         await session.commit()
-    return ok, fail
+    return ok, fail, first_err
 
 
 async def bulk_reseller_plan_action(
@@ -213,35 +222,40 @@ async def bulk_reseller_plan_action(
     staff: dict,
     plan_ids: list[int],
     action: str,
-) -> tuple[int, int]:
-    from app.services.billing import delete_plan_billing_rate, sync_plan_billing_rate
+) -> tuple[int, int, str | None]:
+    from app.services.billing import sync_plan_billing_rate
+    from app.services.plans_catalog import PlanDeleteBlocked, delete_reseller_plan
 
     ids = parse_bulk_ids(plan_ids)
     ok = fail = 0
+    first_err: str | None = None
     for pid in ids:
         plan = await session.get(ResellerPlan, pid)
         if not plan:
             fail += 1
             continue
         try:
-            if action == "toggle":
-                plan.is_active = not plan.is_active
-                await sync_plan_billing_rate(session, plan)
-                await session.flush()
-                ok += 1
-            elif action == "delete":
-                await delete_plan_billing_rate(session, int(plan.id))
-                await session.delete(plan)
-                await session.flush()
-                ok += 1
-            else:
-                fail += 1
+            async with session.begin_nested():
+                if action == "toggle":
+                    plan.is_active = not plan.is_active
+                    await sync_plan_billing_rate(session, plan)
+                    await session.flush()
+                    ok += 1
+                elif action == "delete":
+                    await delete_reseller_plan(session, plan)
+                    ok += 1
+                else:
+                    fail += 1
+        except PlanDeleteBlocked as e:
+            fail += 1
+            if first_err is None:
+                first_err = e.message
         except Exception:
             logger.debug("bulk reseller plan %s failed id=%s", action, pid, exc_info=True)
             fail += 1
     if ok:
         await session.commit()
-    return ok, fail
+    return ok, fail, first_err
 
 
 async def bulk_gift_code_toggle(

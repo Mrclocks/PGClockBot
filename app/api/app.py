@@ -3214,13 +3214,25 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.plans_catalog import get_owned_plan
+        from app.services.plans_catalog import (
+            PlanDeleteBlocked,
+            delete_shop_plan,
+            get_owned_plan,
+        )
 
         plan = await get_owned_plan(session, plan_id, staff)
-        if plan and not plan.is_trial:
-            await session.delete(plan)
+        if not plan or plan.is_trial:
+            return RedirectResponse("/plans", status_code=303)
+        try:
+            await delete_shop_plan(session, plan)
             await session.commit()
-        return RedirectResponse("/plans", status_code=303)
+        except PlanDeleteBlocked as e:
+            try:
+                await session.rollback()
+            except Exception:
+                pass
+            return _redirect_msg("/plans", err=e.message)
+        return _redirect_msg("/plans", ok="پلن حذف شد")
 
 
     async def _notify_order_user(session: AsyncSession, payment: Payment, order: Order | None) -> None:

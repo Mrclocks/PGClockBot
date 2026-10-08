@@ -1527,13 +1527,22 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        plan = await session.get(ResellerPlan, plan_id)
-        if plan:
-            from app.services.billing import delete_plan_billing_rate
+        from app.services.plans_catalog import PlanDeleteBlocked, delete_reseller_plan
 
-            await delete_plan_billing_rate(session, int(plan.id))
-            await session.delete(plan)
+        plan = await session.get(ResellerPlan, plan_id)
+        if not plan:
+            return RedirectResponse("/plans#reseller-plans", status_code=303)
+        try:
+            await delete_reseller_plan(session, plan)
             await session.commit()
+        except PlanDeleteBlocked as e:
+            try:
+                await session.rollback()
+            except Exception:
+                pass
+            return RedirectResponse(
+                f"/plans?err={_q(e.message)}#reseller-plans", status_code=303
+            )
         return RedirectResponse(f"/plans?ok={_q('حذف شد')}#reseller-plans", status_code=303)
 
     # ---- applications ----

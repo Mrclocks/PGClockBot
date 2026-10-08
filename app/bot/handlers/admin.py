@@ -1737,13 +1737,24 @@ async def adm_plan_del(callback: CallbackQuery, session: AsyncSession, db_user: 
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
+    from app.services.plans_catalog import PlanDeleteBlocked, delete_shop_plan
+
     pid = int(callback.data.rsplit(":", 1)[-1])
     plan = await session.get(Plan, pid)
     if not plan or plan.is_trial:
         await callback.answer("یافت نشد", show_alert=True)
         return
-    await session.delete(plan)
-    await session.commit()
+    try:
+        await delete_shop_plan(session, plan)
+        await session.commit()
+    except PlanDeleteBlocked as e:
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+        msg = e.message if len(e.message) <= 180 else e.message[:177] + "…"
+        await callback.answer(msg, show_alert=True)
+        return
     await callback.answer("حذف شد")
     await _render_plans_list(callback, session)
 

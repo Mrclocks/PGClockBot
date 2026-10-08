@@ -1625,17 +1625,25 @@ async def resplan_del(callback: CallbackQuery, session: AsyncSession, db_user: B
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
+    from app.services.plans_catalog import PlanDeleteBlocked, delete_reseller_plan
+
     pid = int(callback.data.rsplit(":", 1)[-1])
     plan = await session.get(ResellerPlan, pid)
     if not plan:
         await callback.answer("یافت نشد", show_alert=True)
         return
     mode = reseller_plan_mode_of(plan)
-    from app.services.billing import delete_plan_billing_rate
-
-    await delete_plan_billing_rate(session, int(plan.id))
-    await session.delete(plan)
-    await _persist(session)
+    try:
+        await delete_reseller_plan(session, plan)
+        await _persist(session)
+    except PlanDeleteBlocked as e:
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+        msg = e.message if len(e.message) <= 180 else e.message[:177] + "…"
+        await callback.answer(msg, show_alert=True)
+        return
     await callback.answer("حذف شد")
     await state.update_data(_adm_plans_aud="resellers", _adm_plans_kind=mode)
     if callback.message:

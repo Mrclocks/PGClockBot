@@ -269,12 +269,23 @@ async def res_plan_delete(callback: CallbackQuery, session: AsyncSession, db_use
     if not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
+    from app.services.plans_catalog import PlanDeleteBlocked, delete_shop_plan
+
     plan = await session.get(Plan, int(callback.data.split(":")[-1]))
     if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
         await callback.answer("یافت نشد", show_alert=True)
         return
-    await session.delete(plan)
-    await session.commit()
+    try:
+        await delete_shop_plan(session, plan)
+        await session.commit()
+    except PlanDeleteBlocked as e:
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+        msg = e.message if len(e.message) <= 180 else e.message[:177] + "…"
+        await callback.answer(msg, show_alert=True)
+        return
     await callback.answer("حذف شد")
     plans = await _list_plans(session, owner_id)
     if callback.message:

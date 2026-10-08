@@ -6,14 +6,26 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-def _bulk_result(return_to: str, ok: int, fail: int, *, done: str, none: str):
+def _bulk_result(
+    return_to: str,
+    ok: int,
+    fail: int,
+    *,
+    done: str,
+    none: str,
+    detail: str | None = None,
+):
     from app.services.table_bulk import redirect_bulk
 
     if ok == 0 and fail:
+        if detail:
+            return redirect_bulk(return_to, err=detail)
         return redirect_bulk(return_to, err=f"{none} · {fail} نامعتبر")
     msg = f"{ok} {done}"
     if fail:
         msg += f" · {fail} رد شد"
+        if detail:
+            msg += f" — {detail}"
     return redirect_bulk(return_to, ok=msg)
 
 
@@ -350,10 +362,12 @@ def register_bulk_pages(
             return redirect_bulk(return_to, err="هیچ پلنی انتخاب نشده")
         if action not in {"toggle", "delete"}:
             return redirect_bulk(return_to, err="عملیات نامعتبر")
-        ok, fail = await bulk_reseller_plan_action(session, staff, ids, action)
+        ok, fail, detail = await bulk_reseller_plan_action(session, staff, ids, action)
         labels = {"toggle": "وضعیت پلن تغییر کرد", "delete": "پلن حذف شد"}
         none = {"toggle": "هیچ پلنی تغییر نکرد", "delete": "هیچ پلنی حذف نشد"}
-        return _bulk_result(return_to, ok, fail, done=labels[action], none=none[action])
+        return _bulk_result(
+            return_to, ok, fail, done=labels[action], none=none[action], detail=detail
+        )
 
     # ---- shop plans + gift codes ----
 
@@ -376,10 +390,12 @@ def register_bulk_pages(
             return redirect_bulk(return_to, err="هیچ پلنی انتخاب نشده")
         if action not in {"toggle", "delete"}:
             return redirect_bulk(return_to, err="عملیات نامعتبر")
-        ok, fail = await bulk_shop_plan_action(session, staff, ids, action)
+        ok, fail, detail = await bulk_shop_plan_action(session, staff, ids, action)
         labels = {"toggle": "وضعیت پلن تغییر کرد", "delete": "پلن حذف شد"}
         none = {"toggle": "هیچ پلنی تغییر نکرد", "delete": "هیچ پلنی حذف نشد"}
-        return _bulk_result(return_to, ok, fail, done=labels[action], none=none[action])
+        return _bulk_result(
+            return_to, ok, fail, done=labels[action], none=none[action], detail=detail
+        )
 
     @app.post("/plans/gift-codes/bulk-action")
     async def gift_codes_bulk_action(
