@@ -9,20 +9,22 @@
   {% endif %}
   <div class="form-stack magic-links-stack">
     {% for key, label in [('renew','تمدید'),('wallet','کیف پول'),('support','پشتیبانی'),('config','دریافت مجدد کانفیگ'),('gift','کد هدیه')] %}
-    <label class="form-field">{{ label }}
-      <div class="magic-link-field{% if links.get(key) %} has-copy{% endif %}">
-        <input class="magic-link-input" dir="ltr" readonly
+    <div class="magic-link-item">
+      <span class="magic-link-label" id="ml-label-{{ key }}">{{ label }}</span>
+      <div class="magic-link-field{% if links.get(key) %} has-copy{% endif %}" dir="ltr">
+        <input class="magic-link-input" type="text" readonly
                value="{{ links.get(key) or '—' }}" id="ml-{{ key }}"
-               title="{{ links.get(key) or '' }}" />
+               title="{{ links.get(key) or '' }}"
+               aria-labelledby="ml-label-{{ key }}" />
         {% if links.get(key) %}
-        <button type="button" class="btn btn-ghost btn-sm magic-link-copy"
+        <button type="button" class="magic-link-copy"
                 data-copy="{{ links.get(key) }}"
                 data-copy-from="#ml-{{ key }}"
                 data-copy-idle="کپی"
                 aria-label="کپی لینک {{ label }}">کپی</button>
         {% endif %}
       </div>
-    </label>
+    </div>
     {% endfor %}
   </div>
 </div>
