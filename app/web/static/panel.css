@@ -58,7 +58,9 @@
   --drawer-w: min(300px, 78vw);
   /* Drawer dim — painted by .side-backdrop::before, never by the fixed box */
   --side-dim: rgba(0, 0, 0, 0.55);
-  --topbar-h: 52px;
+  /* Header chrome — keep in sync with .brand / .topbar padding + logo size */
+  --topbar-h: 58px;
+  --brand-logo-size: 40px;
   --btn-h: 36px;
   /* Spacing scale — 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 */
   --space-0: 4px;
@@ -296,7 +298,8 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-1) var(--space-1);
+  /* Extra bottom air before the separator — sidebar .side top uses --topbar-h on mobile */
+  padding: var(--space-1) var(--space-1) var(--space-2);
   margin-bottom: var(--space-1);
   border-bottom: 1px solid var(--border);
   color: inherit;
@@ -317,8 +320,8 @@ a.topbar-brand:focus-visible {
 .brand-logo {
   display: inline-flex;
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
+  width: var(--brand-logo-size);
+  height: var(--brand-logo-size);
   /* Soft square chrome — not the larger card --radius */
   border-radius: var(--r-sm);
   overflow: hidden;
@@ -4592,14 +4595,14 @@ form.settings-form > .actions.sticky-actions,
   text-decoration: none;
 }
 .topbar-brand .brand-logo {
-  width: var(--btn-h);
-  height: var(--btn-h);
+  width: var(--brand-logo-size);
+  height: var(--brand-logo-size);
   border-radius: var(--r-sm);
 }
 .topbar-brand-text {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-0);
   min-width: 0;
 }
 .topbar-brand strong {
@@ -8647,6 +8650,36 @@ html[data-theme="light"] .home-period {
   gap: var(--space-1);
   align-items: center;
   justify-content: flex-end;
+}
+/* Quick links: copy sits inside the readonly URL field */
+.magic-link-field {
+  position: relative;
+  display: block;
+  margin-top: var(--space-1);
+  min-width: 0;
+}
+.magic-link-field .magic-link-input {
+  width: 100%;
+  margin-top: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.magic-link-field.has-copy .magic-link-input {
+  padding-inline-end: calc(var(--space-2) + 3.25rem);
+}
+.magic-link-copy {
+  position: absolute;
+  inset-inline-end: var(--space-1);
+  top: 50%;
+  transform: translateY(-50%);
+  min-height: calc(var(--btn-h) - 10px);
+  padding-block: 0;
+  padding-inline: var(--space-1);
+  font-size: 12px;
+  z-index: 1;
 }
 .backup-health-tag {
   margin-inline-start: var(--space-1);

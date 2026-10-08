@@ -68,7 +68,7 @@
   <div class="shell">
     <header class="topbar mobile-only">
       <a class="topbar-brand" href="/home" aria-label="داشبورد">
-        <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" width="36" height="36" /></span>
+        <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" width="40" height="40" /></span>
         <div class="topbar-brand-text">
           <strong dir="ltr">MrClockBot</strong>
           <span class="topbar-version" dir="ltr">
@@ -86,7 +86,7 @@
     <aside class="side" id="sidebar" aria-label="منوی اصلی">
       <div class="side-panel">
       <a class="brand desk-only" href="/home" aria-label="داشبورد">
-        <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" width="36" height="36" /></span>
+        <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" width="40" height="40" /></span>
         <div>
           <strong dir="ltr">MrClockBot</strong>
           <span class="brand-ver-line" dir="ltr">
@@ -121,7 +121,7 @@
       </div>
       <nav class="side-nav" data-side-nav>
         {% set settings_tab = request.query_params.get('tab') or 'welcome' %}
-        {% set is_panel_settings = path.startswith('/settings') and settings_tab in ['backup','pwa','ssl','update'] %}
+        {% set is_panel_settings = path.startswith('/settings') and settings_tab in ['general','backup','pwa','ssl','update'] %}
         {% if is_owner %}
         <div class="nav-section is-collapsed nav-section-home" data-nav-mode="system" id="nav-panel-system">
           <button type="button" class="nav-label nav-label-home nav-label-toggle" data-nav-collapse="system" aria-expanded="false">
@@ -136,7 +136,7 @@
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a5 5 0 0 1 5 5v2.2l1.8 3.3H5.2L7 11.2V9a5 5 0 0 1 5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>
             <span class="nav-item-label"><span>اعلان‌ها</span>{% if inbox_alert %}<i class="nav-dot" aria-label="اعلان خوانده‌نشده"></i>{% endif %}</span>
           </a>
-          <a href="/settings?tab=backup" class="nav-item nav-item-home {% if is_panel_settings or path.startswith('/security') %}active{% endif %}">
+          <a href="/settings?tab=general" class="nav-item nav-item-home {% if is_panel_settings or path.startswith('/security') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 5v4M19 7h1"/><path d="M4 12h3M11 10v4M13 12h7"/><path d="M4 17h11M19 15v4M21 17h-1"/></svg>
             <span>تنظیمات وب پنل</span>
           </a>
@@ -264,7 +264,7 @@
           </button>
           <p class="nav-empty muted">در این بخش آیتمی برای دسترسی شما نیست.</p>
           {% if is_owner %}
-          <a href="/settings?tab=pasarguard" class="nav-item nav-item-pg {% if path=='/settings' and request.query_params.get('tab')=='pasarguard' %}active{% endif %}">
+          <a href="/settings?tab=bot" class="nav-item nav-item-pg {% if path=='/settings' and request.query_params.get('tab')=='bot' %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="17" r="2"/></svg>
             <span>تنظیمات اتصال</span>
           </a>

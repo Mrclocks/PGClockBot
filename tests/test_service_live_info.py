@@ -458,23 +458,42 @@ def test_panel_settings_bad_path_does_not_write(settings_endpoint, bad):
 
 def test_panel_settings_template_keeps_password_out_of_html():
     from pathlib import Path
-    from jinja2 import Environment, FileSystemLoader
-    from app.services.users import SETTINGS_TABS
+    from jinja2 import Environment, FileSystemLoader, select_autoescape
+    from app.services.users import SETTINGS_DOMAIN_REDIRECTS, SETTINGS_TABS
 
     templates = Path(__file__).resolve().parents[1] / "app/web/templates"
-    env = Environment(loader=FileSystemLoader(templates), autoescape=True)
-    html = env.get_template("_settings_pasarguard.html").render(
+    env = Environment(
+        loader=FileSystemLoader(templates),
+        autoescape=select_autoescape(["html", "xml"]),
+    )
+    env.globals["modal_title"] = lambda *a, **k: ""
+    html = env.get_template("_settings_bot.html").render(
         env_values={
             "PG_PASSWORD": "stored-secret",
             "PG_SUBSCRIPTION_PATH": "/apilog",
             "PG_BASE_URL": "https://pg.example",
+            "BOT_TOKEN": "",
+            "BOT_USERNAME": "",
+            "ADMIN_IDS": "",
+            "WEBHOOK_URL": "",
+            "WEBHOOK_PATH": "/telegram/webhook",
+            "PUBLIC_BASE_URL": "",
         },
-        pg_has_password=True,
+        bot_status={"ok": False, "label": ""},
+        bot_token_masked="",
+        bot_update_mode="polling",
+        webhook_full_url="",
+        request=SimpleNamespace(query_params={}),
+        csrf_token="",
+        csp_nonce="",
     )
-    assert 'type="password" value=""' in html
+    assert 'id="pg-password-input"' in html
+    assert 'type="password"' in html
     assert "stored-secret" not in html
-    assert 'action="/settings?tab=pasarguard"' in html
-    assert ("pasarguard", "اتصال پاسارگارد") in SETTINGS_TABS
+    assert 'action="/settings?tab=bot"' in html
+    assert "وب و عمومی" not in html
+    assert ("pasarguard", "اتصال پاسارگارد") not in SETTINGS_TABS
+    assert SETTINGS_DOMAIN_REDIRECTS.get("pasarguard") == "/settings?tab=bot"
 
 
 def test_actual_path_overrides_other_configured_path():

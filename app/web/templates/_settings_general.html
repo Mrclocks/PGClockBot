@@ -1,0 +1,28 @@
+<form method="post" action="/settings?tab=general" class="settings-form" id="panel-general-form">
+  {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
+  <div class="card settings-card">
+    <h2>وب و عمومی</h2>
+    <p class="muted update-card-caption">پورت پنل، واحد پول، و آدرس عمومی برای مینی‌اپ و پیش‌فرض Webhook.</p>
+    <div class="settings-grid">
+      <div class="setting-item">
+        <label>پورت وب‌پنل
+          <input name="WEB_PORT" value="{{ env_values.get('WEB_PORT','9000') }}" dir="ltr" required inputmode="numeric" autocomplete="off" />
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>واحد پول
+          <input name="CURRENCY" value="{{ env_values.get('CURRENCY','تومان') }}" required autocomplete="off" />
+        </label>
+      </div>
+      <div class="setting-item full">
+        <label>آدرس عمومی (اختیاری)
+          <input name="PUBLIC_BASE_URL" id="public-base-input" value="{{ env_values.get('PUBLIC_BASE_URL','') }}" dir="ltr" placeholder="https://bot.example.com" autocomplete="off" />
+          <small class="muted">برای مینی‌اپ، لینک‌های عمومی و پیش‌فرض Webhook — با HTTPS فعال، دکمه Open تلگرام خودکار ست می‌شود</small>
+        </label>
+      </div>
+    </div>
+  </div>
+  <div class="actions sticky-actions">
+    <button class="btn" type="submit">ذخیره تنظیمات عمومی</button>
+  </div>
+</form>

@@ -1,5 +1,6 @@
 {% macro panel_settings_tabs(active) -%}
 <nav class="section-tabs settings-tabs" aria-label="تب‌های تنظیمات وب پنل">
+  <a href="/settings?tab=general" class="{% if active=='general' %}active{% endif %}">عمومی</a>
   <a href="/settings?tab=backup" class="{% if active=='backup' %}active{% endif %}">بکاپ</a>
   <a href="/settings?tab=pwa" class="{% if active=='pwa' %}active{% endif %}">وب‌اپ</a>
   <a href="/settings?tab=ssl" class="{% if active=='ssl' %}active{% endif %}">SSL</a>
