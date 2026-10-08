@@ -11,12 +11,15 @@
     {% for key, label in [('renew','تمدید'),('wallet','کیف پول'),('support','پشتیبانی'),('config','دریافت مجدد کانفیگ'),('gift','کد هدیه')] %}
     <label class="form-field">{{ label }}
       <div class="magic-link-field{% if links.get(key) %} has-copy{% endif %}">
-        <input class="magic-link-input" dir="ltr" readonly value="{{ links.get(key) or '—' }}" id="ml-{{ key }}" />
+        <input class="magic-link-input" dir="ltr" readonly
+               value="{{ links.get(key) or '—' }}" id="ml-{{ key }}"
+               title="{{ links.get(key) or '' }}" />
         {% if links.get(key) %}
         <button type="button" class="btn btn-ghost btn-sm magic-link-copy"
                 data-copy="{{ links.get(key) }}"
                 data-copy-from="#ml-{{ key }}"
-                data-copy-idle="کپی">کپی</button>
+                data-copy-idle="کپی"
+                aria-label="کپی لینک {{ label }}">کپی</button>
         {% endif %}
       </div>
     </label>

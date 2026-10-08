@@ -254,13 +254,31 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         block = css.split(".magic-link-field {", 1)[1].split("}", 1)[0]
         self.assertIn("position: relative", block)
+        self.assertIn("--magic-link-h: 44px", block)
+        self.assertIn("--magic-copy-h: 28px", block)
+        self.assertIn("--magic-copy-w: 4.75rem", block)
         inp = css.split(".magic-link-field .magic-link-input {", 1)[1].split("}", 1)[0]
         self.assertIn("text-overflow: ellipsis", inp)
+        self.assertIn("text-align: right", inp)
         self.assertIn("font-size: 12px", inp)
+        self.assertIn("height: var(--magic-link-h)", inp)
+        btn = css.split(".magic-link-copy {", 1)[1].split("}", 1)[0]
+        self.assertIn("width: var(--magic-copy-w)", btn)
+        self.assertIn("height: var(--magic-copy-h)", btn)
+        self.assertIn("justify-content: center", btn)
         logo = css.split(".brand-logo {", 1)[1].split("}", 1)[0]
         self.assertIn("var(--brand-logo-size)", logo)
         self.assertIn("--brand-logo-size: 40px", css)
         self.assertIn("--topbar-h: 58px", css)
+
+    def test_pg_connection_settings_is_last_sidebar_item(self):
+        base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
+        section = base.split('id="nav-panel-pg"', 1)[1].split("</div>", 1)[0]
+        self.assertIn("تنظیمات اتصال", section)
+        self.assertIn('href="/settings?tab=bot"', section)
+        # Owner connection link must come after every other PG nav item.
+        self.assertGreater(section.rindex("تنظیمات اتصال"), section.rindex("اینباند"))
+        self.assertGreater(section.rindex('href="/settings?tab=bot"'), section.index('href="/pg"'))
 
 if __name__ == "__main__":
     unittest.main()
