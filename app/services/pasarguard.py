@@ -763,11 +763,40 @@ class PasarGuardClient:
     async def reconnect_all_nodes(self) -> Any:
         return await self.request("POST", "/api/nodes/reconnect")
 
-    async def subscription_info(self, token: str) -> dict:
-        return await self.request("GET", f"/sub/{token}/info", auth=False)
+    async def subscription_info(
+        self,
+        token: str | None = None,
+        *,
+        subscription_url: str | None = None,
+    ) -> dict:
+        """Public subscription info — path comes from panel URL, never a hardcoded prefix."""
+        target = subscription_request_target(
+            subscription_url=subscription_url,
+            token=token,
+            suffix="info",
+        )
+        if not target:
+            raise PasarGuardError(
+                "مسیر اشتراک پاسارگارد مشخص نیست — لینک پنل لازم است"
+            )
+        return await self.request("GET", target, auth=False)
 
-    async def subscription_usage(self, token: str) -> Any:
-        return await self.request("GET", f"/sub/{token}/usage", auth=False)
+    async def subscription_usage(
+        self,
+        token: str | None = None,
+        *,
+        subscription_url: str | None = None,
+    ) -> Any:
+        target = subscription_request_target(
+            subscription_url=subscription_url,
+            token=token,
+            suffix="usage",
+        )
+        if not target:
+            raise PasarGuardError(
+                "مسیر اشتراک پاسارگارد مشخص نیست — لینک پنل لازم است"
+            )
+        return await self.request("GET", target, auth=False)
 
 
 def as_any_list(data: Any, *keys: str) -> list:
@@ -1054,7 +1083,7 @@ async def get_pg_for_principal(
 
 
 def public_pg_api_base() -> str:
-    """Best-known API root (may include a dashboard path). Prefer ``public_pg_sub_origin`` for /sub links."""
+    """Best-known API root (may include a dashboard path). Prefer ``public_pg_sub_origin`` for sub links."""
     client = _pg
     if client and client.base_url:
         return client.base_url.rstrip("/")
@@ -1065,9 +1094,9 @@ def public_pg_api_base() -> str:
 def public_pg_sub_origin() -> str:
     """Scheme + host (+ port) of the PasarGuard panel — no dashboard/UI path.
 
-    When PG has no dedicated subscription host configured it often returns a
-    path-only ``/sub/…`` URL. Public links must still be absolute; use this
-    origin (not the panel path) as the fallback base.
+    When PG returns a path-only subscription URL, public links must still be
+    absolute; use this origin (not the dashboard path) as the host fallback.
+    The path itself always comes from the panel URL — never invented here.
     """
     from urllib.parse import urlparse, urlunparse
 
@@ -1088,52 +1117,173 @@ def public_pg_sub_origin() -> str:
     return urlunparse((parsed.scheme, parsed.netloc, "", "", "", "")).rstrip("/")
 
 
-def extract_sub_token(subscription_url: str | None) -> str | None:
-    if not subscription_url:
-        return None
-    url = subscription_url.rstrip("/")
-    parts = url.split("/sub/")
+# Last path segment names that are subscription *endpoints*, not the token.
+_SUB_ENDPOINT_SUFFIXES = frozenset({"info", "usage"})
+
+# Path prefix learned from panel-provided subscription URLs (e.g. "/custom").
+# Used only when a caller has a token but no full URL yet (deep-link claim).
+_learned_subscription_path_prefix: str | None = None
+
+
+def reset_learned_subscription_path_prefix() -> None:
+    """Test helper — clear remembered subscription path prefix."""
+    global _learned_subscription_path_prefix
+    _learned_subscription_path_prefix = None
+
+
+def learned_subscription_path_prefix() -> str | None:
+    return _learned_subscription_path_prefix
+
+
+def note_subscription_url(subscription_url: str | None) -> None:
+    """Remember path prefix from a panel URL so token-only lookups stay path-accurate."""
+    global _learned_subscription_path_prefix
+    path = subscription_resource_path(subscription_url)
+    if not path:
+        return
+    parts = [p for p in path.split("/") if p]
     if len(parts) < 2:
+        # "/TOKEN" only — no prefix to learn
+        return
+    prefix = "/" + "/".join(parts[:-1])
+    _learned_subscription_path_prefix = prefix
+
+
+def subscription_resource_path(subscription_url: str | None) -> str | None:
+    """Normalize to ``/{prefix}/{token}`` (no host, no /info|/usage)."""
+    from urllib.parse import unquote, urlparse
+
+    raw = (subscription_url or "").strip()
+    if not raw:
         return None
-    token = parts[-1].split("?")[0].strip("/")
-    return token or None
+    if "://" in raw:
+        parsed = urlparse(raw)
+        path = parsed.path or ""
+    elif raw.startswith("/"):
+        path = raw.split("?", 1)[0]
+    else:
+        return None
+    parts = [unquote(p) for p in path.split("/") if p]
+    while parts and parts[-1].lower() in _SUB_ENDPOINT_SUFFIXES:
+        parts.pop()
+    if not parts:
+        return None
+    return "/" + "/".join(parts)
+
+
+def extract_sub_token(subscription_url: str | None) -> str | None:
+    """Token = last path segment of the panel subscription URL (any prefix)."""
+    path = subscription_resource_path(subscription_url)
+    if not path:
+        return None
+    parts = [p for p in path.split("/") if p]
+    return parts[-1] if parts else None
+
+
+def subscription_request_target(
+    *,
+    subscription_url: str | None = None,
+    token: str | None = None,
+    suffix: str | None = "info",
+) -> str | None:
+    """Build httpx target for public subscription endpoints from the panel URL.
+
+    Prefer ``subscription_url`` from PasarGuard. Never invent a default ``/sub``
+    prefix. Token-only calls reuse the last learned prefix from a real panel URL.
+    """
+    from urllib.parse import urlparse, urlunparse
+
+    suf = (suffix or "").strip().strip("/")
+    cleaned = _sanitize_subscription_url(subscription_url or "")
+    if cleaned:
+        note_subscription_url(cleaned)
+        resource = subscription_resource_path(cleaned)
+        if not resource:
+            return None
+        path = f"{resource}/{suf}" if suf else resource
+        if cleaned.startswith("/"):
+            return path
+        parsed = urlparse(cleaned)
+        if parsed.scheme and parsed.netloc:
+            return urlunparse(
+                (parsed.scheme, parsed.netloc, path, "", "", "")
+            )
+        return path
+
+    tok = (token or "").strip().strip("/")
+    if not tok:
+        return None
+    prefix = learned_subscription_path_prefix()
+    if not prefix:
+        return None
+    path = f"{prefix.rstrip('/')}/{tok}"
+    if suf:
+        path = f"{path}/{suf}"
+    return path
 
 
 def _sanitize_subscription_url(raw: str) -> str | None:
-    """Reject executable browser schemes; allow http(s) and common VPN URI schemes."""
+    """Reject executable browser schemes; allow http(s), relative paths, VPN URIs."""
     url = (raw or "").strip()
     if not url:
         return None
     low = url.lower()
     if low.startswith(("javascript:", "data:", "vbscript:", "file:")):
         return None
-    # Relative /sub/ paths and absolute http(s) / known schemes
-    if low.startswith(("/", "http://", "https://", "vless://", "vmess://", "trojan://", "ss://", "ssr://", "hy2://", "hysteria2://", "tuic://", "wireguard://")):
+    if low.startswith(
+        (
+            "/",
+            "http://",
+            "https://",
+            "vless://",
+            "vmess://",
+            "trojan://",
+            "ss://",
+            "ssr://",
+            "hy2://",
+            "hysteria2://",
+            "tuic://",
+            "wireguard://",
+        )
+    ):
         return url
-    # Bare host-ish tokens are rejected
     if "://" in low:
         return None
     return url
 
 
 def absolutize_subscription_url(raw: str | None) -> str | None:
-    """Sanitize and turn path-only ``/sub/…`` into an absolute URL via PG panel origin."""
+    """Sanitize; for path-only panel URLs, prepend PG origin (path unchanged)."""
     cleaned = _sanitize_subscription_url(raw or "")
     if not cleaned:
         return None
     if cleaned.startswith("/"):
         origin = public_pg_sub_origin()
         if not origin:
-            # Incomplete without a host — do not hand out path-only links
             return None
-        return f"{origin}{cleaned}"
+        absolute = f"{origin}{cleaned}"
+        note_subscription_url(absolute)
+        return absolute
+    note_subscription_url(cleaned)
     return cleaned
 
 
 def user_subscription_url(user: dict | None) -> str | None:
-    """Best-effort absolute subscription URL from a PG user payload."""
+    """Absolute subscription URL exactly as PasarGuard provided (path never invented).
+
+    Token-only payloads return ``None`` — callers must not synthesize a /sub link.
+    """
     if not isinstance(user, dict):
         return None
+
+    def _accept(raw: str | None) -> str | None:
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        cleaned = absolutize_subscription_url(raw)
+        if cleaned:
+            note_subscription_url(cleaned)
+        return cleaned
+
     for key in (
         "subscription_url",
         "subscription",
@@ -1143,48 +1293,34 @@ def user_subscription_url(user: dict | None) -> str | None:
         "sub_link",
     ):
         raw = user.get(key)
-        if isinstance(raw, str) and raw.strip():
-            cleaned = absolutize_subscription_url(raw)
-            if cleaned:
-                return cleaned
+        if isinstance(raw, str):
+            got = _accept(raw)
+            if got:
+                return got
         if isinstance(raw, dict):
             for k in ("url", "subscription_url", "link", "href"):
-                v = raw.get(k)
-                if isinstance(v, str) and v.strip():
-                    cleaned = absolutize_subscription_url(v)
-                    if cleaned:
-                        return cleaned
+                got = _accept(raw.get(k) if isinstance(raw.get(k), str) else None)
+                if got:
+                    return got
     links = user.get("links")
     if isinstance(links, dict):
         for k in ("subscription", "subscription_url", "url", "sub"):
-            v = links.get(k)
-            if isinstance(v, str) and v.strip():
-                cleaned = absolutize_subscription_url(v)
-                if cleaned:
-                    return cleaned
+            got = _accept(links.get(k) if isinstance(links.get(k), str) else None)
+            if got:
+                return got
     if isinstance(links, list):
         for item in links:
-            if isinstance(item, str) and ("/sub/" in item or item.startswith("http")):
-                cleaned = absolutize_subscription_url(item)
-                if cleaned:
-                    return cleaned
+            if isinstance(item, str) and (
+                item.startswith("http") or item.startswith("/")
+            ):
+                got = _accept(item)
+                if got:
+                    return got
             if isinstance(item, dict):
                 for k in ("url", "link", "href"):
-                    v = item.get(k)
-                    if isinstance(v, str) and v.strip():
-                        cleaned = absolutize_subscription_url(v)
-                        if cleaned:
-                            return cleaned
-    token = (
-        user.get("subscription_token")
-        or user.get("token")
-        or user.get("sub_id")
-        or user.get("subscription_id")
-    )
-    if isinstance(token, str) and token.strip():
-        origin = public_pg_sub_origin()
-        if origin:
-            return f"{origin}/sub/{token.strip()}"
+                    got = _accept(item.get(k) if isinstance(item.get(k), str) else None)
+                    if got:
+                        return got
     return None
 
 

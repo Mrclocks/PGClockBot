@@ -13,9 +13,9 @@ from app.config import get_settings
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
 from app.services.pasarguard import (
-    absolutize_subscription_url,
     extract_sub_token,
     get_pg,
+    note_subscription_url,
     user_subscription_url,
 )
 from app.services.users import get_all_settings, on
@@ -844,8 +844,29 @@ async def _link_subscription(
             return
     else:
         pg = get_pg()
+
+    # Prefer a stored panel URL for this token (custom SUBSCRIPTION_PATH).
+    known = await session.execute(
+        select(UserService).where(UserService.subscription_token == token).limit(1)
+    )
+    known_svc = known.scalar_one_or_none()
+    if not (known_svc and known_svc.subscription_url):
+        # Warm path prefix from any delivered URL so token-only claim stays accurate.
+        warm = await session.execute(
+            select(UserService.subscription_url)
+            .where(UserService.subscription_url.isnot(None))
+            .where(UserService.subscription_url != "")
+            .limit(1)
+        )
+        warm_url = warm.scalar_one_or_none()
+        if warm_url:
+            note_subscription_url(warm_url)
+
     try:
-        info = await pg.subscription_info(token)
+        info = await pg.subscription_info(
+            token,
+            subscription_url=known_svc.subscription_url if known_svc else None,
+        )
     except Exception:
         await message.answer("لینک نامعتبر است یا سرویس پیدا نشد.")
         await render_home(
@@ -857,42 +878,35 @@ async def _link_subscription(
         )
         return
 
-    existing = await session.execute(
-        select(UserService).where(
-            UserService.bot_user_id == db_user.id,
-            UserService.subscription_token == token,
+    live_url = user_subscription_url(info if isinstance(info, dict) else None)
+
+    if known_svc and known_svc.bot_user_id == db_user.id:
+        if live_url and live_url != (known_svc.subscription_url or ""):
+            known_svc.subscription_url = live_url
+            await session.commit()
+    elif known_svc and known_svc.bot_user_id != db_user.id:
+        await message.answer("این اشتراک قبلاً به حساب دیگری وصل شده است.")
+        await render_home(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
-    )
-    svc = existing.scalar_one_or_none()
-    if not svc:
-        claimed = await session.execute(
-            select(UserService).where(
-                UserService.subscription_token == token,
-                UserService.bot_user_id != db_user.id,
-            ).limit(1)
-        )
-        if claimed.scalar_one_or_none() is not None:
-            await message.answer("این اشتراک قبلاً به حساب دیگری وصل شده است.")
-            await render_home(
-                message,
-                session,
-                db_user,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
+        return
+    else:
+        # Link exactly as PasarGuard returned — never invent a /sub/… URL.
+        session.add(
+            UserService(
+                bot_user_id=db_user.id,
+                pg_user_id=info.get("id") if isinstance(info, dict) else None,
+                pg_username=(info.get("username") if isinstance(info, dict) else None)
+                or "unknown",
+                subscription_url=live_url,
+                subscription_token=token or extract_sub_token(live_url),
+                remark="linked",
             )
-            return
-        sub_url = user_subscription_url(info if isinstance(info, dict) else None) or (
-            absolutize_subscription_url(f"/sub/{token}")
         )
-        svc = UserService(
-            bot_user_id=db_user.id,
-            pg_user_id=info.get("id"),
-            pg_username=info.get("username", "unknown"),
-            subscription_url=sub_url,
-            subscription_token=token or extract_sub_token(sub_url),
-            remark="linked",
-        )
-        session.add(svc)
         await session.commit()
 
     await message.answer(

@@ -74,10 +74,19 @@ async def svc_view(
         return
     await callback.answer()
     text = format_message("📦 سرویس", f"🔹 <b>{svc.pg_username}</b>")
-    if svc.subscription_token:
+    if svc.subscription_token or svc.subscription_url:
         try:
-            info = await get_pg().subscription_info(svc.subscription_token)
+            info = await get_pg().subscription_info(
+                svc.subscription_token,
+                subscription_url=svc.subscription_url,
+            )
             text = format_message("📦 سرویس شما", service_card(info))
+            # Refresh stored link from live panel payload when present.
+            from app.services.pasarguard import user_subscription_url
+
+            live = user_subscription_url(info if isinstance(info, dict) else None)
+            if live and live != (svc.subscription_url or ""):
+                svc.subscription_url = live
         except Exception as e:
             text = format_message("📦 سرویس", f"🔹 <b>{svc.pg_username}</b>\n\nخطا در دریافت وضعیت: {e}")
     if callback.message:
@@ -105,11 +114,21 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
-    url = svc.subscription_url or ""
+    from app.services.pasarguard import absolutize_subscription_url, user_subscription_url
+
+    url = absolutize_subscription_url(svc.subscription_url) or (svc.subscription_url or "")
     sub_info = None
-    if svc.subscription_token:
+    if svc.subscription_token or svc.subscription_url:
         try:
-            sub_info = await get_pg().subscription_info(svc.subscription_token)
+            sub_info = await get_pg().subscription_info(
+                svc.subscription_token,
+                subscription_url=svc.subscription_url,
+            )
+            live = user_subscription_url(sub_info if isinstance(sub_info, dict) else None)
+            if live:
+                url = live
+                if live != (svc.subscription_url or ""):
+                    svc.subscription_url = live
         except Exception:
             sub_info = None
     parts = ["🔗 لینک و QR اشتراک"]

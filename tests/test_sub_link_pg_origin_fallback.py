@@ -1,4 +1,4 @@
-"""Path-only /sub/… links fall back to PasarGuard panel origin (no UI path)."""
+"""Subscription links use the panel URL path — never invent a default /sub prefix."""
 
 from __future__ import annotations
 
@@ -38,8 +38,16 @@ class PublicPgSubOriginTests(unittest.TestCase):
 
 
 class AbsolutizeSubscriptionUrlTests(unittest.TestCase):
-    def test_relative_sub_gets_pg_origin(self):
-        from app.services.pasarguard import absolutize_subscription_url
+    def setUp(self):
+        from app.services.pasarguard import reset_learned_subscription_path_prefix
+
+        reset_learned_subscription_path_prefix()
+
+    def test_relative_panel_path_gets_pg_origin(self):
+        from app.services.pasarguard import (
+            absolutize_subscription_url,
+            learned_subscription_path_prefix,
+        )
 
         with patch(
             "app.services.pasarguard.public_pg_sub_origin",
@@ -49,6 +57,23 @@ class AbsolutizeSubscriptionUrlTests(unittest.TestCase):
                 absolutize_subscription_url("/sub/abc123"),
                 "https://pg.example.com/sub/abc123",
             )
+            self.assertEqual(learned_subscription_path_prefix(), "/sub")
+
+    def test_custom_relative_path_preserved(self):
+        from app.services.pasarguard import (
+            absolutize_subscription_url,
+            learned_subscription_path_prefix,
+        )
+
+        with patch(
+            "app.services.pasarguard.public_pg_sub_origin",
+            return_value="https://pg.example.com",
+        ):
+            self.assertEqual(
+                absolutize_subscription_url("/custom/abc123"),
+                "https://pg.example.com/custom/abc123",
+            )
+            self.assertEqual(learned_subscription_path_prefix(), "/custom")
 
     def test_absolute_https_unchanged(self):
         from app.services.pasarguard import absolutize_subscription_url
@@ -68,7 +93,75 @@ class AbsolutizeSubscriptionUrlTests(unittest.TestCase):
         self.assertIsNone(absolutize_subscription_url("javascript:alert(1)"))
 
 
+class ExtractSubTokenTests(unittest.TestCase):
+    def test_default_sub_path(self):
+        from app.services.pasarguard import extract_sub_token
+
+        self.assertEqual(
+            extract_sub_token("https://pg.example.com/sub/tokABC"),
+            "tokABC",
+        )
+
+    def test_custom_path(self):
+        from app.services.pasarguard import extract_sub_token
+
+        self.assertEqual(
+            extract_sub_token("https://pg.example.com/my/path/tokXYZ"),
+            "tokXYZ",
+        )
+
+    def test_strips_info_suffix(self):
+        from app.services.pasarguard import extract_sub_token
+
+        self.assertEqual(
+            extract_sub_token("https://pg.example.com/custom/tok/info"),
+            "tok",
+        )
+
+
+class SubscriptionRequestTargetTests(unittest.TestCase):
+    def setUp(self):
+        from app.services.pasarguard import reset_learned_subscription_path_prefix
+
+        reset_learned_subscription_path_prefix()
+
+    def test_from_panel_url(self):
+        from app.services.pasarguard import subscription_request_target
+
+        self.assertEqual(
+            subscription_request_target(
+                subscription_url="https://pg.example.com/custom/tok1",
+                suffix="info",
+            ),
+            "https://pg.example.com/custom/tok1/info",
+        )
+
+    def test_token_only_without_learned_prefix_is_none(self):
+        from app.services.pasarguard import subscription_request_target
+
+        self.assertIsNone(
+            subscription_request_target(token="tok2", suffix="info")
+        )
+
+    def test_token_only_reuses_learned_custom_prefix(self):
+        from app.services.pasarguard import (
+            note_subscription_url,
+            subscription_request_target,
+        )
+
+        note_subscription_url("https://pg.example.com/custom/other")
+        self.assertEqual(
+            subscription_request_target(token="tok3", suffix="usage"),
+            "/custom/tok3/usage",
+        )
+
+
 class UserSubscriptionUrlFallbackTests(unittest.TestCase):
+    def setUp(self):
+        from app.services.pasarguard import reset_learned_subscription_path_prefix
+
+        reset_learned_subscription_path_prefix()
+
     def test_relative_payload_absolutized(self):
         from app.services.pasarguard import user_subscription_url
 
@@ -81,7 +174,7 @@ class UserSubscriptionUrlFallbackTests(unittest.TestCase):
                 "https://pg.example.com/sub/tok1",
             )
 
-    def test_token_only_uses_origin_not_panel_path(self):
+    def test_custom_relative_payload(self):
         from app.services.pasarguard import user_subscription_url
 
         with patch(
@@ -89,8 +182,19 @@ class UserSubscriptionUrlFallbackTests(unittest.TestCase):
             return_value="https://pg.example.com",
         ):
             self.assertEqual(
-                user_subscription_url({"subscription_token": "tok2"}),
-                "https://pg.example.com/sub/tok2",
+                user_subscription_url({"subscription_url": "/vpn/tok1"}),
+                "https://pg.example.com/vpn/tok1",
+            )
+
+    def test_token_only_does_not_invent_sub_path(self):
+        from app.services.pasarguard import user_subscription_url
+
+        with patch(
+            "app.services.pasarguard.public_pg_sub_origin",
+            return_value="https://pg.example.com",
+        ):
+            self.assertIsNone(
+                user_subscription_url({"subscription_token": "tok2"})
             )
 
     def test_configured_host_url_kept(self):

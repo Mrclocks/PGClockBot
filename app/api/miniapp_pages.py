@@ -143,13 +143,21 @@ def _service_sub_token(svc: UserService) -> str | None:
     return extract_sub_token(svc.subscription_url)
 
 
-async def _fetch_pg_info(subscription_token: str | None) -> dict:
-    """Public /sub/{token}/info — uses the service token only (auth=False, no admin JWT)."""
-    token = (subscription_token or "").strip()
-    if not token:
+async def _fetch_pg_info(
+    subscription_token: str | None,
+    *,
+    subscription_url: str | None = None,
+) -> dict:
+    """Public subscription info — path from panel URL (auth=False, no admin JWT)."""
+    token = (subscription_token or "").strip() or None
+    url = (subscription_url or "").strip() or None
+    if not token and not url:
         return {"error": "upstream_unavailable"}
     try:
-        info = await asyncio.wait_for(get_pg().subscription_info(token), timeout=5.0)
+        info = await asyncio.wait_for(
+            get_pg().subscription_info(token, subscription_url=url),
+            timeout=5.0,
+        )
         return info if isinstance(info, dict) and info else {"error": "upstream_unavailable"}
     except Exception:
         return {"error": "upstream_unavailable"}
@@ -204,10 +212,17 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
     time_known = not upstream_err and (
         "expire" in info or "expire_date" in info or pending
     )
-    # Never expose subscription_token — only the share URL the user already owns.
-    from app.services.pasarguard import absolutize_subscription_url
+    # Never expose subscription_token — only the share URL the panel produced.
+    from app.services.pasarguard import absolutize_subscription_url, user_subscription_url
 
-    sub_url = absolutize_subscription_url(svc.subscription_url) or (svc.subscription_url or "")
+    live = user_subscription_url(info if isinstance(info, dict) else None)
+    if live and live != (svc.subscription_url or ""):
+        svc.subscription_url = live
+    sub_url = (
+        live
+        or absolutize_subscription_url(svc.subscription_url)
+        or (svc.subscription_url or "")
+    )
     return {
         "id": svc.id,
         "username": svc.pg_username or "",
@@ -241,7 +256,13 @@ async def _enrich_services(services: list[UserService]) -> list[dict]:
         return []
     try:
         infos = await asyncio.gather(
-            *[_fetch_pg_info(_service_sub_token(s)) for s in services[:20]]
+            *[
+                _fetch_pg_info(
+                    _service_sub_token(s),
+                    subscription_url=getattr(s, "subscription_url", None),
+                )
+                for s in services[:20]
+            ]
         )
     except Exception:
         log.exception("miniapp enrich gather failed; returning bare services")
@@ -556,7 +577,10 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         user = await load_mini_user(session, request)
         _require_commerce(user)
         svc = _owned_service_or_404(await session.get(UserService, service_id), user)
-        info = await _fetch_pg_info(_service_sub_token(svc))
+        info = await _fetch_pg_info(
+            _service_sub_token(svc),
+            subscription_url=svc.subscription_url,
+        )
         # Never return raw PG payload — allowlisted summary only
         return _no_store({"service": _serialize_service(svc, info)})
 

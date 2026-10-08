@@ -219,12 +219,20 @@ async def build_delivery_content(
                 "skip_qr": True,
             }
 
-        if svc and svc.subscription_token:
+        if svc and (svc.subscription_token or svc.subscription_url):
             try:
-                info = await get_pg().subscription_info(svc.subscription_token)
+                info = await get_pg().subscription_info(
+                    svc.subscription_token,
+                    subscription_url=svc.subscription_url,
+                )
                 sub_info = info if isinstance(info, dict) else None
                 if include_details:
                     detail_parts.append(service_card(info))
+                from app.services.pasarguard import user_subscription_url
+
+                live = user_subscription_url(sub_info)
+                if live and live != (svc.subscription_url or ""):
+                    svc.subscription_url = live
             except Exception:
                 if include_details and svc.pg_username:
                     detail_parts.append(f"👤 {copyable(svc.pg_username)}")

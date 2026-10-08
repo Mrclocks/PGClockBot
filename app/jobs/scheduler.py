@@ -192,16 +192,22 @@ async def check_expiring_services(bot: Bot) -> None:
 
             sem = asyncio.Semaphore(_PG_FETCH_CONCURRENCY)
 
-            async def _fetch_info(token: str):
+            async def _fetch_info(token: str | None, sub_url: str | None):
                 async with sem:
                     try:
-                        return await asyncio.wait_for(pg.subscription_info(token), timeout=12)
+                        return await asyncio.wait_for(
+                            pg.subscription_info(token, subscription_url=sub_url),
+                            timeout=12,
+                        )
                     except Exception:
                         logger.debug("subscription_info failed for service fetch", exc_info=True)
                         return None
 
             infos = await asyncio.gather(
-                *[_fetch_info(svc.subscription_token) for svc, *_rest in eligible]
+                *[
+                    _fetch_info(svc.subscription_token, svc.subscription_url)
+                    for svc, *_rest in eligible
+                ]
             )
 
             for (svc, user, _ui, traffic_pct, time_pct, shop_rid), info in zip(eligible, infos):

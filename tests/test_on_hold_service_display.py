@@ -148,7 +148,10 @@ def test_fetch_and_enrich_reported_payload(service, pending_info):
     pg = SimpleNamespace(subscription_info=AsyncMock(return_value=pending_info))
     with patch("app.api.miniapp_pages.get_pg", return_value=pg):
         out = asyncio.run(_enrich_services([service]))
-    pg.subscription_info.assert_awaited_once_with("test-token")
+    pg.subscription_info.assert_awaited_once_with(
+        "test-token",
+        subscription_url="https://pg.example/sub/test-token",
+    )
     assert out[0]["status_fa"] == "در انتظار اتصال"
     assert out[0]["traffic"] == "0 از 30 گیگ"
     assert out[0]["expire_days"] == 60
