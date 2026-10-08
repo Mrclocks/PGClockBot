@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import re
 import time
 from typing import Any
 
 import httpx
 
+from app.services.migration_metadata import clear_revision_metadata_cache, fetch_revision_ids
+from app.services.migration_metadata import parse_revision_assignment as parse_revision_assignment
 from app.version import GITHUB_REPO
 
 logger = logging.getLogger(__name__)
@@ -20,11 +22,6 @@ CHANNEL_LABELS_FA: dict[str, str] = {
     "main": "پایدار",
     "dev": "توسعه",
 }
-
-_REV_ASSIGN_RE = re.compile(
-    r"""^revision\s*=\s*['"]([^'"]+)['"]""",
-    re.M,
-)
 
 _ALEMBIC_TREE_CACHE: dict[str, Any] = {"at": 0.0, "channel": "", "ids": None, "ok": False}
 _ALEMBIC_TREE_TTL_OK = 120.0
@@ -133,6 +130,7 @@ def badge_context(channel: object | None = None) -> dict[str, Any]:
 
 def clear_alembic_tree_cache() -> None:
     _ALEMBIC_TREE_CACHE.update({"at": 0.0, "channel": "", "ids": None, "ok": False})
+    clear_revision_metadata_cache()
 
 
 def _github_headers() -> dict[str, str]:
@@ -144,19 +142,6 @@ def _github_headers() -> dict[str, str]:
     }
 
 
-def _revision_ids_from_filenames(paths: list[str]) -> set[str]:
-    """This repo uses filename stem == Alembic revision id."""
-    out: set[str] = set()
-    for path in paths:
-        name = path.rsplit("/", 1)[-1]
-        if not name.endswith(".py") or name.startswith("__"):
-            continue
-        stem = name[:-3]
-        if stem:
-            out.add(stem)
-    return out
-
-
 async def fetch_remote_alembic_revision_ids(
     channel: object | None = None,
     *,
@@ -165,40 +150,23 @@ async def fetch_remote_alembic_revision_ids(
 ) -> set[str] | None:
     """Revision ids present under alembic/versions on the channel branch.
 
-    Returns None when the remote tree could not be loaded.
+    Returns None when complete remote metadata could not be loaded.
     """
     ch = channel_branch(channel)
     now = time.monotonic()
-    cached_ids = _ALEMBIC_TREE_CACHE.get("ids")
+    same_channel = _ALEMBIC_TREE_CACHE.get("channel") == ch
+    cached_ids = _ALEMBIC_TREE_CACHE.get("ids") if same_channel else None
     ttl = _ALEMBIC_TREE_TTL_OK if _ALEMBIC_TREE_CACHE.get("ok") else _ALEMBIC_TREE_TTL_FAIL
-    if (
-        not force
-        and _ALEMBIC_TREE_CACHE.get("channel") == ch
-        and isinstance(cached_ids, set)
-        and (now - float(_ALEMBIC_TREE_CACHE["at"])) < ttl
-    ):
-        return set(cached_ids)
-
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/git/trees/{ch}?recursive=1"
+    if not force and same_channel and (now - float(_ALEMBIC_TREE_CACHE["at"])) < ttl:
+        return set(cached_ids) if isinstance(cached_ids, set) else None
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            resp = await client.get(url, headers=_github_headers())
-        if resp.status_code != 200:
-            raise RuntimeError(f"status {resp.status_code}")
-        payload = resp.json() or {}
-        paths = [
-            str(item.get("path") or "")
-            for item in (payload.get("tree") or [])
-            if isinstance(item, dict)
-            and str(item.get("path") or "").startswith("alembic/versions/")
-            and str(item.get("path") or "").endswith(".py")
-        ]
-        ids = _revision_ids_from_filenames(paths)
-        if not ids:
-            raise RuntimeError("empty alembic versions on remote")
+        async with asyncio.timeout(timeout), httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            ids = await fetch_revision_ids(
+                client, repository=GITHUB_REPO, channel=ch, headers=_github_headers(),
+            )
         _ALEMBIC_TREE_CACHE.update({"at": now, "channel": ch, "ids": set(ids), "ok": True})
         return set(ids)
-    except Exception as e:
+    except (httpx.HTTPError, ValueError, TimeoutError) as e:
         logger.debug("remote alembic tree fetch failed (%s): %s", ch, e)
         _ALEMBIC_TREE_CACHE.update(
             {
@@ -286,7 +254,7 @@ async def migration_preflight(
         from app.config import get_settings
         from app.db.alembic_runner import current_revision
 
-        db_rev = current_revision(get_settings().database_url)
+        db_rev = await asyncio.to_thread(current_revision, get_settings().database_url)
     except Exception as e:
         logger.debug("current_revision failed: %s", e)
     remote_ids = await fetch_remote_alembic_revision_ids(ch, force=force)
@@ -296,9 +264,3 @@ async def migration_preflight(
     )
     out["channel"] = ch
     return out
-
-
-def parse_revision_assignment(source: str) -> str | None:
-    """Test helper / fallback: read ``revision = '…'`` from a versions file."""
-    m = _REV_ASSIGN_RE.search(source or "")
-    return m.group(1).strip() if m else None

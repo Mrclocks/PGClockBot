@@ -2,6 +2,8 @@
 #
 # Subscription contact ownership, shop isolation and cancellation notification claims.
 tests/test_purchase_contact_and_cancellation_notices.py
+# Migration channel compatibility and cache isolation.
+tests/test_update_migration_metadata.py
 # --- ACL / RBAC / authz audits ---
 # --- Core authorization / role & tenant isolation phases ---
 # Every file listed here is executed by scripts/run_security_tests.sh (and by
