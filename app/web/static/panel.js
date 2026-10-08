@@ -3877,17 +3877,23 @@ const root = document.getElementById('upd-root');
       }
     }
     if (versionFlash && root.dataset.showOps !== '1') {
-      versionFlash.hidden = false;
-      versionFlash.className = 'flash ' + (checkTone === 'ok' ? 'ok' : (checkTone === 'err' ? 'err' : 'warn'));
-      if (checkMsg) {
-        versionFlash.textContent = checkMsg;
-      } else if (info.update_available && !migrationBlocked) {
-        versionFlash.textContent = 'برای کانال ' + chLabel + ' آپدیت جدید هست: ' +
-          (info.version || data.local_version || '') + ' → ' + (info.remote_version || '');
-      } else if (info.checked && !info.update_available) {
-        versionFlash.textContent = 'برای کانال ' + chLabel + ' آپدیت جدیدی نیست — روی آخرین نسخه هستید.';
+      // Migration error already lives in #upd-migration-flash — never mirror it here.
+      if (migrationBlocked) {
+        versionFlash.hidden = true;
+        versionFlash.textContent = '';
       } else {
-        versionFlash.textContent = info.label || ('بررسی آپدیت کانال ' + chLabel + ' ناموفق');
+        versionFlash.hidden = false;
+        versionFlash.className = 'flash ' + (checkTone === 'ok' ? 'ok' : (checkTone === 'err' ? 'err' : 'warn'));
+        if (checkMsg) {
+          versionFlash.textContent = checkMsg;
+        } else if (info.update_available) {
+          versionFlash.textContent = 'برای کانال ' + chLabel + ' آپدیت جدید هست: ' +
+            (info.version || data.local_version || '') + ' → ' + (info.remote_version || '');
+        } else if (info.checked && !info.update_available) {
+          versionFlash.textContent = 'برای کانال ' + chLabel + ' آپدیت جدیدی نیست — روی آخرین نسخه هستید.';
+        } else {
+          versionFlash.textContent = info.label || ('بررسی آپدیت کانال ' + chLabel + ' ناموفق');
+        }
       }
     }
     if (stateEl && root.dataset.showOps !== '1') {

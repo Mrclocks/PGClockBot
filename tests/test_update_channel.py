@@ -226,5 +226,31 @@ class ChannelAwareUpdateCheckTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(info["channel"], "main")
 
 
+class MigrationFlashNoDuplicateTests(unittest.TestCase):
+    """Migration error must not also fill the version flash (channel switch)."""
+
+    def test_payload_keeps_migration_text_out_of_channel_check_message(self):
+        src = open("app/services/panel_update.py", encoding="utf-8").read()
+        # Blocked preflight only flips tone — message stays version-status copy.
+        self.assertIn("Keep update-status copy separate from migration_preflight", src)
+        self.assertNotIn(
+            'check_message = str(preflight.get("message") or preflight.get("label") or "")',
+            src,
+        )
+
+    def test_js_hides_version_flash_when_migration_blocked(self):
+        js = open("app/web/static/panel.js", encoding="utf-8").read()
+        self.assertIn("Migration error already lives in #upd-migration-flash", js)
+        self.assertIn("if (migrationBlocked)", js)
+
+    def test_ssr_hides_version_flash_when_migration_blocked(self):
+        html = open(
+            "app/web/templates/_settings_update.html", encoding="utf-8"
+        ).read()
+        self.assertIn("migration_blocked or show_ops", html)
+        self.assertIn('id="upd-version-flash"', html)
+        self.assertIn('id="upd-migration-flash"', html)
+
+
 if __name__ == "__main__":
     unittest.main()

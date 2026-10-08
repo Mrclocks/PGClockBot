@@ -1197,10 +1197,10 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
         local=local, remote=remote, remote_notes=remote_notes
     )
     ch_label = ch_ctx["channel_label"]
-    if preflight.get("blocked"):
-        check_message = str(preflight.get("message") or preflight.get("label") or "")
-        check_tone = "err"
-    elif info.get("update_available") and remote:
+    # Keep update-status copy separate from migration_preflight — the update
+    # page renders those in two flashes; duplicating the migration text made
+    # the error appear twice after a channel switch.
+    if info.get("update_available") and remote:
         check_message = (
             f"برای کانال {ch_label} آپدیت جدید هست: {local} → {remote}"
         )
@@ -1213,6 +1213,8 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
     else:
         check_message = str(info.get("label") or "بررسی آپدیت ناموفق")
         check_tone = "warn"
+    if preflight.get("blocked"):
+        check_tone = "err"
     return {
         "update_info": info,
         "update": info,  # sidebar badge on settings tab

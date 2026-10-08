@@ -92,6 +92,10 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("flex-direction: column;", scroll_chrome)
         self.assertIn("gap: var(--space-3);", scroll_chrome)
         self.assertIn("padding: var(--space-3);", scroll_chrome)
+        # Track reserved so the thumb never overlays title/close/body
+        self.assertIn("scrollbar-gutter: stable;", scroll_chrome)
+        base_scroll = css.split(".ui-modal-scroll {", 1)[1].split("}", 1)[0]
+        self.assertIn("scrollbar-gutter: stable;", base_scroll)
         js = JS.read_text(encoding="utf-8")
         self.assertIn('panel.dataset.scrollShell = \'1\'', js)
         self.assertIn("corner clip", js)
