@@ -153,6 +153,66 @@ def is_loopback_ip(host: str | None) -> bool:
         return raw.lower() in {"localhost", "localhost.localdomain"}
 
 
+# Phase 3 — default trusted reverse-proxy peers when TRUSTED_PROXIES is empty.
+# Matches the common "nginx on the same host" layout. Docker / remote proxies
+# must set TRUSTED_PROXIES explicitly (e.g. 172.16.0.0/12,10.0.0.0/8).
+_DEFAULT_TRUSTED_PROXY_CIDRS: tuple[str, ...] = ("127.0.0.0/8", "::1/128")
+
+
+def parse_trusted_proxy_cidrs(raw: str | None) -> list:
+    """Parse comma/space-separated CIDRs or single IPs into network objects.
+
+    Empty / blank → loopback-only defaults (safe for same-host nginx).
+    Invalid tokens are skipped (fail closed for that token).
+    """
+    text = (raw or "").strip()
+    tokens: list[str]
+    if not text:
+        tokens = list(_DEFAULT_TRUSTED_PROXY_CIDRS)
+    else:
+        tokens = [t.strip() for t in text.replace(";", ",").split(",") if t.strip()]
+    out: list = []
+    for tok in tokens:
+        try:
+            if "/" in tok:
+                out.append(ipaddress.ip_network(tok, strict=False))
+            else:
+                ip = ipaddress.ip_address(tok)
+                out.append(ipaddress.ip_network(f"{ip}/{ip.max_prefixlen}", strict=False))
+        except ValueError:
+            continue
+    return out or [
+        ipaddress.ip_network(c, strict=False) for c in _DEFAULT_TRUSTED_PROXY_CIDRS
+    ]
+
+
+def peer_is_trusted_proxy(
+    peer_host: str | None,
+    *,
+    trusted_proxies_raw: str | None = None,
+) -> bool:
+    """True when the TCP peer may set X-Forwarded-* for this app."""
+    raw = (peer_host or "").strip()
+    if not raw or raw == "unknown":
+        return False
+    if raw.lower() in {"localhost", "localhost.localdomain"}:
+        raw = "127.0.0.1"
+    try:
+        ip = ipaddress.ip_address(raw)
+    except ValueError:
+        return False
+    # Normalize IPv4-mapped IPv6 (::ffff:x.x.x.x) for CIDR matching.
+    if getattr(ip, "ipv4_mapped", None) is not None:
+        ip = ip.ipv4_mapped  # type: ignore[assignment]
+    for net in parse_trusted_proxy_cidrs(trusted_proxies_raw):
+        try:
+            if ip in net:
+                return True
+        except TypeError:
+            continue
+    return False
+
+
 def _hostname_blocked_for_pg(hostname: str) -> bool:
     h = (hostname or "").strip().lower().rstrip(".")
     if not h:

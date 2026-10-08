@@ -53,7 +53,7 @@ from app.services.setup_wizard import (
     current_setup_values,
     ensure_setup_gate_token,
     ensure_web_secret,
-    is_local_setup_client,
+    is_local_setup_request,
     is_setup_complete,
     mark_setup_complete,
     normalize_webhook_base_url,
@@ -324,10 +324,11 @@ def _cookie_secure(request: Request) -> bool:
     except Exception:
         return False
     try:
-        if get_settings().trust_proxy:
-            fwd = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
-            if fwd == "https":
-                return True
+        from app.api.login_guard import forwarded_proto_is_https
+
+        # Phase 3: X-Forwarded-Proto only from a trusted proxy peer.
+        if forwarded_proto_is_https(request):
+            return True
     except Exception:
         pass
     return request.url.scheme == "https"
@@ -818,7 +819,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             gate_c = (request.cookies.get("setup_gate") or "").strip()
             q_ok = bool(gate_q) and setup_gate_ok(gate_q)
             c_ok = bool(gate_c) and setup_gate_ok(gate_c)
-            local_ok = is_local_setup_client(_client_ip(request))
+            local_ok = is_local_setup_request(request)
             if q_ok or c_ok or local_ok:
                 response = await call_next(request)
                 cookie_ttl = setup_gate_cookie_max_age()
