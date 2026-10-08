@@ -8651,8 +8651,11 @@ html[data-theme="light"] .home-period {
   align-items: center;
   justify-content: flex-end;
 }
-/* Quick links: copy sits inside the readonly URL field */
+/* Quick links: taller field, URL on the right, compact copy chip inside */
 .magic-link-field {
+  --magic-link-h: 44px;
+  --magic-copy-h: 28px;
+  --magic-copy-w: 4.75rem; /* fits both «کپی» and «کپی شد» without shift */
   position: relative;
   display: block;
   margin-top: var(--space-1);
@@ -8660,26 +8663,49 @@ html[data-theme="light"] .home-period {
 }
 .magic-link-field .magic-link-input {
   width: 100%;
+  height: var(--magic-link-h);
+  min-height: var(--magic-link-h);
   margin-top: 0;
+  padding-inline-start: var(--space-2);
   font-size: 12px;
+  line-height: 1.35;
   font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .magic-link-field.has-copy .magic-link-input {
-  padding-inline-end: calc(var(--space-2) + 3.25rem);
+  /* Room for the in-field copy chip on inline-end (visual left in RTL) */
+  padding-inline-end: calc(var(--space-1) + var(--magic-copy-w) + var(--space-1));
 }
 .magic-link-copy {
   position: absolute;
   inset-inline-end: var(--space-1);
   top: 50%;
   transform: translateY(-50%);
-  min-height: calc(var(--btn-h) - 10px);
-  padding-block: 0;
-  padding-inline: var(--space-1);
+  box-sizing: border-box;
+  width: var(--magic-copy-w);
+  min-width: var(--magic-copy-w);
+  max-width: var(--magic-copy-w);
+  height: var(--magic-copy-h);
+  min-height: var(--magic-copy-h);
+  max-height: var(--magic-copy-h);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
   z-index: 1;
+}
+.magic-link-copy.is-copied,
+.magic-link-copy.btn-ok {
+  /* Keep the same chip geometry while the label flips to «کپی شد» */
+  width: var(--magic-copy-w);
+  min-width: var(--magic-copy-w);
 }
 .backup-health-tag {
   margin-inline-start: var(--space-1);
