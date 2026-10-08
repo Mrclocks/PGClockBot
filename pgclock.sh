@@ -683,21 +683,21 @@ PY
 }
 
 setup_wizard_url() {
-  # Always emit a one-time setup URL (http://IP:PORT/?gate=…) when the
-  # setup_complete.flag file is absent. Do NOT call is_setup_complete() here —
-  # that helper can auto-create the flag from leftover .env credentials and
-  # then return an empty URL (install looked "done" with no link printed).
+  # Emit the active setup URL (?gate=…) when setup_complete.flag is absent.
+  # Do NOT call is_setup_complete() here — that helper can auto-create the flag
+  # from leftover .env credentials and then return an empty URL.
   #
-  # Optional $1 = base URL override (use the same IP as the SUCCESS banner).
+  # Optional $1 = base URL override (prefer panel_public_base_url so HTTPS
+  # installs are not printed as http://IP:PORT). Reuses a still-valid gate
+  # token via ensure_setup_gate_token — status/retry must not invalidate the
+  # link printed at install. First browser open still rotates the URL token.
   if [[ -f data/setup_complete.flag ]]; then
     return 0
   fi
-  local port ip py base
-  port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
-  ip="$(detect_server_ip)"
+  local py base
   base="${1:-}"
   if [[ -z "$base" ]]; then
-    base="http://${ip}:${port}"
+    base="$(panel_public_base_url)"
   fi
   base="${base%/}"
   py="$PY"
@@ -715,7 +715,7 @@ from app.services.setup_wizard import (
     SETUP_ENTRY_FILE,
     SETUP_FLAG,
     build_setup_entry_url,
-    create_setup_gate_session,
+    ensure_setup_gate_token,
     _ensure_data_dir,
 )
 
@@ -723,7 +723,9 @@ if SETUP_FLAG.exists():
     raise SystemExit(0)
 
 base = """${base}""".rstrip("/")
-token = create_setup_gate_session()
+token = ensure_setup_gate_token()
+if not token:
+    raise SystemExit(0)
 url = build_setup_entry_url(base, token=token)
 _ensure_data_dir()
 SETUP_ENTRY_FILE.write_text(url + chr(10), encoding="utf-8")
@@ -1977,7 +1979,8 @@ PY
   fi
   if [[ ! -f data/setup_complete.flag ]]; then
     local setup_url
-    setup_url="$(setup_wizard_url)"
+    # Same public base as the install SUCCESS banner (HTTPS when TLS is live).
+    setup_url="$(setup_wizard_url "$(panel_public_base_url)/")"
     if [[ -n "$setup_url" ]]; then
       echo -e "  Setup URL:  ${B}${setup_url}${N}"
       echo -e "  (valid 15 min — disabled after setup or login)"
