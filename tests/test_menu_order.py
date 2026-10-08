@@ -34,6 +34,17 @@ class MenuOrderTests(unittest.TestCase):
     def test_shop_always_present(self):
         self.assertEqual(_menu_order({"menu_order": "wallet,support"}), ["shop", "wallet", "support"])
 
+    def test_shop_keeps_custom_position_when_present(self):
+        """Shop is required in the menu but must stay movable (not forced to index 0)."""
+        self.assertEqual(
+            _menu_order({"menu_order": "wallet,shop,support"}),
+            ["wallet", "shop", "support"],
+        )
+        self.assertEqual(
+            _menu_order({"menu_order": "services,wallet,shop"}),
+            ["services", "wallet", "shop"],
+        )
+
     def test_sync_show_flags(self):
         flags = sync_show_flags_for_order(["shop", "wallet", "referral"])
         self.assertEqual(flags["show_wallet"], "1")

@@ -96,7 +96,7 @@
                 {% if not item.required %}
                 <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
                 {% else %}
-                <span class="icon-btn icon-move icon-fixed" title="ثابت — قابل حذف نیست" aria-label="ثابت" role="img"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"/></svg></span>
+                <span class="icon-btn icon-move icon-fixed" title="همیشه در منو است — با ▲▼ جابه‌جا می‌شود" aria-label="قابل جابه‌جایی، غیرقابل حذف" role="img"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"/></svg></span>
                 {% endif %}
               </div>
             </li>
@@ -186,6 +186,13 @@
     if (dir > 0 && li.nextElementSibling) active.insertBefore(li.nextElementSibling, li);
     sync();
   }
+  function activeControlsHtml(required){
+    return '<button type="button" class="icon-btn icon-move btn-up" title="بالا"><svg class="ico" viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg></button>' +
+      '<button type="button" class="icon-btn icon-move btn-down" title="پایین"><svg class="ico" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg></button>' +
+      (required
+        ? '<span class="icon-btn icon-move icon-fixed" title="همیشه در منو است — با ▲▼ جابه‌جا می‌شود" aria-label="قابل جابه‌جایی، غیرقابل حذف" role="img"><svg class="ico" viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg></span>'
+        : '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف"><svg class="ico" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>');
+  }
   active.addEventListener('click', (e) => {
     const li = e.target.closest('.dnd-item');
     if (!li) return;
@@ -193,6 +200,7 @@
     if (e.target.closest('.btn-down')) move(li, 1);
     if (e.target.closest('.btn-remove') && li.dataset.required !== '1') {
       pool.appendChild(li);
+      li.draggable = false;
       const actions = li.querySelector('.dnd-actions');
       if (actions) actions.innerHTML = '<button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>';
       sync();
@@ -202,9 +210,33 @@
     const li = e.target.closest('.dnd-item');
     if (!li || !e.target.closest('.btn-add')) return;
     active.appendChild(li);
+    li.draggable = true;
     const actions = li.querySelector('.dnd-actions');
-    if (actions) actions.innerHTML = '<button type="button" class="icon-btn icon-move btn-up" title="بالا"><svg class="ico" viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg></button><button type="button" class="icon-btn icon-move btn-down" title="پایین"><svg class="ico" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg></button><button type="button" class="icon-btn icon-remove btn-remove" title="حذف"><svg class="ico" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>';
+    if (actions) actions.innerHTML = activeControlsHtml(li.dataset.required === '1');
     sync();
+  });
+  let dragEl = null;
+  active.querySelectorAll('.dnd-item').forEach((li) => { li.draggable = true; });
+  active.addEventListener('dragstart', (e) => {
+    const li = e.target.closest('.dnd-item');
+    if (!li || !active.contains(li)) return;
+    dragEl = li;
+    li.classList.add('is-dragging');
+    try { e.dataTransfer.setData('text/plain', li.dataset.key || ''); e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+  });
+  active.addEventListener('dragend', () => {
+    if (dragEl) dragEl.classList.remove('is-dragging');
+    dragEl = null;
+    sync();
+  });
+  active.addEventListener('dragover', (e) => {
+    if (!dragEl) return;
+    e.preventDefault();
+    const over = e.target.closest('.dnd-item');
+    if (!over || over === dragEl || !active.contains(over)) return;
+    const rect = over.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    active.insertBefore(dragEl, before ? over : over.nextSibling);
   });
   if (layoutUi && layoutInput) {
     layoutUi.addEventListener('change', () => { layoutInput.value = layoutUi.value; });

@@ -299,7 +299,14 @@ async def open_shop_list(
     )
 
 
-async def open_services_list(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+async def open_services_list(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+) -> None:
     from app.bot.menu_nav import build_main_reply_keyboard
     from app.bot.tg_utils import present_inline_with_reply_chrome
 
@@ -311,6 +318,8 @@ async def open_services_list(message: Message, session: AsyncSession, db_user: B
     )
     services = list(result.scalars().all())
     main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
+    if state is not None:
+        await nav.set_nav_level(state, nav.NAV_SERVICES, push=push)
     if not services:
         from app.services.rich_text import outbound_setting_text
 
@@ -1426,12 +1435,35 @@ async def handle_back(
     *,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
+    reseller_profile_id: int | None = None,
 ) -> None:
-    """One-level back through the reply-keyboard stack."""
+    """One-level back: within-section step first, then reply-keyboard stack."""
     data = await state.get_data()
     await state.set_state(None)
     await state.set_data(data)
+
+    # 1) Within shop: plans/custom/wholesale → shop hub (not straight to home).
+    current = await nav.get_nav_level(state)
+    if current == nav.NAV_SHOP:
+        step = str(data.get(nav.SHOP_STEP) or "hub")
+        if step and step != "hub":
+            await nav.set_shop_step(state, "hub")
+            await open_shop_list(message, session, db_user, state, push=False)
+            return
+    # 2) Within loyalty club: sub-screen → club hub.
+    if current == nav.NAV_LOYALTY:
+        step = str(data.get(nav.LOY_STEP) or "hub")
+        if step and step != "hub":
+            await nav.set_loy_step(state, "hub")
+            await open_loyalty_home(message, session, db_user, state, push=False)
+            return
+
     level = await nav.pop_nav_level(state)
+    if level == nav.NAV_SERVICES:
+        await open_services_list(
+            message, session, db_user, state, push=False
+        )
+        return
     if level == nav.NAV_WALLET:
         await open_wallet_home(message, session, db_user, state, push=False)
         return
@@ -1601,8 +1633,7 @@ async def handle_back(
         )
         return
     if level == nav.NAV_SERVICE:
-        # Re-show service actions KB; entity list is under previous messages
-        ui = await get_all_settings(session)
+        # Restored onto service detail — re-show actions KB for the stored service.
         await nav.show_nav_keyboard(
             message,
             session,
@@ -2101,6 +2132,7 @@ async def reply_main_nav(
             state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
+            reseller_profile_id=reseller_profile_id,
         )
         return
 
@@ -2125,7 +2157,7 @@ async def reply_main_nav(
         cb = _SoftCallback(bubble, "shop:kind:wholesale")
         await shop_h.shop_kind_wholesale(cb, session, state)
     elif action == kb.REPLY_ACTION_SERVICES:
-        await open_services_list(message, session, db_user)
+        await open_services_list(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_WALLET:
         await open_wallet_home(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_WALLET_TOPUP:
@@ -2148,18 +2180,22 @@ async def reply_main_nav(
         from app.bot.handlers.loyalty import open_loyalty_points_message
 
         await open_loyalty_points_message(message, session, db_user)
+        await nav.set_loy_step(state, "points")
     elif action == kb.REPLY_ACTION_LOY_REWARDS:
         from app.bot.handlers.loyalty import open_loyalty_rewards_message
 
         await open_loyalty_rewards_message(message, session, db_user)
+        await nav.set_loy_step(state, "rewards")
     elif action == kb.REPLY_ACTION_LOY_WHEEL:
         from app.bot.handlers.loyalty import open_loyalty_wheel_message
 
         await open_loyalty_wheel_message(message, session, db_user)
+        await nav.set_loy_step(state, "wheel")
     elif action == kb.REPLY_ACTION_LOY_HISTORY:
         from app.bot.handlers.loyalty import open_loyalty_history_message
 
         await open_loyalty_history_message(message, session, db_user)
+        await nav.set_loy_step(state, "history")
     elif action == kb.REPLY_ACTION_ADMIN_LOYALTY:
         if is_reseller_bot:
             await _refuse_admin(message)

@@ -317,7 +317,11 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if await _answer_shop_maintenance(callback, session, ui_gate):
         return
     await callback.answer()
-    await state.clear()
+    # Keep reply-nav stack — wiping it made keyboard «بازگشت» jump to home.
+    from app.bot import menu_nav as nav
+
+    await nav.clear_fsm_keep_nav(state)
+    await nav.set_nav_level(state, nav.NAV_SHOP, push=False)
     ui, fixed_on, trial_on, custom_on, wholesale_on, _plans, fixed_plans, _trial = (
         await _shop_kind_flags(session, db_user)
     )
@@ -361,6 +365,9 @@ async def shop_kind_fixed(
     if await _answer_shop_maintenance(callback, session):
         return
     await callback.answer()
+    from app.bot import menu_nav as nav
+
+    await nav.set_shop_step(state, "plans")
     ui, fixed_on, *_rest, fixed_plans, _trial = await _shop_kind_flags(session, db_user)
     if not fixed_on:
         await callback.answer("پلن ثابت فعال نیست.", show_alert=True)
@@ -411,6 +418,9 @@ async def shop_category_pick(
 ):
     if await _answer_shop_maintenance(callback, session):
         return
+    from app.bot import menu_nav as nav
+
+    await nav.set_shop_step(state, "plans")
     raw = (callback.data or "").split(":")[-1]
     ui, fixed_on, *_rest, fixed_plans, _trial = await _shop_kind_flags(session, db_user)
     if not fixed_on:
@@ -463,6 +473,9 @@ async def shop_kind_trial(
 ):
     if await _answer_shop_maintenance(callback, session):
         return
+    from app.bot import menu_nav as nav
+
+    await nav.set_shop_step(state, "plans")
     ui, _fixed, trial_on, *_rest, _fixed_plans, trial_plans = await _shop_kind_flags(
         session, db_user
     )
@@ -517,6 +530,9 @@ async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FS
             show_alert=True,
         )
         return
+    from app.bot import menu_nav as nav
+
+    await nav.set_shop_step(state, "custom")
     await callback.answer()
     min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
     data = await state.get_data()
@@ -875,9 +891,12 @@ async def wholesale_start(callback: CallbackQuery, session: AsyncSession, state:
     if not plans:
         await callback.answer("پلنی برای فروش عمده نیست", show_alert=True)
         return
+    from app.bot import menu_nav as nav
+
     # Keep shop nav stack; only reset wholesale qty FSM fields
     await state.set_state(None)
     await state.update_data(wholesale_plan_id=None, wholesale_qty=None)
+    await nav.set_shop_step(state, "wholesale")
     await callback.answer()
     text = format_message(
         "📦 فروش عمده",

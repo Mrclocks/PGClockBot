@@ -327,6 +327,7 @@ async def open_loyalty_referral_message(
         push=push,
         **send_kw,
     )
+    await nav.set_loy_step(state, "referral")
     await message.answer(
         "اشتراک و آمار:",
         reply_markup=_ref_actions_keyboard(share_url=share),

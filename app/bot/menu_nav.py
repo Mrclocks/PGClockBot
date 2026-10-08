@@ -15,9 +15,13 @@ from app.services.users import get_all_settings
 NAV_LEVEL = "_kb_nav"
 NAV_STACK = "_kb_stack"
 PAY_ORDER_ID = "_pay_order_id"
+# Within-section step (reply Back restores this before popping the keyboard level)
+SHOP_STEP = "_shop_step"  # hub | plans | custom | wholesale
+LOY_STEP = "_loy_step"  # hub | referral | points | rewards | wheel | history
 
 NAV_MAIN = "main"
 NAV_SHOP = "shop"
+NAV_SERVICES = "services"
 NAV_WALLET = "wallet"
 NAV_SUPPORT = "support"
 NAV_LOYALTY = "loyalty"
@@ -179,6 +183,26 @@ async def build_main_reply_keyboard(
     return markup, ui, role
 
 
+# Keys preserved across FSM clears so reply Back still has a stack.
+NAV_PRESERVE_KEYS = frozenset(
+    {
+        NAV_LEVEL,
+        NAV_STACK,
+        PAY_ORDER_ID,
+        SERVICE_ID,
+        REVIEW_KIND,
+        REVIEW_ID,
+        SHOP_STEP,
+        LOY_STEP,
+        "_shop_custom",
+        "_shop_wholesale",
+        "_adm_plans_aud",
+        "_adm_plans_kind",
+        "_pay_order_id",
+    }
+)
+
+
 async def get_nav_level(state: FSMContext | None) -> str:
     if state is None:
         return NAV_MAIN
@@ -196,13 +220,57 @@ async def set_nav_level(state: FSMContext | None, level: str, *, push: bool = Tr
     if push and current and current != level:
         stack.append(current)
         stack = stack[-8:]
-    await state.update_data(**{NAV_LEVEL: level, NAV_STACK: stack})
+    payload: dict = {NAV_LEVEL: level, NAV_STACK: stack}
+    # Entering a fresh top-level shop/loyalty hub resets within-section steps.
+    if level == NAV_SHOP:
+        payload[SHOP_STEP] = "hub"
+    elif level == NAV_LOYALTY:
+        payload[LOY_STEP] = "hub"
+    await state.update_data(**payload)
 
 
 async def clear_nav(state: FSMContext | None) -> None:
     if state is None:
         return
-    await state.update_data(**{NAV_LEVEL: NAV_MAIN, NAV_STACK: [], PAY_ORDER_ID: None})
+    await state.update_data(
+        **{
+            NAV_LEVEL: NAV_MAIN,
+            NAV_STACK: [],
+            PAY_ORDER_ID: None,
+            SHOP_STEP: None,
+            LOY_STEP: None,
+        }
+    )
+
+
+async def clear_fsm_keep_nav(state: FSMContext | None) -> None:
+    """Drop FSM state / draft fields but keep reply-keyboard navigation stack."""
+    if state is None:
+        return
+    data = await state.get_data()
+    keep = {k: data[k] for k in NAV_PRESERVE_KEYS if k in data}
+    try:
+        await state.clear()
+    except Exception:
+        pass
+    try:
+        await state.set_state(None)
+    except Exception:
+        pass
+    if keep:
+        await state.update_data(**keep)
+
+
+async def set_shop_step(state: FSMContext | None, step: str) -> None:
+    if state is None:
+        return
+    await state.update_data(**{SHOP_STEP: step})
+
+
+async def set_loy_step(state: FSMContext | None, step: str) -> None:
+    if state is None:
+        return
+    await state.update_data(**{LOY_STEP: step})
 
 
 async def pop_nav_level(state: FSMContext | None) -> str:
@@ -212,7 +280,12 @@ async def pop_nav_level(state: FSMContext | None) -> str:
     data = await state.get_data()
     stack = list(data.get(NAV_STACK) or [])
     level = stack.pop() if stack else NAV_MAIN
-    await state.update_data(**{NAV_LEVEL: level, NAV_STACK: stack})
+    payload: dict = {NAV_LEVEL: level, NAV_STACK: stack}
+    if level != NAV_SHOP:
+        payload[SHOP_STEP] = None
+    if level != NAV_LOYALTY:
+        payload[LOY_STEP] = None
+    await state.update_data(**payload)
     return level
 
 
@@ -312,6 +385,16 @@ async def show_nav_keyboard(
 
     if level == NAV_SHOP:
         markup = kb.shop_reply_keyboard(ui)
+    elif level == NAV_SERVICES:
+        # Services list uses main reply chrome; Back from a service restores this level.
+        markup, ui, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            as_user=as_user,
+            ui=ui,
+        )
     elif level == NAV_RESELLER_APPLY:
         markup = kb.reseller_apply_reply_keyboard(ui)
     elif level == NAV_WALLET:

@@ -34,7 +34,7 @@
             {% if not item.required %}
             <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
             {% else %}
-            <span class="icon-btn icon-move icon-fixed" title="ثابت — قابل حذف نیست" aria-label="ثابت" role="img"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"/></svg></span>
+            <span class="icon-btn icon-move icon-fixed" title="همیشه در منو است — با ▲▼ جابه‌جا می‌شود" aria-label="قابل جابه‌جایی، غیرقابل حذف" role="img"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"/></svg></span>
             {% endif %}
           </div>
         </li>
@@ -90,10 +90,11 @@
       '<button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>' +
       '<button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>' +
       (required
-        ? '<span class="icon-btn icon-move icon-fixed" title="ثابت — قابل حذف نیست" aria-label="ثابت" role="img"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"/></svg></span>'
+        ? '<span class="icon-btn icon-move icon-fixed" title="همیشه در منو است — با ▲▼ جابه‌جا می‌شود" aria-label="قابل جابه‌جایی، غیرقابل حذف" role="img"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"/></svg></span>'
         : '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>');
     li.querySelectorAll('.dnd-actions, button.btn-remove, button.btn-add, span.badge, span.icon-fixed').forEach((n) => n.remove());
     li.appendChild(box);
+    li.draggable = true;
   }
   function setPoolControls(li) {
     li.dataset.required = '0';
@@ -157,6 +158,31 @@
       e.preventDefault();
       moveItem(down.closest('.dnd-item'), 1);
     }
+  });
+
+  /* HTML5 drag-reorder — includes required items (shop); only remove is blocked. */
+  let dragEl = null;
+  active.querySelectorAll('.dnd-item').forEach((li) => { li.draggable = true; });
+  active.addEventListener('dragstart', (e) => {
+    const li = e.target.closest('.dnd-item');
+    if (!li || !active.contains(li)) return;
+    dragEl = li;
+    li.classList.add('is-dragging');
+    try { e.dataTransfer.setData('text/plain', li.dataset.key || ''); e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+  });
+  active.addEventListener('dragend', () => {
+    if (dragEl) dragEl.classList.remove('is-dragging');
+    dragEl = null;
+    syncOrder();
+  });
+  active.addEventListener('dragover', (e) => {
+    if (!dragEl) return;
+    e.preventDefault();
+    const over = e.target.closest('.dnd-item');
+    if (!over || over === dragEl || !active.contains(over)) return;
+    const rect = over.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    active.insertBefore(dragEl, before ? over : over.nextSibling);
   });
 
   syncOrder();
