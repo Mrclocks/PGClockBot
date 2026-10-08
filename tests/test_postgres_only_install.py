@@ -117,3 +117,28 @@ def test_alembic_revision_ids_documented_over_32():
         lengths.append(len(m.group(1)))
     assert max(lengths) > 32, "expected at least one revision id longer than VARCHAR(32)"
     assert max(lengths) <= 128
+
+
+def test_uninstall_wipes_local_postgres_and_le_cert():
+    """Menu uninstall must drop local db/role + panel LE cert, not leave alembic ghosts."""
+    src = (ROOT / "pgclock.sh").read_text(encoding="utf-8")
+    assert "wipe_local_postgres_for_uninstall" in src
+    assert "wipe_letsencrypt_for_uninstall" in src
+    assert "DROP DATABASE IF EXISTS" in src
+    assert "DROP ROLE" in src
+    assert "pg_terminate_backend" in src
+    assert "certbot delete" in src
+    assert "local PostgreSQL database + role" in src
+    # Old safe-default that left the DB behind must stay gone.
+    assert "database are NOT dropped" not in src
+    assert "are NOT dropped" not in src
+    # Remote URLs must not be wiped blindly.
+    assert "leaving that database alone" in src
+    # Call order: stop service → wipe LE/DB → delete folder
+    uninstall = src.split("cmd_uninstall() {", 1)[1].split("\ncmd_", 1)[0]
+    assert uninstall.index("wipe_letsencrypt_for_uninstall") < uninstall.index(
+        "wipe_local_postgres_for_uninstall"
+    )
+    assert uninstall.index("wipe_local_postgres_for_uninstall") < uninstall.index(
+        "rm -rf \"$root\""
+    )
