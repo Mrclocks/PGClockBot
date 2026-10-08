@@ -1542,7 +1542,8 @@ PY
           "" \
           "Service did not answer /health yet. Fix, then open the Setup URL above." \
           "journalctl -u ${SERVICE_NAME} -n 80 --no-pager" \
-          "Then: bash pgclock.sh status" \
+          "Then:  bash ${SCRIPT_DIR}/pgclock.sh status" \
+          "Or:    pgclock status" \
           "On-server test: ${health_hint}" \
           "Hint file: ${SCRIPT_DIR}/data/setup_entry.url"
       fi
@@ -1550,20 +1551,23 @@ PY
       print_success "Install finished — panel not healthy yet" \
         "Service did not answer /health. Check logs first:" \
         "journalctl -u ${SERVICE_NAME} -n 80 --no-pager" \
-        "Then: bash pgclock.sh status" \
-        "Or:   cat ${SCRIPT_DIR}/data/setup_entry.url"
+        "Then:  bash ${SCRIPT_DIR}/pgclock.sh status" \
+        "Or:    pgclock status" \
+        "Or:    cat ${SCRIPT_DIR}/data/setup_entry.url"
     else
       print_success "Install complete" \
         "Setup URL was not generated automatically." \
-        "Run:  bash pgclock.sh status" \
-        "Or:   cat ${SCRIPT_DIR}/data/setup_entry.url" \
+        "Run:   bash ${SCRIPT_DIR}/pgclock.sh status" \
+        "Or:    pgclock status" \
+        "Or:    cat ${SCRIPT_DIR}/data/setup_entry.url" \
         "Panel base: ${panel_url}" \
         "Cloud firewall: allow inbound TCP ${WEB_PORT}."
     fi
   else
     print_success "Install/refresh complete" \
       "Panel:      ${panel_url}" \
-      "Manage:     bash pgclock.sh" \
+      "Manage:     bash ${SCRIPT_DIR}/pgclock.sh" \
+      "Or:         pgclock status" \
       "Logs:       journalctl -u ${SERVICE_NAME} -f"
   fi
   return 0

@@ -89,6 +89,10 @@ class PgclockInstallHintTests(unittest.TestCase):
         # Install finish copy must stay English (CLI is English).
         self.assertNotIn("لینک یک‌بارمصرف", src)
         self.assertNotIn("فایروال ابری", src)
+        # Status/setup hints must use the absolute install path (cwd may be $HOME).
+        self.assertIn("bash ${SCRIPT_DIR}/pgclock.sh status", src)
+        self.assertNotIn('"Then: bash pgclock.sh status"', src)
+        self.assertNotIn('"Run:  bash pgclock.sh status"', src)
 
     def test_banner_shows_dynamic_release_version(self):
         src = Path("pgclock.sh").read_text(encoding="utf-8")

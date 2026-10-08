@@ -17,7 +17,9 @@ class SetupGateStatusPageTests(unittest.TestCase):
         self.assertIn("render_panel_status", src)
         self.assertIn("راه‌اندازی اولیه", src)
         self.assertIn("چطور توکن", src)
+        self.assertIn("pgclock status", src)
         self.assertIn("bash pgclock.sh status", src)
+        self.assertIn("data/setup_entry.url", src)
         self.assertIn("?gate=", src)
         # Old plain English wall removed
         self.assertNotIn("Setup link required", src)
@@ -52,7 +54,12 @@ class SetupGateStatusPageTests(unittest.TestCase):
                     "body": 'پارامتر <code dir="ltr">?gate=…</code> توکن شماست.',
                 },
             ],
-            code_block="bash pgclock.sh status",
+            code_block=(
+                "pgclock status\n"
+                "# اگر pgclock پیدا نشد:\n"
+                "cd /path/to/PGClockBot && bash pgclock.sh status\n"
+                "cat data/setup_entry.url"
+            ),
             guide_note='از <code dir="ltr">127.0.0.1</code> بدون لینک.',
             footer="بعد از اتمام راه‌اندازی…",
             app_version="0.1.10",
@@ -61,6 +68,7 @@ class SetupGateStatusPageTests(unittest.TestCase):
         self.assertIn("panel-status--guided", html)
         self.assertIn("panel-status-guide", html)
         self.assertIn("چطور توکن", html)
+        self.assertIn("pgclock status", html)
         self.assertIn("bash pgclock.sh status", html)
         self.assertIn("?gate=", html)
         self.assertIn('data-status="403"', html)
