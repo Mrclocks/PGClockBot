@@ -106,6 +106,7 @@ def create_dispatcher() -> Dispatcher:
         admin_pg_users,
         admin_settings,
         loyalty,
+        nav_hubs,
         payments,
         plan_catalog_manage,
         reply_nav,
@@ -126,6 +127,7 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(terms.router)
     # Reply-keyboard nav early so menu labels win over FSM amount parsers
     dp.include_router(reply_nav.router)
+    dp.include_router(nav_hubs.router)
     dp.include_router(loyalty.router)
     dp.include_router(shop.router)
     dp.include_router(wallet.router)

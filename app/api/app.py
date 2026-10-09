@@ -4223,6 +4223,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         payload = {"menu_order": ",".join(order)}
         if layout in {"classic", "compact"}:
             payload["menu_layout"] = layout
+        nav_mode = str(form.get("s_nav_mode") or form.get("nav_mode") or "").strip().lower()
+        if nav_mode in {"inline", "classic"}:
+            payload["nav_mode"] = nav_mode
         payload.update(sync_show_flags_for_order(order))
         if reseller_id is not None:
             payload["show_reseller_apply"] = "0"

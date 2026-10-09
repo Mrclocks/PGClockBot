@@ -125,11 +125,16 @@ async def render_home(
             profile=owner_profile,
         )
 
-    mini = None
-    if not is_reseller_bot:
-        mini = kb.miniapp_inline_keyboard(ui)
-
+    from app.bot.nav_mode import is_inline_nav
     from app.bot.tg_utils import attach_reply_keyboard, send_reply_keyboard_last
+
+    inline_nav = is_inline_nav(ui)
+
+    # Classic: Mini App as a separate inline bubble (ahead of reply chrome).
+    # Inline nav: Mini App is a web_app button on the main ReplyKeyboard.
+    mini = None
+    if not inline_nav and not is_reseller_bot:
+        mini = kb.miniapp_inline_keyboard(ui)
 
     ahead: list[tuple[str, object]] = []
     if mini is not None:
@@ -148,6 +153,9 @@ async def render_home(
                         await message.delete()
                     except Exception:
                         pass
+                    if inline_nav:
+                        await message.answer(text, reply_markup=reply_kb, **home_send_kw)
+                        return
                     # Mini (inline) first if any; welcome+reply KB must be last.
                     await send_reply_keyboard_last(
                         message,
@@ -159,6 +167,9 @@ async def render_home(
                     return
         except Exception:
             pass
+        if inline_nav:
+            # Main ReplyKeyboard already stable — do not send filler chrome.
+            return
         # edit_text cannot set ReplyKeyboard — lasting attach AFTER any mini.
         if mini is not None:
             try:
@@ -172,9 +183,13 @@ async def render_home(
         )
         return
 
-    # Contract: reply keyboard carrier is the *last* message in this turn.
-    # Sending Mini App (inline-only) after welcome hid the custom keyboard and
-    # the 4-square menu icon on iOS when returning home from shop/submenus.
+    if inline_nav:
+        # One message: welcome + stable main ReplyKeyboard (no 📱/⌨️ carriers).
+        await message.answer(text, reply_markup=reply_kb, **home_send_kw)
+        _ = seed_reply_kb
+        return
+
+    # Classic contract: reply keyboard carrier is the *last* message in this turn.
     await send_reply_keyboard_last(
         message,
         text,

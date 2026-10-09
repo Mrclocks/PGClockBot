@@ -789,6 +789,7 @@ DEFAULT_SETTINGS = {
     "show_support": "1",
     "show_miniapp": "1",
     "menu_layout": "compact",
+    "nav_mode": "inline",
     "menu_order": "shop,services,wallet,support,loyalty,reseller_apply,miniapp",
     "pg_username_prefix": "clk",
     "pg_username_suffix": "",
@@ -988,7 +989,7 @@ SETTING_GROUPS = {
         ("btn_loy_wheel", "دکمه چرخ شانس", "text", "زیرمنوی باشگاه مشتریان"),
         ("btn_loy_history", "دکمه تاریخچه باشگاه", "text", "زیرمنوی باشگاه مشتریان"),
         ("btn_reseller_apply", "دکمه درخواست نمایندگی", "text", ""),
-        ("btn_miniapp", "دکمه مینی‌اپ", "text", "فقط به‌صورت اینلاین زیر پیام (محدودیت تلگرام)"),
+        ("btn_miniapp", "دکمه مینی‌اپ", "text", "روی کیبورد پایین (web_app) وقتی nav_mode=inline؛ کلاسیک: اینلاین زیر خوش‌آمد"),
         ("btn_wholesale", "دکمه فروش عمده", "text", "در لیست پلن‌های فروشگاه نمایش داده می‌شود"),
         ("btn_reseller", "دکمه نماینده", "text", "در کیبورد ربات اختصاصی نماینده"),
         ("btn_reseller_creds", "دکمه اطلاعات ورود نماینده", "text", "در ربات اصلی برای صاحب فروشگاه"),
@@ -1016,6 +1017,16 @@ SETTING_GROUPS = {
             "select",
             "منوی اصلی داخل کیبورد پایین است؛ انتخاب‌ها (پلن/پرداخت/…) زیر پیام می‌آیند",
             [("classic", "کلاسیک — هر دکمه یک ردیف"), ("compact", "فشرده — دکمه‌ها جفتی")],
+        ),
+        (
+            "nav_mode",
+            "حالت ناوبری ربات",
+            "select",
+            "inline: کیبورد پایین ثابت + زیرمنوها اینلاین (پیشنهادی). classic: زیرمنوی جدا روی کیبورد پایین (rollback)",
+            [
+                ("inline", "اینلاین — کیبورد ثابت (پیشنهادی)"),
+                ("classic", "کلاسیک — زیرمنوی کیبورد پایین"),
+            ],
         ),
     ],
     "مدیریت PAYG": [

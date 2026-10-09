@@ -308,6 +308,8 @@ async def open_services_list(
     push: bool = True,
 ) -> None:
     from app.bot.menu_nav import build_main_reply_keyboard
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only
     from app.bot.tg_utils import present_inline_with_reply_chrome
 
     ui = await get_all_settings(session)
@@ -329,11 +331,16 @@ async def open_services_list(
         )
         await message.answer(text, reply_markup=main_kb, **send_kw)
         return
-    # Inline list first; lasting main menu last (never leave inline as final message).
+    body = "📦 <b>سرویس‌های شما</b>\nیکی را انتخاب کنید:"
+    inline = kb.services_keyboard(services, ui)
+    if is_inline_nav(ui):
+        await present_inline_only(message, text=body, inline=inline)
+        return
+    # Classic: inline list first; lasting main menu last.
     await present_inline_with_reply_chrome(
         message,
-        text="📦 <b>سرویس‌های شما</b>\nیکی را انتخاب کنید:",
-        inline=kb.services_keyboard(services, ui),
+        text=body,
+        inline=inline,
         reply=main_kb,
         chrome_text="⌨️ منوی اصلی",
     )
@@ -347,11 +354,19 @@ async def open_wallet_home(
     *,
     push: bool = True,
 ) -> None:
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only, wallet_hub_keyboard
     from app.config import get_settings
     from app.services.formatting import format_toman, kv_line
     from app.services.wallet import wallet_balance_for_context
 
+    ui = await get_all_settings(session)
     bal = await wallet_balance_for_context(session, db_user)
+    hint = (
+        "یک گزینه را از دکمه‌های زیر انتخاب کنید."
+        if is_inline_nav(ui)
+        else "از کیبورد پایین شارژ یا تراکنش‌ها را انتخاب کنید."
+    )
     text = format_message(
         "👛 کیف پول",
         "\n".join(
@@ -362,10 +377,17 @@ async def open_wallet_home(
                     f"<b>{format_toman(bal, get_settings().currency)}</b>",
                 ),
                 "",
-                "از کیبورد پایین شارژ یا تراکنش‌ها را انتخاب کنید.",
+                hint,
             ]
         ),
     )
+    if is_inline_nav(ui):
+        if state is not None:
+            await nav.set_nav_level(state, nav.NAV_WALLET, push=push)
+        await present_inline_only(
+            message, text=text, inline=wallet_hub_keyboard(ui)
+        )
+        return
     await nav.show_nav_keyboard(
         message,
         session,
@@ -380,6 +402,7 @@ async def open_wallet_home(
 async def open_wallet_topup(
     message: Message, session: AsyncSession, state: FSMContext
 ) -> None:
+    from app.bot.nav_mode import is_inline_nav
     from app.services.users import on
 
     ui = await get_all_settings(session)
@@ -388,14 +411,24 @@ async def open_wallet_topup(
         for k in ("pay_card_enabled", "pay_gateway_enabled", "pay_crypto_enabled")
     )
     if not can_topup:
-        await message.answer(
-            "روش شارژ فعالی تنظیم نشده.",
-            reply_markup=kb.wallet_reply_keyboard(ui),
-        )
+        if is_inline_nav(ui):
+            from app.bot.nav_inline import present_inline_only, wallet_hub_keyboard
+
+            await present_inline_only(
+                message,
+                text="روش شارژ فعالی تنظیم نشده.",
+                inline=wallet_hub_keyboard(ui),
+            )
+        else:
+            await message.answer(
+                "روش شارژ فعالی تنظیم نشده.",
+                reply_markup=kb.wallet_reply_keyboard(ui),
+            )
         return
     from app.bot.handlers.wallet import WalletStates
 
     await state.set_state(WalletStates.topup_amount)
+    # Free-text amount: cancel_reply only (restores main KB after cancel/finish).
     await message.answer(
         format_message("➕ شارژ کیف پول", "مبلغ شارژ را به تومان وارد کنید:"),
         reply_markup=kb.cancel_reply(ui),
@@ -403,6 +436,8 @@ async def open_wallet_topup(
 
 
 async def open_wallet_tx(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only, wallet_hub_keyboard
     from app.config import get_settings
     from app.services.formatting import format_toman
     from app.services.wallet import list_activity
@@ -410,10 +445,13 @@ async def open_wallet_tx(message: Message, session: AsyncSession, db_user: BotUs
     ui = await get_all_settings(session)
     txs = await list_activity(session, db_user.id, limit=15)
     if not txs:
-        await message.answer(
-            "تراکنشی ثبت نشده.",
-            reply_markup=kb.wallet_reply_keyboard(ui),
-        )
+        body = "تراکنشی ثبت نشده."
+        if is_inline_nav(ui):
+            await present_inline_only(
+                message, text=body, inline=wallet_hub_keyboard(ui)
+            )
+        else:
+            await message.answer(body, reply_markup=kb.wallet_reply_keyboard(ui))
         return
     lines = []
     for t in txs:
@@ -421,10 +459,13 @@ async def open_wallet_tx(message: Message, session: AsyncSession, db_user: BotUs
         lines.append(
             f"{sign}{format_toman(t.amount, get_settings().currency)} — {t.reason}"
         )
-    await message.answer(
-        format_message("📜 تراکنش‌ها", "\n".join(lines)),
-        reply_markup=kb.wallet_reply_keyboard(ui),
-    )
+    body = format_message("📜 تراکنش‌ها", "\n".join(lines))
+    if is_inline_nav(ui):
+        await present_inline_only(
+            message, text=body, inline=wallet_hub_keyboard(ui)
+        )
+    else:
+        await message.answer(body, reply_markup=kb.wallet_reply_keyboard(ui))
 
 
 async def open_support_home(
@@ -435,6 +476,8 @@ async def open_support_home(
     *,
     push: bool = True,
 ) -> None:
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only, support_hub_keyboard
     from app.services.support_contacts import (
         active_support_contacts,
         parse_support_contacts,
@@ -445,11 +488,45 @@ async def open_support_home(
 
     ui = await get_all_settings(session)
     contacts = active_support_contacts(parse_support_contacts(ui.get("support_contacts")))
+    default_support = (
+        "تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
+        if is_inline_nav(ui)
+        else "از کیبورد پایین تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
+    )
     text, send_kw = outbound_setting_text(
-        ui.get("support_text")
-        or "از کیبورد پایین تیکت جدید بسازید یا تیکت‌های قبلی را ببینید.",
+        ui.get("support_text") or default_support,
         title="🎧 پشتیبانی",
     )
+    contact_rows: list[list[InlineKeyboardButton]] = []
+    for c in contacts:
+        url = support_chat_url(c.get("telegram") or "")
+        title = c.get("title") or "پشتیبان"
+        if url:
+            contact_rows.append(
+                [InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)]
+            )
+    order_keys = {
+        p.strip() for p in (ui.get("menu_order") or "").split(",") if p.strip()
+    }
+    show_apply = (
+        is_inline_nav(ui)
+        and "reseller_apply" in order_keys
+        and db_user.role == Role.USER.value
+    )
+    if is_inline_nav(ui):
+        if state is not None:
+            await nav.set_nav_level(state, nav.NAV_SUPPORT, push=push)
+        await present_inline_only(
+            message,
+            text=text,
+            inline=support_hub_keyboard(
+                ui,
+                contact_rows=contact_rows or None,
+                include_reseller_apply=show_apply,
+            ),
+            **send_kw,
+        )
+        return
     await nav.show_nav_keyboard(
         message,
         session,
@@ -460,24 +537,17 @@ async def open_support_home(
         push=push,
         **send_kw,
     )
-    if contacts:
-        rows: list[list[InlineKeyboardButton]] = []
-        for c in contacts:
-            url = support_chat_url(c.get("telegram") or "")
-            title = c.get("title") or "پشتیبان"
-            if url:
-                rows.append([InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)])
-        if rows:
-            from app.bot.tg_utils import attach_reply_keyboard
+    if contact_rows:
+        from app.bot.tg_utils import attach_reply_keyboard
 
-            await message.answer(
-                "ارتباط مستقیم:",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-            )
-            # Re-affirm support reply chrome after inline (must be last).
-            await attach_reply_keyboard(
-                message, kb.support_reply_keyboard(ui), text="⌨️ پشتیبانی"
-            )
+        await message.answer(
+            "ارتباط مستقیم:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=contact_rows),
+        )
+        # Re-affirm support reply chrome after inline (must be last).
+        await attach_reply_keyboard(
+            message, kb.support_reply_keyboard(ui), text="⌨️ پشتیبانی"
+        )
 
 
 async def open_support_new(
@@ -496,15 +566,33 @@ async def open_support_new(
 async def open_support_list(
     message: Message, session: AsyncSession, db_user: BotUser
 ) -> None:
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only
     from app.services.tickets import list_user_tickets
 
     ui = await get_all_settings(session)
     tickets = await list_user_tickets(session, db_user.id)
     if not tickets:
-        await message.answer(
-            "تیکتی ندارید.",
-            reply_markup=kb.support_reply_keyboard(ui),
-        )
+        if is_inline_nav(ui):
+            await present_inline_only(
+                message,
+                text="تیکتی ندارید.",
+                inline=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=ui.get("btn_back") or "⬅️ بازگشت",
+                                callback_data="nv:s:home",
+                            )
+                        ]
+                    ]
+                ),
+            )
+        else:
+            await message.answer(
+                "تیکتی ندارید.",
+                reply_markup=kb.support_reply_keyboard(ui),
+            )
         return
     rows = [
         [
@@ -515,6 +603,21 @@ async def open_support_list(
         ]
         for t in tickets[:20]
     ]
+    if is_inline_nav(ui):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=ui.get("btn_back") or "⬅️ بازگشت",
+                    callback_data="nv:s:home",
+                )
+            ]
+        )
+        await present_inline_only(
+            message,
+            text="📋 تیکت‌های شما — یکی را باز کنید:",
+            inline=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+        return
     from app.bot.tg_utils import present_inline_with_reply_chrome
 
     await present_inline_with_reply_chrome(
@@ -619,11 +722,18 @@ async def open_reseller_apply(
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_RESELLER_APPLY, push=push)
-    # Inline modes on the main bubble; lasting apply chrome (back/home) — NEVER main menu.
+    inline = await _resapply_mode_keyboard(session, ui)
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only
+
+    if is_inline_nav(ui):
+        await present_inline_only(message, text=text, inline=inline)
+        return
+    # Classic: inline modes + lasting apply chrome (back/home) — NEVER main menu.
     await present_inline_with_reply_chrome(
         message,
         text=text,
-        inline=await _resapply_mode_keyboard(session, ui),
+        inline=inline,
         reply=kb.reseller_apply_reply_keyboard(ui),
         chrome_text="⌨️ درخواست نمایندگی",
     )

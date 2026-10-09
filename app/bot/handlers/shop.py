@@ -286,6 +286,8 @@ async def present_shop_kind_picker(
     Also never use ReplyKeyboard→Inline ``edit_reply_markup`` (Telegram
     rejects that conversion and hides category buttons).
     """
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only
     from app.bot.tg_utils import present_inline_with_reply_chrome
 
     text = format_message("🛒 فروشگاه", body)
@@ -300,6 +302,10 @@ async def present_shop_kind_picker(
     )
     if mode == "edit":
         await safe_edit_text(message, text, reply_markup=inline)
+        return
+
+    if is_inline_nav(ui):
+        await present_inline_only(message, text=text, inline=inline)
         return
 
     await present_inline_with_reply_chrome(
@@ -1102,8 +1108,13 @@ async def wholesale_qty_entered(
         "تعداد را با دکمه‌ها تنظیم کنید:",
         reply_markup=kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id),
     )
-    # Inline qty must not be the final message — re-affirm lasting shop chrome.
-    await attach_reply_keyboard(message, kb.shop_reply_keyboard(ui), text="⌨️ منوی فروشگاه")
+    from app.bot.nav_mode import is_inline_nav
+
+    if not is_inline_nav(ui):
+        # Classic: inline qty must not be final — re-affirm lasting shop chrome.
+        await attach_reply_keyboard(
+            message, kb.shop_reply_keyboard(ui), text="⌨️ منوی فروشگاه"
+        )
 
 
 @router.callback_query(F.data == "shop:wholesale:confirm")

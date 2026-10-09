@@ -49,7 +49,7 @@ class ShopCategoryDisplayFixTests(unittest.IsolatedAsyncioTestCase):
             ):
                 await present_shop_kind_picker(
                     message,
-                    ui={},
+                    ui={"nav_mode": "classic"},
                     body="ابتدا دسته را انتخاب کنید",
                     fixed_on=True,
                     trial_on=False,
@@ -68,6 +68,32 @@ class ShopCategoryDisplayFixTests(unittest.IsolatedAsyncioTestCase):
         # Critical: deleting chrome drops reply KB + 4-square menu on iOS
         chrome_msg.delete.assert_not_awaited()
 
+    async def test_send_mode_inline_nav_single_message(self):
+        from app.bot.handlers.shop import present_shop_kind_picker
+
+        message = AsyncMock()
+        message.answer = AsyncMock(return_value=AsyncMock())
+
+        with patch(
+            "app.bot.handlers.shop.kb.shop_kind_keyboard", return_value="INLINE"
+        ):
+            await present_shop_kind_picker(
+                message,
+                ui={"nav_mode": "inline"},
+                body="ابتدا دسته را انتخاب کنید",
+                fixed_on=True,
+                trial_on=False,
+                custom_on=False,
+                wholesale_on=False,
+                categories=[object()],
+                mode="send",
+            )
+
+        self.assertEqual(message.answer.await_count, 1)
+        self.assertEqual(
+            message.answer.await_args.kwargs.get("reply_markup"), "INLINE"
+        )
+
     async def test_send_mode_survives_attach_failure(self):
         from app.bot.handlers.shop import present_shop_kind_picker
 
@@ -81,7 +107,7 @@ class ShopCategoryDisplayFixTests(unittest.IsolatedAsyncioTestCase):
             ):
                 await present_shop_kind_picker(
                     message,
-                    ui={},
+                    ui={"nav_mode": "classic"},
                     body="body",
                     fixed_on=True,
                     trial_on=False,

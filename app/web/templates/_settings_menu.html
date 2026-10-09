@@ -1,8 +1,9 @@
 <div class="card menu-layout-intro">
   <h2>چیدمان دکمه‌های کیبورد</h2>
   <p class="muted update-card-caption">
-    منوی اصلی و زیرمنوهای ثابت داخل <b>کیبورد پایین</b> ربات هستند؛ آیتم‌های داینامیک (سفارش، کاربر، پلن، …) به‌صورت دکمه زیر پیام می‌آیند.
-    آیتم‌های «منوی فعال» همان دکمه‌های کیبورد هستند. از مخزن اضافه کنید و ترتیب را عوض کنید.
+    در حالت <b>اینلاین</b> فقط مقصدهای اصلی روی <b>کیبورد پایین</b> می‌مانند؛ زیرمنوها (کیف، پشتیبانی، باشگاه، فروشگاه، …) زیر همان پیام به‌صورت اینلاین ویرایش می‌شوند.
+    «درخواست نمایندگی» از کیبورد پایین حذف و در پشتیبانی/خوش‌آمد نشان داده می‌شود. مینی‌اپ روی کیبورد پایین به‌صورت web_app است.
+    آیتم‌های «منوی فعال» ترتیب کیبورد پایین‌اند.
   </p>
   <div class="settings-grid menu-layout-mode">
     <label class="setting-item">
@@ -12,12 +13,20 @@
         <option value="compact" {% if values.get('menu_layout','compact')=='compact' %}selected{% endif %}>فشرده (جفتی — پیشنهادی)</option>
       </select>
     </label>
+    <label class="setting-item">
+      <span>حالت ناوبری</span>
+      <select id="nav_mode_select" form="menu-form">
+        <option value="inline" {% if values.get('nav_mode','inline')=='inline' %}selected{% endif %}>اینلاین — کیبورد ثابت (پیشنهادی)</option>
+        <option value="classic" {% if values.get('nav_mode','inline')=='classic' %}selected{% endif %}>کلاسیک — زیرمنوی کیبورد (rollback)</option>
+      </select>
+    </label>
   </div>
 </div>
 <form method="post" action="/settings?tab=menu" id="menu-form" class="menu-layout-form">
   <input type="hidden" name="menu_order" id="menu_order" value="{{ order_csv }}" />
   <input type="hidden" name="menu_layout" id="menu_layout" value="{{ values.get('menu_layout', 'compact') }}" />
   <input type="hidden" name="menu_layout_save" value="1" />
+  <input type="hidden" name="s_nav_mode" id="nav_mode_hidden" value="{{ values.get('nav_mode', 'inline') }}" />
   <div class="dnd-cols">
     <div class="card dnd-card">
       <h2>منوی فعال</h2>
@@ -127,10 +136,18 @@
     syncOrder();
   }
 
+  const navSelect = document.getElementById('nav_mode_select');
+  const navHidden = document.getElementById('nav_mode_hidden');
   if (layoutSelect && layoutHidden) {
     layoutSelect.addEventListener('change', () => {
       layoutHidden.value = layoutSelect.value;
       layoutHidden.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+  if (navSelect && navHidden) {
+    navSelect.addEventListener('change', () => {
+      navHidden.value = navSelect.value;
+      navHidden.dispatchEvent(new Event('change', { bubbles: true }));
     });
   }
 
@@ -139,6 +156,7 @@
   menuForm.addEventListener('submit', () => {
     syncOrder();
     if (layoutSelect && layoutHidden) layoutHidden.value = layoutSelect.value;
+    if (navSelect && navHidden) navHidden.value = navSelect.value;
   });
   menuForm.addEventListener('click', (e) => {
     const rem = e.target.closest('.btn-remove');

@@ -185,8 +185,18 @@ async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: B
         ),
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=None)
-        await callback.message.answer("کیف پول:", reply_markup=kb.wallet_reply_keyboard(ui))
+        from app.bot.nav_mode import is_inline_nav
+        from app.bot.nav_inline import wallet_hub_keyboard
+
+        if is_inline_nav(ui):
+            await safe_edit_text(
+                callback.message, text, reply_markup=wallet_hub_keyboard(ui)
+            )
+        else:
+            await safe_edit_text(callback.message, text, reply_markup=None)
+            await callback.message.answer(
+                "کیف پول:", reply_markup=kb.wallet_reply_keyboard(ui)
+            )
 
 
 @router.callback_query(F.data == "wallet:tx")
@@ -205,12 +215,24 @@ async def wallet_tx(callback: CallbackQuery, session: AsyncSession, db_user: Bot
             )
         body = "\n".join(lines)
     if callback.message:
-        await safe_edit_text(
-            callback.message,
-            format_message("📜 تراکنش‌ها", body),
-            reply_markup=None,
-        )
-        await callback.message.answer("کیف پول:", reply_markup=kb.wallet_reply_keyboard(ui))
+        from app.bot.nav_mode import is_inline_nav
+        from app.bot.nav_inline import wallet_hub_keyboard
+
+        if is_inline_nav(ui):
+            await safe_edit_text(
+                callback.message,
+                format_message("📜 تراکنش‌ها", body),
+                reply_markup=wallet_hub_keyboard(ui),
+            )
+        else:
+            await safe_edit_text(
+                callback.message,
+                format_message("📜 تراکنش‌ها", body),
+                reply_markup=None,
+            )
+            await callback.message.answer(
+                "کیف پول:", reply_markup=kb.wallet_reply_keyboard(ui)
+            )
 
 
 @router.callback_query(F.data == "wallet:topup")
