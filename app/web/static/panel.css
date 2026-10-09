@@ -8707,7 +8707,8 @@ html[data-theme="light"] .home-period {
   box-shadow: none !important;
   color: var(--muted-fg);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
+  /* Beat global input { font-size: var(--control-fs) !important } (16px) */
+  font-size: 10px !important;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
   line-height: 1.35;

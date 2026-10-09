@@ -265,7 +265,7 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         inp = css.split(".magic-link-field .magic-link-input {", 1)[1].split("}", 1)[0]
         self.assertIn("text-overflow: ellipsis", inp)
         self.assertIn("text-align: left", inp)
-        self.assertIn("font-size: 11px", inp)
+        self.assertIn("font-size: 10px !important", inp)
         self.assertIn("flex: 1 1 auto", inp)
         btn = css.split(".magic-link-copy {", 1)[1].split("}", 1)[0]
         self.assertIn("flex: 0 0 var(--magic-copy-w)", btn)
