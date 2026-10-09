@@ -140,7 +140,13 @@ async def present_nav_panel(
         data = await state.get_data()
         chat_id = data.get(NAV_PANEL_CHAT_KEY)
         msg_id = data.get(NAV_PANEL_MSG_KEY)
-        if chat_id and msg_id:
+        cur_chat = getattr(getattr(message, "chat", None), "id", None)
+        if (
+            chat_id
+            and msg_id
+            and cur_chat is not None
+            and int(chat_id) == int(cur_chat)
+        ):
             try:
                 await message.bot.edit_message_text(
                     text,

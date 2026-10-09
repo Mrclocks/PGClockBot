@@ -414,9 +414,11 @@ async def nv_res_close(
     db_user: BotUser,
     state: FSMContext,
     is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     """Close the live reseller panel — manage shortcuts stay on reply KB."""
     from app.bot.nav_inline import clear_nav_panel, safe_edit_inline
+    from app.services.reseller_access import load_reseller_actor
 
     await callback.answer()
     if not callback.message:
@@ -424,6 +426,18 @@ async def nv_res_close(
     if not is_reseller_bot:
         await safe_edit_inline(
             callback.message, "از کیبورد پایین ادامه دهید.", reply_markup=None
+        )
+        await clear_nav_panel(state)
+        return
+    owner_id, profile = await load_reseller_actor(
+        session,
+        db_user,
+        is_reseller_bot=True,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile:
+        await safe_edit_inline(
+            callback.message, "دسترسی نماینده یافت نشد.", reply_markup=None
         )
         await clear_nav_panel(state)
         return
