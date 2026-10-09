@@ -193,6 +193,8 @@ class ExistingWebAccess:
     detail: str | None = None
     # Phase D3 — pg_staff remediation visibility (None for non-staff sources)
     credentials_ready: bool | None = None
+    password_ready: bool | None = None
+    api_key_ready: bool | None = None
     username_aligned: bool | None = None
     needs_remediation: bool | None = None
 
@@ -214,6 +216,8 @@ class ExistingWebAccess:
             "detail": self.detail,
             "has_access": self.has_access,
             "credentials_ready": self.credentials_ready,
+            "password_ready": self.password_ready,
+            "api_key_ready": self.api_key_ready,
             "username_aligned": self.username_aligned,
             "needs_remediation": self.needs_remediation,
         }
@@ -654,8 +658,8 @@ async def update_web_access(
 
     pwd = (password or "").strip()
     if not pwd:
-        # Keep existing password on edit — but not when PG enc is missing
-        if not staff_has_stored_pg_password(existing):
+        # Keep existing password on edit — but not when no PG auth secret exists
+        if not staff_has_pg_auth_secret(existing):
             return None, "رمز عبور الزامی است — اعتبارنامه پاسارگارد ذخیره نشده"
     else:
         cleaned_tmp, _ = validate_web_username(web_username, lowercase=True)
@@ -761,6 +765,60 @@ def staff_has_stored_pg_password(row: PgStaffAccess | None) -> bool:
     return bool(decrypt_secret(getattr(row, "pg_admin_password_enc", None)))
 
 
+def staff_has_stored_pg_api_key(row: PgStaffAccess | None) -> bool:
+    """True when encrypted PasarGuard admin API key decrypts to a non-empty secret."""
+    if row is None:
+        return False
+    from app.services.secret_box import decrypt_secret
+
+    return bool(decrypt_secret(getattr(row, "pg_api_key_enc", None)))
+
+
+def staff_has_pg_auth_secret(row: PgStaffAccess | None) -> bool:
+    """True when either API key or password can authenticate this staff to PG."""
+    return staff_has_stored_pg_api_key(row) or staff_has_stored_pg_password(row)
+
+
+def store_staff_pg_api_key(
+    row: PgStaffAccess,
+    *,
+    api_key: str | None = None,
+    clear: bool = False,
+) -> str | None:
+    """Encrypt and store (or clear) an admin API key on a pg_staff row.
+
+    Returns an error message on failure, else ``None``. Does not commit.
+    """
+    from app.services.pasarguard import invalidate_pg_staff_cache
+    from app.services.secret_box import encrypt_secret
+
+    if clear:
+        row.pg_api_key_enc = None
+        try:
+            invalidate_pg_staff_cache(staff_id=int(row.id))
+        except Exception:
+            pass
+        return None
+    raw = (api_key or "").replace("\r", "").strip()
+    if not raw:
+        return None  # empty = keep current
+    if len(raw) < 16:
+        return "کلید API پاسارگارد کوتاه است — مقدار کامل را از پنل پاسارگارد کپی کنید"
+    enc = encrypt_secret(raw)
+    if not enc:
+        return (
+            "رمز‌گذاری کلید API ناموفق بود. "
+            "علت محتمل: کلید رمزنگاری پنل تنظیم نشده یا خراب است. "
+            "راه حل: تنظیمات امنیتی سرور را بررسی کنید و دوباره تلاش کنید."
+        )
+    row.pg_api_key_enc = enc
+    try:
+        invalidate_pg_staff_cache(staff_id=int(row.id))
+    except Exception:
+        pass
+    return None
+
+
 def staff_username_aligned(row: PgStaffAccess | None) -> bool:
     """True when web login username equals PG admin username (case-insensitive)."""
     if row is None:
@@ -774,15 +832,19 @@ def staff_needs_remediation(row: PgStaffAccess | None) -> bool:
     """True when enc is missing or username is misaligned (active or not)."""
     if row is None:
         return False
-    return (not staff_has_stored_pg_password(row)) or (not staff_username_aligned(row))
+    return (not staff_has_pg_auth_secret(row)) or (not staff_username_aligned(row))
 
 
 def staff_remediation_flags(row: PgStaffAccess) -> dict[str, bool]:
     """Flags for Owner UI / status map (Phase D3)."""
-    ready = staff_has_stored_pg_password(row)
+    password_ready = staff_has_stored_pg_password(row)
+    api_key_ready = staff_has_stored_pg_api_key(row)
+    ready = password_ready or api_key_ready
     aligned = staff_username_aligned(row)
     return {
         "credentials_ready": ready,
+        "password_ready": password_ready,
+        "api_key_ready": api_key_ready,
         "username_aligned": aligned,
         "needs_remediation": (not ready) or (not aligned),
     }
@@ -792,7 +854,7 @@ def classify_staff_cohort(row: PgStaffAccess) -> str:
     """Legacy cohort label (L1–L5) for inventory / docs."""
     if not bool(row.is_active):
         return "L5"
-    ready = staff_has_stored_pg_password(row)
+    ready = staff_has_pg_auth_secret(row)
     aligned = staff_username_aligned(row)
     if not ready and aligned:
         return "L1"

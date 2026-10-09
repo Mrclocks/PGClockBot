@@ -81,9 +81,12 @@
             </span>
             <span class="mono" dir="ltr">{{ st.get('web_username') }}</span>
             {% if st.get('credentials_ready') %}
-            <span class="badge approved">رمز پاسارگارد ذخیره‌شده</span>
+            <span class="badge approved">اعتبارنامه پاسارگارد ذخیره‌شده</span>
+            {% if st.get('api_key_ready') %}
+            <span class="badge approved">کلید API</span>
+            {% endif %}
             {% else %}
-            <span class="badge warn">نیاز به ذخیره رمز</span>
+            <span class="badge warn">نیاز به ذخیره رمز یا کلید API</span>
             {% endif %}
             {% if st.get('username_aligned') is sameas false %}
             <span class="badge danger">نام کاربری ناهماهنگ</span>
@@ -203,6 +206,21 @@
           placeholder="{% if src == 'pg_staff' %}خالی = حفظ رمز فعلی (اگر اعتبارنامه ذخیره شده){% else %}رمز قوی{% endif %}" />
         <small class="muted">{% if src == 'pg_staff' %}اگر اعتبارنامه پاسارگارد ذخیره نشده، رمز الزامی است — {% endif %}طبق پاسارگارد: حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
       </label>
+      {% if src == 'pg_staff' or src == 'none' %}
+      <label class="form-field">کلید API پاسارگارد
+        <input name="pg_api_key" type="password" autocomplete="new-password" dir="ltr"
+          placeholder="{% if st.get('api_key_ready') %}خالی بماند تا کلید فعلی حفظ شود{% else %}اختیاری — کلید API پاسارگارد{% endif %}" />
+        <small class="muted">ترجیح بر رمز برای API (<code dir="ltr">X-Api-Key</code>){% if st.get('api_key_ready') %} · <span class="badge approved">ذخیره‌شده</span>{% endif %}</small>
+      </label>
+      {% if st.get('api_key_ready') %}
+      <label class="form-field">
+        <span class="ui-check">
+          <input type="checkbox" name="clear_pg_api_key" value="1" />
+          حذف کلید API
+        </span>
+      </label>
+      {% endif %}
+      {% endif %}
       <label class="form-field">یادداشت
         <input name="note" value="{{ st.get('note') if src == 'pg_staff' and st.get('note') else '' }}" placeholder="ادمین فرعی محدود" />
         <small class="muted">اختیاری</small>
@@ -264,9 +282,9 @@
       </label>
       <label class="form-field">رمز عبور مشترک
         <input name="web_password" type="password" autocomplete="new-password" dir="ltr"
-          placeholder="{% if st.get('credentials_ready') %}خالی = استفاده از رمز ذخیره‌شده{% else %}رمز الزامی است{% endif %}"
-          {% if not st.get('credentials_ready') %}required{% endif %} />
-        <small class="muted">همان رمز برای وب و پاسارگارد — اگر رمز ذخیره‌شده دارید می‌توانید خالی بگذارید</small>
+          placeholder="{% if st.get('password_ready') %}خالی = استفاده از رمز ذخیره‌شده{% else %}رمز الزامی است{% endif %}"
+          {% if not st.get('password_ready') %}required{% endif %} />
+        <small class="muted">همان رمز برای وب و پاسارگارد — اگر رمز ذخیره‌شده دارید می‌توانید خالی بگذارید (کلید API به‌تنهایی کافی نیست)</small>
       </label>
       <label class="form-field">یادداشت
         <input name="note" placeholder="تبدیل از ادمین فرعی" />

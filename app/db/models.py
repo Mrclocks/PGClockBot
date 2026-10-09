@@ -550,6 +550,8 @@ class ResellerProfile(Base):
     pg_admin_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     # Fernet ciphertext of the PasarGuard admin password (shop ops must use this, not owner).
     pg_admin_password_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Fernet ciphertext of a PasarGuard admin API key (X-Api-Key). Preferred over password when set.
+    pg_api_key_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     share_pg_panel_url: Mapped[bool] = mapped_column(Boolean, default=False)
     web_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True)
@@ -824,6 +826,8 @@ class PgStaffAccess(Base):
     web_password_hash: Mapped[str] = mapped_column(String(255))
     # Phase C5: encrypted PasarGuard password (same secret_box as resellers)
     pg_admin_password_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Fernet ciphertext of a PasarGuard admin API key (X-Api-Key). Preferred over password when set.
+    pg_api_key_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -860,6 +864,8 @@ class OrgPrincipal(Base):
     # Phase 2C: encrypted PasarGuard password for this Principal's own PG identity
     # (never Owner env credentials). Used for tenant-safe PG client selection.
     pg_password_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Fernet ciphertext of a PasarGuard admin API key (X-Api-Key). Preferred over password when set.
+    pg_api_key_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     reseller_profile_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("reseller_profiles.id"), nullable=True
     )

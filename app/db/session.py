@@ -247,6 +247,7 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             "share_pg_panel_url": "BOOLEAN DEFAULT 0",
             "bot_admin_ids": "TEXT",
             "pg_admin_password_enc": "TEXT",
+            "pg_api_key_enc": "TEXT",
             "billing_mode": "VARCHAR(16) DEFAULT 'fixed'",
             "billing_balance": "INTEGER DEFAULT 0",
             "billing_watermark_bytes": "BIGINT DEFAULT 0",
@@ -435,6 +436,11 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
                 sql_text("ALTER TABLE org_principals ADD COLUMN pg_password_enc TEXT")
             )
             insp.clear_cache() if hasattr(insp, "clear_cache") else None
+        if "pg_api_key_enc" not in ocols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE org_principals ADD COLUMN pg_api_key_enc TEXT")
+            )
+            insp.clear_cache() if hasattr(insp, "clear_cache") else None
         _ensure_org_principal_aux_tables(sync_conn)
         _seed_owner_if_no_depth0(sync_conn)
         # Phase 5B / 6A — unique Telegram bind (NULLs remain unbound).
@@ -478,6 +484,10 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
         if "pg_admin_password_enc" not in scols:
             sync_conn.execute(
                 sql_text("ALTER TABLE pg_staff_access ADD COLUMN pg_admin_password_enc TEXT")
+            )
+        if "pg_api_key_enc" not in scols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE pg_staff_access ADD COLUMN pg_api_key_enc TEXT")
             )
         if "pg_role_id" not in scols:
             sync_conn.execute(
@@ -643,6 +653,8 @@ def _missing_alembic_head_schema(sync_conn) -> list[str]:
     cols = {c["name"] for c in insp.get_columns("org_principals")}
     if "pg_password_enc" not in cols:
         missing.append("org_principals.pg_password_enc")
+    if "pg_api_key_enc" not in cols:
+        missing.append("org_principals.pg_api_key_enc")
     if not insp.has_table("org_principal_provisions"):
         missing.append("org_principal_provisions")
     if not insp.has_table("org_principal_web_identities"):

@@ -309,7 +309,9 @@ def _assert_pg_identity_ready(principal: OrgPrincipal) -> None:
             "هویت پاسارگارد Principal سطح ۲ موجود نیست",
             code="pg_identity_missing",
         )
-    enc = (principal.pg_password_enc or "").strip()
+    enc = (principal.pg_password_enc or "").strip() or (
+        getattr(principal, "pg_api_key_enc", None) or ""
+    ).strip()
     if not enc:
         raise PrincipalWebIdentityError(
             "اعتبارنامه پاسارگارد Principal سطح ۲ موجود نیست",
@@ -503,6 +505,8 @@ def build_principal_session_payload(
         "password",
         "pg_password",
         "pg_password_enc",
+        "pg_api_key",
+        "pg_api_key_enc",
         "web_password",
         "panel_password",
         "org_principal_id",
@@ -520,9 +524,15 @@ def session_contains_plaintext_secret(payload: Mapping[str, Any] | None) -> bool
     if not payload:
         return False
     # Ciphertext must never ride in cookies either.
-    if payload.get("pg_password_enc"):
+    if payload.get("pg_password_enc") or payload.get("pg_api_key_enc"):
         return True
-    for key in ("password", "pg_password", "web_password", "panel_password"):
+    for key in (
+        "password",
+        "pg_password",
+        "pg_api_key",
+        "web_password",
+        "panel_password",
+    ):
         val = payload.get(key)
         if isinstance(val, str) and val.strip():
             # bcrypt hashes are web password versions only when prefixed $2 — still forbid.
@@ -633,6 +643,8 @@ async def resolve_principal_web_session(
     out.pop("password", None)
     out.pop("pg_password", None)
     out.pop("pg_password_enc", None)
+    out.pop("pg_api_key", None)
+    out.pop("pg_api_key_enc", None)
 
     # Refresh PG capability matrices from this Principal's PG admin (not Owner).
     from app.services.pg_access import enrich_staff_pg_from_role, resolve_acl_from_client
@@ -693,7 +705,10 @@ async def resolve_principal_web_session(
         out["pg_writes"] = {}
         out["pg_capabilities_ok"] = False
 
-    out["pg_credentials_ready"] = bool(principal.pg_password_enc)
+    out["pg_credentials_ready"] = bool(
+        (principal.pg_password_enc or "").strip()
+        or (getattr(principal, "pg_api_key_enc", None) or "").strip()
+    )
     out = apply_level1_pg_local_safety(out, role if isinstance(role, dict) else None)
 
     # Ensure attached principal fields win over any cookie hierarchy leftovers.

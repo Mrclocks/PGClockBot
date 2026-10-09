@@ -566,7 +566,10 @@ async def _staff_for_reseller_l1(
     elif profile.pg_role_id:
         staff["pg_role_id"] = int(profile.pg_role_id)
     staff["pg_credentials_ready"] = bool(
-        profile.pg_admin_password_enc or principal.pg_password_enc
+        profile.pg_admin_password_enc
+        or getattr(profile, "pg_api_key_enc", None)
+        or principal.pg_password_enc
+        or getattr(principal, "pg_api_key_enc", None)
     )
     return attach_org_principal_fields(
         staff, principal, visible_principal_ids=visible
@@ -657,7 +660,10 @@ async def _staff_for_principal_l2(
             staff["pg_user_actions"] = {}
             staff["pg_writes"] = {}
             staff["pg_capabilities_ok"] = False
-        staff["pg_credentials_ready"] = bool(principal.pg_password_enc)
+        staff["pg_credentials_ready"] = bool(
+            (principal.pg_password_enc or "").strip()
+            or (getattr(principal, "pg_api_key_enc", None) or "").strip()
+        )
 
     staff = apply_level1_pg_local_safety(
         staff, role if isinstance(role, dict) else None
@@ -709,7 +715,10 @@ async def bot_staff_from_org_principal(
         staff["reseller_profile_id"] = int(profile.id)
         staff["bot_user_id"] = int(profile.user_id)
         staff["pg_credentials_ready"] = bool(
-            profile.pg_admin_password_enc or principal.pg_password_enc
+            profile.pg_admin_password_enc
+            or getattr(profile, "pg_api_key_enc", None)
+            or principal.pg_password_enc
+            or getattr(principal, "pg_api_key_enc", None)
         )
         staff["web_owner"] = False
         staff["pg_is_owner"] = False

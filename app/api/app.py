@@ -594,7 +594,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 PG_ACCESS_DENIED_MSG,
                 access_by_web_username,
                 enforce_pg_admin_web_gate,
-                staff_has_stored_pg_password,
+                staff_has_pg_auth_secret,
             )
 
             web_u = (user.get("username") or "").strip().lower()
@@ -614,8 +614,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             user["permissions"] = []
             user["pg_admin_username"] = row.pg_username
             user["pg_staff_id"] = int(row.id)
-            # Phase C5: advertise stored PG password so menus/reads match client selection
-            user["pg_credentials_ready"] = staff_has_stored_pg_password(row)
+            # Phase C5: advertise stored PG auth (API key or password)
+            user["pg_credentials_ready"] = staff_has_pg_auth_secret(row)
             if row.pg_role_id:
                 user["pg_role_id"] = int(row.pg_role_id)
             pg_client = None
@@ -1902,7 +1902,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 access_by_web_username,
                 enforce_pg_admin_web_gate,
                 resolve_pg_role_id_for_admin,
-                staff_has_stored_pg_password,
+                staff_has_pg_auth_secret,
             )
 
             result = await session.execute(
@@ -2051,7 +2051,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     display = staff_row.web_username
                     permissions = []
                     pg_admin_username = staff_row.pg_username
-                    pg_credentials_ready = staff_has_stored_pg_password(staff_row)
+                    pg_credentials_ready = staff_has_pg_auth_secret(staff_row)
                     pg_staff_id = int(staff_row.id)
                     # Prefer stored role; refresh live when reachable
                     pg_role_id = (
