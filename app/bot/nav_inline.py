@@ -1,7 +1,9 @@
 """Inline hub keyboards and chrome-free present helpers (nav_mode=inline).
 
-Contextual screens send/edit a single message with an InlineKeyboard.
-The main ReplyKeyboard is left unchanged (set on /start or legacy heal).
+Hybrid contract (mature):
+- ReplyKeyboard stays stable (admin: group shortcuts; user: main menu).
+- One live panel message carries submenu InlineKeyboards (edit-in-place).
+- Do not mirror the reply shortcuts as a second full inline home.
 """
 
 from __future__ import annotations
@@ -10,11 +12,16 @@ import logging
 from typing import Any
 
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.bot.keyboards import _ikb, _style, _t
 
 logger = logging.getLogger(__name__)
+
+# FSM keys for the single live nav panel (edit instead of spam).
+NAV_PANEL_CHAT_KEY = "_nav_panel_chat_id"
+NAV_PANEL_MSG_KEY = "_nav_panel_msg_id"
 
 # Filler texts that must never be sent as standalone messages in inline mode.
 FILLER_CHROME_TEXTS = frozenset(
@@ -83,6 +90,99 @@ async def safe_edit_inline(
     except Exception:
         logger.warning("safe_edit_inline failed", exc_info=True)
         return False
+
+
+def is_bot_panel_message(message: Message | None) -> bool:
+    """True when ``message`` is a bot-owned chat message (e.g. callback.message)."""
+    if message is None:
+        return False
+    fu = getattr(message, "from_user", None)
+    if fu is None:
+        return False
+    # Strict True — MagicMock.is_bot must not count as bot-owned.
+    return getattr(fu, "is_bot", False) is True
+
+
+async def remember_nav_panel(state: FSMContext | None, message: Message | None) -> None:
+    if state is None or message is None:
+        return
+    chat = getattr(message, "chat", None)
+    chat_id = getattr(chat, "id", None)
+    msg_id = getattr(message, "message_id", None)
+    if chat_id is None or msg_id is None:
+        return
+    await state.update_data(
+        **{NAV_PANEL_CHAT_KEY: int(chat_id), NAV_PANEL_MSG_KEY: int(msg_id)}
+    )
+
+
+async def clear_nav_panel(state: FSMContext | None) -> None:
+    if state is None:
+        return
+    await state.update_data(**{NAV_PANEL_CHAT_KEY: None, NAV_PANEL_MSG_KEY: None})
+
+
+async def present_nav_panel(
+    message: Message,
+    *,
+    text: str,
+    inline: InlineKeyboardMarkup | None,
+    state: FSMContext | None = None,
+    prefer_edit: bool = True,
+    **send_kw: Any,
+) -> Message | None:
+    """One live panel: edit bot/tracked message when possible; else answer once."""
+    if prefer_edit and is_bot_panel_message(message):
+        if await safe_edit_inline(message, text, reply_markup=inline, **send_kw):
+            await remember_nav_panel(state, message)
+            return message
+    if prefer_edit and state is not None and message.bot is not None:
+        data = await state.get_data()
+        chat_id = data.get(NAV_PANEL_CHAT_KEY)
+        msg_id = data.get(NAV_PANEL_MSG_KEY)
+        cur_chat = getattr(getattr(message, "chat", None), "id", None)
+        if (
+            chat_id
+            and msg_id
+            and cur_chat is not None
+            and int(chat_id) == int(cur_chat)
+        ):
+            try:
+                await message.bot.edit_message_text(
+                    text,
+                    chat_id=int(chat_id),
+                    message_id=int(msg_id),
+                    reply_markup=inline,
+                    **send_kw,
+                )
+                return None
+            except TelegramBadRequest as e:
+                if "message is not modified" in str(e).lower():
+                    return None
+            except Exception:
+                logger.info("present_nav_panel tracked edit failed", exc_info=True)
+    sent = await present_inline_only(
+        message, text=text, inline=inline, **send_kw
+    )
+    await remember_nav_panel(state, sent)
+    return sent
+
+
+def with_inline_back(
+    markup: InlineKeyboardMarkup | None,
+    ui: dict | None,
+    back_callback: str,
+) -> InlineKeyboardMarkup:
+    """Append a single Back row unless the same callback is already last."""
+    rows: list[list[InlineKeyboardButton]] = (
+        [list(r) for r in markup.inline_keyboard] if markup else []
+    )
+    if rows:
+        last = rows[-1]
+        if any(getattr(b, "callback_data", None) == back_callback for b in last):
+            return InlineKeyboardMarkup(inline_keyboard=rows)
+    rows.append(_hub_back_row(ui, callback_data=back_callback))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 DEFAULT_TOPUP_PRESETS: tuple[int, ...] = (50_000, 100_000, 200_000, 500_000)
@@ -405,7 +505,8 @@ def admin_ops_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         for key, text in _reply_admin_ops_entries(ui)
         if key in cb_map
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
+    # Groups already live on the stable reply KB — Back closes the panel.
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:close")
 
 
 def admin_people_hub_keyboard(
@@ -435,7 +536,7 @@ def admin_people_hub_keyboard(
         )
         if key in cb_map
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:close")
 
 
 def admin_product_hub_keyboard(
@@ -463,7 +564,7 @@ def admin_product_hub_keyboard(
         for key, text in _reply_admin_product_entries(ui, pg_features=pg_features)
         if key in cb_map
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:close")
 
 
 def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
@@ -491,7 +592,7 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         for key, text in _reply_admin_system_entries(ui)
         if key in cb_map
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:close")
 
 
 def pg_hub_keyboard(
@@ -827,7 +928,7 @@ def reseller_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMark
         )
         for key, text in _reseller_settings_submenu_entries(ui)
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:home")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:close")
 
 
 def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
@@ -842,7 +943,7 @@ def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         )
         for key, text in _reseller_plans_submenu_entries(ui)
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:home")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:close")
 
 
 def service_card_keyboard(

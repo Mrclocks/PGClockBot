@@ -35,7 +35,8 @@ class AdminHubKeyboardTests(unittest.TestCase):
         ]
         self.assertIn("adm:dash", ops)
         self.assertIn("adm:orders", ops)
-        self.assertIn("nv:adm:home", ops)
+        self.assertIn("nv:adm:close", ops)
+        self.assertNotIn("nv:adm:home", ops)
 
     def test_pg_reuses_adm_pg_prefix(self):
         from app.bot.nav_inline import pg_hub_keyboard

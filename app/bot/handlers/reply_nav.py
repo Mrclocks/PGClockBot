@@ -785,7 +785,7 @@ async def open_reseller_home(
     push: bool = True,
 ) -> None:
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import present_inline_only, reseller_manage_hub_keyboard
+    from app.bot.nav_inline import clear_nav_panel, is_bot_panel_message, present_nav_panel, safe_edit_inline
     from app.services.reseller_access import load_reseller_actor
 
     if not is_reseller_bot:
@@ -818,22 +818,28 @@ async def open_reseller_home(
         can_add = False
     body = format_message(
         "🤝 پنل نماینده",
-        (
-            "یک بخش را از دکمه‌های زیر انتخاب کنید."
-            if is_inline_nav(ui)
-            else "از کیبورد پایین بخش موردنظر را انتخاب کنید."
-        ),
+        "از کیبورد پایین بخش موردنظر را انتخاب کنید.",
     )
     if is_inline_nav(ui):
+        from app.bot.menu_nav import build_main_reply_keyboard
+
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_RESELLER, push=push)
-        await present_inline_only(
-            message,
-            text=body,
-            inline=reseller_manage_hub_keyboard(
-                profile, ui, can_add_representative=can_add
-            ),
+        # Manage shortcuts already on stable reply KB — do not mirror inline.
+        if is_bot_panel_message(message):
+            await safe_edit_inline(message, body, reply_markup=None)
+            await clear_nav_panel(state)
+            return
+        main_kb, _, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
         )
+        await message.answer(body, reply_markup=main_kb)
+        await clear_nav_panel(state)
+        _ = can_add
         return
     await nav.show_nav_keyboard(
         message,
@@ -908,7 +914,7 @@ async def open_pg_home(
         bot_pg_can_create_user,
     )
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import present_inline_only, pg_hub_keyboard
+    from app.bot.nav_inline import present_nav_panel, pg_hub_keyboard
     from app.services.bot_principal_identity import shop_bot_actor_is_operator
 
     if is_reseller_bot and not await shop_bot_actor_is_operator(
@@ -955,18 +961,20 @@ async def open_pg_home(
         if not feats:
             from app.bot.nav_inline import admin_product_hub_keyboard
 
-            await present_inline_only(
+            await present_nav_panel(
                 message,
                 text="🖥 پاسارگارد در دسترس نیست — به محصول برگردید.",
                 inline=admin_product_hub_keyboard(ui, pg_features=feats),
+                state=state,
             )
             return
-        await present_inline_only(
+        await present_nav_panel(
             message,
             text=body,
             inline=pg_hub_keyboard(
                 ui, features=feats, can_create_user=can_create
             ),
+            state=state,
         )
         return
     await nav.show_nav_keyboard(
@@ -1023,16 +1031,17 @@ async def dispatch_admin_inline_reply_action(
         from app.bot.nav_mode import is_inline_nav
         from app.bot.nav_inline import (
             admin_plans_add_type_hub_keyboard,
-            present_inline_only,
+            present_nav_panel,
         )
 
         ui = await get_all_settings(session)
         if is_inline_nav(ui):
             await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_ADD_TYPE, push=True)
-            await present_inline_only(
+            await present_nav_panel(
                 message,
                 text="➕ <b>افزودن پلن</b>\nنوع پلن را انتخاب کنید:",
                 inline=admin_plans_add_type_hub_keyboard(str(aud), ui),
+                state=state,
             )
             return
         from app.bot.handlers.admin_plans import send_add_plan_type_picker
@@ -1121,7 +1130,7 @@ async def present_admin_plans_audience(
     Owner-gated (same as classic ``_OWNER_ONLY_REPLY_ACTIONS`` for audience keys).
     """
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import admin_plans_kind_hub_keyboard, present_inline_only
+    from app.bot.nav_inline import admin_plans_kind_hub_keyboard, present_nav_panel
 
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
@@ -1142,10 +1151,11 @@ async def present_admin_plans_audience(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_KIND, push=True)
-        await present_inline_only(
+        await present_nav_panel(
             message,
             text=body,
             inline=admin_plans_kind_hub_keyboard(audience, ui),
+            state=state,
         )
     else:
         await nav.show_nav_keyboard(
@@ -1177,7 +1187,7 @@ async def open_admin_users_hub(
     is_reseller_bot: bool = False,
 ) -> None:
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import admin_users_hub_keyboard, present_inline_only
+    from app.bot.nav_inline import admin_users_hub_keyboard, present_nav_panel
 
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
@@ -1201,8 +1211,8 @@ async def open_admin_users_hub(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN_USERS, push=push)
-        await present_inline_only(
-            message, text=body, inline=admin_users_hub_keyboard(ui)
+        await present_nav_panel(
+            message, text=body, inline=admin_users_hub_keyboard(ui), state=state
         )
         return
     await nav.show_nav_keyboard(
@@ -1226,7 +1236,7 @@ async def open_admin_resellers_hub(
     is_reseller_bot: bool = False,
 ) -> None:
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import admin_resellers_hub_keyboard, present_inline_only
+    from app.bot.nav_inline import admin_resellers_hub_keyboard, present_nav_panel
     from app.bot.auth import platform_can_manage_representatives
 
     if not await _deny_unless_owner(
@@ -1248,8 +1258,8 @@ async def open_admin_resellers_hub(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN_RESELLERS, push=push)
-        await present_inline_only(
-            message, text=body, inline=admin_resellers_hub_keyboard(ui)
+        await present_nav_panel(
+            message, text=body, inline=admin_resellers_hub_keyboard(ui), state=state
         )
         return
     await nav.show_nav_keyboard(
@@ -1288,7 +1298,7 @@ async def open_admin_settings_hub(
     reseller_owner_id: int | None = None,
 ) -> None:
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import admin_settings_hub_keyboard, present_inline_only
+    from app.bot.nav_inline import admin_settings_hub_keyboard, present_nav_panel
 
     _ = (reseller_profile_id, reseller_owner_id)
     if not await _deny_unless_owner(
@@ -1307,8 +1317,8 @@ async def open_admin_settings_hub(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN_SETTINGS, push=push)
-        await present_inline_only(
-            message, text=body, inline=admin_settings_hub_keyboard(ui)
+        await present_nav_panel(
+            message, text=body, inline=admin_settings_hub_keyboard(ui), state=state
         )
         return
     await nav.show_nav_keyboard(
@@ -1337,7 +1347,7 @@ async def open_admin_backup_hub(
 
     from app.bot.handlers import admin_backup as backup_h
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import admin_backup_hub_keyboard, present_inline_only
+    from app.bot.nav_inline import admin_backup_hub_keyboard, present_nav_panel, with_inline_back
     from app.services.backup import list_backups
 
     _ = (reseller_profile_id, reseller_owner_id)
@@ -1350,18 +1360,23 @@ async def open_admin_backup_hub(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN_BACKUP, push=push)
-        await present_inline_only(
+        files_kb = with_inline_back(
+            kb.backup_files_keyboard(backups), ui, "nv:adm:system"
+        )
+        # Prefixed actions from hub keyboard without trailing back, then files + back.
+        hub = admin_backup_hub_keyboard(ui)
+        hub_rows = [list(r) for r in hub.inline_keyboard[:-1]]  # drop Back
+        file_rows = [list(r) for r in files_kb.inline_keyboard]
+        from aiogram.types import InlineKeyboardMarkup
+        combined = InlineKeyboardMarkup(inline_keyboard=hub_rows + file_rows)
+        await present_nav_panel(
             message,
             text=(
                 "💾 <b>بکاپ / ریستور</b>\n"
-                "عملیات از دکمه‌های زیر؛ سپس فهرست فایل‌ها."
+                f"{backup_h._hub_text(backups)}"
             ),
-            inline=admin_backup_hub_keyboard(ui),
-        )
-        await present_inline_only(
-            message,
-            text=backup_h._hub_text(backups),
-            inline=kb.backup_files_keyboard(backups),
+            inline=combined,
+            state=state,
         )
         return
     from app.bot.tg_utils import attach_reply_keyboard
@@ -1396,7 +1411,7 @@ async def open_admin_broadcast_hub(
     reseller_owner_id: int | None = None,
 ) -> None:
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import admin_broadcast_hub_keyboard, present_inline_only
+    from app.bot.nav_inline import admin_broadcast_hub_keyboard, present_nav_panel
 
     _ = (reseller_profile_id, reseller_owner_id)
     if not await _deny_unless_owner(
@@ -1415,8 +1430,8 @@ async def open_admin_broadcast_hub(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN_BROADCAST, push=push)
-        await present_inline_only(
-            message, text=body, inline=admin_broadcast_hub_keyboard(ui)
+        await present_nav_panel(
+            message, text=body, inline=admin_broadcast_hub_keyboard(ui), state=state
         )
         return
     await nav.show_nav_keyboard(
@@ -1442,7 +1457,7 @@ async def open_admin_plans_hub(
     reseller_owner_id: int | None = None,
 ) -> None:
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import admin_plans_audience_hub_keyboard, present_inline_only
+    from app.bot.nav_inline import admin_plans_audience_hub_keyboard, present_nav_panel
 
     _ = (reseller_profile_id, reseller_owner_id)
     if not await _deny_unless_owner(
@@ -1466,8 +1481,8 @@ async def open_admin_plans_hub(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_AUDIENCE, push=push)
-        await present_inline_only(
-            message, text=body, inline=admin_plans_audience_hub_keyboard(ui)
+        await present_nav_panel(
+            message, text=body, inline=admin_plans_audience_hub_keyboard(ui), state=state
         )
         return
     await nav.show_nav_keyboard(
@@ -1511,7 +1526,7 @@ async def open_reseller_settings_hub(
         return
     bot_line = f"@{profile.bot_username}" if profile.bot_username else "توکن ثبت نشده"
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import present_inline_only, reseller_settings_hub_keyboard
+    from app.bot.nav_inline import present_nav_panel, reseller_settings_hub_keyboard
 
     ui = await get_all_settings(session)
     body = (
@@ -1528,8 +1543,8 @@ async def open_reseller_settings_hub(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_RESELLER_SETTINGS, push=push)
-        await present_inline_only(
-            message, text=body, inline=reseller_settings_hub_keyboard(ui)
+        await present_nav_panel(
+            message, text=body, inline=reseller_settings_hub_keyboard(ui), state=state
         )
         return
     await nav.show_nav_keyboard(
@@ -1576,8 +1591,13 @@ async def open_reseller_plans_hub(
         await message.answer("دسترسی پلن ندارید.")
         return
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import present_inline_only, reseller_plans_hub_keyboard
+    from app.bot.nav_inline import (
+        present_nav_panel,
+        reseller_plans_hub_keyboard,
+        with_inline_back,
+    )
     from app.services.users import get_all_settings
+    from aiogram.types import InlineKeyboardMarkup
 
     ui = await get_all_settings(session, reseller_id=owner_id)
     plans = await _list_plans(session, owner_id)
@@ -1585,7 +1605,7 @@ async def open_reseller_plans_hub(
     hub_text = (
         "💎 <b>پلن‌های فروش</b>\n"
         + (
-            "ساخت و کاتالوگ از دکمه‌های زیر؛ لیست پلن‌ها در پیام بعد."
+            "ساخت و کاتالوگ از دکمه‌های زیر."
             if is_inline_nav(ui)
             else "ساخت از کیبورد؛ انتخاب پلن زیر پیام اینلاین است.\n"
             "برچسب دسته و بسته حجم/زمان از کیبورد — مثل وب‌پنل."
@@ -1594,13 +1614,19 @@ async def open_reseller_plans_hub(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_RESELLER_PLANS, push=push)
-        await present_inline_only(
-            message, text=hub_text, inline=reseller_plans_hub_keyboard(ui)
+        hub = reseller_plans_hub_keyboard(ui)
+        hub_rows = [list(r) for r in hub.inline_keyboard[:-1]]
+        list_kb = with_inline_back(
+            kb.reseller_plans_list_keyboard(plans, ui), ui, "nv:res:close"
         )
-        await present_inline_only(
+        combined = InlineKeyboardMarkup(
+            inline_keyboard=hub_rows + [list(r) for r in list_kb.inline_keyboard]
+        )
+        await present_nav_panel(
             message,
-            text=f"📦 <b>لیست پلن‌ها</b>\n\n{list_body}",
-            inline=kb.reseller_plans_list_keyboard(plans, ui),
+            text=f"{hub_text}\n\n📦 <b>لیست</b>\n{list_body}",
+            inline=combined,
+            state=state,
         )
         return
     await nav.show_nav_keyboard(
@@ -1630,8 +1656,14 @@ async def open_admin_home(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
+    from app.bot.menu_nav import build_main_reply_keyboard
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import admin_groups_hub_keyboard, present_inline_only
+    from app.bot.nav_inline import (
+        clear_nav_panel,
+        is_bot_panel_message,
+        present_nav_panel,
+        safe_edit_inline,
+    )
     from app.version import __version__ as local_version
 
     if not await _deny_unless_owner(
@@ -1639,22 +1671,24 @@ async def open_admin_home(
     ):
         return
     ui = await get_all_settings(session)
+    # Inline: groups already on the stable reply KB — never mirror them inline.
     body = (
         f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
-        + (
-            "یک گروه را از دکمه‌های زیر انتخاب کنید:\n"
-            "🗓 عملیات روزانه · 👤 افراد · 📦 محصول و PG · 🛠 سیستم"
-            if is_inline_nav(ui)
-            else "از کیبورد پایین یک گروه را انتخاب کنید:\n"
-            "🗓 عملیات روزانه · 👤 افراد · 📦 محصول و PG · 🛠 سیستم"
-        )
+        "از کیبورد پایین یک گروه را انتخاب کنید:\n"
+        "🗓 عملیات روزانه · 👤 افراد · 📦 محصول و PG · 🛠 سیستم"
     )
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN, push=push)
-        await present_inline_only(
-            message, text=body, inline=admin_groups_hub_keyboard(ui)
+        if is_bot_panel_message(message):
+            await safe_edit_inline(message, body, reply_markup=None)
+            await clear_nav_panel(state)
+            return
+        main_kb, _, _ = await build_main_reply_keyboard(
+            session, db_user, is_reseller_bot=is_reseller_bot, ui=ui
         )
+        await message.answer(body, reply_markup=main_kb)
+        await clear_nav_panel(state)
         return
     await nav.show_nav_keyboard(
         message,
@@ -1677,7 +1711,7 @@ async def open_admin_ops_hub(
     is_reseller_bot: bool = False,
 ) -> None:
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import admin_ops_hub_keyboard, present_inline_only
+    from app.bot.nav_inline import admin_ops_hub_keyboard, present_nav_panel
 
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
@@ -1688,8 +1722,11 @@ async def open_admin_ops_hub(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN_OPS, push=push)
-        await present_inline_only(
-            message, text=body, inline=admin_ops_hub_keyboard(ui)
+        await present_nav_panel(
+            message,
+            text=body,
+            inline=admin_ops_hub_keyboard(ui),
+            state=state,
         )
         return
     await nav.show_nav_keyboard(
@@ -1713,7 +1750,7 @@ async def open_admin_people_hub(
     is_reseller_bot: bool = False,
 ) -> None:
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import admin_people_hub_keyboard, present_inline_only
+    from app.bot.nav_inline import admin_people_hub_keyboard, present_nav_panel
 
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
@@ -1727,12 +1764,13 @@ async def open_admin_people_hub(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN_PEOPLE, push=push)
-        await present_inline_only(
+        await present_nav_panel(
             message,
             text=body,
             inline=admin_people_hub_keyboard(
                 ui, can_manage_representatives=can_reps
             ),
+            state=state,
         )
         return
     await nav.show_nav_keyboard(
@@ -1756,7 +1794,7 @@ async def open_admin_product_hub(
     is_reseller_bot: bool = False,
 ) -> None:
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import admin_product_hub_keyboard, present_inline_only
+    from app.bot.nav_inline import admin_product_hub_keyboard, present_nav_panel
 
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
@@ -1770,10 +1808,11 @@ async def open_admin_product_hub(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN_PRODUCT, push=push)
-        await present_inline_only(
+        await present_nav_panel(
             message,
             text=body,
             inline=admin_product_hub_keyboard(ui, pg_features=pg_feats),
+            state=state,
         )
         return
     await nav.show_nav_keyboard(
@@ -1797,7 +1836,7 @@ async def open_admin_system_hub(
     is_reseller_bot: bool = False,
 ) -> None:
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import admin_system_hub_keyboard, present_inline_only
+    from app.bot.nav_inline import admin_system_hub_keyboard, present_nav_panel
 
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
@@ -1808,8 +1847,11 @@ async def open_admin_system_hub(
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN_SYSTEM, push=push)
-        await present_inline_only(
-            message, text=body, inline=admin_system_hub_keyboard(ui)
+        await present_nav_panel(
+            message,
+            text=body,
+            inline=admin_system_hub_keyboard(ui),
+            state=state,
         )
         return
     await nav.show_nav_keyboard(
