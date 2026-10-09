@@ -149,6 +149,9 @@ def _reply_user_entries(
     profile=None,
 ) -> list[tuple[str, str]]:
     """Ordered (action_key, button_text) for the customer/reseller reply keyboard."""
+    from app.bot.nav_mode import is_inline_nav
+
+    inline = is_inline_nav(ui)
     entries: list[tuple[str, str]] = []
     for key in _menu_order(ui):
         if key == "shop":
@@ -164,9 +167,17 @@ def _reply_user_entries(
             if on(_t(ui, "loyalty_enabled")):
                 entries.append((REPLY_ACTION_LOYALTY, _t(ui, "btn_loyalty")))
         elif key == "reseller_apply" and role == Role.USER.value and not show_reseller_creds:
-            entries.append((REPLY_ACTION_RESELLER_APPLY, _t(ui, "btn_reseller_apply")))
+            # Inline nav: rare CTA lives on welcome/support hub, not main KB.
+            # Keep registering via reply_action_map for legacy keyboards.
+            if not inline:
+                entries.append(
+                    (REPLY_ACTION_RESELLER_APPLY, _t(ui, "btn_reseller_apply"))
+                )
         elif key == "miniapp":
-            # WebApp requires inline buttons — shown separately under welcome
+            if inline:
+                # web_app KeyboardButton — packed specially in _pack_reply_rows
+                entries.append(("miniapp", _t(ui, "btn_miniapp") or "📱 مینی‌اپ"))
+            # classic: Mini App stays as separate inline bubble under welcome
             continue
         elif key == "services" and not has_services:
             continue
@@ -617,6 +628,17 @@ def _topup_method_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return entries
 
 
+def _pack_reply_button(action: str, text: str, ui: dict | None) -> KeyboardButton | None:
+    """Build one reply button; Mini App uses web_app (no text-message action)."""
+    if action == "miniapp":
+        from app.bot.nav_inline import miniapp_reply_button
+
+        return miniapp_reply_button(ui)
+    if not (text or "").strip():
+        return None
+    return _kb(text, action=action, ui=ui)
+
+
 def _pack_reply_rows(
     entries: list[tuple[str, str]],
     ui: dict | None,
@@ -625,15 +647,19 @@ def _pack_reply_rows(
     footer_row: list[str | tuple[str, str]] | None = None,
 ) -> list[list[KeyboardButton]]:
     layout = _menu_layout(ui)
-    items = [(a, t) for a, t in entries if (t or "").strip()]
+    items = [(a, t) for a, t in entries if (t or "").strip() or a == "miniapp"]
     rows: list[list[KeyboardButton]] = []
     if layout == "compact":
         for i in range(0, len(items), 2):
             chunk = items[i : i + 2]
-            rows.append([_kb(t, action=a, ui=ui) for a, t in chunk])
+            btns = [b for a, t in chunk if (b := _pack_reply_button(a, t, ui)) is not None]
+            if btns:
+                rows.append(btns)
     else:
         for a, t in items:
-            rows.append([_kb(t, action=a, ui=ui)])
+            btn = _pack_reply_button(a, t, ui)
+            if btn is not None:
+                rows.append([btn])
 
     def _footer_btns(items_in: list[str | tuple[str, str]]) -> list[KeyboardButton]:
         out: list[KeyboardButton] = []
@@ -677,10 +703,17 @@ def main_reply_keyboard(
     can_manage_representatives: bool = True,
 ) -> ReplyKeyboardMarkup:
     """Primary navigation reply keyboard (level 0)."""
+    from app.bot.nav_mode import is_inline_nav
+
     home_label = _home_label(ui)
-    home_footer: list[tuple[str, str]] = [(REPLY_ACTION_HOME, home_label)]
+    # Inline nav: no Home row on level-0 (pointless at home); classic keeps footer.
+    home_footer: list[tuple[str, str]] = (
+        [] if is_inline_nav(ui) else [(REPLY_ACTION_HOME, home_label)]
+    )
     if role == Role.ADMIN.value and not as_user:
         # Platform admin: short 4-group hub (leaves live in group submenus)
+        # Wave A leaves admin chrome classic-shaped; still drop redundant home
+        # footer when inline nav is on (admin hubs use Back inside groups).
         _ = (pg_features, can_manage_representatives)  # ACL applied inside groups
         entries = _reply_admin_hub_entries(ui)
         rows = _pack_reply_rows(entries, ui, footer=home_footer)
@@ -981,7 +1014,14 @@ def reply_action_map(
             show_reseller_creds=show_reseller_creds,
             profile=profile if (show_reseller_creds and not is_reseller_bot) else None,
         ):
+            if key == "miniapp":
+                continue  # web_app button — no text action
             mapping[(text or "").strip()] = key
+        # Legacy: reseller-apply label stays mapped even when omitted from main KB
+        if map_role == Role.USER.value and not show_reseller_creds:
+            apply_label = (_t(ui, "btn_reseller_apply") or "").strip()
+            if apply_label:
+                mapping.setdefault(apply_label, REPLY_ACTION_RESELLER_APPLY)
         # L1 on the platform bot: register migrated PG submenu labels (not overview).
         if show_reseller_creds and not is_reseller_bot:
             l1_pg = frozenset(
@@ -1009,6 +1049,9 @@ def reply_action_map(
                 mapping[(text or "").strip()] = key
             for key, text in _topup_method_entries(ui):
                 mapping[(text or "").strip()] = key
+            # Legacy service-action reply labels (stale keyboards after Wave B)
+            for key, text in _service_action_entries(ui):
+                mapping.setdefault((text or "").strip(), key)
 
         if platform_admin:
             for key, text in _wallet_submenu_entries(ui):

@@ -383,8 +383,22 @@ async def show_nav_keyboard(
         if order_id is not None:
             await state.update_data(**{PAY_ORDER_ID: int(order_id)})
 
+    from app.bot.nav_mode import is_inline_nav
+
+    inline_nav = is_inline_nav(ui)
+
     if level == NAV_SHOP:
-        markup = kb.shop_reply_keyboard(ui)
+        if inline_nav:
+            markup, ui, _ = await build_main_reply_keyboard(
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                as_user=as_user,
+                ui=ui,
+            )
+        else:
+            markup = kb.shop_reply_keyboard(ui)
     elif level == NAV_SERVICES:
         # Services list uses main reply chrome; Back from a service restores this level.
         markup, ui, _ = await build_main_reply_keyboard(
@@ -396,13 +410,79 @@ async def show_nav_keyboard(
             ui=ui,
         )
     elif level == NAV_RESELLER_APPLY:
-        markup = kb.reseller_apply_reply_keyboard(ui)
+        markup = (
+            (await build_main_reply_keyboard(
+                session, db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                as_user=as_user, ui=ui,
+            ))[0]
+            if inline_nav
+            else kb.reseller_apply_reply_keyboard(ui)
+        )
     elif level == NAV_WALLET:
-        markup = kb.wallet_reply_keyboard(ui)
+        markup = (
+            (await build_main_reply_keyboard(
+                session, db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                as_user=as_user, ui=ui,
+            ))[0]
+            if inline_nav
+            else kb.wallet_reply_keyboard(ui)
+        )
     elif level == NAV_SUPPORT:
-        markup = kb.support_reply_keyboard(ui)
+        markup = (
+            (await build_main_reply_keyboard(
+                session, db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                as_user=as_user, ui=ui,
+            ))[0]
+            if inline_nav
+            else kb.support_reply_keyboard(ui)
+        )
     elif level == NAV_LOYALTY:
-        markup = kb.loyalty_reply_keyboard(ui)
+        markup = (
+            (await build_main_reply_keyboard(
+                session, db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                as_user=as_user, ui=ui,
+            ))[0]
+            if inline_nav
+            else kb.loyalty_reply_keyboard(ui)
+        )
+    elif level in {
+        NAV_ADMIN,
+        NAV_ADMIN_OPS,
+        NAV_ADMIN_PEOPLE,
+        NAV_ADMIN_PRODUCT,
+        NAV_ADMIN_SYSTEM,
+        NAV_ADMIN_PG,
+        NAV_ADMIN_LOYALTY,
+        # Wave E leaf hubs
+        NAV_ADMIN_USERS,
+        NAV_ADMIN_RESELLERS,
+        NAV_ADMIN_SETTINGS,
+        NAV_ADMIN_BACKUP,
+        NAV_ADMIN_BROADCAST,
+        NAV_ADMIN_PLANS,
+        NAV_ADMIN_PLANS_AUDIENCE,
+        NAV_ADMIN_PLANS_KIND,
+        NAV_ADMIN_PLANS_ADD_TYPE,
+        NAV_RESELLER_SETTINGS,
+        NAV_RESELLER_PLANS,
+    } and inline_nav:
+        # Wave D/E: admin/reseller hubs are inline; keep stable main KB.
+        markup, ui, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            as_user=as_user,
+            ui=ui,
+        )
     elif level == NAV_ADMIN_LOYALTY:
         # Platform admin sees tiers; reseller manage hub excludes global tiers
         include_tiers = not bool(is_reseller_bot)
@@ -472,23 +552,65 @@ async def show_nav_keyboard(
     elif level == NAV_ADMIN_PLANS:
         markup = kb.admin_plans_audience_reply_keyboard(ui)
     elif level == NAV_RESELLER:
-        markup = kb.reseller_reply_keyboard(profile, ui)
+        if inline_nav:
+            # Wave D: manage hub is inline; keep stable reseller main KB.
+            markup, ui, _ = await build_main_reply_keyboard(
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                as_user=as_user,
+                ui=ui,
+            )
+        else:
+            markup = kb.reseller_reply_keyboard(profile, ui)
     elif level == NAV_RESELLER_SETTINGS:
         markup = kb.reseller_settings_reply_keyboard(ui)
     elif level == NAV_RESELLER_PLANS:
         markup = kb.reseller_plans_reply_keyboard(ui)
     elif level == NAV_SERVICE:
-        markup = kb.service_actions_reply_keyboard(ui)
+        if inline_nav:
+            # Wave B: actions are inline on the card; keep stable main ReplyKeyboard.
+            markup, ui, _ = await build_main_reply_keyboard(
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                as_user=as_user,
+                ui=ui,
+            )
+        else:
+            markup = kb.service_actions_reply_keyboard(ui)
     elif level == NAV_REVIEW:
         markup = kb.review_reply_keyboard(ui)
     elif level == NAV_PAY:
-        oid = order_id
-        if oid is None and state is not None:
-            data = await state.get_data()
-            oid = data.get(PAY_ORDER_ID)
-        markup = kb.pay_reply_keyboard(int(oid or 0), ui)
+        if inline_nav:
+            markup, ui, _ = await build_main_reply_keyboard(
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                as_user=as_user,
+                ui=ui,
+            )
+        else:
+            oid = order_id
+            if oid is None and state is not None:
+                data = await state.get_data()
+                oid = data.get(PAY_ORDER_ID)
+            markup = kb.pay_reply_keyboard(int(oid or 0), ui)
     elif level == NAV_TOPUP_PAY:
-        markup = kb.topup_pay_reply_keyboard(ui)
+        if inline_nav:
+            markup, ui, _ = await build_main_reply_keyboard(
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                as_user=as_user,
+                ui=ui,
+            )
+        else:
+            markup = kb.topup_pay_reply_keyboard(ui)
     elif level == NAV_USER_PREVIEW:
         # Always customer keyboard — never leak reseller/admin hub buttons
         from app.db.models import Role as _Role
@@ -523,8 +645,46 @@ async def present_order_pay(
     text: str = "روش پرداخت را از کیبورد پایین انتخاب کنید:",
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
+    heal_main: bool = False,
 ) -> None:
-    """Show order payment methods on the reply keyboard (not inline)."""
+    """Show order payment methods — inline list when nav_mode=inline.
+
+    ``heal_main`` restores the stable main ReplyKeyboard after a free-text
+    step (e.g. discount code) that left ``cancel_reply`` attached.
+    """
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only
+
+    ui = await get_all_settings(session)
+    if state is not None:
+        await set_nav_level(state, NAV_PAY, push=True)
+        await state.update_data(**{PAY_ORDER_ID: int(order_id)})
+
+    if is_inline_nav(ui):
+        body = text
+        if "کیبورد پایین" in body:
+            body = "روش پرداخت را انتخاب کنید:"
+        await present_inline_only(
+            message,
+            text=body,
+            inline=kb.pay_methods(int(order_id), ui),
+        )
+        if heal_main:
+            from app.bot.tg_utils import attach_reply_keyboard
+
+            main_kb, _, _ = await build_main_reply_keyboard(
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
+            await attach_reply_keyboard(
+                message,
+                main_kb,
+                text="روش پرداخت را از دکمه‌های پیام بالا انتخاب کنید.",
+            )
+        return
+
     await show_nav_keyboard(
         message,
         session,

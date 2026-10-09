@@ -38,7 +38,12 @@ class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch(
                 "app.bot.handlers.reply_nav.get_all_settings",
-                new=AsyncMock(return_value={"menu_order": "shop,reseller_apply"}),
+                new=AsyncMock(
+                    return_value={
+                        "nav_mode": "classic",
+                        "menu_order": "shop,reseller_apply",
+                    }
+                ),
             ),
             patch(
                 "app.services.resellers.list_active_reseller_plans",

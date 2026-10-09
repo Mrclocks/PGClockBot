@@ -212,7 +212,9 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         hint = (root / "app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8")
         self.assertIn("Reply Keyboard", hint)
         menu = (root / "app/web/templates/_settings_menu.html").read_text(encoding="utf-8")
-        self.assertIn("داینامیک", menu)
+        # Wave A: menu tab documents inline-first stable reply keyboard
+        self.assertIn("اینلاین", menu)
+        self.assertIn("کیبورد پایین", menu)
 
 
 if __name__ == "__main__":

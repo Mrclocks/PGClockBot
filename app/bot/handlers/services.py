@@ -265,9 +265,18 @@ async def svc_list(
             )
         return
     if callback.message:
-        await safe_edit_text(callback.message, 
+        from app.bot.nav_mode import is_inline_nav
+        from app.bot.nav_inline import services_list_keyboard
+
+        markup = (
+            services_list_keyboard(services, ui)
+            if is_inline_nav(ui)
+            else kb.services_keyboard(services, ui)
+        )
+        await safe_edit_text(
+            callback.message,
             "📦 <b>سرویس‌های شما</b>",
-            reply_markup=kb.services_keyboard(services, ui),
+            reply_markup=markup,
         )
 
 
@@ -293,11 +302,22 @@ async def svc_view(
     info.setdefault("username", svc.pg_username)
     text = format_message("📦 سرویس شما", service_card(info))
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=None)
-        await callback.message.answer(
-            "عملیات سرویس را از کیبورد پایین انتخاب کنید:",
-            reply_markup=kb.service_actions_reply_keyboard(ui),
-        )
+        from app.bot.nav_mode import is_inline_nav
+        from app.bot.nav_inline import service_card_keyboard
+
+        if is_inline_nav(ui):
+            # One message: card + inline actions (no reply-keyboard chrome).
+            await safe_edit_text(
+                callback.message,
+                text,
+                reply_markup=service_card_keyboard(svc_id, ui),
+            )
+        else:
+            await safe_edit_text(callback.message, text, reply_markup=None)
+            await callback.message.answer(
+                "عملیات سرویس را از کیبورد پایین انتخاب کنید:",
+                reply_markup=kb.service_actions_reply_keyboard(ui),
+            )
     if state is not None:
         from app.bot import menu_nav as nav
 
@@ -346,10 +366,24 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     parts.append(service_card(sub_info))
     text = format_message("📱 اشتراک", "\n\n".join(parts))
     if callback.message:
+        from app.bot.nav_mode import is_inline_nav
+
+        markup = None
+        if is_inline_nav(ui):
+            markup = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=ui.get("btn_back") or "⬅️ بازگشت",
+                            callback_data=f"svc:view:{svc_id}",
+                        )
+                    ]
+                ]
+            )
         try:
-            await safe_edit_text(callback.message, text, reply_markup=None)
+            await safe_edit_text(callback.message, text, reply_markup=markup)
         except Exception:
-            await callback.message.answer(text)
+            await callback.message.answer(text, reply_markup=markup)
     if url:
         await send_subscription_qr_photo(
             callback.bot,
@@ -389,10 +423,24 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         ]
         for p in plans
     ]
+    from app.bot.nav_mode import is_inline_nav
+
+    if is_inline_nav(ui):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=ui.get("btn_back") or "⬅️ بازگشت",
+                    callback_data=f"svc:view:{svc_id}",
+                )
+            ]
+        )
+        hint = "پلن تمدید را انتخاب کنید:"
+    else:
+        hint = "پلن تمدید را انتخاب کنید:\n<i>بازگشت از کیبورد پایین</i>"
     if callback.message:
         await safe_edit_text(
             callback.message,
-            "پلن تمدید را انتخاب کنید:\n<i>بازگشت از کیبورد پایین</i>",
+            hint,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
@@ -585,14 +633,27 @@ async def svc_addon(
     title = "افزونه سرویس"
     if kind_filter:
         title = f"افزونه {kind_label(kind_filter)}"
+    from app.bot.nav_mode import is_inline_nav
+
+    if is_inline_nav(ui):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=ui.get("btn_back") or "⬅️ بازگشت",
+                    callback_data=f"svc:view:{svc_id}",
+                )
+            ]
+        )
+        body = "بسته را انتخاب کنید؛ پس از پرداخت به همین سرویس اضافه می‌شود."
+    else:
+        body = (
+            "بسته را انتخاب کنید؛ پس از پرداخت به همین سرویس اضافه می‌شود.\n"
+            "<i>بازگشت از کیبورد پایین</i>"
+        )
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message(
-                f"➕ {title}",
-                "بسته را انتخاب کنید؛ پس از پرداخت به همین سرویس اضافه می‌شود.\n"
-                "<i>بازگشت از کیبورد پایین</i>",
-            ),
+            format_message(f"➕ {title}", body),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
@@ -770,16 +831,29 @@ async def svc_delete(
             await state.update_data(**{nav.SERVICE_ID: None})
     if callback.message:
         from app.bot.menu_nav import restore_main_reply
+        from app.bot.nav_mode import is_inline_nav
 
-        await safe_edit_text(
-            callback.message,
-            format_message("✅ حذف شد", f"سرویس #{svc_id} حذف شد."),
-            reply_markup=kb.back_home(ui),
-        )
-        await restore_main_reply(
-            callback.message,
-            session,
-            db_user,
-            text="🏠 منوی اصلی",
-            state=state,
-        )
+        done = format_message("✅ حذف شد", f"سرویس #{svc_id} حذف شد.")
+        if is_inline_nav(ui):
+            await safe_edit_text(callback.message, done, reply_markup=None)
+            # Heal main ReplyKeyboard with a real confirmation (not filler chrome).
+            await restore_main_reply(
+                callback.message,
+                session,
+                db_user,
+                text="سرویس حذف شد — از منوی پایین ادامه دهید.",
+                state=state,
+            )
+        else:
+            await safe_edit_text(
+                callback.message,
+                done,
+                reply_markup=kb.back_home(ui),
+            )
+            await restore_main_reply(
+                callback.message,
+                session,
+                db_user,
+                text="🏠 منوی اصلی",
+                state=state,
+            )
