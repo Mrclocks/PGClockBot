@@ -2994,7 +2994,27 @@ html[data-theme="light"] .auth-form--card {
 .pw-field input {
   width: 100%;
   margin-top: 0;
-  padding-inline-end: var(--space-5);
+  /* Physical padding: dir=ltr flips padding-inline-* and would shove text off the right.
+     Right matches other inputs (space-2); left clears the eye toggle. */
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-right: var(--space-2);
+  padding-left: var(--space-5);
+  text-align: right;
+}
+/* Persian placeholders fully right-aligned; typed secrets stay LTR via input dir */
+.pw-field input::placeholder {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: isolate;
+  color: var(--placeholder);
+  -webkit-text-fill-color: var(--placeholder);
+  opacity: 1;
+}
+.pw-field input[dir="ltr"]::placeholder {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: isolate;
 }
 .pw-toggle {
   position: absolute;

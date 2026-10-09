@@ -246,6 +246,31 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         self.assertNotIn('href="/settings?tab=pasarguard"', base)
         self.assertIn('href="/settings?tab=bot"', base)
 
+    def test_bot_secret_placeholders_are_clean_rtl(self):
+        bot = (TEMPLATES / "_settings_bot.html").read_text(encoding="utf-8")
+        # No mixed LTR bullets + «یا …» — that bidi-scrambles inside dir=ltr boxes.
+        self.assertNotIn("•••• یا توکن جدید", bot)
+        self.assertNotIn("•••• یا رمز جدید", bot)
+        self.assertIn('placeholder="توکن جدید"', bot)
+        self.assertIn('placeholder="رمز جدید"', bot)
+        self.assertIn("خالی بماند تا توکن فعلی حفظ شود", bot)
+        self.assertIn("خالی بماند تا رمز فعلی حفظ شود", bot)
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn("padding-right: var(--space-2)", css)
+        self.assertIn("padding-left: var(--space-5)", css)
+        # Physical padding lives on the main .pw-field input rule (not auth-form).
+        self.assertIn(
+            ".pw-field input {\n  width: 100%;\n  margin-top: 0;",
+            css,
+        )
+        field = css.split(".pw-field input {\n  width: 100%;", 1)[1].split("}", 1)[0]
+        self.assertIn("padding-right: var(--space-2)", field)
+        self.assertIn("padding-left: var(--space-5)", field)
+        self.assertIn("text-align: right", field)
+        ph = css.split(".pw-field input::placeholder {", 1)[1].split("}", 1)[0]
+        self.assertIn("direction: rtl", ph)
+        self.assertIn("text-align: right", ph)
+
     def test_magic_links_copy_inside_field(self):
         html = (TEMPLATES / "_settings_links.html").read_text(encoding="utf-8")
         self.assertIn("magic-link-field", html)
