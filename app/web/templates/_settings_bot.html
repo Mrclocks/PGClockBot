@@ -76,12 +76,12 @@
       <div class="setting-item full">
         <label>توکن ربات (BOT_TOKEN)
           <div class="pw-field">
-            <input id="bot-token-input" name="BOT_TOKEN" type="password" value="" dir="ltr" autocomplete="off" placeholder="•••• یا توکن جدید" />
+            <input id="bot-token-input" name="BOT_TOKEN" type="password" value="" dir="ltr" autocomplete="off" placeholder="توکن جدید" />
             <button type="button" class="pw-toggle" data-pw-for="bot-token-input" aria-label="نمایش توکن" aria-pressed="false">
               <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>
-          <small class="muted">خالی = حفظ توکن فعلی · <span dir="ltr">{{ bot_token_masked or '—' }}</span></small>
+          <small class="muted">خالی بماند تا توکن فعلی حفظ شود{% if bot_token_masked %} · فعلی: <span dir="ltr">{{ bot_token_masked }}</span>{% endif %}</small>
         </label>
       </div>
       <div class="setting-item">
@@ -185,12 +185,12 @@
       <div class="setting-item">
         <label>رمز
           <div class="pw-field">
-            <input id="pg-password-input" name="PG_PASSWORD" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="•••• یا رمز جدید" />
+            <input id="pg-password-input" name="PG_PASSWORD" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="رمز جدید" />
             <button type="button" class="pw-toggle" data-pw-for="pg-password-input" aria-label="نمایش رمز" aria-pressed="false">
               <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>
-          <small class="muted">خالی = حفظ رمز فعلی</small>
+          <small class="muted">خالی بماند تا رمز فعلی حفظ شود</small>
         </label>
       </div>
     </div>
