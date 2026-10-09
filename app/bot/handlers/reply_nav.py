@@ -995,13 +995,14 @@ async def dispatch_admin_inline_reply_action(
     """Wave E: run selected admin reply-actions from ``nv:adm:ra:*`` hubs.
 
     Reuses the same helpers as ``reply_main_nav`` (no new money/delivery logic).
+    Owner Principal required for every action (parity with ``_OWNER_ONLY_REPLY_ACTIONS``).
     """
     _ = (reseller_owner_id, reseller_profile_id)
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
+        return
     if action == kb.REPLY_ACTION_ADM_ST_PANEL or action == "adm_st_panel":
-        if not await _deny_unless_owner(
-            message, session, db_user, is_reseller_bot=is_reseller_bot
-        ):
-            return
         from app.bot.handlers.admin_settings import _panel_settings_url
 
         url = await _panel_settings_url(session, for_shop=False)
@@ -1042,10 +1043,6 @@ async def dispatch_admin_inline_reply_action(
         kb.REPLY_ACTION_ADM_PLANS_CATEGORIES,
         "adm_plans_categories",
     }:
-        if not await _deny_unless_owner(
-            message, session, db_user, is_reseller_bot=is_reseller_bot
-        ):
-            return
         from app.bot.handlers.plan_catalog_manage import open_categories_manage
 
         await open_categories_manage(
@@ -1058,10 +1055,6 @@ async def dispatch_admin_inline_reply_action(
         )
         return
     if action in {kb.REPLY_ACTION_ADM_PLANS_ADDONS, "adm_plans_addons"}:
-        if not await _deny_unless_owner(
-            message, session, db_user, is_reseller_bot=is_reseller_bot
-        ):
-            return
         from app.bot.handlers.plan_catalog_manage import open_addons_manage
 
         await open_addons_manage(
@@ -1123,10 +1116,17 @@ async def present_admin_plans_audience(
     audience: str,
     is_reseller_bot: bool = False,
 ) -> None:
-    """Wave E: plans audience list — inline actions + overview bubble."""
+    """Wave E: plans audience list — inline actions + overview bubble.
+
+    Owner-gated (same as classic ``_OWNER_ONLY_REPLY_ACTIONS`` for audience keys).
+    """
     from app.bot.nav_mode import is_inline_nav
     from app.bot.nav_inline import admin_plans_kind_hub_keyboard, present_inline_only
 
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
+        return
     ui = await get_all_settings(session)
     if state is not None:
         await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=None)

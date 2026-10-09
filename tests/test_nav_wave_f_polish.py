@@ -303,5 +303,99 @@ class AdmPgCallbackInlineTests(unittest.IsolatedAsyncioTestCase):
         callback.message.answer.assert_not_awaited()
 
 
+class AdminPlansAuthzInlineTests(unittest.IsolatedAsyncioTestCase):
+    """Non-owners must not open plans audience / nv:adm:ra leaf UIs."""
+
+    async def test_present_audience_denies_non_owner(self):
+        from app.bot.handlers.reply_nav import present_admin_plans_audience
+
+        message = AsyncMock()
+        message.answer = AsyncMock()
+        session = AsyncMock()
+        db_user = MagicMock()
+        state = AsyncMock()
+
+        with (
+            patch(
+                "app.bot.handlers.reply_nav._deny_unless_owner",
+                AsyncMock(return_value=False),
+            ),
+            patch(
+                "app.bot.handlers.admin_plans.send_users_plans_overview",
+                new_callable=AsyncMock,
+            ) as overview,
+        ):
+            await present_admin_plans_audience(
+                message, session, db_user, state, audience="users"
+            )
+
+        overview.assert_not_awaited()
+
+    async def test_dispatch_ra_denies_non_owner_before_add(self):
+        from app.bot.handlers.reply_nav import dispatch_admin_inline_reply_action
+
+        message = AsyncMock()
+        message.answer = AsyncMock()
+        session = AsyncMock()
+        db_user = MagicMock()
+        state = AsyncMock()
+        state.get_data = AsyncMock(return_value={"_adm_plans_aud": "users"})
+
+        with (
+            patch(
+                "app.bot.handlers.reply_nav._deny_unless_owner",
+                AsyncMock(return_value=False),
+            ),
+            patch(
+                "app.bot.handlers.admin_plans.open_add_kind_action",
+                new_callable=AsyncMock,
+            ) as open_kind,
+            patch(
+                "app.bot.nav_inline.present_inline_only",
+                new_callable=AsyncMock,
+            ) as present,
+        ):
+            await dispatch_admin_inline_reply_action(
+                message,
+                session,
+                db_user,
+                state,
+                "adm_plans_add",
+                is_reseller_bot=False,
+            )
+
+        open_kind.assert_not_awaited()
+        present.assert_not_awaited()
+
+    async def test_nv_adm_plans_aud_denies_non_owner(self):
+        from app.bot.handlers.nav_hubs import nv_adm_plans_aud
+
+        callback = AsyncMock()
+        callback.data = "nv:adm:plans:aud:users"
+        callback.message = AsyncMock()
+        callback.message.answer = AsyncMock()
+        callback.answer = AsyncMock()
+        session = AsyncMock()
+        db_user = MagicMock()
+        state = AsyncMock()
+
+        with (
+            patch(
+                "app.bot.handlers.reply_nav._deny_unless_owner",
+                AsyncMock(return_value=False),
+            ) as deny,
+            patch(
+                "app.bot.handlers.reply_nav.present_admin_plans_audience",
+                new_callable=AsyncMock,
+            ) as present,
+        ):
+            await nv_adm_plans_aud(
+                callback, session, db_user, state, is_reseller_bot=False
+            )
+
+        deny.assert_awaited()
+        present.assert_not_awaited()
+
+
 if __name__ == "__main__":
     unittest.main()

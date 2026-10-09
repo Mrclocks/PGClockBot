@@ -233,6 +233,10 @@ class PresentPlansAudienceInlineTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
+                "app.bot.handlers.reply_nav._deny_unless_owner",
+                AsyncMock(return_value=True),
+            ),
+            patch(
                 "app.bot.handlers.reply_nav.get_all_settings",
                 AsyncMock(return_value={"nav_mode": "inline"}),
             ),

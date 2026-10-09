@@ -799,7 +799,10 @@ async def nv_adm_plans_aud(
     state: FSMContext,
     is_reseller_bot: bool = False,
 ):
-    from app.bot.handlers.reply_nav import present_admin_plans_audience
+    from app.bot.handlers.reply_nav import (
+        _deny_unless_owner,
+        present_admin_plans_audience,
+    )
 
     aud = (callback.data or "").split(":")[-1]
     if aud not in {"users", "resellers"}:
@@ -807,6 +810,11 @@ async def nv_adm_plans_aud(
         return
     await callback.answer()
     if not callback.message:
+        return
+    # Defense in depth: helper also owner-gates; block forged callbacks early.
+    if not await _deny_unless_owner(
+        callback.message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
         return
     await present_admin_plans_audience(
         callback.message,
@@ -829,11 +837,19 @@ async def nv_adm_ra(
     reseller_profile_id: int | None = None,
 ):
     """Wave E: dispatch admin leaf reply-actions from inline hubs."""
-    from app.bot.handlers.reply_nav import dispatch_admin_inline_reply_action
+    from app.bot.handlers.reply_nav import (
+        _deny_unless_owner,
+        dispatch_admin_inline_reply_action,
+    )
 
     action = (callback.data or "")[len("nv:adm:ra:") :]
     await callback.answer()
     if not callback.message or not action:
+        return
+    # Defense in depth: dispatcher also owner-gates every action.
+    if not await _deny_unless_owner(
+        callback.message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
         return
     await dispatch_admin_inline_reply_action(
         callback.message,
