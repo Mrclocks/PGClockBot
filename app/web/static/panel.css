@@ -69,9 +69,8 @@
   --space-2: 16px;
   --space-2_5: 20px;
   --space-3: 24px;
-  /* Extra inline inset on modal scrollers so overlay thumbs miss body copy.
-     ≥ classic webkit thumb width (10px); overlay UAs ignore scrollbar-gutter. */
-  --modal-scrollbar-room: 14px;
+  /* Extra inline inset on modal scrollers so overlay thumbs miss body copy. */
+  --modal-scrollbar-room: 8px;
   --space-4: 32px;
   --space-4_5: 40px;
   --space-5: 48px;
@@ -6022,28 +6021,14 @@ form.settings-form > .actions.sticky-actions,
   background: var(--bg-card);
   isolation: isolate;
 }
-/* Head / settings chrome stay as panel children (not inside .ui-modal-scroll). */
-.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-head,
-.settings-modal-panel[data-scroll-shell="1"] > .ui-modal-head {
+/* User-edit only: title/close stay outside the scrollport (see panel.js).
+   Other modals keep the pre-#586 wrap-all shell so their layout width is unchanged. */
+#modal-user-edit .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-head {
   flex: 0 0 auto;
   margin: 0;
   padding: var(--space-3);
   padding-bottom: 0;
-  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 14px));
-  box-sizing: border-box;
-}
-.ui-modal-panel[data-scroll-shell="1"] > .settings-modal-flash,
-.settings-modal-panel[data-scroll-shell="1"] > .settings-modal-flash {
-  flex: 0 0 auto;
-  margin: 0;
-  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 14px));
-  box-sizing: border-box;
-}
-.ui-modal-panel[data-scroll-shell="1"] > .modal-section-tabs,
-.settings-modal-panel[data-scroll-shell="1"] > .modal-section-tabs {
-  flex: 0 0 auto;
-  margin: 0;
-  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 14px));
+  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
 }
 .ui-modal-scroll {
@@ -6069,7 +6054,7 @@ form.settings-form > .actions.sticky-actions,
   margin: calc(-1 * var(--space-3));
   padding: var(--space-3);
   /* Extra inline air when a browser ignores gutter for overlay scrollbars. */
-  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 14px));
+  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
 }
 .ui-modal-scroll::-webkit-scrollbar {
@@ -6095,14 +6080,17 @@ form.settings-form > .actions.sticky-actions,
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable both-edges;
-  /* Equal air above first body block and below the last block.
-     Title/close live outside this box (panel.js keepOutsideScroll). */
+  /* Equal air above the title/body and below the last block */
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-3);
-  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 14px));
+  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
+}
+/* User-edit body only: extra air for edge-flush risk/service chips. */
+#modal-user-edit .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {
+  padding-inline: calc(var(--space-3) + 14px);
 }
 .ui-modal-panel-lg { width: min(720px, 100%); }
 .gift-code-editor { padding-top: var(--space-3); margin-top: var(--space-3); border-top: 1px solid var(--border); }
