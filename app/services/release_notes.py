@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.42": [
+        "ناوبری بالغ ادمین/نماینده: کیبورد ثابت میانبر؛ یک پنل اینلاین با ویرایش همان پیام",
+        "حذف منوی تکراری خانه ادمین؛ بازگشت اینلاین روی برگ‌ها؛ بدون پیام اضافه",
+        "ریستور: restore/pre-v0.2.42-v0.2.41",
+    ],
     "0.2.41": [
         "مودال ویرایش کاربر: عنوان/بستن بیرون از اسکرولر؛ نوار دیگر روی تگ ریسک و سرویس‌ها نمی‌نشیند",
         "فاصلهٔ بیشتر برای اسکرول‌بار overlay در مودال‌ها (RTL)",

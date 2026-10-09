@@ -82,7 +82,7 @@ class LeafHubKeyboardTests(unittest.TestCase):
             for b in row
         ]
         self.assertIn("nv:res:ra:res_st_shop", rs)
-        self.assertIn("nv:res:home", rs)
+        self.assertIn("nv:res:close", rs)
 
         rp = [
             b.callback_data
@@ -178,8 +178,8 @@ class OpenAdminBackupInlineTests(unittest.IsolatedAsyncioTestCase):
         ):
             await open_admin_backup_hub(message, session, db_user, state)
 
-        # actions + file list — no chrome attach
-        self.assertEqual(message.answer.await_count, 2)
+        # one combined panel (actions + files) — no chrome attach
+        self.assertEqual(message.answer.await_count, 1)
         attach.assert_not_awaited()
         show_nav.assert_not_awaited()
 

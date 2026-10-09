@@ -378,11 +378,18 @@ async def adm_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         f"📦 سرویس‌ها: <b>{services}</b>\n"
         f"🔢 نسخه: <code>v{local_version()}</code>"
     )
-    rows = [
-        # no inline back — reply KB Back restores admin hub
-    ]
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=None)
+        from app.bot.nav_inline import with_inline_back
+        from app.bot.nav_mode import is_inline_nav
+        from app.services.users import get_all_settings
+
+        ui = await get_all_settings(session)
+        markup = (
+            with_inline_back(None, ui, "nv:adm:ops")
+            if is_inline_nav(ui)
+            else None
+        )
+        await callback.message.edit_text(text, reply_markup=markup)
 
 
 def _order_actions(
@@ -450,10 +457,17 @@ async def adm_reports(callback: CallbackQuery, session: AsyncSession, db_user: B
         )
     rows.append(period_row)
     if callback.message:
+        from app.bot.nav_inline import with_inline_back
+        from app.bot.nav_mode import is_inline_nav
+
+        ui = await get_all_settings(session)
+        markup = InlineKeyboardMarkup(inline_keyboard=rows)
+        if is_inline_nav(ui):
+            markup = with_inline_back(markup, ui, "nv:adm:ops")
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            reply_markup=markup,
         )
 
 
@@ -485,9 +499,16 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         merged.append(o)
         if len(merged) >= 12:
             break
+    from app.bot.nav_inline import with_inline_back
+    from app.bot.nav_mode import is_inline_nav
+
+    ui = await get_all_settings(session)
     if not merged:
         if callback.message:
-            await callback.message.edit_text("سفارشی نیست.", reply_markup=None)
+            markup = (
+                with_inline_back(None, ui, "nv:adm:ops") if is_inline_nav(ui) else None
+            )
+            await callback.message.edit_text("سفارشی نیست.", reply_markup=markup)
         return
     rows = []
     for o in merged:
@@ -495,11 +516,13 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         label = f"{prefix}#{o.id} · {order_status_fa(o.status)} · {format_toman(o.amount, get_settings().currency)}"
         rows.append([InlineKeyboardButton(text=label[:64], callback_data=f"adm:order:{o.id}")])
     if callback.message:
+        markup = InlineKeyboardMarkup(inline_keyboard=rows)
+        if is_inline_nav(ui):
+            markup = with_inline_back(markup, ui, "nv:adm:ops")
         await callback.message.edit_text(
             "🛒 <b>سفارش‌ها</b>\nیکی را برای جزئیات و تأیید/رد انتخاب کنید:\n"
-            "<i>⚠ = پرداخت‌شده بدون سرویس (نیاز به تلاش مجدد تحویل)</i>\n"
-            "<i>بازگشت از کیبورد پایین</i>",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            "<i>⚠ = پرداخت‌شده بدون سرویس (نیاز به تلاش مجدد تحویل)</i>",
+            reply_markup=markup,
         )
 
 
@@ -742,9 +765,14 @@ async def adm_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
         .limit(15)
     )
     payments = list(result.scalars().all())
+    from app.bot.nav_inline import with_inline_back
+    from app.bot.nav_mode import is_inline_nav
+
+    ui = await get_all_settings(session)
+    back = with_inline_back(None, ui, "nv:adm:ops") if is_inline_nav(ui) else None
     if not payments:
         if callback.message:
-            await callback.message.edit_text("رسید معلقی نیست.", reply_markup=None)
+            await callback.message.edit_text("رسید معلقی نیست.", reply_markup=back)
         return
     for p in payments:
         caption = f"پرداخت #{p.id} — {format_toman(p.amount, get_settings().currency)}"
@@ -760,7 +788,7 @@ async def adm_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
                 db_user.telegram_id, caption, reply_markup=kb.payment_review(p.id)
             )
     if callback.message:
-        await callback.message.edit_text("رسیدها ارسال شد.", reply_markup=None)
+        await callback.message.edit_text("رسیدها ارسال شد.", reply_markup=back)
 
 
 
@@ -2042,12 +2070,16 @@ async def adm_users_list(callback: CallbackQuery, session: AsyncSession, db_user
         f"<i>🔔 اعلان · ⏰ انقضا · 📉 حجم — جزئیات در وب‌پنل /users</i>"
     )
     if callback.message:
-        await callback.message.edit_text(
-            text,
-            reply_markup=kb.admin_users_list_keyboard(
-                page=page, has_prev=has_prev, has_next=has_next, rows=rows
-            ),
+        from app.bot.nav_inline import with_inline_back
+        from app.bot.nav_mode import is_inline_nav
+
+        ui = await get_all_settings(session)
+        markup = kb.admin_users_list_keyboard(
+            page=page, has_prev=has_prev, has_next=has_next, rows=rows
         )
+        if is_inline_nav(ui):
+            markup = with_inline_back(markup, ui, "nv:adm:users")
+        await callback.message.edit_text(text, reply_markup=markup)
 
 
 @router.callback_query(F.data == "adm:users:webhint")
@@ -4046,18 +4078,28 @@ async def adm_tickets(callback: CallbackQuery, session: AsyncSession, db_user: B
         return
     await callback.answer()
     tickets = await list_open_tickets(session, platform_only=True)
+    from app.bot.nav_inline import with_inline_back
+    from app.bot.nav_mode import is_inline_nav
+
+    ui = await get_all_settings(session)
     if not tickets:
         if callback.message:
-            await callback.message.edit_text("تیکت بازی نیست.", reply_markup=None)
+            markup = (
+                with_inline_back(None, ui, "nv:adm:ops") if is_inline_nav(ui) else None
+            )
+            await callback.message.edit_text("تیکت بازی نیست.", reply_markup=markup)
         return
     rows = [
         [InlineKeyboardButton(text=f"#{t.id} {t.subject[:24]}", callback_data=f"adm:ticket:{t.id}")]
         for t in tickets[:20]
     ]
     if callback.message:
+        markup = InlineKeyboardMarkup(inline_keyboard=rows)
+        if is_inline_nav(ui):
+            markup = with_inline_back(markup, ui, "nv:adm:ops")
         await callback.message.edit_text(
-            "🎫 تیکت‌های باز:\n<i>بازگشت از کیبورد پایین</i>",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            "🎫 تیکت‌های باز:",
+            reply_markup=markup,
         )
 
 
