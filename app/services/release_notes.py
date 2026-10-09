@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.38": [
+        "احراز هویت ادمین پاسارگارد با کلید API (X-Api-Key) یا رمز؛ اولویت با کلید",
+        "تب تنظیمات اتصال و ویزارد اولیه: رمز یا کلید برای ادمین متصل (لزوماً owner پاسارگارد نیست)",
+        "کلید API برای نماینده و ادمین فرعی؛ مایگریشن 0042_pg_api_key_enc",
+        "ریستور: restore/pre-v0.2.38-v0.2.37",
+    ],
     "0.2.37": [
         "درخواست‌های لغو به آخرین تب مدیریت مالی منتقل شد؛ نقطهٔ اعلان برای نماینده",
         "سخت‌سازی امنیتی لغو و کمپین هدفمند (فلش خطا، متن کمپین، لینک اعلان تلگرام)",
