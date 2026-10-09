@@ -69,8 +69,9 @@
   --space-2: 16px;
   --space-2_5: 20px;
   --space-3: 24px;
-  /* Extra inline inset on modal scrollers so overlay thumbs miss body copy. */
-  --modal-scrollbar-room: 8px;
+  /* Extra inline inset on modal scrollers so overlay thumbs miss body copy.
+     ≥ classic webkit thumb width (10px); overlay UAs ignore scrollbar-gutter. */
+  --modal-scrollbar-room: 14px;
   --space-4: 32px;
   --space-4_5: 40px;
   --space-5: 48px;
@@ -6021,6 +6022,30 @@ form.settings-form > .actions.sticky-actions,
   background: var(--bg-card);
   isolation: isolate;
 }
+/* Head / settings chrome stay as panel children (not inside .ui-modal-scroll). */
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-head,
+.settings-modal-panel[data-scroll-shell="1"] > .ui-modal-head {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: var(--space-3);
+  padding-bottom: 0;
+  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 14px));
+  box-sizing: border-box;
+}
+.ui-modal-panel[data-scroll-shell="1"] > .settings-modal-flash,
+.settings-modal-panel[data-scroll-shell="1"] > .settings-modal-flash {
+  flex: 0 0 auto;
+  margin: 0;
+  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 14px));
+  box-sizing: border-box;
+}
+.ui-modal-panel[data-scroll-shell="1"] > .modal-section-tabs,
+.settings-modal-panel[data-scroll-shell="1"] > .modal-section-tabs {
+  flex: 0 0 auto;
+  margin: 0;
+  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 14px));
+  box-sizing: border-box;
+}
 .ui-modal-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -6044,7 +6069,7 @@ form.settings-form > .actions.sticky-actions,
   margin: calc(-1 * var(--space-3));
   padding: var(--space-3);
   /* Extra inline air when a browser ignores gutter for overlay scrollbars. */
-  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
+  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 14px));
   box-sizing: border-box;
 }
 .ui-modal-scroll::-webkit-scrollbar {
@@ -6070,12 +6095,13 @@ form.settings-form > .actions.sticky-actions,
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable both-edges;
-  /* Equal air above the title and below the last block */
+  /* Equal air above first body block and below the last block.
+     Title/close live outside this box (panel.js keepOutsideScroll). */
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-3);
-  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
+  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 14px));
   box-sizing: border-box;
 }
 .ui-modal-panel-lg { width: min(720px, 100%); }
