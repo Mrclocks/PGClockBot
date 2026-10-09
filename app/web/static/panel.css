@@ -6088,13 +6088,24 @@ form.settings-form > .actions.sticky-actions,
 .ui-modal-panel-xl[data-scroll-shell="1"] {
   overflow: hidden;
 }
+/* Grow with content; only .ui-modal-scroll scrolls.
+   overflow-x:hidden + flex-shrink made this a nested scroller (user/reseller
+   edit) so gutter/padding on the outer shell never applied — unlike
+   .settings-modal-body which already uses flex:0 0 auto + overflow:visible. */
 .edit-modal-body {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  flex: 0 0 auto;
+  flex-shrink: 0;
   min-width: 0;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow: visible;
+}
+.edit-modal-body > .edit-section,
+.edit-modal-body > .svc-list {
+  min-width: 0;
+  max-width: 100%;
 }
 .edit-section {
   padding-top: var(--space-3);
