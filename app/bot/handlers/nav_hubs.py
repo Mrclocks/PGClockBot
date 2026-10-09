@@ -791,5 +791,61 @@ async def nv_res_ra(
     )
 
 
+@router.callback_query(F.data.startswith("nv:adm:plans:aud:"))
+async def nv_adm_plans_aud(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+):
+    from app.bot.handlers.reply_nav import present_admin_plans_audience
+
+    aud = (callback.data or "").split(":")[-1]
+    if aud not in {"users", "resellers"}:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    await callback.answer()
+    if not callback.message:
+        return
+    await present_admin_plans_audience(
+        callback.message,
+        session,
+        db_user,
+        state,
+        audience=aud,
+        is_reseller_bot=is_reseller_bot,
+    )
+
+
+@router.callback_query(F.data.startswith("nv:adm:ra:"))
+async def nv_adm_ra(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    reseller_profile_id: int | None = None,
+):
+    """Wave E: dispatch admin leaf reply-actions from inline hubs."""
+    from app.bot.handlers.reply_nav import dispatch_admin_inline_reply_action
+
+    action = (callback.data or "")[len("nv:adm:ra:") :]
+    await callback.answer()
+    if not callback.message or not action:
+        return
+    await dispatch_admin_inline_reply_action(
+        callback.message,
+        session,
+        db_user,
+        state,
+        action,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        reseller_profile_id=reseller_profile_id,
+    )
+
+
 # Silence unused helper warning for static checkers when message missing
 _ = _answer_gone

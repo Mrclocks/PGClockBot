@@ -461,8 +461,20 @@ async def show_nav_keyboard(
         NAV_ADMIN_SYSTEM,
         NAV_ADMIN_PG,
         NAV_ADMIN_LOYALTY,
+        # Wave E leaf hubs
+        NAV_ADMIN_USERS,
+        NAV_ADMIN_RESELLERS,
+        NAV_ADMIN_SETTINGS,
+        NAV_ADMIN_BACKUP,
+        NAV_ADMIN_BROADCAST,
+        NAV_ADMIN_PLANS,
+        NAV_ADMIN_PLANS_AUDIENCE,
+        NAV_ADMIN_PLANS_KIND,
+        NAV_ADMIN_PLANS_ADD_TYPE,
+        NAV_RESELLER_SETTINGS,
+        NAV_RESELLER_PLANS,
     } and inline_nav:
-        # Wave D: admin group/PG/loyalty hubs are inline; keep stable main admin KB.
+        # Wave D/E: admin/reseller hubs are inline; keep stable main KB.
         markup, ui, _ = await build_main_reply_keyboard(
             session,
             db_user,

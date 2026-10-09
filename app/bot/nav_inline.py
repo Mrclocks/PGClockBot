@@ -593,6 +593,252 @@ def reseller_manage_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback="menu:home")
 
 
+# ── Wave E: admin / reseller leaf hubs ─────────────────────────────────────
+
+
+def admin_users_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_ADM_USERS_LIST,
+        REPLY_ACTION_ADM_USERS_SEARCH,
+        REPLY_ACTION_ADM_USERS_WEB,
+        _admin_users_submenu_entries,
+    )
+
+    cb_map = {
+        REPLY_ACTION_ADM_USERS_LIST: "adm:users:list:0",
+        REPLY_ACTION_ADM_USERS_SEARCH: "adm:users:search",
+        REPLY_ACTION_ADM_USERS_WEB: "adm:users:webhint",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _admin_users_submenu_entries(ui)
+        if key in cb_map
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:people")
+
+
+def admin_resellers_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_ADM_RES_ADD,
+        REPLY_ACTION_ADM_RES_APPS,
+        REPLY_ACTION_ADM_RES_LIST,
+        _admin_resellers_submenu_entries,
+    )
+
+    cb_map = {
+        REPLY_ACTION_ADM_RES_LIST: "adm:resellers:list:0",
+        REPLY_ACTION_ADM_RES_APPS: "adm:resapp:list",
+        REPLY_ACTION_ADM_RES_ADD: "adm:resellers:add",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _admin_resellers_submenu_entries(ui)
+        if key in cb_map
+    ]
+    rows: list[list[InlineKeyboardButton]] = []
+    for i in range(0, len(buttons), 2):
+        rows.append(buttons[i : i + 2])
+    # Optional Mini App shortcut (same as classic follow-up, without chrome).
+    try:
+        from app.bot.keyboards import miniapp_inline_keyboard
+
+        mini = miniapp_inline_keyboard(
+            None, view="ops", label="📱 مینی‌اپ · نمایندگان"
+        )
+        if mini and mini.inline_keyboard:
+            rows.extend(mini.inline_keyboard)
+    except Exception:
+        pass
+    rows.append(_hub_back_row(ui, callback_data="nv:adm:people"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_ADM_ST_PANEL,
+        _admin_settings_submenu_entries,
+    )
+
+    buttons: list[InlineKeyboardButton] = []
+    for key, text in _admin_settings_submenu_entries(ui):
+        if key == REPLY_ACTION_ADM_ST_PANEL:
+            cb = "nv:adm:ra:adm_st_panel"
+        elif key.startswith("adm_st_"):
+            sec = key.replace("adm_st_", "", 1)
+            if sec == "service":
+                sec = "access"
+            cb = f"adm:st:sec:{sec}"
+        else:
+            continue
+        buttons.append(
+            _ikb(
+                text,
+                callback_data=cb,
+                ui=ui,
+                style=_style(ui, key, fallback="primary"),
+            )
+        )
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:system")
+
+
+def admin_backup_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    cb_map = {
+        "backup_create": "adm:backup:create:noenv",
+        "backup_create_env": "adm:backup:create:env",
+        "backup_upload": "adm:backup:upload",
+        "backup_refresh": "nv:adm:backup",
+    }
+    from app.bot.reply_keyboards import _admin_backup_submenu_entries
+
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _admin_backup_submenu_entries(ui)
+        if key in cb_map
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:system")
+
+
+def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.bot.reply_keyboards import _admin_broadcast_submenu_entries
+
+    buttons = [
+        _ikb(
+            text,
+            callback_data=f"adm:broadcast:aud:{key.replace('bc_aud_', '', 1)}",
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _admin_broadcast_submenu_entries(ui)
+        if key.startswith("bc_aud_")
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:system")
+
+
+def admin_plans_audience_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_ADM_PLANS_ADDONS,
+        REPLY_ACTION_ADM_PLANS_AUD_RESELLERS,
+        REPLY_ACTION_ADM_PLANS_AUD_USERS,
+        REPLY_ACTION_ADM_PLANS_CATEGORIES,
+        _admin_plans_audience_entries,
+    )
+
+    cb_map = {
+        REPLY_ACTION_ADM_PLANS_AUD_USERS: "nv:adm:plans:aud:users",
+        REPLY_ACTION_ADM_PLANS_AUD_RESELLERS: "nv:adm:plans:aud:resellers",
+        REPLY_ACTION_ADM_PLANS_CATEGORIES: "nv:adm:ra:adm_plans_categories",
+        REPLY_ACTION_ADM_PLANS_ADDONS: "nv:adm:ra:adm_plans_addons",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _admin_plans_audience_entries(ui)
+        if key in cb_map
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:product")
+
+
+def admin_plans_kind_hub_keyboard(
+    audience: str, ui: dict | None = None
+) -> InlineKeyboardMarkup:
+    """List-screen actions after choosing users/resellers audience."""
+    _ = audience
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_ADM_PLANS_ADD,
+        REPLY_ACTION_ADM_PLANS_ADDONS,
+        REPLY_ACTION_ADM_PLANS_CATEGORIES,
+        _admin_plans_list_entries,
+    )
+
+    cb_map = {
+        REPLY_ACTION_ADM_PLANS_ADD: "nv:adm:ra:adm_plans_add",
+        REPLY_ACTION_ADM_PLANS_CATEGORIES: "nv:adm:ra:adm_plans_categories",
+        REPLY_ACTION_ADM_PLANS_ADDONS: "nv:adm:ra:adm_plans_addons",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _admin_plans_list_entries(ui)
+        if key in cb_map
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:plans")
+
+
+def admin_plans_add_type_hub_keyboard(
+    audience: str, ui: dict | None = None
+) -> InlineKeyboardMarkup:
+    from app.bot.reply_keyboards import _admin_plans_add_type_entries
+
+    buttons = [
+        _ikb(
+            text,
+            callback_data=f"nv:adm:ra:{key}",
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _admin_plans_add_type_entries(audience, ui)
+    ]
+    back = (
+        "nv:adm:plans:aud:resellers"
+        if audience == "resellers"
+        else "nv:adm:plans:aud:users"
+    )
+    return _pack_hub_keyboard(buttons, ui, back_callback=back)
+
+
+def reseller_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.bot.reply_keyboards import _reseller_settings_submenu_entries
+
+    buttons = [
+        _ikb(
+            text,
+            callback_data=f"nv:res:ra:{key}",
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _reseller_settings_submenu_entries(ui)
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:home")
+
+
+def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.bot.reply_keyboards import _reseller_plans_submenu_entries
+
+    buttons = [
+        _ikb(
+            text,
+            callback_data=f"nv:res:ra:{key}",
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _reseller_plans_submenu_entries(ui)
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:home")
+
+
 def service_card_keyboard(
     service_id: int, ui: dict | None = None
 ) -> InlineKeyboardMarkup:
