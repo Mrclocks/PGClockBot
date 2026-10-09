@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.36": [
+        "لینک‌های سریع: ردیف فلکس LTR با دکمه کپی ثابت سمت راست و فونت URL کوچک‌تر",
+        "توکن ربات و رمز پاسارگارد: placeholder راست‌چین استاندارد و فاصله هم‌تراز با بقیه فیلدها",
+    ],
     "0.2.35": [
         "لینک‌های سریع: باکس بلندتر، متن راست‌چین، دکمه کپی جمع‌وجور داخل باکس بدون جابه‌جایی برچسب",
         "تنظیمات اتصال پاسارگارد آخرین گزینهٔ منوی سایدبار پنل پاسارگارد",
