@@ -21,7 +21,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from jinja2 import ChoiceLoader, DictLoader, Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api.miniapp_pages import register_miniapp_pages
@@ -362,28 +362,41 @@ class ContactAndNoticeTests(unittest.IsolatedAsyncioTestCase):
         request_id = await self.request()
         row = await self.session.get(ServiceCancellation, request_id)
         row.notification_status = "review"
+        row.reason = "<b>xss</b>"
         await self.session.commit()
         app = FastAPI()
-        templates = Environment(loader=ChoiceLoader([
-            DictLoader({"base.html": "{% block content %}{% endblock %}"}),
-            FileSystemLoader(str(Path(__file__).resolve().parents[1] / "app/web/templates")),
-        ]), autoescape=select_autoescape())
 
         async def db() -> AsyncSession:
-            return self.session
+            yield self.session
 
         async def auth() -> dict[str, object]:
             return {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
 
-        def render(request: object, template: str, data: dict[str, object]) -> HTMLResponse:
-            return HTMLResponse(templates.get_template(template).render(request=request, csrf_token="test", **data))
-
-        register_customer_features(app, render=render, require_staff=auth, get_db=db)
+        register_customer_features(
+            app, render=lambda *a, **k: HTMLResponse(""), require_staff=auth, get_db=db
+        )
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://example.test") as client:
-            response = await client.get("/service-cancellations")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("اعلان ربات: نیازمند بررسی", response.text)
-        self.assertIn("&lt;b&gt;", response.text)
+            redirected = await client.get("/service-cancellations", follow_redirects=False)
+        self.assertEqual(redirected.status_code, 303)
+        self.assertIn("/finance?tab=cancellations", redirected.headers.get("location", ""))
+
+        from app.services.service_cancellations import STATUS_LABELS, list_cancellation_requests
+
+        rows, _ = await list_cancellation_requests(self.session, None, limit=50)
+        templates = Environment(
+            loader=FileSystemLoader(str(Path(__file__).resolve().parents[1] / "app/web/templates")),
+            autoescape=select_autoescape(),
+        )
+        html = templates.get_template("_finance_cancellations.html").render(
+            cancel_requests=rows,
+            cancel_labels=STATUS_LABELS,
+            can_approve_cancel=True,
+            cancel_next_before=None,
+            cancel_flash_err=None,
+            csrf_token="test",
+        )
+        self.assertIn("اعلان ربات: نیازمند بررسی", html)
+        self.assertIn("&lt;b&gt;", html)
 
     async def dispatch_notice(self, notice: CancellationNotice) -> NoticeOutcome:
         with patch("app.jobs.cancellation_notifications.SessionLocal", self.Session), patch("app.jobs.cancellation_notifications.get_settings", return_value=self.config), patch("app.jobs.cancellation_notifications.open_notify_bot_for_reseller", AsyncMock(return_value=(self.shop_bot, False))), patch("app.jobs.cancellation_notifications.asyncio.sleep", self.sleep):

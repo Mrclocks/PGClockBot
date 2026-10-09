@@ -1,0 +1,65 @@
+{% set notice_labels = {
+  'pending': 'در صف ارسال',
+  'sending': 'در حال ارسال',
+  'sent': 'ارسال‌شده',
+  'skipped': 'ارسال نشده',
+  'review': 'نیازمند بررسی'
+} %}
+{% if cancel_flash_err %}
+<div class="flash warn">{{ cancel_flash_err }}</div>
+{% endif %}
+<p class="muted update-card-caption">
+  مبلغ را اپراتور به تومان تعیین می‌کند. اعتبار پس از تأیید غیرفعال‌شدن سرویس، به کیف پول مشتری در همین فروشگاه واریز می‌شود. نتیجهٔ نامشخص تا تلاش مجدد محفوظ می‌ماند.
+</p>
+{% if cancel_requests %}
+{% for row, username in cancel_requests %}
+<div class="card settings-card">
+  <h2>درخواست #{{ row.id }} — <span dir="ltr">{{ username }}</span></h2>
+  <p class="muted">اعلان ربات: {{ notice_labels.get(row.notification_status, 'ارسال نشده') }}</p>
+  {% if row.notification_status == 'review' %}
+  <p class="muted">نتیجهٔ ارسال اعلان قطعی نیست؛ پیام خودکار دوباره ارسال نمی‌شود. درخواست را از همین صفحه بررسی کنید.</p>
+  {% endif %}
+  <p>{{ cancel_labels[row.status] }}</p>
+  <p style="white-space:pre-wrap">دلیل: {{ row.reason }}</p>
+  {% if row.operator_note %}
+  <p style="white-space:pre-wrap">توضیح اپراتور: {{ row.operator_note }}</p>
+  {% endif %}
+  {% if row.status == 'approved' %}
+  <p>اعتبار برگشتی: {{ row.refund_amount }} تومان</p>
+  {% endif %}
+  {% if can_approve_cancel and row.status in ['pending', 'review', 'processing'] %}
+  <form method="post" action="/service-cancellations/{{ row.id }}/approve" class="form-stack"
+        data-confirm="سرویس غیرفعال شود و مبلغ تعیین‌شده به کیف پول همین فروشگاه برگردد؟">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="form-field">اعتبار برگشتی (تومان)
+      <input name="amount" type="number" min="0" max="2147483647" required
+             value="{{ row.refund_amount if row.refund_amount is not none else '' }}"
+             {% if row.refund_amount is not none %}readonly{% endif %}>
+    </label>
+    <label class="form-field">توضیح برای مشتری
+      <textarea name="note" maxlength="1000">{{ row.operator_note }}</textarea>
+    </label>
+    <button class="btn" type="submit">
+      {% if row.status == 'pending' %}تأیید لغو و اعتبار{% else %}بررسی پنل و ادامهٔ تأیید{% endif %}
+    </button>
+  </form>
+  {% endif %}
+  {% if row.status == 'pending' %}
+  <form method="post" action="/service-cancellations/{{ row.id }}/reject" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="form-field">دلیل رد
+      <textarea name="note" maxlength="1000" required></textarea>
+    </label>
+    <button class="btn btn-danger" type="submit">رد درخواست</button>
+  </form>
+  {% endif %}
+</div>
+{% endfor %}
+{% if cancel_next_before %}
+<a class="btn" href="/finance?tab=cancellations&amp;before={{ cancel_next_before }}">درخواست‌های قدیمی‌تر</a>
+{% endif %}
+{% else %}
+<div class="card settings-card">
+  <p class="muted">درخواستی موجود نیست.</p>
+</div>
+{% endif %}

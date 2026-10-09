@@ -5,6 +5,7 @@
 {%- elif finance_tab == 'behavior' -%}رفتار کاربر
 {%- elif finance_tab == 'payments' -%}پرداخت‌ها
 {%- elif finance_tab == 'delivery' -%}تحویل ناموفق
+{%- elif finance_tab == 'cancellations' -%}درخواست‌های لغو
 {%- else -%}مدیریت مالی
 {%- endif -%}
 {% endblock %}
@@ -15,6 +16,8 @@
     {{ page_title('orders', 'مدیریت مالی', help='finance') }}
     {% if finance_tab == 'reports' %}
     <p class="muted page-sub">گزارش فروش و کاربران · امروز · ۷ روز · ۳۰ روز</p>
+    {% elif finance_tab == 'cancellations' %}
+    <p class="muted page-sub">بررسی درخواست لغو سرویس و اعتبار برگشتی کیف پول همین فروشگاه</p>
     {% endif %}
   </div>
   {% if can_finance_settings %}
@@ -35,6 +38,9 @@
   {% endif %}
   {% if can_orders %}
   <a class="{% if finance_tab=='delivery' %}active{% endif %}" href="/finance?tab=delivery">تحویل ناموفق</a>
+  <a class="finance-tab-cancel {% if finance_tab=='cancellations' %}active{% endif %}" href="/finance?tab=cancellations">
+    <span class="nav-item-label"><span>درخواست‌های لغو</span>{% if cancel_alert %}<i class="nav-dot" aria-label="درخواست لغو در انتظار"></i>{% endif %}</span>
+  </a>
   {% endif %}
 </nav>
 
@@ -404,6 +410,10 @@
   </table>
   </div>
 </div>
+{% endif %}
+
+{% if finance_tab == 'cancellations' and can_orders %}
+{% include "_finance_cancellations.html" %}
 {% endif %}
 
 {% if can_finance_settings %}

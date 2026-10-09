@@ -270,6 +270,8 @@ def render(request: Request, name: str, context: dict | None = None, status_code
         ctx["tickets_unread"] = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
     if "inbox_alert" not in ctx:
         ctx["inbox_alert"] = bool(getattr(request.state, "panel_inbox_alert", False))
+    if "cancel_alert" not in ctx:
+        ctx["cancel_alert"] = bool(getattr(request.state, "panel_cancel_alert", False))
     # Keep env global fresh too — macros import without ``with context``.
     topics = _load_guide_topics()
     templates.env.globals["guide_topics"] = topics
@@ -690,6 +692,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             if should_skip_unread_count(request.url.path, request.method):
                 request.state.panel_tickets_unread = 0
                 request.state.panel_inbox_alert = False
+                request.state.panel_cancel_alert = False
             else:
                 from app.services.panel_sidebar_cache import (
                     peek_sidebar_counts,
@@ -702,20 +705,36 @@ def create_api_app(lifespan=None) -> FastAPI:
                 if cached is not None:
                     request.state.panel_tickets_unread = cached[0]
                     request.state.panel_inbox_alert = cached[1]
+                    request.state.panel_cancel_alert = cached[2]
                 else:
                     unread = await sidebar_unread_count(session, user)
                     from app.services.panel_inbox import sidebar_inbox_has_alerts
 
                     alert = await sidebar_inbox_has_alerts(session, request, user)
-                    store_sidebar_counts(cache_key, unread, alert)
+                    cancel_alert = False
+                    try:
+                        from app.services.authz import authz_from_staff, can_shop
+                        from app.services.service_cancellations import has_pending_cancellations
+                        from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
+
+                        if can_shop(authz_from_staff(user), "orders"):
+                            scope = resolve_shop_scope_id(user)
+                            cancel_alert = await has_pending_cancellations(session, scope)
+                    except ShopScopeError:
+                        cancel_alert = False
+                    except Exception:
+                        cancel_alert = False
+                    store_sidebar_counts(cache_key, unread, alert, cancel_alert)
                     request.state.panel_tickets_unread = unread
                     request.state.panel_inbox_alert = alert
+                    request.state.panel_cancel_alert = cancel_alert
         except Exception:
             from app.services.db_safe import rollback_quiet
 
             await rollback_quiet(session)
             request.state.panel_tickets_unread = 0
             request.state.panel_inbox_alert = False
+            request.state.panel_cancel_alert = False
         from app.services.db_safe import recover_session
 
         await recover_session(session)

@@ -4,7 +4,7 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import BotUser, Order, ServiceAutomation, ServiceCancellation, ShopWallet, UserService
@@ -13,6 +13,8 @@ from app.services.service_automation import service_shop_id
 from app.services.wallet import credit_wallet
 
 STATUS_LABELS = {"pending": "در انتظار بررسی", "processing": "در حال غیرفعال‌سازی", "review": "نیازمند بررسی و تلاش مجدد", "approved": "لغو شد؛ اعتبار به کیف پول همین فروشگاه برگشت", "rejected": "درخواست رد شد", "withdrawn": "درخواست پس گرفته شد"}
+# Operator-facing queue — badge + list filter for items needing human action.
+OPEN_OPERATOR_STATUSES = ("pending", "review")
 
 
 async def lock_service_mutation(session, service_id):
@@ -74,6 +76,46 @@ async def request_cancellation(session, user, service_id, *, shop_id, reason):
 def assert_cancellation_scope(row, shop_id):
     if not row or row.reseller_id != shop_id:
         raise ValueError("درخواست یافت نشد")
+
+
+async def pending_cancellation_count(session, shop_id) -> int:
+    """Count open cancellation requests for one shop (platform shop_id is None)."""
+    return int(
+        await session.scalar(
+            select(func.count())
+            .select_from(ServiceCancellation)
+            .where(
+                ServiceCancellation.reseller_id == shop_id,
+                ServiceCancellation.status.in_(OPEN_OPERATOR_STATUSES),
+            )
+        )
+        or 0
+    )
+
+
+async def has_pending_cancellations(session, shop_id) -> bool:
+    return (await pending_cancellation_count(session, shop_id)) > 0
+
+
+async def list_cancellation_requests(session, shop_id, *, before: int | None = None, limit: int = 50):
+    """Shop-scoped cancellation rows newest-first. Returns (rows, next_before)."""
+    limit = max(1, min(int(limit), 100))
+    query = (
+        select(ServiceCancellation, UserService.pg_username)
+        .join(UserService, UserService.id == ServiceCancellation.service_id)
+        .where(ServiceCancellation.reseller_id == shop_id)
+    )
+    if before is not None:
+        query = query.where(ServiceCancellation.id < int(before))
+    rows = list(
+        (
+            await session.execute(
+                query.order_by(ServiceCancellation.id.desc()).limit(limit + 1)
+            )
+        ).all()
+    )
+    next_before = int(rows[limit - 1][0].id) if len(rows) > limit else None
+    return rows[:limit], next_before
 
 
 async def reject_cancellation(session, request_id, *, shop_id, actor, note):

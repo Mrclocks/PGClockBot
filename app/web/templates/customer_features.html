@@ -1,34 +1,13 @@
 {% extends "base.html" %}
-{% block title %}{% if mode == 'cancellations' %}درخواست‌های لغو{% else %}کمپین هدفمند{% endif %}{% endblock %}
+{% block title %}کمپین هدفمند{% endblock %}
 {% block content %}
 <div class="page-head"><h1>{{ self.title() }}</h1></div>
-{% if request.query_params.get('error') %}<div class="card">{{ request.query_params.get('error') }}</div>{% endif %}
-{% if mode == 'cancellations' %}
-<p class="muted">مبلغ را اپراتور به تومان تعیین می‌کند. اعتبار پس از تأیید غیرفعال‌شدن سرویس، به کیف پول مشتری در همین فروشگاه واریز می‌شود. نتیجهٔ نامشخص تا تلاش مجدد محفوظ می‌ماند.</p>
-{% set notice_labels = {'pending':'در صف ارسال', 'sending':'در حال ارسال', 'sent':'ارسال‌شده', 'skipped':'ارسال نشده', 'review':'نیازمند بررسی'} %}
-{% for row, username in requests %}<div class="card"><h2>درخواست #{{ row.id }} — <span dir="ltr">{{ username }}</span></h2>
-<p class="muted">اعلان ربات: {{ notice_labels.get(row.notification_status, 'ارسال نشده') }}</p>
-{% if row.notification_status == 'review' %}<p class="muted">نتیجهٔ ارسال اعلان قطعی نیست؛ پیام خودکار دوباره ارسال نمی‌شود. درخواست را از همین صفحه بررسی کنید.</p>{% endif %}
-<p>{{ labels[row.status] }}</p><p style="white-space:pre-wrap">دلیل: {{ row.reason }}</p>
-{% if row.operator_note %}<p style="white-space:pre-wrap">توضیح اپراتور: {{ row.operator_note }}</p>{% endif %}
-{% if row.status == 'approved' %}<p>اعتبار برگشتی: {{ row.refund_amount }} تومان</p>{% endif %}
-{% if can_approve and row.status in ['pending', 'review', 'processing'] %}
-<form method="post" action="/service-cancellations/{{ row.id }}/approve" class="form-stack" data-confirm="سرویس غیرفعال شود و مبلغ تعیین‌شده به کیف پول همین فروشگاه برگردد؟">
-<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-<label class="form-field">اعتبار برگشتی (تومان)<input name="amount" type="number" min="0" max="2147483647" required value="{{ row.refund_amount if row.refund_amount is not none else '' }}" {% if row.refund_amount is not none %}readonly{% endif %}></label>
-<label class="form-field">توضیح برای مشتری<textarea name="note" maxlength="1000">{{ row.operator_note }}</textarea></label>
-<button class="btn" type="submit">{% if row.status == 'pending' %}تأیید لغو و اعتبار{% else %}بررسی پنل و ادامهٔ تأیید{% endif %}</button></form>
-{% endif %}
-{% if row.status == 'pending' %}<form method="post" action="/service-cancellations/{{ row.id }}/reject" class="form-stack">
-<input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label class="form-field">دلیل رد<textarea name="note" maxlength="1000" required></textarea></label><button class="btn btn-danger" type="submit">رد درخواست</button></form>{% endif %}
-</div>{% else %}<div class="card">درخواستی موجود نیست.</div>{% endfor %}
-{% if next_before %}<a class="btn" href="/service-cancellations?before={{ next_before }}">درخواست‌های قدیمی‌تر</a>{% endif %}
-{% else %}
+{% if request.query_params.get('error') %}<div class="flash warn">{{ request.query_params.get('error') }}</div>{% endif %}
 <div class="card"><h2>انتخاب مخاطبان</h2><form method="get" action="/campaigns" class="form-stack">
 <label class="form-field">گروه<select name="audience">{% for key, label in audiences.items() %}<option value="{{ key }}" {% if key == audience %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
 <label class="form-field">بازهٔ روز<input name="days" type="number" value="{{ days }}" min="1" max="365" required></label><button class="btn" type="submit">پیش‌نمایش مخاطبان</button></form>
 <p>{{ count }} مخاطب واجد شرایط؛ سقف هر کمپین {{ limit }} نفر.</p>
-<p class="muted">گروه نزدیک انقضا از سهمیه‌های ذخیره‌شده در ۲۴ ساعت اخیر استفاده می‌کند. بازهٔ غیرفعال بر اساس نداشتن خرید محلی است. کاربران مسدود یا منصرف‌شده حذف می‌شوند.</p>
+<p class="muted">گروه نزدیک انقضا از سهمیه‌های ذخیره‌شده در ۲۴ ساعت اخیر استفاده می‌کند. بازهٔ غیرفعال بر اساس نداشتن خرید محلی است. کاربران مسدود یا منصرف‌شده حذف می‌شوند. فهرست مخاطبان در پنل نمایش داده نمی‌شود.</p>
 <form method="post" action="/campaigns" class="form-stack"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="audience" value="{{ audience }}"><input type="hidden" name="days" value="{{ days }}">
 <label class="form-field">متن سادهٔ پیام<textarea name="text" rows="6" required maxlength="3500"></textarea></label><button class="btn" type="submit">ساخت پیش‌نویس و تثبیت مخاطبان</button></form></div>
 {% set campaign_labels = {'draft':'پیش‌نویس', 'running':'در حال ارسال', 'paused':'متوقف', 'completed':'تکمیل‌شده', 'review':'تکمیل با موارد نیازمند بررسی'} %}
@@ -39,5 +18,4 @@
 {% if row.status in ['draft', 'paused', 'running'] %}<form method="post" action="/campaigns/{{ row.id }}/{% if row.status == 'running' %}pause{% else %}start{% endif %}" {% if row.status != 'running' %}data-confirm="ارسال این متن به مخاطبان پیش‌نمایش‌شده آغاز شود؟"{% endif %}>
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">{% if row.status == 'running' %}توقف ارسال{% elif row.status == 'paused' %}ادامهٔ ارسال{% else %}شروع ارسال{% endif %}</button></form>{% endif %}
 </div>{% endfor %}
-{% endif %}
 {% endblock %}

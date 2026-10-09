@@ -52,9 +52,13 @@ async def audience_count(session, **kwargs):
 
 
 async def create_campaign(session, *, shop_id, audience, days, text, actor):
-    text = str(text or "").strip()
+    text = str(text or "").replace("\x00", "").strip()
     if not text or len(text) > 3500:
         raise ValueError("متن پیام باید بین ۱ تا ۳۵۰۰ نویسه باشد")
+    # Plain Telegram text only (parse_mode=None). Reject HTML-ish payloads that
+    # would confuse operators if ever shown elsewhere with richer rendering.
+    if "<script" in text.lower() or "javascript:" in text.lower():
+        raise ValueError("متن پیام نامعتبر است")
     ids = list((await session.scalars(audience_query(shop_id=shop_id, audience=audience, days=days).limit(RECIPIENT_LIMIT))).all())
     if not ids:
         raise ValueError("مخاطبی در این گروه موجود نیست")

@@ -45,7 +45,7 @@ async def _send_to_targets(bot: Bot, notice: CancellationNotice, targets: list[i
     markup = None
     if base_url.startswith("https://"):
         markup = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="بررسی درخواست‌های لغو", url=base_url + "/service-cancellations"),
+            InlineKeyboardButton(text="بررسی درخواست‌های لغو", url=base_url + "/finance?tab=cancellations"),
         ]])
     outcome: NoticeOutcome = "sent"
     for chat_id in targets:
