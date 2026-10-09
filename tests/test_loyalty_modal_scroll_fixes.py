@@ -51,6 +51,22 @@ class ModalScrollLockTests(unittest.TestCase):
         body = css.split(".settings-modal-body {", 1)[1].split("}", 1)[0]
         self.assertIn("overflow: visible;", body)
 
+    def test_edit_modal_body_is_not_nested_scroller(self):
+        """User/reseller edit fragments must not steal scroll from .ui-modal-scroll."""
+        css = CSS.read_text(encoding="utf-8")
+        body = css.split(".edit-modal-body {", 1)[1].split("}", 1)[0]
+        self.assertIn("flex: 0 0 auto;", body)
+        self.assertIn("overflow: visible;", body)
+        self.assertNotIn("overflow-x: hidden;", body)
+        self.assertNotIn("overflow-y: auto;", body)
+        users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
+        self.assertIn('id="user-edit-body"', users)
+        self.assertIn("edit-modal-body", users)
+        resellers = (ROOT / "app/web/templates/resellers.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("edit-modal-body", resellers)
+
     def test_js_lock_helpers_exist(self):
         js = JS.read_text(encoding="utf-8")
         self.assertIn("function lockPageScroll", js)
