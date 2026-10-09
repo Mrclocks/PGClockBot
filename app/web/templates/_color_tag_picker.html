@@ -4,10 +4,11 @@
 {% set color_tags = color_tags or [] %}
 <div class="color-tag-picker" role="radiogroup" aria-label="تگ ریسک" data-color-tag-picker>
   {% for t in color_tags %}
-  <label class="color-tag-option{% if selected_color == t.key %} is-selected{% endif %}">
+  <label class="color-tag-option{% if selected_color == t.key %} is-selected{% endif %}"
+         style="--tag-color: {{ t.hex }}">
     <input type="radio" name="{{ field_name }}" value="{{ t.key }}"
            {% if selected_color == t.key %}checked{% endif %} />
-    <span class="color-tag-swatch" style="--tag-color: {{ t.hex }}" title="{{ t.title_fa }}" aria-hidden="true"></span>
+    <span class="color-tag-swatch" title="{{ t.title_fa }}" aria-hidden="true"></span>
     <span class="color-tag-label">{{ t.title_fa }}</span>
   </label>
   {% endfor %}
