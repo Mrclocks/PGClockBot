@@ -111,7 +111,7 @@ class ModalScrollLockTests(unittest.TestCase):
         # Both edges: RTL gutter mismatch + overlay thumbs on the physical right
         self.assertIn("scrollbar-gutter: stable both-edges;", scroll_chrome)
         self.assertIn(
-            "padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));",
+            "padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 14px));",
             scroll_chrome,
         )
         base_sel = ".ui-modal-scroll {\n"
@@ -119,10 +119,20 @@ class ModalScrollLockTests(unittest.TestCase):
         base_scroll = css.split(base_sel, 1)[1].split("}", 1)[0]
         self.assertIn("scrollbar-gutter: stable both-edges;", base_scroll)
         self.assertIn(".ui-modal-scroll::-webkit-scrollbar {", css)
-        self.assertIn("--modal-scrollbar-room:", css)
+        self.assertIn("--modal-scrollbar-room: 14px;", css)
+        # Title/close stay outside the scrollport after shell wrap
+        head_outside = (
+            '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-head,\n'
+            '.settings-modal-panel[data-scroll-shell="1"] > .ui-modal-head {'
+        )
+        self.assertIn(head_outside, css)
         js = JS.read_text(encoding="utf-8")
         self.assertIn('panel.dataset.scrollShell = \'1\'', js)
         self.assertIn("corner clip", js)
+        self.assertIn("keepOutsideScroll", js)
+        self.assertIn("ui-modal-head", js)
+        self.assertIn("settings-modal-flash", js)
+        self.assertIn("modal-section-tabs", js)
 
 
 class ModalLayoutPolishTests(unittest.TestCase):

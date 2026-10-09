@@ -1261,10 +1261,22 @@
       } catch (e) {
         scroll = Array.from(panel.children).find((c) => c.classList && c.classList.contains('ui-modal-scroll')) || null;
       }
+      /* Keep title/close (and settings flash/tabs) outside the scrollport so the
+         thumb never paints over chrome. Only body siblings scroll. */
+      const keepOutsideScroll = (node) => {
+        if (!node || !node.classList) return false;
+        return node.classList.contains('ui-modal-head')
+          || node.classList.contains('settings-modal-flash')
+          || node.classList.contains('modal-section-tabs');
+      };
       if (!scroll) {
         scroll = document.createElement('div');
         scroll.className = 'ui-modal-scroll';
-        while (panel.firstChild) scroll.appendChild(panel.firstChild);
+        const toMove = [];
+        Array.from(panel.children).forEach((child) => {
+          if (!keepOutsideScroll(child)) toMove.push(child);
+        });
+        toMove.forEach((child) => scroll.appendChild(child));
         panel.appendChild(scroll);
       }
       /* Marks panel so CSS can put padding/gap on .ui-modal-scroll while the
