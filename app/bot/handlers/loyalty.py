@@ -659,17 +659,45 @@ async def open_admin_loyalty_hub(
     extra = ""
     if not can_tiers:
         extra = "\nسطح‌ها سراسری‌اند و فقط ادمین پلتفرم مدیریت می‌کند."
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import (
+        admin_loyalty_manage_hub_keyboard,
+        present_inline_only,
+    )
+    from app.services.users import get_all_settings
+
+    ui = await get_all_settings(session)
+    body = (
+        f"⭐ <b>باشگاه مشتریان</b> ({who})\n"
+        f"وضعیت: <b>{status}</b>\n"
+        + (
+            "یک بخش را از دکمه‌های زیر انتخاب کنید."
+            if is_inline_nav(ui)
+            else "از کیبورد پایین بخش را انتخاب کنید؛ جزئیات زیر پیام اینلاین است."
+        )
+        + f"{extra}"
+    )
+    if is_inline_nav(ui):
+        if state is not None:
+            await nav.set_nav_level(state, nav.NAV_ADMIN_LOYALTY, push=push)
+        await present_inline_only(
+            message,
+            text=body,
+            inline=admin_loyalty_manage_hub_keyboard(
+                ui,
+                include_tiers=can_tiers,
+                back_callback=(
+                    "nv:res:home" if is_reseller_bot else "nv:adm:people"
+                ),
+            ),
+        )
+        return
     await nav.show_nav_keyboard(
         message,
         session,
         db_user,
         nav.NAV_ADMIN_LOYALTY,
-        text=(
-            f"⭐ <b>باشگاه مشتریان</b> ({who})\n"
-            f"وضعیت: <b>{status}</b>\n"
-            "از کیبورد پایین بخش را انتخاب کنید؛ جزئیات زیر پیام اینلاین است."
-            f"{extra}"
-        ),
+        text=body,
         state=state,
         push=push,
         is_reseller_bot=is_reseller_bot,

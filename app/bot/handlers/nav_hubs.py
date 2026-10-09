@@ -353,5 +353,443 @@ async def nv_trial(
     _ = (db_user, state)
 
 
+# ── Wave D: admin / PG / reseller manage hubs ──────────────────────────────
+
+
+@router.callback_query(F.data == "nv:adm:home")
+async def nv_adm_home(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+):
+    from app.bot.handlers.reply_nav import open_admin_home
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_admin_home(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=False,
+        is_reseller_bot=is_reseller_bot,
+    )
+
+
+@router.callback_query(F.data == "nv:adm:ops")
+async def nv_adm_ops(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+):
+    from app.bot.handlers.reply_nav import open_admin_ops_hub
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_admin_ops_hub(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=False,
+        is_reseller_bot=is_reseller_bot,
+    )
+
+
+@router.callback_query(F.data == "nv:adm:people")
+async def nv_adm_people(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+):
+    from app.bot.handlers.reply_nav import open_admin_people_hub
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_admin_people_hub(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=False,
+        is_reseller_bot=is_reseller_bot,
+    )
+
+
+@router.callback_query(F.data == "nv:adm:product")
+async def nv_adm_product(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+):
+    from app.bot.handlers.reply_nav import open_admin_product_hub
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_admin_product_hub(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=False,
+        is_reseller_bot=is_reseller_bot,
+    )
+
+
+@router.callback_query(F.data == "nv:adm:system")
+async def nv_adm_system(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+):
+    from app.bot.handlers.reply_nav import open_admin_system_hub
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_admin_system_hub(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=False,
+        is_reseller_bot=is_reseller_bot,
+    )
+
+
+@router.callback_query(F.data == "nv:adm:pg")
+async def nv_adm_pg(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    from app.bot.handlers.reply_nav import open_pg_home
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_pg_home(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=False,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    )
+
+
+@router.callback_query(F.data == "nv:adm:plans")
+async def nv_adm_plans(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+):
+    from app.bot.handlers.reply_nav import open_admin_plans_hub
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_admin_plans_hub(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=True,
+        is_reseller_bot=is_reseller_bot,
+    )
+
+
+@router.callback_query(F.data == "nv:adm:users")
+async def nv_adm_users(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+):
+    from app.bot.handlers.reply_nav import open_admin_users_hub
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_admin_users_hub(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=True,
+        is_reseller_bot=is_reseller_bot,
+    )
+
+
+@router.callback_query(F.data == "nv:adm:resellers")
+async def nv_adm_resellers(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+):
+    from app.bot.handlers.reply_nav import open_admin_resellers_hub
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_admin_resellers_hub(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=True,
+        is_reseller_bot=is_reseller_bot,
+    )
+
+
+@router.callback_query(F.data == "nv:adm:settings")
+async def nv_adm_settings(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    from app.bot.handlers.reply_nav import open_admin_settings_hub
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_admin_settings_hub(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=True,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    )
+
+
+@router.callback_query(F.data == "nv:adm:broadcast")
+async def nv_adm_broadcast(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+):
+    from app.bot.handlers.reply_nav import open_admin_broadcast_hub
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_admin_broadcast_hub(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=True,
+        is_reseller_bot=is_reseller_bot,
+    )
+
+
+@router.callback_query(F.data == "nv:adm:backup")
+async def nv_adm_backup(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    from app.bot.handlers.reply_nav import open_admin_backup_hub
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_admin_backup_hub(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=True,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    )
+
+
+@router.callback_query(F.data == "nv:adm:preview")
+async def nv_adm_preview(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+):
+    from app.bot.handlers.reply_nav import open_user_preview
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_user_preview(callback.message, session, db_user, state)
+
+
+@router.callback_query(F.data == "nv:adm:loy")
+async def nv_adm_loy(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.bot.handlers.reply_nav import open_admin_loyalty_hub
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_admin_loyalty_hub(
+        callback.message,
+        session,
+        db_user,
+        state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        push=False,
+    )
+
+
+@router.callback_query(F.data.startswith("nv:adm:loy:"))
+async def nv_adm_loy_leaf(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    """Staff loyalty manage leaves — reuse open_admin_loyalty_* helpers."""
+    from app.bot.handlers import loyalty as loy_h
+
+    part = (callback.data or "").split(":")[-1]
+    await callback.answer()
+    if not callback.message:
+        return
+    kw = dict(
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if part == "overview":
+        await loy_h.open_admin_loyalty_overview(
+            callback.message, session, db_user, **kw
+        )
+    elif part == "rules":
+        await loy_h.open_admin_loyalty_rules(
+            callback.message, session, db_user, **kw
+        )
+    elif part == "rewards":
+        await loy_h.open_admin_loyalty_rewards(
+            callback.message, session, db_user, **kw
+        )
+    elif part == "tiers":
+        await loy_h.open_admin_loyalty_tiers(
+            callback.message, session, db_user, **kw
+        )
+    elif part == "settings":
+        await loy_h.open_admin_loyalty_settings(
+            callback.message, session, db_user, **kw
+        )
+    elif part == "reftext":
+        await loy_h.open_admin_loyalty_ref_text(
+            callback.message, session, db_user, state, **kw
+        )
+
+
+@router.callback_query(F.data == "nv:res:home")
+async def nv_res_home(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.bot.handlers.reply_nav import open_reseller_home
+
+    await callback.answer()
+    if not callback.message:
+        return
+    await open_reseller_home(
+        callback.message,
+        session,
+        db_user,
+        state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        push=False,
+    )
+
+
+@router.callback_query(F.data.startswith("nv:res:ra:"))
+async def nv_res_ra(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    """Dispatch reseller manage hub taps via existing reply-action path."""
+    from app.bot.handlers.reply_nav import _soft_reseller, open_user_preview
+    from app.bot import keyboards as kb
+
+    action = (callback.data or "")[len("nv:res:ra:") :]
+    await callback.answer()
+    if not callback.message or not action:
+        return
+    if action in {kb.REPLY_ACTION_RES_PREVIEW, "res_preview"}:
+        if not is_reseller_bot:
+            await callback.message.answer(
+                "پیش‌نمایش فقط روی ربات فروشگاه شما فعال است."
+            )
+            return
+        await open_user_preview(callback.message, session, db_user, state)
+        return
+    await _soft_reseller(
+        callback.message,
+        session,
+        db_user,
+        action,
+        state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+
+
 # Silence unused helper warning for static checkers when message missing
 _ = _answer_gone

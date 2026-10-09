@@ -321,6 +321,278 @@ def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _hub_back_row(
+    ui: dict | None, *, callback_data: str
+) -> list[InlineKeyboardButton]:
+    return [
+        _ikb(
+            _t(ui, "btn_back") or "⬅️ بازگشت",
+            callback_data=callback_data,
+            ui=ui,
+            label_key="btn_back",
+            style=_style(ui, "back"),
+        )
+    ]
+
+
+def _pack_hub_keyboard(
+    buttons: list[InlineKeyboardButton],
+    ui: dict | None,
+    *,
+    back_callback: str,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for i in range(0, len(buttons), 2):
+        rows.append(buttons[i : i + 2])
+    rows.append(_hub_back_row(ui, callback_data=back_callback))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_groups_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Top-level admin groups (Wave D) — mirrors ``_reply_admin_hub_entries``."""
+    from app.bot.reply_keyboards import _reply_admin_hub_entries
+
+    cb_map = {
+        "adm_hub_ops": "nv:adm:ops",
+        "adm_hub_people": "nv:adm:people",
+        "adm_hub_product": "nv:adm:product",
+        "adm_hub_system": "nv:adm:system",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _reply_admin_hub_entries(ui)
+        if key in cb_map
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="menu:home")
+
+
+def admin_ops_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Daily ops — leaf buttons reuse existing ``adm:*`` callbacks."""
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_ADMIN_DASH,
+        REPLY_ACTION_ADMIN_ORDERS,
+        REPLY_ACTION_ADMIN_PAYMENTS,
+        REPLY_ACTION_ADMIN_REPORTS,
+        REPLY_ACTION_ADMIN_TICKETS,
+        _reply_admin_ops_entries,
+    )
+
+    cb_map = {
+        REPLY_ACTION_ADMIN_DASH: "adm:dash",
+        REPLY_ACTION_ADMIN_REPORTS: "adm:reports:week",
+        REPLY_ACTION_ADMIN_ORDERS: "adm:orders",
+        REPLY_ACTION_ADMIN_PAYMENTS: "adm:payments",
+        REPLY_ACTION_ADMIN_TICKETS: "adm:tickets",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _reply_admin_ops_entries(ui)
+        if key in cb_map
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
+
+
+def admin_people_hub_keyboard(
+    ui: dict | None = None, *, can_manage_representatives: bool = True
+) -> InlineKeyboardMarkup:
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_ADMIN_LOYALTY,
+        REPLY_ACTION_ADMIN_RESELLERS,
+        REPLY_ACTION_ADMIN_USERS,
+        _reply_admin_people_entries,
+    )
+
+    cb_map = {
+        REPLY_ACTION_ADMIN_USERS: "nv:adm:users",
+        REPLY_ACTION_ADMIN_RESELLERS: "nv:adm:resellers",
+        REPLY_ACTION_ADMIN_LOYALTY: "nv:adm:loy",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _reply_admin_people_entries(
+            ui, can_manage_representatives=can_manage_representatives
+        )
+        if key in cb_map
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
+
+
+def admin_product_hub_keyboard(
+    ui: dict | None = None,
+    *,
+    pg_features: frozenset[str] | set[str] | None = None,
+) -> InlineKeyboardMarkup:
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_ADMIN_PG,
+        REPLY_ACTION_ADMIN_PLANS,
+        _reply_admin_product_entries,
+    )
+
+    cb_map = {
+        REPLY_ACTION_ADMIN_PLANS: "nv:adm:plans",
+        REPLY_ACTION_ADMIN_PG: "nv:adm:pg",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _reply_admin_product_entries(ui, pg_features=pg_features)
+        if key in cb_map
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
+
+
+def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_ADMIN_BACKUP,
+        REPLY_ACTION_ADMIN_BROADCAST,
+        REPLY_ACTION_ADMIN_PREVIEW,
+        REPLY_ACTION_ADMIN_SETTINGS,
+        _reply_admin_system_entries,
+    )
+
+    cb_map = {
+        REPLY_ACTION_ADMIN_SETTINGS: "nv:adm:settings",
+        REPLY_ACTION_ADMIN_BROADCAST: "nv:adm:broadcast",
+        REPLY_ACTION_ADMIN_BACKUP: "nv:adm:backup",
+        REPLY_ACTION_ADMIN_PREVIEW: "nv:adm:preview",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _reply_admin_system_entries(ui)
+        if key in cb_map
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
+
+
+def pg_hub_keyboard(
+    ui: dict | None = None,
+    *,
+    features: frozenset[str] | set[str] | None = None,
+    can_create_user: bool = True,
+) -> InlineKeyboardMarkup:
+    """PG feature hub — leaf buttons reuse ``adm:pg:*``."""
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_PG_CREATE,
+        REPLY_ACTION_PG_GROUP,
+        REPLY_ACTION_PG_NODES,
+        REPLY_ACTION_PG_SEARCH,
+        REPLY_ACTION_PG_STATS,
+        REPLY_ACTION_PG_TEMPLATE,
+        REPLY_ACTION_PG_USERS,
+        _pg_submenu_entries,
+    )
+
+    cb_map = {
+        REPLY_ACTION_PG_STATS: "adm:pg:stats",
+        REPLY_ACTION_PG_USERS: "adm:pg:users",
+        REPLY_ACTION_PG_CREATE: "adm:pg:create",
+        REPLY_ACTION_PG_SEARCH: "adm:pg:search",
+        REPLY_ACTION_PG_NODES: "adm:pg:nodes",
+        REPLY_ACTION_PG_GROUP: "adm:pg:group",
+        REPLY_ACTION_PG_TEMPLATE: "adm:pg:template",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _pg_submenu_entries(
+            ui, features=features, can_create_user=can_create_user
+        )
+        if key in cb_map
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:product")
+
+
+def admin_loyalty_manage_hub_keyboard(
+    ui: dict | None = None,
+    *,
+    include_tiers: bool = True,
+    back_callback: str = "nv:adm:people",
+) -> InlineKeyboardMarkup:
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_ADM_LOY_OVERVIEW,
+        REPLY_ACTION_ADM_LOY_REF_TEXT,
+        REPLY_ACTION_ADM_LOY_REWARDS,
+        REPLY_ACTION_ADM_LOY_RULES,
+        REPLY_ACTION_ADM_LOY_SETTINGS,
+        REPLY_ACTION_ADM_LOY_TIERS,
+        _admin_loyalty_submenu_entries,
+    )
+
+    cb_map = {
+        REPLY_ACTION_ADM_LOY_OVERVIEW: "nv:adm:loy:overview",
+        REPLY_ACTION_ADM_LOY_RULES: "nv:adm:loy:rules",
+        REPLY_ACTION_ADM_LOY_REWARDS: "nv:adm:loy:rewards",
+        REPLY_ACTION_ADM_LOY_TIERS: "nv:adm:loy:tiers",
+        REPLY_ACTION_ADM_LOY_SETTINGS: "nv:adm:loy:settings",
+        REPLY_ACTION_ADM_LOY_REF_TEXT: "nv:adm:loy:reftext",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _admin_loyalty_submenu_entries(
+            ui, include_tiers=include_tiers
+        )
+        if key in cb_map
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback=back_callback)
+
+
+def reseller_manage_hub_keyboard(
+    profile,
+    ui: dict | None = None,
+    *,
+    can_add_representative: bool = False,
+) -> InlineKeyboardMarkup:
+    """Reseller shop-bot manage hub (Wave D) — ``nv:res:ra:<action>``."""
+    from app.bot.reply_keyboards import _reseller_submenu_entries
+
+    entries = _reseller_submenu_entries(
+        profile, can_add_representative=can_add_representative
+    )
+    buttons = [
+        _ikb(
+            text,
+            callback_data=f"nv:res:ra:{key}",
+            ui=ui,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in entries
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="menu:home")
+
+
 def service_card_keyboard(
     service_id: int, ui: dict | None = None
 ) -> InlineKeyboardMarkup:

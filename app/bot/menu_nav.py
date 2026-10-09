@@ -453,6 +453,24 @@ async def show_nav_keyboard(
             if inline_nav
             else kb.loyalty_reply_keyboard(ui)
         )
+    elif level in {
+        NAV_ADMIN,
+        NAV_ADMIN_OPS,
+        NAV_ADMIN_PEOPLE,
+        NAV_ADMIN_PRODUCT,
+        NAV_ADMIN_SYSTEM,
+        NAV_ADMIN_PG,
+        NAV_ADMIN_LOYALTY,
+    } and inline_nav:
+        # Wave D: admin group/PG/loyalty hubs are inline; keep stable main admin KB.
+        markup, ui, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            as_user=as_user,
+            ui=ui,
+        )
     elif level == NAV_ADMIN_LOYALTY:
         # Platform admin sees tiers; reseller manage hub excludes global tiers
         include_tiers = not bool(is_reseller_bot)
@@ -522,7 +540,18 @@ async def show_nav_keyboard(
     elif level == NAV_ADMIN_PLANS:
         markup = kb.admin_plans_audience_reply_keyboard(ui)
     elif level == NAV_RESELLER:
-        markup = kb.reseller_reply_keyboard(profile, ui)
+        if inline_nav:
+            # Wave D: manage hub is inline; keep stable reseller main KB.
+            markup, ui, _ = await build_main_reply_keyboard(
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                as_user=as_user,
+                ui=ui,
+            )
+        else:
+            markup = kb.reseller_reply_keyboard(profile, ui)
     elif level == NAV_RESELLER_SETTINGS:
         markup = kb.reseller_settings_reply_keyboard(ui)
     elif level == NAV_RESELLER_PLANS:

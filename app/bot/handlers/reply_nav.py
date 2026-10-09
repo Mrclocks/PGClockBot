@@ -783,6 +783,8 @@ async def open_reseller_home(
     reseller_owner_id: int | None,
     push: bool = True,
 ) -> None:
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only, reseller_manage_hub_keyboard
     from app.services.reseller_access import load_reseller_actor
 
     if not is_reseller_bot:
@@ -797,12 +799,47 @@ async def open_reseller_home(
     if not owner_id or not profile:
         await message.answer("دسترسی نماینده یافت نشد.")
         return
+    ui = await get_all_settings(session)
+    can_add = False
+    try:
+        from app.services.representative_unification import (
+            shop_bot_can_manage_representatives,
+        )
+
+        can_add = await shop_bot_can_manage_representatives(
+            session,
+            db_user,
+            is_reseller_bot=True,
+            reseller_owner_id=reseller_owner_id,
+            reseller_profile_id=int(getattr(profile, "id", 0) or 0) or None,
+        )
+    except Exception:
+        can_add = False
+    body = format_message(
+        "🤝 پنل نماینده",
+        (
+            "یک بخش را از دکمه‌های زیر انتخاب کنید."
+            if is_inline_nav(ui)
+            else "از کیبورد پایین بخش موردنظر را انتخاب کنید."
+        ),
+    )
+    if is_inline_nav(ui):
+        if state is not None:
+            await nav.set_nav_level(state, nav.NAV_RESELLER, push=push)
+        await present_inline_only(
+            message,
+            text=body,
+            inline=reseller_manage_hub_keyboard(
+                profile, ui, can_add_representative=can_add
+            ),
+        )
+        return
     await nav.show_nav_keyboard(
         message,
         session,
         db_user,
         nav.NAV_RESELLER,
-        text=format_message("🤝 پنل نماینده", "از کیبورد پایین بخش موردنظر را انتخاب کنید."),
+        text=body,
         state=state,
         push=push,
         profile=profile,
@@ -863,7 +900,14 @@ async def open_pg_home(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ) -> None:
-    from app.bot.auth import OWNER_REQUIRED_MESSAGE, bot_may_open_pg_hub
+    from app.bot.auth import (
+        OWNER_REQUIRED_MESSAGE,
+        bot_may_open_pg_hub,
+        bot_migrated_pg_features,
+        bot_pg_can_create_user,
+    )
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only, pg_hub_keyboard
     from app.services.bot_principal_identity import shop_bot_actor_is_operator
 
     if is_reseller_bot and not await shop_bot_actor_is_operator(
@@ -883,15 +927,53 @@ async def open_pg_home(
     ):
         await message.answer(OWNER_REQUIRED_MESSAGE + ".")
         return
+    ui = await get_all_settings(session)
+    feats: frozenset[str] = frozenset()
+    can_create = False
+    try:
+        feats = await bot_migrated_pg_features(
+            session, db_user, is_reseller_bot=is_reseller_bot
+        )
+        can_create = await bot_pg_can_create_user(
+            session, db_user, is_reseller_bot=is_reseller_bot
+        )
+    except Exception:
+        feats = frozenset()
+        can_create = False
+    body = (
+        "🖥 <b>عملیات پاسارگارد</b>\n"
+        + (
+            "یک بخش را از دکمه‌های زیر انتخاب کنید."
+            if is_inline_nav(ui)
+            else "از کیبورد پایین بخش موردنظر را انتخاب کنید."
+        )
+    )
+    if is_inline_nav(ui):
+        if state is not None:
+            await nav.set_nav_level(state, nav.NAV_ADMIN_PG, push=push)
+        if not feats:
+            from app.bot.nav_inline import admin_product_hub_keyboard
+
+            await present_inline_only(
+                message,
+                text="🖥 پاسارگارد در دسترس نیست — به محصول برگردید.",
+                inline=admin_product_hub_keyboard(ui, pg_features=feats),
+            )
+            return
+        await present_inline_only(
+            message,
+            text=body,
+            inline=pg_hub_keyboard(
+                ui, features=feats, can_create_user=can_create
+            ),
+        )
+        return
     await nav.show_nav_keyboard(
         message,
         session,
         db_user,
         nav.NAV_ADMIN_PG,
-        text=(
-            "🖥 <b>عملیات پاسارگارد</b>\n"
-            "از کیبورد پایین بخش موردنظر را انتخاب کنید."
-        ),
+        text=body,
         state=state,
         push=push,
     )
@@ -1221,22 +1303,38 @@ async def open_admin_home(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import admin_groups_hub_keyboard, present_inline_only
     from app.version import __version__ as local_version
 
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
         return
+    ui = await get_all_settings(session)
+    body = (
+        f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
+        + (
+            "یک گروه را از دکمه‌های زیر انتخاب کنید:\n"
+            "🗓 عملیات روزانه · 👤 افراد · 📦 محصول و PG · 🛠 سیستم"
+            if is_inline_nav(ui)
+            else "از کیبورد پایین یک گروه را انتخاب کنید:\n"
+            "🗓 عملیات روزانه · 👤 افراد · 📦 محصول و PG · 🛠 سیستم"
+        )
+    )
+    if is_inline_nav(ui):
+        if state is not None:
+            await nav.set_nav_level(state, nav.NAV_ADMIN, push=push)
+        await present_inline_only(
+            message, text=body, inline=admin_groups_hub_keyboard(ui)
+        )
+        return
     await nav.show_nav_keyboard(
         message,
         session,
         db_user,
         nav.NAV_ADMIN,
-        text=(
-            f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
-            "از کیبورد پایین یک گروه را انتخاب کنید:\n"
-            "🗓 عملیات روزانه · 👤 افراد · 📦 محصول و PG · 🛠 سیستم"
-        ),
+        text=body,
         state=state,
         push=push,
     )
@@ -1251,19 +1349,28 @@ async def open_admin_ops_hub(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import admin_ops_hub_keyboard, present_inline_only
+
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
+        return
+    ui = await get_all_settings(session)
+    body = "🗓 <b>عملیات روزانه</b>\nداشبورد، سفارش‌ها، رسیدها و تیکت‌ها."
+    if is_inline_nav(ui):
+        if state is not None:
+            await nav.set_nav_level(state, nav.NAV_ADMIN_OPS, push=push)
+        await present_inline_only(
+            message, text=body, inline=admin_ops_hub_keyboard(ui)
+        )
         return
     await nav.show_nav_keyboard(
         message,
         session,
         db_user,
         nav.NAV_ADMIN_OPS,
-        text=(
-            "🗓 <b>عملیات روزانه</b>\n"
-            "داشبورد، سفارش‌ها، رسیدها و تیکت‌ها."
-        ),
+        text=body,
         state=state,
         push=push,
     )
@@ -1278,19 +1385,35 @@ async def open_admin_people_hub(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import admin_people_hub_keyboard, present_inline_only
+
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
+        return
+    ui = await get_all_settings(session)
+    _, can_reps = await nav._platform_admin_menu_flags(
+        session, db_user, is_reseller_bot=is_reseller_bot
+    )
+    body = "👤 <b>افراد</b>\nکاربران، نمایندگان و باشگاه مشتریان."
+    if is_inline_nav(ui):
+        if state is not None:
+            await nav.set_nav_level(state, nav.NAV_ADMIN_PEOPLE, push=push)
+        await present_inline_only(
+            message,
+            text=body,
+            inline=admin_people_hub_keyboard(
+                ui, can_manage_representatives=can_reps
+            ),
+        )
         return
     await nav.show_nav_keyboard(
         message,
         session,
         db_user,
         nav.NAV_ADMIN_PEOPLE,
-        text=(
-            "👤 <b>افراد</b>\n"
-            "کاربران، نمایندگان و باشگاه مشتریان."
-        ),
+        text=body,
         state=state,
         push=push,
     )
@@ -1305,19 +1428,33 @@ async def open_admin_product_hub(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import admin_product_hub_keyboard, present_inline_only
+
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
+        return
+    ui = await get_all_settings(session)
+    pg_feats, _ = await nav._platform_admin_menu_flags(
+        session, db_user, is_reseller_bot=is_reseller_bot
+    )
+    body = "📦 <b>محصول و PG</b>\nپلن‌ها و عملیات پاسارگارد."
+    if is_inline_nav(ui):
+        if state is not None:
+            await nav.set_nav_level(state, nav.NAV_ADMIN_PRODUCT, push=push)
+        await present_inline_only(
+            message,
+            text=body,
+            inline=admin_product_hub_keyboard(ui, pg_features=pg_feats),
+        )
         return
     await nav.show_nav_keyboard(
         message,
         session,
         db_user,
         nav.NAV_ADMIN_PRODUCT,
-        text=(
-            "📦 <b>محصول و PG</b>\n"
-            "پلن‌ها و عملیات پاسارگارد."
-        ),
+        text=body,
         state=state,
         push=push,
     )
@@ -1332,19 +1469,28 @@ async def open_admin_system_hub(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import admin_system_hub_keyboard, present_inline_only
+
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
+        return
+    ui = await get_all_settings(session)
+    body = "🛠 <b>سیستم</b>\nتنظیمات، پیام همگانی، بکاپ و پیش‌نمایش."
+    if is_inline_nav(ui):
+        if state is not None:
+            await nav.set_nav_level(state, nav.NAV_ADMIN_SYSTEM, push=push)
+        await present_inline_only(
+            message, text=body, inline=admin_system_hub_keyboard(ui)
+        )
         return
     await nav.show_nav_keyboard(
         message,
         session,
         db_user,
         nav.NAV_ADMIN_SYSTEM,
-        text=(
-            "🛠 <b>سیستم</b>\n"
-            "تنظیمات، پیام همگانی، بکاپ و پیش‌نمایش."
-        ),
+        text=body,
         state=state,
         push=push,
     )
