@@ -219,7 +219,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         can_billing_settings = staff.get("role") == "admin"
 
         tab = (request.query_params.get("tab") or "").strip()
-        if tab not in {"reports", "behavior", "orders", "payments", "delivery"}:
+        if tab not in {"reports", "behavior", "orders", "payments", "delivery", "cancellations"}:
             tab = "reports" if (can_orders or can_payments) else "payments"
         if tab == "reports" and not (can_orders or can_payments):
             tab = "payments"
@@ -230,6 +230,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         if tab == "payments" and not can_payments:
             tab = "reports" if can_orders else "orders"
         if tab == "delivery" and not can_orders:
+            tab = "reports" if (can_orders or can_payments) else "payments"
+        if tab == "cancellations" and not can_orders:
             tab = "reports" if (can_orders or can_payments) else "payments"
 
         report_period = (request.query_params.get("period") or "week").strip().lower()
@@ -288,6 +290,11 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             },
             "report": {},
             "report_period": report_period,
+            "cancel_requests": [],
+            "cancel_next_before": None,
+            "cancel_labels": {},
+            "can_approve_cancel": False,
+            "cancel_flash_err": request.query_params.get("error"),
         }
 
         if can_finance_settings:
@@ -639,6 +646,28 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 ctx["orders_by_id"] = {}
                 ctx["delivery_diag_by_order"] = {}
                 ctx["delivery_payments_by_order"] = {}
+
+        elif tab == "cancellations" and can_orders:
+            from app.services.service_cancellations import (
+                STATUS_LABELS,
+                list_cancellation_requests,
+            )
+            from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
+
+            try:
+                scope = resolve_shop_scope_id(staff)
+            except ShopScopeError:
+                ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
+                return render(request, "finance.html", ctx)
+            before_raw = (request.query_params.get("before") or "").strip()
+            before = int(before_raw) if before_raw.isdigit() else None
+            rows, next_before = await list_cancellation_requests(
+                session, scope, before=before, limit=50
+            )
+            ctx["cancel_requests"] = rows
+            ctx["cancel_next_before"] = next_before
+            ctx["cancel_labels"] = STATUS_LABELS
+            ctx["can_approve_cancel"] = can_payments
 
         return render(request, "finance.html", ctx)
 

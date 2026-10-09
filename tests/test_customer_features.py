@@ -449,13 +449,27 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
         await self.session.commit()
         staff = {"role": "reseller", "bot_user_id": 2, "permissions": ["orders", "shop_settings", "campaigns"]}
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.panel_app(staff)), base_url="http://test") as client:
-            response = await client.get("/service-cancellations")
-            self.assertEqual(response.status_code, 200)
-            self.assertIn("shop-mine", response.text)
-            self.assertNotIn('>mine<', response.text)
-            self.assertIn("&lt;script&gt;", response.text)
-            self.assertNotIn('<script>alert', response.text)
+            redirect = await client.get("/service-cancellations", follow_redirects=False)
+            self.assertEqual(redirect.status_code, 303)
+            self.assertIn("/finance?tab=cancellations", redirect.headers.get("location", ""))
             self.assertEqual((await client.get("/campaigns")).status_code, 200)
+        from app.services.service_cancellations import list_cancellation_requests
+        rows, _ = await list_cancellation_requests(self.session, 2, limit=50)
+        self.assertTrue(any(r.id == row["id"] for r, _ in rows))
+        self.assertTrue(all(uname != "mine" for _, uname in rows) or any(uname == "shop-mine" for _, uname in rows))
+        env = Environment(loader=FileSystemLoader(str(ROOT / "app/web/templates")), autoescape=select_autoescape())
+        html = env.get_template("_finance_cancellations.html").render(
+            cancel_requests=rows,
+            cancel_labels={"pending": "در انتظار بررسی", "processing": "…", "review": "…", "approved": "…", "rejected": "…", "withdrawn": "…"},
+            can_approve_cancel=False,
+            cancel_next_before=None,
+            cancel_flash_err=None,
+            csrf_token="test",
+        )
+        self.assertIn("shop-mine", html)
+        self.assertNotIn(">mine<", html)
+        self.assertIn("&lt;script&gt;", html)
+        self.assertNotIn("<script>alert", html)
 
     async def test_campaign_and_refund_require_their_own_permissions(self):
         row = await self.request(12, 2)

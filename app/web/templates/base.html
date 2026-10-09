@@ -206,9 +206,9 @@
           {% endif %}
           {% endif %}
           {% if is_admin or 'orders' in perms or 'payments' in perms %}
-          <a href="/finance" class="nav-item nav-item-bot {% if path.startswith('/finance') or path.startswith('/orders') or path.startswith('/payments') %}active{% endif %}">
+          <a href="/finance" class="nav-item nav-item-bot {% if path.startswith('/finance') or path.startswith('/orders') or path.startswith('/payments') or path.startswith('/service-cancellations') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-1.2 9.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.7L6 4H3"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>
-            <span>مدیریت مالی</span>
+            <span class="nav-item-label"><span>مدیریت مالی</span>{% if cancel_alert %}<i class="nav-dot" aria-label="درخواست لغو در انتظار"></i>{% endif %}</span>
           </a>
           {% endif %}
           {% if is_admin or 'plans' in perms %}
@@ -237,9 +237,6 @@
           {% endif %}
           {% if is_owner or 'campaigns' in perms %}
           <a href="/campaigns" class="nav-item nav-item-bot {% if path.startswith('/campaigns') %}active{% endif %}"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10H4zM17 8v8M21 6v12"/></svg><span>کمپین هدفمند</span></a>
-          {% endif %}
-          {% if is_owner or 'orders' in perms %}
-          <a href="/service-cancellations" class="nav-item nav-item-bot {% if path.startswith('/service-cancellations') %}active{% endif %}"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v16H7zM10 9l4 4M14 9l-4 4M10 16h4"/></svg><span>درخواست‌های لغو</span></a>
           {% endif %}
           {% if is_owner or 'shop_settings' in perms %}
           <a href="/message-variables" class="nav-item nav-item-bot {% if path.startswith('/message-variables') %}active{% endif %}">

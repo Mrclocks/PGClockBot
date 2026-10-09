@@ -35,7 +35,7 @@ def _notice(row: ServiceCancellation, user: BotUser, username: str) -> Cancellat
         f"شناسه تلگرام: <code>{user.telegram_id}</code>\n"
         f"سرویس: <code>{html.escape(username)}</code> (#{row.service_id})\n"
         f"دلیل لغو:\n{html.escape(row.reason)}\n\n"
-        "برای بررسی و تعیین اعتبار برگشتی، بخش «درخواست‌های لغو سرویس» پنل را باز کنید."
+        "برای بررسی و تعیین اعتبار برگشتی، مدیریت مالی ← درخواست‌های لغو را باز کنید."
     ))
 
 

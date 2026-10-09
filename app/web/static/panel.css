@@ -4032,6 +4032,14 @@ form.settings-form > .actions.sticky-actions,
   color: var(--brand-fg);
   opacity: 1;
 }
+.section-tabs a .nav-item-label {
+  gap: 6px;
+}
+.section-tabs a .nav-dot {
+  margin-inline-start: 0;
+  width: 7px;
+  height: 7px;
+}
 .section-tabs a.active:active,
 .section-tabs .tab-btn.active:active {
   background: rgba(249, 115, 22, 0.24);
