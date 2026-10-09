@@ -230,6 +230,52 @@ async def nv_loyalty_hist(
     await open_loyalty_history_message(callback.message, session, db_user)
 
 
+@router.callback_query(F.data.startswith("nv:svc:guide:"))
+async def nv_svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    """Service-card guide: show guide_text with back to the same service card."""
+    from app.bot.nav_inline import safe_edit_inline
+    from app.db.models import UserService
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
+
+    try:
+        svc_id = int((callback.data or "").split(":")[-1])
+    except (TypeError, ValueError):
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    svc = await session.get(UserService, svc_id)
+    if not svc or svc.bot_user_id != db_user.id:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await callback.answer()
+    if not callback.message:
+        return
+    ui = await get_all_settings(session)
+    raw = ui.get("guide_text")
+    if not rich_plain_text(raw).strip():
+        raw = (
+            "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، "
+            "فیلد «متن راهنما» را پر کنید."
+        )
+    text, send_kw = outbound_setting_text(raw, title="📘 آموزش اتصال")
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    back = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=ui.get("btn_back") or "⬅️ بازگشت",
+                    callback_data=f"svc:view:{svc_id}",
+                )
+            ]
+        ]
+    )
+    ok = await safe_edit_inline(
+        callback.message, text, reply_markup=back, **send_kw
+    )
+    if not ok:
+        await callback.message.answer(text, reply_markup=back, **send_kw)
+
+
 @router.callback_query(F.data == "nv:trial")
 async def nv_trial(
     callback: CallbackQuery,

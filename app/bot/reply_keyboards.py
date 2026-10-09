@@ -1043,6 +1043,9 @@ def reply_action_map(
                 mapping[(text or "").strip()] = key
             for key, text in _topup_method_entries(ui):
                 mapping[(text or "").strip()] = key
+            # Legacy service-action reply labels (stale keyboards after Wave B)
+            for key, text in _service_action_entries(ui):
+                mapping.setdefault((text or "").strip(), key)
 
         if platform_admin:
             for key, text in _wallet_submenu_entries(ui):

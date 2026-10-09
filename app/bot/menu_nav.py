@@ -478,7 +478,20 @@ async def show_nav_keyboard(
     elif level == NAV_RESELLER_PLANS:
         markup = kb.reseller_plans_reply_keyboard(ui)
     elif level == NAV_SERVICE:
-        markup = kb.service_actions_reply_keyboard(ui)
+        from app.bot.nav_mode import is_inline_nav
+
+        if is_inline_nav(ui):
+            # Wave B: actions are inline on the card; keep stable main ReplyKeyboard.
+            markup, ui, _ = await build_main_reply_keyboard(
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                as_user=as_user,
+                ui=ui,
+            )
+        else:
+            markup = kb.service_actions_reply_keyboard(ui)
     elif level == NAV_REVIEW:
         markup = kb.review_reply_keyboard(ui)
     elif level == NAV_PAY:

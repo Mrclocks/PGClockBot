@@ -331,11 +331,26 @@ async def open_services_list(
         )
         await message.answer(text, reply_markup=main_kb, **send_kw)
         return
-    body = "📦 <b>سرویس‌های شما</b>\nیکی را انتخاب کنید:"
-    inline = kb.services_keyboard(services, ui)
-    if is_inline_nav(ui):
-        await present_inline_only(message, text=body, inline=inline)
+    # Exactly one service → open its card directly (Wave B).
+    if is_inline_nav(ui) and len(services) == 1:
+        from app.bot.handlers.services import svc_view
+
+        bubble = await message.answer("⏳")
+        cb = _SoftCallback(bubble, f"svc:view:{int(services[0].id)}")
+        try:
+            await svc_view(cb, session, db_user, state)
+        except TypeError:
+            await svc_view(cb, session, db_user)
         return
+    body = "📦 <b>سرویس‌های شما</b>\nیکی را انتخاب کنید:"
+    if is_inline_nav(ui):
+        from app.bot.nav_inline import services_list_keyboard
+
+        await present_inline_only(
+            message, text=body, inline=services_list_keyboard(services, ui)
+        )
+        return
+    inline = kb.services_keyboard(services, ui)
     # Classic: inline list first; lasting main menu last.
     await present_inline_with_reply_chrome(
         message,
@@ -1743,7 +1758,22 @@ async def handle_back(
         )
         return
     if level == nav.NAV_SERVICE:
-        # Restored onto service detail — re-show actions KB for the stored service.
+        # Restored onto service detail — inline card or classic reply actions.
+        from app.bot.nav_mode import is_inline_nav
+
+        ui = await get_all_settings(session)
+        data2 = await state.get_data()
+        svc_id = data2.get(nav.SERVICE_ID)
+        if is_inline_nav(ui) and svc_id:
+            from app.bot.handlers.services import svc_view
+
+            bubble = await message.answer("⏳")
+            cb = _SoftCallback(bubble, f"svc:view:{int(svc_id)}")
+            try:
+                await svc_view(cb, session, db_user, state)
+            except TypeError:
+                await svc_view(cb, session, db_user)
+            return
         await nav.show_nav_keyboard(
             message,
             session,

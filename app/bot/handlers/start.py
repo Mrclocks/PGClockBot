@@ -549,10 +549,26 @@ async def _deeplink_config(
     try:
         await svc_link(cb, session, db_user)
     except Exception:
-        await message.answer(
-            "برای دریافت لینک/QR از «سرویس‌های من» استفاده کنید.",
-            reply_markup=kb.service_actions_reply_keyboard(ui),
-        )
+        from app.bot.nav_mode import is_inline_nav
+        from app.bot.menu_nav import build_main_reply_keyboard
+
+        if is_inline_nav(ui):
+            main_kb, _, _ = await build_main_reply_keyboard(
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                ui=ui,
+            )
+            await message.answer(
+                "برای دریافت لینک/QR از «سرویس‌های من» استفاده کنید.",
+                reply_markup=main_kb,
+            )
+        else:
+            await message.answer(
+                "برای دریافت لینک/QR از «سرویس‌های من» استفاده کنید.",
+                reply_markup=kb.service_actions_reply_keyboard(ui),
+            )
 
 
 @router.callback_query(F.data == "forcejoin:nolink")
@@ -910,7 +926,29 @@ async def _link_subscription(
         session.add(svc)
         await session.commit()
 
-    await message.answer(
-        format_message("✅ اتصال سرویس", service_card(info)),
-        reply_markup=kb.service_actions_reply_keyboard(ui),
-    )
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import service_card_keyboard
+    from app.bot.menu_nav import build_main_reply_keyboard
+
+    if is_inline_nav(ui) and getattr(svc, "id", None):
+        await message.answer(
+            format_message("✅ اتصال سرویس", service_card(info)),
+            reply_markup=service_card_keyboard(int(svc.id), ui),
+        )
+    elif is_inline_nav(ui):
+        main_kb, _, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+        )
+        await message.answer(
+            format_message("✅ اتصال سرویس", service_card(info)),
+            reply_markup=main_kb,
+        )
+    else:
+        await message.answer(
+            format_message("✅ اتصال سرویس", service_card(info)),
+            reply_markup=kb.service_actions_reply_keyboard(ui),
+        )

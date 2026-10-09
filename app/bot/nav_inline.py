@@ -215,6 +215,102 @@ def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def service_card_keyboard(
+    service_id: int, ui: dict | None = None
+) -> InlineKeyboardMarkup:
+    """Inline actions for one service card (replaces service_actions_reply_keyboard).
+
+    Reuses existing ``svc:*`` callbacks — no duplicated business logic.
+    """
+    sid = int(service_id)
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            _ikb(
+                _t(ui, "btn_renew") or "🔄 تمدید",
+                callback_data=f"svc:renew:{sid}",
+                ui=ui,
+                label_key="btn_renew",
+                style=_style(ui, "svc_renew", fallback="primary"),
+            ),
+            _ikb(
+                _t(ui, "btn_svc_addon") or "➕ حجم / زمان",
+                callback_data=f"svc:addon:{sid}",
+                ui=ui,
+                label_key="btn_svc_addon",
+                style=_style(ui, "svc_addon", fallback="primary"),
+            ),
+        ],
+        [
+            _ikb(
+                _t(ui, "btn_sub_link") or "🔗 لینک و QR",
+                callback_data=f"svc:link:{sid}",
+                ui=ui,
+                label_key="btn_sub_link",
+                style=_style(ui, "svc_link"),
+            ),
+            _ikb(
+                _t(ui, "btn_guide") or "📘 آموزش اتصال",
+                callback_data=f"nv:svc:guide:{sid}",
+                ui=ui,
+                label_key="btn_guide",
+            ),
+        ],
+        [
+            _ikb(
+                "♻️ رفرش وضعیت",
+                callback_data=f"svc:view:{sid}",
+                ui=ui,
+                style=_style(ui, "svc_refresh"),
+            ),
+            _ikb(
+                "⚙️ تنظیمات خودکار",
+                callback_data=f"svc:auto:{sid}",
+                ui=ui,
+            ),
+        ],
+        [
+            _ikb(
+                "🗑 حذف سرویس",
+                callback_data=f"svc:delask:{sid}",
+                ui=ui,
+                style=_style(ui, "svc_delete", fallback="danger"),
+            ),
+        ],
+        [
+            _ikb(
+                _t(ui, "btn_back") or "⬅️ بازگشت",
+                callback_data="svc:list",
+                ui=ui,
+                label_key="btn_back",
+                style=_style(ui, "back"),
+            )
+        ],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def services_list_keyboard(
+    services: list, ui: dict | None = None
+) -> InlineKeyboardMarkup:
+    """Paginated-ready service list with back-to-home (inline nav)."""
+    from app.bot.keyboards import services_keyboard
+
+    base = services_keyboard(services, ui)
+    rows = list(base.inline_keyboard)
+    rows.append(
+        [
+            _ikb(
+                _t(ui, "btn_back") or "⬅️ بازگشت",
+                callback_data="menu:home",
+                ui=ui,
+                label_key="btn_back",
+                style=_style(ui, "back"),
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def welcome_cta_keyboard(
     ui: dict | None = None,
     *,
