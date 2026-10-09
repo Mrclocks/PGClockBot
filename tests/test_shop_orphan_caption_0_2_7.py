@@ -24,7 +24,7 @@ class ShopOrphanCaptionTests(unittest.IsolatedAsyncioTestCase):
             ):
                 await present_shop_kind_picker(
                     message,
-                    ui={},
+                    ui={"nav_mode": "classic"},
                     body="body",
                     fixed_on=True,
                     trial_on=False,
@@ -38,6 +38,31 @@ class ShopOrphanCaptionTests(unittest.IsolatedAsyncioTestCase):
             message.answer.await_args_list[0].kwargs.get("reply_markup"), "INLINE"
         )
         chrome.delete.assert_not_awaited()
+
+    async def test_present_send_inline_nav_no_chrome_followup(self):
+        from app.bot.handlers.shop import present_shop_kind_picker
+
+        message = AsyncMock()
+        message.answer = AsyncMock(return_value=AsyncMock())
+
+        with patch(
+            "app.bot.handlers.shop.kb.shop_kind_keyboard", return_value="INLINE"
+        ):
+            await present_shop_kind_picker(
+                message,
+                ui={"nav_mode": "inline"},
+                body="body",
+                fixed_on=True,
+                trial_on=False,
+                custom_on=False,
+                wholesale_on=False,
+                mode="send",
+            )
+
+        self.assertEqual(message.answer.await_count, 1)
+        self.assertEqual(
+            message.answer.await_args.kwargs.get("reply_markup"), "INLINE"
+        )
 
     async def test_present_edit_does_not_answer_chrome_caption(self):
         from app.bot.handlers.shop import present_shop_kind_picker

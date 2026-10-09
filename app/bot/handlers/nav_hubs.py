@@ -39,6 +39,52 @@ async def nv_wallet_topup(
     await open_wallet_topup(callback.message, session, state)
 
 
+@router.callback_query(F.data.startswith("nv:w:amt:"))
+async def nv_wallet_amount(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+):
+    """Preset amount or custom free-text prompt (Wave C)."""
+    from app.bot import keyboards as kb
+    from app.bot.handlers.wallet import WalletStates, present_topup_methods
+    from app.bot.nav_inline import present_inline_only, wallet_topup_presets_keyboard
+    from app.services.formatting import format_message
+
+    await callback.answer()
+    if not callback.message:
+        return
+    part = (callback.data or "").split(":")[-1]
+    ui = await get_all_settings(session)
+    if part == "custom":
+        await state.set_state(WalletStates.topup_amount)
+        await callback.message.answer(
+            format_message("➕ شارژ کیف پول", "مبلغ شارژ را به تومان وارد کنید:"),
+            reply_markup=kb.cancel_reply(ui),
+        )
+        return
+    try:
+        amount = int(part)
+    except ValueError:
+        await present_inline_only(
+            callback.message,
+            text=format_message("⚠️ خطا", "مبلغ نامعتبر است."),
+            inline=wallet_topup_presets_keyboard(ui),
+        )
+        return
+    if amount < 1000:
+        await present_inline_only(
+            callback.message,
+            text=format_message("⚠️ خطا", "حداقل مبلغ ۱٬۰۰۰ تومان است."),
+            inline=wallet_topup_presets_keyboard(ui),
+        )
+        return
+    await present_topup_methods(
+        callback.message, session, db_user, state, amount
+    )
+
+
 @router.callback_query(F.data == "nv:w:tx")
 async def nv_wallet_tx(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser

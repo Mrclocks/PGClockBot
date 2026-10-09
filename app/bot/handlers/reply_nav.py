@@ -423,7 +423,12 @@ async def open_wallet_topup(
     ui = await get_all_settings(session)
     can_topup = any(
         on(ui.get(k))
-        for k in ("pay_card_enabled", "pay_gateway_enabled", "pay_crypto_enabled")
+        for k in (
+            "pay_card_enabled",
+            "pay_gateway_enabled",
+            "pay_psp_enabled",
+            "pay_crypto_enabled",
+        )
     )
     if not can_topup:
         if is_inline_nav(ui):
@@ -442,8 +447,22 @@ async def open_wallet_topup(
         return
     from app.bot.handlers.wallet import WalletStates
 
+    if is_inline_nav(ui):
+        from app.bot.nav_inline import present_inline_only, wallet_topup_presets_keyboard
+
+        # Presets first; custom amount uses cancel_reply after nv:w:amt:custom.
+        await state.set_state(WalletStates.topup_amount)
+        await present_inline_only(
+            message,
+            text=format_message(
+                "➕ شارژ کیف پول",
+                "مبلغ را انتخاب کنید یا «مبلغ دیگر» را بزنید:",
+            ),
+            inline=wallet_topup_presets_keyboard(ui),
+        )
+        return
+
     await state.set_state(WalletStates.topup_amount)
-    # Free-text amount: cancel_reply only (restores main KB after cancel/finish).
     await message.answer(
         format_message("➕ شارژ کیف پول", "مبلغ شارژ را به تومان وارد کنید:"),
         reply_markup=kb.cancel_reply(ui),

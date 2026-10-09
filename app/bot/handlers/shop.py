@@ -341,10 +341,14 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
             title="🛒 فروشگاه",
         )
         if callback.message:
+            from app.bot.nav_mode import is_inline_nav
+
             await safe_edit_text(callback.message, text, reply_markup=None, **send_kw)
-            await callback.message.answer(
-                text, reply_markup=kb.persistent_reply_keyboard(ui), **send_kw
-            )
+            # Inline: main ReplyKeyboard already stable — no chrome follow-up.
+            if not is_inline_nav(ui):
+                await callback.message.answer(
+                    text, reply_markup=kb.persistent_reply_keyboard(ui), **send_kw
+                )
         return
     cats, include_other = await _shop_category_menu(session, fixed_plans)
     body, _cap = _shop_picker_copy(use_categories=bool(cats))
@@ -1419,7 +1423,14 @@ async def apply_loyalty_discount_btn(
         await callback.message.answer(
             f"تخفیف اعمال شد ✅\nمبلغ جدید: {format_toman(order.amount, get_settings().currency)}",
         )
-        await present_order_pay(callback.message, session, db_user, order.id, state=state)
+        await present_order_pay(
+            callback.message,
+            session,
+            db_user,
+            order.id,
+            state=state,
+            heal_main=True,
+        )
 
 
 @router.message(ShopStates.discount)
@@ -1469,12 +1480,16 @@ async def apply_discount_msg(
         order = await apply_discount_to_order(session, order, code_raw)
     except ValueError as e:
         await message.answer(user_safe_error(e))
-        await present_order_pay(message, session, db_user, order.id, state=state)
+        await present_order_pay(
+            message, session, db_user, order.id, state=state, heal_main=True
+        )
         return
     await message.answer(
         f"تخفیف اعمال شد ✅\nمبلغ جدید: {format_toman(order.amount, get_settings().currency)}",
     )
-    await present_order_pay(message, session, db_user, order.id, state=state)
+    await present_order_pay(
+        message, session, db_user, order.id, state=state, heal_main=True
+    )
 
 
 @router.callback_query(F.data.startswith("pay:wallet:"))

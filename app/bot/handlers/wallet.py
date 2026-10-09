@@ -251,12 +251,84 @@ async def wallet_topup(callback: CallbackQuery, state: FSMContext, session: Asyn
         await callback.answer("روش شارژ فعالی تنظیم نشده", show_alert=True)
         return
     await callback.answer()
+    if not callback.message:
+        return
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only, wallet_topup_presets_keyboard
+
     await state.set_state(WalletStates.topup_amount)
-    if callback.message:
-        await callback.message.answer(
-            format_message("➕ شارژ کیف پول", "مبلغ شارژ را به تومان وارد کنید:"),
-            reply_markup=kb.cancel_reply(),
+    if is_inline_nav(ui):
+        await present_inline_only(
+            callback.message,
+            text=format_message(
+                "➕ شارژ کیف پول",
+                "مبلغ را انتخاب کنید یا «مبلغ دیگر» را بزنید:",
+            ),
+            inline=wallet_topup_presets_keyboard(ui),
         )
+        return
+    await callback.message.answer(
+        format_message("➕ شارژ کیف پول", "مبلغ شارژ را به تومان وارد کنید:"),
+        reply_markup=kb.cancel_reply(ui),
+    )
+
+
+async def present_topup_methods(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    amount: int,
+    *,
+    heal_main: bool = False,
+) -> None:
+    """After amount is known — show pay methods (inline when nav_mode=inline).
+
+    When ``heal_main`` is set (free-text amount left ``cancel_reply`` on the
+    ReplyKeyboard), restore the stable main keyboard *after* the inline methods
+    bubble so iOS keeps the custom menu.
+    """
+    ui = await get_all_settings(session)
+    await state.set_state(WalletStates.choose_method)
+    await state.update_data(topup_amount=amount)
+    from app.bot import menu_nav as nav
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only, topup_methods_keyboard
+
+    body = format_message(
+        "➕ شارژ کیف پول",
+        f"{kv_line('💰', 'مبلغ', f'<b>{format_toman(amount, get_settings().currency)}</b>')}\n\n"
+        + (
+            "روش واریز را انتخاب کنید:"
+            if is_inline_nav(ui)
+            else "روش واریز را از کیبورد پایین انتخاب کنید:"
+        ),
+    )
+    if is_inline_nav(ui):
+        await nav.set_nav_level(state, nav.NAV_TOPUP_PAY, push=True)
+        await present_inline_only(
+            message, text=body, inline=topup_methods_keyboard(ui)
+        )
+        if heal_main:
+            from app.bot.menu_nav import build_main_reply_keyboard
+            from app.bot.tg_utils import attach_reply_keyboard
+
+            main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
+            await attach_reply_keyboard(
+                message,
+                main_kb,
+                text="مبلغ ثبت شد — روش واریز را از دکمه‌های پیام بالا انتخاب کنید.",
+            )
+        return
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_TOPUP_PAY,
+        text=body,
+        state=state,
+        push=True,
+    )
 
 
 @router.message(WalletStates.topup_amount)
@@ -286,22 +358,9 @@ async def wallet_topup_amount(message: Message, state: FSMContext, session: Asyn
             reply_markup=kb.cancel_reply(ui),
         )
         return
-    await state.set_state(WalletStates.choose_method)
-    await state.update_data(topup_amount=amount)
-    from app.bot import menu_nav as nav
-
-    await nav.show_nav_keyboard(
-        message,
-        session,
-        db_user,
-        nav.NAV_TOPUP_PAY,
-        text=format_message(
-            "➕ شارژ کیف پول",
-            f"{kv_line('💰', 'مبلغ', f'<b>{format_toman(amount, get_settings().currency)}</b>')}\n\n"
-            "روش واریز را از کیبورد پایین انتخاب کنید:",
-        ),
-        state=state,
-        push=True,
+    # Free-text path used cancel_reply — heal stable main KB after methods.
+    await present_topup_methods(
+        message, session, db_user, state, amount, heal_main=True
     )
 
 

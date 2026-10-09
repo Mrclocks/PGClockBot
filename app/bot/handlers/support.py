@@ -40,12 +40,38 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
     await callback.answer()
     ui = await get_all_settings(session)
     contacts = _active_contacts_from_ui(ui)
+    from app.bot.nav_mode import is_inline_nav
+
+    default_support = (
+        "تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
+        if is_inline_nav(ui)
+        else "از کیبورد پایین تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
+    )
     text, send_kw = outbound_setting_text(
-        ui.get("support_text")
-        or "از کیبورد پایین تیکت جدید بسازید یا تیکت‌های قبلی را ببینید.",
+        ui.get("support_text") or default_support,
         title="🎧 پشتیبانی",
     )
     if callback.message:
+        if is_inline_nav(ui):
+            from app.bot.nav_inline import support_hub_keyboard
+
+            contact_rows: list[list[InlineKeyboardButton]] = []
+            for c in contacts:
+                url = support_chat_url(c.get("telegram") or "")
+                title = c.get("title") or "پشتیبان"
+                if url:
+                    contact_rows.append(
+                        [InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)]
+                    )
+            await safe_edit_text(
+                callback.message,
+                text,
+                reply_markup=support_hub_keyboard(
+                    ui, contact_rows=contact_rows or None
+                ),
+                **send_kw,
+            )
+            return
         from app.bot.tg_utils import attach_reply_keyboard
 
         await safe_edit_text(callback.message, text, reply_markup=None, **send_kw)

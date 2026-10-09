@@ -23,6 +23,8 @@ class NavModeTests(unittest.TestCase):
 
 class MainKeyboardInlineTests(unittest.TestCase):
     def test_no_home_footer_and_no_reseller_apply(self):
+        # Import keyboards first to avoid keyboards↔reply_keyboards circular init.
+        import app.bot.keyboards  # noqa: F401
         from app.bot.reply_keyboards import main_reply_keyboard, reply_action_map
         from app.db.models import Role
 
@@ -57,6 +59,7 @@ class MainKeyboardInlineTests(unittest.TestCase):
         self.assertEqual(mapping.get("درخواست نمایندگی"), "reseller_apply")
 
     def test_classic_keeps_home_footer(self):
+        import app.bot.keyboards  # noqa: F401
         from app.bot.reply_keyboards import main_reply_keyboard
         from app.db.models import Role
 

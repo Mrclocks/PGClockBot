@@ -79,6 +79,112 @@ async def safe_edit_inline(
         return False
 
 
+DEFAULT_TOPUP_PRESETS: tuple[int, ...] = (50_000, 100_000, 200_000, 500_000)
+
+
+def parse_topup_presets(ui: dict | None = None) -> list[int]:
+    """CSV of toman amounts from ``wallet_topup_presets`` (falls back to defaults)."""
+    raw = str((ui or {}).get("wallet_topup_presets") or "").strip()
+    out: list[int] = []
+    if raw:
+        for part in raw.replace("،", ",").split(","):
+            part = part.replace(",", "").replace("٬", "").strip()
+            if not part:
+                continue
+            try:
+                n = int(part)
+            except ValueError:
+                continue
+            if n >= 1000:
+                out.append(n)
+    return out or list(DEFAULT_TOPUP_PRESETS)
+
+
+def wallet_topup_presets_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Preset amounts + custom + back (Wave C)."""
+    from app.services.formatting import format_toman
+
+    presets = parse_topup_presets(ui)
+    buttons = [
+        _ikb(
+            format_toman(n),
+            callback_data=f"nv:w:amt:{n}",
+            ui=ui,
+            style=_style(ui, "wallet_topup", fallback="primary"),
+        )
+        for n in presets[:8]
+    ]
+    rows: list[list[InlineKeyboardButton]] = []
+    for i in range(0, len(buttons), 2):
+        rows.append(buttons[i : i + 2])
+    rows.append(
+        [
+            _ikb(
+                "✍ مبلغ دیگر",
+                callback_data="nv:w:amt:custom",
+                ui=ui,
+                style=_style(ui, "wallet_topup", fallback="primary"),
+            )
+        ]
+    )
+    rows.append(
+        [
+            _ikb(
+                _t(ui, "btn_back") or "⬅️ بازگشت",
+                callback_data="nv:w:home",
+                ui=ui,
+                label_key="btn_back",
+                style=_style(ui, "back"),
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def topup_methods_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Inline top-up pay methods using existing ``wtop:*`` callbacks.
+
+    Built without importing ``reply_keyboards`` (avoids circular import via
+    ``keyboards`` ↔ ``reply_keyboards``).
+    """
+    from app.services.users import on
+
+    # flag, label_key, callback, style_key — same set as _topup_method_entries
+    methods = (
+        ("pay_card_enabled", "btn_pay_card", "wtop:card", "topup_card"),
+        ("pay_gateway_enabled", "btn_pay_gateway", "wtop:gateway", "topup_gateway"),
+        ("pay_psp_enabled", "btn_pay_psp", "wtop:psp", "topup_psp"),
+        ("pay_crypto_enabled", "btn_pay_crypto", "wtop:crypto", "topup_crypto"),
+    )
+    rows: list[list[InlineKeyboardButton]] = []
+    for flag, label_key, cb, style_key in methods:
+        if not on(_t(ui, flag)):
+            continue
+        rows.append(
+            [
+                _ikb(
+                    _t(ui, label_key),
+                    callback_data=cb,
+                    ui=ui,
+                    label_key=label_key,
+                    style=_style(ui, style_key, fallback="primary"),
+                )
+            ]
+        )
+    rows.append(
+        [
+            _ikb(
+                _t(ui, "btn_back") or "⬅️ بازگشت",
+                callback_data="nv:w:topup",
+                ui=ui,
+                label_key="btn_back",
+                style=_style(ui, "back"),
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     rows = [
         [
