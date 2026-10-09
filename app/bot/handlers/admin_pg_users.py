@@ -354,6 +354,8 @@ async def adm_pg(
 ):
     """PasarGuard hub for Owner and L1 with migrated PG pages (not platform overview)."""
     from app.bot.auth import bot_may_open_pg_hub, filtered_pg_reply_keyboard
+    from app.bot.nav_mode import is_inline_nav
+    from app.services.users import get_all_settings
 
     if not await bot_may_open_pg_hub(
         session,
@@ -365,25 +367,41 @@ async def adm_pg(
         await callback.answer("دسترسی پاسارگارد برای این حساب تعریف نشده", show_alert=True)
         return
     await callback.answer()
-    if callback.message:
-        await callback.message.edit_text(
-            "🖥 <b>عملیات پاسارگارد</b>\n"
-            "از کیبورد پایین بخش موردنظر را انتخاب کنید.",
-            reply_markup=None,
+    if not callback.message:
+        return
+    ui = await get_all_settings(session)
+    if is_inline_nav(ui):
+        from app.bot.handlers.reply_nav import open_pg_home
+
+        await open_pg_home(
+            callback.message,
+            session,
+            db_user,
+            state=None,
+            push=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
         )
-        try:
-            await callback.message.answer(
-                "⌨️",
-                reply_markup=await filtered_pg_reply_keyboard(
-                    db_user,
-                    session=session,
-                    is_reseller_bot=is_reseller_bot,
-                    reseller_profile_id=reseller_profile_id,
-                    reseller_owner_id=reseller_owner_id,
-                ),
-            )
-        except Exception:
-            pass
+        return
+    await callback.message.edit_text(
+        "🖥 <b>عملیات پاسارگارد</b>\n"
+        "از کیبورد پایین بخش موردنظر را انتخاب کنید.",
+        reply_markup=None,
+    )
+    try:
+        await callback.message.answer(
+            "⌨️",
+            reply_markup=await filtered_pg_reply_keyboard(
+                db_user,
+                session=session,
+                is_reseller_bot=is_reseller_bot,
+                reseller_profile_id=reseller_profile_id,
+                reseller_owner_id=reseller_owner_id,
+            ),
+        )
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data == "adm:pg:group")
