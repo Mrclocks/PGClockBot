@@ -256,6 +256,17 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         self.assertIn("خالی بماند تا توکن فعلی حفظ شود", bot)
         self.assertIn("خالی بماند تا رمز فعلی حفظ شود", bot)
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn("padding-right: var(--space-2)", css)
+        self.assertIn("padding-left: var(--space-5)", css)
+        # Physical padding lives on the main .pw-field input rule (not auth-form).
+        self.assertIn(
+            ".pw-field input {\n  width: 100%;\n  margin-top: 0;",
+            css,
+        )
+        field = css.split(".pw-field input {\n  width: 100%;", 1)[1].split("}", 1)[0]
+        self.assertIn("padding-right: var(--space-2)", field)
+        self.assertIn("padding-left: var(--space-5)", field)
+        self.assertIn("text-align: right", field)
         ph = css.split(".pw-field input::placeholder {", 1)[1].split("}", 1)[0]
         self.assertIn("direction: rtl", ph)
         self.assertIn("text-align: right", ph)
