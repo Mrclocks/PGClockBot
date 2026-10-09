@@ -69,6 +69,8 @@
   --space-2: 16px;
   --space-2_5: 20px;
   --space-3: 24px;
+  /* Extra inline inset on modal scrollers so overlay thumbs miss body copy. */
+  --modal-scrollbar-room: 8px;
   --space-4: 32px;
   --space-4_5: 40px;
   --space-5: 48px;
@@ -5998,15 +6000,38 @@ form.settings-form > .actions.sticky-actions,
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
-  /* Reserve the track so the thumb never paints over title/close/body. */
-  scrollbar-gutter: stable;
+  /*
+    Reserve a track on BOTH inline edges. With dir=rtl, `stable` alone often
+    keeps the gutter on the left while overlay thumbs still paint on the
+    physical right — covering title/close/body. both-edges + a classic
+    webkit track keep the thumb off the copy in LTR and RTL.
+  */
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
   /* Stretch to panel edges so the scrollbar sits on the chrome edge,
      still clipped by the panel's border-radius (fixes Android square overflow). */
   margin: calc(-1 * var(--space-3));
   padding: var(--space-3);
+  /* Extra inline air when a browser ignores gutter for overlay scrollbars. */
+  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
 }
-.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {
+.ui-modal-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.ui-modal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ui-modal-scroll::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll,
+.settings-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {
   margin: 0;
   border: 0;
   border-radius: 0;
@@ -6014,12 +6039,13 @@ form.settings-form > .actions.sticky-actions,
   /* Parent panel clips the curve; this box only scrolls. */
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: stable both-edges;
   /* Equal air above the title and below the last block */
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-3);
+  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
 }
 .ui-modal-panel-lg { width: min(720px, 100%); }
@@ -7410,8 +7436,15 @@ html[data-theme="light"] .ui-modal-panel {
 html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] {
   background: var(--bg-card);
 }
-html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {
+html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll,
+html[data-theme="light"] .settings-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {
   background: transparent;
+}
+html[data-theme="light"] .ui-modal-scroll {
+  scrollbar-color: #d4d4d8 transparent;
+}
+html[data-theme="light"] .ui-modal-scroll::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
 }
 html[data-theme="light"] .nav-label-home { color: var(--foreground); }
 /* Neutral select/hover for the border-only home box (no brand tint) */

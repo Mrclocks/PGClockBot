@@ -79,23 +79,31 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("opacity:", out_kf)
         self.assertNotIn("transform:", in_kf)
         self.assertNotIn("transform:", out_kf)
-        self.assertIn(
-            '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {',
-            css,
+        # Shared shell scroll rule (ui-modal + settings-modal)
+        shell_scroll_sel = (
+            '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll,\n'
+            '.settings-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {'
         )
-        scroll_chrome = css.split(
-            '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {', 1
-        )[1].split("}", 1)[0]
+        self.assertIn(shell_scroll_sel, css)
+        scroll_chrome = css.split(shell_scroll_sel, 1)[1].split("}", 1)[0]
         self.assertIn("background: transparent;", scroll_chrome)
         # Equal vertical air: flex column + gap + symmetric padding
         self.assertIn("display: flex;", scroll_chrome)
         self.assertIn("flex-direction: column;", scroll_chrome)
         self.assertIn("gap: var(--space-3);", scroll_chrome)
         self.assertIn("padding: var(--space-3);", scroll_chrome)
-        # Track reserved so the thumb never overlays title/close/body
-        self.assertIn("scrollbar-gutter: stable;", scroll_chrome)
-        base_scroll = css.split(".ui-modal-scroll {", 1)[1].split("}", 1)[0]
-        self.assertIn("scrollbar-gutter: stable;", base_scroll)
+        # Both edges: RTL gutter mismatch + overlay thumbs on the physical right
+        self.assertIn("scrollbar-gutter: stable both-edges;", scroll_chrome)
+        self.assertIn(
+            "padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));",
+            scroll_chrome,
+        )
+        base_sel = ".ui-modal-scroll {\n"
+        self.assertIn(base_sel, css)
+        base_scroll = css.split(base_sel, 1)[1].split("}", 1)[0]
+        self.assertIn("scrollbar-gutter: stable both-edges;", base_scroll)
+        self.assertIn(".ui-modal-scroll::-webkit-scrollbar {", css)
+        self.assertIn("--modal-scrollbar-room:", css)
         js = JS.read_text(encoding="utf-8")
         self.assertIn('panel.dataset.scrollShell = \'1\'', js)
         self.assertIn("corner clip", js)
