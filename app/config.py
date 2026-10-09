@@ -114,6 +114,8 @@ class Settings(BaseSettings):
     pg_subscription_path: str = Field(default="/sub", alias="PG_SUBSCRIPTION_PATH")
     pg_username: str = Field(default="", alias="PG_USERNAME")
     pg_password: str = Field(default="", alias="PG_PASSWORD")
+    # Admin API key for the connected PG identity (X-Api-Key). Preferred over password.
+    pg_api_key: str = Field(default="", alias="PG_API_KEY")
     pg_access_token: str = Field(default="", alias="PG_ACCESS_TOKEN")
 
     web_host: str = Field(default="0.0.0.0", alias="WEB_HOST")
@@ -160,6 +162,7 @@ class Settings(BaseSettings):
         "pg_subscription_path",
         "pg_username",
         "pg_password",
+        "pg_api_key",
         "pg_access_token",
         "web_host",
         "web_secret",

@@ -388,7 +388,10 @@ def call_settings(endpoint, *, dns_error=False, **overrides):
         stack.enter_context(
             patch(
                 "app.services.setup_wizard.current_setup_values",
-                return_value={"PG_PASSWORD": "stored-secret"},
+                return_value={
+                    "PG_PASSWORD": "stored-secret",
+                    "PG_API_KEY": "",
+                },
             )
         )
         save = stack.enter_context(patch("app.api.app.update_env_keys"))
@@ -418,6 +421,7 @@ def test_panel_settings_save_preserves_password_and_changes_only_pg(settings_end
             "PG_SUBSCRIPTION_PATH": "/apilog",
             "PG_USERNAME": "panel-user",
             "PG_PASSWORD": "stored-secret",
+            "PG_API_KEY": "",
         }
     )
     reset.assert_called_once()
@@ -434,6 +438,7 @@ def test_panel_connection_test_does_not_save(settings_endpoint):
     probe.assert_awaited_once_with(
         username="panel-user",
         password="new-secret",
+        api_key=None,
         base_url="https://pg.example:8443/dashboard",
         use_cache=False,
     )

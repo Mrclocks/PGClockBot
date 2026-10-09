@@ -18,6 +18,7 @@ def main() -> None:
         "PG_BASE_URL",
         "PG_USERNAME",
         "PG_PASSWORD",
+        "PG_API_KEY",
         "WEB_HOST",
         "WEB_PORT",
         "WEB_SECRET",

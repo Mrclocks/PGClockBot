@@ -97,6 +97,26 @@
     </label>
     {% endif %}
 
+    {% if profile.pg_admin_username %}
+    <label class="form-field">کلید API پاسارگارد
+      <input name="pg_api_key" type="password" autocomplete="new-password" dir="ltr"
+        placeholder="{% if pg_api_key_ready %}خالی بماند تا کلید فعلی حفظ شود{% else %}اختیاری — کلید API از پنل پاسارگارد{% endif %}" />
+      <small class="muted">
+        ترجیح بر رمز برای فراخوانی API (هدر <code dir="ltr">X-Api-Key</code>).
+        کلید را در پاسارگارد بسازید و فقط یک‌بار اینجا ذخیره کنید.
+        {% if pg_api_key_ready %}<span class="badge approved">کلید API ذخیره‌شده</span>{% endif %}
+      </small>
+    </label>
+    {% if pg_api_key_ready %}
+    <label class="form-field">
+      <span class="ui-check">
+        <input type="checkbox" name="clear_pg_api_key" value="1" />
+        حذف کلید API (بازگشت به احراز هویت با رمز)
+      </span>
+    </label>
+    {% endif %}
+    {% endif %}
+
     <label class="form-field">آیدی ادمین‌های ربات اختصاصی
       <input name="bot_admin_ids" value="{{ profile.bot_admin_ids or '' }}" dir="ltr" placeholder="123456789, 987654321" />
       <small class="muted">آیدی‌های تلگرام (با ویرگول). فقط روی ربات این نماینده پنل نماینده می‌بینند؛ در ربات اصلی منوی کاربر عادی می‌ماند.</small>

@@ -171,6 +171,7 @@ async def resolve_platform_pg_capabilities(
     *,
     username: str | None = None,
     password: str | None = None,
+    api_key: str | None = None,
     base_url: str | None = None,
     use_cache: bool = True,
 ) -> dict[str, Any]:
@@ -178,6 +179,7 @@ async def resolve_platform_pg_capabilities(
 
     Fail-closed: any probe/role failure → empty features (no PG UI).
     Does not elevate beyond the token of the given / env credentials.
+    Auth: API key (X-Api-Key) preferred over password when either is provided.
     """
     from app.config import get_settings
     from app.services.pasarguard import PasarGuardClient, PasarGuardError
@@ -185,15 +187,25 @@ async def resolve_platform_pg_capabilities(
     settings = get_settings()
     env_username = getattr(settings, "pg_username", None)
     env_password = getattr(settings, "pg_password", None)
+    env_api_key = getattr(settings, "pg_api_key", None)
     env_base_url = getattr(settings, "pg_base_url", None)
     uname = (username if username is not None else env_username or "").strip()
     pwd = (password if password is not None else (env_password or "")).replace(
         "\r", ""
     ).strip()
+    key = (api_key if api_key is not None else (env_api_key or "")).replace(
+        "\r", ""
+    ).strip()
     # base_url override only for setup probe (temporary client)
     cache_key = f"{(base_url or env_base_url or '').rstrip('/')}|{uname.lower()}"
     now = time.monotonic()
-    if use_cache and username is None and password is None and base_url is None:
+    if (
+        use_cache
+        and username is None
+        and password is None
+        and api_key is None
+        and base_url is None
+    ):
         hit = _PLATFORM_CAPS_CACHE.get(cache_key)
         if hit and (now - hit[0]) < _PLATFORM_CAPS_TTL:
             return dict(hit[1])
@@ -208,20 +220,26 @@ async def resolve_platform_pg_capabilities(
         "role": None,
         "admin": None,
     }
-    if not uname or not pwd:
-        empty["error"] = "اعتبارنامه پاسارگارد ناقص است"
+    if not uname or not (pwd or key):
+        empty["error"] = "اعتبارنامه پاسارگارد ناقص است (نام کاربری + رمز یا کلید API)"
         return empty
 
     client: PasarGuardClient | None = None
-    own_client = bool(username is not None or password is not None or base_url is not None)
+    own_client = bool(
+        username is not None
+        or password is not None
+        or api_key is not None
+        or base_url is not None
+    )
     try:
         if own_client:
             # Temporary client for setup probe — do not touch global get_pg() singleton.
-            from app.config import get_settings as _gs
-
-            # PasarGuardClient reads base from settings; briefly not ideal.
-            # Construct with explicit login overrides (token via password grant).
-            client = PasarGuardClient(username=uname, password=pwd)
+            # Prefer API key when provided; otherwise password grant.
+            client = PasarGuardClient(
+                username=uname,
+                password=pwd or None,
+                api_key=key or None,
+            )
             if base_url:
                 try:
                     client.base_url = assert_safe_pg_base_url(str(base_url).rstrip("/"))

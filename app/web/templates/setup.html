@@ -108,13 +108,30 @@
       <label>نام کاربری پاسارگارد
         
         <input name="pg_username" value="{{ values.PG_USERNAME or '' }}" required dir="ltr" placeholder="pg_user" autocomplete="off" />
-        <small class="muted">یوزر ورود API پاسارگارد</small>
+        <small class="muted">یوزر همان ادمین متصل در پاسارگارد (لزوماً owner نیست)</small>
       </label>
       <label>رمز پاسارگارد
-        <input name="pg_password" type="password" value="" {{ 'required' if not has_pg_password else '' }} autocomplete="off" dir="ltr"
-               placeholder="{{ '•••••••••• (برای تغییر، مقدار جدید وارد کنید)' if has_pg_password else '' }}" />
-        {% if has_pg_password %}<small class="muted">قبلاً ذخیره شده — برای حفظ همان رمز، این فیلد را خالی بگذارید.</small>{% endif %}
+        <input name="pg_password" type="password" value="" {{ 'required' if not has_pg_password and not has_pg_api_key else '' }} autocomplete="off" dir="ltr"
+               placeholder="{{ 'خالی بماند تا رمز فعلی حفظ شود' if has_pg_password else '' }}" />
+        {% if has_pg_password %}<small class="muted">قبلاً ذخیره شده — برای حفظ همان رمز، این فیلد را خالی بگذارید.</small>
+        {% else %}<small class="muted">رمز یا کلید API — حداقل یکی لازم است</small>{% endif %}
       </label>
+      <label>کلید API پاسارگارد
+        <input name="pg_api_key" type="password" value="" autocomplete="new-password" dir="ltr"
+               placeholder="{% if has_pg_api_key %}خالی بماند تا کلید فعلی حفظ شود{% else %}اختیاری — کلید API از پنل پاسارگارد{% endif %}" />
+        <small class="muted">
+          ترجیح بر رمز برای فراخوانی API (هدر <code dir="ltr">X-Api-Key</code>).
+          {% if has_pg_api_key %}<span class="badge approved">کلید API ذخیره‌شده</span>{% endif %}
+        </small>
+      </label>
+      {% if has_pg_api_key %}
+      <label>
+        <span class="ui-check">
+          <input type="checkbox" name="clear_pg_api_key" value="1" />
+          حذف کلید API (بازگشت به احراز هویت با رمز)
+        </span>
+      </label>
+      {% endif %}
       <label>پورت وب‌پنل (WEB_PORT)
         <input name="web_port" value="{{ values.WEB_PORT or '9000' }}" required dir="ltr" />
       </label>

@@ -163,6 +163,7 @@ class PasarGuardClient:
         username: str | None = None,
         password: str | None = None,
         access_token: str | None = None,
+        api_key: str | None = None,
     ) -> None:
         self.settings = get_settings()
         # Use settings value as-is (already normalized with path preserved)
@@ -177,8 +178,24 @@ class PasarGuardClient:
         # Optional per-admin credentials (reseller shop) — never fall back to owner silently
         self._login_username = (username or "").strip() or None
         self._login_password = (password or "").replace("\r", "").strip() or None
-        if access_token is not None:
-            self._token: str | None = access_token or None
+        # Admin API key (X-Api-Key). Mutually exclusive with Bearer/password on this client.
+        # One auth method per client — never send both Authorization Bearer and X-Api-Key.
+        explicit_api_key = (api_key or "").replace("\r", "").strip() or None
+        # Env/owner client (no per-admin overrides): prefer PG_API_KEY over password login.
+        env_api_key = None
+        if (
+            explicit_api_key is None
+            and username is None
+            and password is None
+            and access_token is None
+        ):
+            env_api_key = (self.settings.pg_api_key or "").replace("\r", "").strip() or None
+        self._api_key = explicit_api_key or env_api_key
+        if self._api_key:
+            self._token: str | None = None
+            self._login_password = None
+        elif access_token is not None:
+            self._token = access_token or None
         elif self._login_username:
             self._token = None
         else:
@@ -191,6 +208,15 @@ class PasarGuardClient:
             # Never follow redirects with Bearer tokens (SSRF / credential forwarding)
             follow_redirects=False,
         )
+
+    @property
+    def uses_api_key(self) -> bool:
+        return bool(self._api_key)
+
+    @property
+    def is_auth_ready(self) -> bool:
+        """True when this client can authorize requests (API key or Bearer token)."""
+        return bool(self._api_key) or bool(self._token)
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -245,6 +271,11 @@ class PasarGuardClient:
         self._api_base_resolved = True
 
     async def ensure_token(self) -> str:
+        if self._api_key:
+            await self._ensure_api_base()
+            # Sentinel so callers that treat ensure_token as "auth ready" stay truthful.
+            # Real requests use X-Api-Key via _headers — never Bearer with this client.
+            return "__apikey__"
         if self._token:
             return self._token
         await self._ensure_api_base()
@@ -327,6 +358,9 @@ class PasarGuardClient:
         )
 
     async def _headers(self) -> dict[str, str]:
+        if self._api_key:
+            await self._ensure_api_base()
+            return {"X-Api-Key": self._api_key}
         token = await self.ensure_token()
         return {"Authorization": f"Bearer {token}"}
 
@@ -365,9 +399,12 @@ class PasarGuardClient:
             await self._ensure_api_base()
         resp = await self._client.request(method, path, headers=headers, **kwargs)
         if resp.status_code == 401 and auth:
-            self._token = None
-            headers.update(await self._headers())
-            resp = await self._client.request(method, path, headers=headers, **kwargs)
+            # Bearer: clear JWT and re-login once. API key: same key cannot recover —
+            # skip retry (would only double the same unauthorized request).
+            if not self._api_key:
+                self._token = None
+                headers.update(await self._headers())
+                resp = await self._client.request(method, path, headers=headers, **kwargs)
         if resp.status_code >= 400:
             raise PasarGuardError(
                 f"{method} {path} failed ({resp.status_code})",
@@ -823,6 +860,18 @@ _pg_staff_cache: dict[tuple[int, str], PasarGuardClient] = {}
 _pg_principal_cache: dict[tuple[int, str], PasarGuardClient] = {}
 
 
+def _cached_client_ready(client: Any) -> bool:
+    """True when a cached client can authorize (API key or Bearer).
+
+    Accepts real ``PasarGuardClient`` and test doubles that only expose ``_token``.
+    """
+    if client is None:
+        return False
+    if hasattr(client, "is_auth_ready"):
+        return bool(client.is_auth_ready)
+    return bool(getattr(client, "_token", None) or getattr(client, "_api_key", None))
+
+
 def get_pg() -> PasarGuardClient:
     """Platform owner PasarGuard client (env credentials)."""
     global _pg
@@ -874,10 +923,33 @@ def invalidate_pg_reseller_cache(reseller_user_id: int | None) -> None:
         _pg_reseller_cache.pop(stale_key, None)
 
 
+def invalidate_pg_staff_cache(
+    *,
+    staff_id: int | None = None,
+    pg_username: str | None = None,
+) -> None:
+    """Drop cached PG clients for one pg_staff row (e.g. after API key rotate)."""
+    if staff_id is not None:
+        try:
+            sid = int(staff_id)
+        except (TypeError, ValueError):
+            sid = 0
+        if sid > 0:
+            for stale_key in [k for k in _pg_staff_cache if k[0] == sid]:
+                _pg_staff_cache.pop(stale_key, None)
+            return
+    uname = (pg_username or "").strip().lower()
+    if not uname:
+        return
+    for stale_key in [k for k in _pg_staff_cache if k[1] == uname]:
+        _pg_staff_cache.pop(stale_key, None)
+
+
 async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClient:
     """PasarGuard client authenticated as the shop's PG admin — never owner token.
 
-    Requires ``pg_admin_username`` + stored encrypted password on the profile.
+    Requires ``pg_admin_username`` plus a stored encrypted API key or password.
+    Priority: API key (X-Api-Key) → password (Bearer via /api/admin/token).
     """
     from sqlalchemy import select
 
@@ -901,7 +973,7 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
     uname = str(profile.pg_admin_username).strip().lower()
     cache_key = (rid, uname)
     cached = _pg_reseller_cache.get(cache_key)
-    if cached is not None and cached._token:
+    if _cached_client_ready(cached):
         return cached
 
     from app.services.org_principals import get_principal_by_reseller_profile
@@ -911,22 +983,39 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
         linked is not None
         and str(linked.status) == "active"
         and int(getattr(linked, "depth", -1) or -1) in (1, 2)
-        and (linked.pg_password_enc or "").strip()
+        and (
+            (getattr(linked, "pg_api_key_enc", None) or "").strip()
+            or (linked.pg_password_enc or "").strip()
+        )
         and (linked.pg_username or "").strip()
     ):
         return await get_pg_for_principal(session, principal_id=int(linked.id))
 
+    api_key = decrypt_secret(getattr(profile, "pg_api_key_enc", None))
+    if api_key:
+        client = PasarGuardClient(
+            username=profile.pg_admin_username,
+            api_key=api_key,
+        )
+        api_key = ""
+        await client.ensure_token()
+        for stale_key in [k for k in _pg_reseller_cache if k[0] == rid and k != cache_key]:
+            _pg_reseller_cache.pop(stale_key, None)
+        _pg_reseller_cache[cache_key] = client
+        return client
+
     password = decrypt_secret(profile.pg_admin_password_enc)
     if not password:
         raise PasarGuardError(
-            "رمز پاسارگارد نماینده ذخیره نشده. "
+            "اعتبارنامه پاسارگارد نماینده ذخیره نشده (کلید API یا رمز). "
             "علت محتمل: راه‌اندازی ناقص یا کلید رمزنگاری تغییر کرده. "
-            "راه حل: ادمین اصلی از بخش نمایندگان رمز را بازنشانی کند یا دسترسی را دوباره تنظیم کند."
+            "راه حل: ادمین اصلی از بخش نمایندگان کلید API یا رمز را ثبت/بازنشانی کند."
         )
     client = PasarGuardClient(
         username=profile.pg_admin_username,
         password=password,
     )
+    password = ""
     await client.ensure_token()
     # Drop any stale entry for this reseller under a different (old) admin
     # username so it can never be resurrected/reused.
@@ -941,7 +1030,8 @@ async def get_pg_for_staff(
 ) -> PasarGuardClient:
     """PasarGuard client for a pg_staff row — never owner token (Phase C5 / 1F).
 
-    Requires ``PgStaffAccess.pg_admin_password_enc``.
+    Requires encrypted API key or password on ``PgStaffAccess``.
+    Priority: API key → password.
     Cache key is ``(staff_id, username)`` so sibling principals never share a
     client even if usernames collide after re-grant.
     """
@@ -974,16 +1064,26 @@ async def get_pg_for_staff(
     sid = int(row.id)
     cache_key = (sid, uname)
     cached = _pg_staff_cache.get(cache_key)
-    if cached is not None and cached._token:
+    if _cached_client_ready(cached):
         return cached
+    api_key = decrypt_secret(getattr(row, "pg_api_key_enc", None))
+    if api_key:
+        client = PasarGuardClient(username=row.pg_username, api_key=api_key)
+        api_key = ""
+        await client.ensure_token()
+        for stale_key in [k for k in _pg_staff_cache if k[0] == sid and k != cache_key]:
+            _pg_staff_cache.pop(stale_key, None)
+        _pg_staff_cache[cache_key] = client
+        return client
     password = decrypt_secret(row.pg_admin_password_enc)
     if not password:
         raise PasarGuardError(
-            "رمز پاسارگارد برای این حساب ذخیره نشده. "
+            "اعتبارنامه پاسارگارد برای این حساب ذخیره نشده (کلید API یا رمز). "
             "علت محتمل: اعطای ناقص یا کلید رمزنگاری تغییر کرده. "
-            "راه حل: ادمین اصلی از «ادمین‌ها» دسترسی ادمین فرعی را با رمز جدید ویرایش کند."
+            "راه حل: ادمین اصلی از «ادمین‌ها» کلید API یا رمز ادمین فرعی را ثبت کند."
         )
     client = PasarGuardClient(username=row.pg_username, password=password)
+    password = ""
     await client.ensure_token()
     # Drop stale keys for this staff row (username rename) and legacy
     # username-only keys if any remain from older builds.
@@ -1001,7 +1101,8 @@ async def get_pg_for_principal(
 ) -> PasarGuardClient:
     """PasarGuard client for a Level-1 or Level-2 OrgPrincipal — never Owner env token.
 
-    Requires ``OrgPrincipal.pg_username`` + ``pg_password_enc`` on *this* row.
+    Requires ``OrgPrincipal.pg_username`` plus ``pg_api_key_enc`` or ``pg_password_enc``
+    on *this* row. Priority: API key → password.
     Selector is ``principal_id`` only. ``pg_username`` is ignored and must not
     choose a sibling/parent row.
 
@@ -1060,14 +1161,23 @@ async def get_pg_for_principal(
     pid = int(row.id)
     cache_key = (pid, uname.lower())
     cached = _pg_principal_cache.get(cache_key)
-    if cached is not None and cached._token:
+    if _cached_client_ready(cached):
         return cached
+    api_key = decrypt_secret(getattr(row, "pg_api_key_enc", None))
+    if api_key:
+        client = PasarGuardClient(username=uname, api_key=api_key)
+        api_key = ""
+        await client.ensure_token()
+        for stale_key in [k for k in _pg_principal_cache if k[0] == pid and k != cache_key]:
+            _pg_principal_cache.pop(stale_key, None)
+        _pg_principal_cache[cache_key] = client
+        return client
     password = decrypt_secret(row.pg_password_enc)
     if not password:
         raise PasarGuardError(
-            "رمز پاسارگارد Principal ذخیره نشده. "
+            "اعتبارنامه پاسارگارد Principal ذخیره نشده (کلید API یا رمز). "
             "علت محتمل: provisioning ناقص یا کلید رمزنگاری تغییر کرده. "
-            "راه حل: ادمین اصلی Principal را دوباره provision کند."
+            "راه حل: ادمین اصلی کلید API یا رمز Principal را ثبت کند."
         )
     client = PasarGuardClient(username=uname, password=password)
     # Local plaintext reference must not outlive token acquisition.

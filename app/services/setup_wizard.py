@@ -28,6 +28,7 @@ WIZARD_ENV_KEYS = (
     "PG_SUBSCRIPTION_PATH",
     "PG_USERNAME",
     "PG_PASSWORD",
+    "PG_API_KEY",
     "WEB_HOST",
     "WEB_PORT",
     "WEB_SECRET",
@@ -288,6 +289,7 @@ def _env_get(key: str) -> str:
             "PG_SUBSCRIPTION_PATH": settings.pg_subscription_path,
             "PG_USERNAME": settings.pg_username,
             "PG_PASSWORD": settings.pg_password,
+            "PG_API_KEY": settings.pg_api_key,
             "WEB_HOST": settings.web_host,
             "WEB_PORT": str(settings.web_port),
             "WEB_SECRET": settings.web_secret,
@@ -591,6 +593,7 @@ def current_setup_values() -> dict[str, str]:
         "PG_SUBSCRIPTION_PATH": _env_get("PG_SUBSCRIPTION_PATH") or "/sub",
         "PG_USERNAME": _env_get("PG_USERNAME"),
         "PG_PASSWORD": _env_get("PG_PASSWORD"),
+        "PG_API_KEY": _env_get("PG_API_KEY"),
         "WEB_PORT": _env_get("WEB_PORT") or "9000",
         "PUBLIC_BASE_URL": _env_get("PUBLIC_BASE_URL"),
         "CURRENCY": _env_get("CURRENCY") or "تومان",
@@ -754,15 +757,21 @@ async def setup_pg_access_audit() -> dict[str, Any]:
     values = current_setup_values()
     uname = (values.get("PG_USERNAME") or "").strip()
     pwd = (values.get("PG_PASSWORD") or "").strip()
+    api_key = (values.get("PG_API_KEY") or "").strip()
     base = normalize_pg_base_url(values.get("PG_BASE_URL") or "")
-    if not uname or not pwd or not base:
+    if not uname or not (pwd or api_key) or not base:
         return public_pg_access_audit(
-            {"ok": False, "error": "اعتبارنامه پاسارگارد ناقص است", "username": uname or None}
+            {
+                "ok": False,
+                "error": "اعتبارنامه پاسارگارد ناقص است (رمز یا کلید API)",
+                "username": uname or None,
+            }
         )
     try:
         caps = await resolve_platform_pg_capabilities(
             username=uname,
-            password=pwd,
+            password=pwd or None,
+            api_key=api_key or None,
             base_url=base,
             use_cache=False,
         )

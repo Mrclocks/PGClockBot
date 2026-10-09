@@ -2079,6 +2079,13 @@ def register_pg_pages(
             "true",
             "yes",
         }
+        clear_api_key = str(form.get("clear_pg_api_key") or "").strip().lower() in {
+            "1",
+            "on",
+            "true",
+            "yes",
+        }
+        new_api_key = str(form.get("pg_api_key") or "").strip()
         pg_u = (username or "").strip()
         if not pg_u:
             return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
@@ -2111,7 +2118,20 @@ def register_pg_pages(
                 is_active=None,
                 confirm_align=confirm_align,
             )
-            if not err and plan_id and row:
+            if err:
+                return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
+            if row and (clear_api_key or new_api_key):
+                from app.services.pg_staff_access import store_staff_pg_api_key
+
+                api_err = store_staff_pg_api_key(
+                    row,
+                    api_key=new_api_key if not clear_api_key else None,
+                    clear=clear_api_key,
+                )
+                if api_err:
+                    return RedirectResponse(f"/pg/admins?err={_q(api_err)}", status_code=303)
+                await session.commit()
+            if plan_id and row:
                 from app.db.models import ResellerPlan
                 from app.services.pg_admin_subscription import (
                     is_subscription_plan,
@@ -2141,6 +2161,13 @@ def register_pg_pages(
                 note=note,
                 is_active=True,
             )
+            if not err and row and new_api_key:
+                from app.services.pg_staff_access import store_staff_pg_api_key
+
+                api_err = store_staff_pg_api_key(row, api_key=new_api_key)
+                if api_err:
+                    return RedirectResponse(f"/pg/admins?err={_q(api_err)}", status_code=303)
+                await session.commit()
         if err:
             return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
         uname = row.web_username if row else web_username

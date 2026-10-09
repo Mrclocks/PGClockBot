@@ -248,11 +248,12 @@ class StaffPgAsOwnerContractTests(unittest.IsolatedAsyncioTestCase):
 
     def test_admins_template_badges_and_checkbox(self):
         tpl = Path("app/web/templates/pg_admins.html").read_text(encoding="utf-8")
-        self.assertIn("رمز پاسارگارد ذخیره‌شده", tpl)
-        self.assertIn("نیاز به ذخیره رمز", tpl)
+        self.assertIn("اعتبارنامه پاسارگارد ذخیره‌شده", tpl)
+        self.assertIn("نیاز به ذخیره رمز یا کلید API", tpl)
         self.assertIn("نام کاربری ناهماهنگ", tpl)
         self.assertIn('name="confirm_align"', tpl)
         self.assertIn("هم‌ترازسازی نام کاربری با پاسارگارد", tpl)
+        self.assertIn('name="pg_api_key"', tpl)
 
     def test_home_cta_markers(self):
         tpl = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")

@@ -659,7 +659,16 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             "flash_ok": request.query_params.get("ok"),
             "flash_err": request.query_params.get("err"),
             "color_tags": color_tags_for_ui(),
+            "pg_api_key_ready": False,
         }
+        if (getattr(profile, "pg_api_key_enc", None) or "").strip():
+            ctx["pg_api_key_ready"] = True
+        else:
+            from app.services.org_principals import get_principal_by_reseller_profile
+
+            linked = await get_principal_by_reseller_profile(session, int(profile.id))
+            if linked is not None and (getattr(linked, "pg_api_key_enc", None) or "").strip():
+                ctx["pg_api_key_ready"] = True
         if request.query_params.get("fragment") == "1":
             return render(request, "_reseller_edit_body.html", ctx)
         return render(request, "reseller_edit.html", ctx)
@@ -825,6 +834,25 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 return _redirect_reseller_edit(user_id, err=str(e))
             if profile.web_username and not profile.setup_completed_at:
                 profile.setup_completed_at = datetime.now(timezone.utc)
+        clear_api_key = str(form.get("clear_pg_api_key") or "").strip().lower() in {
+            "1",
+            "on",
+            "true",
+            "yes",
+        }
+        new_api_key = str(form.get("pg_api_key") or "").strip()
+        if clear_api_key or new_api_key:
+            from app.services.resellers import apply_reseller_pg_api_key
+
+            try:
+                await apply_reseller_pg_api_key(
+                    session,
+                    profile,
+                    api_key=new_api_key if not clear_api_key else None,
+                    clear=clear_api_key,
+                )
+            except ValueError as e:
+                return _redirect_reseller_edit(user_id, err=str(e))
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
         await session.commit()
         return _redirect_reseller_edit(user_id, ok='ذخیره شد')
