@@ -180,7 +180,17 @@ class PasarGuardClient:
         self._login_password = (password or "").replace("\r", "").strip() or None
         # Admin API key (X-Api-Key). Mutually exclusive with Bearer/password on this client.
         # One auth method per client — never send both Authorization Bearer and X-Api-Key.
-        self._api_key = (api_key or "").replace("\r", "").strip() or None
+        explicit_api_key = (api_key or "").replace("\r", "").strip() or None
+        # Env/owner client (no per-admin overrides): prefer PG_API_KEY over password login.
+        env_api_key = None
+        if (
+            explicit_api_key is None
+            and username is None
+            and password is None
+            and access_token is None
+        ):
+            env_api_key = (self.settings.pg_api_key or "").replace("\r", "").strip() or None
+        self._api_key = explicit_api_key or env_api_key
         if self._api_key:
             self._token: str | None = None
             self._login_password = None

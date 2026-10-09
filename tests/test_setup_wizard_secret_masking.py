@@ -36,7 +36,13 @@ def _fake_request(path: str = "/setup") -> Request:
 
 
 class SetupWizardTemplateMaskingTests(unittest.TestCase):
-    def _render(self, *, has_bot_token: bool, has_pg_password: bool) -> str:
+    def _render(
+        self,
+        *,
+        has_bot_token: bool,
+        has_pg_password: bool,
+        has_pg_api_key: bool = False,
+    ) -> str:
         resp = render(
             _fake_request(),
             "setup.html",
@@ -44,6 +50,7 @@ class SetupWizardTemplateMaskingTests(unittest.TestCase):
                 "values": {
                     "BOT_TOKEN": "",
                     "PG_PASSWORD": "",
+                    "PG_API_KEY": "",
                     "BOT_USERNAME": "shopbot",
                     "ADMIN_IDS": "123",
                     "PG_BASE_URL": "https://pg.example.com",
@@ -52,6 +59,7 @@ class SetupWizardTemplateMaskingTests(unittest.TestCase):
                 },
                 "has_bot_token": has_bot_token,
                 "has_pg_password": has_pg_password,
+                "has_pg_api_key": has_pg_api_key,
                 "initial_step": 2,
                 "show_done": False,
             },
@@ -63,10 +71,11 @@ class SetupWizardTemplateMaskingTests(unittest.TestCase):
         # `values`, the template itself must not interpolate it anymore —
         # simulate the previous behavior's input to prove the template no
         # longer echoes it.
-        html = self._render(has_bot_token=True, has_pg_password=True)
+        html = self._render(has_bot_token=True, has_pg_password=True, has_pg_api_key=True)
         self.assertNotIn('value="123456789:AAHdqTcv', html)
         self.assertIn('name="bot_token" value=""', html)
         self.assertIn('name="pg_password" type="password" value=""', html)
+        self.assertIn('name="pg_api_key" type="password" value=""', html)
 
     def test_placeholder_shown_when_secret_already_saved(self):
         html = self._render(has_bot_token=True, has_pg_password=True)
@@ -80,6 +89,20 @@ class SetupWizardTemplateMaskingTests(unittest.TestCase):
         bot_token_tag = html[html.index('name="bot_token"') : html.index('name="bot_token"') + 200]
         self.assertIn("required", bot_token_tag)
         self.assertNotIn("قبلاً ذخیره شده", html)
+
+    def test_password_not_required_when_api_key_already_saved(self):
+        html = self._render(
+            has_bot_token=True, has_pg_password=False, has_pg_api_key=True
+        )
+        pwd_tag = html[html.index('name="pg_password"') : html.index('name="pg_password"') + 180]
+        self.assertNotIn("required", pwd_tag)
+        self.assertIn("کلید API ذخیره‌شده", html)
+        self.assertIn('name="clear_pg_api_key"', html)
+
+    def test_api_key_field_present(self):
+        html = self._render(has_bot_token=False, has_pg_password=False)
+        self.assertIn('name="pg_api_key"', html)
+        self.assertIn("X-Api-Key", html)
 
 
 class SetupBotEmptyTokenKeepsPreviousTests(unittest.IsolatedAsyncioTestCase):

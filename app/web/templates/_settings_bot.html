@@ -160,9 +160,10 @@
   </div>
 
   {# —— Pasarguard —— #}
+  {% set pg_api_key_ready = (env_values.get('PG_API_KEY') or '')|length > 0 %}
   <div class="card settings-card">
     <h2>پاسارگارد</h2>
-    <p class="muted update-card-caption">ریشه API پاسارگارد را وارد کنید — نه مسیر داشبورد UI.</p>
+    <p class="muted update-card-caption">ریشه API و اعتبارنامهٔ ادمین متصل را وارد کنید — نه مسیر داشبورد UI. این ادمین لزوماً owner پاسارگارد نیست.</p>
     <div class="settings-grid">
       <div class="setting-item full">
         <label>آدرس پنل (PG_BASE_URL)
@@ -180,19 +181,46 @@
       <div class="setting-item">
         <label>نام کاربری
           <input name="PG_USERNAME" value="{{ env_values.get('PG_USERNAME','') }}" dir="ltr" required autocomplete="off" autocapitalize="off" spellcheck="false" />
+          <small class="muted">یوزر همان ادمین متصل در پاسارگارد</small>
         </label>
       </div>
       <div class="setting-item">
         <label>رمز
           <div class="pw-field">
-            <input id="pg-password-input" name="PG_PASSWORD" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="رمز جدید" />
+            <input id="pg-password-input" name="PG_PASSWORD" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="خالی بماند تا رمز فعلی حفظ شود" />
             <button type="button" class="pw-toggle" data-pw-for="pg-password-input" aria-label="نمایش رمز" aria-pressed="false">
               <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>
-          <small class="muted">خالی بماند تا رمز فعلی حفظ شود</small>
+          <small class="muted">رمز یا کلید API — حداقل یکی لازم است</small>
         </label>
       </div>
+      <div class="setting-item full">
+        <label>کلید API پاسارگارد
+          <div class="pw-field">
+            <input id="pg-api-key-input" name="PG_API_KEY" type="password" value="" dir="ltr" autocomplete="new-password"
+              placeholder="{% if pg_api_key_ready %}خالی بماند تا کلید فعلی حفظ شود{% else %}اختیاری — کلید API از پنل پاسارگارد{% endif %}" />
+            <button type="button" class="pw-toggle" data-pw-for="pg-api-key-input" aria-label="نمایش کلید API" aria-pressed="false">
+              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <small class="muted">
+            ترجیح بر رمز برای فراخوانی API (هدر <code dir="ltr">X-Api-Key</code>).
+            کلید را در پاسارگارد برای همین ادمین بسازید.
+            {% if pg_api_key_ready %}<span class="badge approved">کلید API ذخیره‌شده</span>{% endif %}
+          </small>
+        </label>
+      </div>
+      {% if pg_api_key_ready %}
+      <div class="setting-item full">
+        <label>
+          <span class="ui-check">
+            <input type="checkbox" name="clear_pg_api_key" value="1" />
+            حذف کلید API (بازگشت به احراز هویت با رمز)
+          </span>
+        </label>
+      </div>
+      {% endif %}
     </div>
   </div>
 

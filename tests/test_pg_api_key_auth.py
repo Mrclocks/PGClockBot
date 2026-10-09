@@ -518,5 +518,104 @@ class ResellerApplyApiKeyTests(unittest.IsolatedAsyncioTestCase):
                 await apply_reseller_pg_api_key(session, profile, api_key="tiny")
 
 
+class OwnerEnvApiKeyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_get_pg_uses_env_api_key(self) -> None:
+        from app.services.pasarguard import get_pg, reset_pg
+
+        reset_pg()
+        fake_settings = SimpleNamespace(
+            pg_base_url="https://pg.example.com",
+            pg_username="panel_admin",
+            pg_password=_PASSWORD,
+            pg_api_key=_API_KEY,
+            pg_access_token="",
+        )
+        with patch("app.services.pasarguard.get_settings", return_value=fake_settings):
+            with patch(
+                "app.services.pasarguard.assert_safe_pg_base_url",
+                side_effect=lambda u: u,
+            ):
+                client = get_pg()
+        self.assertTrue(client.uses_api_key)
+        self.assertEqual(client._api_key, _API_KEY)
+        self.assertIsNone(client._login_password)
+        reset_pg()
+
+    async def test_platform_caps_accepts_api_key_without_password(self) -> None:
+        from app.services.pg_access import resolve_platform_pg_capabilities
+
+        class _FakeClient:
+            def __init__(self, *, username=None, password=None, api_key=None, access_token=None):
+                self.username = username
+                self.password = password
+                self._api_key = api_key
+                self.base_url = "https://pg.example.com"
+                self._client = MagicMock()
+
+            async def ensure_token(self):
+                return "__apikey__"
+
+            async def get_current_admin(self):
+                return {"username": "limited_admin", "is_sudo": False, "role": {"id": 3}}
+
+            async def get_admin(self, uname):
+                return None
+
+            async def close(self):
+                return None
+
+        with patch("app.services.pasarguard.PasarGuardClient", _FakeClient):
+            with patch(
+                "app.services.pg_access.assert_safe_pg_base_url",
+                side_effect=lambda u: u,
+            ):
+                with patch(
+                    "app.services.pg_access.acl_from_admin_payload",
+                    return_value=(["pg_users"], {"id": 3, "permissions": {}}, False),
+                ):
+                    caps = await resolve_platform_pg_capabilities(
+                        username="limited_admin",
+                        password=None,
+                        api_key=_API_KEY,
+                        base_url="https://pg.example.com",
+                        use_cache=False,
+                    )
+        self.assertTrue(caps.get("ok"))
+        self.assertEqual(caps.get("username"), "limited_admin")
+
+    async def test_platform_caps_fail_closed_without_either_secret(self) -> None:
+        from app.services.pg_access import resolve_platform_pg_capabilities
+
+        caps = await resolve_platform_pg_capabilities(
+            username="x",
+            password="",
+            api_key="",
+            base_url="https://pg.example.com",
+            use_cache=False,
+        )
+        self.assertFalse(caps.get("ok"))
+        self.assertIn("کلید API", caps.get("error") or "")
+
+
+class RedactApiKeyHeaderTests(unittest.TestCase):
+    def test_x_api_key_header_redacted(self) -> None:
+        from app.services.redact import redact
+
+        out = redact(f"X-Api-Key: {_API_KEY}")
+        self.assertNotIn(_API_KEY, out)
+        self.assertIn("<redacted>", out)
+
+
+class ConnectionUiCopyTests(unittest.TestCase):
+    def test_settings_bot_has_api_key_field(self) -> None:
+        from pathlib import Path
+
+        html = Path("app/web/templates/_settings_bot.html").read_text(encoding="utf-8")
+        self.assertIn('name="PG_API_KEY"', html)
+        self.assertIn("ادمین متصل", html)
+        self.assertIn("لزوماً owner پاسارگارد نیست", html)
+        self.assertIn('name="clear_pg_api_key"', html)
+
+
 if __name__ == "__main__":
     unittest.main()
