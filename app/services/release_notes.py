@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.37": [
+        "درخواست‌های لغو به آخرین تب مدیریت مالی منتقل شد؛ نقطهٔ اعلان برای نماینده",
+        "سخت‌سازی امنیتی لغو و کمپین هدفمند (فلش خطا، متن کمپین، لینک اعلان تلگرام)",
+    ],
     "0.2.36": [
         "لینک‌های سریع: ردیف فلکس LTR با دکمه کپی ثابت سمت راست و فونت URL کوچک‌تر",
         "توکن ربات و رمز پاسارگارد: placeholder راست‌چین استاندارد و فاصله هم‌تراز با بقیه فیلدها",
