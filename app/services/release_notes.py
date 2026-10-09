@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
     "0.2.40": [
-        "ناوبری اینلاین بات: کیبورد اصلی ثابت؛ هاب‌ها با دکمه‌های زیر پیام ( Waves A–F )",
-        "rollback سریع: تنظیمات ← منو ← حالت ناوبری = کلاسیک",
+        "ناوبری اینلاین بات: کیبورد اصلی ثابت؛ بخش‌ها با دکمه‌های زیر پیام (فروشگاه، کیف، پشتیبانی، ادمین، …)",
+        "بازگشت سریع به منوی قدیمی: تنظیمات ← منو ← حالت ناوبری = کلاسیک",
         "ریستور گیت: restore/pre-v0.2.40-v0.2.39",
     ],
     "0.2.39": [

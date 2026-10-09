@@ -115,6 +115,12 @@ class OpenAdminUsersInlineTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value={"nav_mode": "inline"}),
             ),
             patch(
+                "app.bot.handlers.reply_nav.admin_customer_counts",
+                AsyncMock(
+                    return_value={"users": 10, "blocked": 1, "orders": 3}
+                ),
+            ),
+            patch(
                 "app.bot.handlers.reply_nav.nav.show_nav_keyboard",
                 new_callable=AsyncMock,
             ) as show_nav,
