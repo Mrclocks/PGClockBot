@@ -561,8 +561,32 @@ async def filtered_pg_reply_keyboard(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    """Reply keyboard for PasarGuard submenu clamped to the actor's PG pages."""
+    """Reply keyboard for PasarGuard submenu clamped to the actor's PG pages.
+
+    Wave F: under ``nav_mode=inline`` heal to the stable main admin/reseller KB
+    instead of swapping in PG submenu chrome after FSM cancel/save.
+    """
     from app.bot import keyboards as kb
+    from app.bot.nav_mode import is_inline_nav
+    from app.services.users import get_all_settings
+
+    if ui is None and session is not None:
+        ui = await get_all_settings(session)
+    if (
+        session is not None
+        and db_user is not None
+        and is_inline_nav(ui)
+    ):
+        from app.bot.menu_nav import build_main_reply_keyboard
+
+        markup, _, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+        )
+        return markup
 
     if session is not None:
         feats = await bot_migrated_pg_features(

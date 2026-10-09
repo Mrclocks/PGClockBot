@@ -79,7 +79,19 @@ async def sync_plans_reply_keyboard(
     audience: str | None = None,
     add_type: bool = False,
 ) -> None:
-    """Keep reply keyboard aligned after inline «back» on plans screens."""
+    """Keep nav aligned after inline «back» on plans screens.
+
+    Wave F: under ``nav_mode=inline`` re-present the hub (no ``⬇️`` chrome).
+    """
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import (
+        admin_plans_add_type_hub_keyboard,
+        admin_plans_audience_hub_keyboard,
+        admin_plans_kind_hub_keyboard,
+        present_inline_only,
+    )
+    from app.bot.menu_nav import build_main_reply_keyboard
+
     if add_type and audience in {"users", "resellers"}:
         await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=None)
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_ADD_TYPE, push=False)
@@ -93,11 +105,28 @@ async def sync_plans_reply_keyboard(
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_AUDIENCE, push=False)
         level = nav.NAV_ADMIN_PLANS_AUDIENCE
     ui = await get_all_settings(session)
+    aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
+    if is_inline_nav(ui):
+        if level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
+            inline = admin_plans_add_type_hub_keyboard(aud, ui)
+            body = "➕ <b>افزودن پلن</b>\nنوع پلن را انتخاب کنید:"
+        elif level == nav.NAV_ADMIN_PLANS_KIND:
+            inline = admin_plans_kind_hub_keyboard(aud, ui)
+            body = (
+                "👥 <b>پلن‌های کاربران</b>\n"
+                if aud == "users"
+                else "🤝 <b>پلن‌های نمایندگان</b>\n"
+            ) + "افزودن/کاتالوگ از دکمه‌های زیر."
+        else:
+            inline = admin_plans_audience_hub_keyboard(ui)
+            body = "💎 <b>پلن‌ها</b>\nمخاطب یا ابزار کاتالوگ را انتخاب کنید."
+        await present_inline_only(message, text=body, inline=inline)
+        main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
+        await message.answer("از منوی پایین یا دکمه‌های بالا ادامه دهید.", reply_markup=main_kb)
+        return
     if level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
-        aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
         markup = kb.admin_plans_add_type_reply_keyboard(aud, ui)
     elif level == nav.NAV_ADMIN_PLANS_KIND:
-        aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
         markup = kb.admin_plans_kind_reply_keyboard(aud, ui)
     else:
         markup = kb.admin_plans_audience_reply_keyboard(ui)
@@ -105,12 +134,57 @@ async def sync_plans_reply_keyboard(
 
 
 async def _answer_plans_cancel(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.menu_nav import build_main_reply_keyboard
+
     await state.set_state(None)
+    ui = await get_all_settings(session)
+    if is_inline_nav(ui):
+        # Need db_user for main KB — fall back to plans submenu markup path via state only.
+        markup = await _plans_reply_markup(session, state)
+        # Prefer stable main when we can resolve user from message.from_user later;
+        # keep kind/audience reply only for classic. For inline, heal via show path below.
+        from app.db.models import BotUser
+        from sqlalchemy import select
+
+        tg_id = getattr(getattr(message, "from_user", None), "id", None)
+        db_user = None
+        if tg_id is not None:
+            db_user = (
+                await session.execute(
+                    select(BotUser).where(BotUser.telegram_id == int(tg_id))
+                )
+            ).scalar_one_or_none()
+        if db_user is not None:
+            main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
+            await message.answer("لغو شد.", reply_markup=main_kb)
+            return
+        await message.answer("لغو شد.", reply_markup=markup)
+        return
     markup = await _plans_reply_markup(session, state)
     await message.answer("لغو شد.", reply_markup=markup)
 
 
 async def _answer_plans_saved(message: Message, state: FSMContext, session: AsyncSession, text: str) -> None:
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.menu_nav import build_main_reply_keyboard
+    from app.db.models import BotUser
+    from sqlalchemy import select
+
+    ui = await get_all_settings(session)
+    if is_inline_nav(ui):
+        tg_id = getattr(getattr(message, "from_user", None), "id", None)
+        db_user = None
+        if tg_id is not None:
+            db_user = (
+                await session.execute(
+                    select(BotUser).where(BotUser.telegram_id == int(tg_id))
+                )
+            ).scalar_one_or_none()
+        if db_user is not None:
+            main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
+            await message.answer(text, reply_markup=main_kb)
+            return
     markup = await _plans_reply_markup(session, state)
     await message.answer(text, reply_markup=markup)
 
@@ -534,9 +608,30 @@ async def open_add_kind_action(
         )
         return
     # Settings-based kinds — open configure screen (same as web «تنظیم»)
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import admin_plans_kind_hub_keyboard, present_inline_only
+    from app.bot.menu_nav import build_main_reply_keyboard
+
     ui = await get_all_settings(session)
-    list_markup = kb.admin_plans_kind_reply_keyboard(audience, ui)
-    await message.answer("⬇️", reply_markup=list_markup)
+    if is_inline_nav(ui):
+        await present_inline_only(
+            message,
+            text=(
+                "👥 <b>پلن‌های کاربران</b>\n"
+                if audience == "users"
+                else "🤝 <b>پلن‌های نمایندگان</b>\n"
+            )
+            + "افزودن/کاتالوگ از دکمه‌های زیر.",
+            inline=admin_plans_kind_hub_keyboard(audience, ui),
+        )
+        main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
+        await message.answer(
+            "از منوی پایین یا دکمه‌های بالا ادامه دهید.",
+            reply_markup=main_kb,
+        )
+    else:
+        list_markup = kb.admin_plans_kind_reply_keyboard(audience, ui)
+        await message.answer("⬇️", reply_markup=list_markup)
     await open_kind_screen(message, session, audience, kind)
 
 

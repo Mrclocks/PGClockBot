@@ -95,6 +95,8 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
 
 @router.callback_query(F.data == "support:tickets")
 async def support_tickets_home(callback: CallbackQuery, session: AsyncSession):
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import support_hub_keyboard
     from app.services.rich_text import outbound_setting_text
 
     await callback.answer()
@@ -104,6 +106,14 @@ async def support_tickets_home(callback: CallbackQuery, session: AsyncSession):
         title="🎧 پشتیبانی — تیکت",
     )
     if callback.message:
+        if is_inline_nav(ui):
+            await safe_edit_text(
+                callback.message,
+                text,
+                reply_markup=support_hub_keyboard(ui),
+                **send_kw,
+            )
+            return
         await safe_edit_text(
             callback.message,
             text,
@@ -238,14 +248,26 @@ async def support_body(
 
 @router.callback_query(F.data == "support:list")
 async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import support_hub_keyboard
+
     await callback.answer()
     tickets = await list_user_tickets(session, db_user.id)
     ui = await get_all_settings(session)
     if not tickets:
         text = "تیکتی ندارید."
         if callback.message:
-            await safe_edit_text(callback.message, text, reply_markup=None)
-            await callback.message.answer(text, reply_markup=kb.support_reply_keyboard(ui))
+            if is_inline_nav(ui):
+                await safe_edit_text(
+                    callback.message,
+                    text,
+                    reply_markup=support_hub_keyboard(ui),
+                )
+            else:
+                await safe_edit_text(callback.message, text, reply_markup=None)
+                await callback.message.answer(
+                    text, reply_markup=kb.support_reply_keyboard(ui)
+                )
         return
     rows = [
         [
@@ -256,14 +278,24 @@ async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: 
         ]
         for t in tickets[:20]
     ]
+    if is_inline_nav(ui):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=ui.get("btn_back") or "⬅️ بازگشت",
+                    callback_data="nv:s:home",
+                )
+            ]
+        )
     text = "📋 تیکت‌های شما:"
     markup = InlineKeyboardMarkup(inline_keyboard=rows)
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=markup)
-        await callback.message.answer(
-            "تیکت‌ها:",
-            reply_markup=kb.support_reply_keyboard(ui),
-        )
+        if not is_inline_nav(ui):
+            await callback.message.answer(
+                "تیکت‌ها:",
+                reply_markup=kb.support_reply_keyboard(ui),
+            )
 
 
 @router.callback_query(F.data.startswith("support:view:"))

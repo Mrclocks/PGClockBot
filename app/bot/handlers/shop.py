@@ -1090,13 +1090,34 @@ async def wholesale_qty_entered(
         f"فعلی: <b>{qty}</b> عدد{disc_line}\n"
         f"جمع: <b>{format_toman(payable, get_settings().currency)}</b>",
     )
-    # Leave cancel_reply; restore shop chrome so user is not stuck on «انصراف»
+    # Leave cancel_reply; restore lasting ReplyKeyboard so user is not stuck on «انصراف»
     from app.bot import menu_nav as nav
+    from app.bot.menu_nav import build_main_reply_keyboard
+    from app.bot.nav_mode import is_inline_nav
+    from app.bot.nav_inline import present_inline_only
     from app.bot.tg_utils import attach_reply_keyboard
 
     custom_on = on(ui.get("custom_plan_enabled"))
     wholesale_on = True
     await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
+    qty_kb = kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id)
+    if is_inline_nav(ui):
+        if state is not None:
+            await nav.set_nav_level(state, nav.NAV_SHOP, push=False)
+        await present_inline_only(message, text=text, inline=qty_kb)
+        main_kb, _, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+        )
+        await attach_reply_keyboard(
+            message,
+            main_kb,
+            text="تعداد ثبت شد — از دکمه‌های پیام بالا تنظیم یا تأیید کنید.",
+        )
+        return
     await nav.show_nav_keyboard(
         message,
         session,
@@ -1110,15 +1131,12 @@ async def wholesale_qty_entered(
     )
     await message.answer(
         "تعداد را با دکمه‌ها تنظیم کنید:",
-        reply_markup=kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id),
+        reply_markup=qty_kb,
     )
-    from app.bot.nav_mode import is_inline_nav
-
-    if not is_inline_nav(ui):
-        # Classic: inline qty must not be final — re-affirm lasting shop chrome.
-        await attach_reply_keyboard(
-            message, kb.shop_reply_keyboard(ui), text="⌨️ منوی فروشگاه"
-        )
+    # Classic: inline qty must not be final — re-affirm lasting shop chrome.
+    await attach_reply_keyboard(
+        message, kb.shop_reply_keyboard(ui), text="⌨️ منوی فروشگاه"
+    )
 
 
 @router.callback_query(F.data == "shop:wholesale:confirm")

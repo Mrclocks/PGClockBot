@@ -630,6 +630,62 @@ async def open_referral_message(message: Message, session: AsyncSession, db_user
 # ---------------------------------------------------------------------------
 
 
+
+async def _staff_loyalty_answer(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    text: str,
+    *,
+    can_tiers: bool,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    content_inline: InlineKeyboardMarkup | None = None,
+    content_caption: str | None = None,
+) -> None:
+    """Wave F: loyalty manage leaves — content/hub inline + stable main KB."""
+    from app.bot.menu_nav import build_main_reply_keyboard
+    from app.bot.nav_inline import admin_loyalty_manage_hub_keyboard, present_inline_only
+    from app.bot.nav_mode import is_inline_nav
+    from app.services.users import get_all_settings
+
+    ui = await get_all_settings(session)
+    if is_inline_nav(ui):
+        await present_inline_only(
+            message,
+            text=text,
+            inline=content_inline
+            or admin_loyalty_manage_hub_keyboard(
+                ui,
+                include_tiers=can_tiers,
+                back_callback=(
+                    "nv:res:home" if is_reseller_bot else "nv:adm:people"
+                ),
+            ),
+        )
+        main_kb, _, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+        )
+        await message.answer(
+            "از منوی پایین یا دکمه‌های بالا ادامه دهید.",
+            reply_markup=main_kb,
+        )
+        return
+    await message.answer(
+        text,
+        reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=can_tiers),
+    )
+    if content_inline is not None:
+        await message.answer(
+            content_caption or "·",
+            reply_markup=content_inline,
+        )
+
+
 async def open_admin_loyalty_hub(
     message: Message,
     session: AsyncSession,
@@ -735,9 +791,14 @@ async def open_admin_loyalty_overview(
         kv_line("💰", "اعتبار کیف از جایزه", str(metrics.get("wallet_credits_issued") or 0)),
         kv_line("🎁", "جوایز فعال", str(metrics.get("active_rewards") or 0)),
     ]
-    await message.answer(
+    await _staff_loyalty_answer(
+        message,
+        session,
+        db_user,
         format_message("📊 نمای کلی باشگاه", "\n".join(lines)),
-        reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=can_tiers),
+        can_tiers=can_tiers,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
 
 
@@ -836,11 +897,20 @@ async def open_admin_loyalty_rules(
             st = "فعال" if r.enabled else "خاموش"
             lines.append(f"• <b>{r.name}</b>\n  {ev} · {mode}: {r.amount} · {st}")
         body = "\n".join(lines)
-    await message.answer(
-        format_message("📐 قوانین امتیاز", body + "\n\nبرای روشن/خاموش کردن از دکمه‌های زیر استفاده کنید."),
-        reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=can_tiers),
+    await _staff_loyalty_answer(
+        message,
+        session,
+        db_user,
+        format_message(
+            "📐 قوانین امتیاز",
+            body + "\n\nبرای روشن/خاموش کردن از دکمه‌های زیر استفاده کنید.",
+        ),
+        can_tiers=can_tiers,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        content_inline=_staff_rules_markup(rules),
+        content_caption="قوانین:",
     )
-    await message.answer("قوانین:", reply_markup=_staff_rules_markup(rules))
 
 
 async def open_admin_loyalty_rewards(
@@ -875,11 +945,20 @@ async def open_admin_loyalty_rewards(
                 f"• <b>{r.name}</b>\n  {tl}: {r.reward_value} · {r.points_cost} امتیاز · {st}"
             )
         body = "\n".join(lines)
-    await message.answer(
-        format_message("🎁 جوایز باشگاه", body + "\n\nافزودن/ویرایش کامل از وب‌پنل؛ اینجا روشن/خاموش."),
-        reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=can_tiers),
+    await _staff_loyalty_answer(
+        message,
+        session,
+        db_user,
+        format_message(
+            "🎁 جوایز باشگاه",
+            body + "\n\nافزودن/ویرایش کامل از وب‌پنل؛ اینجا روشن/خاموش.",
+        ),
+        can_tiers=can_tiers,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        content_inline=_staff_rewards_markup(rewards),
+        content_caption="جوایز:",
     )
-    await message.answer("جوایز:", reply_markup=_staff_rewards_markup(rewards))
 
 
 async def open_admin_loyalty_tiers(
@@ -901,9 +980,14 @@ async def open_admin_loyalty_tiers(
         return
     scope, can_tiers = scope_info
     if not can_tiers:
-        await message.answer(
+        await _staff_loyalty_answer(
+            message,
+            session,
+            db_user,
             "سطح‌ها سراسری‌اند و فقط ادمین پلتفرم می‌تواند آن‌ها را مدیریت کند.",
-            reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=False),
+            can_tiers=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
         return
     await ensure_loyalty_defaults(session, reseller_id=scope)
@@ -925,12 +1009,17 @@ async def open_admin_loyalty_tiers(
                 f" · ضریب {int(t.multiplier_bps or 10000) / 100:.0f}٪"
             )
         body = "\n".join(lines)
-    await message.answer(
+    await _staff_loyalty_answer(
+        message,
+        session,
+        db_user,
         format_message(
             "🏅 سطوح باشگاه",
             body + "\n\nویرایش سطوح فقط از وب‌پنل (ادمین پلتفرم).",
         ),
-        reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=True),
+        can_tiers=True,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
 
 
@@ -986,11 +1075,17 @@ async def open_admin_loyalty_settings(
             "تغییر وضعیت و نرخ از دکمه‌های اینلاین؛ جزئیات بیشتر در وب‌پنل.",
         ]
     )
-    await message.answer(
+    await _staff_loyalty_answer(
+        message,
+        session,
+        db_user,
         format_message("⚙️ تنظیمات باشگاه", body),
-        reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=can_tiers),
+        can_tiers=can_tiers,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        content_inline=_staff_settings_markup(enabled=enabled),
+        content_caption="تنظیمات:",
     )
-    await message.answer("تنظیمات:", reply_markup=_staff_settings_markup(enabled=enabled))
 
 
 async def open_admin_loyalty_ref_text(
@@ -1026,9 +1121,14 @@ async def open_admin_loyalty_ref_text(
         if not profile or not (
             has_bot_perm(profile, "loyalty") and has_bot_perm(profile, "shop_settings")
         ):
-            await message.answer(
+            await _staff_loyalty_answer(
+                message,
+                session,
+                db_user,
                 "ویرایش متن دعوت نیاز به دسترسی «تنظیمات فروشگاه» هم دارد.",
-                reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=False),
+                can_tiers=False,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
             )
             return
     from app.services.rich_text import rich_plain_text
@@ -1743,9 +1843,14 @@ async def staff_save_wallet_rate(
         return
     if kb.is_cancel_text(text):
         await state.clear()
-        await message.answer(
+        await _staff_loyalty_answer(
+            message,
+            session,
+            db_user,
             "لغو شد.",
-            reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=can_tiers),
+            can_tiers=can_tiers,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
         return
     raw = text.replace(",", "").replace("٬", "").strip()
@@ -1760,9 +1865,14 @@ async def staff_save_wallet_rate(
         session, SETTING_POINTS_TO_WALLET_RATE, str(rate), reseller_id=scope
     )
     await state.clear()
-    await message.answer(
+    await _staff_loyalty_answer(
+        message,
+        session,
+        db_user,
         f"نرخ ذخیره شد: <b>{rate}</b>",
-        reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=can_tiers),
+        can_tiers=can_tiers,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
 
 
@@ -1810,9 +1920,14 @@ async def staff_save_referral_text(
             return
     if kb.is_cancel_text(text):
         await state.clear()
-        await message.answer(
+        await _staff_loyalty_answer(
+            message,
+            session,
+            db_user,
             "لغو شد.",
-            reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=can_tiers),
+            can_tiers=can_tiers,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
         return
     if not text:
@@ -1823,7 +1938,12 @@ async def staff_save_referral_text(
     packed = pack_setting_from_message("referral_text", message)
     await set_setting(session, "referral_text", packed, reseller_id=scope)
     await state.clear()
-    await message.answer(
+    await _staff_loyalty_answer(
+        message,
+        session,
+        db_user,
         "متن دعوت ذخیره شد ✅",
-        reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=can_tiers),
+        can_tiers=can_tiers,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )

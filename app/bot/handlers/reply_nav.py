@@ -2175,39 +2175,19 @@ async def handle_back(
     if level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
         aud = (await state.get_data()).get("_adm_plans_aud") or "users"
         await state.update_data(_adm_plans_kind=None)
-        await nav.show_nav_keyboard(
+        await present_admin_plans_audience(
             message,
             session,
             db_user,
-            nav.NAV_ADMIN_PLANS_KIND,
-            text="⬇️",
-            state=state,
-            push=False,
+            state,
+            audience=str(aud),
+            is_reseller_bot=is_reseller_bot,
         )
-        from app.bot.handlers.admin_plans import (
-            send_resellers_plans_overview,
-            send_users_plans_overview,
-        )
-
-        if aud == "resellers":
-            await send_resellers_plans_overview(message, session)
-        else:
-            await send_users_plans_overview(message, session)
         return
     if level == nav.NAV_ADMIN_PLANS_KIND:
-        aud = (await state.get_data()).get("_adm_plans_aud") or "users"
         await state.update_data(_adm_plans_kind=None)
-        await nav.show_nav_keyboard(
-            message,
-            session,
-            db_user,
-            nav.NAV_ADMIN_PLANS_AUDIENCE,
-            text=(
-                "💎 <b>پلن‌ها</b>\n"
-                "«پلن‌های کاربران» یا «پلن‌های نمایندگان» را از کیبورد پایین بزنید."
-            ),
-            state=state,
-            push=False,
+        await open_admin_plans_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
         )
         return
     if level == nav.NAV_ADMIN_PLANS_AUDIENCE:
@@ -2296,15 +2276,17 @@ async def handle_back(
         data2 = await state.get_data()
         oid = data2.get(nav.PAY_ORDER_ID)
         if oid:
-            await nav.show_nav_keyboard(
+            from app.bot.menu_nav import present_order_pay
+
+            await present_order_pay(
                 message,
                 session,
                 db_user,
-                nav.NAV_PAY,
-                text="💳 روش پرداخت را انتخاب کنید:",
+                int(oid),
                 state=state,
-                push=False,
-                order_id=int(oid),
+                text="💳 روش پرداخت را انتخاب کنید:",
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
             )
             return
         await open_wallet_home(message, session, db_user, state, push=False)
