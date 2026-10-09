@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.39": [
+        "اسکرول‌بار مودال‌ها در RTL دیگر روی محتوا نمی‌نشیند (both-edges + ترک کلاسیک)",
+        "رنگ تگ‌های ریسک در تم روشن (سبز / زرد / نارنجی / قرمز) درست نمایش داده می‌شود",
+        "ریستور: restore/pre-v0.2.39-v0.2.38",
+    ],
     "0.2.38": [
         "احراز هویت ادمین پاسارگارد با کلید API (X-Api-Key) یا رمز؛ اولویت با کلید",
         "تب تنظیمات اتصال و ویزارد اولیه: رمز یا کلید برای ادمین متصل (لزوماً owner پاسارگارد نیست)",
