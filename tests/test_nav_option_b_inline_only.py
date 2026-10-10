@@ -79,6 +79,36 @@ class TestPreviewEscape(unittest.TestCase):
         self.assertIn("فروشگاه", labels)
         self.assertNotIn("🗓 عملیات روزانه", labels)
 
+    def test_exit_label_maps_when_merging_user_preview_into_admin(self):
+        """Filter merges role=user as_user=True into admin map — exit must resolve."""
+        from app.bot.reply_keyboards import reply_action_map
+        from app.services.users import DEFAULT_SETTINGS
+
+        ui = dict(DEFAULT_SETTINGS)
+        exit_label = ui["btn_adm_exit_preview"]
+        mapping = reply_action_map(
+            "admin",
+            has_services=True,
+            ui=ui,
+            include_submenus=True,
+            is_reseller_bot=False,
+        )
+        for k, v in reply_action_map(
+            "user",
+            has_services=True,
+            ui=ui,
+            as_user=True,
+            include_submenus=True,
+            is_reseller_bot=False,
+        ).items():
+            mapping.setdefault(k, v)
+        self.assertEqual(mapping.get(exit_label), "admin")
+        # Direct as_user with role=user must also register (regression of role check)
+        direct = reply_action_map(
+            "user", has_services=True, ui=ui, as_user=True, is_reseller_bot=False
+        )
+        self.assertEqual(direct.get(exit_label), "admin")
+
 
 class TestResellerThinReply(unittest.TestCase):
     def test_thin_hub_from_settings(self):

@@ -1039,7 +1039,9 @@ def reply_action_map(
             # Capacity labels (renew / extras) — also registered via _reply_user_entries
             for key, text in _reseller_capacity_entries(profile):
                 mapping[(text or "").strip()] = key
-        # Preview escape — custom exit label (and legacy admin/reseller labels)
+        # Preview escape — custom exit label (and legacy admin/reseller labels).
+        # ``as_user`` may be called with role="user" when merging preview labels
+        # into an admin/reseller filter map — still register the exit button.
         if as_user:
             exit_label = (_t(ui, "btn_adm_exit_preview") or "").strip()
             if is_reseller_bot:
@@ -1048,7 +1050,7 @@ def reply_action_map(
                 res_label = (_t(ui, "btn_reseller") or "").strip()
                 if res_label:
                     mapping[res_label] = REPLY_ACTION_RESELLER
-            elif role == Role.ADMIN.value:
+            else:
                 if exit_label:
                     mapping[exit_label] = REPLY_ACTION_ADMIN
                 admin_label = (_t(ui, "btn_admin") or "").strip()
