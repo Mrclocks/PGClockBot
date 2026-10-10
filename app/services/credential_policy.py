@@ -49,6 +49,21 @@ _PG_BUSINESS_MSG_MAP: list[tuple[re.Pattern[str], str]] = [
         re.compile(r"group.{0,30}(not\s*found|invalid|required)|invalid\s*group", re.I),
         "گروه انتخاب‌شده نامعتبر است یا در دسترس نیست.",
     ),
+    (
+        re.compile(
+            r"\bgroup_ids?\b.{0,80}((field\s*)?required|must\s*not\s*be\s*empty|ensure\s*this\s*value)"
+            r"|((field\s*)?required|missing).{0,40}\bgroup_ids?\b",
+            re.I,
+        ),
+        "گروه پاسارگارد برای این پلن تنظیم نشده یا خالی است — در ویرایش پلن گروه را انتخاب کنید.",
+    ),
+    (
+        re.compile(
+            r"\b(expire|data_limit|status|proxy_settings)\b.{0,60}(invalid|not\s*valid|required)",
+            re.I,
+        ),
+        "یکی از فیلدهای محدودیت سرویس (انقضا/حجم/وضعیت) برای پاسارگارد نامعتبر است.",
+    ),
 ]
 
 # English fragments from PasarGuard / pydantic validation → Persian cause
@@ -102,6 +117,14 @@ _PG_API_MSG_MAP: list[tuple[re.Pattern[str], str]] = [
             re.I,
         ),
         'رمز عبور نباید شامل کاراکتر " باشد',
+    ),
+    (
+        re.compile(r"\bfield\s*required\b", re.I),
+        "یک فیلد الزامی خالی است",
+    ),
+    (
+        re.compile(r"\binput\s*should\s*be\s*a\s*valid\b", re.I),
+        "مقدار یکی از فیلدها معتبر نیست",
     ),
 ]
 
@@ -261,10 +284,7 @@ def humanize_pg_validation_error(text: str) -> str:
     # Drop noisy pydantic prefixes when present
     out = re.sub(r"(?i)\bvalue error,?\s*", "", out)
     out = re.sub(r"\s+", " ", out).strip(" ;.")
-    return (
-        "پاسارگارد درخواست را رد کرد چون با محدودیت‌های نام کاربری/رمز "
-        f"هماهنگ نیست. علت: {out}"
-    )
+    return f"پاسارگارد درخواست را رد کرد. علت: {out}"
 
 
 # Transport / generic HTTP noise → short Persian (bot + panel).
@@ -310,6 +330,10 @@ _PG_TRANSPORT_MSG_MAP: list[tuple[re.Pattern[str], str]] = [
         re.compile(r"failed\s*\(\s*405\s*\)|method\s*not\s*allowed", re.I),
         "این عملیات در پاسارگارد پشتیبانی نشد (متد نامعتبر). آدرس PG_BASE_URL و نسخه پنل را بررسی کنید.",
     ),
+    (
+        re.compile(r"failed\s*\(\s*422\s*\)", re.I),
+        "پاسارگارد دادهٔ ارسالی را نامعتبر دانست. گروه پلن، نام کاربری و محدودیت حجم/زمان را بررسی کنید.",
+    ),
 ]
 
 
@@ -339,6 +363,11 @@ def friendly_pg_error(text: str, *, status_code: int | None = None) -> str:
             "آدرس PG_BASE_URL و نسخه پنل را بررسی کنید."
         )
     if not raw:
+        if status_code == 422:
+            return (
+                "پاسارگارد دادهٔ ارسالی را نامعتبر دانست. "
+                "گروه پلن، نام کاربری و محدودیت حجم/زمان را بررسی کنید."
+            )
         return raw
     # Already Persian / operator-facing — keep as-is.
     if re.search(r"[\u0600-\u06FF]", raw) and not re.search(
@@ -351,7 +380,12 @@ def friendly_pg_error(text: str, *, status_code: int | None = None) -> str:
     for pat, fa in _PG_TRANSPORT_MSG_MAP:
         if pat.search(raw):
             return fa
-    return humanize_pg_validation_error(raw)
+    humanized = humanize_pg_validation_error(raw)
+    if humanized != raw:
+        return humanized
+    if status_code == 422:
+        return f"پاسارگارد داده را نامعتبر دانست: {raw[:300]}"
+    return raw
 
 
 def generate_compliant_password(length: int = 14) -> str:
