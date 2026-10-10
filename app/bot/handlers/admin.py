@@ -3507,12 +3507,14 @@ async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_
     if not users:
         text += "\n\nنماینده‌ای ثبت نشده."
     if callback.message:
-        await callback.message.edit_text(
-            text,
-            reply_markup=kb.admin_resellers_list_keyboard(
-                page=page, has_prev=has_prev, has_next=has_next, rows=rows
-            ),
+        from app.bot.nav_inline import with_inline_back
+
+        ui = await get_all_settings(session)
+        markup = kb.admin_resellers_list_keyboard(
+            page=page, has_prev=has_prev, has_next=has_next, rows=rows
         )
+        markup = with_inline_back(markup, ui, "nv:adm:resellers")
+        await callback.message.edit_text(text, reply_markup=markup)
 
 RESELLER_SVCS_PAGE_SIZE = 10
 
