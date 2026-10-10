@@ -116,6 +116,13 @@ class ReplyMenuTextFilter(BaseFilter):
                 is_reseller_bot=False,
             ).items():
                 mapping.setdefault(k, v)
+            # Escape from preview back to admin hub (must win over any collision)
+            exit_label = (kb._t(ui, "btn_adm_exit_preview") or "").strip()
+            if exit_label:
+                mapping[exit_label] = kb.REPLY_ACTION_ADMIN
+            admin_label = (kb._t(ui, "btn_admin") or "").strip()
+            if admin_label:
+                mapping[admin_label] = kb.REPLY_ACTION_ADMIN
         if role == Role.RESELLER.value and is_reseller_bot:
             for k, v in kb.reply_action_map(
                 Role.USER.value,
@@ -1888,16 +1895,26 @@ async def handle_back(
         )
         return
     if level == nav.NAV_USER_PREVIEW:
-        await nav.show_nav_keyboard(
-            message,
-            session,
-            db_user,
-            nav.NAV_USER_PREVIEW,
-            text="👁 پیش‌نمایش منوی کاربر",
-            state=state,
-            push=False,
-            as_user=True,
-        )
+        # Back / Home from preview exits to the staff panel (same as exit button).
+        if is_reseller_bot:
+            await open_reseller_home(
+                message,
+                session,
+                db_user,
+                state,
+                is_reseller_bot=True,
+                reseller_owner_id=reseller_owner_id,
+                push=False,
+            )
+        else:
+            await open_admin_home(
+                message,
+                session,
+                db_user,
+                state,
+                push=False,
+                is_reseller_bot=False,
+            )
         return
     if level == nav.NAV_PAY:
         data2 = await state.get_data()
