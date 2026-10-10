@@ -41,8 +41,8 @@ async def lasting_staff_reply(
     db_user: BotUser,
     *,
     classic: ReplyKeyboardMarkup | None = None,
-    is_reseller_bot: bool = False,
-    reseller_owner_id: int | None = None,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
     ui: dict | None = None,
 ) -> ReplyKeyboardMarkup:
     """Always return the stable main ReplyKeyboard (Option B).
@@ -74,8 +74,8 @@ async def answer_staff_nav(
     classic: ReplyKeyboardMarkup | None = None,
     state: FSMContext | None = None,
     reopen_panel: ReopenPanel | None = None,
-    is_reseller_bot: bool = False,
-    reseller_owner_id: int | None = None,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
     ui: dict | None = None,
     clear_state: bool = False,
     **reopen_kw: Any,

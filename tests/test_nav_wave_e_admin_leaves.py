@@ -295,6 +295,8 @@ class ShowNavLeafInlineTests(unittest.IsolatedAsyncioTestCase):
                 nav.NAV_ADMIN_USERS,
                 text="users",
                 state=state,
+                is_reseller_bot=False,
+                reseller_owner_id=None,
             )
 
         chrome.assert_not_called()
