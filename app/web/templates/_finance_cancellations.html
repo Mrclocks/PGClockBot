@@ -25,14 +25,14 @@
   <p style="white-space:pre-wrap">توضیح اپراتور: {{ row.operator_note }}</p>
   {% endif %}
   {% if row.status == 'approved' %}
-  <p>اعتبار برگشتی: {{ row.refund_amount }} تومان</p>
+  <p>اعتبار برگشتی: <span dir="ltr">{{ row.refund_amount | money }}</span> تومان</p>
   {% endif %}
   {% if can_approve_cancel and row.status in ['pending', 'review', 'processing'] %}
   <form method="post" action="/service-cancellations/{{ row.id }}/approve" class="form-stack"
         data-confirm="سرویس غیرفعال شود و مبلغ تعیین‌شده به کیف پول همین فروشگاه برگردد؟">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label class="form-field">اعتبار برگشتی (تومان)
-      <input name="amount" type="number" min="0" max="2147483647" required
+      <input name="amount" type="number" data-money min="0" max="2147483647" required
              value="{{ row.refund_amount if row.refund_amount is not none else '' }}"
              {% if row.refund_amount is not none %}readonly{% endif %}>
     </label>

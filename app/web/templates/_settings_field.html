@@ -116,6 +116,7 @@
     <input
       name="s_{{ key }}"
       type="number"
+      {% if key in ['referral_bonus', 'stars_toman_per_star', 'billing_price_per_gb', 'billing_low_balance'] %}data-money{% endif %}
       value="{{ val }}"
       dir="ltr"
       {% if key in ['user_alert_low_traffic_pct', 'user_alert_low_time_pct'] %}

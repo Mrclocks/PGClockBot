@@ -211,7 +211,7 @@
               <button class="btn btn-sm btn-danger" type="submit">حذف نمایندگی</button>
             </form>
             <form method="post" action="/resellers/{{ u.id }}/delete-user"
-                  data-confirm="{% if (u.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول {{ u.wallet_balance | num }} تومان از بین می‌رود. {% endif %}کاربر، نمایندگی، ادمین پاسارگارد، تمام سفارش‌ها، سرویس‌ها و پرداخت‌ها کامل حذف شوند؟ برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."
+                  data-confirm="{% if (u.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول {{ u.wallet_balance | money }} تومان از بین می‌رود. {% endif %}کاربر، نمایندگی، ادمین پاسارگارد، تمام سفارش‌ها، سرویس‌ها و پرداخت‌ها کامل حذف شوند؟ برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."
                   data-confirm-title="حذف کامل (+ ادمین پاسارگارد)"
                   data-confirm-danger="1"
                   {% if (u.wallet_balance or 0) > 0 %}data-confirm-warn="1"{% endif %}
@@ -276,7 +276,7 @@
         <select name="plan_id" required {% if not reseller_plans %}disabled{% endif %}>
           <option value="">— انتخاب پلن —</option>
           {% for p in reseller_plans or [] %}
-          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} / گیگ{% endif %}</option>
+          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ p.price_per_gb | money }} / گیگ{% endif %}</option>
           {% endfor %}
         </select>
         <small class="muted">ثابت یا PAYG — نرخ گیگ و حالت پرداخت از همین پلن تنظیم می‌شود</small>

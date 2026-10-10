@@ -108,7 +108,7 @@
           {% endif %}
         </td>
         <td class="col-hide-sm" data-sort-value="{{ pname }}">{{ pname }}</td>
-        <td class="mono" data-sort-value="{{ o.amount }}">{{ o.amount | num }}</td>
+        <td class="mono" data-sort-value="{{ o.amount }}" dir="ltr">{{ o.amount | money }}</td>
         <td data-sort-value="{{ o.status }}">
           <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled','failed'] %}rejected{% else %}neutral{% endif %}">
             {{ ord_status(o.status) }}
@@ -252,7 +252,7 @@
           {{ uname }}
           {% endif %}
         </td>
-        <td class="mono" data-sort-value="{{ p.amount }}">{{ "{:,}".format(p.amount).replace(",", "٬") }}</td>
+        <td class="mono" data-sort-value="{{ p.amount }}" dir="ltr">{{ p.amount | money }}</td>
         <td class="col-hide-sm" data-sort-value="{{ 'wallet' if p.is_wallet_topup else 'buy' }}">{{ "شارژ کیف" if p.is_wallet_topup else "خرید" }}</td>
         <td data-sort-value="{{ p.status }}">
           <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">

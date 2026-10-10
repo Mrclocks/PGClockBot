@@ -2,6 +2,8 @@
 #
 # Subscription contact ownership, shop isolation and cancellation notification claims.
 tests/test_purchase_contact_and_cancellation_notices.py
+# Monetary display escaping and canonical refund form values.
+tests/test_web_money_formatting.py
 # Migration channel compatibility and cache isolation.
 tests/test_update_migration_metadata.py
 # --- ACL / RBAC / authz audits ---

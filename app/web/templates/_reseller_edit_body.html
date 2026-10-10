@@ -213,16 +213,16 @@
     {% endif %}
   </header>
   {% if profile.billing_suspended_at %}
-  <div class="flash err">حساب به‌خاطر موجودی صفر مسدود است — حداقل شارژ برای رفع مسدودی: <b>{{ format_toman(min_unsuspend or 0) }}</b></div>
+  <div class="flash err">حساب به‌خاطر موجودی صفر مسدود است — حداقل شارژ برای رفع مسدودی: <b><span dir="ltr">{{ (min_unsuspend or 0) | money }}</span> تومان</b></div>
   {% endif %}
   <ul class="payg-meta">
     <li>
       <span class="payg-meta-label">موجودی کیف پول</span>
-      <span class="payg-meta-value">{{ format_toman(wallet_balance or user.wallet_balance or 0) }}</span>
+      <span class="payg-meta-value"><span dir="ltr">{{ (wallet_balance or user.wallet_balance or 0) | money }}</span> تومان</span>
     </li>
     <li>
       <span class="payg-meta-label">نرخ پلن</span>
-      <span class="payg-meta-value"><span class="num-ratio">{{ format_toman(billing_rate or 0) }}</span> / گیگ</span>
+      <span class="payg-meta-value"><span class="num-ratio"><span dir="ltr">{{ (billing_rate or 0) | money }}</span> تومان</span> / گیگ</span>
     </li>
     <li>
       <span class="payg-meta-label">آخرین مصرف صورتحساب‌شده</span>
@@ -235,9 +235,9 @@
     <div class="form-row">
       <div>
         <label class="form-field">شارژ کیف پول (تومان)
-          <input name="amount" type="number" min="{{ min_unsuspend or 1000 }}" step="1000" value="{{ min_unsuspend or '' }}" placeholder="مثلاً ۵۰۰۰۰" required />
+          <input name="amount" type="number" data-money min="{{ min_unsuspend or 1000 }}" step="1000" value="{{ min_unsuspend or '' }}" placeholder="مثلاً ۵۰,۰۰۰" required />
           {% if min_unsuspend %}
-          <small class="muted">حداقل برای رفع مسدودی: {{ format_toman(min_unsuspend) }} (۲× آستانه هشدار)</small>
+          <small class="muted">حداقل برای رفع مسدودی: <span dir="ltr">{{ (min_unsuspend) | money }}</span> تومان (۲× آستانه هشدار)</small>
           {% endif %}
         </label>
       </div>
@@ -260,12 +260,12 @@
       {% for tx in wallet_txs %}
       <li class="wallet-tx-item">
         <div class="wallet-tx-main">
-          <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount }}</span>
+          <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount | money }}</span>
           <span class="muted wallet-tx-reason">{{ tx.reason or '—' }}</span>
         </div>
         <div class="wallet-tx-side">
           <span class="mono muted">#{{ tx.id }}</span>
-          <span>{{ format_toman(tx.balance_after) }}</span>
+          <span><span dir="ltr">{{ (tx.balance_after) | money }}</span> تومان</span>
         </div>
       </li>
       {% endfor %}
@@ -282,12 +282,12 @@
       {% for tx in billing_txs %}
       <li class="wallet-tx-item">
         <div class="wallet-tx-main">
-          <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount }}</span>
+          <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount | money }}</span>
           <span class="muted wallet-tx-reason">{{ tx.kind or '—' }}{% if tx.note %} · {{ tx.note }}{% endif %}</span>
         </div>
         <div class="wallet-tx-side">
           <span class="mono muted">#{{ tx.id }}</span>
-          <span>{{ format_toman(tx.balance_after) }}</span>
+          <span><span dir="ltr">{{ (tx.balance_after) | money }}</span> تومان</span>
         </div>
       </li>
       {% endfor %}
@@ -321,10 +321,10 @@
     <p class="muted">کاربر بات، نمایندگی، ادمین پاسارگارد متصل و تمام سفارش‌ها/سرویس‌ها/پرداخت‌ها/تیکت‌ها حذف می‌شوند. برگشت‌ناپذیر است. اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود.</p>
   </header>
   {% if (user.wallet_balance or 0) > 0 %}
-  <div class="flash warn">موجودی کیف پول: {{ user.wallet_balance | num }} تومان — با حذف کامل از بین می‌رود.</div>
+  <div class="flash warn">موجودی کیف پول: <span dir="ltr">{{ user.wallet_balance | money }}</span> تومان — با حذف کامل از بین می‌رود.</div>
   {% endif %}
   <form method="post" action="/resellers/{{ user.id }}/delete-user" class="form-stack"
-        data-confirm="{% if (user.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | num }} تومان از بین می‌رود. {% endif %}کاربر کامل به‌همراه نمایندگی، ادمین پاسارگارد، سفارش‌ها و سرویس‌ها حذف شود؟ برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."
+        data-confirm="{% if (user.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | money }} تومان از بین می‌رود. {% endif %}کاربر کامل به‌همراه نمایندگی، ادمین پاسارگارد، سفارش‌ها و سرویس‌ها حذف شود؟ برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."
         data-confirm-title="حذف کامل (+ ادمین پاسارگارد)"
         data-confirm-danger="1"
         {% if (user.wallet_balance or 0) > 0 %}data-confirm-warn="1"{% endif %}

@@ -14,13 +14,13 @@
     {% endif %}
   </label>
   <label class="form-field" data-gift-kind="wallet">مبلغ شارژ (تومان)
-    <input name="amount" type="number" min="1" max="50000000" step="1" value="{{ c.amount if c and kind == 'wallet' else '' }}" data-gift-required placeholder="50000" dir="ltr" />
+    <input name="amount" type="number" data-money min="1" max="50000000" step="1" value="{{ c.amount if c and kind == 'wallet' else '' }}" data-gift-required placeholder="50,000" dir="ltr" />
   </label>
   <label class="form-field" data-gift-kind="discount" {% if kind != 'discount' %}hidden{% endif %}>درصد تخفیف
     <input name="percent" type="number" min="1" max="100" value="{{ c.percent if c and kind == 'discount' else '' }}" data-gift-required placeholder="20" dir="ltr" />
   </label>
   <label class="form-field" data-gift-kind="discount" {% if kind != 'discount' %}hidden{% endif %}>سقف تخفیف (تومان)
-    <input name="max_discount_toman" type="number" min="1" max="50000000" value="{{ c.max_discount_toman if c and c.max_discount_toman is not none else '' }}" placeholder="خالی = بدون سقف" dir="ltr" />
+    <input name="max_discount_toman" type="number" data-money min="1" max="50000000" value="{{ c.max_discount_toman if c and c.max_discount_toman is not none else '' }}" placeholder="خالی = بدون سقف" dir="ltr" />
   </label>
   <label class="form-field">سقف استفاده کل
     <input name="max_uses" type="number" min="1" max="1000" value="{{ (c.max_uses if c.max_uses is not none else '') if c else 1 }}" placeholder="خالی = نامحدود" dir="ltr" />

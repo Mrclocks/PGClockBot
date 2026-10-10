@@ -17,7 +17,7 @@
     </div>
     <div class="user-edit-wallet-pill" dir="ltr">
       <span class="muted">کیف پول</span>
-      <strong>{{ format_toman(user.wallet_balance or 0) }}</strong>
+      <strong><span dir="ltr">{{ (user.wallet_balance or 0) | money }}</span> تومان</strong>
     </div>
   </div>
 </section>
@@ -106,7 +106,7 @@
         data-confirm-label="شارژ">
     <div class="user-edit-fields">
       <label class="form-field">مبلغ (تومان)
-        <input name="amount" type="number" min="1000" step="1000" required placeholder="مثلاً ۵۰۰۰۰" inputmode="numeric" />
+        <input name="amount" type="number" data-money min="1000" step="1000" required placeholder="مثلاً ۵۰,۰۰۰" inputmode="numeric" />
       </label>
       <label class="form-field">یادداشت
         <input name="note" type="text" maxlength="120" placeholder="اختیاری" />
@@ -255,12 +255,12 @@
       {% for tx in wallet_txs %}
       <li class="wallet-tx-item">
         <div class="wallet-tx-main">
-          <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount }}</span>
+          <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount | money }}</span>
           <span class="muted wallet-tx-reason">{{ tx.reason or '—' }}</span>
         </div>
         <div class="wallet-tx-side">
           <span class="mono muted">#{{ tx.id }}</span>
-          <span>{{ format_toman(tx.balance_after) }}</span>
+          <span><span dir="ltr">{{ (tx.balance_after) | money }}</span> تومان</span>
         </div>
       </li>
       {% endfor %}
@@ -276,10 +276,10 @@
     <p class="muted">کاربر بات و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط حذف می‌شوند. برگشت‌ناپذیر است. اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود.</p>
   </header>
   {% if (user.wallet_balance or 0) > 0 %}
-  <div class="flash warn">موجودی کیف پول: {{ user.wallet_balance | num }} تومان — با حذف از بین می‌رود.</div>
+  <div class="flash warn">موجودی کیف پول: <span dir="ltr">{{ user.wallet_balance | money }}</span> تومان — با حذف از بین می‌رود.</div>
   {% endif %}
   <form method="post" action="/users/{{ user.id }}/delete" class="form-stack"
-        data-confirm="{% if (user.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | num }} تومان از بین می‌رود. {% endif %}کاربر و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."
+        data-confirm="{% if (user.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | money }} تومان از بین می‌رود. {% endif %}کاربر و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."
         data-confirm-title="تأیید حذف کاربر"
         data-confirm-danger="1"
         {% if (user.wallet_balance or 0) > 0 %}data-confirm-warn="1"{% endif %}

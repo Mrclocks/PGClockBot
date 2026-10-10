@@ -262,6 +262,11 @@ def format_number(num: int | float | None) -> str:
         return "—"
 
 
+def format_money(amount: int | None) -> str:
+    """Group web monetary amounts with ASCII commas without changing their value."""
+    return format_number(amount).replace("٬", ",")
+
+
 def format_uptime(seconds: int | float | None) -> str:
     if seconds is None:
         return "—"

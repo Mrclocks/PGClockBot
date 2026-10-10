@@ -106,7 +106,7 @@
 <div class="flash warn home-update-banner inbox-alert-row">
   <div class="home-update-copy">
     <strong>{{ pr.low|length }} نماینده PAYG با موجودی پایین</strong>
-    <span class="muted">آستانه {{ pr.threshold | num }} — {% for r in pr.low[:3] %}{{ r.label }} ({{ r.balance | num }}){% if not loop.last %}، {% endif %}{% endfor %}{% if pr.low|length > 3 %}…{% endif %}</span>
+    <span class="muted">آستانه <span dir="ltr">{{ pr.threshold | money }}</span> — {% for r in pr.low[:3] %}{{ r.label }} (<span dir="ltr">{{ r.balance | money }}</span>){% if not loop.last %}، {% endif %}{% endfor %}{% if pr.low|length > 3 %}…{% endif %}</span>
   </div>
   <div class="inbox-alert-actions">
     <a class="btn btn-sm btn-ghost" href="/resellers">نمایندگان</a>

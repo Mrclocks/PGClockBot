@@ -12,6 +12,8 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from app.services.formatting import format_money
+
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "app/web/templates"
 LOYALTY_PAGES = ROOT / "app/api/loyalty_pages.py"
@@ -28,6 +30,7 @@ def _jinja_env() -> Environment:
         lambda v: f"{int(v):,}".replace(",", "٬") if v is not None else "۰"
     )
     env.filters["gb"] = lambda v: str(v)
+    env.filters["money"] = format_money
     return env
 
 

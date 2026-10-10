@@ -34,7 +34,7 @@
           <br><small class="muted mono">{{ a.user.telegram_id if a.user else '' }}</small>
         </td>
         <td class="col-hide-sm">{{ a.plan.name if a.plan else '—' }}</td>
-        <td class="mono">{{ (a.plan.price if a.plan else 0) | num }}</td>
+        <td class="mono" dir="ltr">{{ (a.plan.price if a.plan else 0) | money }}</td>
         <td>
           {% if a.status == 'awaiting_approval' %}<span class="badge pending">منتظر تأیید</span>
           {% elif a.status == 'pending_payment' %}<span class="badge pending">منتظر پرداخت</span>

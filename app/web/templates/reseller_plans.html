@@ -29,7 +29,7 @@
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
         <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
-        <td class="mono">{{ p.price | num }}</td>
+        <td class="mono" dir="ltr">{{ p.price | money }}</td>
         <td>{{ "فعال" if p.is_active else "خاموش" }}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -68,7 +68,7 @@
         <div>
           <label class="form-field">قیمت (تومان)
             
-            <input name="price" type="number" value="0" />
+            <input name="price" type="number" data-money value="0" />
         <small class="muted">۰ = رایگان؛ فقط تأیید ادمین</small>
           </label>
         </div>
