@@ -20,6 +20,13 @@ def _q(msg: str) -> str:
     return quote(str(msg), safe="")
 
 
+def _op_err(exc: BaseException, *, prefix: str) -> str:
+    """Staff-facing error with PasarGuard detail when available."""
+    from app.services.redact import operator_error
+
+    return operator_error(exc, prefix=prefix)
+
+
 def _redirect_user(user_id: int, *, ok: str | None = None, err: str | None = None):
     """After modal edits, return to users list and reopen the edit modal."""
     qs = [f"edit={int(user_id)}"]
@@ -193,9 +200,9 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                 actor=actor_label_from_staff(staff),
             )
         except ValueError as e:
-            return _redirect_user(user_id, err=str(e))
+            return _redirect_user(user_id, err=_op_err(e, prefix="اختصاص پلن ناموفق"))
         except Exception as e:
-            return _redirect_user(user_id, err=f"اختصاص پلن ناموفق: {e}")
+            return _redirect_user(user_id, err=_op_err(e, prefix="اختصاص پلن ناموفق"))
         label = plan.name or f"#{svc.id}"
         return _redirect_user(user_id, ok=f"پلن «{label}» اختصاص داده شد (سرویس #{svc.id})")
 
@@ -349,7 +356,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         except ValueError as e:
             return _redirect_list_form(form, err=str(e), uid=user_id)
         except Exception as e:
-            return _redirect_list_form(form, err=f"تمدید ناموفق: {e}", uid=user_id)
+            return _redirect_list_form(form, err=_op_err(e, prefix="تمدید ناموفق"), uid=user_id)
         return _redirect_list_form(
             form, ok=f"سرویس {label} تمدید شد", uid=user_id
         )
@@ -462,7 +469,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
         except Exception as e:
-            return _redirect_user(user_id, err=f"تمدید ناموفق: {e}")
+            return _redirect_user(user_id, err=_op_err(e, prefix="تمدید ناموفق"))
         return _redirect_user(user_id, ok=f"سرویس #{service_id} تمدید شد")
 
     @app.post("/users/{user_id}/services/{service_id}/extend")
@@ -506,7 +513,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
         except Exception as e:
-            return _redirect_user(user_id, err=f"تغییر مانده ناموفق: {e}")
+            return _redirect_user(user_id, err=_op_err(e, prefix="تغییر مانده ناموفق"))
         return _redirect_user(user_id, ok=f"مانده سرویس #{service_id} به‌روز شد")
 
     @app.post("/users/{user_id}/services/{service_id}/delete")
@@ -538,7 +545,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
         except Exception as e:
-            return _redirect_user(user_id, err=f"حذف سرویس ناموفق: {e}")
+            return _redirect_user(user_id, err=_op_err(e, prefix="حذف سرویس ناموفق"))
         note = " (پاسارگارد حذف شد)" if info.get("pg_deleted") else (
             " (پاسارگارد غیرفعال شد)" if info.get("pg_disabled") else ""
         )

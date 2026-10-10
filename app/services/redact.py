@@ -77,3 +77,23 @@ def user_safe_error(
         return fallback
     return msg
 
+
+def operator_error(
+    exc: object,
+    *,
+    prefix: str | None = None,
+    fallback: str = "خطای ناشناخته",
+    limit: int = 400,
+) -> str:
+    """Clear staff-facing error (web panel / admin bot). Prefer PG detail."""
+    detail = user_safe_error(exc, fallback=fallback, limit=limit)
+    prefix = (prefix or "").strip()
+    if not prefix:
+        return detail
+    if not detail or detail == prefix:
+        return prefix
+    # Avoid "X ناموفق: X ناموفق: …" when the exception already carries the prefix.
+    if detail.startswith(prefix):
+        return detail
+    return f"{prefix}: {detail}"
+

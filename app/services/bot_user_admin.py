@@ -500,7 +500,7 @@ async def admin_provision_service(
         await session.commit()
         await session.refresh(service)
         return service
-    except Exception:
+    except Exception as exc:
         if pg_uid:
             try:
                 await pg.delete_user_by_id(int(pg_uid))
@@ -509,7 +509,21 @@ async def admin_provision_service(
                     "rollback PG user failed uid=%s", pg_uid, exc_info=True
                 )
         await session.rollback()
-        raise
+        from app.services.pasarguard import PasarGuardError
+
+        if isinstance(exc, PasarGuardError):
+            raise ValueError(
+                exc.user_message(
+                    fallback="ساخت کاربر در پاسارگارد ناموفق بود"
+                )
+            ) from exc
+        if isinstance(exc, ValueError):
+            raise
+        from app.services.redact import user_safe_error
+
+        raise ValueError(
+            user_safe_error(exc, fallback="اختصاص پلن ناموفق بود", limit=400)
+        ) from exc
 
 
 async def admin_credit_user_wallet(

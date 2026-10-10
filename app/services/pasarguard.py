@@ -65,9 +65,14 @@ def _pg_error_detail(body: Any) -> str | None:
             parts = []
             for item in val:
                 if isinstance(item, dict):
-                    loc = ".".join(str(x) for x in (item.get("loc") or []) if x != "body")
-                    msg = item.get("msg") or item.get("message") or ""
-                    parts.append(f"{loc}: {msg}".strip(": "))
+                    loc_parts = [
+                        str(x)
+                        for x in (item.get("loc") or [])
+                        if x not in {"body", "query", "path"}
+                    ]
+                    loc = ".".join(loc_parts)
+                    msg = item.get("msg") or item.get("message") or item.get("type") or ""
+                    parts.append(f"{loc}: {msg}".strip(": ").strip())
                 else:
                     parts.append(str(item))
             joined = "؛ ".join(p for p in parts if p)
