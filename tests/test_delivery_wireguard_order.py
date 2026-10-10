@@ -65,7 +65,7 @@ class DeliveryOrderContractTests(unittest.TestCase):
     def test_guides_after_qr_and_wireguard(self):
         from app.services import delivery as delivery_mod
 
-        src = inspect.getsource(delivery_mod.send_delivery_to_user)
+        src = inspect.getsource(delivery_mod._deliver_subscription_order)
         qr_i = src.index("send_subscription_qr_photo")
         wg_i = src.index("_send_wireguard_documents")
         guide_i = src.index("_send_delivery_guides")
@@ -73,6 +73,8 @@ class DeliveryOrderContractTests(unittest.TestCase):
         self.assertLess(wg_i, guide_i)
         self.assertIn("caption_header", src)
         self.assertIn("_delivery_qr_header", src)
+        dispatcher = inspect.getsource(delivery_mod.send_delivery_to_user)
+        self.assertIn("_deliver_subscription_order", dispatcher)
 
     def test_shop_no_delivering_toast(self):
         shop = Path("app/bot/handlers/shop.py").read_text(encoding="utf-8")

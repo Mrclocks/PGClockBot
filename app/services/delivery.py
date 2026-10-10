@@ -452,6 +452,246 @@ async def _send_wireguard_documents(
     return sent
 
 
+async def _try_send_html(
+    bot: Bot,
+    chat_id: int,
+    text: str,
+    *,
+    reply_markup: Any = None,
+    send_kw: dict | None = None,
+) -> bool:
+    """Best-effort HTML (or entity) message; returns whether Telegram accepted it."""
+    kwargs = {"parse_mode": "HTML", **(send_kw or {})}
+    try:
+        await bot.send_message(chat_id, text, reply_markup=reply_markup, **kwargs)
+        return True
+    except Exception:
+        try:
+            await bot.send_message(chat_id, text, **kwargs)
+            return True
+        except Exception:
+            return False
+
+
+async def _deliver_addon_order(
+    bot: Bot,
+    chat_id: int,
+    session: AsyncSession,
+    order,
+    reply_kb: Any,
+) -> str:
+    import html as html_mod
+
+    from app.db.models import ServiceAddonPack
+    from app.services.service_addons import (
+        format_amount_label,
+        kind_label,
+        parse_addon_note,
+    )
+
+    parsed = parse_addon_note(order.note)
+    pack_name = "افزونه"
+    detail = ""
+    if parsed:
+        pack_id, _svc_id, snap_kind, snap_amount = parsed
+        pack = await session.get(ServiceAddonPack, pack_id)
+        if pack:
+            pack_name = pack.name
+        use_kind = snap_kind or (pack.kind if pack else None)
+        use_amount = (
+            snap_amount
+            if snap_amount is not None
+            else (float(pack.amount) if pack else None)
+        )
+        if use_kind and use_amount is not None:
+            detail = f"{kind_label(use_kind)}: +{format_amount_label(use_kind, use_amount)}"
+    text = format_message(
+        "✅ افزونه اعمال شد",
+        "\n".join(
+            [
+                f"سفارش #{order.id}",
+                f"بسته: {html_mod.escape(pack_name)}",
+                html_mod.escape(detail) if detail else "",
+                "به سرویس قبلی شما اضافه شد.",
+            ]
+        ).strip(),
+    )
+    if not await _try_send_html(bot, chat_id, text, reply_markup=reply_kb):
+        logger.debug("addon delivery notify failed chat_id=%s", chat_id)
+    return text
+
+
+async def _deliver_reseller_app_order(
+    bot: Bot,
+    chat_id: int,
+    session: AsyncSession,
+    order,
+    reply_kb: Any,
+) -> str:
+    from app.db.models import BotUser, ResellerApplicationStatus
+    from app.services.formatting import format_user_label
+    from app.services.resellers import format_credentials_message, get_application
+
+    try:
+        app_id = int(str(order.note).split(":", 1)[1])
+    except Exception:
+        app_id = 0
+    app = await get_application(session, app_id) if app_id else None
+    creds = order.__dict__.get("_reseller_app_creds")
+    if isinstance(creds, dict) and (
+        not app or app.status == ResellerApplicationStatus.APPROVED.value
+    ):
+        text = format_credentials_message(creds)
+        if not await _try_send_html(bot, chat_id, text, reply_markup=reply_kb):
+            logger.debug("reseller creds delivery failed", exc_info=True)
+        user = await session.get(BotUser, order.user_id)
+        notify = (
+            f"✅ نمایندگی فعال شد #{app_id}\n"
+            f"سفارش #{order.id}\n"
+            f"کاربر: {format_user_label(user)}\n"
+            f"(تأیید خودکار پس از پرداخت)"
+        )
+        for aid in get_settings().admin_ids:
+            try:
+                await bot.send_message(aid, notify, parse_mode="HTML")
+            except Exception:
+                logger.debug("reseller approve admin notify failed", exc_info=True)
+        return text
+
+    text = (
+        "✅ هزینه نمایندگی پرداخت شد.\n"
+        "درخواست شما ثبت شد و پس از تأیید ادمین، اطلاعات ورود برایتان ارسال می‌شود."
+    )
+    if not await _try_send_html(bot, chat_id, text, reply_markup=reply_kb):
+        logger.debug("reseller pending delivery failed", exc_info=True)
+    if app_id:
+        user = await session.get(BotUser, order.user_id)
+        notify = (
+            f"🤝 درخواست نمایندگی پرداخت‌شده #{app_id}\n"
+            f"سفارش #{order.id}\n"
+            f"کاربر: {format_user_label(user)}"
+        )
+        for aid in get_settings().admin_ids:
+            try:
+                await bot.send_message(
+                    aid,
+                    notify,
+                    reply_markup=kb.reseller_app_review(app_id),
+                    parse_mode="HTML",
+                )
+            except Exception:
+                logger.debug("reseller pending admin notify failed", exc_info=True)
+    return text
+
+
+async def _deliver_subscription_order(
+    bot: Bot,
+    chat_id: int,
+    session: AsyncSession,
+    payment: Payment | None,
+    order,
+    *,
+    ui: dict[str, str],
+    reply_kb: Any,
+    shop_rid: int | None,
+) -> str:
+    """QR-first subscription delivery, then WireGuard files, then guides."""
+    from app.services.orders import order_quantity
+
+    wholesale = bool(order and order.service_id and order_quantity(order) > 1)
+    sub_url_peek = None
+    if order and order.service_id and not wholesale:
+        svc = await session.get(UserService, order.service_id)
+        if svc:
+            sub_url_peek = svc.subscription_url
+    use_short = bool(
+        order
+        and order.service_id
+        and sub_url_peek
+        and on(ui.get("qr_enabled", "1"))
+        and not wholesale
+    )
+
+    payload = await build_delivery_content(
+        session, payment, order, include_details=not use_short
+    )
+    text = payload["text"]
+    send_kw = dict(payload.get("send_kw") or {})
+    detail_text = payload.get("detail_text")
+    ui = payload["ui"]
+    sub_url = payload["sub_url"]
+    sub_info = payload.get("sub_info")
+    skip_qr = bool(payload.get("skip_qr")) or wholesale
+    is_subscription = bool(payload.get("is_subscription"))
+    wg_username = sub_info.get("username") if isinstance(sub_info, dict) else None
+
+    notify_ok = False
+    qr_sent = False
+
+    if use_short and sub_url and not skip_qr:
+        header = _delivery_qr_header(ui, order)
+        qr_sent = await send_subscription_qr_photo(
+            bot,
+            chat_id,
+            sub_url,
+            ui,
+            info=sub_info,
+            caption_header=header,
+            reply_markup=reply_kb,
+        )
+        if qr_sent:
+            notify_ok = True
+            text = header
+
+    if not qr_sent:
+        if use_short:
+            detailed = await build_delivery_content(
+                session, payment, order, include_details=True
+            )
+            text = detailed["text"]
+            send_kw = dict(detailed.get("send_kw") or {})
+            detail_text = detailed.get("detail_text")
+            sub_url = detailed.get("sub_url") or sub_url
+            sub_info = detailed.get("sub_info") or sub_info
+            if isinstance(sub_info, dict) and not wg_username:
+                wg_username = sub_info.get("username")
+
+        notify_ok = await _try_send_html(
+            bot, chat_id, text, reply_markup=reply_kb, send_kw=send_kw
+        )
+        if not notify_ok:
+            logger.error(
+                "delivery notify failed order=%s payment=%s chat_id=%s",
+                getattr(order, "id", None),
+                getattr(payment, "id", None) if payment else None,
+                chat_id,
+            )
+        if detail_text and not await _try_send_html(
+            bot, chat_id, detail_text, reply_markup=reply_kb
+        ):
+            logger.debug("delivery detail_text send failed", exc_info=True)
+        if sub_url and not skip_qr and not use_short:
+            qr_sent = await send_subscription_qr_photo(
+                bot, chat_id, sub_url, ui, info=sub_info
+            )
+
+    if is_subscription and sub_url and not wholesale:
+        await _send_wireguard_documents(
+            bot, chat_id, sub_url=sub_url, username=wg_username
+        )
+    if is_subscription and (notify_ok or qr_sent):
+        await _send_delivery_guides(
+            bot, chat_id, session, order=order, ui=ui, shop_rid=shop_rid
+        )
+    if not notify_ok and not qr_sent:
+        logger.error(
+            "delivery fully failed to reach user order=%s chat_id=%s",
+            getattr(order, "id", None),
+            chat_id,
+        )
+    return text
+
+
 async def send_delivery_to_user(
     bot: Bot,
     chat_id: int,
@@ -473,249 +713,21 @@ async def send_delivery_to_user(
     shop_rid = getattr(order, "reseller_id", None) if order is not None else None
     ui = await get_all_settings(session, reseller_id=shop_rid)
     reply_kb = await _buyer_reply_markup(session, payment, order)
-    if order and order.note and str(order.note).startswith("svc_addon:"):
-        import html as html_mod
-
-        from app.db.models import ServiceAddonPack
-        from app.services.service_addons import (
-            format_amount_label,
-            kind_label,
-            parse_addon_note,
-        )
-
-        parsed = parse_addon_note(order.note)
-        pack_name = "افزونه"
-        detail = ""
-        if parsed:
-            pack_id, _svc_id, snap_kind, snap_amount = parsed
-            pack = await session.get(ServiceAddonPack, pack_id)
-            if pack:
-                pack_name = pack.name
-            use_kind = snap_kind or (pack.kind if pack else None)
-            use_amount = (
-                snap_amount
-                if snap_amount is not None
-                else (float(pack.amount) if pack else None)
-            )
-            if use_kind and use_amount is not None:
-                detail = f"{kind_label(use_kind)}: +{format_amount_label(use_kind, use_amount)}"
-        text = format_message(
-            "✅ افزونه اعمال شد",
-            "\n".join(
-                [
-                    f"سفارش #{order.id}",
-                    f"بسته: {html_mod.escape(pack_name)}",
-                    html_mod.escape(detail) if detail else "",
-                    "به سرویس قبلی شما اضافه شد.",
-                ]
-            ).strip(),
-        )
-        try:
-            await bot.send_message(
-                chat_id, text, reply_markup=reply_kb, parse_mode="HTML"
-            )
-        except Exception:
-            try:
-                await bot.send_message(chat_id, text, parse_mode="HTML")
-            except Exception:
-                logger.debug("addon delivery notify failed", exc_info=True)
-        return text
-    if order and order.note and str(order.note).startswith("reseller_app:"):
-        from app.db.models import BotUser, ResellerApplicationStatus
-        from app.services.formatting import format_user_label
-        from app.services.resellers import (
-            format_credentials_message,
-            get_application,
-        )
-
-        try:
-            app_id = int(str(order.note).split(":", 1)[1])
-        except Exception:
-            app_id = 0
-        app = await get_application(session, app_id) if app_id else None
-        creds = order.__dict__.get("_reseller_app_creds")
-        if isinstance(creds, dict) and (
-            not app or app.status == ResellerApplicationStatus.APPROVED.value
-        ):
-            text = format_credentials_message(creds)
-            try:
-                await bot.send_message(
-                    chat_id, text, reply_markup=reply_kb, parse_mode="HTML"
-                )
-            except Exception:
-                try:
-                    await bot.send_message(chat_id, text, parse_mode="HTML")
-                except Exception:
-                    logger.debug("reseller creds delivery failed", exc_info=True)
-            user = await session.get(BotUser, order.user_id)
-            notify = (
-                f"✅ نمایندگی فعال شد #{app_id}\n"
-                f"سفارش #{order.id}\n"
-                f"کاربر: {format_user_label(user)}\n"
-                f"(تأیید خودکار پس از پرداخت)"
-            )
-            for aid in get_settings().admin_ids:
-                try:
-                    await bot.send_message(aid, notify, parse_mode="HTML")
-                except Exception:
-                    logger.debug("reseller approve admin notify failed", exc_info=True)
-            return text
-
-        text = (
-            "✅ هزینه نمایندگی پرداخت شد.\n"
-            "درخواست شما ثبت شد و پس از تأیید ادمین، اطلاعات ورود برایتان ارسال می‌شود."
-        )
-        try:
-            await bot.send_message(
-                chat_id, text, reply_markup=reply_kb, parse_mode="HTML"
-            )
-        except Exception:
-            try:
-                await bot.send_message(chat_id, text, parse_mode="HTML")
-            except Exception:
-                logger.debug("reseller pending delivery failed", exc_info=True)
-        if app_id:
-            user = await session.get(BotUser, order.user_id)
-            notify = (
-                f"🤝 درخواست نمایندگی پرداخت‌شده #{app_id}\n"
-                f"سفارش #{order.id}\n"
-                f"کاربر: {format_user_label(user)}"
-            )
-            for aid in get_settings().admin_ids:
-                try:
-                    await bot.send_message(
-                        aid,
-                        notify,
-                        reply_markup=kb.reseller_app_review(app_id),
-                        parse_mode="HTML",
-                    )
-                except Exception:
-                    logger.debug("reseller pending admin notify failed", exc_info=True)
-        return text
-
-    wholesale = False
-    if order and order.service_id:
-        from app.services.orders import order_quantity
-
-        wholesale = order_quantity(order) > 1
-
-    # Peek whether QR can carry the details (single subscription only).
-    sub_url_peek = None
-    if order and order.service_id and not wholesale:
-        svc = await session.get(UserService, order.service_id)
-        if svc:
-            sub_url_peek = svc.subscription_url
-    qr_enabled = on(ui.get("qr_enabled", "1"))
-    use_short = bool(
-        order
-        and order.service_id
-        and sub_url_peek
-        and qr_enabled
-        and not wholesale
+    note = str(order.note) if order and order.note else ""
+    if note.startswith("svc_addon:"):
+        return await _deliver_addon_order(bot, chat_id, session, order, reply_kb)
+    if note.startswith("reseller_app:"):
+        return await _deliver_reseller_app_order(bot, chat_id, session, order, reply_kb)
+    return await _deliver_subscription_order(
+        bot,
+        chat_id,
+        session,
+        payment,
+        order,
+        ui=ui,
+        reply_kb=reply_kb,
+        shop_rid=shop_rid,
     )
-
-    payload = await build_delivery_content(
-        session, payment, order, include_details=not use_short
-    )
-    text = payload["text"]
-    send_kw = dict(payload.get("send_kw") or {})
-    detail_text = payload.get("detail_text")
-    ui = payload["ui"]
-    sub_url = payload["sub_url"]
-    sub_info = payload.get("sub_info")
-    skip_qr = bool(payload.get("skip_qr")) or wholesale
-    is_subscription = bool(payload.get("is_subscription"))
-
-    send_markup = reply_kb
-    notify_ok = False
-    qr_sent = False
-    wg_username = None
-    if isinstance(sub_info, dict):
-        wg_username = sub_info.get("username")
-
-    # QR-first path: merge the ready card into the caption; skip the duplicate text bubble.
-    if use_short and sub_url and not skip_qr:
-        header = _delivery_qr_header(ui, order)
-        qr_sent = await send_subscription_qr_photo(
-            bot,
-            chat_id,
-            sub_url,
-            ui,
-            info=sub_info,
-            caption_header=header,
-            reply_markup=send_markup,
-        )
-        if qr_sent:
-            notify_ok = True
-            text = header
-
-    if not qr_sent:
-        # Short path without QR must expand to full details (QR was meant to carry them).
-        if use_short:
-            detailed = await build_delivery_content(
-                session, payment, order, include_details=True
-            )
-            text = detailed["text"]
-            send_kw = dict(detailed.get("send_kw") or {})
-            detail_text = detailed.get("detail_text")
-            sub_url = detailed.get("sub_url") or sub_url
-            sub_info = detailed.get("sub_info") or sub_info
-            if isinstance(sub_info, dict) and not wg_username:
-                wg_username = sub_info.get("username")
-
-        msg_kwargs = {"parse_mode": "HTML", **send_kw}
-        try:
-            await bot.send_message(
-                chat_id, text, reply_markup=send_markup, **msg_kwargs
-            )
-            notify_ok = True
-        except Exception:
-            try:
-                await bot.send_message(chat_id, text, **msg_kwargs)
-                notify_ok = True
-            except Exception:
-                logger.error(
-                    "delivery notify failed order=%s payment=%s chat_id=%s",
-                    getattr(order, "id", None),
-                    getattr(payment, "id", None) if payment else None,
-                    chat_id,
-                    exc_info=True,
-                )
-
-        if detail_text:
-            try:
-                await bot.send_message(
-                    chat_id, detail_text, reply_markup=send_markup, parse_mode="HTML"
-                )
-            except Exception:
-                try:
-                    await bot.send_message(chat_id, detail_text, parse_mode="HTML")
-                except Exception:
-                    logger.debug("delivery detail_text send failed", exc_info=True)
-
-        # Non-short path may still want a trailing QR (details already in text).
-        if sub_url and not skip_qr and not use_short:
-            qr_sent = await send_subscription_qr_photo(
-                bot, chat_id, sub_url, ui, info=sub_info
-            )
-
-    if is_subscription and sub_url and not wholesale:
-        await _send_wireguard_documents(
-            bot, chat_id, sub_url=sub_url, username=wg_username
-        )
-
-    if is_subscription and (notify_ok or qr_sent):
-        await _send_delivery_guides(
-            bot, chat_id, session, order=order, ui=ui, shop_rid=shop_rid
-        )
-
-    if not notify_ok and not qr_sent:
-        logger.error(
-            "delivery fully failed to reach user order=%s chat_id=%s",
-            getattr(order, "id", None),
-            chat_id,
-        )
-    return text
 
 
 async def send_subscription_qr_photo(
