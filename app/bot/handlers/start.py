@@ -42,7 +42,7 @@ async def render_home(
     effective_role: str | None = None,
 ):
     from app.services.formatting import format_message
-    from app.services.reseller_access import effective_menu_role, is_shop_owner_on_main_bot
+    from app.services.reseller_access import effective_menu_role
 
     if ui is None:
         ui = await get_all_settings(session)
@@ -90,15 +90,10 @@ async def render_home(
         )
         reply_kb = kb.reseller_hub_main_keyboard(profile, ui)
     else:
-        show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
-        has = await _has_services(session, db_user.id)
-        owner_profile = None
-        if show_creds:
-            from app.services.resellers import get_reseller_profile
+        # Must go through build_main_reply_keyboard so reseller_apply / flags
+        # match heal/home paths (direct main_reply_keyboard defaults apply off).
+        from app.bot.menu_nav import build_main_reply_keyboard
 
-            owner_profile = await get_reseller_profile(session, int(db_user.id))
-            if owner_profile is not None and not owner_profile.is_active:
-                owner_profile = None
         welcome = ui.get("welcome_text", "")
         shop_title_raw = ui.get("shop_title", "")
         title_plain = rich_plain_text(shop_title_raw)
@@ -115,12 +110,12 @@ async def render_home(
         except Exception:
             text = format_message(title_plain or "", rich_plain_text(welcome))
             home_send_kw = {}
-        reply_kb = kb.main_reply_keyboard(
-            effective_role,
-            has_services=has,
+        reply_kb, ui, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
             ui=ui,
-            show_reseller_creds=show_creds,
-            profile=owner_profile,
         )
 
     # Mini App is a web_app button on the main ReplyKeyboard (Option B).
@@ -455,13 +450,18 @@ async def _deeplink_renew(
     try:
         await svc_renew(cb, session, db_user)
     except Exception:
+        from app.bot.menu_nav import build_main_reply_keyboard
+
+        main_kb, _, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+        )
         await message.answer(
             "برای تمدید از «سرویس‌های من» استفاده کنید.",
-            reply_markup=kb.main_reply_keyboard(
-                effective_role or db_user.role,
-                has_services=True,
-                ui=ui,
-            ),
+            reply_markup=main_kb,
         )
 
 async def _deeplink_config(
@@ -669,13 +669,19 @@ async def cb_home(
         )
 
 @router.callback_query(F.data == "menu:as_user")
-async def cb_home_as_user(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def cb_home_as_user(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     """Admin preview of the customer menu (reply keyboard)."""
+    from app.bot.menu_nav import build_main_reply_keyboard
     from app.services.formatting import format_message
 
     await callback.answer()
     ui = await get_all_settings(session)
-    has = await _has_services(session, db_user.id)
     text = format_message(
         "👁 پیش‌نمایش منوی کاربر",
         "کیبورد پایین همان منویی است که مشتری می‌بیند.",
@@ -685,12 +691,15 @@ async def cb_home_as_user(callback: CallbackQuery, session: AsyncSession, db_use
             await callback.message.edit_text(text)
         except Exception:
             pass
-        await callback.message.answer(
-            text,
-            reply_markup=kb.main_reply_keyboard(
-                db_user.role, has_services=has, ui=ui, as_user=True
-            ),
+        markup, _, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            as_user=True,
+            ui=ui,
         )
+        await callback.message.answer(text, reply_markup=markup)
 
 @router.message(Command("menu"))
 async def cmd_menu(
