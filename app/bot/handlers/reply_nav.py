@@ -479,6 +479,8 @@ async def open_support_home(
     state: FSMContext | None = None,
     *,
     push: bool = True,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ) -> None:
     from app.bot.nav_inline import present_inline_only, support_hub_keyboard
     from app.services.support_contacts import (
@@ -486,9 +488,11 @@ async def open_support_home(
         parse_support_contacts,
         support_chat_url,
     )
+    from app.services.users import on
 
     from app.services.rich_text import outbound_setting_text
 
+    _ = reseller_owner_id
     ui = await get_all_settings(session)
     contacts = active_support_contacts(parse_support_contacts(ui.get("support_contacts")))
     default_support = "تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
@@ -507,8 +511,11 @@ async def open_support_home(
     order_keys = {
         p.strip() for p in (ui.get("menu_order") or "").split(",") if p.strip()
     }
+    # Platform bot only — never offer reseller apply on a shop bot.
     show_apply = (
-        "reseller_apply" in order_keys
+        not is_reseller_bot
+        and on(ui.get("show_reseller_apply"))
+        and "reseller_apply" in order_keys
         and db_user.role == Role.USER.value
     )
     if state is not None:
@@ -1819,7 +1826,15 @@ async def handle_back(
         )
         return
     if level == nav.NAV_SUPPORT:
-        await open_support_home(message, session, db_user, state, push=False)
+        await open_support_home(
+            message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     if level == nav.NAV_LOYALTY:
         await open_loyalty_home(message, session, db_user, state, push=False)
@@ -2543,7 +2558,14 @@ async def reply_main_nav(
     elif action == kb.REPLY_ACTION_WALLET_TX:
         await open_wallet_tx(message, session, db_user)
     elif action == kb.REPLY_ACTION_SUPPORT:
-        await open_support_home(message, session, db_user, state)
+        await open_support_home(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
     elif action == kb.REPLY_ACTION_SUPPORT_NEW:
         await open_support_new(message, session, state)
     elif action == kb.REPLY_ACTION_SUPPORT_LIST:
