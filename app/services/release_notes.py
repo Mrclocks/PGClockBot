@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.50": [
+        "رفع نمایش «درخواست نمایندگی» روی منوی اصلی کاربر (/start) — دیگر فقط زیر پشتیبانی نبود",
+        "ریستور: restore/pre-v0.2.50-v0.2.49",
+    ],
     "0.2.49": [
         "دکمه درخواست نمایندگی در منوی اصلی کاربر (ربات پلتفرم، وقتی فعال باشد)",
         "تیکت ادمین: با باز کردن تیکت گزینه‌های پاسخ و بستن؛ انصراف لیست تیکت‌ها را پایین چت برمی‌گرداند",
