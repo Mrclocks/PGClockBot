@@ -57,8 +57,8 @@ class ReplyKeyboard360Tests(unittest.TestCase):
             last = builder(ui).keyboard[-1]
             self.assertEqual([b.text for b in last], ["⬅️ بازگشت", "🏠 منوی اصلی"])
 
-    def test_main_has_home_not_back(self):
-        # Classic nav keeps home footer on level-0; inline mode drops it.
+    def test_main_omits_home_and_back(self):
+        # Option B: level-0 never gets Home/Back footer (nav_mode ignored).
         ui = {
             "nav_mode": "classic",
             "menu_layout": "compact",
@@ -69,8 +69,9 @@ class ReplyKeyboard360Tests(unittest.TestCase):
             "btn_back": "⬅️ بازگشت",
         }
         flat = [b.text for row in main_reply_keyboard("user", ui=ui).keyboard for b in row]
-        self.assertIn("🏠 منوی اصلی", flat)
+        self.assertNotIn("🏠 منوی اصلی", flat)
         self.assertNotIn("⬅️ بازگشت", flat)
+        self.assertIn("خرید", flat)
 
     def test_main_inline_nav_omits_home_footer(self):
         ui = {

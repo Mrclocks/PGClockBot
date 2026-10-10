@@ -29,13 +29,11 @@ _TOPUP_METHODS = {
     "crypto": ("pay_crypto_enabled", PaymentMethod.CRYPTO.value),
 }
 
-
 class WalletStates(StatesGroup):
     topup_amount = State()
     choose_method = State()
     waiting_receipt = State()
     gift_code = State()
-
 
 async def prompt_gift_code(
     message: Message,
@@ -54,7 +52,6 @@ async def prompt_gift_code(
         ),
         reply_markup=kb.cancel_reply(ui),
     )
-
 
 async def redeem_gift_for_user(
     message: Message,
@@ -98,7 +95,6 @@ async def redeem_gift_for_user(
     )
     return True
 
-
 @router.message(Command("gift"))
 async def cmd_gift(
     message: Message,
@@ -122,7 +118,6 @@ async def cmd_gift(
         )
         return
     await prompt_gift_code(message, state, session)
-
 
 @router.message(WalletStates.gift_code)
 async def wallet_gift_code(
@@ -164,7 +159,6 @@ async def wallet_gift_code(
         reseller_owner_id=reseller_owner_id,
     )
 
-
 @router.callback_query(F.data == "wallet:home")
 async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
@@ -185,19 +179,11 @@ async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: B
         ),
     )
     if callback.message:
-        from app.bot.nav_mode import is_inline_nav
         from app.bot.nav_inline import wallet_hub_keyboard
 
-        if is_inline_nav(ui):
-            await safe_edit_text(
-                callback.message, text, reply_markup=wallet_hub_keyboard(ui)
-            )
-        else:
-            await safe_edit_text(callback.message, text, reply_markup=None)
-            await callback.message.answer(
-                "کیف پول:", reply_markup=kb.wallet_reply_keyboard(ui)
-            )
-
+        await safe_edit_text(
+            callback.message, text, reply_markup=wallet_hub_keyboard(ui)
+        )
 
 @router.callback_query(F.data == "wallet:tx")
 async def wallet_tx(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -215,25 +201,13 @@ async def wallet_tx(callback: CallbackQuery, session: AsyncSession, db_user: Bot
             )
         body = "\n".join(lines)
     if callback.message:
-        from app.bot.nav_mode import is_inline_nav
         from app.bot.nav_inline import wallet_hub_keyboard
 
-        if is_inline_nav(ui):
-            await safe_edit_text(
-                callback.message,
-                format_message("📜 تراکنش‌ها", body),
-                reply_markup=wallet_hub_keyboard(ui),
-            )
-        else:
-            await safe_edit_text(
-                callback.message,
-                format_message("📜 تراکنش‌ها", body),
-                reply_markup=None,
-            )
-            await callback.message.answer(
-                "کیف پول:", reply_markup=kb.wallet_reply_keyboard(ui)
-            )
-
+        await safe_edit_text(
+            callback.message,
+            format_message("📜 تراکنش‌ها", body),
+            reply_markup=wallet_hub_keyboard(ui),
+        )
 
 @router.callback_query(F.data == "wallet:topup")
 async def wallet_topup(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
@@ -253,25 +227,18 @@ async def wallet_topup(callback: CallbackQuery, state: FSMContext, session: Asyn
     await callback.answer()
     if not callback.message:
         return
-    from app.bot.nav_mode import is_inline_nav
     from app.bot.nav_inline import present_inline_only, wallet_topup_presets_keyboard
 
     await state.set_state(WalletStates.topup_amount)
-    if is_inline_nav(ui):
-        await present_inline_only(
-            callback.message,
-            text=format_message(
-                "➕ شارژ کیف پول",
-                "مبلغ را انتخاب کنید یا «مبلغ دیگر» را بزنید:",
-            ),
-            inline=wallet_topup_presets_keyboard(ui),
-        )
-        return
-    await callback.message.answer(
-        format_message("➕ شارژ کیف پول", "مبلغ شارژ را به تومان وارد کنید:"),
-        reply_markup=kb.cancel_reply(ui),
+    await present_inline_only(
+        callback.message,
+        text=format_message(
+            "➕ شارژ کیف پول",
+            "مبلغ را انتخاب کنید یا «مبلغ دیگر» را بزنید:",
+        ),
+        inline=wallet_topup_presets_keyboard(ui),
     )
-
+    return
 
 async def present_topup_methods(
     message: Message,
@@ -292,7 +259,6 @@ async def present_topup_methods(
     await state.set_state(WalletStates.choose_method)
     await state.update_data(topup_amount=amount)
     from app.bot import menu_nav as nav
-    from app.bot.nav_mode import is_inline_nav
     from app.bot.nav_inline import present_inline_only, topup_methods_keyboard
 
     body = format_message(
@@ -300,36 +266,23 @@ async def present_topup_methods(
         f"{kv_line('💰', 'مبلغ', f'<b>{format_toman(amount, get_settings().currency)}</b>')}\n\n"
         + (
             "روش واریز را انتخاب کنید:"
-            if is_inline_nav(ui)
-            else "روش واریز را از کیبورد پایین انتخاب کنید:"
         ),
     )
-    if is_inline_nav(ui):
-        await nav.set_nav_level(state, nav.NAV_TOPUP_PAY, push=True)
-        await present_inline_only(
-            message, text=body, inline=topup_methods_keyboard(ui)
-        )
-        if heal_main:
-            from app.bot.menu_nav import build_main_reply_keyboard
-            from app.bot.tg_utils import attach_reply_keyboard
-
-            main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
-            await attach_reply_keyboard(
-                message,
-                main_kb,
-                text="مبلغ ثبت شد — روش واریز را از دکمه‌های پیام بالا انتخاب کنید.",
-            )
-        return
-    await nav.show_nav_keyboard(
-        message,
-        session,
-        db_user,
-        nav.NAV_TOPUP_PAY,
-        text=body,
-        state=state,
-        push=True,
+    await nav.set_nav_level(state, nav.NAV_TOPUP_PAY, push=True)
+    await present_inline_only(
+        message, text=body, inline=topup_methods_keyboard(ui)
     )
+    if heal_main:
+        from app.bot.menu_nav import build_main_reply_keyboard
+        from app.bot.tg_utils import attach_reply_keyboard
 
+        main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
+        await attach_reply_keyboard(
+            message,
+            main_kb,
+            text="مبلغ ثبت شد — روش واریز را از دکمه‌های پیام بالا انتخاب کنید.",
+        )
+    return
 
 @router.message(WalletStates.topup_amount)
 async def wallet_topup_amount(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser,
@@ -362,7 +315,6 @@ async def wallet_topup_amount(message: Message, state: FSMContext, session: Asyn
     await present_topup_methods(
         message, session, db_user, state, amount, heal_main=True
     )
-
 
 async def _topup_instructions(
     session: AsyncSession,
@@ -450,7 +402,6 @@ async def _topup_instructions(
         send_kw = {}
     rows.append([InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="wallet:home")])
     return text, InlineKeyboardMarkup(inline_keyboard=rows), send_kw
-
 
 @router.callback_query(
     # Picker buttons are wtop:card:0:<dest_id> (order_id placeholder 0), matching shop pay:* shape.
@@ -613,7 +564,6 @@ async def wtop_choose_method(
             reply_markup=kb.cancel_reply(ui),
         )
 
-
 @router.message(WalletStates.choose_method)
 async def wallet_choose_method_cancel(
     message: Message,
@@ -641,7 +591,6 @@ async def wallet_choose_method_cancel(
         "روش واریز را از کیبورد پایین انتخاب کنید یا انصراف بزنید.",
         reply_markup=kb.cancel_reply(ui),
     )
-
 
 @router.message(WalletStates.waiting_receipt, F.photo)
 async def wallet_receipt_photo(
@@ -693,7 +642,6 @@ async def wallet_receipt_photo(
 
         await clear_checkout_nav(state)
 
-
 @router.message(WalletStates.waiting_receipt)
 async def wallet_receipt_cancel(
     message: Message,
@@ -721,7 +669,6 @@ async def wallet_receipt_cancel(
         "عکس رسید را بفرستید یا انصراف بزنید.",
         reply_markup=kb.cancel_reply(ui),
     )
-
 
 @router.message(F.photo)
 async def generic_receipt(

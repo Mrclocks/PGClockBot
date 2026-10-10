@@ -34,7 +34,8 @@ class AdminMainReplyInlineTests(unittest.TestCase):
         self.assertNotIn("🗓 عملیات روزانه", labels)
         self.assertNotIn("🛠 سیستم", labels)
 
-    def test_classic_admin_keeps_four_groups(self):
+    def test_stale_classic_admin_still_thin_not_four_groups(self):
+        """Option B: admin reply KB stays thin even if nav_mode=classic lingers."""
         import app.bot.keyboards  # noqa: F401
         from app.bot.reply_keyboards import main_reply_keyboard
         from app.db.models import Role
@@ -42,6 +43,10 @@ class AdminMainReplyInlineTests(unittest.TestCase):
         ui = {
             "nav_mode": "classic",
             "menu_layout": "compact",
+            "menu_order": "shop,wallet",
+            "btn_shop": "خرید",
+            "btn_wallet": "کیف",
+            "btn_admin": "🛠 پنل ادمین",
             "btn_menu_home": "🏠 منوی اصلی",
         }
         labels = [
@@ -51,8 +56,10 @@ class AdminMainReplyInlineTests(unittest.TestCase):
             ).keyboard
             for b in row
         ]
-        self.assertIn("🗓 عملیات روزانه", labels)
-        self.assertIn("🛠 سیستم", labels)
+        self.assertIn("🛠 پنل ادمین", labels)
+        self.assertIn("خرید", labels)
+        self.assertNotIn("🗓 عملیات روزانه", labels)
+        self.assertNotIn("🛠 سیستم", labels)
 
 
 class ResellerThinReplyTests(unittest.TestCase):
@@ -67,9 +74,10 @@ class ResellerThinReplyTests(unittest.TestCase):
             ).keyboard
             for b in row
         ]
+        # Defaults from btn_reseller + btn_adm_preview (settings keys)
         self.assertEqual(
             labels,
-            ["🤝 پنل مدیریت", "👁 پیش‌نمایش منوی کاربر"],
+            ["🤝 پنل نماینده", "👁 پیش‌نمایش منوی کاربر"],
         )
 
 
@@ -161,20 +169,29 @@ class LastingStaffReplyTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIs(out, main_kb)
 
-    async def test_classic_keeps_submenu(self):
+    async def test_classic_arg_ignored_always_main(self):
+        """``classic`` submenu arg is ignored — Option B always heals to main KB."""
         from app.bot.nav_chrome import lasting_staff_reply
 
         session = AsyncMock()
         db_user = MagicMock()
+        main_kb = MagicMock(name="MAIN")
         classic = MagicMock(name="CLASSIC")
 
-        with patch(
-            "app.bot.nav_chrome.get_all_settings",
-            AsyncMock(return_value={"nav_mode": "classic"}),
+        with (
+            patch(
+                "app.bot.nav_chrome.get_all_settings",
+                AsyncMock(return_value={"nav_mode": "classic"}),
+            ),
+            patch(
+                "app.bot.menu_nav.build_main_reply_keyboard",
+                AsyncMock(return_value=(main_kb, {}, "admin")),
+            ),
         ):
             out = await lasting_staff_reply(session, db_user, classic=classic)
 
-        self.assertIs(out, classic)
+        self.assertIs(out, main_kb)
+        self.assertIsNot(out, classic)
 
 
 class AnswerStaffNavReopenTests(unittest.IsolatedAsyncioTestCase):

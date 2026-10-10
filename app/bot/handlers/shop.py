@@ -43,7 +43,6 @@ from app.services.message_variables import DOMAIN_PAYMENT, render_message_templa
 router = Router(name="shop")
 logger = logging.getLogger(__name__)
 
-
 async def _show_order_pay(message, session, db_user, order_id, state, text: str):
     """Show order summary then payment methods on the reply keyboard."""
     from app.bot.menu_nav import present_order_pay
@@ -57,7 +56,6 @@ async def _show_order_pay(message, session, db_user, order_id, state, text: str)
             except Exception:
                 pass
         await present_order_pay(message, session, db_user, order_id, state=state, text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:")
-
 
 async def shop_under_maintenance(session: AsyncSession, ui: dict | None = None) -> str | None:
     """Return maintenance message if shop buying is gated; renew flows stay open."""
@@ -74,7 +72,6 @@ async def shop_under_maintenance(session: AsyncSession, ui: dict | None = None) 
         )
     return None
 
-
 async def _answer_shop_maintenance(callback: CallbackQuery, session: AsyncSession, ui: dict | None = None) -> bool:
     """If maintenance is on, answer the callback and return True (caller should return)."""
     from app.services.rich_text import outbound_setting_text, rich_plain_text
@@ -90,7 +87,6 @@ async def _answer_shop_maintenance(callback: CallbackQuery, session: AsyncSessio
         except Exception:
             pass
     return True
-
 
 async def _record_shop_funnel(
     session: AsyncSession,
@@ -119,14 +115,12 @@ async def _record_shop_funnel(
     except Exception:
         pass
 
-
 class ShopStates(StatesGroup):
     discount = State()
     custom_gb_input = State()
     custom_days_input = State()
     wholesale_qty_input = State()
     trial_contact = State()
-
 
 def _custom_bounds(ui: dict) -> tuple[int, int, int, int, int, int]:
     min_gb = max(1, int(float(ui.get("custom_plan_min_gb") or 1)))
@@ -137,12 +131,10 @@ def _custom_bounds(ui: dict) -> tuple[int, int, int, int, int, int]:
     price_day = int(float(ui.get("custom_plan_price_per_day") or 500))
     return min_gb, max_gb, min_days, max_days, price_gb, price_day
 
-
 def _custom_has_pg_link(ui: dict) -> bool:
     tpl = (ui.get("custom_plan_template_id") or "").strip()
     groups = (ui.get("custom_plan_group_ids") or "").strip()
     return bool(tpl or groups)
-
 
 async def _custom_available_for_users(
     session: AsyncSession,
@@ -178,7 +170,6 @@ async def _custom_available_for_users(
     catalog = [p for p in plans if not p.is_trial]
     return bool(catalog)
 
-
 async def _custom_gate(
     session: AsyncSession,
     ui: dict,
@@ -195,7 +186,6 @@ async def _custom_gate(
     if ok and state is not None:
         await state.update_data(custom_gate_ok=True)
     return ok
-
 
 async def _shop_kind_flags(
     session: AsyncSession,
@@ -231,7 +221,6 @@ async def _shop_kind_flags(
         trial_plans,
     )
 
-
 async def _shop_category_menu(
     session: AsyncSession, fixed_plans: list
 ) -> tuple[list, bool]:
@@ -245,7 +234,6 @@ async def _shop_category_menu(
     other = bool(cats) and bool(uncategorized_fixed_plans(fixed_plans))
     return cats, other
 
-
 def _shop_picker_copy(*, use_categories: bool) -> tuple[str, str]:
     """(body_html, inline_caption) for the shop kind/category step."""
     if use_categories:
@@ -257,7 +245,6 @@ def _shop_picker_copy(*, use_categories: bool) -> tuple[str, str]:
         "ابتدا <b>نوع پلن</b> را از دکمه‌های زیر پیام انتخاب کنید.",
         "📦 نوع پلن:",
     )
-
 
 async def present_shop_kind_picker(
     message: Message,
@@ -288,9 +275,7 @@ async def present_shop_kind_picker(
     Also never use ReplyKeyboard→Inline ``edit_reply_markup`` (Telegram
     rejects that conversion and hides category buttons).
     """
-    from app.bot.nav_mode import is_inline_nav
     from app.bot.nav_inline import present_inline_only
-    from app.bot.tg_utils import present_inline_with_reply_chrome
 
     text = format_message("🛒 فروشگاه", body)
     inline = kb.shop_kind_keyboard(
@@ -306,18 +291,7 @@ async def present_shop_kind_picker(
         await safe_edit_text(message, text, reply_markup=inline)
         return
 
-    if is_inline_nav(ui):
-        await present_inline_only(message, text=text, inline=inline)
-        return
-
-    await present_inline_with_reply_chrome(
-        message,
-        text=text,
-        inline=inline,
-        reply=kb.shop_reply_keyboard(ui),
-        chrome_text="⌨️ منوی فروشگاه",
-    )
-
+    await present_inline_only(message, text=text, inline=inline)
 
 @router.callback_query(F.data == "shop:list")
 async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
@@ -343,14 +317,7 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
             title="🛒 فروشگاه",
         )
         if callback.message:
-            from app.bot.nav_mode import is_inline_nav
-
             await safe_edit_text(callback.message, text, reply_markup=None, **send_kw)
-            # Inline: main ReplyKeyboard already stable — no chrome follow-up.
-            if not is_inline_nav(ui):
-                await callback.message.answer(
-                    text, reply_markup=kb.persistent_reply_keyboard(ui), **send_kw
-                )
         return
     cats, include_other = await _shop_category_menu(session, fixed_plans)
     body, _cap = _shop_picker_copy(use_categories=bool(cats))
@@ -368,7 +335,6 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
             include_uncategorized=include_other,
             mode="edit",
         )
-
 
 @router.callback_query(F.data == "shop:kind:fixed")
 async def shop_kind_fixed(
@@ -422,7 +388,6 @@ async def shop_kind_fixed(
                 category_names=cat_names,
             ),
         )
-
 
 @router.callback_query(F.data.startswith("shop:cat:"))
 async def shop_category_pick(
@@ -478,7 +443,6 @@ async def shop_category_pick(
             ),
         )
 
-
 @router.callback_query(F.data == "shop:kind:trial")
 async def shop_kind_trial(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
@@ -507,7 +471,6 @@ async def shop_kind_trial(
             ),
         )
 
-
 @router.callback_query(F.data == "shop:kind:custom")
 async def shop_kind_custom(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
@@ -515,7 +478,6 @@ async def shop_kind_custom(
     if await _answer_shop_maintenance(callback, session):
         return
     await custom_start(callback, session, state)
-
 
 @router.callback_query(F.data == "shop:kind:wholesale")
 async def shop_kind_wholesale(
@@ -525,11 +487,9 @@ async def shop_kind_wholesale(
         return
     await wholesale_start(callback, session, state)
 
-
 @router.callback_query(F.data == "shop:custom:noop")
 async def custom_noop(callback: CallbackQuery):
     await callback.answer()
-
 
 @router.callback_query(F.data == "shop:custom")
 async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
@@ -559,7 +519,6 @@ async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FS
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=kb.custom_gb_keyboard(gb, ui))
 
-
 @router.callback_query(F.data.in_({"shop:custom:gb:+", "shop:custom:gb:-"}))
 async def custom_gb_step(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
@@ -583,7 +542,6 @@ async def custom_gb_step(callback: CallbackQuery, session: AsyncSession, state: 
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=kb.custom_gb_keyboard(gb, ui))
 
-
 @router.callback_query(F.data == "shop:custom:gb:input")
 async def custom_gb_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
@@ -598,7 +556,6 @@ async def custom_gb_ask(callback: CallbackQuery, session: AsyncSession, state: F
             f"حجم به گیگ را وارد کنید ({min_gb} تا {max_gb}):",
             reply_markup=kb.cancel_reply(),
         )
-
 
 @router.message(ShopStates.custom_gb_input)
 async def custom_gb_entered(
@@ -642,7 +599,6 @@ async def custom_gb_entered(
         reply_markup=kb.custom_gb_keyboard(gb, ui),
     )
 
-
 @router.callback_query(F.data == "shop:custom:gb:next")
 async def custom_days_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
@@ -664,7 +620,6 @@ async def custom_days_start(callback: CallbackQuery, session: AsyncSession, stat
     )
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=kb.custom_days_keyboard(days, ui))
-
 
 @router.callback_query(F.data.in_({"shop:custom:days:+", "shop:custom:days:-"}))
 async def custom_days_step(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
@@ -691,7 +646,6 @@ async def custom_days_step(callback: CallbackQuery, session: AsyncSession, state
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=kb.custom_days_keyboard(days, ui))
 
-
 @router.callback_query(F.data == "shop:custom:days:input")
 async def custom_days_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
@@ -706,7 +660,6 @@ async def custom_days_ask(callback: CallbackQuery, session: AsyncSession, state:
             f"مدت به روز را وارد کنید ({min_days} تا {max_days}):",
             reply_markup=kb.cancel_reply(),
         )
-
 
 @router.message(ShopStates.custom_days_input)
 async def custom_days_entered(
@@ -752,7 +705,6 @@ async def custom_days_entered(
         reply_markup=kb.custom_days_keyboard(days, ui),
     )
 
-
 @router.callback_query(F.data == "shop:custom:confirm")
 async def custom_confirm(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
@@ -783,7 +735,6 @@ async def custom_confirm(callback: CallbackQuery, session: AsyncSession, state: 
             reply_markup=kb.custom_confirm_keyboard(ui),
         )
 
-
 async def _notify_new_order(bot, session, order, db_user, plan_name: str | None):
     try:
         from app.services.notifications import notify_new_order
@@ -798,7 +749,6 @@ async def _notify_new_order(bot, session, order, db_user, plan_name: str | None)
         )
     except Exception:
         logger.exception("notify_new_order failed order=%s", getattr(order, "id", None))
-
 
 @router.callback_query(F.data == "shop:custom:buy")
 async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
@@ -887,11 +837,9 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         await _show_order_pay(callback.message, session, db_user, order.id, state, text)
     await _notify_new_order(callback.bot, session, order, db_user, "پلن دلخواه")
 
-
 @router.callback_query(F.data == "shop:wholesale:noop")
 async def wholesale_noop(callback: CallbackQuery):
     await callback.answer()
-
 
 @router.callback_query(F.data == "shop:wholesale")
 async def wholesale_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
@@ -920,7 +868,6 @@ async def wholesale_start(callback: CallbackQuery, session: AsyncSession, state:
         await safe_edit_text(
             callback.message, text, reply_markup=kb.wholesale_plans_keyboard(plans, ui)
         )
-
 
 @router.callback_query(F.data.startswith("shop:wholesale:plan:"))
 async def wholesale_pick_plan(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
@@ -951,7 +898,6 @@ async def wholesale_pick_plan(callback: CallbackQuery, session: AsyncSession, st
             reply_markup=kb.wholesale_qty_keyboard(mn, ui, plan_id=plan.id),
         )
 
-
 @router.callback_query(F.data == "shop:wholesale:qty")
 async def wholesale_qty_back(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
@@ -980,7 +926,6 @@ async def wholesale_qty_back(callback: CallbackQuery, session: AsyncSession, sta
             text,
             reply_markup=kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id),
         )
-
 
 @router.callback_query(F.data.in_({"shop:wholesale:qty:+", "shop:wholesale:qty:-"}))
 async def wholesale_qty_step(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
@@ -1023,7 +968,6 @@ async def wholesale_qty_step(callback: CallbackQuery, session: AsyncSession, sta
             reply_markup=kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id),
         )
 
-
 @router.callback_query(F.data == "shop:wholesale:qty:input")
 async def wholesale_qty_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
@@ -1038,7 +982,6 @@ async def wholesale_qty_ask(callback: CallbackQuery, session: AsyncSession, stat
             f"تعداد را عددی بین {mn} تا {mx} بفرستید:",
             reply_markup=kb.cancel_reply(),
         )
-
 
 @router.message(ShopStates.wholesale_qty_input)
 async def wholesale_qty_entered(
@@ -1097,7 +1040,6 @@ async def wholesale_qty_entered(
     # Leave cancel_reply; restore lasting ReplyKeyboard so user is not stuck on «انصراف»
     from app.bot import menu_nav as nav
     from app.bot.menu_nav import build_main_reply_keyboard
-    from app.bot.nav_mode import is_inline_nav
     from app.bot.nav_inline import present_inline_only
     from app.bot.tg_utils import attach_reply_keyboard
 
@@ -1105,43 +1047,21 @@ async def wholesale_qty_entered(
     wholesale_on = True
     await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
     qty_kb = kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id)
-    if is_inline_nav(ui):
-        if state is not None:
-            await nav.set_nav_level(state, nav.NAV_SHOP, push=False)
-        await present_inline_only(message, text=text, inline=qty_kb)
-        main_kb, _, _ = await build_main_reply_keyboard(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-            ui=ui,
-        )
-        await attach_reply_keyboard(
-            message,
-            main_kb,
-            text="تعداد ثبت شد — از دکمه‌های پیام بالا تنظیم یا تأیید کنید.",
-        )
-        return
-    await nav.show_nav_keyboard(
-        message,
+    if state is not None:
+        await nav.set_nav_level(state, nav.NAV_SHOP, push=False)
+    await present_inline_only(message, text=text, inline=qty_kb)
+    main_kb, _, _ = await build_main_reply_keyboard(
         session,
         db_user,
-        nav.NAV_SHOP,
-        text=text,
-        state=state,
-        push=False,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
+        ui=ui,
     )
-    await message.answer(
-        "تعداد را با دکمه‌ها تنظیم کنید:",
-        reply_markup=qty_kb,
-    )
-    # Classic: inline qty must not be final — re-affirm lasting shop chrome.
     await attach_reply_keyboard(
-        message, kb.shop_reply_keyboard(ui), text="⌨️ منوی فروشگاه"
+        message,
+        main_kb,
+        text="تعداد ثبت شد — از دکمه‌های پیام بالا تنظیم یا تأیید کنید.",
     )
-
 
 @router.callback_query(F.data == "shop:wholesale:confirm")
 async def wholesale_confirm(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
@@ -1186,7 +1106,6 @@ async def wholesale_confirm(callback: CallbackQuery, session: AsyncSession, stat
         await safe_edit_text(
             callback.message, text, reply_markup=kb.wholesale_confirm_keyboard(ui)
         )
-
 
 @router.callback_query(F.data == "shop:wholesale:buy")
 async def wholesale_buy(
@@ -1255,7 +1174,6 @@ async def wholesale_buy(
         callback.bot, session, order, db_user, f"فروش عمده ×{order.quantity}"
     )
 
-
 @router.callback_query(F.data.startswith("shop:plan:"))
 async def shop_plan(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     ui = await get_all_settings(session)
@@ -1282,7 +1200,6 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     text = format_message(f"💎 {plan.name}", body)
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=kb.plan_actions(plan.id, ui))
-
 
 async def _complete_shop_buy(
     *,
@@ -1360,7 +1277,6 @@ async def _complete_shop_buy(
     bot = callback.bot if callback is not None else message.bot
     await _notify_new_order(bot, session, order, db_user, plan.name if plan else None)
 
-
 @router.callback_query(F.data.startswith("shop:buy:"))
 async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
     reseller_owner_id: int | None = None,
@@ -1433,7 +1349,6 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         plan_id=plan_id,
     )
 
-
 @router.message(ShopStates.trial_contact, F.contact)
 async def shop_trial_contact(
     message: Message,
@@ -1488,7 +1403,6 @@ async def shop_trial_contact(
         trial_telegram_id=int(message.from_user.id),
     )
 
-
 @router.message(ShopStates.trial_contact)
 async def shop_trial_contact_cancel(
     message: Message,
@@ -1512,7 +1426,6 @@ async def shop_trial_contact_cancel(
         )
         return
     await message.answer("لطفاً از دکمه «ارسال شماره تماس» استفاده کنید یا انصراف بزنید.")
-
 
 @router.callback_query(F.data.startswith("pay:discount:"))
 async def ask_discount(
@@ -1556,7 +1469,6 @@ async def ask_discount(
                 "تخفیف‌های باشگاه شما:",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
             )
-
 
 @router.callback_query(F.data.startswith("pay:loydisc:"))
 async def apply_loyalty_discount_btn(
@@ -1602,7 +1514,6 @@ async def apply_loyalty_discount_btn(
             state=state,
             heal_main=True,
         )
-
 
 @router.message(ShopStates.discount)
 async def apply_discount_msg(
@@ -1661,7 +1572,6 @@ async def apply_discount_msg(
     await present_order_pay(
         message, session, db_user, order.id, state=state, heal_main=True
     )
-
 
 @router.callback_query(F.data.startswith("pay:wallet:"))
 async def pay_wallet_cb(
@@ -1801,7 +1711,6 @@ async def pay_wallet_cb(
             "notify_new_subscription failed order=%s", getattr(order, "id", None)
         )
 
-
 async def _await_order_receipt(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -1840,7 +1749,6 @@ async def _await_order_receipt(
             await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
         except Exception:
             pass
-
 
 @router.callback_query(F.data.regexp(r"^pay:card:\d+(?::\w+)?$"))
 async def pay_card_cb(
@@ -1936,7 +1844,6 @@ async def pay_card_cb(
         state=state,
         send_kw=send_kw,
     )
-
 
 @router.callback_query(F.data.regexp(r"^pay:gateway:\d+(?::\w+)?$"))
 async def pay_gateway_cb(
@@ -2040,7 +1947,6 @@ async def pay_gateway_cb(
         send_kw=send_kw,
     )
 
-
 @router.callback_query(F.data.regexp(r"^pay:crypto:\d+(?::\w+)?$"))
 async def pay_crypto_cb(
     callback: CallbackQuery,
@@ -2127,7 +2033,6 @@ async def pay_crypto_cb(
         send_kw=send_kw,
     )
 
-
 @router.callback_query(F.data.startswith("pay:stars:"))
 async def pay_stars_cb(
     callback: CallbackQuery,
@@ -2195,7 +2100,6 @@ async def pay_stars_cb(
     except Exception as e:
         if callback.message:
             await callback.message.answer(f"خطا در ساخت فاکتور استارز: {user_safe_error(e)}")
-
 
 @router.callback_query(F.data.startswith("pay:psp:"))
 async def pay_psp_cb(

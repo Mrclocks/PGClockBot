@@ -85,7 +85,8 @@ class SvcViewInlineTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(hasattr(markup, "inline_keyboard"))
         callback.message.answer.assert_not_awaited()
 
-    async def test_classic_still_sends_reply_actions(self):
+    async def test_stale_classic_still_edits_inline_card(self):
+        """Option B: nav_mode=classic does not restore reply-keyboard actions."""
         from app.bot.handlers.services import svc_view
 
         callback = AsyncMock()
@@ -117,23 +118,18 @@ class SvcViewInlineTests(unittest.IsolatedAsyncioTestCase):
             patch(
                 "app.bot.handlers.services.safe_edit_text",
                 new_callable=AsyncMock,
-            ),
+            ) as edit,
             patch(
                 "app.bot.handlers.services.format_message",
                 return_value="TITLE\nCARD",
             ),
-            patch(
-                "app.bot.handlers.services.kb.service_actions_reply_keyboard",
-                return_value="REPLY_ACTIONS",
-            ),
         ):
             await svc_view(callback, session, db_user, state=None)
 
-        callback.message.answer.assert_awaited()
-        self.assertEqual(
-            callback.message.answer.await_args.kwargs.get("reply_markup"),
-            "REPLY_ACTIONS",
-        )
+        edit.assert_awaited()
+        markup = edit.await_args.kwargs.get("reply_markup")
+        self.assertTrue(hasattr(markup, "inline_keyboard"))
+        callback.message.answer.assert_not_awaited()
 
 
 class LegacyServiceLabelsTests(unittest.TestCase):

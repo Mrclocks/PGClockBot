@@ -24,10 +24,8 @@ from app.services.service_live_info import fetch_live_service_info
 
 router = Router(name="services")
 
-
 class CancellationStates(StatesGroup):
     reason = State()
-
 
 @router.callback_query(F.data.startswith("svc:cancel:"))
 async def svc_cancel(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -56,7 +54,6 @@ async def svc_cancel(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
     await callback.answer()
 
-
 @router.callback_query(F.data.startswith("svc:cancelnew:"))
 async def svc_cancel_new(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     from app.services.service_cancellations import owned_cancellation_service
@@ -73,7 +70,6 @@ async def svc_cancel_new(callback: CallbackQuery, session: AsyncSession, db_user
         await callback.message.answer("دلیل درخواست لغو را بنویسید (حداکثر ۱۰۰۰ نویسه).", reply_markup=kb.cancel_reply())
     await callback.answer()
 
-
 @router.message(CancellationStates.reason, F.text)
 async def svc_cancel_reason(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext):
     from app.services.service_cancellations import request_cancellation
@@ -87,14 +83,12 @@ async def svc_cancel_reason(message: Message, session: AsyncSession, db_user: Bo
     await state.set_state(None)
     await message.answer(f"درخواست #{row['id']} ثبت شد. نتیجه و اعتبار برگشتی را از «درخواست لغو سرویس» ببینید.", reply_markup=kb.service_actions_reply_keyboard(await get_all_settings(session)))
 
-
 @router.callback_query(F.data == "campaign:optout")
 async def campaign_optout(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     from app.services.campaigns import set_marketing_preference
     from app.services.users import current_shop_reseller_id
     await set_marketing_preference(session, db_user.id, shop_id=current_shop_reseller_id(), enabled=False)
     await callback.answer("پیام‌های پیشنهادی این فروشگاه قطع شد. برای فعال‌سازی: /marketing", show_alert=True)
-
 
 @router.message(Command("marketing"))
 async def marketing_settings(message: Message, session: AsyncSession, db_user: BotUser):
@@ -103,14 +97,12 @@ async def marketing_settings(message: Message, session: AsyncSession, db_user: B
         InlineKeyboardButton(text="غیرفعال", callback_data="campaign:optout"),
     ]]))
 
-
 @router.callback_query(F.data == "campaign:optin")
 async def campaign_optin(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     from app.services.campaigns import set_marketing_preference
     from app.services.users import current_shop_reseller_id
     await set_marketing_preference(session, db_user.id, shop_id=current_shop_reseller_id(), enabled=True)
     await callback.answer("دریافت پیام‌های پیشنهادی فعال شد.", show_alert=True)
-
 
 async def _show_automation(callback, session, db_user, service_id):
     from app.services.service_automation import (
@@ -149,7 +141,6 @@ async def _show_automation(callback, session, db_user, service_id):
     if callback.message:
         await safe_edit_text(callback.message, format_message("⚙️ تنظیمات خودکار سرویس", "\n".join(lines)), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
 
-
 @router.callback_query(F.data.startswith("svc:auto:"))
 async def svc_auto(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     try:
@@ -159,7 +150,6 @@ async def svc_auto(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         await callback.answer(str(exc), show_alert=True)
         return
     await callback.answer()
-
 
 @router.callback_query(F.data.startswith("svc:autopick:"))
 async def svc_auto_pick(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -189,7 +179,6 @@ async def svc_auto_pick(callback: CallbackQuery, session: AsyncSession, db_user:
             "با انتخاب گزینه، این قابلیت روشن می‌شود و در هر بار پایان زمان یا حجم، هزینه از کیف پول پرداخت خواهد شد.",
         ), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
 
-
 @router.callback_query(F.data.startswith("svc:autotoggle:"))
 async def svc_auto_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     from app.services.service_automation import (
@@ -218,7 +207,6 @@ async def svc_auto_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         return
     await callback.answer("ذخیره شد")
 
-
 @router.callback_query(F.data.startswith("svc:autoset:"))
 async def svc_auto_set(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     from app.services.service_automation import configure_automation
@@ -231,7 +219,6 @@ async def svc_auto_set(callback: CallbackQuery, session: AsyncSession, db_user: 
         await callback.answer(str(exc), show_alert=True)
         return
     await callback.answer("انتخاب شد و قابلیت روشن شد")
-
 
 @router.callback_query(F.data == "svc:list")
 async def svc_list(
@@ -265,20 +252,16 @@ async def svc_list(
             )
         return
     if callback.message:
-        from app.bot.nav_mode import is_inline_nav
         from app.bot.nav_inline import services_list_keyboard
 
         markup = (
             services_list_keyboard(services, ui)
-            if is_inline_nav(ui)
-            else kb.services_keyboard(services, ui)
         )
         await safe_edit_text(
             callback.message,
             "📦 <b>سرویس‌های شما</b>",
             reply_markup=markup,
         )
-
 
 @router.callback_query(F.data.startswith("svc:view:"))
 async def svc_view(
@@ -302,28 +285,18 @@ async def svc_view(
     info.setdefault("username", svc.pg_username)
     text = format_message("📦 سرویس شما", service_card(info))
     if callback.message:
-        from app.bot.nav_mode import is_inline_nav
         from app.bot.nav_inline import service_card_keyboard
 
-        if is_inline_nav(ui):
-            # One message: card + inline actions (no reply-keyboard chrome).
-            await safe_edit_text(
-                callback.message,
-                text,
-                reply_markup=service_card_keyboard(svc_id, ui),
-            )
-        else:
-            await safe_edit_text(callback.message, text, reply_markup=None)
-            await callback.message.answer(
-                "عملیات سرویس را از کیبورد پایین انتخاب کنید:",
-                reply_markup=kb.service_actions_reply_keyboard(ui),
-            )
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=service_card_keyboard(svc_id, ui),
+        )
     if state is not None:
         from app.bot import menu_nav as nav
 
         await state.update_data(**{nav.SERVICE_ID: svc_id})
         await nav.set_nav_level(state, nav.NAV_SERVICE, push=True)
-
 
 @router.callback_query(F.data.startswith("guide:svc:"))
 async def svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -339,7 +312,6 @@ async def svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         await callback.answer("یافت نشد", show_alert=True)
         return
     await show_guides_list(callback, session, db_user, svc_id=svc_id)
-
 
 @router.callback_query(F.data.startswith("svc:link:"))
 async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -366,20 +338,18 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     parts.append(service_card(sub_info))
     text = format_message("📱 اشتراک", "\n\n".join(parts))
     if callback.message:
-        from app.bot.nav_mode import is_inline_nav
 
         markup = None
-        if is_inline_nav(ui):
-            markup = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text=ui.get("btn_back") or "⬅️ بازگشت",
-                            callback_data=f"svc:view:{svc_id}",
-                        )
-                    ]
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=ui.get("btn_back") or "⬅️ بازگشت",
+                        callback_data=f"svc:view:{svc_id}",
+                    )
                 ]
-            )
+            ]
+        )
         try:
             await safe_edit_text(callback.message, text, reply_markup=markup)
         except Exception:
@@ -393,7 +363,6 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
             info=sub_info if not sub_info.get("error") else None,
             username=svc.pg_username,
         )
-
 
 @router.callback_query(F.data.startswith("svc:renew:"))
 async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -423,27 +392,22 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         ]
         for p in plans
     ]
-    from app.bot.nav_mode import is_inline_nav
 
-    if is_inline_nav(ui):
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=ui.get("btn_back") or "⬅️ بازگشت",
-                    callback_data=f"svc:view:{svc_id}",
-                )
-            ]
-        )
-        hint = "پلن تمدید را انتخاب کنید:"
-    else:
-        hint = "پلن تمدید را انتخاب کنید:\n<i>بازگشت از کیبورد پایین</i>"
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=ui.get("btn_back") or "⬅️ بازگشت",
+                callback_data=f"svc:view:{svc_id}",
+            )
+        ]
+    )
+    hint = "پلن تمدید را انتخاب کنید:"
     if callback.message:
         await safe_edit_text(
             callback.message,
             hint,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
-
 
 @router.callback_query(F.data.startswith("svc:renewpay:"))
 async def svc_renew_preview(
@@ -475,7 +439,6 @@ async def svc_renew_preview(
             ]),
         )
     await callback.answer()
-
 
 @router.callback_query(F.data.startswith("svc:renewconfirm:"))
 async def svc_renew_pay(
@@ -560,7 +523,6 @@ async def svc_renew_pay(
             text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
         )
 
-
 @router.callback_query(F.data.startswith("svc:addon:"))
 async def svc_addon(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
@@ -633,30 +595,22 @@ async def svc_addon(
     title = "افزونه سرویس"
     if kind_filter:
         title = f"افزونه {kind_label(kind_filter)}"
-    from app.bot.nav_mode import is_inline_nav
 
-    if is_inline_nav(ui):
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=ui.get("btn_back") or "⬅️ بازگشت",
-                    callback_data=f"svc:view:{svc_id}",
-                )
-            ]
-        )
-        body = "بسته را انتخاب کنید؛ پس از پرداخت به همین سرویس اضافه می‌شود."
-    else:
-        body = (
-            "بسته را انتخاب کنید؛ پس از پرداخت به همین سرویس اضافه می‌شود.\n"
-            "<i>بازگشت از کیبورد پایین</i>"
-        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=ui.get("btn_back") or "⬅️ بازگشت",
+                callback_data=f"svc:view:{svc_id}",
+            )
+        ]
+    )
+    body = "بسته را انتخاب کنید؛ پس از پرداخت به همین سرویس اضافه می‌شود."
     if callback.message:
         await safe_edit_text(
             callback.message,
             format_message(f"➕ {title}", body),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
-
 
 @router.callback_query(F.data.startswith("svc:addonpay:"))
 async def svc_addon_pay(
@@ -751,7 +705,6 @@ async def svc_addon_pay(
             text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
         )
 
-
 @router.callback_query(F.data.startswith("svc:delask:"))
 async def svc_delete_ask(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
@@ -789,7 +742,6 @@ async def svc_delete_ask(
             ),
             reply_markup=markup,
         )
-
 
 @router.callback_query(F.data.startswith("svc:del:"))
 async def svc_delete(
@@ -831,29 +783,14 @@ async def svc_delete(
             await state.update_data(**{nav.SERVICE_ID: None})
     if callback.message:
         from app.bot.menu_nav import restore_main_reply
-        from app.bot.nav_mode import is_inline_nav
 
         done = format_message("✅ حذف شد", f"سرویس #{svc_id} حذف شد.")
-        if is_inline_nav(ui):
-            await safe_edit_text(callback.message, done, reply_markup=None)
-            # Heal main ReplyKeyboard with a real confirmation (not filler chrome).
-            await restore_main_reply(
-                callback.message,
-                session,
-                db_user,
-                text="سرویس حذف شد — از منوی پایین ادامه دهید.",
-                state=state,
-            )
-        else:
-            await safe_edit_text(
-                callback.message,
-                done,
-                reply_markup=kb.back_home(ui),
-            )
-            await restore_main_reply(
-                callback.message,
-                session,
-                db_user,
-                text="🏠 منوی اصلی",
-                state=state,
-            )
+        await safe_edit_text(callback.message, done, reply_markup=None)
+        # Heal main ReplyKeyboard with a real confirmation (not filler chrome).
+        await restore_main_reply(
+            callback.message,
+            session,
+            db_user,
+            text="سرویس حذف شد — از منوی پایین ادامه دهید.",
+            state=state,
+        )

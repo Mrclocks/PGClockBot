@@ -13,7 +13,9 @@ class NavModeTests(unittest.TestCase):
         self.assertEqual(nav_mode({}), "inline")
         self.assertTrue(is_inline_nav(None))
         self.assertTrue(is_inline_nav({"nav_mode": "inline"}))
-        self.assertFalse(is_inline_nav({"nav_mode": "classic"}))
+        # Option B: classic setting is ignored — always inline
+        self.assertTrue(is_inline_nav({"nav_mode": "classic"}))
+        self.assertEqual(nav_mode({"nav_mode": "classic"}), "inline")
 
     def test_default_settings_has_nav_mode(self):
         from app.services.users import DEFAULT_SETTINGS
@@ -58,7 +60,8 @@ class MainKeyboardInlineTests(unittest.TestCase):
         )
         self.assertEqual(mapping.get("درخواست نمایندگی"), "reseller_apply")
 
-    def test_classic_keeps_home_footer(self):
+    def test_stale_classic_setting_still_omits_home_footer(self):
+        """nav_mode=classic is a no-op; level-0 never gets a Home footer."""
         import app.bot.keyboards  # noqa: F401
         from app.bot.reply_keyboards import main_reply_keyboard
         from app.db.models import Role
@@ -74,7 +77,8 @@ class MainKeyboardInlineTests(unittest.TestCase):
         }
         kb = main_reply_keyboard(Role.USER.value, has_services=False, ui=ui)
         labels = [b.text for row in kb.keyboard for b in row]
-        self.assertIn("🏠 منوی اصلی", labels)
+        self.assertNotIn("🏠 منوی اصلی", labels)
+        self.assertIn("خرید", labels)
 
 
 class HubKeyboardTests(unittest.TestCase):
