@@ -3685,6 +3685,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             .limit(fetch_limit)
         )
         users = list(result.scalars().all())
+        from app.services.wallet import wallet_balances_for_scope
+
+        # Scoped purse only — never surface another shop's ShopWallet / platform
+        # balance to tenant staff (and Owner sees platform BotUser.wallet_balance).
+        wallet_by_uid = await wallet_balances_for_scope(
+            session, [int(u.id) for u in users], shop_id=scope
+        )
         if search_q:
             users = filter_by_search(
                 users,
@@ -3695,7 +3702,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     u.username,
                     u.full_name,
                     u.role,
-                    u.wallet_balance,
+                    wallet_by_uid.get(int(u.id), 0),
                     "مسدود" if u.is_blocked else "فعال",
                 ),
             )
@@ -3704,6 +3711,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             users,
             filter_key=filter_raw,
             focus_uid=focus_uid,
+            shop_id=scope,
+            wallet_by_uid=wallet_by_uid,
         )
         # Deep-link uid outside this shop → ignore (no cross-tenant leak).
         if focus_uid and not any(int(r.user.id) == int(focus_uid) for r in rows):

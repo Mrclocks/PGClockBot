@@ -78,13 +78,14 @@ class ForceJoinFixTests(unittest.TestCase):
 
 class UserDeleteWalletWarnTests(unittest.TestCase):
     def test_list_and_edit_warn_on_positive_wallet(self):
-        self.assertIn("(u.wallet_balance or 0) > 0", USERS)
+        self.assertIn("row.wallet_balance > 0", USERS)
         self.assertIn("موجودی کیف پول", USERS)
         self.assertIn("data-confirm-warn", USERS)
         self.assertIn("حذف کاربر", USER_EDIT)
         self.assertIn("موجودی کیف پول", USER_EDIT)
         self.assertIn('action="/users/{{ user.id }}/delete"', USER_EDIT)
-        self.assertIn("(user.wallet_balance or 0) > 0", USER_EDIT)
+        self.assertIn("wallet_amt > 0", USER_EDIT)
+        self.assertIn("display_wallet", USER_EDIT)
 
 
 class AuthFieldAlignTests(unittest.TestCase):

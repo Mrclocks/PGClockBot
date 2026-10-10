@@ -122,6 +122,12 @@ class ModalScrollLockTests(unittest.TestCase):
         # Global room stays 8px — #586's 14px narrowed every modal
         self.assertIn("--modal-scrollbar-room: 8px;", css)
         self.assertNotIn("--modal-scrollbar-room: 14px;", css)
+        # User-edit body must match shared shell padding (no extra 14px inset)
+        self.assertNotIn(
+            "#modal-user-edit .ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll {",
+            css,
+        )
+        self.assertNotIn("padding-inline: calc(var(--space-3) + 14px);", css)
         # Head-outside-scroll is scoped to user-edit only (not all modals)
         self.assertIn(
             "#modal-user-edit .ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-head {",

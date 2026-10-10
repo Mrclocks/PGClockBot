@@ -773,6 +773,14 @@ html[data-theme="light"] .badge.badge-risk-tag {
   min-width: 6.5rem;
   vertical-align: middle;
 }
+.users-ops-table .col-wallet {
+  width: 1%;
+  max-width: 6.5rem;
+  white-space: nowrap;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
 .users-svc-name {
   display: inline-flex;
   align-items: center;
@@ -6081,10 +6089,10 @@ form.settings-form > .actions.sticky-actions,
   padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
 }
-/* User-edit body only: extra air for edge-flush risk/service chips. */
-#modal-user-edit .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {
-  padding-inline: calc(var(--space-3) + 14px);
-}
+/* User-edit scroll uses the shared shell padding (+ --modal-scrollbar-room).
+   Extra 14px inset was removed so content width matches other modals while
+   scrollbar-gutter + room keep the thumb off the body. Head stays outside
+   the scrollport (above) with the same inline inset for title alignment. */
 .ui-modal-panel-lg { width: min(720px, 100%); }
 .gift-code-editor { padding-top: var(--space-3); margin-top: var(--space-3); border-top: 1px solid var(--border); }
 .gift-code-editor[hidden] { display: none !important; }
@@ -6828,6 +6836,8 @@ th.col-status,
 td.col-status,
 th.col-amount,
 td.col-amount,
+th.col-wallet,
+td.col-wallet,
 th.col-time,
 td.col-time,
 th.col-type,

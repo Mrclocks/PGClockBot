@@ -227,6 +227,18 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return loaded
         user = loaded
 
+        from app.services.shop_scope import resolve_shop_scope_id
+        from app.services.wallet import get_wallet_balance
+
+        try:
+            shop_scope = resolve_shop_scope_id(staff)
+        except ShopScopeError:
+            shop_scope = None
+        # Display the purse for this staff's shop only (no cross-tenant leak).
+        display_wallet = await get_wallet_balance(
+            session, user, shop_id=shop_scope
+        )
+
         snaps = await list_service_snapshots(session, int(user_id))
         wallet_txs = await list_wallet_txs(session, int(user_id), limit=20)
         plans = await list_catalog_plans(session, staff, include_trial=False)
@@ -239,6 +251,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         ctx = {
             "staff": staff,
             "user": user,
+            "display_wallet": display_wallet,
             "services": snaps,
             "wallet_txs": wallet_txs,
             "plans": plans,
