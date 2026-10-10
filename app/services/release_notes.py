@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.51": [
+        "پرداخت: خلاصه سفارش (شناسه/مبلغ) دیگر با لیست روش پرداخت جایگزین نمی‌شود — یک ویرایش واحد",
+        "ورودی متنی از دکمه اینلاین: ask_text با انصراف اینلاین؛ کیبورد پایین عوض نمی‌شود (به‌جز تماس)",
+        "حذف پیام‌های پرکننده اضافه (حذف سرویس، منوی اصلی بعد از کیف، استارز/PSP)",
+        "دکمه مرده nav:home → menu:home؛ مستند docs/NAV_RULES.md",
+        "ریستور: restore/pre-v0.2.51-v0.2.50",
+    ],
     "0.2.50": [
         "رفع نمایش «درخواست نمایندگی» روی منوی اصلی کاربر (/start) — دیگر فقط زیر پشتیبانی نبود",
         "ریستور: restore/pre-v0.2.50-v0.2.49",

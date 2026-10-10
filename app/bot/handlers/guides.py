@@ -52,7 +52,7 @@ def guides_list_keyboard(
     if back_callback:
         rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data=back_callback)])
     else:
-        rows.append([InlineKeyboardButton(text="🏠 منو", callback_data="nav:home")])
+        rows.append([InlineKeyboardButton(text="🏠 منو", callback_data="menu:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

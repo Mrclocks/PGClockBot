@@ -817,7 +817,6 @@ async def settings_edit_ask(
 
         cur = format_force_join_for_edit(cur)
     await callback.answer()
-    await state.set_state(ResellerSettingsStates.edit_value)
     await state.update_data(edit_key=key, reseller_id=profile.user_id)
     hint = "متن جدید را بفرستید.\nبرای انصراف: انصراف"
     if key == "force_join_channel":
@@ -832,11 +831,16 @@ async def settings_edit_ask(
             )
         elif is_message_rich_key(key):
             hint += "\n<i>ایموجی پریمیوم در متن پیام حفظ می‌شود.</i>"
-    if callback.message:
-        await callback.message.answer(
-            f"<b>{meta[1]}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=f"<b>{meta[1]}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}",
+        cancel_code="rs_set",
+        fsm_state=ResellerSettingsStates.edit_value,
+        edit=True,
+    )
 
 
 @router.message(ResellerSettingsStates.edit_value)
@@ -882,10 +886,17 @@ async def support_add(callback: CallbackQuery, state: FSMContext, session: Async
         await callback.answer(err, show_alert=True)
         return
     await callback.answer()
-    await state.set_state(ResellerSettingsStates.support_title)
     await state.update_data(reseller_id=profile.user_id)
-    if callback.message:
-        await callback.message.answer("عنوان پشتیبان را بفرستید:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="عنوان پشتیبان را بفرستید:",
+        cancel_code="rs_set",
+        fsm_state=ResellerSettingsStates.support_title,
+        edit=True,
+    )
 
 
 @router.message(ResellerSettingsStates.support_title)
@@ -898,12 +909,31 @@ async def support_title_save(message: Message, state: FSMContext, session: Async
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer("لغو شد.", reply_markup=await _lasting_kb(session, db_user, kb.reseller_settings_reply_keyboard(), is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id))
         return
     await state.update_data(support_title=text)
-    await state.set_state(ResellerSettingsStates.support_telegram)
-    await message.answer("یوزرنیم یا آیدی عددی تلگرام را بفرستید:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="یوزرنیم یا آیدی عددی تلگرام را بفرستید:",
+        cancel_code="rs_set",
+        fsm_state=ResellerSettingsStates.support_telegram,
+        edit=False,
+    )
 
 
 @router.message(ResellerSettingsStates.support_telegram)
@@ -963,11 +993,16 @@ async def bot_token_ask(callback: CallbackQuery, state: FSMContext, session: Asy
     await callback.answer()
     await state.set_state(ResellerSettingsStates.bot_token)
     await state.update_data(reseller_id=profile.user_id)
-    if callback.message:
-        await callback.message.answer(
-            "توکن جدید ربات را از @BotFather بفرستید:\nبرای انصراف: انصراف",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="توکن جدید ربات را از @BotFather بفرستید:\nبرای انصراف: انصراف",
+        cancel_code="rs_set",
+        fsm_state=ResellerSettingsStates.bot_token,
+        edit=True,
+    )
 
 
 @router.message(ResellerSettingsStates.bot_token)

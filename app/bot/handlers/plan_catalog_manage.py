@@ -337,12 +337,16 @@ async def pcm_cat_add(
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(PlanCatalogStates.cat_name)
-    if callback.message:
-        await callback.message.answer(
-            "نام برچسب دسته را بفرستید:",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="نام برچسب دسته را بفرستید:",
+        cancel_code="pcm_hub",
+        fsm_state=PlanCatalogStates.cat_name,
+        edit=True,
+    )
 
 
 @router.message(PlanCatalogStates.cat_name)
@@ -357,6 +361,17 @@ async def pcm_cat_name_save(
     from app.services.plan_categories import create_category, list_categories
 
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.set_state(None)
         await message.answer(
             "لغو شد.",
@@ -377,7 +392,7 @@ async def pcm_cat_name_save(
         return
     name = (message.text or "").strip()
     if not name:
-        await message.answer("نام خالی است.", reply_markup=kb.cancel_reply())
+        await message.answer("نام خالی است.")
         return
     # Platform Owner can target users or resellers; shop bots always users.
     if staff_is_platform_admin(staff):
@@ -412,10 +427,10 @@ async def pcm_cat_name_save(
             session, staff, name=name, audience="users"
         )
     except (ShopScopeError, ValueError) as e:
-        await message.answer(user_safe_error(e), reply_markup=kb.cancel_reply())
+        await message.answer(user_safe_error(e))
         return
     except Exception as e:
-        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=kb.cancel_reply())
+        await message.answer(f"خطا: {user_safe_error(e)}")
         return
     await state.set_state(None)
     cats = await list_categories(session, staff, active_only=False)
@@ -598,14 +613,18 @@ async def pcm_cat_edit_ask(
     if not cat:
         await callback.answer("یافت نشد", show_alert=True)
         return
-    await state.set_state(PlanCatalogStates.cat_edit_name)
     await state.update_data(_pcm_edit_cat_id=cid)
     await callback.answer()
-    if callback.message:
-        await callback.message.answer(
-            f"نام جدید برای «{html.escape(cat.name)}»:",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=f"نام جدید برای «{html.escape(cat.name)}»:",
+        cancel_code="pcm_hub",
+        fsm_state=PlanCatalogStates.cat_edit_name,
+        edit=True,
+    )
 
 
 @router.message(PlanCatalogStates.cat_edit_name)
@@ -620,6 +639,17 @@ async def pcm_cat_edit_save(
     from app.services.plan_categories import list_categories, update_category
 
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.set_state(None)
         await message.answer(
             "لغو شد.",
@@ -645,10 +675,10 @@ async def pcm_cat_edit_save(
             session, staff, cid, name=(message.text or "").strip()
         )
     except (ShopScopeError, ValueError) as e:
-        await message.answer(user_safe_error(e), reply_markup=kb.cancel_reply())
+        await message.answer(user_safe_error(e))
         return
     except Exception as e:
-        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=kb.cancel_reply())
+        await message.answer(f"خطا: {user_safe_error(e)}")
         return
     await state.set_state(None)
     cats = await list_categories(session, staff, active_only=False)
@@ -715,12 +745,16 @@ async def pcm_addon_add(
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(PlanCatalogStates.addon_name)
-    if callback.message:
-        await callback.message.answer(
-            "نام بسته را بفرستید:",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="نام بسته را بفرستید:",
+        cancel_code="pcm_hub",
+        fsm_state=PlanCatalogStates.addon_name,
+        edit=True,
+    )
 
 
 @router.message(PlanCatalogStates.addon_name)
@@ -731,6 +765,17 @@ async def pcm_addon_name(
     is_reseller_bot: bool = False,
 ):
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.set_state(None)
         await message.answer(
             "لغو شد.",
@@ -741,7 +786,7 @@ async def pcm_addon_name(
         return
     name = (message.text or "").strip()
     if not name:
-        await message.answer("نام خالی نیست.", reply_markup=kb.cancel_reply())
+        await message.answer("نام خالی نیست.")
         return
     await state.update_data(_pcm_addon_name=name[:128])
     await state.set_state(PlanCatalogStates.addon_kind)
@@ -778,8 +823,16 @@ async def pcm_addon_kind(
     await state.set_state(PlanCatalogStates.addon_amount)
     await callback.answer()
     ask = "مقدار به گیگ را بفرستید:" if kind == "volume" else "تعداد روز را بفرستید:"
-    if callback.message:
-        await callback.message.answer(ask, reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=ask,
+        cancel_code="pcm_hub",
+        fsm_state=PlanCatalogStates.addon_amount,
+        edit=True,
+    )
 
 
 @router.message(PlanCatalogStates.addon_amount)
@@ -790,6 +843,17 @@ async def pcm_addon_amount(
     is_reseller_bot: bool = False,
 ):
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.set_state(None)
         await message.answer(
             "لغو شد.",
@@ -808,11 +872,19 @@ async def pcm_addon_amount(
             if amount <= 0:
                 raise ValueError("amount")
     except ValueError:
-        await message.answer("عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
+        await message.answer("عدد معتبر بفرستید.")
         return
     await state.update_data(_pcm_addon_amount=amount)
-    await state.set_state(PlanCatalogStates.addon_price)
-    await message.answer("قیمت به تومان را بفرستید:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="قیمت به تومان را بفرستید:",
+        cancel_code="pcm_hub",
+        fsm_state=PlanCatalogStates.addon_price,
+        edit=False,
+    )
 
 
 @router.message(PlanCatalogStates.addon_price)
@@ -827,6 +899,17 @@ async def pcm_addon_price_save(
     from app.services.service_addons import create_pack, list_packs
 
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.set_state(None)
         await message.answer(
             "لغو شد.",
@@ -838,7 +921,7 @@ async def pcm_addon_price_save(
     try:
         price = max(0, parse_bot_int(message.text))
     except ValueError:
-        await message.answer("عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
+        await message.answer("عدد معتبر بفرستید.")
         return
     staff = await resolve_catalog_staff(
         session,
@@ -861,10 +944,10 @@ async def pcm_addon_price_save(
             price=price,
         )
     except (ShopScopeError, ValueError) as e:
-        await message.answer(user_safe_error(e), reply_markup=kb.cancel_reply())
+        await message.answer(user_safe_error(e))
         return
     except Exception as e:
-        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=kb.cancel_reply())
+        await message.answer(f"خطا: {user_safe_error(e)}")
         return
     await state.set_state(None)
     packs = await list_packs(session, staff, active_only=False)
@@ -995,12 +1078,19 @@ async def pcm_addon_edit_ask(
     await state.set_state(PlanCatalogStates.addon_edit_field)
     await state.update_data(_pcm_edit_addon_id=pid, _pcm_edit_addon_field="name")
     await callback.answer()
-    if callback.message:
-        await callback.message.answer(
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=(
             f"نام جدید برای «{html.escape(pack.name)}» "
-            f"(یا همان نام را بفرستید؛ بعد مقدار و قیمت پرسیده می‌شود):",
-            reply_markup=kb.cancel_reply(),
-        )
+            f"(یا همان نام را بفرستید؛ بعد مقدار و قیمت پرسیده می‌شود):"
+        ),
+        cancel_code="pcm_hub",
+        fsm_state=PlanCatalogStates.addon_edit_field,
+        edit=True,
+    )
 
 
 @router.message(PlanCatalogStates.addon_edit_field)
@@ -1019,6 +1109,17 @@ async def pcm_addon_edit_save(
     )
 
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.set_state(None)
         await message.answer(
             "لغو شد.",
@@ -1049,7 +1150,7 @@ async def pcm_addon_edit_save(
     try:
         if field == "name":
             if not text:
-                await message.answer("نام خالی نیست.", reply_markup=kb.cancel_reply())
+                await message.answer("نام خالی نیست.")
                 return
             await state.update_data(
                 _pcm_edit_addon_name=text[:128],
@@ -1060,9 +1161,15 @@ async def pcm_addon_edit_save(
                 if pack.kind == "volume"
                 else "تعداد روز:"
             )
-            await message.answer(
-                f"{ask} (فعلی: {pack.amount:g})",
-                reply_markup=kb.cancel_reply(),
+            from app.bot.nav_input import ask_text
+
+            await ask_text(
+                message,
+                state,
+                prompt=f"{ask} (فعلی: {pack.amount:g})",
+                cancel_code="pcm_hub",
+                fsm_state=PlanCatalogStates.addon_edit_field,
+                edit=False,
             )
             return
         if field == "amount":
@@ -1076,9 +1183,15 @@ async def pcm_addon_edit_save(
                 _pcm_edit_addon_amount=amount,
                 _pcm_edit_addon_field="price",
             )
-            await message.answer(
-                f"قیمت تومان (فعلی: {int(pack.price):,}):",
-                reply_markup=kb.cancel_reply(),
+            from app.bot.nav_input import ask_text
+
+            await ask_text(
+                message,
+                state,
+                prompt=f"قیمت تومان (فعلی: {int(pack.price):,}):",
+                cancel_code="pcm_hub",
+                fsm_state=PlanCatalogStates.addon_edit_field,
+                edit=False,
             )
             return
         # field == price → commit
@@ -1092,10 +1205,10 @@ async def pcm_addon_edit_save(
             price=price,
         )
     except (ShopScopeError, ValueError) as e:
-        await message.answer(user_safe_error(e), reply_markup=kb.cancel_reply())
+        await message.answer(user_safe_error(e))
         return
     except Exception as e:
-        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=kb.cancel_reply())
+        await message.answer(f"خطا: {user_safe_error(e)}")
         return
     await state.set_state(None)
     packs = await list_packs(session, staff, active_only=False)

@@ -559,31 +559,47 @@ async def open_add_kind_action(
     await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=kind)
     await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_KIND, push=False)
     if audience == "users" and kind == "fixed":
-        await state.set_state(AdminStates.add_plan_name)
-        # Keep cancel reply KB for the whole FSM — do NOT restore list KB mid-wizard
-        await message.answer(
-            "➕ <b>پلن ثابت جدید</b>\nنام پلن را بفرستید:",
-            reply_markup=kb.cancel_reply(),
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            message,
+            state,
+            prompt="➕ <b>پلن ثابت جدید</b>\nنام پلن را بفرستید:",
+            cancel_code="adm_pln",
+            fsm_state=AdminStates.add_plan_name,
+            edit=False,
         )
         return
     if audience == "resellers" and kind in {"fixed", "payg"}:
         label = "اشتراک PAYG" if kind == "payg" else "اشتراک ثابت"
-        await state.set_state(AdminPlansStates.res_plan_name)
         await state.update_data(res_plan_mode=kind, res_plan_kind="subscription")
-        await message.answer(
-            f"➕ <b>پلن {label}</b>\nنام پلن نمایندگی:",
-            reply_markup=kb.cancel_reply(),
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            message,
+            state,
+            prompt=f"➕ <b>پلن {label}</b>\nنام پلن نمایندگی:",
+            cancel_code="adm_pln",
+            fsm_state=AdminPlansStates.res_plan_name,
+            edit=False,
         )
         return
     if audience == "resellers" and kind in {"addon_volume", "addon_users"}:
         label = "بسته حجم" if kind == "addon_volume" else "بسته کاربر"
-        await state.set_state(AdminPlansStates.res_plan_name)
         await state.update_data(res_plan_mode="fixed", res_plan_kind=kind)
-        await message.answer(
-            f"➕ <b>{label}</b>\n"
-            "بدون گروه/نقش/نام‌گذاری سرویس — فقط برای نمایندگان با اشتراک فعال.\n"
-            "نام بسته:",
-            reply_markup=kb.cancel_reply(),
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            message,
+            state,
+            prompt=(
+                f"➕ <b>{label}</b>\n"
+                "بدون گروه/نقش/نام‌گذاری سرویس — فقط برای نمایندگان با اشتراک فعال.\n"
+                "نام بسته:"
+            ),
+            cancel_code="adm_pln",
+            fsm_state=AdminPlansStates.res_plan_name,
+            edit=False,
         )
         return
     # Settings-based kinds — open configure screen on the same panel.
@@ -801,15 +817,19 @@ async def plans_edit_ask(
     key = callback.data.split("adm:plans:edit:", 1)[-1]
     cur = await get_setting(session, key)
     await callback.answer()
-    await state.set_state(AdminPlansStates.edit_value)
     await state.update_data(plans_edit_key=key, _adm_plans_aud="users")
     kind = "wholesale" if key.startswith("wholesale") or key == "btn_wholesale" else "custom"
     await state.update_data(_adm_plans_kind=kind)
-    if callback.message:
-        await callback.message.answer(
-            f"مقدار جدید برای <b>{key}</b>\nفعلی: <code>{html.escape((cur or '')[:200])}</code>",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=f"مقدار جدید برای <b>{key}</b>\nفعلی: <code>{html.escape((cur or '')[:200])}</code>",
+        cancel_code="adm_pln",
+        fsm_state=AdminPlansStates.edit_value,
+        edit=True,
+    )
 
 @router.message(AdminPlansStates.edit_value)
 @require_bot_owner_handler
@@ -823,6 +843,10 @@ async def plans_edit_save(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return
@@ -845,7 +869,7 @@ async def plans_edit_save(
         try:
             float(text.replace(",", "").replace("٬", ""))
         except ValueError:
-            await message.answer("عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
+            await message.answer("عدد معتبر بفرستید.")
             return
     await set_setting(session, key, text.replace(",", "").replace("٬", ""))
     await state.set_state(None)
@@ -862,13 +886,17 @@ async def wholesale_add_tier_ask(callback: CallbackQuery, state: FSMContext, db_
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminPlansStates.wholesale_tier_min)
     await state.update_data(_adm_plans_aud="users", _adm_plans_kind="wholesale")
-    if callback.message:
-        await callback.message.answer(
-            "حداقل تعداد برای پله جدید:",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="حداقل تعداد برای پله جدید:",
+        cancel_code="adm_pln",
+        fsm_state=AdminPlansStates.wholesale_tier_min,
+        edit=True,
+    )
 
 @router.message(AdminPlansStates.wholesale_tier_min)
 @require_bot_owner_handler
@@ -879,6 +907,10 @@ async def wholesale_tier_min_entered(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return
@@ -888,8 +920,16 @@ async def wholesale_tier_min_entered(
         await message.answer("عدد معتبر بفرستید.")
         return
     await state.update_data(tier_min=mn)
-    await state.set_state(AdminPlansStates.wholesale_tier_pct)
-    await message.answer("درصد تخفیف (۰–۱۰۰):", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="درصد تخفیف (۰–۱۰۰):",
+        cancel_code="adm_pln",
+        fsm_state=AdminPlansStates.wholesale_tier_pct,
+        edit=False,
+    )
 
 @router.message(AdminPlansStates.wholesale_tier_pct)
 @require_bot_owner_handler
@@ -900,6 +940,10 @@ async def wholesale_tier_pct_entered(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return
@@ -948,15 +992,30 @@ async def trial_ask_name(callback: CallbackQuery, state: FSMContext, db_user: Bo
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminPlansStates.trial_name)
     await state.update_data(_adm_plans_aud="users", _adm_plans_kind="trial")
-    if callback.message:
-        await callback.message.answer("نام پلن تست:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="نام پلن تست:",
+        cancel_code="adm_pln",
+        fsm_state=AdminPlansStates.trial_name,
+        edit=True,
+    )
 
 @router.message(AdminPlansStates.trial_name)
 @require_bot_owner_handler
 async def trial_save_name(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
+    if not _is_admin(db_user):
+        await state.set_state(None)
+        await _answer_plans_cancel(message, state, session)
+        return
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return
@@ -975,15 +1034,30 @@ async def trial_ask_days(callback: CallbackQuery, state: FSMContext, db_user: Bo
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminPlansStates.trial_days)
     await state.update_data(_adm_plans_aud="users", _adm_plans_kind="trial")
-    if callback.message:
-        await callback.message.answer("مدت به روز:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="مدت به روز:",
+        cancel_code="adm_pln",
+        fsm_state=AdminPlansStates.trial_days,
+        edit=True,
+    )
 
 @router.message(AdminPlansStates.trial_days)
 @require_bot_owner_handler
 async def trial_save_days(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
+    if not _is_admin(db_user):
+        await state.set_state(None)
+        await _answer_plans_cancel(message, state, session)
+        return
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return
@@ -1007,15 +1081,30 @@ async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotU
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminPlansStates.trial_gb)
     await state.update_data(_adm_plans_aud="users", _adm_plans_kind="trial")
-    if callback.message:
-        await callback.message.answer("حجم گیگ (۰ = نامحدود):", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="حجم گیگ (۰ = نامحدود):",
+        cancel_code="adm_pln",
+        fsm_state=AdminPlansStates.trial_gb,
+        edit=True,
+    )
 
 @router.message(AdminPlansStates.trial_gb)
 @require_bot_owner_handler
 async def trial_save_gb(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
+    if not _is_admin(db_user):
+        await state.set_state(None)
+        await _answer_plans_cancel(message, state, session)
+        return
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return
@@ -1730,9 +1819,16 @@ async def resplan_edit_ask(
         await callback.answer("نامعتبر", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminPlansStates.res_plan_edit_field)
-    if callback.message:
-        await callback.message.answer(prompts[field], reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=prompts[field],
+        cancel_code="adm_pln",
+        fsm_state=AdminPlansStates.res_plan_edit_field,
+        edit=True,
+    )
 
 async def _show_resplan_groups(callback: CallbackQuery, state: FSMContext, plan_id: int) -> None:
     selected = [int(x) for x in ((await state.get_data()).get("resplan_edit_groups") or [])]
@@ -1947,7 +2043,7 @@ async def resplan_edit_save(
     try:
         if field == "name":
             if not text:
-                await message.answer("نام خالی نیست.", reply_markup=kb.cancel_reply())
+                await message.answer("نام خالی نیست.")
                 return
             plan.name = text[:128]
         elif field == "price":
@@ -1980,7 +2076,7 @@ async def resplan_edit_save(
             await state.clear()
             return
     except ValueError:
-        await message.answer("عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
+        await message.answer("عدد معتبر بفرستید.")
         return
     await sync_plan_billing_rate(session, plan)
     await _persist(session)
@@ -2003,26 +2099,57 @@ async def resplan_add_start(callback: CallbackQuery, state: FSMContext, db_user:
         await callback.answer("نامعتبر", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminPlansStates.res_plan_name)
     await state.update_data(res_plan_mode=mode, _adm_plans_aud="resellers", _adm_plans_kind=mode)
-    if callback.message:
-        await callback.message.answer("نام پلن نمایندگی:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="نام پلن نمایندگی:",
+        cancel_code="adm_pln",
+        fsm_state=AdminPlansStates.res_plan_name,
+        edit=True,
+    )
 
 @router.message(AdminPlansStates.res_plan_name)
 @require_bot_owner_handler
 async def resplan_name(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
+    if not _is_admin(db_user):
+        await state.set_state(None)
+        await _answer_plans_cancel(message, state, session)
+        return
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return
     await state.update_data(res_plan_name=(message.text or "").strip()[:128])
-    await state.set_state(AdminPlansStates.res_plan_price)
-    await message.answer("قیمت ورود (تومان، ۰ = رایگان):", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="قیمت ورود (تومان، ۰ = رایگان):",
+        cancel_code="adm_pln",
+        fsm_state=AdminPlansStates.res_plan_price,
+        edit=False,
+    )
 
 @router.message(AdminPlansStates.res_plan_price)
 @require_bot_owner_handler
 async def resplan_price(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
+    if not _is_admin(db_user):
+        await state.set_state(None)
+        await _answer_plans_cancel(message, state, session)
+        return
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return
@@ -2035,19 +2162,40 @@ async def resplan_price(message: Message, state: FSMContext, session: AsyncSessi
     data = await state.get_data()
     plan_kind = str(data.get("res_plan_kind") or "subscription")
     if plan_kind in {"addon_volume", "addon_users"}:
-        await state.set_state(AdminPlansStates.res_plan_addon_amount)
         ask = "حجم بسته (گیگ):" if plan_kind == "addon_volume" else "تعداد کاربر بسته:"
-        await message.answer(ask, reply_markup=kb.cancel_reply())
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            message,
+            state,
+            prompt=ask,
+            cancel_code="adm_pln",
+            fsm_state=AdminPlansStates.res_plan_addon_amount,
+            edit=False,
+        )
         return
     if data.get("res_plan_mode") == "payg":
-        await state.set_state(AdminPlansStates.res_plan_rate_gb)
-        await message.answer("نرخ هر گیگ (تومان):", reply_markup=kb.cancel_reply())
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            message,
+            state,
+            prompt="نرخ هر گیگ (تومان):",
+            cancel_code="adm_pln",
+            fsm_state=AdminPlansStates.res_plan_rate_gb,
+            edit=False,
+        )
     else:
         await state.update_data(res_plan_groups=[])
-        await state.set_state(AdminPlansStates.res_plan_link)
-        await message.answer(
-            "📁 گروه پاسارگارد را انتخاب کنید (حداقل یک گروه الزامی):",
-            reply_markup=kb.cancel_reply(),
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            message,
+            state,
+            prompt="📁 گروه پاسارگارد را انتخاب کنید (حداقل یک گروه الزامی):",
+            cancel_code="adm_pln",
+            fsm_state=AdminPlansStates.res_plan_link,
+            edit=False,
         )
         bubble = await message.answer("⏳")
         await _show_resplan_add_groups(bubble, state)
@@ -2057,7 +2205,15 @@ async def resplan_price(message: Message, state: FSMContext, session: AsyncSessi
 async def resplan_addon_amount(
     message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
+    if not _is_admin(db_user):
+        await state.set_state(None)
+        await _answer_plans_cancel(message, state, session)
+        return
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return
@@ -2096,7 +2252,15 @@ async def resplan_addon_amount(
 async def resplan_rate_gb(
     message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
+    if not _is_admin(db_user):
+        await state.set_state(None)
+        await _answer_plans_cancel(message, state, session)
+        return
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return
@@ -2106,10 +2270,15 @@ async def resplan_rate_gb(
         await message.answer("عدد معتبر بفرستید.")
         return
     await state.update_data(res_plan_rate_gb=rate, res_plan_groups=[])
-    await state.set_state(AdminPlansStates.res_plan_link)
-    await message.answer(
-        "📁 گروه پاسارگارد را انتخاب کنید (حداقل یک گروه الزامی):",
-        reply_markup=kb.cancel_reply(),
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="📁 گروه پاسارگارد را انتخاب کنید (حداقل یک گروه الزامی):",
+        cancel_code="adm_pln",
+        fsm_state=AdminPlansStates.res_plan_link,
+        edit=False,
     )
     bubble = await message.answer("⏳")
     await _show_resplan_add_groups(bubble, state)
@@ -2117,7 +2286,15 @@ async def resplan_rate_gb(
 @router.message(AdminPlansStates.res_plan_link)
 @require_bot_owner_handler
 async def resplan_link_cancel(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
+    if not _is_admin(db_user):
+        await state.set_state(None)
+        await _answer_plans_cancel(message, state, session)
+        return
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return
@@ -2126,7 +2303,15 @@ async def resplan_link_cancel(message: Message, state: FSMContext, session: Asyn
 @router.message(AdminPlansStates.res_plan_role)
 @require_bot_owner_handler
 async def resplan_role_cancel(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
+    if not _is_admin(db_user):
+        await state.set_state(None)
+        await _answer_plans_cancel(message, state, session)
+        return
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return

@@ -561,13 +561,19 @@ async def pg_search_start(
     if not gate.allowed:
         return
     await callback.answer()
-    await state.set_state(PgUserStates.search)
-    if callback.message:
-        await callback.message.answer(
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=(
             "نام کاربری پاسارگارد را برای جستجو بفرستید:\n"
-            "(جستجو در لیست فیلتر می‌شود؛ برای انصراف «انصراف» بزنید)",
-            reply_markup=kb.cancel_reply(),
-        )
+            "(جستجو در لیست فیلتر می‌شود؛ برای انصراف «انصراف» بزنید)"
+        ),
+        cancel_code="adm_pg_u",
+        fsm_state=PgUserStates.search,
+        edit=True,
+    )
 
 @router.message(PgUserStates.search)
 async def pg_search_query(
@@ -594,6 +600,17 @@ async def pg_search_query(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
@@ -1034,11 +1051,16 @@ async def pg_create_tpl_chosen(
     await callback.answer()
     await state.update_data(pg_create_mode="template", pg_template_id=tid)
     await state.set_state(PgUserStates.create_username)
-    if callback.message:
-        await callback.message.answer(
-            f"تمپلیت #{tid} انتخاب شد.\nنام کاربری جدید را بفرستید (۳–۳۲ حرف انگلیسی/عدد/_):",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=f"تمپلیت #{tid} انتخاب شد.\nنام کاربری جدید را بفرستید (۳–۳۲ حرف انگلیسی/عدد/_):",
+        cancel_code="adm_pg_u",
+        fsm_state=PgUserStates.create_username,
+        edit=True,
+    )
 
 @router.callback_query(F.data == "adm:pg:create:custom")
 async def pg_create_custom_groups(
@@ -1199,11 +1221,16 @@ async def pg_create_grpdone(
     await callback.answer()
     await state.update_data(pg_create_mode="custom")
     await state.set_state(PgUserStates.create_username)
-    if callback.message:
-        await callback.message.answer(
-            "نام کاربری جدید را بفرستید (۳–۳۲ حرف انگلیسی/عدد/_):",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="نام کاربری جدید را بفرستید (۳–۳۲ حرف انگلیسی/عدد/_):",
+        cancel_code="adm_pg_u",
+        fsm_state=PgUserStates.create_username,
+        edit=True,
+    )
 
 @router.message(PgUserStates.create_username)
 async def pg_create_username(
@@ -1230,6 +1257,17 @@ async def pg_create_username(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
@@ -1242,9 +1280,15 @@ async def pg_create_username(
     await state.update_data(pg_create_username=uname)
     if mode == "custom":
         await state.set_state(PgUserStates.create_gb)
-        await message.answer(
-            "حجم به گیگابایت را بفرستید (عدد؛ برای نامحدود ۰ بفرستید):",
-            reply_markup=kb.cancel_reply(),
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            message,
+            state,
+            prompt="حجم به گیگابایت را بفرستید (عدد؛ برای نامحدود ۰ بفرستید):",
+            cancel_code="adm_pg_u",
+            fsm_state=PgUserStates.create_gb,
+            edit=False,
         )
         return
     if mode != "template":
@@ -1340,6 +1384,17 @@ async def pg_create_gb(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
@@ -1353,9 +1408,15 @@ async def pg_create_gb(
         return
     await state.update_data(pg_create_gb=gb)
     await state.set_state(PgUserStates.create_days)
-    await message.answer(
-        "مدت به روز را بفرستید (عدد؛ برای بدون انقضا ۰ بفرستید):",
-        reply_markup=kb.cancel_reply(),
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="مدت به روز را بفرستید (عدد؛ برای بدون انقضا ۰ بفرستید):",
+        cancel_code="adm_pg_u",
+        fsm_state=PgUserStates.create_days,
+        edit=False,
     )
 
 @router.message(PgUserStates.create_days)
@@ -1383,6 +1444,17 @@ async def pg_create_days(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
@@ -1440,9 +1512,15 @@ async def pg_create_days(
     except Exception as e:
         # Recoverable (e.g. duplicate username): go back to username step.
         await state.set_state(PgUserStates.create_username)
-        await message.answer(
-            f"❌ {_err_msg(e)}\nنام کاربری دیگری بفرستید:",
-            reply_markup=kb.cancel_reply(),
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            message,
+            state,
+            prompt=f"❌ {_err_msg(e)}\nنام کاربری دیگری بفرستید:",
+            cancel_code="adm_pg_u",
+            fsm_state=PgUserStates.create_username,
+            edit=False,
         )
         return
     await state.clear()
@@ -1517,11 +1595,16 @@ async def pg_edit_name_ask(
     await callback.answer()
     await state.update_data(pg_edit_uid=uid)
     await state.set_state(PgUserStates.edit_username)
-    if callback.message:
-        await callback.message.answer(
-            "نام کاربری جدید را بفرستید:",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="نام کاربری جدید را بفرستید:",
+        cancel_code="adm_pg_u",
+        fsm_state=PgUserStates.edit_username,
+        edit=True,
+    )
 
 @router.message(PgUserStates.edit_username)
 async def pg_edit_name_save(
@@ -1536,6 +1619,17 @@ async def pg_edit_name_save(
     from app.services.bot_pg_user_authz import sanitize_pg_user_write_payload
 
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
@@ -1603,11 +1697,16 @@ async def pg_edit_gb_ask(
     await callback.answer()
     await state.update_data(pg_edit_uid=uid)
     await state.set_state(PgUserStates.edit_gb)
-    if callback.message:
-        await callback.message.answer(
-            "حجم جدید به گیگابایت (۰ = نامحدود):",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="حجم جدید به گیگابایت (۰ = نامحدود):",
+        cancel_code="adm_pg_u",
+        fsm_state=PgUserStates.edit_gb,
+        edit=True,
+    )
 
 @router.message(PgUserStates.edit_gb)
 async def pg_edit_gb_save(
@@ -1622,6 +1721,17 @@ async def pg_edit_gb_save(
     from app.services.bot_pg_user_authz import sanitize_pg_user_write_payload
 
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
@@ -1695,11 +1805,16 @@ async def pg_edit_days_ask(
     await callback.answer()
     await state.update_data(pg_edit_uid=uid)
     await state.set_state(PgUserStates.edit_days)
-    if callback.message:
-        await callback.message.answer(
-            "مدت باقی‌مانده از الان به روز (۰ = بدون انقضا):",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="مدت باقی‌مانده از الان به روز (۰ = بدون انقضا):",
+        cancel_code="adm_pg_u",
+        fsm_state=PgUserStates.edit_days,
+        edit=True,
+    )
 
 @router.message(PgUserStates.edit_days)
 async def pg_edit_days_save(
@@ -1714,6 +1829,17 @@ async def pg_edit_days_save(
     from app.services.bot_pg_user_authz import sanitize_pg_user_write_payload
 
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return

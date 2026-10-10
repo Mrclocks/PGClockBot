@@ -435,6 +435,9 @@ async def show_nav_keyboard(
     return ui
 
 
+ORDER_PAY_PROMPT = "روش پرداخت را انتخاب کنید:"
+
+
 async def present_order_pay(
     message: Message,
     session: AsyncSession,
@@ -442,13 +445,16 @@ async def present_order_pay(
     order_id: int,
     *,
     state: FSMContext | None = None,
-    text: str = "روش پرداخت را از کیبورد پایین انتخاب کنید:",
+    text: str = ORDER_PAY_PROMPT,
+    summary: str | None = None,
     is_reseller_bot: bool,
     reseller_owner_id: int | None,
     heal_main: bool = False,
 ) -> None:
-    """Show order payment methods as an inline list (Option B).
+    """Show order summary + payment methods in one inline panel (Option B).
 
+    Pass ``summary`` (HTML order id / plan / amount). The panel text is
+    ``summary + prompt`` so a prior edit of the same message is never needed.
     ``heal_main`` restores the stable main ReplyKeyboard after a free-text
     step (e.g. discount code) that left ``cancel_reply`` attached.
     """
@@ -459,9 +465,11 @@ async def present_order_pay(
         await set_nav_level(state, NAV_PAY, push=True)
         await state.update_data(**{PAY_ORDER_ID: int(order_id)})
 
-    body = text
-    if "کیبورد پایین" in body:
-        body = "روش پرداخت را انتخاب کنید:"
+    prompt = (text or ORDER_PAY_PROMPT).strip() or ORDER_PAY_PROMPT
+    if summary and summary.strip():
+        body = f"{summary.strip()}\n\n{prompt}"
+    else:
+        body = prompt
     await present_inline_only(
         message,
         text=body,
@@ -479,5 +487,5 @@ async def present_order_pay(
         await attach_reply_keyboard(
             message,
             main_kb,
-            text="روش پرداخت را از دکمه‌های پیام بالا انتخاب کنید.",
+            text="·",
         )

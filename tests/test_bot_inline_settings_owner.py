@@ -60,12 +60,16 @@ class InlineSettingsFlowTests(unittest.IsolatedAsyncioTestCase):
         state = _state(level="admin_settings")
         state.set_state = AsyncMock()
         state.update_data = AsyncMock()
-        cb.message.answer = AsyncMock()
-        with patch("app.bot.auth.require_bot_owner", AsyncMock(return_value=False)) as gate:
+        with (
+            patch("app.bot.auth.require_bot_owner", AsyncMock(return_value=False)) as gate,
+            patch("app.bot.nav_input.ask_text", new_callable=AsyncMock) as ask,
+        ):
             await support_add_start(cb, state, session, db_user)
         gate.assert_not_awaited()
         cb.answer.assert_awaited()
-        cb.message.answer.assert_awaited()
+        ask.assert_awaited_once()
+        self.assertEqual(ask.await_args.kwargs.get("cancel_code"), "adm_set")
+        self.assertTrue(ask.await_args.kwargs.get("edit"))
 
     async def test_in_flow_add_support_skips_owner_middleware(self):
         ran = {}

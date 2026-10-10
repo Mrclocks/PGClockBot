@@ -41,7 +41,7 @@ class ResellerAddRoutingTests(unittest.TestCase):
         self.assertIn("adm:resplan:add:toggrp:", ADMIN_PLANS)
         self.assertIn("adm:resplan:add:grpdone", ADMIN_PLANS)
 
-    def test_add_wizard_keeps_cancel_keyboard(self):
+    def test_add_wizard_uses_ask_text_cancel(self):
         block = ADMIN_PLANS[
             ADMIN_PLANS.find("async def open_add_kind_action") : ADMIN_PLANS.find(
                 "async def _rerender_plans_screen"
@@ -49,7 +49,9 @@ class ResellerAddRoutingTests(unittest.TestCase):
         ]
         # Must not restore list KB mid-wizard (overwrites انصراف)
         self.assertNotIn("await message.answer(\"⬇️\", reply_markup=list_markup)", block.split("Settings-based")[0])
-        self.assertIn("kb.cancel_reply()", block)
+        self.assertIn("ask_text", block)
+        self.assertIn('cancel_code="adm_pln"', block)
+        self.assertNotIn("kb.cancel_reply()", block)
 
 
 class UserGroupConfirmTests(unittest.TestCase):

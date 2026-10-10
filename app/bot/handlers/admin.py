@@ -1030,7 +1030,6 @@ async def adm_plan_edit_ask(
         "prefix": "پیشوند نام کاربری پاسارگارد (خالی = پیش‌فرض):",
         "suffix": "پسوند نام کاربری پاسارگارد (خالی = حذف):",
     }
-    await state.set_state(AdminStates.plan_edit_field)
     await state.update_data(
         user_plan_edit_id=int(pid_raw),
         user_plan_edit_field=field,
@@ -1038,8 +1037,16 @@ async def adm_plan_edit_ask(
         _adm_plans_kind="fixed",
     )
     await callback.answer()
-    if callback.message:
-        await callback.message.answer(prompts[field], reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=prompts[field],
+        cancel_code="adm_pln",
+        fsm_state=AdminStates.plan_edit_field,
+        edit=True,
+    )
 
 @router.message(AdminStates.plan_edit_field)
 @require_bot_owner_handler
@@ -1050,6 +1057,10 @@ async def adm_plan_edit_save(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         from app.bot.handlers.admin_plans import _answer_plans_cancel
 
@@ -1084,7 +1095,7 @@ async def adm_plan_edit_save(
         elif field == "suffix":
             plan.pg_username_suffix = text[:64] or None
     except ValueError:
-        await message.answer("عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
+        await message.answer("عدد معتبر بفرستید.")
         return
     await session.commit()
     await state.set_state(None)
@@ -1101,36 +1112,63 @@ async def adm_plan_add(callback: CallbackQuery, state: FSMContext, db_user: BotU
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminStates.add_plan_name)
     await state.update_data(_adm_plans_aud="users", _adm_plans_kind="fixed")
-    if callback.message:
-        await callback.message.answer("نام پلن را بفرستید:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="نام پلن را بفرستید:",
+        cancel_code="adm_pln",
+        fsm_state=AdminStates.add_plan_name,
+        edit=True,
+    )
 
 @router.message(AdminStates.add_plan_name)
 @require_bot_owner_handler
-async def plan_name(message: Message, state: FSMContext, db_user: BotUser):
+async def plan_name(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
     if not _is_admin(db_user):
         await state.clear()
         await message.answer("ادمین نیستید")
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         from app.bot.handlers.admin_plans import _answer_plans_cancel
 
         await _answer_plans_cancel(message, state, session)
         return
     await state.update_data(name=(message.text or "").strip())
-    await state.set_state(AdminStates.add_plan_price)
-    await message.answer("قیمت به تومان را بفرستید:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="قیمت به تومان را بفرستید:",
+        cancel_code="adm_pln",
+        fsm_state=AdminStates.add_plan_price,
+        edit=False,
+    )
 
 @router.message(AdminStates.add_plan_price)
 @require_bot_owner_handler
-async def plan_price(message: Message, state: FSMContext, db_user: BotUser):
+async def plan_price(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
     if not _is_admin(db_user):
         await state.clear()
         await message.answer("ادمین نیستید")
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         from app.bot.handlers.admin_plans import _answer_plans_cancel
 
@@ -1139,20 +1177,34 @@ async def plan_price(message: Message, state: FSMContext, db_user: BotUser):
     try:
         price = max(0, parse_bot_int(message.text))
     except ValueError:
-        await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
+        await message.answer("یک عدد معتبر بفرستید.")
         return
     await state.update_data(price=price)
-    await state.set_state(AdminStates.add_plan_days)
-    await message.answer("مدت اعتبار به روز را بفرستید:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="مدت اعتبار به روز را بفرستید:",
+        cancel_code="adm_pln",
+        fsm_state=AdminStates.add_plan_days,
+        edit=False,
+    )
 
 @router.message(AdminStates.add_plan_days)
 @require_bot_owner_handler
-async def plan_days(message: Message, state: FSMContext, db_user: BotUser):
+async def plan_days(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
     if not _is_admin(db_user):
         await state.clear()
         await message.answer("ادمین نیستید")
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         from app.bot.handlers.admin_plans import _answer_plans_cancel
 
@@ -1161,23 +1213,34 @@ async def plan_days(message: Message, state: FSMContext, db_user: BotUser):
     try:
         days = max(1, parse_bot_int(message.text, default=30))
     except ValueError:
-        await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
+        await message.answer("یک عدد معتبر بفرستید.")
         return
     await state.update_data(days=days)
-    await state.set_state(AdminStates.add_plan_gb)
-    await message.answer(
-        "حجم به گیگ را بفرستید:\n<code>0</code> = نامحدود",
-        reply_markup=kb.cancel_reply(),
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="حجم به گیگ را بفرستید:\n<code>0</code> = نامحدود",
+        cancel_code="adm_pln",
+        fsm_state=AdminStates.add_plan_gb,
+        edit=False,
     )
 
 @router.message(AdminStates.add_plan_gb)
 @require_bot_owner_handler
-async def plan_gb(message: Message, state: FSMContext, db_user: BotUser):
+async def plan_gb(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
     if not _is_admin(db_user):
         await state.clear()
         await message.answer("ادمین نیستید")
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         from app.bot.handlers.admin_plans import _answer_plans_cancel
 
@@ -1186,7 +1249,7 @@ async def plan_gb(message: Message, state: FSMContext, db_user: BotUser):
     try:
         gb = parse_bot_float(message.text)
     except ValueError:
-        await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
+        await message.answer("یک عدد معتبر بفرستید.")
         return
     await state.update_data(gb=None if gb <= 0 else gb)
     await state.set_state(AdminStates.add_plan_link)
@@ -1203,13 +1266,19 @@ async def plan_gb(message: Message, state: FSMContext, db_user: BotUser):
 
 @router.message(AdminStates.add_plan_link)
 @require_bot_owner_handler
-async def plan_link_cancel(message: Message, state: FSMContext, db_user: BotUser):
+async def plan_link_cancel(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
     """Allow reply-keyboard انصراف while waiting for inline PG mode pick."""
     if not _is_admin(db_user):
         await state.clear()
         await message.answer("ادمین نیستید")
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         from app.bot.handlers.admin_plans import _answer_plans_cancel
 
@@ -2257,12 +2326,16 @@ async def adm_users_search_start(callback: CallbackQuery, state: FSMContext, db_
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminStates.user_search)
-    if callback.message:
-        await callback.message.answer(
-            "آیدی عددی تلگرام کاربر را بفرستید:",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="آیدی عددی تلگرام کاربر را بفرستید:",
+        cancel_code="adm_usr",
+        fsm_state=AdminStates.user_search,
+        edit=True,
+    )
 
 @router.message(AdminStates.user_search)
 @require_bot_owner_handler
@@ -2274,6 +2347,10 @@ async def adm_users_search(
         await message.answer("ادمین نیستید")
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await _answer_users_nav(
             message,
             session,
@@ -2385,13 +2462,19 @@ async def adm_users_message_start(
         await callback.answer(deny, show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminStates.user_message)
     await state.update_data(msg_user_id=int(user.id))
-    if callback.message:
-        await callback.message.answer(
-            f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b> را بفرستید:",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=(
+            f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b> را بفرستید:"
+        ),
+        cancel_code="adm_usr",
+        fsm_state=AdminStates.user_message,
+        edit=True,
+    )
 
 @router.message(AdminStates.user_message)
 @require_bot_owner_handler
@@ -2402,6 +2485,10 @@ async def adm_users_message_send(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await _answer_users_nav(
             message,
             session,
@@ -2567,15 +2654,23 @@ async def adm_users_wallet_credit_ask(
     if deny:
         await callback.answer(deny, show_alert=True)
         return
-    await state.set_state(AdminStates.user_wallet_credit)
     await state.update_data(admin_credit_user_id=user_id)
     await callback.answer()
-    if callback.message:
-        await callback.message.answer(
-            f"💰 مبلغ شارژ کیف پول برای <b>{html.escape(user.full_name or str(user.telegram_id))}</b>\n"
-            f"موجودی فعلی: {format_toman(user.wallet_balance, get_settings().currency)}\n\n"
-            "مبلغ را به تومان ارسال کنید (حداقل ۱۰۰۰):",
-        )
+    from app.bot.nav_input import ask_text
+
+    prompt = (
+        f"💰 مبلغ شارژ کیف پول برای <b>{html.escape(user.full_name or str(user.telegram_id))}</b>\n"
+        f"موجودی فعلی: {format_toman(user.wallet_balance, get_settings().currency)}\n\n"
+        "مبلغ را به تومان ارسال کنید (حداقل ۱۰۰۰):"
+    )
+    await ask_text(
+        callback,
+        state,
+        prompt=prompt,
+        cancel_code="adm_usr",
+        fsm_state=AdminStates.user_wallet_credit,
+        edit=True,
+    )
 
 @router.message(AdminStates.user_wallet_credit)
 @require_bot_owner_handler
@@ -2584,6 +2679,20 @@ async def adm_users_wallet_credit_save(
 ):
     if not _is_admin(db_user):
         await state.clear()
+        return
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
+        await _answer_users_nav(
+            message,
+            session,
+            db_user,
+            "لغو شد.",
+            state,
+            clear_state=True,
+        )
         return
     data = await state.get_data()
     user_id = int(data.get("admin_credit_user_id") or 0)
@@ -2596,7 +2705,6 @@ async def adm_users_wallet_credit_save(
     if amount is None or amount < 1000:
         await message.answer(
             "مبلغ نامعتبر — حداقل ۱۰۰۰ تومان",
-            reply_markup=kb.cancel_reply(),
         )
         return
     from app.services.bot_user_admin import admin_credit_user_wallet
@@ -2929,12 +3037,17 @@ async def adm_users_service_adjust(
                 "svcadj_sid": service_id,
             }
         )
-        await state.set_state(AdminStates.svc_adjust_days_input)
         await callback.answer()
         if callback.message:
-            await callback.message.answer(
-                f"تعداد روز تغییر را وارد کنید (±{MAX_EXTEND_DAYS}، منفی = کاهش):",
-                reply_markup=kb.cancel_reply(),
+            from app.bot.nav_input import ask_text
+
+            await ask_text(
+                callback,
+                state,
+                prompt=f"تعداد روز تغییر را وارد کنید (±{MAX_EXTEND_DAYS}، منفی = کاهش):",
+                cancel_code="adm_usr",
+                fsm_state=AdminStates.svc_adjust_days_input,
+                edit=False,
             )
         return
     elif action == "gb" and detail == "input":
@@ -2945,12 +3058,17 @@ async def adm_users_service_adjust(
                 "svcadj_sid": service_id,
             }
         )
-        await state.set_state(AdminStates.svc_adjust_gb_input)
         await callback.answer()
         if callback.message:
-            await callback.message.answer(
-                f"مقدار گیگ تغییر را وارد کنید (±{MAX_EXTEND_GB}، منفی = کاهش):",
-                reply_markup=kb.cancel_reply(),
+            from app.bot.nav_input import ask_text
+
+            await ask_text(
+                callback,
+                state,
+                prompt=f"مقدار گیگ تغییر را وارد کنید (±{MAX_EXTEND_GB}، منفی = کاهش):",
+                cancel_code="adm_usr",
+                fsm_state=AdminStates.svc_adjust_gb_input,
+                edit=False,
             )
         return
     elif action == "confirm":
@@ -3012,6 +3130,10 @@ async def adm_svc_adjust_days_entered(
         return
     if kb.is_cancel_text(message.text):
         await state.set_state(None)
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await _answer_users_nav(
             message,
             session,
@@ -3026,12 +3148,11 @@ async def adm_svc_adjust_days_entered(
     try:
         days = parse_bot_int(message.text)
     except ValueError:
-        await message.answer("عدد معتبر بفرستید", reply_markup=kb.cancel_reply())
+        await message.answer("عدد معتبر بفرستید")
         return
     if abs(days) > MAX_EXTEND_DAYS:
         await message.answer(
             f"روز باید بین ±{MAX_EXTEND_DAYS} باشد",
-            reply_markup=kb.cancel_reply(),
         )
         return
     data = await state.get_data()
@@ -3068,6 +3189,10 @@ async def adm_svc_adjust_gb_entered(
         return
     if kb.is_cancel_text(message.text):
         await state.set_state(None)
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await _answer_users_nav(
             message,
             session,
@@ -3082,12 +3207,11 @@ async def adm_svc_adjust_gb_entered(
     try:
         gb = parse_bot_float(message.text)
     except ValueError:
-        await message.answer("عدد معتبر بفرستید", reply_markup=kb.cancel_reply())
+        await message.answer("عدد معتبر بفرستید")
         return
     if abs(gb) > MAX_EXTEND_GB:
         await message.answer(
             f"گیگ باید بین ±{MAX_EXTEND_GB} باشد",
-            reply_markup=kb.cancel_reply(),
         )
         return
     data = await state.get_data()
@@ -3152,14 +3276,21 @@ async def adm_users_block(
             await _render_user_card(callback.message, session, user, edit=True)
         return
 
-    await state.set_state(AdminStates.block_user_reason)
     await state.update_data(block_user_id=user_id)
     await callback.answer()
     if callback.message:
-        await callback.message.answer(
-            f"علت مسدودسازی کاربر <code>{user.telegram_id}</code> را بنویسید "
-            "(حداقل ۳ کاراکتر — برای کاربر ارسال می‌شود):",
-            reply_markup=kb.cancel_reply(),
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            callback,
+            state,
+            prompt=(
+                f"علت مسدودسازی کاربر <code>{user.telegram_id}</code> را بنویسید "
+                "(حداقل ۳ کاراکتر — برای کاربر ارسال می‌شود):"
+            ),
+            cancel_code="adm_usr",
+            fsm_state=AdminStates.block_user_reason,
+            edit=False,
         )
 
 @router.message(AdminStates.block_user_reason)
@@ -3172,6 +3303,10 @@ async def adm_users_block_reason(
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await _answer_users_nav(
             message,
             session,
@@ -3259,13 +3394,20 @@ async def adm_users_delete_ask_reason(
         await callback.answer("حذف ادمین مجاز نیست", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminStates.delete_user_reason)
     await state.update_data(delete_user_id=user_id)
     if callback.message:
-        await callback.message.answer(
-            f"علت حذف کامل کاربر <code>{user.telegram_id}</code> را بنویسید "
-            "(حداقل ۳ کاراکتر — برای خود کاربر ارسال می‌شود):\n\nبرای لغو: انصراف",
-            reply_markup=kb.cancel_reply(),
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            callback,
+            state,
+            prompt=(
+                f"علت حذف کامل کاربر <code>{user.telegram_id}</code> را بنویسید "
+                "(حداقل ۳ کاراکتر — برای خود کاربر ارسال می‌شود):\n\nبرای لغو: انصراف"
+            ),
+            cancel_code="adm_usr",
+            fsm_state=AdminStates.delete_user_reason,
+            edit=False,
         )
 
 @router.message(AdminStates.delete_user_reason)
@@ -3278,6 +3420,10 @@ async def adm_users_delete_reason(
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await _answer_users_nav(
             message,
             session,
@@ -3359,13 +3505,20 @@ async def adm_users_unreseller_ask(
         await callback.answer("این کاربر نماینده نیست", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminStates.revoke_reseller_reason)
     await state.update_data(revoke_user_id=user_id)
     if callback.message:
-        await callback.message.answer(
-            f"علت حذف نمایندگی کاربر <code>{user.telegram_id}</code> را بنویسید "
-            "(برای خود کاربر ارسال می‌شود):\n\nبرای لغو: انصراف",
-            reply_markup=kb.cancel_reply(),
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            callback,
+            state,
+            prompt=(
+                f"علت حذف نمایندگی کاربر <code>{user.telegram_id}</code> را بنویسید "
+                "(برای خود کاربر ارسال می‌شود):\n\nبرای لغو: انصراف"
+            ),
+            cancel_code="adm_usr",
+            fsm_state=AdminStates.revoke_reseller_reason,
+            edit=False,
         )
 
 @router.message(AdminStates.revoke_reseller_reason)
@@ -3378,6 +3531,10 @@ async def adm_users_unreseller_reason(
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await _answer_users_nav(
             message,
             session,
@@ -3711,24 +3868,34 @@ async def adm_resellers_capacity_adjust(
         await state.update_data(
             **{adj_key: {"days": days, "gb": gb}, "capadj_uid": user_id}
         )
-        await state.set_state(AdminStates.reseller_cap_days_input)
         await callback.answer()
         if callback.message:
-            await callback.message.answer(
-                f"تعداد روز تغییر را وارد کنید (±{MAX_ADJUST_DAYS}، منفی = کاهش):",
-                reply_markup=kb.cancel_reply(),
+            from app.bot.nav_input import ask_text
+
+            await ask_text(
+                callback,
+                state,
+                prompt=f"تعداد روز تغییر را وارد کنید (±{MAX_ADJUST_DAYS}، منفی = کاهش):",
+                cancel_code="adm_cap",
+                fsm_state=AdminStates.reseller_cap_days_input,
+                edit=False,
             )
         return
     elif action == "gb" and detail == "input":
         await state.update_data(
             **{adj_key: {"days": days, "gb": gb}, "capadj_uid": user_id}
         )
-        await state.set_state(AdminStates.reseller_cap_gb_input)
         await callback.answer()
         if callback.message:
-            await callback.message.answer(
-                f"مقدار گیگ تغییر را وارد کنید (±{MAX_ADJUST_GB}، منفی = کاهش):",
-                reply_markup=kb.cancel_reply(),
+            from app.bot.nav_input import ask_text
+
+            await ask_text(
+                callback,
+                state,
+                prompt=f"مقدار گیگ تغییر را وارد کنید (±{MAX_ADJUST_GB}، منفی = کاهش):",
+                cancel_code="adm_cap",
+                fsm_state=AdminStates.reseller_cap_gb_input,
+                edit=False,
             )
         return
     elif action == "confirm":
@@ -3792,6 +3959,10 @@ async def adm_reseller_cap_days_entered(
     if not _is_admin(db_user):
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         data = await state.get_data()
         user_id = int(data.get("capadj_uid") or 0)
         await state.set_state(None)
@@ -3857,6 +4028,10 @@ async def adm_reseller_cap_gb_entered(
     if not _is_admin(db_user):
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         data = await state.get_data()
         user_id = int(data.get("capadj_uid") or 0)
         await state.set_state(None)
@@ -4031,16 +4206,22 @@ async def adm_resellers_add(callback: CallbackQuery, state: FSMContext, db_user:
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminStates.make_reseller)
-    if callback.message:
-        await callback.message.answer(
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=(
             "آیدی عددی تلگرام کاربر را برای نماینده‌شدن بفرستید.\n\n"
             "مثال:\n"
             "<code>123456789 1</code>\n\n"
             "• عدد اول: آیدی تلگرام\n"
-            "• عدد دوم: ۱ = اجازه تأیید رسید، ۰ یا خالی = بدون تأیید",
-            reply_markup=kb.cancel_reply(),
-        )
+            "• عدد دوم: ۱ = اجازه تأیید رسید، ۰ یا خالی = بدون تأیید"
+        ),
+        cancel_code="adm_home",
+        fsm_state=AdminStates.make_reseller,
+        edit=True,
+    )
 
 @router.callback_query(F.data == "adm:resapp:list")
 @require_bot_owner_handler
@@ -4225,6 +4406,10 @@ async def make_res(
         await message.answer("ادمین نیستید")
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         from app.bot.handlers.reply_nav import open_admin_home
         from app.bot.nav_chrome import answer_staff_nav
 
@@ -4375,12 +4560,17 @@ async def adm_ticket_reply_start(
         await callback.answer("تیکت بسته است", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminStates.ticket_reply)
     await state.update_data(ticket_id=ticket.id)
-    if callback.message:
-        await callback.message.answer(
-            "پاسخ را بنویسید:", reply_markup=kb.cancel_reply()
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="پاسخ را بنویسید:",
+        cancel_code="adm_tkt",
+        fsm_state=AdminStates.ticket_reply,
+        edit=False,
+    )
 
 
 @router.callback_query(F.data.regexp(r"^adm:ticket:close:\d+$"))
@@ -4418,6 +4608,10 @@ async def adm_ticket_reply(
     message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await _answer_tickets_nav(
             message,
             session,
@@ -4508,7 +4702,6 @@ async def adm_broadcast_audience(callback: CallbackQuery, db_user: BotUser, stat
         await callback.answer("نامعتبر", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminStates.broadcast_text)
     await state.update_data(broadcast_audience=audience)
     audience_fa = {
         "all": "همه",
@@ -4520,7 +4713,16 @@ async def adm_broadcast_audience(callback: CallbackQuery, db_user: BotUser, stat
         await callback.message.edit_text(
             f"📢 مخاطب: <b>{audience_fa}</b>\nمتن پیام را بفرستید (HTML ساده).\nبرای لغو: انصراف"
         )
-        await callback.message.answer("متن پیام:", reply_markup=kb.cancel_reply())
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            callback,
+            state,
+            prompt="متن پیام:",
+            cancel_code="adm_bc",
+            fsm_state=AdminStates.broadcast_text,
+            edit=False,
+        )
 
 @router.message(AdminStates.broadcast_text)
 @require_bot_owner_handler
@@ -4529,6 +4731,10 @@ async def adm_broadcast_send(message: Message, state: FSMContext, session: Async
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         from app.bot.handlers.reply_nav import open_admin_broadcast_hub
         from app.bot.nav_chrome import answer_staff_nav
 

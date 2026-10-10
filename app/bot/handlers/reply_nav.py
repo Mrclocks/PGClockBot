@@ -2136,7 +2136,6 @@ async def handle_back(
                 db_user,
                 int(oid),
                 state=state,
-                text="💳 روش پرداخت را انتخاب کنید:",
                 is_reseller_bot=is_reseller_bot,
                 reseller_owner_id=reseller_owner_id,
             )

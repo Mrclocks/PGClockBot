@@ -130,6 +130,8 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(reply_nav.router)
     dp.include_router(nav_hubs.router)
     from app.bot import nav_input as nav_input_mod
+    from app.bot import staff_cancel as _staff_cancel  # noqa: F401 — cancel registry
+
     dp.include_router(nav_input_mod.router)
     dp.include_router(purchase_contact.router)
     dp.include_router(loyalty.router)
