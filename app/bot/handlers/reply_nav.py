@@ -7,6 +7,8 @@ Inline under messages: plans, services/user/reseller names, approve/reject, URL 
 
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.filters import BaseFilter
 from aiogram.fsm.context import FSMContext
@@ -23,6 +25,7 @@ from app.services.home_overview import admin_customer_counts
 from app.services.users import get_all_settings
 from app.services.redact import user_safe_error
 
+logger = logging.getLogger(__name__)
 router = Router(name="reply_nav")
 
 class _SoftCallback:
@@ -766,17 +769,40 @@ async def open_reseller_home(
         )
     except Exception:
         can_add = False
+    from app.services.admin_counters import (
+        PendingCounts,
+        format_queue_summary,
+        pending_counts,
+    )
+
+    # Shop-scoped only — platform queue must never appear on reseller hub.
+    try:
+        queue = await pending_counts(session, shop_id=int(owner_id))
+    except Exception:
+        logger.warning(
+            "reseller hub pending_counts failed shop_id=%s",
+            owner_id,
+            exc_info=True,
+        )
+        queue = PendingCounts()
     body = format_message(
         "🤝 پنل نماینده",
         "یک بخش را از دکمه‌های زیر انتخاب کنید.",
     )
+    queue_line = format_queue_summary(queue)
+    if queue_line:
+        body = f"{body}\n\n{queue_line}"
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_RESELLER, push=push)
     await present_nav_panel(
         message,
         text=body,
         inline=reseller_manage_hub_keyboard(
-            profile, ui, can_add_representative=can_add
+            profile,
+            ui,
+            can_add_representative=can_add,
+            pending_payments=queue.payments,
+            pending_tickets=queue.tickets,
         ),
         state=state,
     )
@@ -1412,6 +1438,7 @@ async def open_admin_home(
     is_reseller_bot: bool = False,
 ) -> None:
     from app.bot.nav_inline import admin_groups_hub_keyboard, present_nav_panel
+    from app.services.admin_counters import format_queue_summary, pending_counts
     from app.version import __version__ as local_version
 
     if not await _deny_unless_owner(
@@ -1419,10 +1446,18 @@ async def open_admin_home(
     ):
         return
     ui = await get_all_settings(session)
+    # Platform-only queue — never include shop-tenant rows.
+    queue_line = None
+    try:
+        queue_line = format_queue_summary(await pending_counts(session, shop_id=None))
+    except Exception:
+        logger.warning("admin home pending_counts failed", exc_info=True)
     body = (
         f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
         "یک گروه را از دکمه‌های زیر انتخاب کنید."
     )
+    if queue_line:
+        body = f"{body}\n\n{queue_line}"
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN, push=push)
     await present_nav_panel(
@@ -1443,19 +1478,37 @@ async def open_admin_ops_hub(
     is_reseller_bot: bool = False,
 ) -> None:
     from app.bot.nav_inline import admin_ops_hub_keyboard, present_nav_panel
+    from app.services.admin_counters import (
+        PendingCounts,
+        format_queue_summary,
+        pending_counts,
+    )
 
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
         return
     ui = await get_all_settings(session)
+    try:
+        queue = await pending_counts(session, shop_id=None)
+    except Exception:
+        logger.warning("admin ops pending_counts failed", exc_info=True)
+        queue = PendingCounts()
     body = "🗓 <b>عملیات روزانه</b>\nداشبورد، سفارش‌ها، رسیدها و تیکت‌ها."
+    queue_line = format_queue_summary(queue)
+    if queue_line:
+        # Cancel count is summary-only (no bot cancel inbox yet).
+        body = f"{body}\n\n{queue_line}"
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_OPS, push=push)
     await present_nav_panel(
         message,
         text=body,
-        inline=admin_ops_hub_keyboard(ui),
+        inline=admin_ops_hub_keyboard(
+            ui,
+            pending_payments=queue.payments,
+            pending_tickets=queue.tickets,
+        ),
         state=state,
     )
     return

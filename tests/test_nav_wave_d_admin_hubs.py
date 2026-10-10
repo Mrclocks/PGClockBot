@@ -129,6 +129,10 @@ class OpenAdminOpsInlineTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value={"nav_mode": "inline"}),
             ),
             patch(
+                "app.services.admin_counters.pending_counts",
+                AsyncMock(return_value=MagicMock(payments=0, tickets=0, cancellations=0, total=0)),
+            ),
+            patch(
                 "app.bot.handlers.reply_nav.nav.show_nav_keyboard",
                 new_callable=AsyncMock,
             ) as show_nav,
@@ -163,6 +167,10 @@ class OpenAdminOpsInlineTests(unittest.IsolatedAsyncioTestCase):
             patch(
                 "app.bot.handlers.reply_nav.get_all_settings",
                 AsyncMock(return_value={"nav_mode": "classic"}),
+            ),
+            patch(
+                "app.services.admin_counters.pending_counts",
+                AsyncMock(return_value=MagicMock(payments=0, tickets=0, cancellations=0, total=0)),
             ),
             patch(
                 "app.bot.handlers.reply_nav.nav.show_nav_keyboard",
