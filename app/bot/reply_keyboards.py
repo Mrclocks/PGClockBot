@@ -147,11 +147,13 @@ def _reply_user_entries(
     ui: dict | None,
     show_reseller_creds: bool = False,
     profile=None,
+    show_reseller_apply: bool = False,
 ) -> list[tuple[str, str]]:
     """Ordered (action_key, button_text) for the customer/reseller reply keyboard.
 
-    Option B: reseller_apply lives on welcome/support inline, not main KB.
-    Mini App is a web_app KeyboardButton on the main reply keyboard.
+    ``reseller_apply`` appears on the main KB when enabled (platform bot only;
+    callers pass ``show_reseller_apply=False`` on shop bots). Also still on
+    support inline. Mini App is a web_app KeyboardButton on the main KB.
     """
     entries: list[tuple[str, str]] = []
     for key in _menu_order(ui):
@@ -168,8 +170,13 @@ def _reply_user_entries(
             if on(_t(ui, "loyalty_enabled")):
                 entries.append((REPLY_ACTION_LOYALTY, _t(ui, "btn_loyalty")))
         elif key == "reseller_apply":
-            # Rare CTA on welcome/support inline — not main reply KB.
-            continue
+            if show_reseller_apply:
+                entries.append(
+                    (
+                        REPLY_ACTION_RESELLER_APPLY,
+                        _t(ui, "btn_reseller_apply") or "🤝 درخواست نمایندگی",
+                    )
+                )
         elif key == "miniapp":
             # web_app KeyboardButton — packed specially in _pack_reply_rows
             entries.append(("miniapp", _t(ui, "btn_miniapp") or "📱 مینی‌اپ"))
@@ -695,6 +702,7 @@ def main_reply_keyboard(
     ui: dict | None = None,
     as_user: bool = False,
     show_reseller_creds: bool = False,
+    show_reseller_apply: bool = False,
     profile=None,
     pg_features: frozenset[str] | set[str] | None = None,
     can_manage_representatives: bool = True,
@@ -713,6 +721,7 @@ def main_reply_keyboard(
         has_services=has_services,
         ui=ui,
         show_reseller_creds=False if as_user else show_reseller_creds,
+        show_reseller_apply=show_reseller_apply,
         profile=None if as_user else profile,
     )
     if as_user and preview_exit_action:
@@ -992,6 +1001,12 @@ def reply_action_map(
     )
     reseller_actor = role == Role.RESELLER.value and is_reseller_bot
 
+    # Platform bot only — shop bots never expose reseller-apply CTA.
+    apply_on_main = (
+        not is_reseller_bot
+        and on(ui.get("show_reseller_apply") if ui else None)
+        and "reseller_apply" in set(_k._menu_order(ui))
+    )
     if platform_admin:
         # Option B: main KB is customer menu + پنل ادمین
         for key, text in _reply_user_entries(
@@ -999,6 +1014,7 @@ def reply_action_map(
             has_services=has_services,
             ui=ui,
             show_reseller_creds=show_reseller_creds,
+            show_reseller_apply=apply_on_main,
             profile=profile if show_reseller_creds else None,
         ):
             if key == "miniapp":
@@ -1020,6 +1036,7 @@ def reply_action_map(
             has_services=has_services,
             ui=ui,
             show_reseller_creds=show_reseller_creds,
+            show_reseller_apply=apply_on_main and map_role == Role.USER.value,
             profile=profile if (show_reseller_creds and not is_reseller_bot) else None,
         ):
             if key == "miniapp":

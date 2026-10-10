@@ -2070,6 +2070,14 @@ def admin_user_actions(
                 )
             ]
         )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ بازگشت",
+                callback_data="adm:users:list:0",
+            )
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

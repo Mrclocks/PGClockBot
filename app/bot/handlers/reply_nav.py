@@ -805,6 +805,7 @@ async def open_reseller_home(
             can_add_representative=can_add,
             pending_payments=queue.payments,
             pending_tickets=queue.tickets,
+            pending_cancellations=queue.cancellations,
         ),
         state=state,
     )
@@ -1449,15 +1450,18 @@ async def open_admin_home(
         return
     ui = await get_all_settings(session)
     # Platform-only queue — never include shop-tenant rows.
-    queue_line = None
+    from app.services.admin_counters import PendingCounts
+
+    queue = PendingCounts()
     try:
-        queue_line = format_queue_summary(await pending_counts(session, shop_id=None))
+        queue = await pending_counts(session, shop_id=None)
     except Exception:
         logger.warning("admin home pending_counts failed", exc_info=True)
     body = (
         f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
         "یک گروه را از دکمه‌های زیر انتخاب کنید."
     )
+    queue_line = format_queue_summary(queue)
     if queue_line:
         body = f"{body}\n\n{queue_line}"
     if state is not None:
@@ -1465,7 +1469,12 @@ async def open_admin_home(
     await present_nav_panel(
         message,
         text=body,
-        inline=admin_groups_hub_keyboard(ui),
+        inline=admin_groups_hub_keyboard(
+            ui,
+            pending_payments=queue.payments,
+            pending_tickets=queue.tickets,
+            pending_cancellations=queue.cancellations,
+        ),
         state=state,
     )
     return
