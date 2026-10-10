@@ -950,7 +950,8 @@ def service_card_keyboard(
 ) -> InlineKeyboardMarkup:
     """Inline actions for one service card (replaces service_actions_reply_keyboard).
 
-    Reuses existing ``svc:*`` callbacks — no duplicated business logic.
+    Reuses existing ``svc:*`` / ``guide:svc:*`` callbacks — no duplicated business logic.
+    Cancel sits above delete so destructive delete stays visually separated.
     """
     sid = int(service_id)
     rows: list[list[InlineKeyboardButton]] = [
@@ -979,10 +980,10 @@ def service_card_keyboard(
                 style=_style(ui, "svc_link"),
             ),
             _ikb(
-                _t(ui, "btn_guide") or "📘 آموزش اتصال",
-                callback_data=f"nv:svc:guide:{sid}",
+                _t(ui, "btn_guides") or _t(ui, "btn_guide") or "📘 آموزش اتصال",
+                callback_data=f"guide:svc:{sid}",
                 ui=ui,
-                label_key="btn_guide",
+                label_key="btn_guides",
             ),
         ],
         [
@@ -995,6 +996,13 @@ def service_card_keyboard(
             _ikb(
                 "⚙️ تنظیمات خودکار",
                 callback_data=f"svc:auto:{sid}",
+                ui=ui,
+            ),
+        ],
+        [
+            _ikb(
+                "📝 درخواست لغو سرویس",
+                callback_data=f"svc:cancel:{sid}",
                 ui=ui,
             ),
         ],
@@ -1038,42 +1046,6 @@ def services_list_keyboard(
             )
         ]
     )
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def welcome_cta_keyboard(
-    ui: dict | None = None,
-    *,
-    show_trial: bool = False,
-    show_reseller_apply: bool = False,
-) -> InlineKeyboardMarkup | None:
-    """Optional CTAs for welcome (used when welcome has no ReplyKeyboard dual need)."""
-    rows: list[list[InlineKeyboardButton]] = []
-    if show_trial:
-        rows.append(
-            [
-                _ikb(
-                    "🎁 دریافت تست رایگان",
-                    callback_data="nv:trial",
-                    ui=ui,
-                    style=_style(ui, "shop_kind_trial", fallback="primary"),
-                )
-            ]
-        )
-    if show_reseller_apply:
-        rows.append(
-            [
-                _ikb(
-                    _t(ui, "btn_reseller_apply") or "🤝 درخواست نمایندگی",
-                    callback_data="nv:resapply",
-                    ui=ui,
-                    label_key="btn_reseller_apply",
-                    style=_style(ui, "reseller_apply"),
-                )
-            ]
-        )
-    if not rows:
-        return None
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
