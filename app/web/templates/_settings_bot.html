@@ -1,4 +1,5 @@
 {% from "macros.html" import modal_title %}
+{% from "_list_input.html" import list_input %}
 {% set update_mode = bot_update_mode or env_values.get('BOT_UPDATE_MODE') or 'polling' %}
 {% set wh_url = env_values.get('WEBHOOK_URL','') %}
 {% set wh_path = env_values.get('WEBHOOK_PATH','/telegram/webhook') %}
@@ -90,10 +91,7 @@
         </label>
       </div>
       <div class="setting-item">
-        <label>آیدی ادمین‌ها
-          <input name="ADMIN_IDS" value="{{ env_values.get('ADMIN_IDS','') }}" dir="ltr" required placeholder="123456789" autocomplete="off" />
-          <small class="muted">با کاما جدا کنید</small>
-        </label>
+        {{ list_input('ADMIN_IDS', 'آیدی ادمین‌ها', env_values.get('ADMIN_IDS',''), kind='telegram', required=true, placeholder='123456789', help='آیدی هر ادمین را جداگانه اضافه کنید.') }}
       </div>
     </div>
   </div>

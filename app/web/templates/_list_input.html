@@ -1,0 +1,11 @@
+{% macro list_input(name, label, value='', kind='text', required=false, id='', help='', placeholder='') %}
+{% set field_id = id or 'list-' ~ name %}
+<div class="form-field list-input-field">
+  <label for="{{ field_id }}">{{ label }}</label>
+  <input id="{{ field_id }}" name="{{ name }}" value="{{ value }}"
+         data-list-editor="{{ kind }}" data-normalize-digits="0" aria-label="{{ label }}"
+         dir="ltr" autocomplete="off" {% if required %}required{% endif %}
+         {% if placeholder %}placeholder="{{ placeholder }}"{% endif %} />
+  {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+</div>
+{% endmacro %}

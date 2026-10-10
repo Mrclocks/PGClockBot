@@ -1,3 +1,4 @@
+{% from "_list_input.html" import list_input %}
 {% set key = field[0] %}
 {% set label = field[1] %}
 {% set kind = field[2] if field|length > 2 else 'text' %}
@@ -106,6 +107,8 @@
     <input type="hidden" name="s_payment_crypto_wallets" value="{{ values.get('payment_crypto_wallets', '[]') }}" data-pay-dest-json />
     <div class="pay-dest-rows" data-pay-dest-list></div>
   </div>
+  {% elif kind == 'list' %}
+  {{ list_input('s_' ~ key, label, val, kind='money' if key == 'wallet_topup_presets' else 'text', help=help, placeholder='50000' if key == 'wallet_topup_presets' else '') }}
   {% elif kind == 'textarea' %}
   <label>{{ label }}
     <textarea name="s_{{ key }}" rows="5">{{ val }}</textarea>

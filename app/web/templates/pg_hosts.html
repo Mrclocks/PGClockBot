@@ -1,5 +1,6 @@
 ﻿{% extends "base.html" %}
 {% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "_list_input.html" import list_input %}
 {% block title %}هاست‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -89,9 +90,7 @@
           </label>
         </div>
         <div>
-          <label class="form-field">آدرس (چندتایی با ویرگول)
-            <input name="address" required placeholder="1.2.3.4 یا domain.com" dir="ltr" />
-          </label>
+          {{ list_input(name="address", label='آدرس‌ها', required=true, id='pg-host-create-address', placeholder='1.2.3.4 یا domain.com', help='هر آدرس را جداگانه اضافه کنید.') }}
         </div>
         <div>
           <label class="form-field">پورت (اختیاری)
@@ -137,9 +136,7 @@
           </label>
         </div>
         <div>
-          <label class="form-field">آدرس (چندتایی با ویرگول)
-            <input name="address" id="pg-host-edit-address" required dir="ltr" />
-          </label>
+          {{ list_input(name="address", label='آدرس‌ها', required=true, id='pg-host-edit-address', placeholder='1.2.3.4 یا domain.com', help='هر آدرس را جداگانه اضافه کنید.') }}
         </div>
         <div>
           <label class="form-field">پورت (اختیاری)
@@ -185,6 +182,7 @@
     const inbound = document.getElementById('pg-host-edit-inbound');
     if (remark) remark.value = btn.getAttribute('data-remark') || '';
     if (address) address.value = btn.getAttribute('data-address') || '';
+    address?.dispatchEvent(new Event('change', { bubbles: true }));
     if (port) port.value = btn.getAttribute('data-port') || '';
     if (priority) priority.value = btn.getAttribute('data-priority') || '0';
     if (inbound) inbound.value = btn.getAttribute('data-inbound') || '';
