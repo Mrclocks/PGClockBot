@@ -92,6 +92,12 @@ async def ask_text(
 ) -> Message | None:
     """Prompt for free text with an inline cancel button; main ReplyKeyboard untouched."""
     if cancel_code not in CANCEL_REGISTRY:
+        # Staff codes live in staff_cancel; import lazily for direct handler tests.
+        try:
+            import app.bot.staff_cancel  # noqa: F401
+        except Exception:
+            pass
+    if cancel_code not in CANCEL_REGISTRY:
         raise KeyError(f"cancel code not registered: {cancel_code!r}")
     await state.set_state(fsm_state)
     markup = _merge_inline(cancel_code, extra_inline)
