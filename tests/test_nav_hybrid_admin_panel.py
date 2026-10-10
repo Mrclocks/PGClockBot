@@ -120,6 +120,14 @@ class OpenAdminHomePanelTests(unittest.IsolatedAsyncioTestCase):
                 "app.bot.nav_inline.admin_groups_hub_keyboard",
                 return_value="GROUPS",
             ) as groups,
+            patch(
+                "app.services.admin_counters.pending_counts",
+                AsyncMock(
+                    return_value=MagicMock(
+                        payments=0, tickets=0, cancellations=0, total=0
+                    )
+                ),
+            ),
         ):
             await open_admin_home(message, session, db_user, state)
 

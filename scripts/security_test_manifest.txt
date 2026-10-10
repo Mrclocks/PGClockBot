@@ -92,6 +92,7 @@ tests/test_setup_gate_install_url.py
 tests/test_setup_url_log_redaction.py
 tests/test_setup_wizard_secret_masking.py
 tests/test_shop_isolation_3_5_4.py
+tests/test_nav_admin_counters_0_2_47.py
 tests/test_shop_wallet_isolation.py
 tests/test_service_automation.py
 tests/test_customer_features.py

@@ -3,6 +3,12 @@ from __future__ import annotations
 
 _FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")
 _AR_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+_TO_FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
+
+
+def to_fa_digits(value: int | str | None) -> str:
+    """Map ASCII digits to Persian digits for operator-facing labels."""
+    return str(value if value is not None else "").translate(_TO_FA_DIGITS)
 
 
 def normalize_digits(text: str | None) -> str:

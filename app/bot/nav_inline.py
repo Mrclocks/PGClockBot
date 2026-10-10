@@ -477,7 +477,12 @@ def admin_groups_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return _pack_hub_keyboard(buttons, ui, back_callback="menu:home")
 
 
-def admin_ops_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+def admin_ops_hub_keyboard(
+    ui: dict | None = None,
+    *,
+    pending_payments: int = 0,
+    pending_tickets: int = 0,
+) -> InlineKeyboardMarkup:
     """Daily ops — leaf buttons reuse existing ``adm:*`` callbacks."""
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADMIN_DASH,
@@ -487,6 +492,7 @@ def admin_ops_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         REPLY_ACTION_ADMIN_TICKETS,
         _reply_admin_ops_entries,
     )
+    from app.services.admin_counters import with_badge
 
     cb_map = {
         REPLY_ACTION_ADMIN_DASH: "adm:dash",
@@ -495,9 +501,13 @@ def admin_ops_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         REPLY_ACTION_ADMIN_PAYMENTS: "adm:payments",
         REPLY_ACTION_ADMIN_TICKETS: "adm:tickets",
     }
+    badge_for = {
+        REPLY_ACTION_ADMIN_PAYMENTS: pending_payments,
+        REPLY_ACTION_ADMIN_TICKETS: pending_tickets,
+    }
     buttons = [
         _ikb(
-            text,
+            with_badge(text, badge_for.get(key, 0)),
             callback_data=cb_map[key],
             ui=ui,
             style=_style(ui, key, fallback="primary"),
@@ -680,16 +690,23 @@ def reseller_manage_hub_keyboard(
     ui: dict | None = None,
     *,
     can_add_representative: bool = False,
+    pending_payments: int = 0,
+    pending_tickets: int = 0,
 ) -> InlineKeyboardMarkup:
     """Reseller shop-bot manage hub (Wave D) — ``nv:res:ra:<action>``."""
     from app.bot.reply_keyboards import _reseller_submenu_entries
+    from app.services.admin_counters import with_badge
 
     entries = _reseller_submenu_entries(
         profile, can_add_representative=can_add_representative
     )
+    badge_for = {
+        "res_payments": pending_payments,
+        "res_tickets": pending_tickets,
+    }
     buttons = [
         _ikb(
-            text,
+            with_badge(text, badge_for.get(key, 0)),
             callback_data=f"nv:res:ra:{key}",
             ui=ui,
             style=_style(ui, key, fallback="primary"),
