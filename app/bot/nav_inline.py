@@ -131,6 +131,31 @@ async def clear_nav_panel(state: FSMContext | None) -> None:
     await state.update_data(**{NAV_PANEL_CHAT_KEY: None, NAV_PANEL_MSG_KEY: None})
 
 
+def panel_is_still_live(message: Message, tracked_msg_id: int | None) -> bool:
+    """True when the tracked panel is still the bottom content bubble.
+
+    Telegram assigns increasing ``message_id`` values. A reply-keyboard tap
+    is always one id after the previous message, so we allow
+    ``cur <= tracked + 1`` (the tap itself). Any *intervening* message
+    (bot notice, preview chrome, another user line) makes ``cur`` larger
+    — editing then would bury the result; callers must resend at the
+    bottom instead.
+
+    Inline taps on the panel bubble use ``is_bot_panel_message`` and edit
+    that message directly; they do not depend on this helper.
+    """
+    if tracked_msg_id is None:
+        return False
+    cur = getattr(message, "message_id", None)
+    if cur is None:
+        return False
+    try:
+        # tracked: panel; tracked+1: immediate reply-KB tap with nothing else.
+        return int(cur) <= int(tracked_msg_id) + 1
+    except (TypeError, ValueError):
+        return False
+
+
 async def present_nav_panel(
     message: Message,
     *,
@@ -140,7 +165,13 @@ async def present_nav_panel(
     prefer_edit: bool = True,
     **send_kw: Any,
 ) -> Message | None:
-    """One live panel: edit bot/tracked message when possible; else answer once."""
+    """One live panel: edit when acting on that bubble; else answer at bottom.
+
+    - Bot-owned ``callback.message`` → always edit that message (same-bubble action).
+    - Reply-keyboard / later user message → edit tracked panel only while
+      ``panel_is_still_live`` (immediate tap, no intervening chat); otherwise
+      clear the tracker and send a fresh panel at the bottom.
+    """
     if prefer_edit and is_bot_panel_message(message):
         if await safe_edit_inline(message, text, reply_markup=inline, **send_kw):
             await remember_nav_panel(state, message)
@@ -155,6 +186,7 @@ async def present_nav_panel(
             and msg_id
             and cur_chat is not None
             and int(chat_id) == int(cur_chat)
+            and panel_is_still_live(message, int(msg_id))
         ):
             try:
                 await message.bot.edit_message_text(
@@ -170,9 +202,15 @@ async def present_nav_panel(
                     return None
             except Exception:
                 logger.info("present_nav_panel tracked edit failed", exc_info=True)
-    sent = await present_inline_only(
-        message, text=text, inline=inline, **send_kw
-    )
+        elif msg_id and not panel_is_still_live(message, int(msg_id) if msg_id else None):
+            # Stale tracked panel — drop it so we do not keep editing history.
+            await clear_nav_panel(state)
+    # Force a real send even if message is bot-owned (edit already failed above).
+    try:
+        sent = await message.answer(text, reply_markup=inline, **send_kw)
+    except Exception:
+        logger.warning("present_nav_panel answer failed", exc_info=True)
+        sent = None
     await remember_nav_panel(state, sent)
     return sent
 
