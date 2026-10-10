@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.54": [
+        "پیام خطای اختصاص پلن و عملیات سرویس: علت واقعی پاسارگارد (مثل گروه خالی یا نام تکراری) به‌جای فقط کد 422",
+        "ریستور: restore/pre-v0.2.54-v0.2.53",
+    ],
     "0.2.53": [
         "تنظیم کیف پول ادمین: مبلغ منفی از موجودی کم می‌کند (debit امن، بدون موجودی منفی)",
         "تحویل سرویس: کارت آماده داخل کپشن QR؛ آموزش اتصال بعد از تحویل؛ حذف پیام میانی «در حال تحویل»",
