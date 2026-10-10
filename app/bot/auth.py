@@ -561,22 +561,17 @@ async def filtered_pg_reply_keyboard(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    """Reply keyboard for PasarGuard submenu clamped to the actor's PG pages.
+    """Heal to the stable main ReplyKeyboard after PG FSM cancel/save (Option B).
 
-    Wave F: under ``nav_mode=inline`` heal to the stable main admin/reseller KB
-    instead of swapping in PG submenu chrome after FSM cancel/save.
+    PG leaves live on the inline panel; this never swaps in submenu chrome.
+    ``reseller_profile_id`` kept for call-site compatibility.
     """
-    from app.bot import keyboards as kb
-    from app.bot.nav_mode import is_inline_nav
+    _ = reseller_profile_id
     from app.services.users import get_all_settings
 
     if ui is None and session is not None:
         ui = await get_all_settings(session)
-    if (
-        session is not None
-        and db_user is not None
-        and is_inline_nav(ui)
-    ):
+    if session is not None and db_user is not None:
         from app.bot.menu_nav import build_main_reply_keyboard
 
         markup, _, _ = await build_main_reply_keyboard(
@@ -587,23 +582,7 @@ async def filtered_pg_reply_keyboard(
             ui=ui,
         )
         return markup
+    # No session/user context — empty main-style fallback (should be rare)
+    from app.bot import keyboards as kb
 
-    if session is not None:
-        feats = await bot_migrated_pg_features(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_profile_id=reseller_profile_id,
-            reseller_owner_id=reseller_owner_id,
-        )
-        can_create = await bot_pg_can_create_user(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_profile_id=reseller_profile_id,
-            reseller_owner_id=reseller_owner_id,
-        )
-    else:
-        feats = await platform_pg_features()
-        can_create = await can_platform_pg_action(db_user, "users", "create")
-    return kb.pg_reply_keyboard(ui, features=feats, can_create_user=can_create)
+    return kb.persistent_reply_keyboard(ui)

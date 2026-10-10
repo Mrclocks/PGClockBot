@@ -104,9 +104,7 @@ async def nv_wallet_home(
     db_user: BotUser,
     state: FSMContext,
 ):
-    from app.bot.handlers.reply_nav import open_wallet_home
     from app.bot.nav_inline import safe_edit_inline, wallet_hub_keyboard
-    from app.bot.nav_mode import is_inline_nav
     from app.config import get_settings
     from app.services.formatting import format_message, format_toman, kv_line
     from app.services.wallet import wallet_balance_for_context
@@ -115,9 +113,6 @@ async def nv_wallet_home(
     if not callback.message:
         return
     ui = await get_all_settings(session)
-    if not is_inline_nav(ui):
-        await open_wallet_home(callback.message, session, db_user, state, push=False)
-        return
     bal = await wallet_balance_for_context(session, db_user)
     text = format_message(
         "👛 کیف پول",
@@ -848,7 +843,14 @@ async def nv_res_ra(
                 "پیش‌نمایش فقط روی ربات فروشگاه شما فعال است."
             )
             return
-        await open_user_preview(callback.message, session, db_user, state)
+        await open_user_preview(
+            callback.message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=True,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     await _soft_reseller(
         callback.message,

@@ -129,9 +129,15 @@ class ReplyMenuTextFilter(BaseFilter):
                 profile=None,
             ).items():
                 mapping.setdefault(k, v)
-            # Escape from preview back to shop hub
+            # Escape from preview back to shop hub (+ custom exit label)
             mapping[(kb._t(ui, "btn_reseller") or "🤝 پنل نماینده").strip()] = kb.REPLY_ACTION_RESELLER
-            mapping["👁 پیش‌نمایش منوی کاربر"] = kb.REPLY_ACTION_RES_PREVIEW
+            exit_label = (kb._t(ui, "btn_adm_exit_preview") or "").strip()
+            if exit_label:
+                mapping[exit_label] = kb.REPLY_ACTION_RESELLER
+            preview_label = (kb._t(ui, "btn_adm_preview") or "").strip()
+            if preview_label:
+                mapping[preview_label] = kb.REPLY_ACTION_RES_PREVIEW
+            mapping.setdefault("👁 پیش‌نمایش منوی کاربر", kb.REPLY_ACTION_RES_PREVIEW)
         # Shared / colliding labels — resolve by current nav level
         level = await nav.get_nav_level(state)
         if level == nav.NAV_TOPUP_PAY:
@@ -1854,7 +1860,14 @@ async def open_user_preview(
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext | None = None,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ) -> None:
+    from app.services.users import get_all_settings
+
+    ui = await get_all_settings(session)
+    exit_label = (kb._t(ui, "btn_adm_exit_preview") or "🛠 بازگشت به پنل ادمین").strip()
     await nav.show_nav_keyboard(
         message,
         session,
@@ -1862,11 +1875,13 @@ async def open_user_preview(
         nav.NAV_USER_PREVIEW,
         text=format_message(
             "👁 پیش‌نمایش منوی کاربر",
-            "کیبورد پایین به حالت کاربر تغییر کرد. «بازگشت» یا «منوی اصلی» را بزنید.",
+            f"کیبورد پایین به حالت کاربر تغییر کرد. برای خروج «{exit_label}» را بزنید.",
         ),
         state=state,
         push=True,
         as_user=True,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
 
 
@@ -2948,12 +2963,26 @@ async def reply_main_nav(
             message, session, db_user, state, is_reseller_bot=is_reseller_bot
         )
     elif action == kb.REPLY_ACTION_ADMIN_PREVIEW:
-        await open_user_preview(message, session, db_user, state)
+        await open_user_preview(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
     elif action == kb.REPLY_ACTION_RES_PREVIEW:
         if not is_reseller_bot:
             await message.answer("پیش‌نمایش فقط روی ربات فروشگاه شما فعال است.")
             return
-        await open_user_preview(message, session, db_user, state)
+        await open_user_preview(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=True,
+            reseller_owner_id=reseller_owner_id,
+        )
     elif action == kb.REPLY_ACTION_ADMIN_DASH:
         await _soft_admin(
             message, session, db_user, "adm:dash", state, is_reseller_bot=is_reseller_bot
