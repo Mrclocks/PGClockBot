@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.53": [
+        "تنظیم کیف پول ادمین: مبلغ منفی از موجودی کم می‌کند (debit امن، بدون موجودی منفی)",
+        "تحویل سرویس: کارت آماده داخل کپشن QR؛ آموزش اتصال بعد از تحویل؛ حذف پیام میانی «در حال تحویل»",
+        "ارسال فایل کانفیگ WireGuard وقتی پاسارگارد برای سرویس داشته باشد",
+        "ریستور: restore/pre-v0.2.53-v0.2.52",
+    ],
     "0.2.52": [
         "هاب‌های قدیمی ادمین (home/users/resellers/broadcast): ویرایش همان پنل اینلاین، بدون کیبورد فرعی",
         "بازگشت لیست درخواست نمایندگی به nv:adm:resellers؛ مخفی شدن درخواست نمایندگی برای ادمین/نماینده",
