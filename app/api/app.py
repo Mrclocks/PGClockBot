@@ -4246,7 +4246,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 {
                     "key": key,
                     "label": meta["label"],
-                    "btn": values.get(f"btn_{key}", meta["label"]),
                     "required": meta["required"],
                 }
             )
@@ -4260,7 +4259,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                     {
                         "key": key,
                         "label": meta["label"],
-                        "btn": values.get(f"btn_{key}", meta["label"]),
                         "required": False,
                     }
                 )

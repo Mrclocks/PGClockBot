@@ -116,7 +116,13 @@ async def sync_plans_reply_keyboard(
         inline = admin_plans_audience_hub_keyboard(ui)
         body = "💎 <b>پلن‌ها</b>\nمخاطب یا ابزار کاتالوگ را انتخاب کنید."
     await present_inline_only(message, text=body, inline=inline)
-    main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
+    main_kb, _, _ = await build_main_reply_keyboard(
+        session,
+        db_user,
+        is_reseller_bot=False,
+        reseller_owner_id=None,
+        ui=ui,
+    )
     await message.answer("از منوی پایین یا دکمه‌های بالا ادامه دهید.", reply_markup=main_kb)
     return
 
@@ -139,7 +145,13 @@ async def _answer_plans_cancel(message: Message, state: FSMContext, session: Asy
             )
         ).scalar_one_or_none()
     if db_user is not None:
-        main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
+        main_kb, _, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
+            ui=ui,
+        )
         await message.answer("لغو شد.", reply_markup=main_kb)
         return
     await message.answer("لغو شد.", reply_markup=markup)
@@ -160,7 +172,13 @@ async def _answer_plans_saved(message: Message, state: FSMContext, session: Asyn
             )
         ).scalar_one_or_none()
     if db_user is not None:
-        main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
+        main_kb, _, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
+            ui=ui,
+        )
         await message.answer(text, reply_markup=main_kb)
         return
     markup = await _plans_reply_markup(session, state)
@@ -579,7 +597,13 @@ async def open_add_kind_action(
         + "افزودن/کاتالوگ از دکمه‌های زیر.",
         inline=admin_plans_kind_hub_keyboard(audience, ui),
     )
-    main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
+    main_kb, _, _ = await build_main_reply_keyboard(
+        session,
+        db_user,
+        is_reseller_bot=False,
+        reseller_owner_id=None,
+        ui=ui,
+    )
     await message.answer(
         "از منوی پایین یا دکمه‌های بالا ادامه دهید.",
         reply_markup=main_kb,

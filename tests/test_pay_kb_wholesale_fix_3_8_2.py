@@ -178,7 +178,10 @@ class BuyerMainKeyboardTests(unittest.IsolatedAsyncioTestCase):
             "app.bot.menu_nav.build_main_reply_keyboard",
             new=AsyncMock(return_value=("KB", {"x": 1}, "user")),
         ) as build:
-            markup, ui = await buyer_main_reply_keyboard(session, user, order=order)
+            markup, ui = await buyer_main_reply_keyboard(session, user, order=order,
+                is_reseller_bot=False,
+                reseller_owner_id=None,
+            )
         self.assertEqual(markup, "KB")
         self.assertEqual(ui, {"x": 1})
         kwargs = build.await_args.kwargs

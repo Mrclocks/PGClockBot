@@ -87,8 +87,7 @@
             {% for item in items %}
             <li class="dnd-item" data-key="{{ item.key }}" data-required="{{ '1' if item.required else '0' }}">
               <div class="meta">
-                <strong>{{ item.btn or item.label }}</strong>
-                <div class="muted">{{ item.label }}</div>
+                <strong>{{ item.label }}</strong>
               </div>
               <div class="dnd-actions">
                 <button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>
@@ -109,8 +108,7 @@
             {% for item in pool %}
             <li class="dnd-item" data-key="{{ item.key }}" data-required="0">
               <div class="meta">
-                <strong>{{ item.btn or item.label }}</strong>
-                <div class="muted">{{ item.label }}</div>
+                <strong>{{ item.label }}</strong>
               </div>
               <div class="dnd-actions">
                 <button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
