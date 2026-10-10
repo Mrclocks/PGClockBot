@@ -515,12 +515,15 @@ async def open_support_new(
     message: Message, session: AsyncSession, state: FSMContext
 ) -> None:
     from app.bot.handlers.support import SupportStates
+    from app.bot.nav_input import ask_text
 
-    ui = await get_all_settings(session)
-    await state.set_state(SupportStates.subject)
-    await message.answer(
-        "موضوع تیکت را بنویسید:",
-        reply_markup=kb.cancel_reply(ui),
+    _ = session
+    await ask_text(
+        message,
+        state,
+        prompt="موضوع تیکت را بنویسید:",
+        cancel_code="s_subj",
+        fsm_state=SupportStates.subject,
     )
 
 async def open_support_list(

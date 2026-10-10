@@ -966,17 +966,21 @@ async def wholesale_qty_step(callback: CallbackQuery, session: AsyncSession, sta
 
 @router.callback_query(F.data == "shop:wholesale:qty:input")
 async def wholesale_qty_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    from app.bot.nav_input import ask_text
+
     ui = await get_all_settings(session)
     if not on(ui.get("wholesale_enabled")):
         await callback.answer("فروش عمده فعال نیست", show_alert=True)
         return
     mn, mx = wholesale_bounds(ui)
-    await state.set_state(ShopStates.wholesale_qty_input)
     await callback.answer()
     if callback.message:
-        await callback.message.answer(
-            f"تعداد را عددی بین {mn} تا {mx} بفرستید:",
-            reply_markup=kb.cancel_reply(),
+        await ask_text(
+            callback,
+            state,
+            prompt=f"تعداد را عددی بین {mn} تا {mx} بفرستید:",
+            cancel_code="w_qty",
+            fsm_state=ShopStates.wholesale_qty_input,
         )
 
 @router.message(ShopStates.wholesale_qty_input)
@@ -1033,11 +1037,8 @@ async def wholesale_qty_entered(
         f"فعلی: <b>{qty}</b> عدد{disc_line}\n"
         f"جمع: <b>{format_toman(payable, get_settings().currency)}</b>",
     )
-    # Leave cancel_reply; restore lasting ReplyKeyboard so user is not stuck on «انصراف»
     from app.bot import menu_nav as nav
-    from app.bot.menu_nav import build_main_reply_keyboard
-    from app.bot.nav_inline import present_inline_only
-    from app.bot.tg_utils import attach_reply_keyboard
+    from app.bot.nav_input import finish_text_step
 
     custom_on = on(ui.get("custom_plan_enabled"))
     wholesale_on = True
@@ -1045,19 +1046,9 @@ async def wholesale_qty_entered(
     qty_kb = kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id)
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_SHOP, push=False)
-    await present_inline_only(message, text=text, inline=qty_kb)
-    main_kb, _, _ = await build_main_reply_keyboard(
-        session,
-        db_user,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-        ui=ui,
-    )
-    await attach_reply_keyboard(
-        message,
-        main_kb,
-        text="تعداد ثبت شد — از دکمه‌های پیام بالا تنظیم یا تأیید کنید.",
-    )
+    # Edit the ask_text prompt into the qty panel — main ReplyKeyboard stays put.
+    await finish_text_step(message, state, text=text, inline=qty_kb)
+    _ = (is_reseller_bot, reseller_owner_id)
 
 @router.callback_query(F.data == "shop:wholesale:confirm")
 async def wholesale_confirm(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
@@ -2169,3 +2160,76 @@ async def pay_psp_cb(
             await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
         except Exception:
             pass
+
+
+def _register_shop_cancel_codes() -> None:
+    from app.bot.nav_input import CancelEntry, register_cancel_code
+
+    async def _reopen_wholesale_qty(message, session, db_user, state, **_kw):
+        from app.bot import keyboards as kb
+        from app.bot.nav_inline import present_inline_only
+        from app.config import get_settings
+        from app.services.formatting import format_message, format_toman
+        from app.services.orders import (
+            calc_wholesale_price,
+            get_catalog_plan,
+            list_active_plans,
+            parse_wholesale_tiers,
+            wholesale_bounds,
+            wholesale_description,
+            wholesale_tier_percent,
+        )
+        from app.services.users import get_all_settings, on
+
+        ui = await get_all_settings(session)
+        if not on(ui.get("wholesale_enabled")):
+            await message.answer("فروش عمده فعال نیست.")
+            return
+        data = await state.get_data()
+        plan_id = int(data.get("wholesale_plan_id") or 0)
+        plan = await get_catalog_plan(session, plan_id) if plan_id else None
+        if not plan:
+            plans = [p for p in await list_active_plans(session) if not getattr(p, "is_trial", False)]
+            await present_inline_only(
+                message,
+                text=format_message(
+                    "📦 فروش عمده",
+                    wholesale_description(ui) + "\n\nابتدا نوع سرویس (پلن) را انتخاب کنید:",
+                ),
+                inline=kb.wholesale_plans_keyboard(plans, ui),
+            )
+            await state.set_state(None)
+            return
+        mn, _mx = wholesale_bounds(ui)
+        qty = int(data.get("wholesale_qty") or mn)
+        qty = max(mn, min(_mx, qty))
+        await state.update_data(wholesale_qty=qty)
+        await state.set_state(None)
+        tiers = parse_wholesale_tiers(ui.get("wholesale_tiers"))
+        pct = wholesale_tier_percent(qty, tiers)
+        payable, discount = calc_wholesale_price(
+            unit_price=plan.price, quantity=qty, percent=pct
+        )
+        disc_line = (
+            f"\nتخفیف فعلی: <b>{pct}٪</b> (−{format_toman(discount, get_settings().currency)})"
+            if pct
+            else ""
+        )
+        text = format_message(
+            "📦 فروش عمده — تعداد",
+            f"پلن: <b>{plan.name}</b>\n"
+            f"قیمت واحد: <b>{format_toman(plan.price, get_settings().currency)}</b>\n\n"
+            f"{wholesale_description(ui)}\n\n"
+            f"فعلی: <b>{qty}</b> عدد{disc_line}\n"
+            f"جمع: <b>{format_toman(payable, get_settings().currency)}</b>",
+        )
+        await present_inline_only(
+            message,
+            text=text,
+            inline=kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id),
+        )
+
+    register_cancel_code("w_qty", CancelEntry(reopen=_reopen_wholesale_qty))
+
+
+_register_shop_cancel_codes()

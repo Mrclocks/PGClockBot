@@ -55,10 +55,16 @@ async def nv_wallet_amount(
     part = (callback.data or "").split(":")[-1]
     ui = await get_all_settings(session)
     if part == "custom":
-        await state.set_state(WalletStates.topup_amount)
-        await callback.message.answer(
-            format_message("➕ شارژ کیف پول", "مبلغ شارژ را به تومان وارد کنید:"),
-            reply_markup=kb.cancel_reply(ui),
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            callback,
+            state,
+            prompt=format_message(
+                "➕ شارژ کیف پول", "مبلغ شارژ را به تومان وارد کنید:"
+            ),
+            cancel_code="w_amt",
+            fsm_state=WalletStates.topup_amount,
         )
         return
     try:

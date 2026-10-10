@@ -129,6 +129,8 @@ def create_dispatcher() -> Dispatcher:
     # Reply-keyboard nav early so menu labels win over FSM amount parsers
     dp.include_router(reply_nav.router)
     dp.include_router(nav_hubs.router)
+    from app.bot import nav_input as nav_input_mod
+    dp.include_router(nav_input_mod.router)
     dp.include_router(purchase_contact.router)
     dp.include_router(loyalty.router)
     dp.include_router(shop.router)
