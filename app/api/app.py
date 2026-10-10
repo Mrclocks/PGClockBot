@@ -917,8 +917,19 @@ def create_api_app(lifespan=None) -> FastAPI:
                         ),
                     },
                 ],
-                code_block="bash pgclock.sh status",
+                code_block=(
+                    "pgclock status\n"
+                    "# اگر pgclock پیدا نشد:\n"
+                    "cd /path/to/PGClockBot && bash pgclock.sh status\n"
+                    "cat data/setup_entry.url"
+                ),
                 guide_note=(
+                    "از هر مسیر "
+                    "<code dir=\"ltr\">pgclock status</code> "
+                    "را بزنید؛ اگر نبود بروید داخل پوشه نصب و "
+                    "<code dir=\"ltr\">bash pgclock.sh status</code> "
+                    "یا "
+                    "<code dir=\"ltr\">cat data/setup_entry.url</code>. "
                     "از خود سرور با "
                     "<code dir=\"ltr\">127.0.0.1</code> "
                     "یا "

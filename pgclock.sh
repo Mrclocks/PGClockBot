@@ -1542,7 +1542,8 @@ PY
           "" \
           "Service did not answer /health yet. Fix, then open the Setup URL above." \
           "journalctl -u ${SERVICE_NAME} -n 80 --no-pager" \
-          "Then: bash pgclock.sh status" \
+          "Then:  bash ${SCRIPT_DIR}/pgclock.sh status" \
+          "Or:    pgclock status" \
           "On-server test: ${health_hint}" \
           "Hint file: ${SCRIPT_DIR}/data/setup_entry.url"
       fi
@@ -1550,20 +1551,23 @@ PY
       print_success "Install finished — panel not healthy yet" \
         "Service did not answer /health. Check logs first:" \
         "journalctl -u ${SERVICE_NAME} -n 80 --no-pager" \
-        "Then: bash pgclock.sh status" \
-        "Or:   cat ${SCRIPT_DIR}/data/setup_entry.url"
+        "Then:  bash ${SCRIPT_DIR}/pgclock.sh status" \
+        "Or:    pgclock status" \
+        "Or:    cat ${SCRIPT_DIR}/data/setup_entry.url"
     else
       print_success "Install complete" \
         "Setup URL was not generated automatically." \
-        "Run:  bash pgclock.sh status" \
-        "Or:   cat ${SCRIPT_DIR}/data/setup_entry.url" \
+        "Run:   bash ${SCRIPT_DIR}/pgclock.sh status" \
+        "Or:    pgclock status" \
+        "Or:    cat ${SCRIPT_DIR}/data/setup_entry.url" \
         "Panel base: ${panel_url}" \
         "Cloud firewall: allow inbound TCP ${WEB_PORT}."
     fi
   else
     print_success "Install/refresh complete" \
       "Panel:      ${panel_url}" \
-      "Manage:     bash pgclock.sh" \
+      "Manage:     bash ${SCRIPT_DIR}/pgclock.sh" \
+      "Or:         pgclock status" \
       "Logs:       journalctl -u ${SERVICE_NAME} -f"
   fi
   return 0
@@ -1824,19 +1828,159 @@ cmd_service() {
   done
 }
 
+# Parse DATABASE_URL → host/db/user for uninstall wipe. Prints: host\tdb\tuser
+# Empty output when .env / URL missing.
+_uninstall_parse_database_url() {
+  [[ -f .env ]] || return 0
+  DATABASE_URL="$(env_get DATABASE_URL "")" python3 - <<'PY' 2>/dev/null || true
+import os, re, urllib.parse
+raw = (os.environ.get("DATABASE_URL") or "").strip().strip('"').strip("'")
+if not raw:
+    raise SystemExit(0)
+for prefix in ("postgresql+asyncpg://", "postgres://", "postgresql://"):
+    if raw.startswith(prefix):
+        raw = "postgresql://" + raw[len(prefix):]
+        break
+else:
+    raise SystemExit(0)
+u = urllib.parse.urlparse(raw)
+qs = urllib.parse.parse_qs(u.query)
+host = (u.hostname or "").strip() or (qs.get("host") or [""])[0]
+user = urllib.parse.unquote(u.username or "") or "pgclock"
+dbname = (u.path or "/pgclock").lstrip("/") or "pgclock"
+# Identifiers only — refuse odd names before SQL.
+ident = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+if not ident.match(user) or not ident.match(dbname):
+    raise SystemExit(0)
+print(f"{host}\t{dbname}\t{user}")
+PY
+}
+
+# Drop local Postgres DB + role owned by this bot. Never touches remote hosts
+# or apt packages. Safe to call when Postgres is down / already gone.
+wipe_local_postgres_for_uninstall() {
+  local parsed host dbname dbuser sql_file rc
+  parsed="$(_uninstall_parse_database_url)"
+  if [[ -z "$parsed" ]]; then
+    # Fallback defaults used by ensure_postgresql / setup_postgres.sh
+    host="127.0.0.1"
+    dbname="pgclock"
+    dbuser="pgclock"
+    info "No DATABASE_URL in .env — will still try to drop local role/db pgclock/pgclock"
+  else
+    IFS=$'\t' read -r host dbname dbuser <<<"$parsed"
+  fi
+  case "${host}" in
+    127.0.0.1|localhost|::1|""|/var/run/postgresql|/run/postgresql|/tmp)
+      ;;
+    /*)
+      # Unix socket path — still local
+      ;;
+    *)
+      warn "DATABASE_URL points at remote host «${host}» — leaving that database alone."
+      warn "Drop it yourself on the remote server if you want a full DB wipe."
+      return 0
+      ;;
+  esac
+
+  if ! command -v psql >/dev/null 2>&1; then
+    warn "psql not found — skipped Postgres wipe (install postgresql-client to drop leftovers)."
+    return 0
+  fi
+
+  info "Dropping local PostgreSQL database «${dbname}» and role «${dbuser}»…"
+  # Identifiers already validated as [A-Za-z_][A-Za-z0-9_]*.
+  # Use `sudo -u` even as root — sudo_wrap drops -u when already root.
+  sql_file="$(mktemp /tmp/pgclock-uninstall-XXXXXX.sql)"
+  cat >"$sql_file" <<SQL
+SELECT pg_terminate_backend(pid)
+  FROM pg_stat_activity
+ WHERE datname = '${dbname}'
+   AND pid <> pg_backend_pid();
+DROP DATABASE IF EXISTS ${dbname};
+DO \$\$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${dbuser}') THEN
+    EXECUTE format('REASSIGN OWNED BY %I TO CURRENT_USER', '${dbuser}');
+    EXECUTE format('DROP OWNED BY %I', '${dbuser}');
+    EXECUTE format('DROP ROLE %I', '${dbuser}');
+  END IF;
+END
+\$\$;
+SQL
+  rc=1
+  if sudo -u postgres psql -v ON_ERROR_STOP=1 -d postgres -f "$sql_file" >/dev/null 2>&1; then
+    rc=0
+  fi
+  rm -f "$sql_file"
+  if [[ "$rc" -eq 0 ]]; then
+    ok "Local PostgreSQL database/role removed (${dbname}/${dbuser})"
+  else
+    warn "Could not drop Postgres db/role automatically — if reinstall fails, run:"
+    warn "  sudo -u postgres psql -c \"DROP DATABASE IF EXISTS ${dbname};\""
+    warn "  sudo -u postgres psql -c \"DROP ROLE IF EXISTS ${dbuser};\""
+  fi
+}
+
+# Remove Let's Encrypt lineage issued for this panel domain (pgclock-<domain>).
+wipe_letsencrypt_for_uninstall() {
+  local meta domain lineage
+  meta="${SCRIPT_DIR}/data/certs/meta.json"
+  domain=""
+  if [[ -f "$meta" ]]; then
+    domain="$(
+      PGCLOCK_SSL_META="$meta" python3 - <<'PY' 2>/dev/null || true
+import json, os
+from pathlib import Path
+p = Path(os.environ.get("PGCLOCK_SSL_META") or "")
+try:
+    m = json.loads(p.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+d = (m.get("domain") or m.get("host") or "").strip().lower().rstrip(".")
+print(d)
+PY
+    )"
+  fi
+  if [[ -z "$domain" ]]; then
+    info "No panel SSL domain recorded — skipping Let's Encrypt cleanup."
+    return 0
+  fi
+  if ! command -v certbot >/dev/null 2>&1; then
+    warn "certbot missing — LE lineage for ${domain} may remain under /etc/letsencrypt."
+    return 0
+  fi
+  info "Removing Let's Encrypt certificates for ${domain}…"
+  for lineage in "pgclock-${domain}" "${domain}"; do
+    if [[ -d "/etc/letsencrypt/live/${lineage}" ]] \
+      || [[ -d "/etc/letsencrypt/archive/${lineage}" ]]; then
+      if sudo_wrap certbot delete --cert-name "$lineage" --non-interactive >/dev/null 2>&1; then
+        ok "Removed certbot lineage «${lineage}»"
+      else
+        warn "certbot delete failed for «${lineage}» — remove manually if needed."
+      fi
+    fi
+  done
+}
+
 cmd_uninstall() {
   banner_small "Uninstall"
   warn "FULL uninstall removes EVERYTHING for this bot:"
-  warn "  systemd service, running processes, .venv, data, .env, backups,"
+  warn "  systemd service, global CLI, processes, .venv, data, .env, backups,"
+  warn "  Let's Encrypt cert for the panel domain (if any),"
+  warn "  local PostgreSQL database + role (pgclock),"
   warn "  and the entire project folder: ${SCRIPT_DIR}"
-  warn "PostgreSQL system packages and the 'pgclock' database are NOT dropped"
-  warn "(safe default — remove manually if you want a full DB wipe)."
+  warn "PostgreSQL *system packages* stay installed (shared server software)."
   if ! ask_yn "Continue full uninstall?" "N"; then
     info "Cancelled."
     return 0
   fi
 
-  # Stop & remove systemd
+  # Capture port / DB / SSL metadata BEFORE deleting .env and data/
+  local port
+  port="$(env_get WEB_PORT 9000)"
+
+  # Stop & remove systemd first so nothing holds DB connections.
   if service_installed || [[ -f "$SERVICE_PATH" ]]; then
     info "Stopping systemd service..."
     sudo_wrap systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
@@ -1864,12 +2008,12 @@ cmd_uninstall() {
   info "Stopping leftover processes..."
   pkill -f "${SCRIPT_DIR}/.venv/bin/python .*run.py" 2>/dev/null || true
   pkill -f "python .*${SCRIPT_DIR}/run.py" 2>/dev/null || true
-  # free web port if still held
-  local port
-  port="$(env_get WEB_PORT 9000)"
   if command -v fuser >/dev/null 2>&1; then
     fuser -k "${port}/tcp" 2>/dev/null || true
   fi
+
+  wipe_letsencrypt_for_uninstall
+  wipe_local_postgres_for_uninstall
 
   local root="$SCRIPT_DIR"
   info "Deleting project folder: ${root}"
@@ -1881,6 +2025,7 @@ cmd_uninstall() {
   printf '%s  SUCCESS · Full uninstall complete%s\n' "$G" "$N" > /dev/tty
   printf '%s==========================================%s\n' "$G" "$N" > /dev/tty
   printf '  Removed: %s\n' "$root" > /dev/tty
+  printf '  Local Postgres db/role and panel LE cert wiped when present.\n' > /dev/tty
   printf '  Reinstall:\n' > /dev/tty
   printf '    bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)\n' > /dev/tty
   printf '%s==========================================%s\n\n' "$G" "$N" > /dev/tty
@@ -2024,7 +2169,7 @@ cmd_help() {
     bash pgclock.sh service         systemd controls
     bash pgclock.sh status          Quick status
     bash pgclock.sh doctor          Read-only diagnostics (OK/WARN/FAIL)
-    bash pgclock.sh uninstall       Remove service / data
+    bash pgclock.sh uninstall       Full wipe (service, data, local DB, LE cert)
     bash pgclock.sh help            This help
 
   Global CLI (after install):
