@@ -338,8 +338,6 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     parts.append(service_card(sub_info))
     text = format_message("📱 اشتراک", "\n\n".join(parts))
     if callback.message:
-
-        markup = None
         markup = InlineKeyboardMarkup(
             inline_keyboard=[
                 [

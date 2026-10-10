@@ -265,15 +265,11 @@ async def present_shop_kind_picker(
     InlineKeyboard cannot share the shop bubble. Contract:
 
     * ``mode="edit"`` — refresh an existing shop message (back from plan list).
-    * ``mode="send"`` — send shop text **with** the inline kind/category
-      keyboard, then attach shop reply-chrome (Home/Back) on a **lasting**
-      message via ``present_inline_with_reply_chrome``.
+    * ``mode="send"`` — send shop text with the inline kind/category
+      keyboard via ``present_inline_only`` (Option B; thin main KB stays put).
 
-    Never delete the reply-chrome message. On iOS/mobile, deleting the message
-    that set ``ReplyKeyboardMarkup`` drops the custom keyboard and the
-    input-field 4-square menu icon, leaving the system keyboard open.
-    Also never use ReplyKeyboard→Inline ``edit_reply_markup`` (Telegram
-    rejects that conversion and hides category buttons).
+    Never use ReplyKeyboard→Inline ``edit_reply_markup`` (Telegram rejects
+    that conversion and hides category buttons).
     """
     from app.bot.nav_inline import present_inline_only
 

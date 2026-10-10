@@ -808,9 +808,7 @@ async def open_pg_home(
         can_create = False
     body = (
         "🖥 <b>عملیات پاسارگارد</b>\n"
-        + (
-            "یک بخش را از دکمه‌های زیر انتخاب کنید."
-        )
+        + "یک بخش را از دکمه‌های زیر انتخاب کنید."
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PG, push=push)
@@ -966,7 +964,7 @@ async def present_admin_plans_audience(
 ) -> None:
     """Wave E: plans audience list — inline actions + overview bubble.
 
-    Owner-gated (same as classic ``_OWNER_ONLY_REPLY_ACTIONS`` for audience keys).
+    Owner-gated (same Owner Principal gate as ``_OWNER_ONLY_REPLY_ACTIONS``).
     """
     from app.bot.nav_inline import admin_plans_kind_hub_keyboard, present_nav_panel
 
@@ -980,9 +978,7 @@ async def present_admin_plans_audience(
     title = "👥 <b>پلن‌های کاربران</b>" if audience == "users" else "🤝 <b>پلن‌های نمایندگان</b>"
     body = (
         f"{title}\n"
-        + (
-            "پلن‌ها در پیام بعد؛ افزودن/کاتالوگ از دکمه‌های زیر."
-        )
+        + "پلن‌ها در پیام بعد؛ افزودن/کاتالوگ از دکمه‌های زیر."
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_KIND, push=True)
@@ -1056,9 +1052,7 @@ async def open_admin_resellers_hub(
     ui = await get_all_settings(session)
     body = (
         "🤝 <b>نمایندگان</b>\n"
-        + (
-            "یک بخش را از دکمه‌های زیر انتخاب کنید."
-        )
+        + "یک بخش را از دکمه‌های زیر انتخاب کنید."
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_RESELLERS, push=push)
@@ -1088,9 +1082,7 @@ async def open_admin_settings_hub(
     ui = await get_all_settings(session)
     body = (
         "⚙️ <b>تنظیمات سریع</b>\n"
-        + (
-            "یک بخش را از دکمه‌های زیر انتخاب کنید.\nظاهر، رنگ، گزارش روزانه → وب‌پنل."
-        )
+        + "یک بخش را از دکمه‌های زیر انتخاب کنید.\nظاهر، رنگ، گزارش روزانه → وب‌پنل."
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_SETTINGS, push=push)
@@ -1166,9 +1158,7 @@ async def open_admin_broadcast_hub(
     ui = await get_all_settings(session)
     body = (
         "📢 <b>پیام گروهی</b>\n"
-        + (
-            "مخاطب را از دکمه‌های زیر انتخاب کنید:"
-        )
+        + "مخاطب را از دکمه‌های زیر انتخاب کنید:"
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_BROADCAST, push=push)
@@ -1200,9 +1190,7 @@ async def open_admin_plans_hub(
     await state.update_data(_adm_plans_aud=None, _adm_plans_kind=None)
     body = (
         "💎 <b>پلن‌ها</b> (مثل وب‌پنل /plans)\n"
-        + (
-            "مخاطب یا ابزار کاتالوگ را از دکمه‌های زیر انتخاب کنید."
-        )
+        + "مخاطب یا ابزار کاتالوگ را از دکمه‌های زیر انتخاب کنید."
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_AUDIENCE, push=push)
@@ -1882,9 +1870,7 @@ async def handle_back(
         )
         return
     if level == nav.NAV_SERVICE:
-        # Restored onto service detail — inline card or classic reply actions.
-
-        ui = await get_all_settings(session)
+        # Restored onto service detail card (inline).
         data2 = await state.get_data()
         svc_id = data2.get(nav.SERVICE_ID)
         if svc_id:
@@ -1897,14 +1883,8 @@ async def handle_back(
             except TypeError:
                 await svc_view(cb, session, db_user)
             return
-        await nav.show_nav_keyboard(
-            message,
-            session,
-            db_user,
-            nav.NAV_SERVICE,
-            text="عملیات سرویس:",
-            state=state,
-            push=False,
+        await open_services_list(
+            message, session, db_user, state, push=False
         )
         return
     if level == nav.NAV_USER_PREVIEW:

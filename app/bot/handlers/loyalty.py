@@ -260,7 +260,7 @@ async def open_loyalty_home_message(
     *,
     push: bool = True,
 ) -> None:
-    """Club hub: overview + reply submenu (classic) or single inline hub (inline)."""
+    """Club hub: overview as a single inline hub panel."""
     from app.bot import menu_nav as nav
     from app.bot.nav_inline import loyalty_hub_keyboard, present_inline_only
 
@@ -601,9 +601,7 @@ async def open_admin_loyalty_hub(
     body = (
         f"⭐ <b>باشگاه مشتریان</b> ({who})\n"
         f"وضعیت: <b>{status}</b>\n"
-        + (
-            "یک بخش را از دکمه‌های زیر انتخاب کنید."
-        )
+        + "یک بخش را از دکمه‌های زیر انتخاب کنید."
         + f"{extra}"
     )
     if state is not None:

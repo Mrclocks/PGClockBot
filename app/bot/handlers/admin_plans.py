@@ -78,7 +78,7 @@ async def sync_plans_reply_keyboard(
 ) -> None:
     """Keep nav aligned after inline «back» on plans screens.
 
-    Wave F: under ``nav_mode=inline`` re-present the hub (no ``⬇️`` chrome).
+    Wave F / Option B: re-present the hub inline (no ``⬇️`` chrome).
     """
     from app.bot.nav_inline import (
         admin_plans_add_type_hub_keyboard,
@@ -126,8 +126,7 @@ async def _answer_plans_cancel(message: Message, state: FSMContext, session: Asy
     await state.set_state(None)
     ui = await get_all_settings(session)
     markup = await _plans_reply_markup(session, state)
-    # Prefer stable main when we can resolve user from message.from_user later;
-    # keep kind/audience reply only for classic. For inline, heal via show path below.
+    # Prefer stable main KB when we can resolve the user; else keep plans reply.
     from app.db.models import BotUser
     from sqlalchemy import select
 

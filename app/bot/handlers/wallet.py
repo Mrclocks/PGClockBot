@@ -249,7 +249,7 @@ async def present_topup_methods(
     *,
     heal_main: bool = False,
 ) -> None:
-    """After amount is known — show pay methods (inline when nav_mode=inline).
+    """After amount is known — show pay methods on the inline panel.
 
     When ``heal_main`` is set (free-text amount left ``cancel_reply`` on the
     ReplyKeyboard), restore the stable main keyboard *after* the inline methods
@@ -264,9 +264,7 @@ async def present_topup_methods(
     body = format_message(
         "➕ شارژ کیف پول",
         f"{kv_line('💰', 'مبلغ', f'<b>{format_toman(amount, get_settings().currency)}</b>')}\n\n"
-        + (
-            "روش واریز را انتخاب کنید:"
-        ),
+        + "روش واریز را انتخاب کنید:",
     )
     await nav.set_nav_level(state, nav.NAV_TOPUP_PAY, push=True)
     await present_inline_only(

@@ -196,25 +196,9 @@ async def res_home(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Option B: open inline manage hub (same as nv:res:home), not classic reply."""
+    """Option B: open inline manage hub (same as ``nv:res:home``)."""
     from app.bot.handlers.reply_nav import open_reseller_home
 
-    # Full panel only on dedicated shop bot — main bot redirects to credentials
-    if not is_reseller_bot:
-        await res_creds(
-            callback,
-            session,
-            db_user,
-            is_reseller_bot=False,
-            reseller_owner_id=None,
-        )
-        return
-    owner_id, profile = await _actor(
-        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
-    )
-    if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
-        return
     await callback.answer()
     if not callback.message:
         return
@@ -223,7 +207,7 @@ async def res_home(
         session,
         db_user,
         state,
-        is_reseller_bot=True,
+        is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
         push=False,
     )

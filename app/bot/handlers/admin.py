@@ -44,7 +44,7 @@ async def _staff_reply(
     db_user: BotUser,
     classic: ReplyKeyboardMarkup,
 ) -> ReplyKeyboardMarkup:
-    """Inline → stable main KB; classic → submenu chrome."""
+    """Return lasting staff ReplyKeyboard (stable main under Option B)."""
     from app.bot.nav_chrome import lasting_staff_reply
 
     return await lasting_staff_reply(session, db_user, classic=classic)
