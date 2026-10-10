@@ -35,8 +35,51 @@ from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 
 async def _admin_hub_kb(session: AsyncSession, db_user: BotUser) -> ReplyKeyboardMarkup:
     from app.bot.menu_nav import admin_hub_reply_keyboard
+    from app.bot.nav_chrome import lasting_staff_reply
 
-    return await admin_hub_reply_keyboard(session, db_user)
+    classic = await admin_hub_reply_keyboard(session, db_user)
+    return await lasting_staff_reply(session, db_user, classic=classic)
+
+
+async def _staff_reply(
+    session: AsyncSession,
+    db_user: BotUser,
+    classic: ReplyKeyboardMarkup,
+) -> ReplyKeyboardMarkup:
+    """Inline → stable main KB; classic → submenu chrome."""
+    from app.bot.nav_chrome import lasting_staff_reply
+
+    return await lasting_staff_reply(session, db_user, classic=classic)
+
+
+async def _answer_users_nav(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    text: str,
+    state: FSMContext | None = None,
+    *,
+    reopen: bool = True,
+    clear_state: bool = False,
+) -> None:
+    """After cancel/finish in users flows: heal main KB + restore users inline hub."""
+    from app.bot.nav_chrome import answer_staff_nav
+
+    reopen_fn = None
+    if reopen:
+        from app.bot.handlers.reply_nav import open_admin_users_hub
+
+        reopen_fn = open_admin_users_hub
+    await answer_staff_nav(
+        message,
+        session,
+        db_user,
+        text=text,
+        classic=kb.admin_users_reply_keyboard(),
+        state=state,
+        reopen_panel=reopen_fn,
+        clear_state=clear_state,
+    )
 
 
 def _plan_line(p: Plan) -> str:
@@ -57,10 +100,17 @@ def _plan_needs_link(p: Plan) -> bool:
     return not p.pg_template_id and not (p.pg_group_ids or "").strip()
 
 
-async def _plans_flow_reply_kb(state: FSMContext) -> ReplyKeyboardMarkup:
+async def _plans_flow_reply_kb(
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+) -> ReplyKeyboardMarkup:
     data = await state.get_data()
     aud = data.get("_adm_plans_aud")
-    return kb.admin_plans_reply_keyboard(audience=aud if aud in {"users", "resellers"} else None)
+    classic = kb.admin_plans_reply_keyboard(
+        audience=aud if aud in {"users", "resellers"} else None
+    )
+    return await _staff_reply(session, db_user, classic)
 
 
 async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> None:
@@ -858,7 +908,7 @@ async def adm_plan_edit_save(
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
+        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(session, db_user, state))
         return
     data = await state.get_data()
     plan = await session.get(Plan, int(data.get("user_plan_edit_id") or 0))
@@ -893,7 +943,7 @@ async def adm_plan_edit_save(
         return
     await session.commit()
     await state.set_state(None)
-    await message.answer("ذخیره شد ✅", reply_markup=await _plans_flow_reply_kb(state))
+    await message.answer("ذخیره شد ✅", reply_markup=await _plans_flow_reply_kb(session, db_user, state))
     await message.answer(
         await _plan_detail_text_for(session, plan),
         reply_markup=await _plan_detail_markup(session, plan),
@@ -922,7 +972,7 @@ async def plan_name(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
+        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(session, db_user, state))
         return
     await state.update_data(name=(message.text or "").strip())
     await state.set_state(AdminStates.add_plan_price)
@@ -938,7 +988,7 @@ async def plan_price(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
+        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(session, db_user, state))
         return
     try:
         price = max(0, parse_bot_int(message.text))
@@ -959,7 +1009,7 @@ async def plan_days(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
+        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(session, db_user, state))
         return
     try:
         days = max(1, parse_bot_int(message.text, default=30))
@@ -983,7 +1033,7 @@ async def plan_gb(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
+        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(session, db_user, state))
         return
     try:
         gb = parse_bot_float(message.text)
@@ -1014,11 +1064,11 @@ async def plan_link_cancel(message: Message, state: FSMContext, db_user: BotUser
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
+        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(session, db_user, state))
         return
     await message.answer(
         "اتصال را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.",
-        reply_markup=await _plans_flow_reply_kb(state),
+        reply_markup=await _plans_flow_reply_kb(session, db_user, state),
     )
 
 
@@ -1987,7 +2037,7 @@ async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         await safe_edit_text(callback.message, text, reply_markup=None)
         await callback.message.answer(
             "کاربران:",
-            reply_markup=kb.admin_users_reply_keyboard(),
+            reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
         )
         if state is not None:
             from app.bot import menu_nav as nav
@@ -2119,9 +2169,14 @@ async def adm_users_search(
         await message.answer("ادمین نیستید")
         return
     if kb.is_cancel_text(message.text):
-        await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
-        await message.answer("👥 کاربران", reply_markup=kb.admin_users_reply_keyboard())
+        await _answer_users_nav(
+            message,
+            session,
+            db_user,
+            "لغو شد.",
+            state,
+            clear_state=True,
+        )
         return
     try:
         tg_id = int((message.text or "").strip())
@@ -2246,14 +2301,14 @@ async def adm_users_message_send(
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
     data = await state.get_data()
     uid = int(data.get("msg_user_id") or 0)
     user, deny = await _platform_shop_user(session, uid) if uid else (None, "یافت نشد")
     await state.clear()
     if deny:
-        await message.answer(deny, reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(deny, reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
     from app.services.users_quick import send_staff_dm
 
@@ -2265,11 +2320,11 @@ async def adm_users_message_send(
             actor=str(db_user.telegram_id or db_user.id),
         )
         await session.commit()
-        await message.answer("پیام ارسال شد ✅", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer("پیام ارسال شد ✅", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
     except ValueError as e:
-        await message.answer(user_safe_error(e), reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(user_safe_error(e), reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
     except Exception as e:
-        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
     await _render_user_card(message, session, user)
 
 
@@ -2433,7 +2488,7 @@ async def adm_users_wallet_credit_save(
     user, deny = await _platform_shop_user(session, user_id) if user_id else (None, "یافت نشد")
     if deny:
         await state.clear()
-        await message.answer(deny, reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(deny, reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
     amount = parse_bot_int(message.text or "")
     if amount is None or amount < 1000:
@@ -2453,7 +2508,7 @@ async def adm_users_wallet_credit_save(
             note="شارژ از ربات ادمین",
         )
     except ValueError as e:
-        await message.answer(user_safe_error(e), reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(user_safe_error(e), reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         await state.clear()
         return
     await state.clear()
@@ -2462,7 +2517,7 @@ async def adm_users_wallet_credit_save(
         f"✅ کیف پول شارژ شد.\n"
         f"مبلغ: {format_toman(amount, get_settings().currency)}\n"
         f"مانده: {format_toman(user.wallet_balance, get_settings().currency)}",
-        reply_markup=kb.admin_users_reply_keyboard(),
+        reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
     )
     await _render_user_card(message, session, user)
 
@@ -2863,7 +2918,7 @@ async def adm_svc_adjust_days_entered(
         return
     if kb.is_cancel_text(message.text):
         await state.set_state(None)
-        await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
     from app.services.bot_user_admin import MAX_EXTEND_DAYS
 
@@ -2885,7 +2940,7 @@ async def adm_svc_adjust_days_entered(
         await state.set_state(None)
         await message.answer(
             "نشست منقضی شد — دوباره از منوی سرویس وارد شوید.",
-            reply_markup=kb.admin_users_reply_keyboard(),
+            reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
         )
         return
     adj_key = f"svcadj:{user_id}:{service_id}"
@@ -2894,7 +2949,7 @@ async def adm_svc_adjust_days_entered(
     await state.set_state(None)
     await state.update_data(**{adj_key: {"days": days, "gb": gb}})
     # Restore reply submenu (cancel_reply displaced it); then show inline adjust UI.
-    await message.answer("👥 کاربران", reply_markup=kb.admin_users_reply_keyboard())
+    await message.answer("👥 کاربران", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
     await message.answer(
         f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\n"
         f"روز: <b>{days}</b> · گیگ: <b>{gb}</b>",
@@ -2913,7 +2968,7 @@ async def adm_svc_adjust_gb_entered(
         return
     if kb.is_cancel_text(message.text):
         await state.set_state(None)
-        await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
     from app.services.bot_user_admin import MAX_EXTEND_GB
 
@@ -2935,7 +2990,7 @@ async def adm_svc_adjust_gb_entered(
         await state.set_state(None)
         await message.answer(
             "نشست منقضی شد — دوباره از منوی سرویس وارد شوید.",
-            reply_markup=kb.admin_users_reply_keyboard(),
+            reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
         )
         return
     adj_key = f"svcadj:{user_id}:{service_id}"
@@ -2944,7 +2999,7 @@ async def adm_svc_adjust_gb_entered(
     await state.set_state(None)
     await state.update_data(**{adj_key: {"days": days, "gb": gb}})
     # Restore reply submenu (cancel_reply displaced it); then show inline adjust UI.
-    await message.answer("👥 کاربران", reply_markup=kb.admin_users_reply_keyboard())
+    await message.answer("👥 کاربران", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
     await message.answer(
         f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\n"
         f"روز: <b>{days}</b> · گیگ: <b>{gb}</b>",
@@ -3012,7 +3067,7 @@ async def adm_users_block_reason(
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
     data = await state.get_data()
     user_id = int(data.get("block_user_id") or 0)
@@ -3023,7 +3078,7 @@ async def adm_users_block_reason(
     user, deny = await _platform_shop_user(session, user_id) if user_id else (None, "یافت نشد")
     if deny:
         await state.clear()
-        await message.answer(deny, reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(deny, reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
     from app.services.notifications import notify_account_edit
     from app.services.users import is_protected_admin
@@ -3032,7 +3087,7 @@ async def adm_users_block_reason(
         await state.clear()
         await message.answer(
             "مسدود کردن ادمین مجاز نیست.",
-            reply_markup=kb.admin_users_reply_keyboard(),
+            reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
         )
         return
     user.is_blocked = True
@@ -3047,7 +3102,7 @@ async def adm_users_block_reason(
     await state.clear()
     await message.answer(
         f"🚫 کاربر مسدود شد.\nعلت: {reason}",
-        reply_markup=kb.admin_users_reply_keyboard(),
+        reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
     )
     await _render_user_card(message, session, user, edit=False)
 
@@ -3114,7 +3169,7 @@ async def adm_users_delete_reason(
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
     reason = (message.text or "").strip()
     if len(reason) < 3:
@@ -3132,12 +3187,12 @@ async def adm_users_delete_reason(
 
     user, deny = await _platform_shop_user(session, user_id)
     if deny:
-        await message.answer(deny, reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(deny, reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
     if is_protected_admin(user):
         await message.answer(
             "حذف ادمین مجاز نیست.",
-            reply_markup=kb.admin_users_reply_keyboard(),
+            reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
         )
         return
 
@@ -3155,10 +3210,10 @@ async def adm_users_delete_reason(
             actor_user_id=db_user.id,
         )
     except ValueError as e:
-        await message.answer(user_safe_error(e), reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(user_safe_error(e), reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
     except Exception as e:
-        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
 
     # ReplyKeyboard cannot be attached via edit_text — that threw and surfaced
@@ -3166,7 +3221,7 @@ async def adm_users_delete_reason(
     await message.answer(
         f"🗑 کاربر <code>{info.get('telegram_id')}</code> ({html.escape(str(info.get('name') or '—'))}) "
         f"حذف شد.\nعلت: {html.escape(reason)}",
-        reply_markup=kb.admin_users_reply_keyboard(),
+        reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
     )
 
 
@@ -3209,7 +3264,7 @@ async def adm_users_unreseller_reason(
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
     reason = (message.text or "").strip()
     if len(reason) < 3:
@@ -3223,7 +3278,7 @@ async def adm_users_unreseller_reason(
         return
     _user, deny = await _platform_shop_user(session, user_id)
     if deny:
-        await message.answer(deny, reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(deny, reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
 
     from app.services.resellers import notify_reseller_revoked, revoke_reseller
@@ -3233,10 +3288,10 @@ async def adm_users_unreseller_reason(
             session, user_id, delete_pg_admin=True, reason=reason
         )
     except ValueError as e:
-        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
     except Exception as e:
-        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=kb.admin_users_reply_keyboard())
+        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
 
     user = await session.get(BotUser, user_id)
@@ -3254,7 +3309,7 @@ async def adm_users_unreseller_reason(
     note = "پیام علت ارسال شد ✅" if notified else "پیام تلگرام ارسال نشد ⚠️"
     await message.answer(
         f"🤝 نمایندگی حذف شد.\nعلت: {reason}\n{note}",
-        reply_markup=kb.admin_users_reply_keyboard(),
+        reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
     )
     if user:
         await _render_user_card(message, session, user)
@@ -3278,7 +3333,7 @@ async def adm_resellers(callback: CallbackQuery, db_user: BotUser, state: FSMCon
         )
         await callback.message.answer(
             "پنل نمایندگان:",
-            reply_markup=kb.admin_resellers_reply_keyboard(),
+            reply_markup=await _staff_reply(session, db_user, kb.admin_resellers_reply_keyboard()),
         )
         if state is not None:
             from app.bot import menu_nav as nav
@@ -4187,7 +4242,7 @@ async def adm_broadcast_start(callback: CallbackQuery, db_user: BotUser, state: 
         )
         await callback.message.answer(
             "مخاطب پیام گروهی:",
-            reply_markup=kb.admin_broadcast_reply_keyboard(),
+            reply_markup=await _staff_reply(session, db_user, kb.admin_broadcast_reply_keyboard()),
         )
 
 
@@ -4227,7 +4282,7 @@ async def adm_broadcast_send(message: Message, state: FSMContext, session: Async
         await state.clear()
         await message.answer(
             "لغو شد.",
-            reply_markup=kb.admin_broadcast_reply_keyboard(),
+            reply_markup=await _staff_reply(session, db_user, kb.admin_broadcast_reply_keyboard()),
         )
         return
     data = await state.get_data()

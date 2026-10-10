@@ -1,9 +1,9 @@
 """Inline hub keyboards and chrome-free present helpers (nav_mode=inline).
 
-Hybrid contract (mature):
-- ReplyKeyboard stays stable (admin: group shortcuts; user: main menu).
-- One live panel message carries submenu InlineKeyboards (edit-in-place).
-- Do not mirror the reply shortcuts as a second full inline home.
+Pure-inline staff contract (see ``app.bot.nav_chrome``):
+- ReplyKeyboard = level-0 only (user menu + one staff entry).
+- Nested admin/reseller menus live on one edited inline panel.
+- Never restore a reply submenu after cancel under inline mode.
 """
 
 from __future__ import annotations
@@ -505,8 +505,7 @@ def admin_ops_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         for key, text in _reply_admin_ops_entries(ui)
         if key in cb_map
     ]
-    # Groups already live on the stable reply KB — Back closes the panel.
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:close")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
 def admin_people_hub_keyboard(
@@ -536,7 +535,7 @@ def admin_people_hub_keyboard(
         )
         if key in cb_map
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:close")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
 def admin_product_hub_keyboard(
@@ -564,7 +563,7 @@ def admin_product_hub_keyboard(
         for key, text in _reply_admin_product_entries(ui, pg_features=pg_features)
         if key in cb_map
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:close")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
 def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
@@ -592,7 +591,7 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         for key, text in _reply_admin_system_entries(ui)
         if key in cb_map
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:close")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
 def pg_hub_keyboard(
@@ -928,7 +927,7 @@ def reseller_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMark
         )
         for key, text in _reseller_settings_submenu_entries(ui)
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:close")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:home")
 
 
 def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
@@ -943,7 +942,7 @@ def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         )
         for key, text in _reseller_plans_submenu_entries(ui)
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:close")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:home")
 
 
 def service_card_keyboard(
