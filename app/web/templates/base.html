@@ -48,6 +48,7 @@
   <link rel="preload" href="/static/panel.css?v={{ app_version }}" as="style" />
   <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
   <link rel="stylesheet" href="/static/panel.css?v={{ app_version }}" />
+  <link rel="stylesheet" href="/static/list-inputs.css?v={{ app_version }}" />
   <link rel="stylesheet" href="/static/panel-nav-modes.css?v={{ app_version }}" />
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
   {% block head %}{% endblock %}
@@ -464,6 +465,7 @@
   </div>
   <script src="/static/money-inputs.js?v={{ app_version }}&grouping=1"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/panel.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/list-inputs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script type="application/json" id="template-variable-specs"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>{{ template_variable_specs(daily_report_actor|default('shop' if shop_mode|default(false) else 'owner', true))|tojson }}</script>
   <script src="/static/template-variables.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   {% block page_scripts %}{% endblock %}

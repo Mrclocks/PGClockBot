@@ -1,4 +1,5 @@
 {% from "macros.html" import switch %}
+{% from "_list_input.html" import list_input %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
@@ -117,10 +118,7 @@
     {% endif %}
     {% endif %}
 
-    <label class="form-field">آیدی ادمین‌های ربات اختصاصی
-      <input name="bot_admin_ids" value="{{ profile.bot_admin_ids or '' }}" dir="ltr" placeholder="123456789, 987654321" />
-      <small class="muted">آیدی‌های تلگرام (با ویرگول). فقط روی ربات این نماینده پنل نماینده می‌بینند؛ در ربات اصلی منوی کاربر عادی می‌ماند.</small>
-    </label>
+    {{ list_input('bot_admin_ids', 'آیدی ادمین‌های ربات اختصاصی', profile.bot_admin_ids or '', kind='telegram', placeholder='123456789', help='آیدی هر ادمین را جداگانه اضافه کنید. فقط روی ربات این نماینده پنل نماینده می‌بینند؛ در ربات اصلی منوی کاربر عادی می‌ماند.') }}
 
     <div class="ui-switch-list">
       {{ switch('is_active', 'نماینده فعال', checked=profile.is_active) }}

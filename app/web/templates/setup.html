@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_list_input.html" import list_input %}
 {% block title %}راه‌اندازی اولیه{% endblock %}
 {% block auth %}
 <div class="auth-wrap auth-wrap--atmo">
@@ -83,9 +84,7 @@
       <label>نام کاربری ربات (بدون @)
         <input name="bot_username" value="{{ values.BOT_USERNAME or '' }}" required autocomplete="off" dir="ltr" placeholder="MyShopBot" />
       </label>
-      <label>آیدی ادمین‌ها (با کاما جدا کنید)
-        <input name="admin_ids" value="{{ values.ADMIN_IDS or '' }}" required placeholder="123456789" dir="ltr" />
-      </label>
+      {{ list_input('admin_ids', 'آیدی ادمین‌ها', values.ADMIN_IDS or '', kind='telegram', required=true, placeholder='123456789', help='آیدی هر ادمین را جداگانه اضافه کنید.') }}
       <div class="setup-actions">
         <button type="button" class="btn btn-ghost" data-prev="1">قبلی</button>
         <button class="btn" type="submit">ادامه</button>
@@ -343,7 +342,7 @@
       const ids = String(botForm.admin_ids.value).split(',').map(s => s.trim()).filter(Boolean);
       if (!ids.length || ids.some(x => !/^\d+$/.test(x))) {
         e.preventDefault();
-        showErr('آیدی ادمین‌ها باید عدد باشد (با کاما جدا کنید).');
+        showErr('آیدی هر ادمین باید عدد باشد.');
       }
     });
   }
