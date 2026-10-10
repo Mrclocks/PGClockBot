@@ -976,7 +976,6 @@ async def settings_edit_ask(
         cur = format_force_join_for_edit(cur)
     loc = _owner_screen_for_key(key)
     await callback.answer()
-    await state.set_state(SettingsStates.edit_value)
     await state.update_data(edit_key=key, edit_loc=loc)
     hint = "عدد بفرستید." if kind == "number" else "متن جدید را بفرستید.\nبرای انصراف: انصراف"
     if key == "force_join_channel":
@@ -991,11 +990,16 @@ async def settings_edit_ask(
             )
         elif is_message_rich_key(key):
             hint += "\n<i>ایموجی پریمیوم در متن پیام حفظ می‌شود.</i>"
-    if callback.message:
-        await callback.message.answer(
-            f"<b>{label}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=f"<b>{label}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}",
+        cancel_code="adm_set",
+        fsm_state=SettingsStates.edit_value,
+        edit=True,
+    )
 
 
 @settings_actor_required
@@ -1012,6 +1016,11 @@ async def settings_edit_save(
     loc = data.get("edit_loc")
     text = (message.text or "").strip()
     if kb.is_cancel_text(text) or not key:
+        if kb.is_cancel_text(text):
+            from app.bot.nav_input import try_legacy_cancel
+
+            if await try_legacy_cancel(message, state, session, db_user):
+                return
         await state.clear()
         await _keep_settings_nav(state)
         await message.answer(
@@ -1131,13 +1140,17 @@ async def support_add_start(
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(SettingsStates.support_title)
     await state.update_data(support_edit_id=None)
-    if callback.message:
-        await callback.message.answer(
-            "عنوان پشتیبان (مثلاً پشتیبان ربات):",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="عنوان پشتیبان (مثلاً پشتیبان ربات):",
+        cancel_code="adm_set",
+        fsm_state=SettingsStates.support_title,
+        edit=True,
+    )
 
 
 @settings_actor_required
@@ -1155,6 +1168,10 @@ async def support_title_msg(
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         await _keep_settings_nav(state)
         await message.answer(
@@ -1163,10 +1180,15 @@ async def support_title_msg(
         )
         return
     await state.update_data(support_title=text)
-    await state.set_state(SettingsStates.support_telegram)
-    await message.answer(
-        "یوزرنیم یا آیدی تلگرام را بفرستید:\n<code>@user</code> یا عدد",
-        reply_markup=kb.cancel_reply(),
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="یوزرنیم یا آیدی تلگرام را بفرستید:\n<code>@user</code> یا عدد",
+        cancel_code="adm_set",
+        fsm_state=SettingsStates.support_telegram,
+        edit=False,
     )
 
 
@@ -1181,6 +1203,10 @@ async def support_telegram_msg(
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         await _keep_settings_nav(state)
         await message.answer(
@@ -1397,13 +1423,17 @@ async def support_edit_start(
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(SettingsStates.support_title)
     await state.update_data(support_edit_id=cid)
-    if callback.message:
-        await callback.message.answer(
-            f"عنوان جدید (فعلی: {c['title']}):",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=f"عنوان جدید (فعلی: {c['title']}):",
+        cancel_code="adm_set",
+        fsm_state=SettingsStates.support_title,
+        edit=True,
+    )
 
 
 @settings_actor_required
@@ -1451,9 +1481,16 @@ async def trial_ask_name(callback: CallbackQuery, state: FSMContext, db_user: Bo
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(SettingsStates.trial_name)
-    if callback.message:
-        await callback.message.answer("نام پلن تست:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="نام پلن تست:",
+        cancel_code="adm_set",
+        fsm_state=SettingsStates.trial_name,
+        edit=True,
+    )
 
 
 @settings_actor_required
@@ -1467,6 +1504,10 @@ async def trial_save_name(
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         await _keep_settings_nav(state)
         await message.answer(
@@ -1488,9 +1529,16 @@ async def trial_ask_days(callback: CallbackQuery, state: FSMContext, db_user: Bo
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(SettingsStates.trial_days)
-    if callback.message:
-        await callback.message.answer("مدت به روز:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="مدت به روز:",
+        cancel_code="adm_set",
+        fsm_state=SettingsStates.trial_days,
+        edit=True,
+    )
 
 
 @settings_actor_required
@@ -1504,6 +1552,10 @@ async def trial_save_days(
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         await _keep_settings_nav(state)
         await message.answer(
@@ -1530,9 +1582,16 @@ async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotU
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(SettingsStates.trial_gb)
-    if callback.message:
-        await callback.message.answer("حجم به گیگ (۰ = نامحدود):", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="حجم به گیگ (۰ = نامحدود):",
+        cancel_code="adm_set",
+        fsm_state=SettingsStates.trial_gb,
+        edit=True,
+    )
 
 
 @settings_actor_required
@@ -1546,6 +1605,10 @@ async def trial_save_gb(
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         await _keep_settings_nav(state)
         await message.answer(

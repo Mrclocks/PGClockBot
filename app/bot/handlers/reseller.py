@@ -459,13 +459,19 @@ async def res_user_message_start(
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(ResellerStates.user_message)
     await state.update_data(msg_user_id=int(user.id))
-    if callback.message:
-        await callback.message.answer(
-            f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b>:",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=(
+            f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b>:"
+        ),
+        cancel_code="rs_msg",
+        fsm_state=ResellerStates.user_message,
+        edit=True,
+    )
 
 
 @router.message(ResellerStates.user_message)
@@ -488,6 +494,17 @@ async def res_user_message_send(
         await message.answer("دسترسی ندارید.")
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer("لغو شد.")
         return
@@ -1224,26 +1241,21 @@ async def resapply_buy(
             )
         return
 
-    text = format_message(
+    summary = format_message(
         f"🧾 سفارش نمایندگی #{order.id}",
         f"نوع: {mode_label}\nپلن: {plan.name}\n"
-        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>\n\n"
-        "روش پرداخت را انتخاب کنید:",
+        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>",
     )
     if callback.message:
         from app.bot.menu_nav import present_order_pay
 
-        try:
-            await safe_edit_text(callback.message, text, reply_markup=None)
-        except Exception:
-            await callback.message.answer(text)
         await present_order_pay(
             callback.message,
             session,
             db_user,
             order.id,
             state=state,
-            text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+            summary=summary,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )

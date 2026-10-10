@@ -1003,17 +1003,22 @@ async def open_admin_loyalty_ref_text(
     preview = (rich_plain_text(cur) or "").strip() or "—"
     if len(preview) > 400:
         preview = preview[:399] + "…"
-    await message.answer(
-        format_message(
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt=format_message(
             "📝 متن دعوت",
             f"فعلی:\n<code>{preview}</code>\n\n"
             "متغیرها: <code>{code}</code> و <code>{link}</code>\n"
             "متن جدید را بفرستید یا «انصراف» بزنید.\n"
             "<i>ایموجی پریمیوم از همین‌جا حفظ می‌شود.</i>",
         ),
-        reply_markup=kb.cancel_reply(),
+        cancel_code="loy_stf",
+        fsm_state=LoyaltyManageStates.edit_referral_text,
+        edit=False,
     )
-    await state.set_state(LoyaltyManageStates.edit_referral_text)
     await state.update_data(
         _loy_edit_scope=scope if scope is not None else 0,
         _loy_edit_is_shop=1 if scope is not None else 0,
@@ -1523,11 +1528,16 @@ async def staff_edit_rate_start(
         _loy_edit_reseller_bot=1 if is_reseller_bot else 0,
         _loy_edit_owner=int(reseller_owner_id or 0),
     )
-    if callback.message:
-        await callback.message.answer(
-            f"نرخ فعلی: <code>{cur}</code>\nعدد جدید (تومان به‌ازای ۱ امتیاز) را بفرستید:",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=f"نرخ فعلی: <code>{cur}</code>\nعدد جدید (تومان به‌ازای ۱ امتیاز) را بفرستید:",
+        cancel_code="loy_stf",
+        fsm_state=LoyaltyManageStates.edit_wallet_rate,
+        edit=True,
+    )
 
 @router.callback_query(F.data.startswith("loyadm:rule:tog:"))
 async def staff_rule_toggle(
@@ -1685,6 +1695,17 @@ async def staff_save_wallet_rate(
         await message.answer("محدوده تنظیمات نامعتبر است.")
         return
     if kb.is_cancel_text(text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         enabled = await loyalty_enabled(session, reseller_id=scope)
         rate_cur = await get_setting(
@@ -1779,6 +1800,17 @@ async def staff_save_referral_text(
             await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
             return
     if kb.is_cancel_text(text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await _staff_loyalty_answer(
             message,

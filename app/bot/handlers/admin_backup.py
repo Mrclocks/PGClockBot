@@ -296,17 +296,24 @@ async def backup_restore_ask(callback: CallbackQuery, db_user: BotUser, state: F
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(BackupStates.confirm_restore)
     await state.update_data(backup_id=backup_id, restore_env=restore_env)
-    if callback.message:
-        await callback.message.answer(
-            "⚠️ ریستور همه داده‌های فعلی را جایگزین می‌کند.\n"
-            f"بکاپ: <code>{backup_id}</code>\n"
-            f".env: {'بله' if restore_env else 'خیر'}\n\n"
-            "برای تأیید همین پیام را بفرستید:\n<code>RESTORE</code>\n"
-            "برای انصراف: انصراف",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    prompt = (
+        "⚠️ ریستور همه داده‌های فعلی را جایگزین می‌کند.\n"
+        f"بکاپ: <code>{backup_id}</code>\n"
+        f".env: {'بله' if restore_env else 'خیر'}\n\n"
+        "برای تأیید همین پیام را بفرستید:\n<code>RESTORE</code>\n"
+        "برای انصراف: انصراف"
+    )
+    await ask_text(
+        callback,
+        state,
+        prompt=prompt,
+        cancel_code="adm_bak",
+        fsm_state=BackupStates.confirm_restore,
+        edit=False,
+    )
 
 
 @router.message(BackupStates.confirm_restore)
@@ -317,13 +324,16 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         await message.answer("لغو شد.", reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
         return
     if text != "RESTORE":
         await message.answer(
             "برای تأیید دقیقاً <code>RESTORE</code> را بفرستید یا انصراف.",
-            reply_markup=kb.cancel_reply(),
         )
         return
     data = await state.get_data()
@@ -364,12 +374,16 @@ async def backup_upload_ask(callback: CallbackQuery, db_user: BotUser, state: FS
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(BackupStates.waiting_upload)
-    if callback.message:
-        await callback.message.answer(
-            "فایل ZIP بکاپ را در همین گفتگو بفرستید.",
-            reply_markup=kb.cancel_reply(),
-        )
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="فایل ZIP بکاپ را در همین گفتگو بفرستید.",
+        cancel_code="adm_bak",
+        fsm_state=BackupStates.waiting_upload,
+        edit=True,
+    )
 
 
 @router.message(BackupStates.waiting_upload, F.document)
@@ -417,7 +431,11 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
 async def backup_upload_cancel(message: Message, session, db_user: BotUser, state: FSMContext):
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         await message.answer("لغو شد.", reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
         return
-    await message.answer("یک فایل ZIP بفرستید یا انصراف.", reply_markup=kb.cancel_reply())
+    await message.answer("یک فایل ZIP بفرستید یا انصراف.")

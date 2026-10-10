@@ -14,6 +14,9 @@ class AskTextHelperTests(unittest.IsolatedAsyncioTestCase):
         import app.bot.handlers.wallet  # noqa: F401
         import app.bot.handlers.shop  # noqa: F401
         import app.bot.handlers.support  # noqa: F401
+        import app.bot.handlers.services  # noqa: F401
+        import app.bot.handlers.ticket_actions  # noqa: F401
+        import app.bot.staff_cancel  # noqa: F401
 
     async def test_ask_text_stores_prompt_and_inline_cancel(self):
         from app.bot.nav_input import PROMPT_MSG_ID, ask_text
@@ -82,9 +85,25 @@ class AskTextHelperTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(callback.answer.await_args.kwargs.get("show_alert"))
 
     async def test_registered_codes_include_customer_flows(self):
+        import app.bot.staff_cancel  # noqa: F401
         from app.bot.nav_input import CANCEL_REGISTRY
 
-        for code in ("w_amt", "w_qty", "s_subj", "s_body"):
+        for code in (
+            "w_amt",
+            "w_qty",
+            "w_gift",
+            "w_rcpt",
+            "s_subj",
+            "s_body",
+            "s_reply",
+            "c_gb",
+            "c_days",
+            "pay_disc",
+            "svc_cnl",
+            "tkt_rpl",
+            "adm_pln",
+            "adm_set",
+        ):
             self.assertIn(code, CANCEL_REGISTRY)
 
 

@@ -96,6 +96,7 @@ async def support_new(callback: CallbackQuery, state: FSMContext):
             prompt="موضوع تیکت را بنویسید:",
             cancel_code="s_subj",
             fsm_state=SupportStates.subject,
+            edit=True,
         )
 
 @router.message(SupportStates.subject)
@@ -285,11 +286,18 @@ async def support_view(
     for m in ticket.messages[-10:]:
         who = "پشتیبانی" if m.is_staff else "شما"
         lines.append(f"<b>{who}:</b> {html.escape(m.body or '')}")
-    await state.set_state(SupportStates.reply)
     await state.update_data(ticket_id=ticket.id)
-    if callback.message:
-        await safe_edit_text(callback.message, "\n".join(lines))
-        await callback.message.answer("برای پاسخ، پیام بفرستید یا انصراف بزنید:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    preview = "\n".join(lines)
+    await ask_text(
+        callback,
+        state,
+        prompt=preview + "\n\nبرای پاسخ، پیام بفرستید یا انصراف بزنید:",
+        cancel_code="s_reply",
+        fsm_state=SupportStates.reply,
+        edit=True,
+    )
 
 @router.message(SupportStates.reply)
 async def support_reply(
@@ -301,8 +309,18 @@ async def support_reply(
     reseller_owner_id: int | None = None,
 ):
     from app.bot.menu_nav import restore_main_reply
+    from app.bot.nav_input import finish_text_step, try_legacy_cancel
 
     if kb.is_cancel_text(message.text):
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await restore_main_reply(
             message,
             session,
@@ -355,14 +373,11 @@ async def support_reply(
         )
     except Exception:
         pass
-    await restore_main_reply(
+    await finish_text_step(
         message,
-        session,
-        db_user,
+        state,
         text="پاسخ ثبت شد.",
-        state=state,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
+        inline=None,
     )
 
 
@@ -376,6 +391,7 @@ def _register_support_cancel_codes() -> None:
 
     register_cancel_code("s_subj", CancelEntry(reopen=_reopen_support))
     register_cancel_code("s_body", CancelEntry(reopen=_reopen_support))
+    register_cancel_code("s_reply", CancelEntry(reopen=_reopen_support))
 
 
 _register_support_cancel_codes()

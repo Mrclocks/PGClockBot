@@ -42,15 +42,20 @@ async def prompt_gift_code(
     *,
     intro: str | None = None,
 ) -> None:
-    ui = await get_all_settings(session)
-    await state.set_state(WalletStates.gift_code)
-    await message.answer(
-        format_message(
+    from app.bot.nav_input import ask_text
+
+    _ = session
+    await ask_text(
+        message,
+        state,
+        prompt=format_message(
             "🎁 کد هدیه",
             intro
             or "کد شارژ/هدیه را وارد کنید:\n(یا دستور <code>/gift کد</code>)",
         ),
-        reply_markup=kb.cancel_reply(ui),
+        cancel_code="w_gift",
+        fsm_state=WalletStates.gift_code,
+        edit=False,
     )
 
 async def redeem_gift_for_user(
@@ -129,9 +134,19 @@ async def wallet_gift_code(
     reseller_owner_id: int | None = None,
 ):
     from app.bot.menu_nav import restore_main_reply
+    from app.bot.nav_input import try_legacy_cancel
 
     ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui):
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await restore_main_reply(
             message,
             session,
@@ -144,10 +159,7 @@ async def wallet_gift_code(
         return
     code = (message.text or "").strip()
     if not code:
-        await message.answer(
-            "کد را وارد کنید یا انصراف بزنید.",
-            reply_markup=kb.cancel_reply(ui),
-        )
+        await message.answer("کد را وارد کنید یا انصراف بزنید.")
         return
     await redeem_gift_for_user(
         message,
@@ -584,11 +596,16 @@ async def wtop_choose_method(
     await state.set_state(WalletStates.waiting_receipt)
     await state.update_data(payment_id=payment.id, topup_amount=None)
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=markup, **send_kw)
-        await callback.message.answer(
-            "عکس رسید را بفرستید یا انصراف بزنید:",
-            reply_markup=kb.cancel_reply(ui),
+        from app.bot.nav_input import remember_prompt, with_cancel_row
+
+        hint = "\n\nعکس رسید را بفرستید یا انصراف بزنید:"
+        await safe_edit_text(
+            callback.message,
+            text + hint,
+            reply_markup=with_cancel_row(markup, "w_rcpt"),
+            **send_kw,
         )
+        await remember_prompt(state, callback.message, cancel_code="w_rcpt")
 
 @router.message(WalletStates.choose_method)
 async def wallet_choose_method_cancel(
@@ -600,9 +617,19 @@ async def wallet_choose_method_cancel(
     reseller_owner_id: int | None = None,
 ):
     from app.bot.menu_nav import restore_main_reply
+    from app.bot.nav_input import try_legacy_cancel
 
     ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui):
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await restore_main_reply(
             message,
             session,
@@ -613,10 +640,7 @@ async def wallet_choose_method_cancel(
             reseller_owner_id=reseller_owner_id,
         )
         return
-    await message.answer(
-        "روش واریز را از کیبورد پایین انتخاب کنید یا انصراف بزنید.",
-        reply_markup=kb.cancel_reply(ui),
-    )
+    await message.answer("روش واریز را از دکمه‌های پیام انتخاب کنید یا انصراف بزنید.")
 
 @router.message(WalletStates.waiting_receipt, F.photo)
 async def wallet_receipt_photo(
@@ -678,9 +702,19 @@ async def wallet_receipt_cancel(
     reseller_owner_id: int | None = None,
 ):
     from app.bot.menu_nav import restore_main_reply
+    from app.bot.nav_input import try_legacy_cancel
 
     ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui):
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await restore_main_reply(
             message,
             session,
@@ -691,10 +725,7 @@ async def wallet_receipt_cancel(
             reseller_owner_id=reseller_owner_id,
         )
         return
-    await message.answer(
-        "عکس رسید را بفرستید یا انصراف بزنید.",
-        reply_markup=kb.cancel_reply(ui),
-    )
+    await message.answer("عکس رسید را بفرستید یا انصراف بزنید.")
 
 @router.message(F.photo)
 async def generic_receipt(
@@ -759,7 +790,14 @@ def _register_wallet_cancel_codes() -> None:
 
         await open_wallet_topup(message, session, state)
 
+    async def _reopen_wallet_home(message, session, db_user, state, **_kw):
+        from app.bot.handlers.reply_nav import open_wallet_home
+
+        await open_wallet_home(message, session, db_user, state, push=False)
+
     register_cancel_code("w_amt", CancelEntry(reopen=_reopen_topup))
+    register_cancel_code("w_rcpt", CancelEntry(reopen=_reopen_topup))
+    register_cancel_code("w_gift", CancelEntry(reopen=_reopen_wallet_home))
 
 
 _register_wallet_cancel_codes()

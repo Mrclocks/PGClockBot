@@ -115,13 +115,20 @@ async def tkt_reply_start(
     reopen = "res_tickets" if (as_staff and is_reseller_bot) else (
         "adm_tickets" if as_staff else "main"
     )
-    await state.set_state(TicketActionStates.reply)
     await state.update_data(
         ticket_id=ticket.id, as_staff=as_staff, tkt_cancel_reopen=reopen
     )
+    from app.bot.nav_input import ask_text
+
     text = _thread_preview(ticket, as_staff=as_staff)
-    if callback.message:
-        await callback.message.answer(text, reply_markup=kb.cancel_reply())
+    await ask_text(
+        callback,
+        state,
+        prompt=text,
+        cancel_code="tkt_rpl",
+        fsm_state=TicketActionStates.reply,
+        edit=True,
+    )
 
 
 async def _tkt_cancel_reopen(
@@ -205,8 +212,18 @@ async def tkt_reply_body(
     reseller_owner_id: int | None = None,
 ):
     from app.bot.menu_nav import restore_main_reply
+    from app.bot.nav_input import finish_text_step, try_legacy_cancel
 
     if kb.is_cancel_text(message.text):
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await _tkt_cancel_reopen(
             message,
             session,
@@ -305,14 +322,11 @@ async def tkt_reply_body(
             reseller_owner_id=reseller_owner_id,
         )
         return
-    await restore_main_reply(
+    await finish_text_step(
         message,
-        session,
-        db_user,
+        state,
         text="ارسال شد ✅",
-        state=state,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
+        inline=None,
     )
 
 
@@ -358,3 +372,23 @@ async def tkt_close(
             await callback.message.edit_reply_markup(reply_markup=None)
         except Exception:
             pass
+
+
+def _register_ticket_cancel_codes() -> None:
+    from app.bot.nav_input import CancelEntry, register_cancel_code
+
+    async def _reopen_ticket_reply(message, session, db_user, state, **kw):
+        await _tkt_cancel_reopen(
+            message,
+            session,
+            db_user,
+            state,
+            text="لغو شد.",
+            is_reseller_bot=kw.get("is_reseller_bot", False),
+            reseller_owner_id=kw.get("reseller_owner_id"),
+        )
+
+    register_cancel_code("tkt_rpl", CancelEntry(reopen=_reopen_ticket_reply))
+
+
+_register_ticket_cancel_codes()

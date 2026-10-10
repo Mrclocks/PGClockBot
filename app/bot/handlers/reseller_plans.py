@@ -311,9 +311,16 @@ async def res_plan_add(callback: CallbackQuery, state: FSMContext, session: Asyn
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(ResellerPlanStates.name)
-    if callback.message:
-        await callback.message.answer("نام پلن را بفرستید:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="نام پلن را بفرستید:",
+        cancel_code="rs_pln",
+        fsm_state=ResellerPlanStates.name,
+        edit=True,
+    )
 
 
 @router.message(ResellerPlanStates.name)
@@ -332,6 +339,17 @@ async def res_plan_name(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer(
             "لغو شد.",
@@ -339,13 +357,32 @@ async def res_plan_name(
         )
         return
     await state.update_data(name=(message.text or "").strip(), owner_id=owner_id)
-    await state.set_state(ResellerPlanStates.price)
-    await message.answer("قیمت به تومان را بفرستید:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="قیمت به تومان را بفرستید:",
+        cancel_code="rs_pln",
+        fsm_state=ResellerPlanStates.price,
+        edit=False,
+    )
 
 
 @router.message(ResellerPlanStates.price)
 async def res_plan_price(message: Message, state: FSMContext, db_user: BotUser):
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer(
             "لغو شد.",
@@ -355,16 +392,35 @@ async def res_plan_price(message: Message, state: FSMContext, db_user: BotUser):
     try:
         price = int((message.text or "").replace(",", "").replace("٬", ""))
     except ValueError:
-        await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
+        await message.answer("یک عدد معتبر بفرستید.")
         return
     await state.update_data(price=price)
-    await state.set_state(ResellerPlanStates.days)
-    await message.answer("مدت اعتبار به روز را بفرستید:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="مدت اعتبار به روز را بفرستید:",
+        cancel_code="rs_pln",
+        fsm_state=ResellerPlanStates.days,
+        edit=False,
+    )
 
 
 @router.message(ResellerPlanStates.days)
 async def res_plan_days(message: Message, state: FSMContext):
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer(
             "لغو شد.",
@@ -374,13 +430,18 @@ async def res_plan_days(message: Message, state: FSMContext):
     try:
         days = max(1, int(message.text or "30"))
     except ValueError:
-        await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
+        await message.answer("یک عدد معتبر بفرستید.")
         return
     await state.update_data(days=days)
-    await state.set_state(ResellerPlanStates.gb)
-    await message.answer(
-        "حجم به گیگ را بفرستید:\n<code>0</code> = نامحدود",
-        reply_markup=kb.cancel_reply(),
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="حجم به گیگ را بفرستید:\n<code>0</code> = نامحدود",
+        cancel_code="rs_pln",
+        fsm_state=ResellerPlanStates.gb,
+        edit=False,
     )
 
 
@@ -390,6 +451,17 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
     reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await state.clear()
         await message.answer(
             "لغو شد.",

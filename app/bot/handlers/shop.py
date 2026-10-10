@@ -54,24 +54,17 @@ async def _show_order_pay(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Show order summary then payment methods on the reply keyboard."""
+    """Show order summary + payment methods in one inline edit."""
     from app.bot.menu_nav import present_order_pay
+
     if message is not None:
-        try:
-            from app.bot.tg_utils import safe_edit_text
-            await safe_edit_text(message, text, reply_markup=None)
-        except Exception:
-            try:
-                await message.answer(text)
-            except Exception:
-                pass
         await present_order_pay(
             message,
             session,
             db_user,
             order_id,
             state=state,
-            text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+            summary=text,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
@@ -559,18 +552,22 @@ async def custom_gb_step(callback: CallbackQuery, session: AsyncSession, state: 
 
 @router.callback_query(F.data == "shop:custom:gb:input")
 async def custom_gb_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    from app.bot.nav_input import ask_text
+
     ui = await get_all_settings(session)
     if not await _custom_gate(session, ui, state):
         await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     await callback.answer()
     min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
-    await state.set_state(ShopStates.custom_gb_input)
-    if callback.message:
-        await callback.message.answer(
-            f"حجم به گیگ را وارد کنید ({min_gb} تا {max_gb}):",
-            reply_markup=kb.cancel_reply(),
-        )
+    await ask_text(
+        callback,
+        state,
+        prompt=f"حجم به گیگ را وارد کنید ({min_gb} تا {max_gb}):",
+        cancel_code="c_gb",
+        fsm_state=ShopStates.custom_gb_input,
+        edit=True,
+    )
 
 @router.message(ShopStates.custom_gb_input)
 async def custom_gb_entered(
@@ -581,8 +578,19 @@ async def custom_gb_entered(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
+    from app.bot.nav_input import finish_text_step, try_legacy_cancel
+
     ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text):
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         from app.bot.menu_nav import restore_main_reply
 
         await restore_main_reply(
@@ -606,12 +614,14 @@ async def custom_gb_entered(
         return
     await state.set_state(None)
     await state.update_data(custom_gb=gb)
-    await message.answer(
-        format_message(
+    await finish_text_step(
+        message,
+        state,
+        text=format_message(
             "✨ پلن دلخواه — حجم",
             f"حجم انتخاب‌شده: <b>{gb}</b> گیگ",
         ),
-        reply_markup=kb.custom_gb_keyboard(gb, ui),
+        inline=kb.custom_gb_keyboard(gb, ui),
     )
 
 @router.callback_query(F.data == "shop:custom:gb:next")
@@ -663,18 +673,22 @@ async def custom_days_step(callback: CallbackQuery, session: AsyncSession, state
 
 @router.callback_query(F.data == "shop:custom:days:input")
 async def custom_days_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    from app.bot.nav_input import ask_text
+
     ui = await get_all_settings(session)
     if not await _custom_gate(session, ui, state):
         await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     await callback.answer()
     _, _, min_days, max_days, _, _ = _custom_bounds(ui)
-    await state.set_state(ShopStates.custom_days_input)
-    if callback.message:
-        await callback.message.answer(
-            f"مدت به روز را وارد کنید ({min_days} تا {max_days}):",
-            reply_markup=kb.cancel_reply(),
-        )
+    await ask_text(
+        callback,
+        state,
+        prompt=f"مدت به روز را وارد کنید ({min_days} تا {max_days}):",
+        cancel_code="c_days",
+        fsm_state=ShopStates.custom_days_input,
+        edit=True,
+    )
 
 @router.message(ShopStates.custom_days_input)
 async def custom_days_entered(
@@ -685,8 +699,19 @@ async def custom_days_entered(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
+    from app.bot.nav_input import finish_text_step, try_legacy_cancel
+
     ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text):
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         from app.bot.menu_nav import restore_main_reply
 
         await restore_main_reply(
@@ -712,12 +737,14 @@ async def custom_days_entered(
     gb = int(data.get("custom_gb") or _custom_bounds(ui)[0])
     await state.set_state(None)
     await state.update_data(custom_days=days)
-    await message.answer(
-        format_message(
+    await finish_text_step(
+        message,
+        state,
+        text=format_message(
             "✨ پلن دلخواه — مدت",
             f"حجم: <b>{gb}</b> گیگ\nمدت انتخاب‌شده: <b>{days}</b> روز",
         ),
-        reply_markup=kb.custom_days_keyboard(days, ui),
+        inline=kb.custom_days_keyboard(days, ui),
     )
 
 @router.callback_query(F.data == "shop:custom:confirm")
@@ -845,8 +872,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     text = format_message(
         f"🧾 سفارش #{order.id}",
         f"پلن دلخواه — <b>{gb:g}</b> گیگ / <b>{days}</b> روز\n"
-        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}\n\n"
-        "روش پرداخت را انتخاب کنید:",
+        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}",
     )
     if callback.message:
         await _show_order_pay(callback.message, session, db_user, order.id, state, text)
@@ -1000,6 +1026,7 @@ async def wholesale_qty_ask(callback: CallbackQuery, session: AsyncSession, stat
             prompt=f"تعداد را عددی بین {mn} تا {mx} بفرستید:",
             cancel_code="w_qty",
             fsm_state=ShopStates.wholesale_qty_input,
+            edit=True,
         )
 
 @router.message(ShopStates.wholesale_qty_input)
@@ -1171,8 +1198,7 @@ async def wholesale_buy(
     text = format_message(
         f"🧾 سفارش عمده #{order.id}",
         f"{plan_name} × <b>{order.quantity}</b>\n"
-        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}\n\n"
-        "روش پرداخت را انتخاب کنید:",
+        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}",
     )
     if callback.message:
         await _show_order_pay(callback.message, session, db_user, order.id, state, text)
@@ -1274,8 +1300,7 @@ async def _complete_shop_buy(
 
     text = format_message(
         f"🧾 سفارش #{order.id}",
-        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}\n\n"
-        "روش پرداخت را انتخاب کنید:",
+        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}",
     )
     msg = callback.message if callback is not None else message
     if msg is not None:
@@ -1444,13 +1469,14 @@ async def ask_discount(
     session: AsyncSession,
     db_user: BotUser,
 ):
+    from app.bot.nav_input import ask_text
+
     ui = await get_all_settings(session)
     if not on(ui.get("pay_discount_enabled")):
         await callback.answer("کد تخفیف غیرفعال است", show_alert=True)
         return
     await callback.answer()
     order_id = int(callback.data.split(":")[-1])
-    await state.set_state(ShopStates.discount)
     await state.update_data(order_id=order_id)
 
     from app.services.loyalty import list_available_discounts
@@ -1468,17 +1494,19 @@ async def ask_discount(
         )
     hint = "کد تخفیف را ارسال کنید یا از دکمه زیر استفاده کنید:"
     if not ents:
-        hint = "کد تخفیف را ارسال کنید یا «انصراف» بزنید:"
-    if callback.message:
-        await callback.message.answer(
-            hint,
-            reply_markup=kb.cancel_reply(),
-        )
-        if rows:
-            await callback.message.answer(
-                "تخفیف‌های باشگاه شما:",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-            )
+        hint = "کد تخفیف را ارسال کنید یا انصراف بزنید:"
+    if rows:
+        hint = "تخفیف‌های باشگاه شما — یا کد را تایپ کنید:\n\n" + hint
+    extra = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+    await ask_text(
+        callback,
+        state,
+        prompt=hint,
+        cancel_code="pay_disc",
+        fsm_state=ShopStates.discount,
+        extra_inline=extra,
+        edit=True,
+    )
 
 @router.callback_query(F.data.startswith("pay:loydisc:"))
 async def apply_loyalty_discount_btn(
@@ -1513,8 +1541,10 @@ async def apply_loyalty_discount_btn(
         return
     await callback.answer("تخفیف اعمال شد ✅")
     if callback.message:
-        await callback.message.answer(
-            f"تخفیف اعمال شد ✅\nمبلغ جدید: {format_toman(order.amount, get_settings().currency)}",
+        summary = (
+            f"🛒 سفارش #{order.id}\n"
+            f"تخفیف اعمال شد ✅\n"
+            f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
         )
         await present_order_pay(
             callback.message,
@@ -1522,6 +1552,7 @@ async def apply_loyalty_discount_btn(
             db_user,
             order.id,
             state=state,
+            summary=summary,
             is_reseller_bot=False,
             reseller_owner_id=None,
             heal_main=True,
@@ -1536,10 +1567,19 @@ async def apply_discount_msg(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    from app.bot.menu_nav import restore_main_reply
+    from app.bot.menu_nav import present_order_pay, restore_main_reply
+    from app.bot.nav_input import try_legacy_cancel
 
-    ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text):
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await restore_main_reply(
             message,
             session,
@@ -1568,25 +1608,31 @@ async def apply_discount_msg(
             reseller_owner_id=reseller_owner_id,
         )
         return
-    from app.bot.menu_nav import present_order_pay
 
     try:
         order = await apply_discount_to_order(session, order, code_raw)
     except ValueError as e:
-        await message.answer(user_safe_error(e))
+        summary = (
+            f"🛒 سفارش #{order.id}\n"
+            f"{user_safe_error(e)}\n"
+            f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
+        )
         await present_order_pay(
             message,
             session,
             db_user,
             order.id,
             state=state,
+            summary=summary,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
             heal_main=True,
         )
         return
-    await message.answer(
-        f"تخفیف اعمال شد ✅\nمبلغ جدید: {format_toman(order.amount, get_settings().currency)}",
+    summary = (
+        f"🛒 سفارش #{order.id}\n"
+        f"تخفیف اعمال شد ✅\n"
+        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
     )
     await present_order_pay(
         message,
@@ -1594,6 +1640,7 @@ async def apply_discount_msg(
         db_user,
         order.id,
         state=state,
+        summary=summary,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
         heal_main=True,
@@ -1673,13 +1720,7 @@ async def pay_wallet_cb(
                     ),
                     reply_markup=None,
                 )
-            try:
-                await callback.message.answer(
-                    "🏠 منوی اصلی",
-                    reply_markup=main_kb,
-                )
-            except Exception:
-                pass
+            _ = main_kb
         for aid in get_settings().admin_ids:
             try:
                 if approved:
@@ -1713,12 +1754,10 @@ async def pay_wallet_cb(
             callback.bot, db_user.telegram_id, session, None, order
         )
     except Exception:
-        # Delivery failed to send — still put user back on main menu
-        if callback.message:
-            try:
-                await callback.message.answer("🏠 منوی اصلی", reply_markup=main_kb)
-            except Exception:
-                pass
+        logger.exception(
+            "send_delivery_to_user failed order=%s", getattr(order, "id", None)
+        )
+        _ = main_kb
     try:
         from app.services.notifications import notify_new_subscription
 
@@ -1748,8 +1787,10 @@ async def _await_order_receipt(
     state: FSMContext | None = None,
     send_kw: dict | None = None,
 ):
-    """Show pay instructions and switch reply KB off payment methods (cancel while waiting)."""
-    ui = await get_all_settings(session)
+    """Show pay instructions + inline cancel on the same panel (await photo)."""
+    from app.bot.nav_input import remember_prompt, with_cancel_row
+
+    _ = (session, db_user)
     if callback.message:
         if send_kw is None:
             text = format_message(title, body)
@@ -1757,17 +1798,18 @@ async def _await_order_receipt(
         else:
             text = body
             kw = dict(send_kw)
+        hint = (
+            "\n\nپس از واریز، عکس رسید را در همین گفتگو بفرستید.\n"
+            "با ارسال رسید به منوی اصلی برمی‌گردید."
+        )
         await safe_edit_text(
             callback.message,
-            text,
-            reply_markup=reply_markup,
+            text + hint,
+            reply_markup=with_cancel_row(reply_markup, "pay_rcpt"),
             **kw,
         )
-        await callback.message.answer(
-            "پس از واریز، عکس رسید را در همین گفتگو بفرستید.\n"
-            "با ارسال رسید به منوی اصلی برمی‌گردید.",
-            reply_markup=kb.cancel_reply(ui),
-        )
+        if state is not None:
+            await remember_prompt(state, callback.message, cancel_code="pay_rcpt")
     if state is not None:
         from app.bot import menu_nav as nav
 
@@ -2103,18 +2145,17 @@ async def pay_stars_cb(
             provider_token="",
         )
         if callback.message:
-            await safe_edit_text(callback.message, 
+            from app.bot.nav_input import cancel_keyboard
+
+            await safe_edit_text(
+                callback.message,
                 format_message(
                     "⭐ استارز تلگرام",
                     f"فاکتور {stars} استارز برای سفارش #{order.id} ارسال شد.\n"
                     f"(معادل تقریبی {format_toman(order.amount, get_settings().currency)})\n\n"
                     "پس از پرداخت موفق، به منوی اصلی برمی‌گردید.",
                 ),
-                reply_markup=None,
-            )
-            await callback.message.answer(
-                "فاکتور استارز ارسال شد — پس از پرداخت منتظر بمانید:",
-                reply_markup=kb.cancel_reply(ui),
+                reply_markup=cancel_keyboard("pay_wait"),
             )
         if state is not None:
             from app.bot import menu_nav as nav
@@ -2183,15 +2224,20 @@ async def pay_psp_cb(
         rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
     markup = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
     if callback.message:
+        from app.bot.nav_input import cancel_keyboard
+
+        wait_rows: list[list[InlineKeyboardButton]] = list(rows)
+        wait_rows.extend(cancel_keyboard("pay_wait").inline_keyboard)
+        wait_markup = InlineKeyboardMarkup(inline_keyboard=wait_rows)
         await safe_edit_text(
             callback.message,
-            format_message("🏦 درگاه آنلاین", body),
-            reply_markup=markup,
+            format_message(
+                "🏦 درگاه آنلاین",
+                body + "\n\nپس از پرداخت موفق در درگاه، به ربات برگردید.",
+            ),
+            reply_markup=wait_markup,
         )
-        await callback.message.answer(
-            "پس از پرداخت موفق در درگاه، به ربات برگردید.",
-            reply_markup=kb.cancel_reply(ui),
-        )
+        _ = markup
     if state is not None:
         from app.bot import menu_nav as nav
 
@@ -2268,7 +2314,91 @@ def _register_shop_cancel_codes() -> None:
             inline=kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id),
         )
 
+    async def _reopen_custom_gb(message, session, db_user, state, **_kw):
+        from app.bot.nav_inline import present_inline_only
+        from app.services.users import get_all_settings
+
+        ui = await get_all_settings(session)
+        if not await _custom_gate(session, ui, state):
+            await present_inline_only(
+                message, text="پلن دلخواه در دسترس نیست.", inline=None
+            )
+            return
+        min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
+        data = await state.get_data()
+        gb = int(data.get("custom_gb") or min_gb)
+        gb = max(min_gb, min(max_gb, gb))
+        await state.set_state(None)
+        await present_inline_only(
+            message,
+            text=format_message(
+                "✨ پلن دلخواه — حجم",
+                f"حجم سرویس را انتخاب کنید ({min_gb} تا {max_gb} گیگ):\n"
+                f"فعلی: <b>{gb}</b> گیگ",
+            ),
+            inline=kb.custom_gb_keyboard(gb, ui),
+        )
+
+    async def _reopen_custom_days(message, session, db_user, state, **_kw):
+        from app.bot.nav_inline import present_inline_only
+        from app.services.users import get_all_settings
+
+        ui = await get_all_settings(session)
+        if not await _custom_gate(session, ui, state):
+            await present_inline_only(
+                message, text="پلن دلخواه در دسترس نیست.", inline=None
+            )
+            return
+        _, _, min_days, max_days, _, _ = _custom_bounds(ui)
+        data = await state.get_data()
+        gb = int(data.get("custom_gb") or _custom_bounds(ui)[0])
+        days = int(data.get("custom_days") or min_days)
+        days = max(min_days, min(max_days, days))
+        await state.set_state(None)
+        await present_inline_only(
+            message,
+            text=format_message(
+                "✨ پلن دلخواه — مدت",
+                f"حجم: <b>{gb}</b> گیگ\n"
+                f"مدت را انتخاب کنید ({min_days} تا {max_days} روز):\n"
+                f"فعلی: <b>{days}</b> روز",
+            ),
+            inline=kb.custom_days_keyboard(days, ui),
+        )
+
+    async def _reopen_order_pay(message, session, db_user, state, **kw):
+        from app.bot.menu_nav import PAY_ORDER_ID, present_order_pay
+
+        data = await state.get_data()
+        oid = data.get(PAY_ORDER_ID) or data.get("order_id")
+        if not oid:
+            await message.answer("سفارش یافت نشد.")
+            return
+        order = await session.get(Order, int(oid))
+        if not order:
+            await message.answer("سفارش یافت نشد.")
+            return
+        summary = (
+            f"🛒 سفارش #{order.id}\n"
+            f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
+        )
+        await present_order_pay(
+            message,
+            session,
+            db_user,
+            order.id,
+            state=state,
+            summary=summary,
+            is_reseller_bot=kw.get("is_reseller_bot", False),
+            reseller_owner_id=kw.get("reseller_owner_id"),
+        )
+
     register_cancel_code("w_qty", CancelEntry(reopen=_reopen_wholesale_qty))
+    register_cancel_code("c_gb", CancelEntry(reopen=_reopen_custom_gb))
+    register_cancel_code("c_days", CancelEntry(reopen=_reopen_custom_days))
+    register_cancel_code("pay_disc", CancelEntry(reopen=_reopen_order_pay))
+    register_cancel_code("pay_rcpt", CancelEntry(reopen=_reopen_order_pay))
+    register_cancel_code("pay_wait", CancelEntry(reopen=_reopen_order_pay))
 
 
 _register_shop_cancel_codes()

@@ -67,6 +67,7 @@ async def nv_wallet_amount(
             ),
             cancel_code="w_amt",
             fsm_state=WalletStates.topup_amount,
+            edit=True,
         )
         return
     try:

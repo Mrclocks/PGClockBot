@@ -161,6 +161,73 @@ async def finish_text_step(
     return await message.answer(text, reply_markup=inline, **send_kw)
 
 
+async def remember_prompt(
+    state: FSMContext | None,
+    message: Message | None,
+    *,
+    cancel_code: str | None = None,
+) -> None:
+    """Store panel ids so a later photo/text reply can edit the same bubble."""
+    if state is None or message is None:
+        return
+    chat = getattr(message, "chat", None)
+    chat_id = getattr(chat, "id", None)
+    msg_id = getattr(message, "message_id", None)
+    if chat_id is None or msg_id is None:
+        return
+    payload: dict[str, Any] = {
+        PROMPT_MSG_ID: int(msg_id),
+        PROMPT_CHAT_ID: int(chat_id),
+    }
+    if cancel_code is not None:
+        payload[CANCEL_CODE_KEY] = cancel_code
+    await state.update_data(**payload)
+
+
+async def try_legacy_cancel(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> bool:
+    """Reopen the previous panel when FSM still knows a cancel_code.
+
+    Used for stale ReplyKeyboard «انصراف» taps after ask_text migration.
+    Returns True when handled.
+    """
+    data = await state.get_data()
+    code = data.get(CANCEL_CODE_KEY)
+    entry = CANCEL_REGISTRY.get(str(code)) if code else None
+    if entry is None:
+        return False
+    try:
+        await state.set_state(None)
+    except Exception:
+        pass
+    await state.update_data(
+        **{PROMPT_MSG_ID: None, PROMPT_CHAT_ID: None, CANCEL_CODE_KEY: None}
+    )
+    kw = dict(entry.reopen_kw or {})
+    kw.setdefault("is_reseller_bot", is_reseller_bot)
+    kw.setdefault("reseller_owner_id", reseller_owner_id)
+    try:
+        await entry.reopen(message, session, db_user, state, **kw)
+    except TypeError:
+        await entry.reopen(message, session, db_user, state)
+    return True
+
+
+def with_cancel_row(
+    markup: InlineKeyboardMarkup | None,
+    cancel_code: str,
+) -> InlineKeyboardMarkup:
+    """Append an inline «انصراف» row to an existing markup (or build one)."""
+    return _merge_inline(cancel_code, markup)
+
+
 @router.callback_query(F.data.startswith("nv:cancel:"))
 async def nv_cancel_input(
     callback: CallbackQuery,

@@ -108,7 +108,7 @@ class PresentOrderPayInlineTests(unittest.IsolatedAsyncioTestCase):
                 db_user,
                 99,
                 state=state,
-                text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+                summary="🛒 سفارش #۹۹\nمبلغ: <b>۱٬۰۰۰ تومان</b>",
                 is_reseller_bot=False,
                 reseller_owner_id=None,
             )
@@ -116,6 +116,8 @@ class PresentOrderPayInlineTests(unittest.IsolatedAsyncioTestCase):
         message.answer.assert_awaited()
         self.assertEqual(message.answer.await_count, 1)
         args, kwargs = message.answer.await_args
+        self.assertIn("سفارش #۹۹", args[0])
+        self.assertIn("روش پرداخت", args[0])
         self.assertNotIn("کیبورد پایین", args[0])
         self.assertIs(kwargs.get("reply_markup"), pay_kb)
         pay_methods.assert_called_once_with(99, unittest.mock.ANY)
@@ -245,7 +247,7 @@ class NvWalletAmountTests(unittest.IsolatedAsyncioTestCase):
         present.assert_awaited()
         self.assertEqual(present.await_args.args[4], 50_000)
 
-    async def test_custom_prompts_with_cancel_reply(self):
+    async def test_custom_prompts_with_ask_text(self):
         from app.bot.handlers.nav_hubs import nv_wallet_amount
 
         callback = AsyncMock()
@@ -263,19 +265,20 @@ class NvWalletAmountTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value={"nav_mode": "inline"}),
             ),
             patch(
-                "app.bot.keyboards.cancel_reply",
-                return_value="CANCEL",
-            ),
-        ):
-            # cancel_reply imported as kb.cancel_reply inside handler
-            with patch(
+                "app.bot.nav_input.ask_text",
+                new_callable=AsyncMock,
+            ) as ask,
+            patch(
                 "app.bot.handlers.wallet.present_topup_methods",
                 new_callable=AsyncMock,
-            ) as present:
-                await nv_wallet_amount(callback, session, db_user, state)
+            ) as present,
+        ):
+            await nv_wallet_amount(callback, session, db_user, state)
 
         present.assert_not_awaited()
-        callback.message.answer.assert_awaited()
+        ask.assert_awaited_once()
+        self.assertEqual(ask.await_args.kwargs.get("cancel_code"), "w_amt")
+        self.assertTrue(ask.await_args.kwargs.get("edit"))
 
 
 class ShowNavKeyboardCustomerLevelsTests(unittest.IsolatedAsyncioTestCase):

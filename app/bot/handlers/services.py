@@ -56,6 +56,7 @@ async def svc_cancel(callback: CallbackQuery, session: AsyncSession, db_user: Bo
 
 @router.callback_query(F.data.startswith("svc:cancelnew:"))
 async def svc_cancel_new(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
+    from app.bot.nav_input import ask_text
     from app.services.service_cancellations import owned_cancellation_service
     from app.services.users import current_shop_reseller_id
     try:
@@ -65,23 +66,50 @@ async def svc_cancel_new(callback: CallbackQuery, session: AsyncSession, db_user
         await callback.answer(str(exc), show_alert=True)
         return
     await state.update_data(cancellation_service_id=service_id)
-    await state.set_state(CancellationStates.reason)
-    if callback.message:
-        await callback.message.answer("دلیل درخواست لغو را بنویسید (حداکثر ۱۰۰۰ نویسه).", reply_markup=kb.cancel_reply())
     await callback.answer()
+    await ask_text(
+        callback,
+        state,
+        prompt="دلیل درخواست لغو را بنویسید (حداکثر ۱۰۰۰ نویسه).",
+        cancel_code="svc_cnl",
+        fsm_state=CancellationStates.reason,
+        edit=True,
+    )
 
 @router.message(CancellationStates.reason, F.text)
 async def svc_cancel_reason(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext):
+    from app.bot.nav_input import finish_text_step, try_legacy_cancel
     from app.services.service_cancellations import request_cancellation
     from app.services.users import current_shop_reseller_id
+
+    if kb.is_cancel_text(message.text):
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
+        await state.set_state(None)
+        await message.answer("لغو شد.")
+        return
     data = await state.get_data()
     try:
-        row = await request_cancellation(session, db_user, int(data.get("cancellation_service_id") or 0), shop_id=current_shop_reseller_id(), reason=message.text)
+        row = await request_cancellation(
+            session,
+            db_user,
+            int(data.get("cancellation_service_id") or 0),
+            shop_id=current_shop_reseller_id(),
+            reason=message.text,
+        )
     except ValueError as exc:
         await message.answer(str(exc))
         return
     await state.set_state(None)
-    await message.answer(f"درخواست #{row['id']} ثبت شد. نتیجه و اعتبار برگشتی را از «درخواست لغو سرویس» ببینید.", reply_markup=kb.service_actions_reply_keyboard(await get_all_settings(session)))
+    await finish_text_step(
+        message,
+        state,
+        text=(
+            f"درخواست #{row['id']} ثبت شد. نتیجه و اعتبار برگشتی را "
+            "از «درخواست لغو سرویس» ببینید."
+        ),
+        inline=None,
+    )
 
 @router.callback_query(F.data == "campaign:optout")
 async def campaign_optout(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -534,24 +562,20 @@ async def svc_renew_pay(
             )
         return
 
-    text = format_message(
+    summary = format_message(
         f"🔄 تمدید — سفارش #{order.id}",
-        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>\nروش پرداخت را از کیبورد پایین انتخاب کنید:",
+        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>",
     )
     if callback.message:
         from app.bot.menu_nav import present_order_pay
 
-        try:
-            await safe_edit_text(callback.message, text, reply_markup=None)
-        except Exception:
-            await callback.message.answer(text)
         await present_order_pay(
             callback.message,
             session,
             db_user,
             order.id,
             state=state,
-            text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+            summary=summary,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
@@ -720,27 +744,22 @@ async def svc_addon_pay(
             )
         return
 
-    text = format_message(
+    summary = format_message(
         f"➕ افزونه — سفارش #{order.id}",
         f"{pack.name}\n"
         f"{kind_label(pack.kind)}: +{amount_label(pack)}\n"
-        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>\n"
-        "روش پرداخت را از کیبورد پایین انتخاب کنید:",
+        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>",
     )
     if callback.message:
         from app.bot.menu_nav import present_order_pay
 
-        try:
-            await safe_edit_text(callback.message, text, reply_markup=None)
-        except Exception:
-            await callback.message.answer(text)
         await present_order_pay(
             callback.message,
             session,
             db_user,
             order.id,
             state=state,
-            text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+            summary=summary,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
@@ -816,7 +835,6 @@ async def svc_delete(
         "اتصال حذف شد" if not delete_pg else "سرویس حذف شد",
         show_alert=True,
     )
-    ui = await get_all_settings(session)
     if state is not None:
         from app.bot import menu_nav as nav
 
@@ -824,17 +842,77 @@ async def svc_delete(
         if int(data.get(nav.SERVICE_ID) or 0) == svc_id:
             await state.update_data(**{nav.SERVICE_ID: None})
     if callback.message:
-        from app.bot.menu_nav import restore_main_reply
-
         done = format_message("✅ حذف شد", f"سرویس #{svc_id} حذف شد.")
         await safe_edit_text(callback.message, done, reply_markup=None)
-        # Heal main ReplyKeyboard with a real confirmation (not filler chrome).
-        await restore_main_reply(
-            callback.message,
-            session,
-            db_user,
-            text="سرویس حذف شد — از منوی پایین ادامه دهید.",
-            state=state,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
+        _ = (is_reseller_bot, reseller_owner_id)
+
+
+def _register_services_cancel_codes() -> None:
+    from app.bot.nav_input import CancelEntry, register_cancel_code
+
+    async def _reopen_cancel_panel(message, session, db_user, state, **_kw):
+        from app.bot.nav_inline import present_inline_only
+        from app.services.service_cancellations import cancellation_status
+        from app.services.users import current_shop_reseller_id
+
+        data = await state.get_data()
+        service_id = int(data.get("cancellation_service_id") or 0)
+        if not service_id:
+            await present_inline_only(message, text="سرویس یافت نشد.", inline=None)
+            return
+        try:
+            status = await cancellation_status(
+                session, db_user, service_id, shop_id=current_shop_reseller_id()
+            )
+        except ValueError as exc:
+            await present_inline_only(message, text=str(exc), inline=None)
+            return
+        text = (
+            "📝 درخواست لغو سرویس\n"
+            "اپراتور مبلغ اعتبار برگشتی را تعیین می‌کند. پس از تأیید، سرویس غیرفعال "
+            "و اعتبار به کیف پول همین فروشگاه برمی‌گردد. ثبت درخواست به‌تنهایی "
+            "سرویس را غیرفعال نمی‌کند."
         )
+        buttons: list[list[InlineKeyboardButton]] = []
+        if status:
+            text += f"\n\nدرخواست #{status['id']}: {html.escape(status['label'])}"
+            if status["operator_note"]:
+                text += "\n" + html.escape(status["operator_note"])
+            if status["refund_amount"] is not None:
+                text += "\nاعتبار برگشتی: " + format_toman(status["refund_amount"])
+        if not status or status["status"] in {"rejected", "withdrawn"}:
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text="ثبت درخواست و دلیل لغو",
+                        callback_data=f"svc:cancelnew:{service_id}",
+                    )
+                ]
+            )
+        else:
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text="به‌روزرسانی درخواست",
+                        callback_data=f"svc:cancel:{service_id}",
+                    )
+                ]
+            )
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="بازگشت به سرویس",
+                    callback_data=f"svc:view:{service_id}",
+                )
+            ]
+        )
+        await present_inline_only(
+            message,
+            text=text,
+            inline=InlineKeyboardMarkup(inline_keyboard=buttons),
+        )
+
+    register_cancel_code("svc_cnl", CancelEntry(reopen=_reopen_cancel_panel))
+
+
+_register_services_cancel_codes()
