@@ -9,35 +9,31 @@ from unittest.mock import AsyncMock, patch
 
 
 class ShopOrphanCaptionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_present_send_sets_inline_then_lasting_chrome(self):
+    async def test_present_send_stale_classic_no_chrome_followup(self):
+        """Option B: classic setting must not spawn lasting shop reply chrome."""
         from app.bot.handlers.shop import present_shop_kind_picker
 
         message = AsyncMock()
-        shop_msg = AsyncMock()
-        chrome = AsyncMock()
-        chrome.delete = AsyncMock()
-        message.answer = AsyncMock(side_effect=[shop_msg, chrome])
+        message.answer = AsyncMock(return_value=AsyncMock())
 
-        with patch("app.bot.handlers.shop.kb.shop_reply_keyboard", return_value="REPLY"):
-            with patch(
-                "app.bot.handlers.shop.kb.shop_kind_keyboard", return_value="INLINE"
-            ):
-                await present_shop_kind_picker(
-                    message,
-                    ui={"nav_mode": "classic"},
-                    body="body",
-                    fixed_on=True,
-                    trial_on=False,
-                    custom_on=False,
-                    wholesale_on=False,
-                    mode="send",
-                )
+        with patch(
+            "app.bot.handlers.shop.kb.shop_kind_keyboard", return_value="INLINE"
+        ):
+            await present_shop_kind_picker(
+                message,
+                ui={"nav_mode": "classic"},
+                body="body",
+                fixed_on=True,
+                trial_on=False,
+                custom_on=False,
+                wholesale_on=False,
+                mode="send",
+            )
 
-        self.assertEqual(message.answer.await_count, 2)
+        self.assertEqual(message.answer.await_count, 1)
         self.assertEqual(
-            message.answer.await_args_list[0].kwargs.get("reply_markup"), "INLINE"
+            message.answer.await_args.kwargs.get("reply_markup"), "INLINE"
         )
-        chrome.delete.assert_not_awaited()
 
     async def test_present_send_inline_nav_no_chrome_followup(self):
         from app.bot.handlers.shop import present_shop_kind_picker

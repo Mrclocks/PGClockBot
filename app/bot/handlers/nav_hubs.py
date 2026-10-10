@@ -16,13 +16,11 @@ from app.services.users import get_all_settings
 
 router = Router(name="nav_hubs")
 
-
 async def _answer_gone(callback: CallbackQuery) -> None:
     try:
         await callback.answer("این پیام دیگر معتبر نیست. از منوی پایین دوباره وارد شوید.")
     except Exception:
         pass
-
 
 @router.callback_query(F.data == "nv:w:topup")
 async def nv_wallet_topup(
@@ -37,7 +35,6 @@ async def nv_wallet_topup(
     if not callback.message:
         return
     await open_wallet_topup(callback.message, session, state)
-
 
 @router.callback_query(F.data.startswith("nv:w:amt:"))
 async def nv_wallet_amount(
@@ -84,7 +81,6 @@ async def nv_wallet_amount(
         callback.message, session, db_user, state, amount
     )
 
-
 @router.callback_query(F.data == "nv:w:tx")
 async def nv_wallet_tx(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
@@ -96,7 +92,6 @@ async def nv_wallet_tx(
         return
     await open_wallet_tx(callback.message, session, db_user)
 
-
 @router.callback_query(F.data == "nv:w:home")
 async def nv_wallet_home(
     callback: CallbackQuery,
@@ -104,9 +99,7 @@ async def nv_wallet_home(
     db_user: BotUser,
     state: FSMContext,
 ):
-    from app.bot.handlers.reply_nav import open_wallet_home
     from app.bot.nav_inline import safe_edit_inline, wallet_hub_keyboard
-    from app.bot.nav_mode import is_inline_nav
     from app.config import get_settings
     from app.services.formatting import format_message, format_toman, kv_line
     from app.services.wallet import wallet_balance_for_context
@@ -115,9 +108,6 @@ async def nv_wallet_home(
     if not callback.message:
         return
     ui = await get_all_settings(session)
-    if not is_inline_nav(ui):
-        await open_wallet_home(callback.message, session, db_user, state, push=False)
-        return
     bal = await wallet_balance_for_context(session, db_user)
     text = format_message(
         "👛 کیف پول",
@@ -139,7 +129,6 @@ async def nv_wallet_home(
     if not ok:
         await open_wallet_home(callback.message, session, db_user, state, push=False)
 
-
 @router.callback_query(F.data == "nv:s:new")
 async def nv_support_new(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
@@ -151,7 +140,6 @@ async def nv_support_new(
         return
     await open_support_new(callback.message, session, state)
 
-
 @router.callback_query(F.data == "nv:s:list")
 async def nv_support_list(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
@@ -162,7 +150,6 @@ async def nv_support_list(
     if not callback.message:
         return
     await open_support_list(callback.message, session, db_user)
-
 
 @router.callback_query(F.data == "nv:s:home")
 async def nv_support_home(
@@ -178,7 +165,6 @@ async def nv_support_home(
         return
     await open_support_home(callback.message, session, db_user, state, push=False)
 
-
 @router.callback_query(F.data == "nv:resapply")
 async def nv_reseller_apply(
     callback: CallbackQuery,
@@ -192,7 +178,6 @@ async def nv_reseller_apply(
     if not callback.message:
         return
     await open_reseller_apply(callback.message, session, db_user, state, push=False)
-
 
 @router.callback_query(F.data == "nv:loy:home")
 async def nv_loyalty_home(
@@ -210,7 +195,6 @@ async def nv_loyalty_home(
         callback.message, session, db_user, state, push=False
     )
 
-
 @router.callback_query(F.data == "nv:loy:ref")
 async def nv_loyalty_ref(
     callback: CallbackQuery,
@@ -227,7 +211,6 @@ async def nv_loyalty_ref(
         callback.message, session, db_user, state, push=False
     )
 
-
 @router.callback_query(F.data == "nv:loy:pts")
 async def nv_loyalty_pts(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
@@ -238,7 +221,6 @@ async def nv_loyalty_pts(
     if not callback.message:
         return
     await open_loyalty_points_message(callback.message, session, db_user)
-
 
 @router.callback_query(F.data == "nv:loy:rew")
 async def nv_loyalty_rew(
@@ -251,7 +233,6 @@ async def nv_loyalty_rew(
         return
     await open_loyalty_rewards_message(callback.message, session, db_user)
 
-
 @router.callback_query(F.data == "nv:loy:wheel")
 async def nv_loyalty_wheel(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
@@ -263,7 +244,6 @@ async def nv_loyalty_wheel(
         return
     await open_loyalty_wheel_message(callback.message, session, db_user)
 
-
 @router.callback_query(F.data == "nv:loy:hist")
 async def nv_loyalty_hist(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
@@ -274,7 +254,6 @@ async def nv_loyalty_hist(
     if not callback.message:
         return
     await open_loyalty_history_message(callback.message, session, db_user)
-
 
 @router.callback_query(F.data.startswith("nv:svc:guide:"))
 async def nv_svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -321,7 +300,6 @@ async def nv_svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: 
     if not ok:
         await callback.message.answer(text, reply_markup=back, **send_kw)
 
-
 @router.callback_query(F.data == "nv:trial")
 async def nv_trial(
     callback: CallbackQuery,
@@ -352,9 +330,7 @@ async def nv_trial(
     )
     _ = (db_user, state)
 
-
 # ── Wave D: admin / PG / reseller manage hubs ──────────────────────────────
-
 
 @router.callback_query(F.data == "nv:adm:home")
 async def nv_adm_home(
@@ -377,7 +353,6 @@ async def nv_adm_home(
         push=False,
         is_reseller_bot=is_reseller_bot,
     )
-
 
 @router.callback_query(F.data == "nv:adm:close")
 async def nv_adm_close(
@@ -405,7 +380,6 @@ async def nv_adm_close(
     )
     await safe_edit_inline(callback.message, body, reply_markup=None)
     await clear_nav_panel(state)
-
 
 @router.callback_query(F.data == "nv:res:close")
 async def nv_res_close(
@@ -448,7 +422,6 @@ async def nv_res_close(
     )
     await clear_nav_panel(state)
 
-
 @router.callback_query(F.data == "nv:adm:ops")
 async def nv_adm_ops(
     callback: CallbackQuery,
@@ -470,7 +443,6 @@ async def nv_adm_ops(
         push=False,
         is_reseller_bot=is_reseller_bot,
     )
-
 
 @router.callback_query(F.data == "nv:adm:people")
 async def nv_adm_people(
@@ -494,7 +466,6 @@ async def nv_adm_people(
         is_reseller_bot=is_reseller_bot,
     )
 
-
 @router.callback_query(F.data == "nv:adm:product")
 async def nv_adm_product(
     callback: CallbackQuery,
@@ -517,7 +488,6 @@ async def nv_adm_product(
         is_reseller_bot=is_reseller_bot,
     )
 
-
 @router.callback_query(F.data == "nv:adm:system")
 async def nv_adm_system(
     callback: CallbackQuery,
@@ -539,7 +509,6 @@ async def nv_adm_system(
         push=False,
         is_reseller_bot=is_reseller_bot,
     )
-
 
 @router.callback_query(F.data == "nv:adm:pg")
 async def nv_adm_pg(
@@ -567,7 +536,6 @@ async def nv_adm_pg(
         reseller_owner_id=reseller_owner_id,
     )
 
-
 @router.callback_query(F.data == "nv:adm:plans")
 async def nv_adm_plans(
     callback: CallbackQuery,
@@ -589,7 +557,6 @@ async def nv_adm_plans(
         push=True,
         is_reseller_bot=is_reseller_bot,
     )
-
 
 @router.callback_query(F.data == "nv:adm:users")
 async def nv_adm_users(
@@ -613,7 +580,6 @@ async def nv_adm_users(
         is_reseller_bot=is_reseller_bot,
     )
 
-
 @router.callback_query(F.data == "nv:adm:resellers")
 async def nv_adm_resellers(
     callback: CallbackQuery,
@@ -635,7 +601,6 @@ async def nv_adm_resellers(
         push=True,
         is_reseller_bot=is_reseller_bot,
     )
-
 
 @router.callback_query(F.data == "nv:adm:settings")
 async def nv_adm_settings(
@@ -663,7 +628,6 @@ async def nv_adm_settings(
         reseller_owner_id=reseller_owner_id,
     )
 
-
 @router.callback_query(F.data == "nv:adm:broadcast")
 async def nv_adm_broadcast(
     callback: CallbackQuery,
@@ -685,7 +649,6 @@ async def nv_adm_broadcast(
         push=True,
         is_reseller_bot=is_reseller_bot,
     )
-
 
 @router.callback_query(F.data == "nv:adm:backup")
 async def nv_adm_backup(
@@ -713,7 +676,6 @@ async def nv_adm_backup(
         reseller_owner_id=reseller_owner_id,
     )
 
-
 @router.callback_query(F.data == "nv:adm:preview")
 async def nv_adm_preview(
     callback: CallbackQuery,
@@ -727,7 +689,6 @@ async def nv_adm_preview(
     if not callback.message:
         return
     await open_user_preview(callback.message, session, db_user, state)
-
 
 @router.callback_query(F.data == "nv:adm:loy")
 async def nv_adm_loy(
@@ -752,7 +713,6 @@ async def nv_adm_loy(
         reseller_owner_id=reseller_owner_id,
         push=False,
     )
-
 
 @router.callback_query(F.data.startswith("nv:adm:loy:"))
 async def nv_adm_loy_leaf(
@@ -799,7 +759,6 @@ async def nv_adm_loy_leaf(
             callback.message, session, db_user, state, **kw
         )
 
-
 @router.callback_query(F.data == "nv:res:home")
 async def nv_res_home(
     callback: CallbackQuery,
@@ -824,7 +783,6 @@ async def nv_res_home(
         push=False,
     )
 
-
 @router.callback_query(F.data.startswith("nv:res:ra:"))
 async def nv_res_ra(
     callback: CallbackQuery,
@@ -848,7 +806,14 @@ async def nv_res_ra(
                 "پیش‌نمایش فقط روی ربات فروشگاه شما فعال است."
             )
             return
-        await open_user_preview(callback.message, session, db_user, state)
+        await open_user_preview(
+            callback.message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=True,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     await _soft_reseller(
         callback.message,
@@ -859,7 +824,6 @@ async def nv_res_ra(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
-
 
 @router.callback_query(F.data.startswith("nv:adm:plans:aud:"))
 async def nv_adm_plans_aud(
@@ -894,7 +858,6 @@ async def nv_adm_plans_aud(
         audience=aud,
         is_reseller_bot=is_reseller_bot,
     )
-
 
 @router.callback_query(F.data.startswith("nv:adm:ra:"))
 async def nv_adm_ra(
@@ -931,7 +894,6 @@ async def nv_adm_ra(
         reseller_owner_id=reseller_owner_id,
         reseller_profile_id=reseller_profile_id,
     )
-
 
 # Silence unused helper warning for static checkers when message missing
 _ = _answer_gone

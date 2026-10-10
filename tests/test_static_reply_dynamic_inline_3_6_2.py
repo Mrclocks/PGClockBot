@@ -128,12 +128,13 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         self.assertIn("🧾 رسیدهای در انتظار", mapping)
         self.assertNotIn("💎 پلن‌های فروش", mapping)
         self.assertNotIn("⚙️ تنظیمات فروشگاه", mapping)
-        # Pure-inline thin home replaces classic «خانه نماینده» on the reply map
+        # Thin hub: settings btn_reseller + legacy «پنل مدیریت» alias
+        self.assertIn("🤝 پنل نماینده", mapping)
         self.assertIn("🤝 پنل مدیریت", mapping)
         self.assertIn("👥 مشتریان من", mapping)  # dashboard soft leaf still mapped
         self.assertNotIn("📊 آمار", mapping)
         self.assertNotIn("📊 آمار و کمیسیون", mapping)
-        # Classic rollback still maps the old home label
+        # Stale nav_mode=classic must not restore «خانه نماینده» as live path
         classic_map = reply_action_map(
             "reseller",
             ui={**ui, "nav_mode": "classic"},
@@ -141,7 +142,8 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
             is_reseller_bot=True,
             profile=profile,
         )
-        self.assertIn("🏠 خانه نماینده", classic_map)
+        self.assertNotIn("🏠 خانه نماینده", classic_map)
+        self.assertIn("🤝 پنل نماینده", classic_map)
 
     def test_legacy_hubs_no_longer_static_chrome(self):
         """Inline legacy hubs must not re-surface full static menus."""

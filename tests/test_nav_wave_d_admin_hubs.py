@@ -143,13 +143,17 @@ class OpenAdminOpsInlineTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("adm:dash", data)
         show_nav.assert_not_awaited()
 
-    async def test_classic_still_show_nav(self):
+    async def test_stale_classic_still_inline_ops_hub(self):
+        """Option B: ops hub stays inline even if nav_mode=classic lingers."""
         from app.bot.handlers.reply_nav import open_admin_ops_hub
 
         message = AsyncMock()
+        message.answer = AsyncMock(return_value=MagicMock())
         session = AsyncMock()
         db_user = MagicMock()
         state = AsyncMock()
+        state.get_data = AsyncMock(return_value={})
+        state.update_data = AsyncMock()
 
         with (
             patch(
@@ -167,7 +171,10 @@ class OpenAdminOpsInlineTests(unittest.IsolatedAsyncioTestCase):
         ):
             await open_admin_ops_hub(message, session, db_user, state)
 
-        show_nav.assert_awaited()
+        message.answer.assert_awaited()
+        markup = message.answer.await_args.kwargs.get("reply_markup")
+        self.assertTrue(hasattr(markup, "inline_keyboard"))
+        show_nav.assert_not_awaited()
 
 
 class OpenPgHomeInlineTests(unittest.IsolatedAsyncioTestCase):

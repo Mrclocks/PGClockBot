@@ -22,16 +22,13 @@ from app.services.users import get_all_settings
 
 router = Router(name="support")
 
-
 class SupportStates(StatesGroup):
     subject = State()
     body = State()
     reply = State()
 
-
 def _active_contacts_from_ui(ui: dict) -> list[dict]:
     return active_support_contacts(parse_support_contacts(ui.get("support_contacts")))
-
 
 @router.callback_query(F.data == "support:home")
 async def support_home(callback: CallbackQuery, session: AsyncSession):
@@ -40,62 +37,35 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
     await callback.answer()
     ui = await get_all_settings(session)
     contacts = _active_contacts_from_ui(ui)
-    from app.bot.nav_mode import is_inline_nav
 
-    default_support = (
-        "تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
-        if is_inline_nav(ui)
-        else "از کیبورد پایین تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
-    )
+    default_support = "تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
     text, send_kw = outbound_setting_text(
         ui.get("support_text") or default_support,
         title="🎧 پشتیبانی",
     )
     if callback.message:
-        if is_inline_nav(ui):
-            from app.bot.nav_inline import support_hub_keyboard
+        from app.bot.nav_inline import support_hub_keyboard
 
-            contact_rows: list[list[InlineKeyboardButton]] = []
-            for c in contacts:
-                url = support_chat_url(c.get("telegram") or "")
-                title = c.get("title") or "پشتیبان"
-                if url:
-                    contact_rows.append(
-                        [InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)]
-                    )
-            await safe_edit_text(
-                callback.message,
-                text,
-                reply_markup=support_hub_keyboard(
-                    ui, contact_rows=contact_rows or None
-                ),
-                **send_kw,
-            )
-            return
-        from app.bot.tg_utils import attach_reply_keyboard
-
-        await safe_edit_text(callback.message, text, reply_markup=None, **send_kw)
-        await callback.message.answer("پشتیبانی:", reply_markup=kb.support_reply_keyboard(ui))
-        if contacts:
-            rows: list[list[InlineKeyboardButton]] = []
-            for c in contacts:
-                url = support_chat_url(c.get("telegram") or "")
-                title = c.get("title") or "پشتیبان"
-                if url:
-                    rows.append([InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)])
-            if rows:
-                await callback.message.answer(
-                    "ارتباط مستقیم:",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        contact_rows: list[list[InlineKeyboardButton]] = []
+        for c in contacts:
+            url = support_chat_url(c.get("telegram") or "")
+            title = c.get("title") or "پشتیبان"
+            if url:
+                contact_rows.append(
+                    [InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)]
                 )
-                await attach_reply_keyboard(
-                    callback.message, kb.support_reply_keyboard(ui), text="⌨️ پشتیبانی"
-                )
-
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=support_hub_keyboard(
+                ui, contact_rows=contact_rows or None
+            ),
+            **send_kw,
+        )
+        return
 
 @router.callback_query(F.data == "support:tickets")
 async def support_tickets_home(callback: CallbackQuery, session: AsyncSession):
-    from app.bot.nav_mode import is_inline_nav
     from app.bot.nav_inline import support_hub_keyboard
     from app.services.rich_text import outbound_setting_text
 
@@ -106,25 +76,13 @@ async def support_tickets_home(callback: CallbackQuery, session: AsyncSession):
         title="🎧 پشتیبانی — تیکت",
     )
     if callback.message:
-        if is_inline_nav(ui):
-            await safe_edit_text(
-                callback.message,
-                text,
-                reply_markup=support_hub_keyboard(ui),
-                **send_kw,
-            )
-            return
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=None,
+            reply_markup=support_hub_keyboard(ui),
             **send_kw,
         )
-        await callback.message.answer(
-            "تیکت:",
-            reply_markup=kb.support_reply_keyboard(ui),
-        )
-
+        return
 
 @router.callback_query(F.data == "support:new")
 async def support_new(callback: CallbackQuery, state: FSMContext):
@@ -132,7 +90,6 @@ async def support_new(callback: CallbackQuery, state: FSMContext):
     await state.set_state(SupportStates.subject)
     if callback.message:
         await callback.message.answer("موضوع تیکت را بنویسید:", reply_markup=kb.cancel_reply())
-
 
 @router.message(SupportStates.subject)
 async def support_subject(
@@ -162,7 +119,6 @@ async def support_subject(
     await state.update_data(subject=subject)
     await state.set_state(SupportStates.body)
     await message.answer("متن پیام را بنویسید:", reply_markup=kb.cancel_reply())
-
 
 @router.message(SupportStates.body)
 async def support_body(
@@ -245,10 +201,8 @@ async def support_body(
         reseller_owner_id=reseller_owner_id,
     )
 
-
 @router.callback_query(F.data == "support:list")
 async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    from app.bot.nav_mode import is_inline_nav
     from app.bot.nav_inline import support_hub_keyboard
 
     await callback.answer()
@@ -257,17 +211,11 @@ async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: 
     if not tickets:
         text = "تیکتی ندارید."
         if callback.message:
-            if is_inline_nav(ui):
-                await safe_edit_text(
-                    callback.message,
-                    text,
-                    reply_markup=support_hub_keyboard(ui),
-                )
-            else:
-                await safe_edit_text(callback.message, text, reply_markup=None)
-                await callback.message.answer(
-                    text, reply_markup=kb.support_reply_keyboard(ui)
-                )
+            await safe_edit_text(
+                callback.message,
+                text,
+                reply_markup=support_hub_keyboard(ui),
+            )
         return
     rows = [
         [
@@ -278,25 +226,18 @@ async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: 
         ]
         for t in tickets[:20]
     ]
-    if is_inline_nav(ui):
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=ui.get("btn_back") or "⬅️ بازگشت",
-                    callback_data="nv:s:home",
-                )
-            ]
-        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=ui.get("btn_back") or "⬅️ بازگشت",
+                callback_data="nv:s:home",
+            )
+        ]
+    )
     text = "📋 تیکت‌های شما:"
     markup = InlineKeyboardMarkup(inline_keyboard=rows)
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=markup)
-        if not is_inline_nav(ui):
-            await callback.message.answer(
-                "تیکت‌ها:",
-                reply_markup=kb.support_reply_keyboard(ui),
-            )
-
 
 @router.callback_query(F.data.startswith("support:view:"))
 async def support_view(
@@ -335,7 +276,6 @@ async def support_view(
     if callback.message:
         await safe_edit_text(callback.message, "\n".join(lines))
         await callback.message.answer("برای پاسخ، پیام بفرستید یا انصراف بزنید:", reply_markup=kb.cancel_reply())
-
 
 @router.message(SupportStates.reply)
 async def support_reply(

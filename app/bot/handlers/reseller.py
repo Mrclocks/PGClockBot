@@ -192,10 +192,18 @@ async def res_home(
     callback: CallbackQuery,
     session: AsyncSession,
     db_user: BotUser,
+    state: FSMContext,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    # Full panel only on dedicated shop bot — main bot redirects to credentials
+    """Option B: open inline manage hub (same as ``nv:res:home``).
+
+    Full manage panel only on the dedicated shop bot — main bot redirects to
+    credentials (shop isolation).
+    """
+    from app.bot.handlers.reply_nav import open_reseller_home
+
+    # Main bot: never open the shop manage hub — credentials card only.
     if not is_reseller_bot:
         await res_creds(
             callback,
@@ -205,23 +213,18 @@ async def res_home(
             reseller_owner_id=None,
         )
         return
-    owner_id, profile = await _actor(
-        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
-    )
-    if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
-        return
     await callback.answer()
-    if callback.message:
-        await safe_edit_text(
-            callback.message,
-            format_message("🤝 پنل نماینده", "دسترسی‌ها با وب‌پنل یکسان است — از کیبورد پایین انتخاب کنید."),
-            reply_markup=None,
-        )
-        await callback.message.answer(
-            "پنل نماینده:",
-            reply_markup=kb.reseller_reply_keyboard(profile),
-        )
+    if not callback.message:
+        return
+    await open_reseller_home(
+        callback.message,
+        session,
+        db_user,
+        state,
+        is_reseller_bot=True,
+        reseller_owner_id=reseller_owner_id,
+        push=False,
+    )
 
 
 @router.callback_query(F.data == "res:dash")

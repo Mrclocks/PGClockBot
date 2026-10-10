@@ -16,7 +16,7 @@ class ReplyKeyboardChromeDeleteGuards(unittest.TestCase):
         from app.bot.handlers import shop
 
         src = inspect.getsource(shop.present_shop_kind_picker)
-        self.assertIn("present_inline_with_reply_chrome", src)
+        self.assertIn("present_inline_only", src)
         self.assertNotIn("chrome.delete", src)
         self.assertNotIn("\\u2060", src)
         self.assertNotIn("\u2060", src)
@@ -27,10 +27,9 @@ class ReplyKeyboardChromeDeleteGuards(unittest.TestCase):
         from app.bot.handlers import reply_nav
 
         src = inspect.getsource(reply_nav.open_reseller_apply)
-        self.assertIn("present_inline_with_reply_chrome", src)
+        self.assertIn("present_inline_only", src)
         self.assertNotIn("chrome.delete", src)
         self.assertIsNone(re.search(r"await chrome\.delete", src))
-        self.assertIn("reseller_apply_reply_keyboard", src)
 
     def test_handlers_have_no_zwsp_chrome_delete(self):
         """Regression: \\u2060 tip + delete was the v0.2.8 iOS keyboard wipe."""

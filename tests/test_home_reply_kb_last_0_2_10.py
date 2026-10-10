@@ -1,4 +1,4 @@
-"""Home/back must leave a lasting ReplyKeyboard as the final message."""
+"""Home/back: one welcome + lasting main ReplyKeyboard (Option B)."""
 
 from __future__ import annotations
 
@@ -11,47 +11,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class SendReplyKeyboardLastTests(unittest.IsolatedAsyncioTestCase):
-    async def test_ahead_then_reply_carrier(self):
-        from app.bot.tg_utils import send_reply_keyboard_last
-
-        message = AsyncMock()
-        mini_msg = MagicMock(name="mini")
-        home_msg = MagicMock(name="home")
-        message.answer = AsyncMock(side_effect=[mini_msg, home_msg])
-        out = await send_reply_keyboard_last(
-            message,
-            "welcome",
-            "MAIN_KB",
-            ahead=[("📱", "MINI")],
-            parse_mode=None,
-        )
-        self.assertEqual(message.answer.await_count, 2)
-        first = message.answer.await_args_list[0]
-        self.assertEqual(first.args[0], "📱")
-        self.assertEqual(first.kwargs.get("reply_markup"), "MINI")
-        second = message.answer.await_args_list[1]
-        self.assertEqual(second.args[0], "welcome")
-        self.assertEqual(second.kwargs.get("reply_markup"), "MAIN_KB")
-        self.assertIs(out, home_msg)
-
-    async def test_no_ahead_still_sends_reply(self):
-        from app.bot.tg_utils import send_reply_keyboard_last
-
-        message = AsyncMock()
-        message.answer = AsyncMock(return_value=MagicMock())
-        await send_reply_keyboard_last(message, "hi", "KB")
-        message.answer.assert_awaited_once()
-        self.assertEqual(message.answer.await_args.kwargs.get("reply_markup"), "KB")
-
-
 class RenderHomeReplyLastTests(unittest.IsolatedAsyncioTestCase):
-    async def test_render_home_puts_reply_kb_after_mini(self):
+    async def test_render_home_stale_classic_single_message_no_mini_bubble(self):
+        """Option B: classic nav_mode no longer sends a separate Mini App bubble."""
         from app.bot.handlers.start import render_home
         from app.db.models import Role
 
         message = AsyncMock()
-        message.answer = AsyncMock(side_effect=[MagicMock(), MagicMock()])
+        message.answer = AsyncMock(return_value=MagicMock())
         session = AsyncMock()
         db_user = MagicMock()
         db_user.id = 1
@@ -68,7 +35,6 @@ class RenderHomeReplyLastTests(unittest.IsolatedAsyncioTestCase):
             "menu_order": "shop,miniapp",
             "btn_menu_home": "🏠 منوی اصلی",
         }
-        mini = MagicMock(name="MINI_INLINE")
         main_kb = MagicMock(name="MAIN_REPLY")
 
         with (
@@ -94,7 +60,7 @@ class RenderHomeReplyLastTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch(
                 "app.bot.keyboards.miniapp_inline_keyboard",
-                return_value=mini,
+                return_value=MagicMock(name="SHOULD_NOT_USE"),
             ),
             patch(
                 "app.services.rich_text.outbound_setting_text",
@@ -110,13 +76,10 @@ class RenderHomeReplyLastTests(unittest.IsolatedAsyncioTestCase):
                 is_reseller_bot=False,
             )
 
-        self.assertEqual(message.answer.await_count, 2)
-        first = message.answer.await_args_list[0]
-        second = message.answer.await_args_list[1]
-        self.assertEqual(first.args[0], "📱")
-        self.assertIs(first.kwargs.get("reply_markup"), mini)
-        self.assertEqual(second.args[0], "HOME_TEXT")
-        self.assertIs(second.kwargs.get("reply_markup"), main_kb)
+        self.assertEqual(message.answer.await_count, 1)
+        call = message.answer.await_args
+        self.assertEqual(call.args[0], "HOME_TEXT")
+        self.assertIs(call.kwargs.get("reply_markup"), main_kb)
 
     async def test_render_home_inline_nav_single_message_no_mini_bubble(self):
         from app.bot.handlers.start import render_home
@@ -243,14 +206,14 @@ class RenderHomeReplyLastTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HomeReplySourceGuards(unittest.TestCase):
-    def test_render_home_uses_send_reply_keyboard_last(self):
+    def test_render_home_one_message_no_send_reply_keyboard_last(self):
         from app.bot.handlers import start
 
         src = inspect.getsource(start.render_home)
-        self.assertIn("send_reply_keyboard_last", src)
-        # Must not send mini AFTER the reply-keyboard carrier
-        self.assertNotIn('await message.answer("📱", reply_markup=mini)\n    # seed', src)
-        # edit path must lasting-attach, not ephemeral tip-delete
+        # Option B: welcome + main KB on one message (no mini-ahead helper)
+        self.assertNotIn("send_reply_keyboard_last", src)
+        self.assertIn("message.answer(text, reply_markup=reply_kb", src)
+        self.assertNotIn('await message.answer("📱"', src)
         seed = inspect.getsource(start.seed_main_reply_kb)
         self.assertIn("attach_reply_keyboard", seed)
         self.assertNotIn("ephemeral=True", seed)

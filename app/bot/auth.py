@@ -31,7 +31,6 @@ MIGRATED_PG_SOFT_CALLBACKS = frozenset(
     }
 )
 
-
 def is_platform_admin(user: BotUser | None) -> bool:
     """True when the Telegram user is a platform admin (role or ADMIN_IDS).
 
@@ -42,7 +41,6 @@ def is_platform_admin(user: BotUser | None) -> bool:
     from app.services.platform_identity import is_bot_platform_admin
 
     return is_bot_platform_admin(user)
-
 
 async def is_bot_owner_principal(
     session: AsyncSession | None,
@@ -69,7 +67,6 @@ async def is_bot_owner_principal(
     )
     return principal is not None and is_owner_principal(principal)
 
-
 def is_migrated_pg_soft_callback(data: str | None) -> bool:
     """True when reply-nav may invoke a 4B–4E PG family handler without Owner."""
     raw = (data or "").strip()
@@ -78,7 +75,6 @@ def is_migrated_pg_soft_callback(data: str | None) -> bool:
     if raw in MIGRATED_PG_SOFT_CALLBACKS:
         return True
     return False
-
 
 async def notify_owner_required(*, callback=None, message=None) -> None:
     if callback is not None:
@@ -92,7 +88,6 @@ async def notify_owner_required(*, callback=None, message=None) -> None:
             await message.answer(OWNER_REQUIRED_MESSAGE + ".")
         except Exception:
             pass
-
 
 async def require_bot_owner(
     session: AsyncSession | None,
@@ -115,7 +110,6 @@ async def require_bot_owner(
     if notify:
         await notify_owner_required(callback=callback, message=message)
     return False
-
 
 async def bot_admin_settings_in_flow(event: Any, data: dict[str, Any]) -> bool:
     """True when a settings inline/FSM step continues owner-gated reply navigation.
@@ -153,7 +147,6 @@ async def bot_admin_settings_in_flow(event: Any, data: dict[str, Any]) -> bool:
     if cur and "SettingsStates" in str(cur):
         return True
     return False
-
 
 def _owner_handler_signature(fn: Callable[..., Awaitable[Any]]) -> inspect.Signature:
     """Aiogram follows ``inspect.signature`` → ``__wrapped__``, so extra DI
@@ -193,7 +186,6 @@ def _owner_handler_signature(fn: Callable[..., Awaitable[Any]]) -> inspect.Signa
     if var_kw is not None:
         new_params.append(var_kw)
     return orig.replace(parameters=new_params)
-
 
 def require_bot_owner_handler(fn: Callable[..., Awaitable[Any]]):
     """Decorator: Owner Principal required before the wrapped Bot handler runs.
@@ -267,7 +259,6 @@ def require_bot_owner_handler(fn: Callable[..., Awaitable[Any]]):
     wrapper.__qualname__ = getattr(fn, "__qualname__", wrapper.__name__)
     return wrapper
 
-
 async def bot_migrated_pg_features(
     session: AsyncSession | None,
     db_user: BotUser | None,
@@ -328,7 +319,6 @@ async def bot_migrated_pg_features(
             allowed.add(page)
     return frozenset(allowed)
 
-
 async def bot_may_open_pg_hub(
     session: AsyncSession | None,
     db_user: BotUser | None,
@@ -345,7 +335,6 @@ async def bot_may_open_pg_hub(
         reseller_owner_id=reseller_owner_id,
     )
     return bool(feats)
-
 
 async def bot_pg_can_create_user(
     session: AsyncSession | None,
@@ -396,7 +385,6 @@ async def bot_pg_can_create_user(
         staff = apply_level1_pg_local_safety(staff)
     return bool(authorize_pg_user_action(staff, "create").allowed)
 
-
 async def resolve_bot_owner_principal(
     session: AsyncSession | None,
     user: BotUser | None,
@@ -415,7 +403,6 @@ async def resolve_bot_owner_principal(
     if principal is None or not is_owner_principal(principal):
         return None
     return principal
-
 
 async def resolve_bot_principal_bridge(
     session: AsyncSession | None,
@@ -438,7 +425,6 @@ async def resolve_bot_principal_bridge(
         reseller_owner_id=reseller_owner_id,
     )
 
-
 def can_shop_feature(
     key: str,
     *,
@@ -459,7 +445,6 @@ def can_shop_feature(
         role = db_user.role
     return shop_feature_allowed(key=key, profile=profile, role=role)
 
-
 async def platform_pg_features() -> frozenset[str]:
     """Live PG menu keys for the env installer account (Hybrid fail-closed)."""
     from app.services.pg_access import resolve_platform_pg_capabilities
@@ -467,13 +452,11 @@ async def platform_pg_features() -> frozenset[str]:
     caps = await resolve_platform_pg_capabilities()
     return frozenset(caps.get("features") or [])
 
-
 async def can_platform_pg_page(db_user: BotUser | None, key: str) -> bool:
     """True when platform bot admin may open a PasarGuard bot surface."""
     if not is_platform_admin(db_user):
         return False
     return key in await platform_pg_features()
-
 
 async def can_platform_pg_action(db_user: BotUser | None, resource: str, action: str) -> bool:
     if not is_platform_admin(db_user):
@@ -485,7 +468,6 @@ async def can_platform_pg_action(db_user: BotUser | None, resource: str, action:
     if not caps.get("ok"):
         return False
     return can_pg_action(authz_from_staff(staff_from_platform_caps(caps)), resource, action)
-
 
 async def platform_pg_quota_staff() -> dict:
     """Staff-shaped dict for the env PG admin, usable with ``app.services.pg_quota``.
@@ -508,7 +490,6 @@ async def platform_pg_quota_staff() -> dict:
         "pg_role_id": staff.get("pg_role_id"),
     }
 
-
 async def platform_can_manage_representatives() -> bool:
     """True when the env PG account may create admins / shop representatives."""
     from app.services.pg_access import resolve_platform_pg_capabilities, staff_from_platform_caps
@@ -518,7 +499,6 @@ async def platform_can_manage_representatives() -> bool:
     if not caps.get("ok"):
         return False
     return owner_has_pg_admin_create_capability(staff_from_platform_caps(caps))
-
 
 def require_platform_rep_mgmt(fn: Callable[..., Awaitable[Any]]):
     """Deny Hybrid Owner without ``admins.create`` from representative management."""
@@ -551,7 +531,6 @@ def require_platform_rep_mgmt(fn: Callable[..., Awaitable[Any]]):
 
     return wrapper
 
-
 async def filtered_pg_reply_keyboard(
     db_user: BotUser | None = None,
     ui: dict | None = None,
@@ -561,22 +540,17 @@ async def filtered_pg_reply_keyboard(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    """Reply keyboard for PasarGuard submenu clamped to the actor's PG pages.
+    """Heal to the stable main ReplyKeyboard after PG FSM cancel/save (Option B).
 
-    Wave F: under ``nav_mode=inline`` heal to the stable main admin/reseller KB
-    instead of swapping in PG submenu chrome after FSM cancel/save.
+    PG leaves live on the inline panel; this never swaps in submenu chrome.
+    ``reseller_profile_id`` kept for call-site compatibility.
     """
-    from app.bot import keyboards as kb
-    from app.bot.nav_mode import is_inline_nav
+    _ = reseller_profile_id
     from app.services.users import get_all_settings
 
     if ui is None and session is not None:
         ui = await get_all_settings(session)
-    if (
-        session is not None
-        and db_user is not None
-        and is_inline_nav(ui)
-    ):
+    if session is not None and db_user is not None:
         from app.bot.menu_nav import build_main_reply_keyboard
 
         markup, _, _ = await build_main_reply_keyboard(
@@ -587,23 +561,7 @@ async def filtered_pg_reply_keyboard(
             ui=ui,
         )
         return markup
+    # No session/user context — empty main-style fallback (should be rare)
+    from app.bot import keyboards as kb
 
-    if session is not None:
-        feats = await bot_migrated_pg_features(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_profile_id=reseller_profile_id,
-            reseller_owner_id=reseller_owner_id,
-        )
-        can_create = await bot_pg_can_create_user(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_profile_id=reseller_profile_id,
-            reseller_owner_id=reseller_owner_id,
-        )
-    else:
-        feats = await platform_pg_features()
-        can_create = await can_platform_pg_action(db_user, "users", "create")
-    return kb.pg_reply_keyboard(ui, features=feats, can_create_user=can_create)
+    return kb.persistent_reply_keyboard(ui)

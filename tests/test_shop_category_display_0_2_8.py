@@ -20,8 +20,8 @@ class ShopKeyboardAttachTests(unittest.TestCase):
         # Must send inline on the shop message — not ReplyKeyboard-then-edit
         self.assertIn("reply_markup=inline", helper)
         self.assertNotIn("edit_reply_markup(", helper)
-        # Reply chrome must be lasting via shared helper (never delete tip)
-        self.assertIn("present_inline_with_reply_chrome", helper)
+        # Option B: single inline message (no lasting shop reply chrome)
+        self.assertIn("present_inline_only", helper)
         self.assertNotIn(".delete(", helper)
 
     def test_shop_list_callback_edits_without_orphan_caption(self):
@@ -34,39 +34,32 @@ class ShopKeyboardAttachTests(unittest.TestCase):
 
 
 class ShopCategoryDisplayFixTests(unittest.IsolatedAsyncioTestCase):
-    async def test_send_mode_puts_inline_then_lasting_reply_chrome(self):
+    async def test_send_mode_stale_classic_single_inline(self):
+        """Option B: nav_mode=classic no longer attaches shop reply chrome."""
         from app.bot.handlers.shop import present_shop_kind_picker
 
         message = AsyncMock()
-        shop_msg = AsyncMock()
-        chrome_msg = AsyncMock()
-        chrome_msg.delete = AsyncMock()
-        message.answer = AsyncMock(side_effect=[shop_msg, chrome_msg])
+        message.answer = AsyncMock(return_value=AsyncMock())
 
-        with patch("app.bot.handlers.shop.kb.shop_reply_keyboard", return_value="REPLY"):
-            with patch(
-                "app.bot.handlers.shop.kb.shop_kind_keyboard", return_value="INLINE"
-            ):
-                await present_shop_kind_picker(
-                    message,
-                    ui={"nav_mode": "classic"},
-                    body="ابتدا دسته را انتخاب کنید",
-                    fixed_on=True,
-                    trial_on=False,
-                    custom_on=False,
-                    wholesale_on=False,
-                    categories=[object()],
-                    mode="send",
-                )
+        with patch(
+            "app.bot.handlers.shop.kb.shop_kind_keyboard", return_value="INLINE"
+        ):
+            await present_shop_kind_picker(
+                message,
+                ui={"nav_mode": "classic"},
+                body="ابتدا دسته را انتخاب کنید",
+                fixed_on=True,
+                trial_on=False,
+                custom_on=False,
+                wholesale_on=False,
+                categories=[object()],
+                mode="send",
+            )
 
-        self.assertEqual(message.answer.await_count, 2)
-        first = message.answer.await_args_list[0]
-        self.assertEqual(first.kwargs.get("reply_markup"), "INLINE")
-        second = message.answer.await_args_list[1]
-        self.assertEqual(second.kwargs.get("reply_markup"), "REPLY")
-        self.assertIn("منوی فروشگاه", second.args[0])
-        # Critical: deleting chrome drops reply KB + 4-square menu on iOS
-        chrome_msg.delete.assert_not_awaited()
+        self.assertEqual(message.answer.await_count, 1)
+        self.assertEqual(
+            message.answer.await_args.kwargs.get("reply_markup"), "INLINE"
+        )
 
     async def test_send_mode_inline_nav_single_message(self):
         from app.bot.handlers.shop import present_shop_kind_picker
@@ -93,31 +86,6 @@ class ShopCategoryDisplayFixTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             message.answer.await_args.kwargs.get("reply_markup"), "INLINE"
         )
-
-    async def test_send_mode_survives_attach_failure(self):
-        from app.bot.handlers.shop import present_shop_kind_picker
-
-        message = AsyncMock()
-        shop_msg = AsyncMock()
-        message.answer = AsyncMock(side_effect=[shop_msg, RuntimeError("tg down")])
-
-        with patch("app.bot.handlers.shop.kb.shop_reply_keyboard", return_value="REPLY"):
-            with patch(
-                "app.bot.handlers.shop.kb.shop_kind_keyboard", return_value="INLINE"
-            ):
-                await present_shop_kind_picker(
-                    message,
-                    ui={"nav_mode": "classic"},
-                    body="body",
-                    fixed_on=True,
-                    trial_on=False,
-                    custom_on=False,
-                    wholesale_on=False,
-                    mode="send",
-                )
-
-        first = message.answer.await_args_list[0]
-        self.assertEqual(first.kwargs.get("reply_markup"), "INLINE")
 
     async def test_edit_mode_still_edits_inline(self):
         from app.bot.handlers.shop import present_shop_kind_picker

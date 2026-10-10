@@ -23,13 +23,11 @@ from app.services.message_variables import DOMAIN_USER
 
 router = Router(name="start")
 
-
 async def _has_services(session: AsyncSession, user_id: int) -> bool:
     result = await session.execute(
         select(UserService.id).where(UserService.bot_user_id == user_id).limit(1)
     )
     return result.scalar_one_or_none() is not None
-
 
 async def render_home(
     message: Message,
@@ -125,26 +123,12 @@ async def render_home(
             profile=owner_profile,
         )
 
-    from app.bot.nav_mode import is_inline_nav
-    from app.bot.tg_utils import attach_reply_keyboard, send_reply_keyboard_last
-
-    inline_nav = is_inline_nav(ui)
-
-    # Classic: Mini App as a separate inline bubble (ahead of reply chrome).
-    # Inline nav: Mini App is a web_app button on the main ReplyKeyboard.
-    mini = None
-    if not inline_nav and not is_reseller_bot:
-        mini = kb.miniapp_inline_keyboard(ui)
-
-    ahead: list[tuple[str, object]] = []
-    if mini is not None:
-        ahead.append(("📱", mini))
-
+    # Mini App is a web_app button on the main ReplyKeyboard (Option B).
     if edit:
         from aiogram.exceptions import TelegramBadRequest
 
         try:
-            # Inline «بازگشت» — update the bubble text; reply kb is re-seeded below
+            # Inline «بازگشت» — update the bubble text; reply kb already stable.
             await message.edit_text(text, reply_markup=None, **home_send_kw)
         except TelegramBadRequest as e:
             if "message is not modified" not in str(e).lower():
@@ -153,59 +137,22 @@ async def render_home(
                         await message.delete()
                     except Exception:
                         pass
-                    if inline_nav:
-                        await message.answer(text, reply_markup=reply_kb, **home_send_kw)
-                        return
-                    # Mini (inline) first if any; welcome+reply KB must be last.
-                    await send_reply_keyboard_last(
-                        message,
-                        text,
-                        reply_kb,
-                        ahead=ahead or None,
-                        **home_send_kw,
-                    )
+                    await message.answer(text, reply_markup=reply_kb, **home_send_kw)
                     return
         except Exception:
             pass
-        if inline_nav:
-            # Main ReplyKeyboard already stable — do not send filler chrome.
-            return
-        # edit_text cannot set ReplyKeyboard — lasting attach AFTER any mini.
-        if mini is not None:
-            try:
-                await message.answer("📱", reply_markup=mini)
-            except Exception:
-                pass
-        await attach_reply_keyboard(
-            message,
-            reply_kb,
-            text=ui.get("btn_menu_home") or "⌨️ منوی اصلی",
-        )
+        # Main ReplyKeyboard already stable — do not send filler chrome.
         return
 
-    if inline_nav:
-        # One message: welcome + stable main ReplyKeyboard (no 📱/⌨️ carriers).
-        await message.answer(text, reply_markup=reply_kb, **home_send_kw)
-        _ = seed_reply_kb
-        return
-
-    # Classic contract: reply keyboard carrier is the *last* message in this turn.
-    await send_reply_keyboard_last(
-        message,
-        text,
-        reply_kb,
-        ahead=ahead or None,
-        **home_send_kw,
-    )
+    # One message: welcome + stable main ReplyKeyboard.
+    await message.answer(text, reply_markup=reply_kb, **home_send_kw)
     _ = seed_reply_kb
-
 
 async def seed_main_reply_kb(message: Message, reply_kb, *, tip: str = "⌨️") -> None:
     from app.bot.tg_utils import attach_reply_keyboard
 
     # Always lasting — ephemeral tip-delete alone clears the menu on mobile.
     await attach_reply_keyboard(message, reply_kb, text=tip or "⌨️ منوی اصلی")
-
 
 @router.message(F.text.func(kb.is_restart_text))
 async def cmd_restart(
@@ -226,7 +173,6 @@ async def cmd_restart(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
-
 
 @router.message(CommandStart())
 async def cmd_start(
@@ -337,7 +283,6 @@ async def cmd_start(
         effective_role=role_for_force,
     )
 
-
 async def _handle_start_deeplink(
     message: Message,
     session: AsyncSession,
@@ -438,7 +383,6 @@ async def _handle_start_deeplink(
 
     return False
 
-
 async def _deeplink_renew(
     message: Message,
     session: AsyncSession,
@@ -499,7 +443,6 @@ async def _deeplink_renew(
             ),
         )
 
-
 async def _deeplink_config(
     message: Message,
     session: AsyncSession,
@@ -549,27 +492,19 @@ async def _deeplink_config(
     try:
         await svc_link(cb, session, db_user)
     except Exception:
-        from app.bot.nav_mode import is_inline_nav
         from app.bot.menu_nav import build_main_reply_keyboard
 
-        if is_inline_nav(ui):
-            main_kb, _, _ = await build_main_reply_keyboard(
-                session,
-                db_user,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-                ui=ui,
-            )
-            await message.answer(
-                "برای دریافت لینک/QR از «سرویس‌های من» استفاده کنید.",
-                reply_markup=main_kb,
-            )
-        else:
-            await message.answer(
-                "برای دریافت لینک/QR از «سرویس‌های من» استفاده کنید.",
-                reply_markup=kb.service_actions_reply_keyboard(ui),
-            )
-
+        main_kb, _, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+        )
+        await message.answer(
+            "برای دریافت لینک/QR از «سرویس‌های من» استفاده کنید.",
+            reply_markup=main_kb,
+        )
 
 @router.callback_query(F.data == "forcejoin:nolink")
 async def cb_force_join_nolink(callback: CallbackQuery):
@@ -578,7 +513,6 @@ async def cb_force_join_nolink(callback: CallbackQuery):
         "لینک دعوت کانال در تنظیمات ذخیره نشده. ادمین باید لینک t.me/+… را وارد کند.",
         show_alert=True,
     )
-
 
 @router.callback_query(F.data == "forcejoin:check")
 async def cb_force_join_check(
@@ -680,7 +614,6 @@ async def cb_force_join_check(
             effective_role=role_for_force,
         )
 
-
 @router.callback_query(F.data == "menu:home")
 async def cb_home(
     callback: CallbackQuery,
@@ -701,7 +634,6 @@ async def cb_home(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
-
 
 @router.callback_query(F.data == "menu:as_user")
 async def cb_home_as_user(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -727,7 +659,6 @@ async def cb_home_as_user(callback: CallbackQuery, session: AsyncSession, db_use
             ),
         )
 
-
 @router.message(Command("menu"))
 async def cmd_menu(
     message: Message,
@@ -746,7 +677,6 @@ async def cmd_menu(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
-
 
 @router.message(Command("help"))
 async def cmd_help(
@@ -776,7 +706,6 @@ async def cmd_help(
     )
     await message.answer(text, reply_markup=main_kb, **send_kw)
 
-
 @router.message(F.text.func(kb.is_cancel_text))
 async def orphan_cancel(
     message: Message,
@@ -804,7 +733,6 @@ async def orphan_cancel(
         reseller_owner_id=reseller_owner_id,
     )
 
-
 @router.callback_query(F.data == "help:guide")
 async def help_guide(callback: CallbackQuery, session: AsyncSession):
     from app.services.rich_text import outbound_setting_text, rich_plain_text
@@ -826,7 +754,6 @@ async def help_guide(callback: CallbackQuery, session: AsyncSession):
             **send_kw,
         )
 
-
 @router.callback_query(F.data == "help:faq")
 async def help_faq(callback: CallbackQuery, session: AsyncSession):
     from app.services.rich_text import outbound_setting_text
@@ -843,7 +770,6 @@ async def help_faq(callback: CallbackQuery, session: AsyncSession):
             reply_markup=kb.back_home(ui),
             **send_kw,
         )
-
 
 async def _link_subscription(
     message: Message,
@@ -926,16 +852,15 @@ async def _link_subscription(
         session.add(svc)
         await session.commit()
 
-    from app.bot.nav_mode import is_inline_nav
     from app.bot.nav_inline import service_card_keyboard
     from app.bot.menu_nav import build_main_reply_keyboard
 
-    if is_inline_nav(ui) and getattr(svc, "id", None):
+    if getattr(svc, "id", None):
         await message.answer(
             format_message("✅ اتصال سرویس", service_card(info)),
             reply_markup=service_card_keyboard(int(svc.id), ui),
         )
-    elif is_inline_nav(ui):
+    else:
         main_kb, _, _ = await build_main_reply_keyboard(
             session,
             db_user,
@@ -946,9 +871,4 @@ async def _link_subscription(
         await message.answer(
             format_message("✅ اتصال سرویس", service_card(info)),
             reply_markup=main_kb,
-        )
-    else:
-        await message.answer(
-            format_message("✅ اتصال سرویس", service_card(info)),
-            reply_markup=kb.service_actions_reply_keyboard(ui),
         )

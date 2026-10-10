@@ -1178,32 +1178,40 @@ def custom_days_keyboard(
 
 
 def custom_confirm_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    buy_label = _t(ui, "btn_buy_continue") or "🟢✅ ادامه خرید"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 _ikb(
-                    "🟢✅ ادامه خرید",
+                    buy_label,
                     callback_data="shop:custom:buy",
                     style=_style(ui, "buy_continue", fallback="primary"),
+                    ui=ui,
+                    label_key="btn_buy_continue",
                 )
             ],
             [InlineKeyboardButton(text="✏️ تغییر روز", callback_data="shop:custom:gb:next")],
             [InlineKeyboardButton(text="✏️ تغییر حجم", callback_data="shop:custom")],
+            [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:custom:gb:next")],
         ]
     )
 
 
 def plan_actions(plan_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
-    """One-shot buy confirm under the plan message (no back chrome)."""
+    """Buy confirm under the plan message — Back returns to plan list."""
+    buy_label = _t(ui, "btn_buy_continue") or "🟢✅ ادامه خرید"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 _ikb(
-                    "🟢✅ ادامه خرید",
+                    buy_label,
                     callback_data=f"shop:buy:{plan_id}",
                     style=_style(ui, "buy_continue", fallback="primary"),
+                    ui=ui,
+                    label_key="btn_buy_continue",
                 )
             ],
+            [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:list")],
         ]
     )
 

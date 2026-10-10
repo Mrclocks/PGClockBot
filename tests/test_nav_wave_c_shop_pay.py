@@ -119,13 +119,17 @@ class PresentOrderPayInlineTests(unittest.IsolatedAsyncioTestCase):
         pay_methods.assert_called_once_with(99, unittest.mock.ANY)
         show_nav.assert_not_awaited()
 
-    async def test_classic_still_uses_show_nav(self):
+    async def test_stale_classic_still_uses_inline_pay(self):
+        """Option B: present_order_pay never falls back to show_nav chrome."""
         from app.bot.menu_nav import present_order_pay
 
         message = AsyncMock()
+        message.answer = AsyncMock(return_value=MagicMock())
         session = AsyncMock()
         db_user = MagicMock()
         state = AsyncMock()
+        pay_kb = MagicMock(name="PAY_INLINE")
+        pay_kb.inline_keyboard = []
 
         with (
             patch(
@@ -137,6 +141,10 @@ class PresentOrderPayInlineTests(unittest.IsolatedAsyncioTestCase):
                 new_callable=AsyncMock,
             ),
             patch(
+                "app.bot.menu_nav.kb.pay_methods",
+                return_value=pay_kb,
+            ),
+            patch(
                 "app.bot.menu_nav.show_nav_keyboard",
                 new_callable=AsyncMock,
             ) as show_nav,
@@ -145,7 +153,11 @@ class PresentOrderPayInlineTests(unittest.IsolatedAsyncioTestCase):
                 message, session, db_user, 7, state=state
             )
 
-        show_nav.assert_awaited()
+        message.answer.assert_awaited()
+        self.assertIs(
+            message.answer.await_args.kwargs.get("reply_markup"), pay_kb
+        )
+        show_nav.assert_not_awaited()
 
 
 class OpenWalletTopupPresetTests(unittest.IsolatedAsyncioTestCase):
@@ -176,7 +188,8 @@ class OpenWalletTopupPresetTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("nv:w:amt:50000", data)
         self.assertIn("nv:w:amt:custom", data)
 
-    async def test_classic_still_prompts_amount(self):
+    async def test_stale_classic_still_shows_presets(self):
+        """Option B: wallet top-up always uses inline presets, not free-text."""
         from app.bot.handlers.reply_nav import open_wallet_topup
 
         message = AsyncMock()
@@ -186,24 +199,19 @@ class OpenWalletTopupPresetTests(unittest.IsolatedAsyncioTestCase):
         ui = {
             "nav_mode": "classic",
             "pay_card_enabled": "1",
+            "wallet_topup_presets": "50000,100000",
         }
 
-        with (
-            patch(
-                "app.bot.handlers.reply_nav.get_all_settings",
-                AsyncMock(return_value=ui),
-            ),
-            patch(
-                "app.bot.handlers.reply_nav.kb.cancel_reply",
-                return_value="CANCEL",
-            ),
+        with patch(
+            "app.bot.handlers.reply_nav.get_all_settings",
+            AsyncMock(return_value=ui),
         ):
             await open_wallet_topup(message, session, state)
 
-        self.assertEqual(
-            message.answer.await_args.kwargs.get("reply_markup"),
-            "CANCEL",
-        )
+        markup = message.answer.await_args.kwargs.get("reply_markup")
+        self.assertTrue(hasattr(markup, "inline_keyboard"))
+        data = [b.callback_data for row in markup.inline_keyboard for b in row]
+        self.assertIn("nv:w:amt:50000", data)
 
 
 class NvWalletAmountTests(unittest.IsolatedAsyncioTestCase):

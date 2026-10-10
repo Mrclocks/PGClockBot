@@ -190,22 +190,7 @@
         return '<div class="tg-key-row">'+btn(it.label, it.tone, {styleId: it.styleId, focus: it.styleId === focusStyleId})+'</div>';
       }).join('');
     }
-    function navMode(){
-      const sel = document.getElementById('nav_mode_select');
-      if (sel && sel.value) return sel.value;
-      const hid = document.getElementById('nav_mode_hidden');
-      if (hid && hid.value) return hid.value;
-      return values.nav_mode || 'inline';
-    }
-    const inlineNav = navMode() !== 'classic';
-    if (opts.submenu && !inlineNav) {
-      html += '<div class="tg-key-row tg-key-nav">'
-        + btn(back, backTone, {styleId: 'back', focus: focusStyleId === 'back'})
-        + btn(home, homeTone, {styleId: 'home', focus: focusStyleId === 'home'})
-        + '</div>';
-    } else if (home && !inlineNav) {
-      html += '<div class="tg-key-row tg-key-home">'+btn(home, homeTone, {styleId: 'home', focus: focusStyleId === 'home'})+'</div>';
-    }
+    // Option B: reply KB is thin level-0 only — no submenu Back/Home footer.
     keysEl.innerHTML = html;
   }
   function render(){
@@ -289,21 +274,9 @@
         support: 'primary', loyalty: 'success', reseller_apply: '',
         miniapp: 'primary',
       };
-      const inlineNavPreview = (function(){
-        const sel = document.getElementById('nav_mode_select');
-        if (sel && sel.value) return sel.value !== 'classic';
-        const hid = document.getElementById('nav_mode_hidden');
-        if (hid && hid.value) return hid.value !== 'classic';
-        return (values.nav_mode || 'inline') !== 'classic';
-      })();
+      // Option B: Mini App on reply KB; reseller_apply on welcome/support inline
       const labels = order.filter(function(k){
-        if (inlineNavPreview) {
-          // Mini App on reply KB; reseller_apply moves to welcome/support inline
-          if (k === 'reseller_apply') return false;
-          return true;
-        }
-        // Classic: Mini App was a separate inline bubble, not reply KB
-        return k !== 'miniapp';
+        return k !== 'reseller_apply';
       }).map(function(k){
         const label = map[k];
         if (!label) return null;

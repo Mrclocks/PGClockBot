@@ -40,7 +40,6 @@ BACK_RESELLERS_KIND = "adm:plans:aud:resellers"
 # Re-open a specific kind list/detail screen
 BACK_USERS_FIXED_LIST = "adm:plans:kind:users:fixed"
 
-
 class AdminPlansStates(StatesGroup):
     edit_value = State()
     res_plan_name = State()
@@ -57,7 +56,6 @@ class AdminPlansStates(StatesGroup):
     wholesale_tier_min = State()
     wholesale_tier_pct = State()
 
-
 async def _plans_reply_markup(
     session: AsyncSession,
     state: FSMContext,
@@ -68,7 +66,6 @@ async def _plans_reply_markup(
     if aud in {"users", "resellers"}:
         return kb.admin_plans_kind_reply_keyboard(aud, ui)
     return kb.admin_plans_audience_reply_keyboard(ui)
-
 
 async def sync_plans_reply_keyboard(
     message: Message,
@@ -81,9 +78,8 @@ async def sync_plans_reply_keyboard(
 ) -> None:
     """Keep nav aligned after inline «back» on plans screens.
 
-    Wave F: under ``nav_mode=inline`` re-present the hub (no ``⬇️`` chrome).
+    Wave F / Option B: re-present the hub inline (no ``⬇️`` chrome).
     """
-    from app.bot.nav_mode import is_inline_nav
     from app.bot.nav_inline import (
         admin_plans_add_type_hub_keyboard,
         admin_plans_audience_hub_keyboard,
@@ -106,92 +102,72 @@ async def sync_plans_reply_keyboard(
         level = nav.NAV_ADMIN_PLANS_AUDIENCE
     ui = await get_all_settings(session)
     aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
-    if is_inline_nav(ui):
-        if level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
-            inline = admin_plans_add_type_hub_keyboard(aud, ui)
-            body = "➕ <b>افزودن پلن</b>\nنوع پلن را انتخاب کنید:"
-        elif level == nav.NAV_ADMIN_PLANS_KIND:
-            inline = admin_plans_kind_hub_keyboard(aud, ui)
-            body = (
-                "👥 <b>پلن‌های کاربران</b>\n"
-                if aud == "users"
-                else "🤝 <b>پلن‌های نمایندگان</b>\n"
-            ) + "افزودن/کاتالوگ از دکمه‌های زیر."
-        else:
-            inline = admin_plans_audience_hub_keyboard(ui)
-            body = "💎 <b>پلن‌ها</b>\nمخاطب یا ابزار کاتالوگ را انتخاب کنید."
-        await present_inline_only(message, text=body, inline=inline)
-        main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
-        await message.answer("از منوی پایین یا دکمه‌های بالا ادامه دهید.", reply_markup=main_kb)
-        return
     if level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
-        markup = kb.admin_plans_add_type_reply_keyboard(aud, ui)
+        inline = admin_plans_add_type_hub_keyboard(aud, ui)
+        body = "➕ <b>افزودن پلن</b>\nنوع پلن را انتخاب کنید:"
     elif level == nav.NAV_ADMIN_PLANS_KIND:
-        markup = kb.admin_plans_kind_reply_keyboard(aud, ui)
+        inline = admin_plans_kind_hub_keyboard(aud, ui)
+        body = (
+            "👥 <b>پلن‌های کاربران</b>\n"
+            if aud == "users"
+            else "🤝 <b>پلن‌های نمایندگان</b>\n"
+        ) + "افزودن/کاتالوگ از دکمه‌های زیر."
     else:
-        markup = kb.admin_plans_audience_reply_keyboard(ui)
-    await message.answer("⬇️", reply_markup=markup)
-
+        inline = admin_plans_audience_hub_keyboard(ui)
+        body = "💎 <b>پلن‌ها</b>\nمخاطب یا ابزار کاتالوگ را انتخاب کنید."
+    await present_inline_only(message, text=body, inline=inline)
+    main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
+    await message.answer("از منوی پایین یا دکمه‌های بالا ادامه دهید.", reply_markup=main_kb)
+    return
 
 async def _answer_plans_cancel(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    from app.bot.nav_mode import is_inline_nav
     from app.bot.menu_nav import build_main_reply_keyboard
 
     await state.set_state(None)
     ui = await get_all_settings(session)
-    if is_inline_nav(ui):
-        # Need db_user for main KB — fall back to plans submenu markup path via state only.
-        markup = await _plans_reply_markup(session, state)
-        # Prefer stable main when we can resolve user from message.from_user later;
-        # keep kind/audience reply only for classic. For inline, heal via show path below.
-        from app.db.models import BotUser
-        from sqlalchemy import select
-
-        tg_id = getattr(getattr(message, "from_user", None), "id", None)
-        db_user = None
-        if tg_id is not None:
-            db_user = (
-                await session.execute(
-                    select(BotUser).where(BotUser.telegram_id == int(tg_id))
-                )
-            ).scalar_one_or_none()
-        if db_user is not None:
-            main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
-            await message.answer("لغو شد.", reply_markup=main_kb)
-            return
-        await message.answer("لغو شد.", reply_markup=markup)
-        return
     markup = await _plans_reply_markup(session, state)
-    await message.answer("لغو شد.", reply_markup=markup)
+    # Prefer stable main KB when we can resolve the user; else keep plans reply.
+    from app.db.models import BotUser
+    from sqlalchemy import select
 
+    tg_id = getattr(getattr(message, "from_user", None), "id", None)
+    db_user = None
+    if tg_id is not None:
+        db_user = (
+            await session.execute(
+                select(BotUser).where(BotUser.telegram_id == int(tg_id))
+            )
+        ).scalar_one_or_none()
+    if db_user is not None:
+        main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
+        await message.answer("لغو شد.", reply_markup=main_kb)
+        return
+    await message.answer("لغو شد.", reply_markup=markup)
+    return
 
 async def _answer_plans_saved(message: Message, state: FSMContext, session: AsyncSession, text: str) -> None:
-    from app.bot.nav_mode import is_inline_nav
     from app.bot.menu_nav import build_main_reply_keyboard
     from app.db.models import BotUser
     from sqlalchemy import select
 
     ui = await get_all_settings(session)
-    if is_inline_nav(ui):
-        tg_id = getattr(getattr(message, "from_user", None), "id", None)
-        db_user = None
-        if tg_id is not None:
-            db_user = (
-                await session.execute(
-                    select(BotUser).where(BotUser.telegram_id == int(tg_id))
-                )
-            ).scalar_one_or_none()
-        if db_user is not None:
-            main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
-            await message.answer(text, reply_markup=main_kb)
-            return
+    tg_id = getattr(getattr(message, "from_user", None), "id", None)
+    db_user = None
+    if tg_id is not None:
+        db_user = (
+            await session.execute(
+                select(BotUser).where(BotUser.telegram_id == int(tg_id))
+            )
+        ).scalar_one_or_none()
+    if db_user is not None:
+        main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
+        await message.answer(text, reply_markup=main_kb)
+        return
     markup = await _plans_reply_markup(session, state)
     await message.answer(text, reply_markup=markup)
 
-
 def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
-
 
 def _kind_btn_style(ui: dict | None, kind: str) -> str | None:
     from app.services.button_styles import plan_kind_style_id
@@ -201,18 +177,14 @@ def _kind_btn_style(ui: dict | None, kind: str) -> str | None:
         return None
     return kb._style(ui, sid, fallback="primary")
 
-
 def _ib(text: str, cb: str, style: str | None = None) -> InlineKeyboardButton:
     return kb._ikb(text, callback_data=cb, style=style)
-
 
 def _back_row(label: str, cb: str, style: str | None = None) -> list[InlineKeyboardButton]:
     return [_ib(label, cb, style=style)]
 
-
 async def _persist(session: AsyncSession) -> None:
     await session.commit()
-
 
 async def _ensure_trial(session: AsyncSession) -> Plan:
     trial = (
@@ -234,7 +206,6 @@ async def _ensure_trial(session: AsyncSession) -> Plan:
     await _persist(session)
     return trial
 
-
 async def send_audience_hub(
     message: Message,
     session: AsyncSession,
@@ -249,7 +220,6 @@ async def send_audience_hub(
         except Exception:
             pass
     await message.answer(text)
-
 
 async def send_kind_hub(
     message: Message,
@@ -268,7 +238,6 @@ async def send_kind_hub(
             pass
     await message.answer(text)
 
-
 async def send_users_plans_overview(message: Message, session: AsyncSession) -> None:
     """User plans list — mirrors web /plans user table; plans inline, add on reply keyboard."""
     ui = await get_all_settings(session)
@@ -285,7 +254,6 @@ async def send_users_plans_overview(message: Message, session: AsyncSession) -> 
         text,
         reply_markup=kb.admin_users_plans_overview_keyboard(plans, ui),
     )
-
 
 async def send_resellers_plans_overview(message: Message, session: AsyncSession) -> None:
     """Reseller subscription plans — all rows inline like web /plans."""
@@ -316,7 +284,6 @@ async def send_resellers_plans_overview(message: Message, session: AsyncSession)
         ),
     )
 
-
 async def send_add_plan_type_picker(
     message: Message,
     session: AsyncSession,
@@ -340,7 +307,6 @@ async def send_add_plan_type_picker(
         reply_markup=kb.admin_plans_add_type_keyboard(audience, ui),
     )
 
-
 async def send_users_fixed_list(message: Message, session: AsyncSession) -> None:
     from app.bot.handlers.admin import _plan_line
 
@@ -361,7 +327,6 @@ async def send_users_fixed_list(message: Message, session: AsyncSession) -> None
             kind="fixed",
         ),
     )
-
 
 async def _build_custom_screen(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     ui = await get_all_settings(session)
@@ -393,11 +358,9 @@ async def _build_custom_screen(session: AsyncSession) -> tuple[str, InlineKeyboa
     )
     return text, _kb(rows)
 
-
 async def send_users_custom(message: Message, session: AsyncSession) -> None:
     text, markup = await _build_custom_screen(session)
     await message.answer(text, reply_markup=markup)
-
 
 async def _build_trial_screen(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     trial = (
@@ -441,11 +404,9 @@ async def _build_trial_screen(session: AsyncSession) -> tuple[str, InlineKeyboar
     ]
     return f"🧪 <b>پلن تست</b>\n\n{body}", _kb(rows)
 
-
 async def send_users_trial(message: Message, session: AsyncSession) -> None:
     text, markup = await _build_trial_screen(session)
     await message.answer(text, reply_markup=markup)
-
 
 async def _build_wholesale_screen(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     ui = await get_all_settings(session)
@@ -481,11 +442,9 @@ async def _build_wholesale_screen(session: AsyncSession) -> tuple[str, InlineKey
     )
     return text, _kb(rows)
 
-
 async def send_users_wholesale(message: Message, session: AsyncSession) -> None:
     text, markup = await _build_wholesale_screen(session)
     await message.answer(text, reply_markup=markup)
-
 
 async def send_reseller_plans_list(
     message: Message,
@@ -545,7 +504,6 @@ async def send_reseller_plans_list(
         ),
     )
 
-
 async def open_kind_screen(
     message: Message,
     session: AsyncSession,
@@ -564,7 +522,6 @@ async def open_kind_screen(
         await send_reseller_plans_list(message, session, kind)
     else:
         await message.answer("نوع پلن نامعتبر است.")
-
 
 async def open_add_kind_action(
     message: Message,
@@ -608,32 +565,26 @@ async def open_add_kind_action(
         )
         return
     # Settings-based kinds — open configure screen (same as web «تنظیم»)
-    from app.bot.nav_mode import is_inline_nav
     from app.bot.nav_inline import admin_plans_kind_hub_keyboard, present_inline_only
     from app.bot.menu_nav import build_main_reply_keyboard
 
     ui = await get_all_settings(session)
-    if is_inline_nav(ui):
-        await present_inline_only(
-            message,
-            text=(
-                "👥 <b>پلن‌های کاربران</b>\n"
-                if audience == "users"
-                else "🤝 <b>پلن‌های نمایندگان</b>\n"
-            )
-            + "افزودن/کاتالوگ از دکمه‌های زیر.",
-            inline=admin_plans_kind_hub_keyboard(audience, ui),
+    await present_inline_only(
+        message,
+        text=(
+            "👥 <b>پلن‌های کاربران</b>\n"
+            if audience == "users"
+            else "🤝 <b>پلن‌های نمایندگان</b>\n"
         )
-        main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
-        await message.answer(
-            "از منوی پایین یا دکمه‌های بالا ادامه دهید.",
-            reply_markup=main_kb,
-        )
-    else:
-        list_markup = kb.admin_plans_kind_reply_keyboard(audience, ui)
-        await message.answer("⬇️", reply_markup=list_markup)
+        + "افزودن/کاتالوگ از دکمه‌های زیر.",
+        inline=admin_plans_kind_hub_keyboard(audience, ui),
+    )
+    main_kb, _, _ = await build_main_reply_keyboard(session, db_user, ui=ui)
+    await message.answer(
+        "از منوی پایین یا دکمه‌های بالا ادامه دهید.",
+        reply_markup=main_kb,
+    )
     await open_kind_screen(message, session, audience, kind)
-
 
 async def _rerender_plans_screen(
     callback: CallbackQuery,
@@ -692,7 +643,6 @@ async def _rerender_plans_screen(
             ),
         )
 
-
 @router.callback_query(F.data == "adm:plans:noop")
 @require_bot_owner_handler
 async def plans_noop(callback: CallbackQuery, db_user: BotUser):
@@ -700,7 +650,6 @@ async def plans_noop(callback: CallbackQuery, db_user: BotUser):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer("از کیبورد «افزودن پلن» استفاده کنید", show_alert=True)
-
 
 @router.callback_query(F.data.startswith("adm:plans:add:"))
 @require_bot_owner_handler
@@ -729,7 +678,6 @@ async def plans_add_kind_cb(
             pass
         await open_add_kind_action(callback.message, session, db_user, state, aud, kind)
 
-
 @router.callback_query(F.data == "adm:plans")
 @require_bot_owner_handler
 async def plans_hub(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
@@ -748,7 +696,6 @@ async def plans_hub(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         except Exception:
             pass
         await sync_plans_reply_keyboard(callback.message, session, db_user, state)
-
 
 @router.callback_query(F.data.startswith("adm:plans:aud:"))
 @require_bot_owner_handler
@@ -779,7 +726,6 @@ async def plans_aud_inline_back(
         else:
             await send_resellers_plans_overview(callback.message, session)
 
-
 @router.callback_query(F.data.startswith("adm:plans:kind:"))
 @require_bot_owner_handler
 async def plans_kind_cb(
@@ -805,7 +751,6 @@ async def plans_kind_cb(
             await callback.message.delete()
         except Exception:
             pass
-
 
 @router.callback_query(F.data.startswith("adm:plans:tog:"))
 @require_bot_owner_handler
@@ -838,7 +783,6 @@ async def plans_toggle(
         kind = "wholesale"
     await _rerender_plans_screen(callback, session, aud, kind)
 
-
 @router.callback_query(F.data.startswith("adm:plans:edit:"))
 @require_bot_owner_handler
 async def plans_edit_ask(
@@ -862,7 +806,6 @@ async def plans_edit_ask(
             f"مقدار جدید برای <b>{key}</b>\nفعلی: <code>{html.escape((cur or '')[:200])}</code>",
             reply_markup=kb.cancel_reply(),
         )
-
 
 @router.message(AdminPlansStates.edit_value)
 @require_bot_owner_handler
@@ -908,7 +851,6 @@ async def plans_edit_save(
     bubble = await message.answer("⏳")
     await open_kind_screen(bubble, session, aud, kind)
 
-
 @router.callback_query(F.data == "adm:plans:wholesale:add_tier")
 @require_bot_owner_handler
 async def wholesale_add_tier_ask(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
@@ -923,7 +865,6 @@ async def wholesale_add_tier_ask(callback: CallbackQuery, state: FSMContext, db_
             "حداقل تعداد برای پله جدید:",
             reply_markup=kb.cancel_reply(),
         )
-
 
 @router.message(AdminPlansStates.wholesale_tier_min)
 @require_bot_owner_handler
@@ -945,7 +886,6 @@ async def wholesale_tier_min_entered(
     await state.update_data(tier_min=mn)
     await state.set_state(AdminPlansStates.wholesale_tier_pct)
     await message.answer("درصد تخفیف (۰–۱۰۰):", reply_markup=kb.cancel_reply())
-
 
 @router.message(AdminPlansStates.wholesale_tier_pct)
 @require_bot_owner_handler
@@ -977,7 +917,6 @@ async def wholesale_tier_pct_entered(
     bubble = await message.answer("⏳")
     await send_users_wholesale(bubble, session)
 
-
 @router.callback_query(F.data.startswith("adm:plans:wholesale:del:"))
 @require_bot_owner_handler
 async def wholesale_del_tier(
@@ -996,9 +935,7 @@ async def wholesale_del_tier(
     await callback.answer("حذف شد")
     await _rerender_plans_screen(callback, session, "users", "wholesale")
 
-
 # —— Trial (plans context) ——
-
 
 @router.callback_query(F.data == "adm:plans:trial:name")
 @require_bot_owner_handler
@@ -1011,7 +948,6 @@ async def trial_ask_name(callback: CallbackQuery, state: FSMContext, db_user: Bo
     await state.update_data(_adm_plans_aud="users", _adm_plans_kind="trial")
     if callback.message:
         await callback.message.answer("نام پلن تست:", reply_markup=kb.cancel_reply())
-
 
 @router.message(AdminPlansStates.trial_name)
 @require_bot_owner_handler
@@ -1028,7 +964,6 @@ async def trial_save_name(message: Message, state: FSMContext, session: AsyncSes
     bubble = await message.answer("⏳")
     await send_users_trial(bubble, session)
 
-
 @router.callback_query(F.data == "adm:plans:trial:days")
 @require_bot_owner_handler
 async def trial_ask_days(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
@@ -1040,7 +975,6 @@ async def trial_ask_days(callback: CallbackQuery, state: FSMContext, db_user: Bo
     await state.update_data(_adm_plans_aud="users", _adm_plans_kind="trial")
     if callback.message:
         await callback.message.answer("مدت به روز:", reply_markup=kb.cancel_reply())
-
 
 @router.message(AdminPlansStates.trial_days)
 @require_bot_owner_handler
@@ -1062,7 +996,6 @@ async def trial_save_days(message: Message, state: FSMContext, session: AsyncSes
     bubble = await message.answer("⏳")
     await send_users_trial(bubble, session)
 
-
 @router.callback_query(F.data == "adm:plans:trial:gb")
 @require_bot_owner_handler
 async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
@@ -1074,7 +1007,6 @@ async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotU
     await state.update_data(_adm_plans_aud="users", _adm_plans_kind="trial")
     if callback.message:
         await callback.message.answer("حجم گیگ (۰ = نامحدود):", reply_markup=kb.cancel_reply())
-
 
 @router.message(AdminPlansStates.trial_gb)
 @require_bot_owner_handler
@@ -1095,7 +1027,6 @@ async def trial_save_gb(message: Message, state: FSMContext, session: AsyncSessi
     await _answer_plans_saved(message, state, session, "ذخیره شد ✅")
     bubble = await message.answer("⏳")
     await send_users_trial(bubble, session)
-
 
 @router.callback_query(F.data == "adm:plans:trial:tpl")
 @require_bot_owner_handler
@@ -1129,7 +1060,6 @@ async def trial_pick_tpl(callback: CallbackQuery, db_user: BotUser):
     if callback.message:
         await callback.message.edit_text("تمپلیت را انتخاب کنید:", reply_markup=_kb(rows))
 
-
 @router.callback_query(F.data.startswith("adm:plans:trial:settpl:"))
 @require_bot_owner_handler
 async def trial_set_tpl(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -1145,7 +1075,6 @@ async def trial_set_tpl(callback: CallbackQuery, session: AsyncSession, db_user:
     bubble = await callback.message.answer("⏳") if callback.message else None
     if bubble:
         await send_users_trial(bubble, session)
-
 
 @router.callback_query(F.data == "adm:plans:trial:grp")
 @require_bot_owner_handler
@@ -1164,7 +1093,6 @@ async def trial_pick_grp(
     await state.update_data(trial_groups=selected, _adm_plans_kind="trial")
     await callback.answer()
     await _show_trial_groups_plans(callback, state)
-
 
 async def _show_trial_groups_plans(callback: CallbackQuery, state: FSMContext) -> None:
     selected = [int(x) for x in ((await state.get_data()).get("trial_groups") or [])]
@@ -1203,7 +1131,6 @@ async def _show_trial_groups_plans(callback: CallbackQuery, state: FSMContext) -
     if callback.message:
         await callback.message.edit_text("گروه(ها) را انتخاب کنید:", reply_markup=_kb(rows))
 
-
 @router.callback_query(F.data.startswith("adm:plans:trial:toggrp:"))
 @require_bot_owner_handler
 async def trial_tog_grp_plans(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
@@ -1219,7 +1146,6 @@ async def trial_tog_grp_plans(callback: CallbackQuery, state: FSMContext, db_use
     await state.update_data(trial_groups=selected)
     await callback.answer()
     await _show_trial_groups_plans(callback, state)
-
 
 @router.callback_query(F.data == "adm:plans:trial:grpdone")
 @require_bot_owner_handler
@@ -1243,9 +1169,7 @@ async def trial_grp_done_plans(
         text, markup = await _build_trial_screen(session)
         await callback.message.edit_text(text, reply_markup=markup)
 
-
 # —— Custom PG (plans context) ——
-
 
 async def _custom_pg_summary(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     ui = await get_all_settings(session)
@@ -1280,7 +1204,6 @@ async def _custom_pg_summary(session: AsyncSession) -> tuple[str, InlineKeyboard
     rows.append(_back_row("⬅️ پلن دلخواه", BACK_USERS_KIND))
     return text, _kb(rows)
 
-
 @router.callback_query(F.data == "adm:plans:custom:pg")
 @require_bot_owner_handler
 async def custom_pg_hub(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -1291,7 +1214,6 @@ async def custom_pg_hub(callback: CallbackQuery, session: AsyncSession, db_user:
     text, markup = await _custom_pg_summary(session)
     if callback.message:
         await callback.message.edit_text(text, reply_markup=markup)
-
 
 @router.callback_query(F.data == "adm:plans:custom:toggle")
 @require_bot_owner_handler
@@ -1306,7 +1228,6 @@ async def custom_pg_toggle(callback: CallbackQuery, session: AsyncSession, db_us
     if callback.message:
         await callback.message.edit_text(text, reply_markup=markup)
 
-
 @router.callback_query(F.data == "adm:plans:custom:clearlink")
 @require_bot_owner_handler
 async def custom_pg_clear(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -1319,7 +1240,6 @@ async def custom_pg_clear(callback: CallbackQuery, session: AsyncSession, db_use
     text, markup = await _custom_pg_summary(session)
     if callback.message:
         await callback.message.edit_text(text, reply_markup=markup)
-
 
 @router.callback_query(F.data == "adm:plans:custom:picktpl")
 @require_bot_owner_handler
@@ -1351,7 +1271,6 @@ async def custom_pick_tpl(callback: CallbackQuery, db_user: BotUser):
     if callback.message:
         await callback.message.edit_text("تمپلیت:", reply_markup=_kb(rows))
 
-
 @router.callback_query(F.data.startswith("adm:plans:custom:settpl:"))
 @require_bot_owner_handler
 async def custom_set_tpl(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -1366,7 +1285,6 @@ async def custom_set_tpl(callback: CallbackQuery, session: AsyncSession, db_user
     if callback.message:
         await callback.message.edit_text(text, reply_markup=markup)
 
-
 @router.callback_query(F.data == "adm:plans:custom:pickgrp")
 @require_bot_owner_handler
 async def custom_pick_grp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
@@ -1376,7 +1294,6 @@ async def custom_pick_grp(callback: CallbackQuery, state: FSMContext, db_user: B
     await state.update_data(custom_selected_groups=[])
     await callback.answer()
     await _show_custom_groups_plans(callback, state)
-
 
 async def _show_custom_groups_plans(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
@@ -1419,7 +1336,6 @@ async def _show_custom_groups_plans(callback: CallbackQuery, state: FSMContext) 
             reply_markup=_kb(rows),
         )
 
-
 @router.callback_query(F.data.startswith("adm:plans:custom:toggrp:"))
 @require_bot_owner_handler
 async def custom_tog_grp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
@@ -1436,7 +1352,6 @@ async def custom_tog_grp(callback: CallbackQuery, state: FSMContext, db_user: Bo
     await state.update_data(custom_selected_groups=selected)
     await callback.answer()
     await _show_custom_groups_plans(callback, state)
-
 
 @router.callback_query(F.data == "adm:plans:custom:grpdone")
 @require_bot_owner_handler
@@ -1458,13 +1373,10 @@ async def custom_grp_done(
     if callback.message:
         await callback.message.edit_text(text, reply_markup=markup)
 
-
 # —— Reseller subscription plans ——
-
 
 def _resplan_detail_text(plan: ResellerPlan) -> str:
     return format_reseller_plan_apply_detail(plan, currency=get_settings().currency)
-
 
 async def _show_resplan_color_picker(
     target: CallbackQuery | Message,
@@ -1485,7 +1397,6 @@ async def _show_resplan_color_picker(
             await safe_edit_text(target.message, text, reply_markup=markup)
     else:
         await target.answer(text, reply_markup=markup)
-
 
 def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
     from app.services.pg_admin_subscription import is_addon_plan, is_subscription_plan
@@ -1599,7 +1510,6 @@ def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
     )
     return _kb(rows)
 
-
 @router.callback_query(F.data.startswith("adm:resplan:view:"))
 @require_bot_owner_handler
 async def resplan_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -1616,7 +1526,6 @@ async def resplan_view(callback: CallbackQuery, session: AsyncSession, db_user: 
             _resplan_detail_text(plan),
             reply_markup=_resplan_detail_keyboard(plan),
         )
-
 
 @router.callback_query(F.data.startswith("adm:resplan:toggle:"))
 @require_bot_owner_handler
@@ -1636,7 +1545,6 @@ async def resplan_toggle(callback: CallbackQuery, session: AsyncSession, db_user
             _resplan_detail_text(plan),
             reply_markup=_resplan_detail_keyboard(plan),
         )
-
 
 @router.callback_query(F.data.regexp(r"^adm:resplan:flag:(pgadmin|sharepg|buyextra):\d+$"))
 @require_bot_owner_handler
@@ -1683,7 +1591,6 @@ async def resplan_flag_toggle(callback: CallbackQuery, session: AsyncSession, db
             reply_markup=_resplan_detail_keyboard(plan),
         )
 
-
 @router.callback_query(F.data.startswith("adm:resplan:delask:"))
 @require_bot_owner_handler
 async def resplan_del_ask(callback: CallbackQuery, db_user: BotUser):
@@ -1712,7 +1619,6 @@ async def resplan_del_ask(callback: CallbackQuery, db_user: BotUser):
                 ]
             ),
         )
-
 
 @router.callback_query(F.data.startswith("adm:resplan:del:"))
 @require_bot_owner_handler
@@ -1743,7 +1649,6 @@ async def resplan_del(callback: CallbackQuery, session: AsyncSession, db_user: B
     await state.update_data(_adm_plans_aud="resellers", _adm_plans_kind=mode)
     if callback.message:
         await _rerender_plans_screen(callback, session, "resellers", mode)
-
 
 @router.callback_query(
     F.data.regexp(
@@ -1825,7 +1730,6 @@ async def resplan_edit_ask(
     if callback.message:
         await callback.message.answer(prompts[field], reply_markup=kb.cancel_reply())
 
-
 async def _show_resplan_groups(callback: CallbackQuery, state: FSMContext, plan_id: int) -> None:
     selected = [int(x) for x in ((await state.get_data()).get("resplan_edit_groups") or [])]
     try:
@@ -1873,7 +1777,6 @@ async def _show_resplan_groups(callback: CallbackQuery, state: FSMContext, plan_
             reply_markup=_kb(rows),
         )
 
-
 @router.callback_query(F.data.startswith("adm:resplan:edit:toggrp:"))
 @require_bot_owner_handler
 async def resplan_edit_tog_grp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
@@ -1891,7 +1794,6 @@ async def resplan_edit_tog_grp(callback: CallbackQuery, state: FSMContext, db_us
     await state.update_data(resplan_edit_groups=selected)
     await callback.answer()
     await _show_resplan_groups(callback, state, plan_id)
-
 
 @router.callback_query(F.data.startswith("adm:resplan:edit:grpdone:"))
 @require_bot_owner_handler
@@ -1927,7 +1829,6 @@ async def resplan_edit_grp_done(
             _resplan_detail_text(plan),
             reply_markup=_resplan_detail_keyboard(plan),
         )
-
 
 @router.callback_query(F.data.startswith("adm:resplan:perms:"))
 @require_bot_owner_handler
@@ -1966,7 +1867,6 @@ async def resplan_perms_screen(
             "🔐 <b>دسترسی‌های پلن</b>\nوب و ربات نماینده یکسان است.",
             reply_markup=_kb(rows),
         )
-
 
 @router.callback_query(F.data.startswith("adm:resplan:togperm:"))
 @require_bot_owner_handler
@@ -2015,7 +1915,6 @@ async def resplan_tog_perm(callback: CallbackQuery, session: AsyncSession, db_us
             "🔐 <b>دسترسی‌های پلن</b>\nوب و ربات نماینده یکسان است.",
             reply_markup=_kb(rows),
         )
-
 
 @router.message(AdminPlansStates.res_plan_edit_field)
 @require_bot_owner_handler
@@ -2089,7 +1988,6 @@ async def resplan_edit_save(
     )
     _ = bubble
 
-
 @router.callback_query(F.data.in_({"adm:resplan:add:fixed", "adm:resplan:add:payg"}))
 @require_bot_owner_handler
 async def resplan_add_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
@@ -2106,7 +2004,6 @@ async def resplan_add_start(callback: CallbackQuery, state: FSMContext, db_user:
     if callback.message:
         await callback.message.answer("نام پلن نمایندگی:", reply_markup=kb.cancel_reply())
 
-
 @router.message(AdminPlansStates.res_plan_name)
 @require_bot_owner_handler
 async def resplan_name(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
@@ -2117,7 +2014,6 @@ async def resplan_name(message: Message, state: FSMContext, session: AsyncSessio
     await state.update_data(res_plan_name=(message.text or "").strip()[:128])
     await state.set_state(AdminPlansStates.res_plan_price)
     await message.answer("قیمت ورود (تومان، ۰ = رایگان):", reply_markup=kb.cancel_reply())
-
 
 @router.message(AdminPlansStates.res_plan_price)
 @require_bot_owner_handler
@@ -2151,7 +2047,6 @@ async def resplan_price(message: Message, state: FSMContext, session: AsyncSessi
         )
         bubble = await message.answer("⏳")
         await _show_resplan_add_groups(bubble, state)
-
 
 @router.message(AdminPlansStates.res_plan_addon_amount)
 @require_bot_owner_handler
@@ -2192,7 +2087,6 @@ async def resplan_addon_amount(
         back_callback="adm:plans:aud:resellers",
     )
 
-
 @router.message(AdminPlansStates.res_plan_rate_gb)
 @require_bot_owner_handler
 async def resplan_rate_gb(
@@ -2216,7 +2110,6 @@ async def resplan_rate_gb(
     bubble = await message.answer("⏳")
     await _show_resplan_add_groups(bubble, state)
 
-
 @router.message(AdminPlansStates.res_plan_link)
 @require_bot_owner_handler
 async def resplan_link_cancel(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
@@ -2226,7 +2119,6 @@ async def resplan_link_cancel(message: Message, state: FSMContext, session: Asyn
         return
     await message.answer("گروه را از دکمه‌های زیر پیام انتخاب کنید (حداقل یک گروه).")
 
-
 @router.message(AdminPlansStates.res_plan_role)
 @require_bot_owner_handler
 async def resplan_role_cancel(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
@@ -2235,7 +2127,6 @@ async def resplan_role_cancel(message: Message, state: FSMContext, session: Asyn
         await _answer_plans_cancel(message, state, session)
         return
     await message.answer("نقش پاسارگارد را از دکمه‌های زیر پیام انتخاب کنید.")
-
 
 async def _show_resplan_add_groups(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
@@ -2286,7 +2177,6 @@ async def _show_resplan_add_groups(message: Message, state: FSMContext) -> None:
     )
     await safe_edit_text(message, text, reply_markup=_kb(rows))
 
-
 async def _show_resplan_role_picker(
     message: Message,
     state: FSMContext,
@@ -2329,7 +2219,6 @@ async def _show_resplan_role_picker(
         reply_markup=_kb(rows),
     )
 
-
 @router.callback_query(F.data.startswith("adm:resplan:add:toggrp:"))
 @require_bot_owner_handler
 async def resplan_add_tog_grp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
@@ -2354,7 +2243,6 @@ async def resplan_add_tog_grp(callback: CallbackQuery, state: FSMContext, db_use
     if callback.message:
         await _show_resplan_add_groups(callback.message, state)
 
-
 @router.callback_query(F.data == "adm:resplan:add:grpdone")
 @require_bot_owner_handler
 async def resplan_add_grp_done(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
@@ -2372,7 +2260,6 @@ async def resplan_add_grp_done(callback: CallbackQuery, state: FSMContext, db_us
     await callback.answer()
     if callback.message:
         await _show_resplan_role_picker(callback.message, state)
-
 
 @router.callback_query(F.data.startswith("adm:resplan:add:setrole:"))
 @require_bot_owner_handler
@@ -2409,7 +2296,6 @@ async def resplan_add_set_role(
         callback_prefix="adm:resplan:addcolor",
         back_callback="adm:plans:aud:resellers",
     )
-
 
 @router.callback_query(F.data.startswith("adm:resplan:addcolor:"))
 @require_bot_owner_handler
@@ -2490,7 +2376,6 @@ async def resplan_add_color(
             callback.message, session, db_user, state, audience="resellers"
         )
 
-
 @router.callback_query(F.data.startswith("adm:resplan:colorpick:"))
 @require_bot_owner_handler
 async def resplan_color_pick(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -2509,7 +2394,6 @@ async def resplan_color_pick(callback: CallbackQuery, session: AsyncSession, db_
         callback_prefix=f"adm:resplan:setcolor:{pid}",
         back_callback=f"adm:resplan:view:{pid}",
     )
-
 
 @router.callback_query(F.data.startswith("adm:resplan:setcolor:"))
 @require_bot_owner_handler
@@ -2537,7 +2421,6 @@ async def resplan_set_color(callback: CallbackQuery, session: AsyncSession, db_u
             _resplan_detail_text(plan),
             reply_markup=_resplan_detail_keyboard(plan),
         )
-
 
 @router.callback_query(F.data.startswith("adm:resplan:edit:setrole:"))
 @require_bot_owner_handler
@@ -2573,7 +2456,6 @@ async def resplan_edit_set_role(
             _resplan_detail_text(plan),
             reply_markup=_resplan_detail_keyboard(plan),
         )
-
 
 async def _save_reseller_plan(
     session: AsyncSession,

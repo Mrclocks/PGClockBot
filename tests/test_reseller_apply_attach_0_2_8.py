@@ -11,12 +11,13 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
-    async def test_open_reseller_apply_uses_apply_chrome_not_main(self):
+    async def test_open_reseller_apply_inline_only(self):
+        """Option B: apply flow is one inline message (no lasting apply chrome)."""
         from app.bot.handlers.reply_nav import open_reseller_apply
         from app.db.models import Role
 
         message = AsyncMock()
-        message.answer = AsyncMock(side_effect=[AsyncMock(), AsyncMock()])
+        message.answer = AsyncMock(return_value=AsyncMock())
 
         session = AsyncMock()
         db_user = MagicMock()
@@ -29,7 +30,6 @@ class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
                 [InlineKeyboardButton(text="⚡ PAYG — 0 پلن", callback_data="resapply:mode:payg")],
             ]
         )
-        apply_kb = MagicMock(name="APPLY_CHROME")
 
         with (
             patch(
@@ -54,10 +54,6 @@ class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=markup),
             ),
             patch(
-                "app.bot.handlers.reply_nav.kb.reseller_apply_reply_keyboard",
-                return_value=apply_kb,
-            ),
-            patch(
                 "app.bot.handlers.reply_nav.nav.set_nav_level",
                 new=AsyncMock(),
             ) as set_nav,
@@ -65,15 +61,11 @@ class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
             await open_reseller_apply(message, session, db_user, state)
 
         set_nav.assert_awaited()
-        self.assertEqual(message.answer.await_count, 2)
-        first = message.answer.await_args_list[0]
-        self.assertIs(first.kwargs.get("reply_markup"), markup)
-        self.assertIn("درخواست نمایندگی", first.args[0])
-        second = message.answer.await_args_list[1]
-        self.assertIs(second.kwargs.get("reply_markup"), apply_kb)
-        self.assertIn("درخواست نمایندگی", second.args[0])
-        # Must NOT re-attach the main menu while inside apply flow
-        self.assertIsNot(second.kwargs.get("reply_markup"), "MAIN")
+        self.assertEqual(message.answer.await_count, 1)
+        call = message.answer.await_args
+        self.assertIs(call.kwargs.get("reply_markup"), markup)
+        self.assertIn("درخواست نمایندگی", call.args[0])
+        self.assertIsNot(call.kwargs.get("reply_markup"), "MAIN")
 
 
 class ResellerApplySourceGuards(unittest.TestCase):
@@ -86,8 +78,7 @@ class ResellerApplySourceGuards(unittest.TestCase):
         self.assertNotIn('"نوع پلن:"', fn)
         self.assertNotIn("'نوع پلن:'", fn)
         self.assertIn("_resapply_mode_keyboard", fn)
-        self.assertIn("present_inline_with_reply_chrome", fn)
-        self.assertIn("reseller_apply_reply_keyboard", fn)
+        self.assertIn("present_inline_only", fn)
         self.assertNotIn('text="⌨️ منوی اصلی"', fn)
         self.assertIn("NAV_RESELLER_APPLY", fn)
 

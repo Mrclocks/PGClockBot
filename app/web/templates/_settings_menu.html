@@ -1,24 +1,17 @@
 <div class="card menu-layout-intro">
   <h2>چیدمان دکمه‌های کیبورد</h2>
   <p class="muted update-card-caption">
-    در حالت <b>اینلاین</b> کیبورد پایین فقط منوی اصلی است (برای ادمین: منوی کاربر + «پنل ادمین»).
-    همهٔ زیرمنوهای ادمین/نماینده روی <b>یک پیام پنل</b> با دکمه‌های اینلاین و ویرایش همان پیام‌اند — بدون کیبورد موازی و بدون بازگشت به منوی Reply.
-    «درخواست نمایندگی» از کیبورد پایین حذف و در پشتیبانی/خوش‌آمد است. مینی‌اپ روی کیبورد به‌صورت web_app.
-    آیتم‌های «منوی فعال» ترتیب کیبورد پایین کاربرند.
+    کیبورد پایین فقط میانبرهای اصلی است (فروشگاه، کیف، پشتیبانی، …؛ برای ادمین + «پنل ادمین»).
+    همهٔ زیرمنوها روی <b>یک پیام پنل اینلاین</b> با ویرایش همان پیام‌اند — با دکمهٔ بازگشت در هر مرحله.
+    «درخواست نمایندگی» در پشتیبانی/خوش‌آمد است. مینی‌اپ روی کیبورد به‌صورت web_app.
+    متن دکمه‌ها از بخش «متن دکمه‌های منو» خوانده می‌شود. آیتم‌های «منوی فعال» ترتیب کیبورد پایین‌اند.
   </p>
   <div class="settings-grid menu-layout-mode">
     <label class="setting-item">
       <span>حالت چیدمان کیبورد</span>
       <select name="menu_layout_ui" id="menu_layout_select" form="menu-form">
-        <option value="classic" {% if values.get('menu_layout','compact')=='classic' %}selected{% endif %}>کلاسیک (تکی — هر دکمه یک ردیف)</option>
-        <option value="compact" {% if values.get('menu_layout','compact')=='compact' %}selected{% endif %}>فشرده (جفتی — پیشنهادی)</option>
-      </select>
-    </label>
-    <label class="setting-item">
-      <span>حالت ناوبری</span>
-      <select id="nav_mode_select" form="menu-form">
-        <option value="inline" {% if values.get('nav_mode','inline')=='inline' %}selected{% endif %}>اینلاین — کیبورد ثابت (پیشنهادی)</option>
-        <option value="classic" {% if values.get('nav_mode','inline')=='classic' %}selected{% endif %}>کلاسیک — زیرمنوی کیبورد (rollback)</option>
+        <option value="classic" {% if values.get('menu_layout','compact')=='classic' %}selected{% endif %}>تکی — هر دکمه یک ردیف</option>
+        <option value="compact" {% if values.get('menu_layout','compact')=='compact' %}selected{% endif %}>فشرده — دکمه‌ها جفتی (پیشنهادی)</option>
       </select>
     </label>
   </div>
@@ -27,7 +20,6 @@
   <input type="hidden" name="menu_order" id="menu_order" value="{{ order_csv }}" />
   <input type="hidden" name="menu_layout" id="menu_layout" value="{{ values.get('menu_layout', 'compact') }}" />
   <input type="hidden" name="menu_layout_save" value="1" />
-  <input type="hidden" name="s_nav_mode" id="nav_mode_hidden" value="{{ values.get('nav_mode', 'inline') }}" />
   <div class="dnd-cols">
     <div class="card dnd-card">
       <h2>منوی فعال</h2>
@@ -137,18 +129,10 @@
     syncOrder();
   }
 
-  const navSelect = document.getElementById('nav_mode_select');
-  const navHidden = document.getElementById('nav_mode_hidden');
   if (layoutSelect && layoutHidden) {
     layoutSelect.addEventListener('change', () => {
       layoutHidden.value = layoutSelect.value;
       layoutHidden.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-  }
-  if (navSelect && navHidden) {
-    navSelect.addEventListener('change', () => {
-      navHidden.value = navSelect.value;
-      navHidden.dispatchEvent(new Event('change', { bubbles: true }));
     });
   }
 
@@ -157,7 +141,6 @@
   menuForm.addEventListener('submit', () => {
     syncOrder();
     if (layoutSelect && layoutHidden) layoutHidden.value = layoutSelect.value;
-    if (navSelect && navHidden) navHidden.value = navSelect.value;
   });
   menuForm.addEventListener('click', (e) => {
     const rem = e.target.closest('.btn-remove');
