@@ -501,8 +501,61 @@ def _pack_hub_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def admin_groups_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Top-level admin groups (Wave D) — mirrors ``_reply_admin_hub_entries``."""
+def queue_shortcut_row(
+    ui: dict | None,
+    *,
+    payments: int = 0,
+    tickets: int = 0,
+    cancellations: int = 0,
+    payments_cb: str = "adm:payments",
+    tickets_cb: str = "adm:tickets",
+    cancellations_cb: str = "adm:cancellations",
+) -> list[InlineKeyboardButton]:
+    """Non-zero queue counts → danger shortcuts (side by side)."""
+    from app.services.admin_counters import with_badge
+
+    row: list[InlineKeyboardButton] = []
+    if int(payments or 0) > 0:
+        row.append(
+            _ikb(
+                with_badge("🧾 رسید", payments),
+                callback_data=payments_cb,
+                ui=ui,
+                style=_style(ui, "reject", fallback="danger"),
+            )
+        )
+    if int(tickets or 0) > 0:
+        row.append(
+            _ikb(
+                with_badge("🎫 تیکت", tickets),
+                callback_data=tickets_cb,
+                ui=ui,
+                style=_style(ui, "reject", fallback="danger"),
+            )
+        )
+    if int(cancellations or 0) > 0:
+        row.append(
+            _ikb(
+                with_badge("📝 لغو", cancellations),
+                callback_data=cancellations_cb,
+                ui=ui,
+                style=_style(ui, "reject", fallback="danger"),
+            )
+        )
+    return row
+
+
+def admin_groups_hub_keyboard(
+    ui: dict | None = None,
+    *,
+    pending_payments: int = 0,
+    pending_tickets: int = 0,
+    pending_cancellations: int = 0,
+) -> InlineKeyboardMarkup:
+    """Top-level admin groups (Wave D) — mirrors ``_reply_admin_hub_entries``.
+
+    Non-zero queue counts become a danger shortcut row above the groups.
+    """
     from app.bot.reply_keyboards import _reply_admin_hub_entries
 
     cb_map = {
@@ -521,7 +574,19 @@ def admin_groups_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         for key, text in _reply_admin_hub_entries(ui)
         if key in cb_map
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="menu:home")
+    rows: list[list[InlineKeyboardButton]] = []
+    shortcuts = queue_shortcut_row(
+        ui,
+        payments=pending_payments,
+        tickets=pending_tickets,
+        cancellations=pending_cancellations,
+    )
+    if shortcuts:
+        rows.append(shortcuts)
+    for i in range(0, len(buttons), 2):
+        rows.append(buttons[i : i + 2])
+    rows.append(_hub_back_row(ui, callback_data="menu:home"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_ops_hub_keyboard(
@@ -739,6 +804,7 @@ def reseller_manage_hub_keyboard(
     can_add_representative: bool = False,
     pending_payments: int = 0,
     pending_tickets: int = 0,
+    pending_cancellations: int = 0,
 ) -> InlineKeyboardMarkup:
     """Reseller shop-bot manage hub (Wave D) — ``nv:res:ra:<action>``."""
     from app.bot.reply_keyboards import _reseller_submenu_entries
@@ -760,7 +826,22 @@ def reseller_manage_hub_keyboard(
         )
         for key, text in entries
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="menu:home")
+    rows: list[list[InlineKeyboardButton]] = []
+    shortcuts = queue_shortcut_row(
+        ui,
+        payments=pending_payments,
+        tickets=pending_tickets,
+        cancellations=pending_cancellations,
+        payments_cb="res:payments",
+        tickets_cb="res:tickets",
+        cancellations_cb="res:cancellations",
+    )
+    if shortcuts:
+        rows.append(shortcuts)
+    for i in range(0, len(buttons), 2):
+        rows.append(buttons[i : i + 2])
+    rows.append(_hub_back_row(ui, callback_data="menu:home"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 # ── Wave E: admin / reseller leaf hubs ─────────────────────────────────────

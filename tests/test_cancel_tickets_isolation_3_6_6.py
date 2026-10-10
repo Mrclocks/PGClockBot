@@ -100,9 +100,12 @@ class TicketShopScopeTests(unittest.TestCase):
 
     def test_admin_cannot_open_shop_ticket(self):
         src = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        chunk = src.split("async def adm_ticket_view")[1].split("async def")[0]
+        # Scope gate lives in shared loader used by view/reply/close.
+        chunk = src.split("async def _load_platform_ticket")[1].split("async def")[0]
         self.assertIn("ticket.reseller_id", chunk)
         self.assertIn("فروشگاه نماینده", chunk)
+        view = src.split("async def adm_ticket_view")[1].split("async def")[0]
+        self.assertIn("_load_platform_ticket", view)
 
     def test_support_passes_reseller_id(self):
         src = (ROOT / "app/bot/handlers/support.py").read_text(encoding="utf-8")

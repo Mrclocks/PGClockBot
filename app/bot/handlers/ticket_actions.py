@@ -111,11 +111,88 @@ async def tkt_reply_start(
         return
     await callback.answer()
     as_staff = role == "staff"
+    # Prefer reopening the staff tickets list after cancel when acting as staff.
+    reopen = "res_tickets" if (as_staff and is_reseller_bot) else (
+        "adm_tickets" if as_staff else "main"
+    )
     await state.set_state(TicketActionStates.reply)
-    await state.update_data(ticket_id=ticket.id, as_staff=as_staff)
+    await state.update_data(
+        ticket_id=ticket.id, as_staff=as_staff, tkt_cancel_reopen=reopen
+    )
     text = _thread_preview(ticket, as_staff=as_staff)
     if callback.message:
         await callback.message.answer(text, reply_markup=kb.cancel_reply())
+
+
+async def _tkt_cancel_reopen(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    *,
+    text: str,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+) -> None:
+    """Heal main KB and resend the previous tickets panel when possible."""
+    from app.bot.nav_chrome import answer_staff_nav, heal_main_reply
+
+    data = await state.get_data()
+    reopen = str(data.get("tkt_cancel_reopen") or "main")
+    try:
+        await state.clear()
+    except Exception:
+        pass
+    if reopen == "adm_tickets":
+        from app.bot.handlers.admin import _present_admin_tickets_list
+
+        async def _reopen(msg, sess, user, st, **_kw):
+            await _present_admin_tickets_list(msg, sess, edit=False)
+
+        await answer_staff_nav(
+            message,
+            session,
+            db_user,
+            text=text,
+            classic=None,
+            state=None,
+            reopen_panel=_reopen,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
+        )
+        return
+    if reopen == "res_tickets":
+        from app.bot.handlers.reseller import present_reseller_tickets_list
+
+        async def _reopen_res(msg, sess, user, st, **_kw):
+            await present_reseller_tickets_list(
+                msg,
+                sess,
+                user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
+
+        await answer_staff_nav(
+            message,
+            session,
+            db_user,
+            text=text,
+            classic=None,
+            state=None,
+            reopen_panel=_reopen_res,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    await heal_main_reply(
+        message,
+        session,
+        db_user,
+        text=text,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
 
 
 @router.message(TicketActionStates.reply)
@@ -130,12 +207,12 @@ async def tkt_reply_body(
     from app.bot.menu_nav import restore_main_reply
 
     if kb.is_cancel_text(message.text):
-        await restore_main_reply(
+        await _tkt_cancel_reopen(
             message,
             session,
             db_user,
+            state,
             text="لغو شد.",
-            state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
@@ -201,7 +278,6 @@ async def tkt_reply_body(
         )
         return
     await reply_ticket(session, ticket, body, db_user.telegram_id, is_staff=as_staff)
-    await state.clear()
     try:
         from app.services.notifications import notify_ticket_message
 
@@ -218,6 +294,17 @@ async def tkt_reply_body(
         )
     except Exception:
         pass
+    if as_staff:
+        await _tkt_cancel_reopen(
+            message,
+            session,
+            db_user,
+            state,
+            text="ارسال شد ✅",
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
     await restore_main_reply(
         message,
         session,

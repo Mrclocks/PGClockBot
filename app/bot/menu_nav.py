@@ -170,12 +170,20 @@ async def build_main_reply_keyboard(
         pg_feats, can_reps = await _platform_admin_menu_flags(
             session, db_user, is_reseller_bot=is_reseller_bot
         )
+    from app.services.users import on as _setting_on
+
+    show_apply = (
+        not is_reseller_bot
+        and _setting_on(ui.get("show_reseller_apply"))
+        and "reseller_apply" in set(kb._menu_order(ui))
+    )
     markup = kb.main_reply_keyboard(
         role,
         has_services=has,
         ui=ui,
         as_user=as_user,
         show_reseller_creds=show_creds,
+        show_reseller_apply=show_apply,
         profile=owner_profile,
         pg_features=pg_feats,
         can_manage_representatives=can_reps,
@@ -396,11 +404,19 @@ async def show_nav_keyboard(
         exit_action = (
             kb.REPLY_ACTION_RESELLER if is_reseller_bot else kb.REPLY_ACTION_ADMIN
         )
+        from app.services.users import on as _setting_on
+
+        preview_apply = (
+            not is_reseller_bot
+            and _setting_on(ui.get("show_reseller_apply"))
+            and "reseller_apply" in set(kb._menu_order(ui))
+        )
         markup = kb.main_reply_keyboard(
             _Role.USER.value,
             has_services=has,
             ui=ui,
             as_user=True,
+            show_reseller_apply=preview_apply,
             preview_exit_action=exit_action,
         )
     elif level == NAV_REVIEW:
