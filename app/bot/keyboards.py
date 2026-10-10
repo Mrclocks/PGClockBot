@@ -291,7 +291,7 @@ def main_menu(
         full_width.append(
             _ikb(
                 _t(ui, "btn_admin"),
-                callback_data="adm:home",
+                callback_data="nv:adm:home",
                 ui=ui,
                 label_key="btn_admin",
             )

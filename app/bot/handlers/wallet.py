@@ -297,7 +297,7 @@ async def present_topup_methods(
         await attach_reply_keyboard(
             message,
             main_kb,
-            text="مبلغ ثبت شد — روش واریز را از دکمه‌های پیام بالا انتخاب کنید.",
+            text="مبلغ ثبت شد — روش واریز را انتخاب کنید.",
         )
     return
 

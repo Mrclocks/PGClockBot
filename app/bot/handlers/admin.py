@@ -467,24 +467,26 @@ class AdminStates(StatesGroup):
 
 @router.callback_query(F.data == "adm:home")
 @require_bot_owner_handler
-async def adm_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def adm_home(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    text = (
-        f"🛠 <b>پنل ادمین</b>\n"
-        f"<code>v{local_version()}</code>\n\n"
-        "از منوی زیر بخش موردنظر را انتخاب کنید."
-    )
     if callback.message:
-        # ReplyKeyboard cannot be attached via edit_text — clear inline then send reply KB
-        from app.bot.tg_utils import safe_edit_text
+        from app.bot.handlers.reply_nav import open_admin_home
 
-        await safe_edit_text(callback.message, text, reply_markup=None)
-        await callback.message.answer(
-            "پنل ادمین:",
-            reply_markup=await _admin_hub_kb(session, db_user),
+        await open_admin_home(
+            callback.message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=False,
         )
 
 @router.callback_query(F.data == "adm:dash")
@@ -2205,27 +2207,17 @@ async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    counts = await admin_customer_counts(session)
-    total, blocked, orders = counts["users"], counts["blocked"], counts["orders"]
-    text = (
-        "👥 <b>کاربران بات</b>\n\n"
-        f"کل: {total}\n"
-        f"مسدود: {blocked}\n"
-        f"سفارش‌ها: {orders}\n\n"
-        "از کیبورد پایین لیست یا جستجو را انتخاب کنید."
-    )
     if callback.message:
-        from app.bot.tg_utils import safe_edit_text
+        from app.bot.handlers.reply_nav import open_admin_users_hub
 
-        await safe_edit_text(callback.message, text, reply_markup=None)
-        await callback.message.answer(
-            "کاربران:",
-            reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
+        await open_admin_users_hub(
+            callback.message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=False,
         )
-        if state is not None:
-            from app.bot import menu_nav as nav
-
-            await nav.set_nav_level(state, nav.NAV_ADMIN_USERS, push=False)
 
 USERS_PAGE_SIZE = 10
 
@@ -3595,27 +3587,27 @@ async def adm_users_unreseller_reason(
 @router.callback_query(F.data == "adm:resellers")
 @require_bot_owner_handler
 @require_platform_rep_mgmt
-async def adm_resellers(callback: CallbackQuery, db_user: BotUser, state: FSMContext | None = None):
+async def adm_resellers(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
     if callback.message:
-        from app.bot.tg_utils import safe_edit_text
+        from app.bot.handlers.reply_nav import open_admin_resellers_hub
 
-        await safe_edit_text(
+        await open_admin_resellers_hub(
             callback.message,
-            "🤝 <b>نمایندگان</b>\nاز کیبورد پایین بخش موردنظر را انتخاب کنید.",
-            reply_markup=None,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=False,
         )
-        await callback.message.answer(
-            "پنل نمایندگان:",
-            reply_markup=await _staff_reply(session, db_user, kb.admin_resellers_reply_keyboard()),
-        )
-        if state is not None:
-            from app.bot import menu_nav as nav
-
-            await nav.set_nav_level(state, nav.NAV_ADMIN_RESELLERS, push=False)
 
 RESELLERS_PAGE_SIZE = 10
 
@@ -4261,7 +4253,7 @@ async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_use
             f"{(plan.name if plan else '?')}"
         )
         rows.append([InlineKeyboardButton(text=label[:60], callback_data=f"adm:resapp:view:{a.id}")])
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:resellers")])
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="nv:adm:resellers")])
     if callback.message:
         await callback.message.edit_text(
             "📋 درخواست‌های باز (پرداخت / تأیید):",
@@ -4676,19 +4668,27 @@ async def adm_ticket_reply(
 
 @router.callback_query(F.data == "adm:broadcast")
 @require_bot_owner_handler
-async def adm_broadcast_start(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
+async def adm_broadcast_start(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
     await state.clear()
     if callback.message:
-        await callback.message.edit_text(
-            "📢 <b>پیام گروهی</b>\nمخاطب را از کیبورد پایین انتخاب کنید."
-        )
-        await callback.message.answer(
-            "مخاطب پیام گروهی:",
-            reply_markup=await _staff_reply(session, db_user, kb.admin_broadcast_reply_keyboard()),
+        from app.bot.handlers.reply_nav import open_admin_broadcast_hub
+
+        await open_admin_broadcast_hub(
+            callback.message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=False,
         )
 
 @router.callback_query(F.data.startswith("adm:broadcast:aud:"))

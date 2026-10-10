@@ -221,7 +221,7 @@ async def send_audience_hub(
     *,
     edit: bool = False,
 ) -> None:
-    text = "💎 <b>پلن‌ها</b>\nمخاطب را از کیبورد پایین انتخاب کنید:"
+    text = "💎 <b>پلن‌ها</b>\nمخاطب را از دکمه‌های زیر انتخاب کنید:"
     if edit and message.text:
         try:
             await message.edit_text(text, reply_markup=None)
@@ -238,7 +238,7 @@ async def send_kind_hub(
     edit: bool = False,
 ) -> None:
     title = "کاربران" if audience == "users" else "نمایندگان"
-    text = f"💎 <b>پلن‌های {title}</b>\nنوع پلن را از کیبورد پایین انتخاب کنید:"
+    text = f"💎 <b>پلن‌های {title}</b>\nنوع پلن را از دکمه‌های زیر انتخاب کنید:"
     if edit:
         try:
             await message.edit_text(text, reply_markup=None)
@@ -257,7 +257,7 @@ async def send_users_plans_overview(message: Message, session: AsyncSession) -> 
         "👥 <b>پلن‌های کاربران</b>\n"
         "━━━━━━━━━━━━\n"
         f"پلن‌های ثابت: <b>{len(fixed)}</b>\n"
-        "روی هر پلن بزنید تا ویرایش/حذف — «افزودن پلن» از کیبورد پایین."
+        "روی هر پلن بزنید تا ویرایش/حذف — یا «افزودن پلن» را بزنید."
     )
     await message.answer(
         text,
@@ -284,7 +284,7 @@ async def send_resellers_plans_overview(message: Message, session: AsyncSession)
         "🤝 <b>پلن‌های نمایندگان</b>\n"
         "━━━━━━━━━━━━\n"
         f"اشتراک ثابت: <b>{len(fixed)}</b> · PAYG: <b>{len(payg)}</b> · بسته: <b>{len(addons)}</b>\n"
-        "روی هر پلن بزنید — «افزودن پلن» از کیبورد پایین."
+        "روی هر پلن بزنید — یا «افزودن پلن» را بزنید."
     )
     await message.answer(
         text,
@@ -308,7 +308,7 @@ async def send_add_plan_type_picker(
     markup = kb.admin_plans_add_type_reply_keyboard(audience, ui)
     await message.answer(
         f"➕ <b>افزودن پلن — {title}</b>\n"
-        "نوع پلن را از کیبورد پایین یا دکمه‌های زیر انتخاب کنید:",
+        "نوع پلن را از دکمه‌های زیر انتخاب کنید:",
         reply_markup=markup,
     )
     await message.answer(
@@ -710,7 +710,7 @@ async def plans_hub(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         try:
             await callback.message.edit_text(
                 "💎 <b>پلن‌ها</b>\n"
-                "«پلن‌های کاربران» یا «پلن‌های نمایندگان» را از کیبورد پایین بزنید.",
+                "«پلن‌های کاربران» یا «پلن‌های نمایندگان» را انتخاب کنید.",
                 reply_markup=None,
             )
         except Exception:

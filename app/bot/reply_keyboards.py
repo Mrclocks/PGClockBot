@@ -725,6 +725,9 @@ def main_reply_keyboard(
             and "reseller_apply" in set(_menu_order(ui))
         )
     map_role = Role.USER.value if as_user else role
+    # Never offer apply on a real staff keyboard (preview/as_user is fine).
+    if not as_user and map_role != Role.USER.value:
+        show_reseller_apply = False
     entries = _reply_user_entries(
         map_role,
         has_services=has_services,

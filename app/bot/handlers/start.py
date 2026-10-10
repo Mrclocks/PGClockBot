@@ -64,7 +64,7 @@ async def render_home(
         from app.bot.menu_nav import build_main_reply_keyboard
 
         text, home_send_kw = outbound_setting_text(
-            "پنل مدیریت فروشگاه\nاز کیبورد پایین گزینه را انتخاب کنید.",
+            "پنل مدیریت فروشگاه\nاز منوی زیر گزینه را انتخاب کنید.",
             title_raw=ui.get("shop_title") or "کلاک",
         )
         reply_kb, ui, _ = await build_main_reply_keyboard(
@@ -84,7 +84,7 @@ async def render_home(
             reseller_owner_id=reseller_owner_id,
         )
         text, home_send_kw = outbound_setting_text(
-            "پنل مدیریت فروشگاه شما\nاز کیبورد پایین گزینه را انتخاب کنید.\n"
+            "پنل مدیریت فروشگاه شما\nاز منوی زیر گزینه را انتخاب کنید.\n"
             "برای دیدن منوی مشتری: «پیش‌نمایش منوی کاربر».",
             title_raw=ui.get("shop_title") or "فروشگاه",
         )
@@ -684,7 +684,7 @@ async def cb_home_as_user(
     ui = await get_all_settings(session)
     text = format_message(
         "👁 پیش‌نمایش منوی کاربر",
-        "کیبورد پایین همان منویی است که مشتری می‌بیند.",
+        "منوی زیر همان منویی است که مشتری می‌بیند.",
     )
     if callback.message:
         try:
