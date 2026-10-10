@@ -6255,6 +6255,22 @@ form.settings-form > .actions.sticky-actions,
 .user-edit-actions {
   margin-top: 0;
 }
+.wallet-adjust-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+.user-edit-fields > .form-field:has(input[name="amount"]) {
+  grid-column: 1 / -1;
+}
+.wallet-adjust-modes > .btn {
+  width: 100%;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  box-sizing: border-box;
+}
 .user-edit-empty {
   margin: 0;
 }

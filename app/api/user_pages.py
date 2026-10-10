@@ -270,6 +270,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         from app.services.bot_user_admin import (
             admin_adjust_user_wallet,
             parse_admin_wallet_amount,
+            parse_admin_wallet_mode,
         )
         from app.services.notifications import actor_label_from_staff
 
@@ -283,22 +284,24 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         note = str(form.get("note") or "").strip()
         try:
             amount = parse_admin_wallet_amount(raw)
-        except (TypeError, ValueError):
-            return _redirect_user(user_id, err="مبلغ نامعتبر است")
+            mode = parse_admin_wallet_mode(str(form.get("mode") or ""))
+        except (TypeError, ValueError) as e:
+            return _redirect_user(user_id, err=str(e) or "مبلغ نامعتبر است")
         try:
             await admin_adjust_user_wallet(
                 session,
                 user,
                 amount,
+                mode=mode,
                 actor=actor_label_from_staff(staff),
                 note=note or None,
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
-        if amount > 0:
+        if mode == "credit":
             ok = f"کیف پول {amount:,} تومان شارژ شد"
         else:
-            ok = f"از کیف پول {abs(amount):,} تومان کسر شد"
+            ok = f"از کیف پول {amount:,} تومان کسر شد"
         return _redirect_user(user_id, ok=ok)
 
     @app.post("/users/{user_id}/message")

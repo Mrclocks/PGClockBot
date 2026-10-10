@@ -2632,11 +2632,14 @@ async def adm_users_quick_renew(
     if callback.message and user:
         await _render_user_card(callback.message, session, user, edit=True)
 
-@router.callback_query(F.data.startswith("adm:users:wcredit:"))
-@require_bot_owner_handler
-async def adm_users_wallet_credit_ask(
-    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
-):
+async def _adm_users_wallet_adjust_ask(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    mode: str,
+) -> None:
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -2646,17 +2649,23 @@ async def adm_users_wallet_credit_ask(
     if deny:
         await callback.answer(deny, show_alert=True)
         return
-    await state.update_data(admin_credit_user_id=user_id)
+    from app.services.bot_user_admin import parse_admin_wallet_mode
+
+    try:
+        direction = parse_admin_wallet_mode(mode)
+    except ValueError as e:
+        await callback.answer(user_safe_error(e), show_alert=True)
+        return
+    await state.update_data(admin_credit_user_id=user_id, admin_wallet_mode=direction)
     await callback.answer()
     from app.bot.nav_input import ask_text
 
+    action = "افزایش" if direction == "credit" else "کاهش"
     prompt = (
-        f"💰 تنظیم کیف پول برای <b>{html.escape(user.full_name or str(user.telegram_id))}</b>\n"
+        f"💰 {action} کیف پول برای <b>{html.escape(user.full_name or str(user.telegram_id))}</b>\n"
         f"موجودی فعلی: {format_toman(user.wallet_balance, get_settings().currency)}\n\n"
-        "مبلغ را به تومان بفرستید:\n"
-        "• مثبت = شارژ (مثلاً ۵۰۰۰۰)\n"
-        "• منفی = کسر (مثلاً -۵۰۰۰۰)\n"
-        "حداقل قدرمطلق ۱۰۰۰ — موجودی منفی مجاز نیست."
+        "مبلغ را به تومان بفرستید (عدد مثبت، حداقل ۱۰۰۰).\n"
+        "موجودی منفی مجاز نیست."
     )
     await ask_text(
         callback,
@@ -2666,6 +2675,27 @@ async def adm_users_wallet_credit_ask(
         fsm_state=AdminStates.user_wallet_credit,
         edit=True,
     )
+
+
+@router.callback_query(F.data.startswith("adm:users:wcredit:"))
+@require_bot_owner_handler
+async def adm_users_wallet_credit_ask(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    await _adm_users_wallet_adjust_ask(
+        callback, state, session, db_user, mode="credit"
+    )
+
+
+@router.callback_query(F.data.startswith("adm:users:wdebit:"))
+@require_bot_owner_handler
+async def adm_users_wallet_debit_ask(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    await _adm_users_wallet_adjust_ask(
+        callback, state, session, db_user, mode="debit"
+    )
+
 
 @router.message(AdminStates.user_wallet_credit)
 @require_bot_owner_handler
@@ -2691,6 +2721,7 @@ async def adm_users_wallet_credit_save(
         return
     data = await state.get_data()
     user_id = int(data.get("admin_credit_user_id") or 0)
+    mode = str(data.get("admin_wallet_mode") or "credit")
     user, deny = await _platform_shop_user(session, user_id) if user_id else (None, "یافت نشد")
     if deny:
         await state.clear()
@@ -2699,13 +2730,15 @@ async def adm_users_wallet_credit_save(
     from app.services.bot_user_admin import (
         admin_adjust_user_wallet,
         parse_admin_wallet_amount,
+        parse_admin_wallet_mode,
     )
 
     try:
         amount = parse_admin_wallet_amount(message.text or "")
+        direction = parse_admin_wallet_mode(mode)
     except ValueError:
         await message.answer(
-            "مبلغ نامعتبر — عدد صحیح تومان بفرستید (مثبت یا منفی، حداقل قدرمطلق ۱۰۰۰).",
+            "مبلغ نامعتبر — عدد صحیح مثبت تومان بفرستید (حداقل ۱۰۰۰).",
         )
         return
     try:
@@ -2713,6 +2746,7 @@ async def adm_users_wallet_credit_save(
             session,
             user,
             int(amount),
+            mode=direction,
             actor=f"tg:{db_user.telegram_id}",
             note="تنظیم از ربات ادمین",
         )
@@ -2722,10 +2756,10 @@ async def adm_users_wallet_credit_save(
         return
     await state.clear()
     await session.refresh(user)
-    verb = "شارژ شد" if amount > 0 else "کسر شد"
+    verb = "شارژ شد" if direction == "credit" else "کسر شد"
     await message.answer(
         f"✅ کیف پول {verb}.\n"
-        f"مبلغ: {format_toman(abs(amount), get_settings().currency)}\n"
+        f"مبلغ: {format_toman(amount, get_settings().currency)}\n"
         f"مانده: {format_toman(user.wallet_balance, get_settings().currency)}",
         reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
     )

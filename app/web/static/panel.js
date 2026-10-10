@@ -2654,6 +2654,9 @@
         if (!form.hasAttribute('data-confirm')) return;
         e.preventDefault();
         e.stopPropagation();
+        /* collectFormFields skips submit controls — keep the clicked button's
+           name/value (e.g. wallet mode=credit|debit) across the confirm modal. */
+        const submitter = e.submitter;
         const opts = readOpts(form, form);
         window.panelConfirm(opts).then((result) => {
           if (!result || !result.ok) return;
@@ -2662,6 +2665,9 @@
           /* Body-level POST with reason from JS memory — not form.submit() inside
              a display:none kebab menu (drops fields on mobile WebKit). */
           const overrides = {};
+          if (submitter && submitter.name) {
+            overrides[submitter.name] = submitter.value || '1';
+          }
           if (opts.requireReason) {
             const reasonText = String((result && result.reason) || '').trim();
             if (!reasonText) return;

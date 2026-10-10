@@ -2004,13 +2004,16 @@ def admin_user_actions(
     rows: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton(
-                text="💰 تنظیم کیف پول", callback_data=f"adm:users:wcredit:{user_id}"
+                text="➕ افزایش کیف", callback_data=f"adm:users:wcredit:{user_id}"
             ),
             InlineKeyboardButton(
-                text="📦 سرویس‌ها", callback_data=f"adm:users:svcs:{user_id}"
+                text="➖ کاهش کیف", callback_data=f"adm:users:wdebit:{user_id}"
             ),
         ],
         [
+            InlineKeyboardButton(
+                text="📦 سرویس‌ها", callback_data=f"adm:users:svcs:{user_id}"
+            ),
             InlineKeyboardButton(
                 text=f"🏷 تگ: {tag_label}"[:64],
                 callback_data=f"adm:users:tag:{user_id}",

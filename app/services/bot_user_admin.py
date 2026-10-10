@@ -50,20 +50,39 @@ MAX_TELEGRAM_ID = 9_007_199_254_740_991  # signed int64 safe upper bound
 
 
 def parse_admin_wallet_amount(text: str | None) -> int:
-    """Parse a signed integer toman amount (no float / no scientific notation)."""
+    """Parse a positive integer toman amount (no float / no sign).
+
+    Direction (credit vs debit) is chosen separately — never via a leading minus.
+    """
     raw = normalize_number_text(text).replace("−", "-").replace("–", "-")
-    if not raw or raw in {"+", "-"}:
+    if not raw:
         raise ValueError("مبلغ نامعتبر است")
     if any(ch in raw for ch in ".eE"):
         raise ValueError("مبلغ باید عدد صحیح تومان باشد")
     if raw.startswith("+"):
         raw = raw[1:]
-        if not raw or raw.startswith("-"):
-            raise ValueError("مبلغ نامعتبر است")
+    if not raw or raw.startswith("-"):
+        raise ValueError("مبلغ باید مثبت باشد؛ نوع عملیات را جداگانه انتخاب کنید")
     try:
-        return int(raw)
+        amount = int(raw)
     except ValueError as exc:
         raise ValueError("مبلغ نامعتبر است") from exc
+    if amount <= 0:
+        raise ValueError("مبلغ باید مثبت باشد")
+    return amount
+
+
+def parse_admin_wallet_mode(raw: str | None) -> str:
+    """Normalize adjust mode to ``credit`` or ``debit``."""
+    mode = (raw or "").strip().lower()
+    if mode in {"credit", "debit"}:
+        return mode
+    # Persian / UI aliases
+    if mode in {"افزایش", "شارژ", "plus", "inc", "increase"}:
+        return "credit"
+    if mode in {"کاهش", "کسر", "minus", "dec", "decrease"}:
+        return "debit"
+    raise ValueError("نوع تنظیم نامعتبر است — افزایش یا کاهش را انتخاب کنید")
 
 
 def _require_admin_wallet_amount(amount: object) -> int:
@@ -573,25 +592,26 @@ async def admin_adjust_user_wallet(
     user: BotUser,
     amount: int,
     *,
+    mode: str,
     actor: str,
     note: str | None = None,
     shop_id: int | None = None,
     min_abs: int = MIN_ADMIN_WALLET_ADJUST,
 ) -> BotUser:
-    """Signed admin adjust: positive credits, negative debits (atomic shortfall)."""
-    signed = _require_admin_wallet_amount(amount)
-    if signed == 0:
-        raise ValueError("مبلغ نمی‌تواند صفر باشد")
-    abs_amt = abs(signed)
+    """Admin adjust: positive ``amount`` + ``mode`` credit|debit (atomic shortfall)."""
+    direction = parse_admin_wallet_mode(mode)
+    amt = _require_admin_wallet_amount(amount)
+    if amt <= 0:
+        raise ValueError("مبلغ باید مثبت باشد")
     floor = int(min_abs)
-    if floor > 0 and abs_amt < floor:
-        raise ValueError(f"حداقل قدرمطلق مبلغ {floor:,} تومان است")
-    if signed > 0:
+    if floor > 0 and amt < floor:
+        raise ValueError(f"حداقل مبلغ {floor:,} تومان است")
+    if direction == "credit":
         return await admin_credit_user_wallet(
-            session, user, signed, actor=actor, note=note, shop_id=shop_id
+            session, user, amt, actor=actor, note=note, shop_id=shop_id
         )
     return await admin_debit_user_wallet(
-        session, user, abs_amt, actor=actor, note=note, shop_id=shop_id
+        session, user, amt, actor=actor, note=note, shop_id=shop_id
     )
 
 
