@@ -1741,14 +1741,16 @@ async def pay_wallet_cb(
                 pass
         return
 
+    # Clear pay buttons on the checkout bubble; delivery carries the full success card.
     if callback.message:
         try:
-            await safe_edit_text(callback.message, 
-                format_message("✅ خرید موفق", "سرویس در حال تحویل است…"),
+            await safe_edit_text(
+                callback.message,
+                format_message("✅ پرداخت تأیید شد", f"سفارش #{order.id}"),
                 reply_markup=None,
             )
         except Exception:
-            pass
+            logger.debug("pay_wallet checkout clear failed order=%s", order.id, exc_info=True)
     try:
         await send_delivery_to_user(
             callback.bot, db_user.telegram_id, session, None, order
