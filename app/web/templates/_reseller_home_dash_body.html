@@ -31,7 +31,7 @@
 <div class="card home-conn-card">
   <h2>کیف پول (PAYG)</h2>
   <p class="muted">مصرف ترافیک از همین کیف پول فروشگاهی کسر می‌شود</p>
-  <p class="home-balance"><strong>{{ billing_card.balance_fa }}</strong></p>
+  <p class="home-balance"><strong><span dir="ltr">{{ billing_card.balance | money }}</span> تومان</strong></p>
   {% if billing_card.suspended %}
   <p class="flash err">حساب به‌خاطر موجودی صفر مسدود است</p>
   {% endif %}

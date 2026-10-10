@@ -96,7 +96,7 @@
           </span>
           <span>درآمد</span>
         </div>
-        <strong>{{ stats.revenue | num }}</strong>
+        <strong dir="ltr">{{ stats.revenue | money }}</strong>
       </div>
     </div>
   </section>
@@ -115,7 +115,7 @@
         {% for p in recent_payments %}
           <tr>
             <td class="mono col-id">{{ p.id }}</td>
-            <td class="mono col-amount">{{ p.amount | num }}</td>
+            <td class="mono col-amount" dir="ltr">{{ p.amount | money }}</td>
             <td class="col-status">
               <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">
                 {{ pay_status(p.status) }}
@@ -144,7 +144,7 @@
         {% for o in recent_orders %}
           <tr>
             <td class="mono col-id">{{ o.id }}</td>
-            <td class="mono col-amount">{{ o.amount | num }}</td>
+            <td class="mono col-amount" dir="ltr">{{ o.amount | money }}</td>
             <td class="col-status">
               <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled'] %}rejected{% else %}neutral{% endif %}">
                 {{ ord_status(o.status) }}

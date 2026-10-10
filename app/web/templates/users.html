@@ -201,7 +201,7 @@
         </td>
         <td class="col-vol users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
         <td class="col-exp users-exp-cell" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
-        <td class="mono col-wallet col-hide-sm" dir="ltr" data-sort-value="{{ u.wallet_balance or 0 }}">{{ u.wallet_balance | num }}</td>
+        <td class="mono col-wallet col-hide-sm" dir="ltr" data-sort-value="{{ u.wallet_balance or 0 }}">{{ u.wallet_balance | money }}</td>
         <td class="col-status" data-sort-value="{{ '1' if u.is_blocked else '0' }}">
           {% if u.is_blocked %}
           <span class="badge blocked">مسدود</span>
@@ -248,7 +248,7 @@
             </form>
             {% if u.role != 'admin' %}
             <form method="post" action="/users/{{ u.id }}/delete"
-                  data-confirm="{% if (u.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول این کاربر {{ u.wallet_balance | num }} تومان است و با حذف از بین می‌رود. {% endif %}کاربر و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."
+                  data-confirm="{% if (u.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول این کاربر {{ u.wallet_balance | money }} تومان است و با حذف از بین می‌رود. {% endif %}کاربر و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."
                   data-confirm-title="تأیید حذف کاربر"
                   data-confirm-danger="1"
                   {% if (u.wallet_balance or 0) > 0 %}data-confirm-warn="1"{% endif %}

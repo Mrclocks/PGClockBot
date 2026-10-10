@@ -275,7 +275,7 @@
         <select name="plan_id" required {% if not reseller_plans %}disabled{% endif %}>
           <option value="">— انتخاب پلن —</option>
           {% for p in reseller_plans or [] %}
-          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} / گیگ{% endif %}</option>
+          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ p.price_per_gb | money }} / گیگ{% endif %}</option>
           {% endfor %}
         </select>
         <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن می‌آید</small>
@@ -317,7 +317,7 @@
         <select name="plan_id" required {% if not reseller_plans %}disabled{% endif %}>
           <option value="">— انتخاب پلن —</option>
           {% for p in reseller_plans or [] %}
-          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} / گیگ{% endif %}</option>
+          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ p.price_per_gb | money }} / گیگ{% endif %}</option>
           {% endfor %}
         </select>
         <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن کپی می‌شود</small>
@@ -416,7 +416,7 @@
           <select name="plan_id" id="create-plan-id" disabled {% if not reseller_plans %}data-no-plans="1"{% endif %}>
             <option value="">— انتخاب پلن —</option>
             {% for p in reseller_plans or [] %}
-            <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} / گیگ{% endif %}</option>
+            <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ p.price_per_gb | money }} / گیگ{% endif %}</option>
             {% endfor %}
           </select>
           <small class="muted">ثابت یا PAYG — حالت پرداخت و نرخ از همین پلن می‌آید</small>

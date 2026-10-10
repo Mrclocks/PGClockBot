@@ -124,7 +124,7 @@
   }
 
   function money(n) {
-    return (Number(n) || 0).toLocaleString("fa-IR") + " " + currency;
+    return num(n).replace(/٬/g, ",") + " " + currency;
   }
 
   function num(n) {

@@ -31,7 +31,9 @@
         var type = (el.type || 'text').toLowerCase();
         if (type === 'submit' || type === 'button' || type === 'image' || type === 'reset' || type === 'file') return;
         if ((type === 'checkbox' || type === 'radio') && !el.checked) return;
-        out.push([el.name, el.value]);
+        const value = el.hasAttribute('data-money') && typeof window.normalizePanelNumberText === 'function'
+          ? window.normalizePanelNumberText(el.value) : el.value;
+        out.push([el.name, value]);
       });
       return out;
     }
@@ -2747,9 +2749,16 @@
           el.setAttribute('dir', el.getAttribute('dir') || 'ltr');
           el.setAttribute('autocomplete', el.getAttribute('autocomplete') || 'off');
         });
+        (root || document).querySelectorAll('input[data-money]').forEach((el) => {
+          window.PanelMoney.formatMoneyInput(el, normalizeNumberText);
+        });
       }
-      function applyNormalize(el){
+      function applyNormalize(el, forSubmit = false){
         if (!isNumericField(el)) return;
+        if (el.hasAttribute('data-money') && !forSubmit) {
+          window.PanelMoney.formatMoneyInput(el, normalizeNumberText);
+          return;
+        }
         const next = normalizeNumberText(el.value);
         if (next !== el.value) el.value = next;
       }
@@ -2764,10 +2773,32 @@
       document.addEventListener('change', (e) => {
         applyNormalize(e.target);
       }, true);
+      document.addEventListener('input', (e) => {
+        if (!e.isComposing && e.target.hasAttribute('data-money')) applyNormalize(e.target);
+      }, true);
+      document.addEventListener('compositionend', (e) => {
+        if (e.target.hasAttribute('data-money')) applyNormalize(e.target);
+      }, true);
+      document.addEventListener('focus', (e) => {
+        if (e.target.hasAttribute('data-money')) applyNormalize(e.target);
+      }, true);
+      document.addEventListener('formdata', (e) => {
+        e.target.querySelectorAll('input[data-money]').forEach((el) => {
+          if (!el.disabled && el.name && e.formData.has(el.name)) {
+            e.formData.set(el.name, normalizeNumberText(el.value));
+          }
+        });
+      });
+      document.addEventListener('reset', (e) => {
+        setTimeout(() => unlockNumberInputs(e.target), 0);
+      }, true);
       document.addEventListener('submit', (e) => {
         const form = e.target;
         if (!(form instanceof HTMLFormElement)) return;
-        form.querySelectorAll('input').forEach(applyNormalize);
+        form.querySelectorAll('input').forEach((el) => applyNormalize(el, true));
+        setTimeout(() => {
+          if (e.defaultPrevented) unlockNumberInputs(form);
+        }, 0);
       }, true);
     })();
 

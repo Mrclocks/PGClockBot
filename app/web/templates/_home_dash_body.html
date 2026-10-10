@@ -92,7 +92,7 @@
   <div class="card home-conn-card">
     <h2>کیف پول</h2>
     <p class="muted">موجودی فروشگاه همین حساب</p>
-    <p class="home-balance"><strong>{{ wallet_card.balance_fa }}</strong></p>
+    <p class="home-balance"><strong><span dir="ltr">{{ wallet_card.balance | money }}</span> تومان</strong></p>
   </div>
   {% endif %}
 

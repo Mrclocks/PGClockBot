@@ -39,7 +39,7 @@
       </div>
       <div>
         <label class="form-field"><span id="edit-price-label">{% if is_addon %}قیمت بسته (تومان){% else %}قیمت (تومان){% endif %}</span>
-          <input name="price" type="number" value="{{ plan.price }}" />
+          <input name="price" type="number" data-money value="{{ plan.price }}" />
           <small class="muted" id="edit-price-hint">{% if is_addon %}فقط برای نمایندگان با اشتراک فعال{% else %}قیمت خرید پکیج نمایندگی — ۰ = رایگان{% endif %}</small>
         </label>
       </div>
@@ -53,7 +53,7 @@
       </div>
       <div id="edit-price-per-gb-field" hidden>
         <label class="form-field">نرخ هر گیگ (تومان)
-          <input name="price_per_gb" id="edit-price-per-gb-input" type="number" min="0" value="{{ plan.price_per_gb or 0 }}" />
+          <input name="price_per_gb" id="edit-price-per-gb-input" type="number" data-money min="0" value="{{ plan.price_per_gb or 0 }}" />
           <small class="muted">نرخ مصرف این پلن PAYG — برای گروه‌های با قیمت متفاوت، پلن جدا بسازید</small>
         </label>
       </div>
@@ -105,7 +105,7 @@
     </div>
     <div class="form-row" id="edit-renew-fields">
       <label class="form-field">قیمت تمدید (تومان)
-        <input name="renew_price" type="number" min="0" value="{{ plan.renew_price or 0 }}" />
+        <input name="renew_price" type="number" data-money min="0" value="{{ plan.renew_price or 0 }}" />
         <small class="muted">۰ = همان قیمت ورود پلن</small>
       </label>
       <label class="form-field">محاسبه تمدید
@@ -153,10 +153,10 @@
 
     <div class="form-row" id="edit-extra-prices" {% if not plan.allow_buy_extra %}hidden{% endif %}>
       <label class="form-field">قیمت هر گیگ اضافه (تومان)
-        <input name="extra_gb_price" type="number" min="0" value="{{ plan.extra_gb_price or 0 }}" />
+        <input name="extra_gb_price" type="number" data-money min="0" value="{{ plan.extra_gb_price or 0 }}" />
       </label>
       <label class="form-field">قیمت هر کاربر اضافه (تومان)
-        <input name="extra_user_price" type="number" min="0" value="{{ plan.extra_user_price or 0 }}" />
+        <input name="extra_user_price" type="number" data-money min="0" value="{{ plan.extra_user_price or 0 }}" />
       </label>
     </div>
     </div>{# /edit-buy-extra-block #}

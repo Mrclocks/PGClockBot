@@ -82,7 +82,7 @@
       <dl class="home-period-metrics">
         <div><dt>سفارش</dt><dd>{{ day.orders | num }}</dd></div>
         <div><dt>خرید موفق</dt><dd>{{ day.delivered | num }}</dd></div>
-        <div><dt>درآمد</dt><dd>{{ day.revenue | num }}</dd></div>
+        <div><dt>درآمد</dt><dd dir="ltr">{{ day.revenue | money }}</dd></div>
         <div><dt>کاربر جدید</dt><dd>{{ day.new_users | num }}</dd></div>
       </dl>
     </article>
@@ -91,7 +91,7 @@
       <dl class="home-period-metrics">
         <div><dt>سفارش</dt><dd>{{ week.orders | num }}</dd></div>
         <div><dt>خرید موفق</dt><dd>{{ week.delivered | num }}</dd></div>
-        <div><dt>درآمد</dt><dd>{{ week.revenue | num }}</dd></div>
+        <div><dt>درآمد</dt><dd dir="ltr">{{ week.revenue | money }}</dd></div>
         <div><dt>کاربر جدید</dt><dd>{{ week.new_users | num }}</dd></div>
       </dl>
     </article>
@@ -100,7 +100,7 @@
       <dl class="home-period-metrics">
         <div><dt>سفارش</dt><dd>{{ month.orders | num }}</dd></div>
         <div><dt>خرید موفق</dt><dd>{{ month.delivered | num }}</dd></div>
-        <div><dt>درآمد</dt><dd>{{ month.revenue | num }}</dd></div>
+        <div><dt>درآمد</dt><dd dir="ltr">{{ month.revenue | money }}</dd></div>
         <div><dt>کاربر جدید</dt><dd>{{ month.new_users | num }}</dd></div>
       </dl>
     </article>

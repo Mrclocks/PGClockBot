@@ -20,7 +20,7 @@
         <input name="name" required value="{{ plan.name }}" />
       </label>
       <label class="form-field">قیمت (تومان)
-        <input name="price" type="number" min="0" required value="{{ plan.price }}" />
+        <input name="price" type="number" data-money min="0" required value="{{ plan.price }}" />
       </label>
       <label class="form-field">مدت (روز)
         <input name="duration_days" type="number" min="1" required value="{{ plan.duration_days }}" />

@@ -40,7 +40,7 @@
         {{ table_select_cell(p.id) }}
         <td>{{ p.name }}</td>
         <td class="col-hide-sm muted">{% if p.category_id and plan_category_map and plan_category_map.get(p.category_id) %}{{ plan_category_map.get(p.category_id).name }}{% else %}—{% endif %}</td>
-        <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
+        <td class="mono" dir="ltr">{{ p.price | money }}</td>
         <td class="col-hide-sm">{{ p.duration_days }} روز</td>
         <td>{% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}</td>
         <td class="mono col-hide-sm">
@@ -180,7 +180,7 @@
         </td>
         <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
         <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
-        <td class="mono">{{ "{:,}".format(a.price).replace(",", "٬") }}</td>
+        <td class="mono" dir="ltr">{{ a.price | money }}</td>
         <td>{% if a.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -248,7 +248,7 @@
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
         <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
-        <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
+        <td class="mono" dir="ltr">{{ p.price | money }}</td>
         <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -296,8 +296,8 @@
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
         <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
-        <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
-        <td class="mono col-hide-sm">{% if p.price_per_gb %}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }}{% else %}—{% endif %}</td>
+        <td class="mono" dir="ltr">{{ p.price | money }}</td>
+        <td class="mono col-hide-sm" dir="ltr">{% if p.price_per_gb %}{{ p.price_per_gb | money }}{% else %}—{% endif %}</td>
         <td class="mono col-hide-sm">{{ p.pg_group_ids or '—' }}</td>
         <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
@@ -349,7 +349,7 @@
         <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
         <td>{% if p.plan_kind == 'addon_users' %}کاربر{% else %}حجم{% endif %}</td>
         <td class="mono">{% if p.plan_kind == 'addon_users' %}+{{ p.addon_users or 0 }} کاربر{% else %}+{{ p.addon_gb or 0 }} گیگ{% endif %}</td>
-        <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
+        <td class="mono" dir="ltr">{{ p.price | money }}</td>
         <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -412,7 +412,7 @@
             <input name="name" required placeholder="مثلاً ویژه ۴۰ گیگ" />
           </label>
           <label class="form-field">قیمت (تومان)
-            <input name="price" type="number" min="0" required placeholder="150000" />
+            <input name="price" type="number" data-money min="0" required placeholder="150,000" />
           </label>
           <label class="form-field">مدت (روز)
             <input name="duration_days" type="number" min="1" value="30" required />
@@ -573,10 +573,10 @@
         </div>
         <div class="form-row">
           <label class="form-field">قیمت هر گیگ (تومان)
-            <input name="custom_plan_price_per_gb" type="number" min="0" value="{{ values.get('custom_plan_price_per_gb','1000') }}" />
+            <input name="custom_plan_price_per_gb" type="number" data-money min="0" value="{{ values.get('custom_plan_price_per_gb','1000') }}" />
           </label>
           <label class="form-field">قیمت هر روز (تومان)
-            <input name="custom_plan_price_per_day" type="number" min="0" value="{{ values.get('custom_plan_price_per_day','500') }}" />
+            <input name="custom_plan_price_per_day" type="number" data-money min="0" value="{{ values.get('custom_plan_price_per_day','500') }}" />
           </label>
           <label class="form-field">حداقل / حداکثر گیگ
             <div class="form-row" style="margin: 0">
@@ -697,7 +697,7 @@
             <small class="muted" id="unified-addon-amount-hint">برای حجم می‌تواند اعشار باشد؛ برای زمان عدد صحیح روز</small>
           </label>
           <label class="form-field">قیمت (تومان)
-            <input name="price" id="unified-addon-price" type="number" min="0" required placeholder="50000" />
+            <input name="price" id="unified-addon-price" type="number" data-money min="0" required placeholder="50,000" />
           </label>
           <label class="form-field">ترتیب
             <input name="sort_order" type="number" value="0" />
@@ -730,12 +730,12 @@
           </label>
           <label class="form-field">
             <span id="reseller-price-label">قیمت ورود (تومان)</span>
-            <input name="price" type="number" value="0" id="reseller-plan-price" />
+            <input name="price" type="number" data-money value="0" id="reseller-plan-price" />
             <small class="muted" id="reseller-price-hint">هزینه خرید پکیج نمایندگی — ۰ = رایگان؛ فقط تأیید ادمین</small>
           </label>
           <label class="form-field" id="reseller-price-per-gb-field" hidden>
             نرخ هر گیگ (تومان)
-            <input name="price_per_gb" id="reseller-price-per-gb-input" type="number" min="0" value="0" />
+            <input name="price_per_gb" id="reseller-price-per-gb-input" type="number" data-money min="0" value="0" />
             <small class="muted">فقط برای PAYG — هر پلن می‌تواند نرخ جدا داشته باشد</small>
           </label>
           <label class="form-field">ترتیب
@@ -781,7 +781,7 @@
         </div>
         <div class="form-row" id="reseller-renew-fields">
           <label class="form-field">قیمت تمدید (تومان)
-            <input name="renew_price" type="number" min="0" value="0" />
+            <input name="renew_price" type="number" data-money min="0" value="0" />
             <small class="muted">۰ = همان قیمت ورود پلن</small>
           </label>
           <label class="form-field">محاسبه تمدید
@@ -828,10 +828,10 @@
 
         <div class="form-row" id="reseller-extra-prices" hidden>
           <label class="form-field">قیمت هر گیگ اضافه (تومان)
-            <input name="extra_gb_price" id="reseller-extra-gb-price" type="number" min="0" value="0" />
+            <input name="extra_gb_price" id="reseller-extra-gb-price" type="number" data-money min="0" value="0" />
           </label>
           <label class="form-field">قیمت هر کاربر اضافه (تومان)
-            <input name="extra_user_price" id="reseller-extra-user-price" type="number" min="0" value="0" />
+            <input name="extra_user_price" id="reseller-extra-user-price" type="number" data-money min="0" value="0" />
           </label>
         </div>
         </div>{# /reseller-buy-extra-block #}
@@ -1007,7 +1007,7 @@
           <small class="muted" id="service-addon-amount-hint">برای حجم می‌تواند اعشار باشد؛ برای زمان عدد صحیح روز</small>
         </label>
         <label class="form-field">قیمت (تومان)
-          <input name="price" id="service-addon-price" type="number" min="0" required placeholder="50000" />
+          <input name="price" id="service-addon-price" type="number" data-money min="0" required placeholder="50,000" />
         </label>
         <label class="form-field">ترتیب
           <input name="sort_order" id="service-addon-sort" type="number" value="0" />
@@ -1044,7 +1044,7 @@
             </td>
             <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
             <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
-            <td class="mono">{{ "{:,}".format(a.price).replace(",", "٬") }}</td>
+            <td class="mono" dir="ltr">{{ a.price | money }}</td>
             <td>{% if a.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
             <td class="col-actions">
               {% call row_actions() %}
@@ -1117,7 +1117,7 @@
           <tr data-bulk-ops="toggle">
             {{ table_select_cell(c.id) }}
             <td><span class="mono" dir="ltr">{{ c.code }}</span>{% if c.note %}<div class="muted">{{ c.note }}</div>{% endif %}</td>
-            <td>{% if c.kind == 'discount' %}<span class="mono">{{ c.percent }}٪</span>{% if c.max_discount_toman is not none %}<div class="muted">تا {{ c.max_discount_toman | num }} تومان</div>{% endif %}{% else %}<span class="mono">{{ c.amount | num }}</span><div class="muted">شارژ کیف پول</div>{% endif %}</td>
+            <td>{% if c.kind == 'discount' %}<span class="mono">{{ c.percent }}٪</span>{% if c.max_discount_toman is not none %}<div class="muted">تا <span dir="ltr">{{ c.max_discount_toman | money }}</span> تومان</div>{% endif %}{% else %}<span class="mono" dir="ltr">{{ c.amount | money }}</span><div class="muted">شارژ کیف پول</div>{% endif %}</td>
             <td class="col-hide-sm">{{ c.used_count }}{% if c.max_uses is not none %}/{{ c.max_uses }}{% endif %}</td>
             <td><div>هر کاربر: {{ c.max_uses_per_user if c.max_uses_per_user is not none else 'نامحدود' }}</div>{% if c.kind == 'discount' %}<div class="muted">{{ 'فقط خرید اول' if c.first_purchase_only else d.get('purchase_label', 'همه خریدها') }}</div>{% endif %}</td>
             <td dir="ltr">{{ d.get('expiry_label', 'بدون انقضا') }}</td>
@@ -1662,7 +1662,10 @@
         if (nameEl) nameEl.value = btn.getAttribute('data-name') || '';
         if (kindEl) kindEl.value = btn.getAttribute('data-kind') || 'volume';
         if (amountEl) amountEl.value = btn.getAttribute('data-amount') || '';
-        if (priceEl) priceEl.value = btn.getAttribute('data-price') || '';
+        if (priceEl) {
+          priceEl.value = btn.getAttribute('data-price') || '';
+          priceEl.dispatchEvent(new Event('input', {bubbles: true}));
+        }
         if (sortEl) sortEl.value = btn.getAttribute('data-sort') || '0';
         if (descEl) descEl.value = btn.getAttribute('data-description') || '';
         if (submitEl) submitEl.textContent = 'ذخیره تغییرات';

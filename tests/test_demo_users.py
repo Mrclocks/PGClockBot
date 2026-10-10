@@ -26,7 +26,7 @@ from app.db.models import (
 from app.services.daily_report import _scoped_totals, _today_activity
 from app.services.demo_users import set_demo_user
 from app.services.finance_reports import build_finance_report
-from app.services.formatting import format_number
+from app.services.formatting import format_money, format_number
 from app.services.home_overview import admin_customer_counts, bot_dashboard_summary, bot_panel_summary, reseller_shop_summary
 from app.services.loyalty import overview_metrics
 from app.services.subordinate_report import SubordinateShop, collect_subordinate_stats
@@ -97,6 +97,7 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
 
         self.env = Environment(loader=FileSystemLoader(ROOT / "app/web/templates"), autoescape=select_autoescape())
         self.env.filters["num"] = format_number
+        self.env.filters["money"] = format_money
 
         def render(request: Request, name: str, context: dict[str, Any]) -> HTMLResponse:
             return HTMLResponse(self.env.get_template(name).render(**context, csrf_token="fake-csrf"))

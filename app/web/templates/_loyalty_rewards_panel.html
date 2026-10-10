@@ -23,8 +23,8 @@
       </div>
       <p class="muted">فقط برای تخفیف درصدی:</p>
       <div class="form-row">
-        <label class="form-field">حداقل خرید (تومان)<input name="min_purchase_toman" type="number" min="0" value="0" dir="ltr" /></label>
-        <label class="form-field">سقف تخفیف (تومان)<input name="max_discount_toman" type="number" min="0" placeholder="اختیاری" dir="ltr" /></label>
+        <label class="form-field">حداقل خرید (تومان)<input name="min_purchase_toman" type="number" data-money min="0" value="0" dir="ltr" /></label>
+        <label class="form-field">سقف تخفیف (تومان)<input name="max_discount_toman" type="number" data-money min="0" placeholder="اختیاری" dir="ltr" /></label>
         <label class="form-field">انقضا (روز)<input name="expires_days" type="number" min="1" placeholder="اختیاری" dir="ltr" /></label>
       </div>
       <div class="actions"><button class="btn" type="submit">ایجاد جایزه</button></div>
@@ -58,8 +58,8 @@
       </div>
       {% if reward.reward_type == 'discount_percent' %}
       <div class="form-row">
-        <label class="form-field">حداقل خرید<input name="min_purchase_toman" type="number" min="0" value="{{ reward.min_purchase_toman or 0 }}" dir="ltr" /></label>
-        <label class="form-field">سقف تخفیف<input name="max_discount_toman" type="number" min="0" value="{{ reward.max_discount_toman if reward.max_discount_toman is not none else '' }}" dir="ltr" /></label>
+        <label class="form-field">حداقل خرید<input name="min_purchase_toman" type="number" data-money min="0" value="{{ reward.min_purchase_toman or 0 }}" dir="ltr" /></label>
+        <label class="form-field">سقف تخفیف<input name="max_discount_toman" type="number" data-money min="0" value="{{ reward.max_discount_toman if reward.max_discount_toman is not none else '' }}" dir="ltr" /></label>
         <label class="form-field">انقضا (روز)<input name="expires_days" type="number" min="1" value="{{ reward.expires_days if reward.expires_days is not none else '' }}" dir="ltr" /></label>
       </div>
       {% endif %}
