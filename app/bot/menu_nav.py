@@ -115,8 +115,8 @@ async def build_main_reply_keyboard(
     session: AsyncSession,
     db_user: BotUser,
     *,
-    is_reseller_bot: bool = False,
-    reseller_owner_id: int | None = None,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
     as_user: bool = False,
     ui: dict | None = None,
 ) -> tuple[ReplyKeyboardMarkup, dict, str]:
@@ -294,8 +294,8 @@ async def buyer_main_reply_keyboard(
     db_user: BotUser,
     *,
     order=None,
-    is_reseller_bot: bool = False,
-    reseller_owner_id: int | None = None,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
 ) -> tuple[ReplyKeyboardMarkup, dict]:
     """Customer main menu after checkout/delivery (always shows «سرویس‌های من» when owned)."""
     rid = reseller_owner_id
@@ -336,8 +336,8 @@ async def restore_main_reply(
     *,
     text: str = "🏠 منوی اصلی",
     state: FSMContext | None = None,
-    is_reseller_bot: bool = False,
-    reseller_owner_id: int | None = None,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
     as_user: bool = False,
 ) -> dict:
     if state is not None:
@@ -369,8 +369,8 @@ async def show_nav_keyboard(
     text: str,
     state: FSMContext | None = None,
     push: bool = True,
-    is_reseller_bot: bool = False,
-    reseller_owner_id: int | None = None,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
     profile=None,
     order_id: int | None = None,
     as_user: bool = False,
@@ -427,8 +427,8 @@ async def present_order_pay(
     *,
     state: FSMContext | None = None,
     text: str = "روش پرداخت را از کیبورد پایین انتخاب کنید:",
-    is_reseller_bot: bool = False,
-    reseller_owner_id: int | None = None,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
     heal_main: bool = False,
 ) -> None:
     """Show order payment methods as an inline list (Option B).

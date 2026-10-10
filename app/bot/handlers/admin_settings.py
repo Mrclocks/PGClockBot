@@ -36,7 +36,10 @@ from app.services.settings_button_labels import (
 
 async def _lasting_kb(session, db_user, classic):
     from app.bot.nav_chrome import lasting_staff_reply
-    return await lasting_staff_reply(session, db_user, classic=classic)
+    return await lasting_staff_reply(
+        session, db_user, classic=classic,
+        is_reseller_bot=False, reseller_owner_id=None,
+    )
 
 router = Router(name="admin_settings")
 

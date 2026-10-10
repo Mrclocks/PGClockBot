@@ -18,10 +18,11 @@ class ServiceCardKeyboardTests(unittest.TestCase):
         self.assertIn("svc:auto:42", data)
         self.assertIn("svc:delask:42", data)
         self.assertIn("svc:view:42", data)  # refresh
-        self.assertIn("nv:svc:guide:42", data)
+        self.assertIn("guide:svc:42", data)
+        self.assertIn("svc:cancel:42", data)
         self.assertIn("svc:list", data)
         # No new money/mutation prefixes
-        self.assertTrue(all(d.startswith(("svc:", "nv:svc:")) for d in data))
+        self.assertTrue(all(d.startswith(("svc:", "guide:")) for d in data))
 
     def test_list_keyboard_adds_home_back(self):
         from app.bot.nav_inline import services_list_keyboard

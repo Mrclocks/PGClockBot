@@ -337,7 +337,13 @@ async def _buyer_reply_markup(session: AsyncSession, payment: Payment | None, or
     if not user:
         return None
     try:
-        markup, _ui = await buyer_main_reply_keyboard(session, user, order=order)
+        markup, _ui = await buyer_main_reply_keyboard(
+            session,
+            user,
+            order=order,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
+        )
         return markup
     except Exception:
         return None

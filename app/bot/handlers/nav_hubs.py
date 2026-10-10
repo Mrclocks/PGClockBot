@@ -42,6 +42,8 @@ async def nv_wallet_amount(
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     """Preset amount or custom free-text prompt (Wave C)."""
     from app.bot import keyboards as kb
@@ -78,7 +80,13 @@ async def nv_wallet_amount(
         )
         return
     await present_topup_methods(
-        callback.message, session, db_user, state, amount
+        callback.message,
+        session,
+        db_user,
+        state,
+        amount,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
 
 @router.callback_query(F.data == "nv:w:tx")
@@ -157,13 +165,23 @@ async def nv_support_home(
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     from app.bot.handlers.reply_nav import open_support_home
 
     await callback.answer()
     if not callback.message:
         return
-    await open_support_home(callback.message, session, db_user, state, push=False)
+    await open_support_home(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=False,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
 
 @router.callback_query(F.data == "nv:resapply")
 async def nv_reseller_apply(
@@ -171,13 +189,23 @@ async def nv_reseller_apply(
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     from app.bot.handlers.reply_nav import open_reseller_apply
 
     await callback.answer()
     if not callback.message:
         return
-    await open_reseller_apply(callback.message, session, db_user, state, push=False)
+    await open_reseller_apply(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=False,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
 
 @router.callback_query(F.data == "nv:loy:home")
 async def nv_loyalty_home(
@@ -257,48 +285,17 @@ async def nv_loyalty_hist(
 
 @router.callback_query(F.data.startswith("nv:svc:guide:"))
 async def nv_svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    """Service-card guide: show guide_text with back to the same service card."""
-    from app.bot.nav_inline import safe_edit_inline
-    from app.db.models import UserService
-    from app.services.rich_text import outbound_setting_text, rich_plain_text
+    """Legacy card callback — same catalog-or-fallback path as ``guide:svc``."""
+    from app.bot.handlers.services import svc_guide
 
+    raw = callback.data or ""
     try:
-        svc_id = int((callback.data or "").split(":")[-1])
+        svc_id = int(raw.rsplit(":", 1)[-1])
     except (TypeError, ValueError):
         await callback.answer("نامعتبر", show_alert=True)
         return
-    svc = await session.get(UserService, svc_id)
-    if not svc or svc.bot_user_id != db_user.id:
-        await callback.answer("یافت نشد", show_alert=True)
-        return
-    await callback.answer()
-    if not callback.message:
-        return
-    ui = await get_all_settings(session)
-    raw = ui.get("guide_text")
-    if not rich_plain_text(raw).strip():
-        raw = (
-            "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، "
-            "فیلد «متن راهنما» را پر کنید."
-        )
-    text, send_kw = outbound_setting_text(raw, title="📘 آموزش اتصال")
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
-    back = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=ui.get("btn_back") or "⬅️ بازگشت",
-                    callback_data=f"svc:view:{svc_id}",
-                )
-            ]
-        ]
-    )
-    ok = await safe_edit_inline(
-        callback.message, text, reply_markup=back, **send_kw
-    )
-    if not ok:
-        await callback.message.answer(text, reply_markup=back, **send_kw)
+    callback.data = f"guide:svc:{svc_id}"
+    await svc_guide(callback, session, db_user)
 
 @router.callback_query(F.data == "nv:trial")
 async def nv_trial(

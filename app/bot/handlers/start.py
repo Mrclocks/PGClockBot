@@ -128,23 +128,24 @@ async def render_home(
         from aiogram.exceptions import TelegramBadRequest
 
         try:
-            # Inline «بازگشت» — update the bubble text; reply kb already stable.
+            # Inline «بازگشت» — welcome text only (no inline CTAs); reply kb stays.
             await message.edit_text(text, reply_markup=None, **home_send_kw)
+            return
         except TelegramBadRequest as e:
-            if "message is not modified" not in str(e).lower():
-                if getattr(message, "photo", None):
-                    try:
-                        await message.delete()
-                    except Exception:
-                        pass
-                    await message.answer(text, reply_markup=reply_kb, **home_send_kw)
-                    return
+            if "message is not modified" in str(e).lower():
+                return
         except Exception:
             pass
-        # Main ReplyKeyboard already stable — do not send filler chrome.
+        # Edit failed (e.g. can't edit) — one fallback message, never silent.
+        if getattr(message, "photo", None):
+            try:
+                await message.delete()
+            except Exception:
+                pass
+        await message.answer(text, reply_markup=reply_kb, **home_send_kw)
         return
 
-    # One message: welcome + stable main ReplyKeyboard.
+    # One message: welcome + stable main ReplyKeyboard (no inline CTAs).
     await message.answer(text, reply_markup=reply_kb, **home_send_kw)
     _ = seed_reply_kb
 
@@ -331,7 +332,15 @@ async def _handle_start_deeplink(
             ui=ui,
             effective_role=effective_role,
         )
-        await open_support_home(message, session, db_user, state, push=True)
+        await open_support_home(
+            message,
+            session,
+            db_user,
+            state,
+            push=True,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return True
 
     if key == "gift":
@@ -420,13 +429,25 @@ async def _deeplink_renew(
             )
         ).scalar_one_or_none()
         if not row:
-            await open_services_list(message, session, db_user)
+            await open_services_list(
+                message,
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
             await message.answer("سرویسی برای تمدید ندارید — از فروشگاه خرید کنید.")
             return
         svc_id = int(row.id)
     svc = await session.get(UserService, int(svc_id))
     if not svc or svc.bot_user_id != db_user.id:
-        await open_services_list(message, session, db_user)
+        await open_services_list(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         await message.answer("سرویس پیدا نشد — از لیست یکی را انتخاب کنید.")
         return
     bubble = await message.answer("🔄 تمدید سرویس…")
@@ -478,13 +499,25 @@ async def _deeplink_config(
             )
         ).scalar_one_or_none()
         if not row:
-            await open_services_list(message, session, db_user)
+            await open_services_list(
+                message,
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
             await message.answer("سرویسی ندارید — پس از خرید، کانفیگ اینجا ارسال می‌شود.")
             return
         svc_id = int(row.id)
     svc = await session.get(UserService, int(svc_id))
     if not svc or svc.bot_user_id != db_user.id:
-        await open_services_list(message, session, db_user)
+        await open_services_list(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         await message.answer("سرویس پیدا نشد — از لیست یکی را انتخاب کنید.")
         return
     bubble = await message.answer("📱 ارسال کانفیگ…")

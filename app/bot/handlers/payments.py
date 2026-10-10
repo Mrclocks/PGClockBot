@@ -204,7 +204,13 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
 
     # Stars success → leave pay menus; delivery attaches main KB
     await clear_checkout_nav(None)
-    main_kb, _ = await buyer_main_reply_keyboard(session, db_user, order=order)
+    main_kb, _ = await buyer_main_reply_keyboard(
+        session,
+        db_user,
+        order=order,
+        is_reseller_bot=False,
+        reseller_owner_id=None,
+    )
     await message.answer(
         format_message("✅ پرداخت استارز", "پرداخت با موفقیت انجام شد."),
         reply_markup=main_kb,
@@ -369,7 +375,12 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         try:
             from app.bot.menu_nav import buyer_main_reply_keyboard
 
-            main_kb, _ = await buyer_main_reply_keyboard(session, user)
+            main_kb, _ = await buyer_main_reply_keyboard(
+                session,
+                user,
+                is_reseller_bot=False,
+                reseller_owner_id=None,
+            )
             await callback.bot.send_message(
                 user.telegram_id,
                 text,
