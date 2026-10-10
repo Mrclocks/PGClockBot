@@ -196,9 +196,23 @@ async def res_home(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Option B: open inline manage hub (same as ``nv:res:home``)."""
+    """Option B: open inline manage hub (same as ``nv:res:home``).
+
+    Full manage panel only on the dedicated shop bot — main bot redirects to
+    credentials (shop isolation).
+    """
     from app.bot.handlers.reply_nav import open_reseller_home
 
+    # Main bot: never open the shop manage hub — credentials card only.
+    if not is_reseller_bot:
+        await res_creds(
+            callback,
+            session,
+            db_user,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
+        )
+        return
     await callback.answer()
     if not callback.message:
         return
@@ -207,7 +221,7 @@ async def res_home(
         session,
         db_user,
         state,
-        is_reseller_bot=is_reseller_bot,
+        is_reseller_bot=True,
         reseller_owner_id=reseller_owner_id,
         push=False,
     )

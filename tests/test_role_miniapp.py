@@ -203,9 +203,15 @@ class MiniAppSourceTests(unittest.TestCase):
         self.assertIn("web.telegram.org", src)
 
     def test_admin_resellers_hub_offers_miniapp(self):
-        src = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
-        self.assertIn('view="ops"', src)
-        self.assertIn("miniapp_inline_keyboard", src)
+        # Option B: Mini App ops shortcut lives on the inline resellers hub KB
+        # (not a classic reply-nav follow-up message).
+        hub = (ROOT / "app/bot/nav_inline.py").read_text(encoding="utf-8")
+        self.assertIn('view="ops"', hub)
+        self.assertIn("miniapp_inline_keyboard", hub)
+        self.assertIn("def admin_resellers_hub_keyboard", hub)
+        # Hub opener still presents that keyboard
+        reply = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
+        self.assertIn("admin_resellers_hub_keyboard", reply)
 
     def test_menu_button_webapp_sync(self):
         src = (ROOT / "app/bot/chat_menu.py").read_text(encoding="utf-8")
