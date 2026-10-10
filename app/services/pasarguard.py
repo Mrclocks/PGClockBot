@@ -832,6 +832,44 @@ class PasarGuardClient:
             auth=False, use_cache=False, resolve_api_base=False,
         )
 
+    async def subscription_wireguard_bytes(
+        self, token: str, *, subscription_url: str | None = None
+    ) -> bytes | None:
+        """Fetch WireGuard payload (``.zip`` or plain ``.conf``). Public sub route.
+
+        Returns ``None`` when the user has no WireGuard inbound (404/empty/HTML).
+        Uses raw bytes — ``request()`` would corrupt zip via ``resp.text``.
+        """
+        path = self._subscription_endpoint(token, "wireguard", subscription_url)
+        try:
+            resp = await self._client.request(
+                "GET",
+                path,
+                headers={
+                    "Accept": "application/zip, text/plain;q=0.9, */*;q=0.1",
+                    "User-Agent": "PGClockBot-WireGuard/1.0",
+                },
+            )
+        except httpx.HTTPError:
+            logger.warning("wireguard fetch transport error token=…%s", (token or "")[-6:])
+            return None
+        if resp.status_code in {204, 404}:
+            return None
+        if resp.status_code >= 400:
+            logger.warning(
+                "wireguard fetch failed status=%s token=…%s",
+                resp.status_code,
+                (token or "")[-6:],
+            )
+            return None
+        data = resp.content or b""
+        if len(data) < 16:
+            return None
+        head = data.lstrip()[:64].lower()
+        if head.startswith(b"<!doctype") or head.startswith(b"<html"):
+            return None
+        return data
+
 
 def as_any_list(data: Any, *keys: str) -> list:
     if data is None:
