@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.46": [
+        "رفع خروج از پیش‌نمایش منوی کاربر: دکمه «بازگشت به پنل ادمین» دوباره کار می‌کند",
+        "ریستور: restore/pre-v0.2.46-v0.2.45",
+    ],
     "0.2.45": [
         "ناوبری فقط اینلاین (حالت ب): حذف کامل حالت کلاسیک و سلکتور «حالت ناوبری» از وب‌پنل",
         "متن همه دکمه‌های هاب ادمین/خرید/پیش‌نمایش از تنظیمات پنل؛ خروج از پیش‌نمایش و بازگشت در جزئیات پلن",
