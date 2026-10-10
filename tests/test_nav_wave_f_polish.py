@@ -200,9 +200,9 @@ class WholesaleQtyInlineTests(unittest.IsolatedAsyncioTestCase):
                 new_callable=AsyncMock,
             ),
             patch(
-                "app.bot.tg_utils.attach_reply_keyboard",
+                "app.bot.nav_input.finish_text_step",
                 new_callable=AsyncMock,
-            ) as attach,
+            ) as finish,
             patch(
                 "app.bot.handlers.shop.kb.shop_reply_keyboard",
                 return_value="SHOP_CHROME",
@@ -213,9 +213,9 @@ class WholesaleQtyInlineTests(unittest.IsolatedAsyncioTestCase):
             )
 
         shop_chrome.assert_not_called()
-        attach.assert_awaited()
-        first_markup = message.answer.await_args_list[0].kwargs.get("reply_markup")
-        self.assertIs(first_markup, qty_kb)
+        # ask_text path: edit prompt into qty panel — no shop reply-chrome heal.
+        finish.assert_awaited()
+        self.assertIs(finish.await_args.kwargs.get("inline"), qty_kb)
 
 
 class StaffLoyaltyAnswerInlineTests(unittest.IsolatedAsyncioTestCase):
@@ -224,6 +224,7 @@ class StaffLoyaltyAnswerInlineTests(unittest.IsolatedAsyncioTestCase):
         from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
         message = AsyncMock()
+        message.from_user = MagicMock(is_bot=False)
         message.answer = AsyncMock(return_value=MagicMock())
         session = AsyncMock()
         db_user = MagicMock()
@@ -232,16 +233,11 @@ class StaffLoyaltyAnswerInlineTests(unittest.IsolatedAsyncioTestCase):
                 [InlineKeyboardButton(text="x", callback_data="loyadm:rules")]
             ]
         )
-        main_kb = MagicMock(name="MAIN")
 
         with (
             patch(
                 "app.services.users.get_all_settings",
                 AsyncMock(return_value={"nav_mode": "inline"}),
-            ),
-            patch(
-                "app.bot.menu_nav.build_main_reply_keyboard",
-                AsyncMock(return_value=(main_kb, {}, "admin")),
             ),
             patch(
                 "app.bot.keyboards.admin_loyalty_reply_keyboard",
@@ -258,11 +254,14 @@ class StaffLoyaltyAnswerInlineTests(unittest.IsolatedAsyncioTestCase):
             )
 
         chrome.assert_not_called()
+        # One panel only — no filler chrome follow-up with main KB.
+        self.assertEqual(message.answer.await_count, 1)
         first = message.answer.await_args_list[0]
         self.assertEqual(first.args[0], "rules body")
-        self.assertIs(first.kwargs.get("reply_markup"), content)
-        second = message.answer.await_args_list[1]
-        self.assertIs(second.kwargs.get("reply_markup"), main_kb)
+        markup = first.kwargs.get("reply_markup")
+        data = [b.callback_data for row in markup.inline_keyboard for b in row]
+        self.assertIn("loyadm:rules", data)
+        self.assertIn("nv:adm:loy", data)
 
 
 class AdmPgCallbackInlineTests(unittest.IsolatedAsyncioTestCase):

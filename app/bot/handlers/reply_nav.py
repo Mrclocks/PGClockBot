@@ -120,9 +120,10 @@ class ReplyMenuTextFilter(BaseFilter):
             ).items():
                 mapping.setdefault(k, v)
             # Escape from preview back to admin hub (must win over any collision)
-            exit_label = (kb._t(ui, "btn_adm_exit_preview") or "").strip()
-            if exit_label:
-                mapping[exit_label] = kb.REPLY_ACTION_ADMIN
+            exit_label = (
+                kb._t(ui, "btn_adm_exit_preview") or "🛠 بازگشت به پنل ادمین"
+            ).strip()
+            mapping[exit_label] = kb.REPLY_ACTION_ADMIN
             admin_label = (kb._t(ui, "btn_admin") or "").strip()
             if admin_label:
                 mapping[admin_label] = kb.REPLY_ACTION_ADMIN
@@ -139,9 +140,10 @@ class ReplyMenuTextFilter(BaseFilter):
                 mapping.setdefault(k, v)
             # Escape from preview back to shop hub (+ custom exit label)
             mapping[(kb._t(ui, "btn_reseller") or "🤝 پنل نماینده").strip()] = kb.REPLY_ACTION_RESELLER
-            exit_label = (kb._t(ui, "btn_adm_exit_preview") or "").strip()
-            if exit_label:
-                mapping[exit_label] = kb.REPLY_ACTION_RESELLER
+            exit_label = (
+                kb._t(ui, "btn_adm_exit_preview") or "🛠 بازگشت به پنل ادمین"
+            ).strip()
+            mapping[exit_label] = kb.REPLY_ACTION_RESELLER
             preview_label = (kb._t(ui, "btn_adm_preview") or "").strip()
             if preview_label:
                 mapping[preview_label] = kb.REPLY_ACTION_RES_PREVIEW
@@ -2076,6 +2078,23 @@ async def handle_back(
         return
     if level == nav.NAV_USER_PREVIEW:
         # Back / Home from preview exits to the staff panel (same as exit button).
+        from app.bot.nav_chrome import heal_main_reply
+        from app.bot.nav_inline import clear_nav_panel
+
+        await clear_nav_panel(state)
+        await heal_main_reply(
+            message,
+            session,
+            db_user,
+            text=(
+                "به پنل نماینده برگشتید."
+                if is_reseller_bot
+                else "به پنل ادمین برگشتید."
+            ),
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            as_user=False,
+        )
         if is_reseller_bot:
             await open_reseller_home(
                 message,
@@ -2757,6 +2776,21 @@ async def reply_main_nav(
             reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_RESELLER:
+        if (await nav.get_nav_level(state)) == nav.NAV_USER_PREVIEW:
+            from app.bot.nav_chrome import heal_main_reply
+            from app.bot.nav_inline import clear_nav_panel
+
+            await clear_nav_panel(state)
+            await heal_main_reply(
+                message,
+                session,
+                db_user,
+                text="به پنل نماینده برگشتید.",
+                is_reseller_bot=True,
+                reseller_owner_id=reseller_owner_id,
+                as_user=False,
+                ui=ui,
+            )
         await open_reseller_home(
             message,
             session,
@@ -2774,6 +2808,23 @@ async def reply_main_nav(
             reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_ADMIN:
+        # Exit user-preview: restore admin ReplyKeyboard and force a fresh
+        # panel at the bottom (do not edit a buried admin hub above preview).
+        if (await nav.get_nav_level(state)) == nav.NAV_USER_PREVIEW:
+            from app.bot.nav_chrome import heal_main_reply
+            from app.bot.nav_inline import clear_nav_panel
+
+            await clear_nav_panel(state)
+            await heal_main_reply(
+                message,
+                session,
+                db_user,
+                text="به پنل ادمین برگشتید.",
+                is_reseller_bot=False,
+                reseller_owner_id=None,
+                as_user=False,
+                ui=ui,
+            )
         await open_admin_home(
             message, session, db_user, state, is_reseller_bot=is_reseller_bot
         )

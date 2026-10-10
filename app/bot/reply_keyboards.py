@@ -716,9 +716,10 @@ def main_reply_keyboard(
         profile=None if as_user else profile,
     )
     if as_user and preview_exit_action:
-        exit_label = (_t(ui, "btn_adm_exit_preview") or "").strip()
-        if exit_label:
-            entries.append((preview_exit_action, exit_label))
+        exit_label = (
+            _t(ui, "btn_adm_exit_preview") or "🛠 بازگشت به پنل ادمین"
+        ).strip()
+        entries.append((preview_exit_action, exit_label))
     # No Home row on level-0 (already at home).
     rows = _pack_reply_rows(entries, ui, footer=[])
     return _reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…")
@@ -1043,16 +1044,16 @@ def reply_action_map(
         # ``as_user`` may be called with role="user" when merging preview labels
         # into an admin/reseller filter map — still register the exit button.
         if as_user:
-            exit_label = (_t(ui, "btn_adm_exit_preview") or "").strip()
+            exit_label = (
+                _t(ui, "btn_adm_exit_preview") or "🛠 بازگشت به پنل ادمین"
+            ).strip()
             if is_reseller_bot:
-                if exit_label:
-                    mapping[exit_label] = REPLY_ACTION_RESELLER
+                mapping[exit_label] = REPLY_ACTION_RESELLER
                 res_label = (_t(ui, "btn_reseller") or "").strip()
                 if res_label:
                     mapping[res_label] = REPLY_ACTION_RESELLER
             else:
-                if exit_label:
-                    mapping[exit_label] = REPLY_ACTION_ADMIN
+                mapping[exit_label] = REPLY_ACTION_ADMIN
                 admin_label = (_t(ui, "btn_admin") or "").strip()
                 if admin_label:
                     mapping[admin_label] = REPLY_ACTION_ADMIN
