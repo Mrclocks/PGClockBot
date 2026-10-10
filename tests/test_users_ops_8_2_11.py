@@ -131,7 +131,14 @@ class UsersOpsUiTests(unittest.TestCase):
         self.assertIn(".users-ops-table .col-svc", css)
         self.assertIn(".users-ops-table .col-vol", css)
         self.assertIn(".users-ops-table .col-exp", css)
-        self.assertIn("col-hide-sm", (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8"))
+        self.assertIn(".users-ops-table .col-wallet", css)
+        users_html = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
+        self.assertIn('class="col-wallet"', users_html)
+        self.assertIn("row.wallet_balance", users_html)
+        # Wallet stays visible on mobile (not col-hide-sm); # / telegram may still hide.
+        wallet_th = users_html.split("کیف پول</th>", 1)[0].rsplit("<th", 1)[-1]
+        self.assertNotIn("col-hide-sm", wallet_th)
+        self.assertIn("col-hide-sm", users_html)
         self.assertIn("users-svc-boxed", css)
         self.assertIn("users-svc-menu-label", css)
         self.assertNotIn("has-svc-alert", css)

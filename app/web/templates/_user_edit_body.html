@@ -1,4 +1,5 @@
 {% from "macros.html" import num_stepper %}
+{% set wallet_amt = display_wallet if display_wallet is defined else (user.wallet_balance or 0) %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
@@ -17,7 +18,7 @@
     </div>
     <div class="user-edit-wallet-pill" dir="ltr">
       <span class="muted">کیف پول</span>
-      <strong><span dir="ltr">{{ (user.wallet_balance or 0) | money }}</span> تومان</strong>
+      <strong><span dir="ltr">{{ wallet_amt | money }}</span> تومان</strong>
     </div>
   </div>
 </section>
@@ -276,14 +277,14 @@
     <h3>حذف کاربر</h3>
     <p class="muted">کاربر بات و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط حذف می‌شوند. برگشت‌ناپذیر است. اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود.</p>
   </header>
-  {% if (user.wallet_balance or 0) > 0 %}
-  <div class="flash warn">موجودی کیف پول: <span dir="ltr">{{ user.wallet_balance | money }}</span> تومان — با حذف از بین می‌رود.</div>
+  {% if wallet_amt > 0 %}
+  <div class="flash warn">موجودی کیف پول: <span dir="ltr">{{ wallet_amt | money }}</span> تومان — با حذف از بین می‌رود.</div>
   {% endif %}
   <form method="post" action="/users/{{ user.id }}/delete" class="form-stack"
-        data-confirm="{% if (user.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | money }} تومان از بین می‌رود. {% endif %}کاربر و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."
+        data-confirm="{% if wallet_amt > 0 %}هشدار: موجودی کیف پول {{ wallet_amt | money }} تومان از بین می‌رود. {% endif %}کاربر و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."
         data-confirm-title="تأیید حذف کاربر"
         data-confirm-danger="1"
-        {% if (user.wallet_balance or 0) > 0 %}data-confirm-warn="1"{% endif %}
+        {% if wallet_amt > 0 %}data-confirm-warn="1"{% endif %}
         data-confirm-reason="1"
         data-confirm-reason-label="علت حذف"
         data-confirm-reason-name="reason"

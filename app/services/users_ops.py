@@ -164,6 +164,9 @@ class UserOpsRow:
     no_service: bool = True
     has_alert: bool = False
     urgency: int = 0  # higher = more urgent
+    # Scoped purse for the current staff shop (platform or ShopWallet) — never
+    # cross-tenant. Template must use this, not raw user.wallet_balance.
+    wallet_balance: int = 0
 
 
 def _service_label(svc: UserService, plan: Plan | None) -> str:
@@ -382,10 +385,19 @@ async def build_users_ops_page(
     filter_key: UserFilter | str = "all",
     focus_uid: int | None = None,
     expire_days: int = DEFAULT_EXPIRE_DAYS,
+    shop_id: int | None = None,
+    wallet_by_uid: dict[int, int] | None = None,
 ) -> tuple[list[UserOpsRow], dict[str, int], UserFilter]:
+    from app.services.wallet import wallet_balances_for_scope
+
     fk = normalize_users_filter(str(filter_key))
     focus = parse_focus_uid(str(focus_uid) if focus_uid is not None else None)
-    by_uid = await load_services_by_user_ids(session, [int(u.id) for u in users])
+    uids = [int(u.id) for u in users]
+    by_uid = await load_services_by_user_ids(session, uids)
+    if wallet_by_uid is None:
+        wallet_by_uid = await wallet_balances_for_scope(
+            session, uids, shop_id=shop_id
+        )
     now = _utcnow()
     all_rows = [
         build_user_ops_row(
@@ -393,6 +405,8 @@ async def build_users_ops_page(
         )
         for u in users
     ]
+    for row in all_rows:
+        row.wallet_balance = int(wallet_by_uid.get(int(row.user.id), 0) or 0)
     counts = summarize_ops_counts(all_rows)
     filtered = filter_ops_rows(all_rows, fk)
     if focus:

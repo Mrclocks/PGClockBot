@@ -118,6 +118,46 @@ async def wallet_balance_for_context(
     return await get_wallet_balance(session, user, shop_id=shop_id)
 
 
+async def wallet_balances_for_scope(
+    session: AsyncSession,
+    user_ids: list[int],
+    *,
+    shop_id: int | None = None,
+) -> dict[int, int]:
+    """Map ``user_id → balance`` for one shop scope (or platform purse).
+
+    ``shop_id=None`` reads ``BotUser.wallet_balance`` only.
+    A positive ``shop_id`` reads that shop's ``ShopWallet`` rows and never
+    another tenant's purse — missing rows are ``0`` (fail-closed, no leak).
+    """
+    uids = sorted({int(x) for x in user_ids if x is not None})
+    if not uids:
+        return {}
+    sid = normalize_shop_id(shop_id)
+    if sid is None:
+        rows = (
+            await session.execute(
+                select(BotUser.id, BotUser.wallet_balance).where(BotUser.id.in_(uids))
+            )
+        ).all()
+        out = {uid: 0 for uid in uids}
+        for uid, bal in rows:
+            out[int(uid)] = int(bal or 0)
+        return out
+    out = {uid: 0 for uid in uids}
+    rows = (
+        await session.execute(
+            select(ShopWallet.user_id, ShopWallet.balance).where(
+                ShopWallet.user_id.in_(uids),
+                ShopWallet.reseller_id == sid,
+            )
+        )
+    ).all()
+    for uid, bal in rows:
+        out[int(uid)] = int(bal or 0)
+    return out
+
+
 async def _get_or_create_shop_wallet(
     session: AsyncSession, *, user_id: int, reseller_id: int
 ) -> ShopWallet:

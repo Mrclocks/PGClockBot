@@ -472,6 +472,42 @@ class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
             ok = await reseller_can_review_payment(session, reviewer, payment)
         self.assertTrue(ok)
 
+    async def test_wallet_balances_for_scope_isolates_shop(self):
+        from app.services.wallet import credit_wallet, wallet_balances_for_scope
+
+        async with self.Session() as session:
+            owner_a = await self._user(session, 9001, code="OWNA")
+            owner_b = await self._user(session, 9002, code="OWNB")
+            buyer = await self._user(
+                session, 9003, reseller_id=owner_a.id, code="BUYAB"
+            )
+            await credit_wallet(
+                session, buyer, 12_000, "a", shop_id=owner_a.id
+            )
+            await credit_wallet(
+                session, buyer, 99_000, "b", shop_id=owner_b.id
+            )
+            buyer.wallet_balance = 7_000
+            await session.commit()
+
+            platform = await wallet_balances_for_scope(
+                session, [buyer.id], shop_id=None
+            )
+            shop_a = await wallet_balances_for_scope(
+                session, [buyer.id], shop_id=owner_a.id
+            )
+            shop_b = await wallet_balances_for_scope(
+                session, [buyer.id], shop_id=owner_b.id
+            )
+            self.assertEqual(platform[buyer.id], 7_000)
+            self.assertEqual(shop_a[buyer.id], 12_000)
+            self.assertEqual(shop_b[buyer.id], 99_000)
+            # Unknown user id → 0, never raises / never leaks
+            missing = await wallet_balances_for_scope(
+                session, [buyer.id, 424242], shop_id=owner_a.id
+            )
+            self.assertEqual(missing[424242], 0)
+
 
 class PaymentTenancyTopupRegression(unittest.IsolatedAsyncioTestCase):
     async def test_reseller_still_blocked_from_platform_topup(self):
