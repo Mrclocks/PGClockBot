@@ -440,7 +440,12 @@ async def svc_renew_preview(
 
 @router.callback_query(F.data.startswith("svc:renewconfirm:"))
 async def svc_renew_pay(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     ui = await get_all_settings(session)
     _, _, svc_id, plan_id = callback.data.split(":")
@@ -519,6 +524,8 @@ async def svc_renew_pay(
             order.id,
             state=state,
             text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
 
 @router.callback_query(F.data.startswith("svc:addon:"))
@@ -612,7 +619,12 @@ async def svc_addon(
 
 @router.callback_query(F.data.startswith("svc:addonpay:"))
 async def svc_addon_pay(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     ui = await get_all_settings(session)
     parts = (callback.data or "").split(":")
@@ -701,6 +713,8 @@ async def svc_addon_pay(
             order.id,
             state=state,
             text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
 
 @router.callback_query(F.data.startswith("svc:delask:"))
@@ -747,6 +761,8 @@ async def svc_delete(
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext | None = None,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     # Match svc:del:{id} only — not svc:delask:
     parts = (callback.data or "").split(":")
@@ -791,4 +807,6 @@ async def svc_delete(
             db_user,
             text="سرویس حذف شد — از منوی پایین ادامه دهید.",
             state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )

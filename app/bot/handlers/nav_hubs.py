@@ -42,6 +42,8 @@ async def nv_wallet_amount(
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     """Preset amount or custom free-text prompt (Wave C)."""
     from app.bot import keyboards as kb
@@ -78,7 +80,13 @@ async def nv_wallet_amount(
         )
         return
     await present_topup_methods(
-        callback.message, session, db_user, state, amount
+        callback.message,
+        session,
+        db_user,
+        state,
+        amount,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
 
 @router.callback_query(F.data == "nv:w:tx")
@@ -171,13 +179,23 @@ async def nv_reseller_apply(
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     from app.bot.handlers.reply_nav import open_reseller_apply
 
     await callback.answer()
     if not callback.message:
         return
-    await open_reseller_apply(callback.message, session, db_user, state, push=False)
+    await open_reseller_apply(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=False,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
 
 @router.callback_query(F.data == "nv:loy:home")
 async def nv_loyalty_home(

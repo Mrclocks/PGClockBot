@@ -165,7 +165,7 @@ class LastingStaffReplyTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=(main_kb, {}, "admin")),
             ),
         ):
-            out = await lasting_staff_reply(session, db_user, classic=classic)
+            out = await lasting_staff_reply(session, db_user, classic=classic, is_reseller_bot=False, reseller_owner_id=None)
 
         self.assertIs(out, main_kb)
 
@@ -188,7 +188,7 @@ class LastingStaffReplyTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=(main_kb, {}, "admin")),
             ),
         ):
-            out = await lasting_staff_reply(session, db_user, classic=classic)
+            out = await lasting_staff_reply(session, db_user, classic=classic, is_reseller_bot=False, reseller_owner_id=None)
 
         self.assertIs(out, main_kb)
         self.assertIsNot(out, classic)
@@ -225,6 +225,8 @@ class AnswerStaffNavReopenTests(unittest.IsolatedAsyncioTestCase):
                 state=state,
                 reopen_panel=reopen,
                 clear_state=True,
+                is_reseller_bot=False,
+                reseller_owner_id=None,
             )
 
         message.answer.assert_awaited()
