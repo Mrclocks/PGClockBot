@@ -530,36 +530,47 @@ async def _staff_loyalty_answer(
     reseller_owner_id: int | None = None,
     content_inline: InlineKeyboardMarkup | None = None,
     content_caption: str | None = None,
+    state: FSMContext | None = None,
+    heal_reply: bool = False,
 ) -> None:
-    """Wave F: loyalty manage leaves — content/hub inline + stable main KB."""
-    from app.bot.menu_nav import build_main_reply_keyboard
-    from app.bot.nav_inline import admin_loyalty_manage_hub_keyboard, present_inline_only
+    """Staff loyalty leaf/hub — one inline panel (edit-in-place on callbacks).
+
+    Never sends the filler «از منوی پایین…» chrome message. Pass
+    ``heal_reply=True`` only after ``cancel_reply`` displaced the main KB.
+    """
+    _ = content_caption
+    from app.bot.nav_chrome import heal_main_reply
+    from app.bot.nav_inline import (
+        admin_loyalty_manage_hub_keyboard,
+        is_bot_panel_message,
+        present_inline_only,
+        with_inline_back,
+    )
     from app.services.users import get_all_settings
 
     ui = await get_all_settings(session)
-    await present_inline_only(
-        message,
-        text=text,
-        inline=content_inline
-        or admin_loyalty_manage_hub_keyboard(
-            ui,
-            include_tiers=can_tiers,
-            back_callback=(
-                "nv:res:home" if is_reseller_bot else "nv:adm:people"
-            ),
-        ),
-    )
-    main_kb, _, _ = await build_main_reply_keyboard(
-        session,
-        db_user,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-        ui=ui,
-    )
-    await message.answer(
-        "از منوی پایین یا دکمه‌های بالا ادامه دهید.",
-        reply_markup=main_kb,
-    )
+    hub_back = "nv:res:home" if is_reseller_bot else "nv:adm:people"
+    leaf_back = "nv:adm:loy"
+    if content_inline is not None:
+        inline = with_inline_back(content_inline, ui, leaf_back)
+    else:
+        inline = admin_loyalty_manage_hub_keyboard(
+            ui, include_tiers=can_tiers, back_callback=hub_back
+        )
+    # After cancel_reply the main KB must be restored once (user message).
+    if heal_reply and not is_bot_panel_message(message):
+        await heal_main_reply(
+            message,
+            session,
+            db_user,
+            text="کیبورد اصلی بازیابی شد.",
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+        )
+    await present_inline_only(message, text=text, inline=inline)
+    _ = db_user
+    _ = state
     return
 
 async def open_admin_loyalty_hub(
@@ -699,6 +710,9 @@ def _staff_rules_markup(rules: list[PointsRule]) -> InlineKeyboardMarkup:
     rows.append(
         [InlineKeyboardButton(text="🔄 تازه‌سازی", callback_data="loyadm:rules")]
     )
+    rows.append(
+        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="nv:adm:loy")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def _staff_rewards_markup(rewards: list[LoyaltyReward]) -> InlineKeyboardMarkup:
@@ -717,6 +731,9 @@ def _staff_rewards_markup(rewards: list[LoyaltyReward]) -> InlineKeyboardMarkup:
         )
     rows.append(
         [InlineKeyboardButton(text="🔄 تازه‌سازی", callback_data="loyadm:rewards")]
+    )
+    rows.append(
+        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="nv:adm:loy")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -890,6 +907,7 @@ def _staff_settings_markup(*, enabled: bool) -> InlineKeyboardMarkup:
                 )
             ],
             [InlineKeyboardButton(text="🔄 تازه‌سازی", callback_data="loyadm:settings")],
+            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="nv:adm:loy")],
         ]
     )
 
@@ -1668,14 +1686,26 @@ async def staff_save_wallet_rate(
         return
     if kb.is_cancel_text(text):
         await state.clear()
+        enabled = await loyalty_enabled(session, reseller_id=scope)
+        rate_cur = await get_setting(
+            session, SETTING_POINTS_TO_WALLET_RATE, "100", reseller_id=scope
+        )
+        body = "\n".join(
+            [
+                kv_line("🔘", "باشگاه", "فعال" if enabled else "غیرفعال"),
+                kv_line("💱", "نرخ امتیاز→تومان", str(rate_cur)),
+            ]
+        )
         await _staff_loyalty_answer(
             message,
             session,
             db_user,
-            "لغو شد.",
+            format_message("⚙️ تنظیمات باشگاه", body),
             can_tiers=can_tiers,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
+            content_inline=_staff_settings_markup(enabled=enabled),
+            heal_reply=True,
         )
         return
     raw = text.replace(",", "").replace("٬", "").strip()
@@ -1690,14 +1720,20 @@ async def staff_save_wallet_rate(
         session, SETTING_POINTS_TO_WALLET_RATE, str(rate), reseller_id=scope
     )
     await state.clear()
+    enabled = await loyalty_enabled(session, reseller_id=scope)
     await _staff_loyalty_answer(
         message,
         session,
         db_user,
-        f"نرخ ذخیره شد: <b>{rate}</b>",
+        format_message(
+            "⚙️ تنظیمات باشگاه",
+            f"نرخ ذخیره شد: <b>{rate}</b>",
+        ),
         can_tiers=can_tiers,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
+        content_inline=_staff_settings_markup(enabled=enabled),
+        heal_reply=True,
     )
 
 @router.message(LoyaltyManageStates.edit_referral_text)
@@ -1748,10 +1784,11 @@ async def staff_save_referral_text(
             message,
             session,
             db_user,
-            "لغو شد.",
+            format_message("⭐ باشگاه مشتریان", "لغو شد — به هاب مدیریت برگشتید."),
             can_tiers=can_tiers,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
+            heal_reply=True,
         )
         return
     if not text:
@@ -1766,8 +1803,9 @@ async def staff_save_referral_text(
         message,
         session,
         db_user,
-        "متن دعوت ذخیره شد ✅",
+        format_message("⭐ باشگاه مشتریان", "متن دعوت ذخیره شد ✅"),
         can_tiers=can_tiers,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
+        heal_reply=True,
     )

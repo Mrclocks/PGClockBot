@@ -78,7 +78,7 @@ async def sync_plans_reply_keyboard(
 ) -> None:
     """Keep nav aligned after inline «back» on plans screens.
 
-    Wave F / Option B: re-present the hub inline (no ``⬇️`` chrome).
+    Option B: edit the same inline panel — never send filler chrome.
     """
     from app.bot.nav_inline import (
         admin_plans_add_type_hub_keyboard,
@@ -86,8 +86,8 @@ async def sync_plans_reply_keyboard(
         admin_plans_kind_hub_keyboard,
         present_inline_only,
     )
-    from app.bot.menu_nav import build_main_reply_keyboard
 
+    _ = db_user
     if add_type and audience in {"users", "resellers"}:
         await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=None)
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_ADD_TYPE, push=False)
@@ -116,26 +116,15 @@ async def sync_plans_reply_keyboard(
         inline = admin_plans_audience_hub_keyboard(ui)
         body = "💎 <b>پلن‌ها</b>\nمخاطب یا ابزار کاتالوگ را انتخاب کنید."
     await present_inline_only(message, text=body, inline=inline)
-    main_kb, _, _ = await build_main_reply_keyboard(
-        session,
-        db_user,
-        is_reseller_bot=False,
-        reseller_owner_id=None,
-        ui=ui,
-    )
-    await message.answer("از منوی پایین یا دکمه‌های بالا ادامه دهید.", reply_markup=main_kb)
     return
 
 async def _answer_plans_cancel(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    from app.bot.menu_nav import build_main_reply_keyboard
-
-    await state.set_state(None)
-    ui = await get_all_settings(session)
-    markup = await _plans_reply_markup(session, state)
-    # Prefer stable main KB when we can resolve the user; else keep plans reply.
+    """Cancel free-text plans FSM: restore main KB and reopen the plans hub."""
+    from app.bot.nav_chrome import heal_main_reply
     from app.db.models import BotUser
     from sqlalchemy import select
 
+    await state.set_state(None)
     tg_id = getattr(getattr(message, "from_user", None), "id", None)
     db_user = None
     if tg_id is not None:
@@ -144,17 +133,19 @@ async def _answer_plans_cancel(message: Message, state: FSMContext, session: Asy
                 select(BotUser).where(BotUser.telegram_id == int(tg_id))
             )
         ).scalar_one_or_none()
-    if db_user is not None:
-        main_kb, _, _ = await build_main_reply_keyboard(
-            session,
-            db_user,
-            is_reseller_bot=False,
-            reseller_owner_id=None,
-            ui=ui,
-        )
-        await message.answer("لغو شد.", reply_markup=main_kb)
+    if db_user is None:
+        await message.answer("لغو شد.")
         return
-    await message.answer("لغو شد.", reply_markup=markup)
+    await heal_main_reply(
+        message,
+        session,
+        db_user,
+        text="کیبورد اصلی بازیابی شد.",
+        is_reseller_bot=False,
+        reseller_owner_id=None,
+    )
+    # Reopen current plans level (audience/kind) — not the main menu dump.
+    await sync_plans_reply_keyboard(message, session, db_user, state)
     return
 
 async def _answer_plans_saved(message: Message, state: FSMContext, session: AsyncSession, text: str) -> None:
@@ -327,6 +318,7 @@ async def send_add_plan_type_picker(
 
 async def send_users_fixed_list(message: Message, session: AsyncSession) -> None:
     from app.bot.handlers.admin import _plan_line
+    from app.bot.nav_inline import present_inline_only
 
     ui = await get_all_settings(session)
     result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
@@ -336,9 +328,10 @@ async def send_users_fixed_list(message: Message, session: AsyncSession) -> None
         body = "هنوز پلن ثابتی ثبت نشده است."
     else:
         body = "\n\n".join(_plan_line(p) for p in fixed[:20])
-    await message.answer(
-        f"📦 <b>پلن‌های ثابت</b>\n\n{body}",
-        reply_markup=kb.admin_plans_list_keyboard(
+    await present_inline_only(
+        message,
+        text=f"📦 <b>پلن‌های ثابت</b>\n\n{body}",
+        inline=kb.admin_plans_list_keyboard(
             plans,
             ui,
             back_callback=BACK_USERS_KIND,
@@ -377,8 +370,10 @@ async def _build_custom_screen(session: AsyncSession) -> tuple[str, InlineKeyboa
     return text, _kb(rows)
 
 async def send_users_custom(message: Message, session: AsyncSession) -> None:
+    from app.bot.nav_inline import present_inline_only
+
     text, markup = await _build_custom_screen(session)
-    await message.answer(text, reply_markup=markup)
+    await present_inline_only(message, text=text, inline=markup)
 
 async def _build_trial_screen(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     trial = (
@@ -423,8 +418,10 @@ async def _build_trial_screen(session: AsyncSession) -> tuple[str, InlineKeyboar
     return f"🧪 <b>پلن تست</b>\n\n{body}", _kb(rows)
 
 async def send_users_trial(message: Message, session: AsyncSession) -> None:
+    from app.bot.nav_inline import present_inline_only
+
     text, markup = await _build_trial_screen(session)
-    await message.answer(text, reply_markup=markup)
+    await present_inline_only(message, text=text, inline=markup)
 
 async def _build_wholesale_screen(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     ui = await get_all_settings(session)
@@ -461,14 +458,17 @@ async def _build_wholesale_screen(session: AsyncSession) -> tuple[str, InlineKey
     return text, _kb(rows)
 
 async def send_users_wholesale(message: Message, session: AsyncSession) -> None:
+    from app.bot.nav_inline import present_inline_only
+
     text, markup = await _build_wholesale_screen(session)
-    await message.answer(text, reply_markup=markup)
+    await present_inline_only(message, text=text, inline=markup)
 
 async def send_reseller_plans_list(
     message: Message,
     session: AsyncSession,
     kind: str,
 ) -> None:
+    from app.bot.nav_inline import present_inline_only
     from app.services.pg_admin_subscription import is_subscription_plan
 
     all_plans = await list_reseller_plans(session)
@@ -483,11 +483,14 @@ async def send_reseller_plans_list(
                 for p in plans[:10]
             ]
             body = "\n\n".join(cards)
-        await message.answer(
-            f"🎁 <b>پلن‌های نماینده — {label}</b>\n"
-            "بدون گروه/نقش/نام‌گذاری سرویس.\n\n"
-            f"{body}",
-            reply_markup=kb.admin_reseller_plans_list_keyboard(
+        await present_inline_only(
+            message,
+            text=(
+                f"🎁 <b>پلن‌های نماینده — {label}</b>\n"
+                "بدون گروه/نقش/نام‌گذاری سرویس.\n\n"
+                f"{body}"
+            ),
+            inline=kb.admin_reseller_plans_list_keyboard(
                 plans,
                 await get_all_settings(session),
                 mode=kind,
@@ -511,9 +514,10 @@ async def send_reseller_plans_list(
             for p in plans[:10]
         ]
         body = "\n\n".join(cards)
-    await message.answer(
-        f"🤝 <b>پلن‌های نماینده — {label}</b>\n\n{body}",
-        reply_markup=kb.admin_reseller_plans_list_keyboard(
+    await present_inline_only(
+        message,
+        text=f"🤝 <b>پلن‌های نماینده — {label}</b>\n\n{body}",
+        inline=kb.admin_reseller_plans_list_keyboard(
             plans,
             await get_all_settings(session),
             mode=kind,
@@ -582,32 +586,8 @@ async def open_add_kind_action(
             reply_markup=kb.cancel_reply(),
         )
         return
-    # Settings-based kinds — open configure screen (same as web «تنظیم»)
-    from app.bot.nav_inline import admin_plans_kind_hub_keyboard, present_inline_only
-    from app.bot.menu_nav import build_main_reply_keyboard
-
-    ui = await get_all_settings(session)
-    await present_inline_only(
-        message,
-        text=(
-            "👥 <b>پلن‌های کاربران</b>\n"
-            if audience == "users"
-            else "🤝 <b>پلن‌های نمایندگان</b>\n"
-        )
-        + "افزودن/کاتالوگ از دکمه‌های زیر.",
-        inline=admin_plans_kind_hub_keyboard(audience, ui),
-    )
-    main_kb, _, _ = await build_main_reply_keyboard(
-        session,
-        db_user,
-        is_reseller_bot=False,
-        reseller_owner_id=None,
-        ui=ui,
-    )
-    await message.answer(
-        "از منوی پایین یا دکمه‌های بالا ادامه دهید.",
-        reply_markup=main_kb,
-    )
+    # Settings-based kinds — open configure screen on the same panel.
+    _ = db_user
     await open_kind_screen(message, session, audience, kind)
 
 async def _rerender_plans_screen(

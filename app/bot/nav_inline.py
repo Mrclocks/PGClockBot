@@ -63,7 +63,16 @@ async def present_inline_only(
     inline: InlineKeyboardMarkup | None,
     **send_kw: Any,
 ) -> Message | None:
-    """Send one content message with inline markup — no reply-chrome follow-up."""
+    """Present one content panel with inline markup — no reply-chrome follow-up.
+
+    When ``message`` is bot-owned (typical ``callback.message``), **edit in place**
+    so every inline tap updates the same bubble. User-authored messages (reply
+    keyboard / first open) still get a single ``answer``.
+    """
+    if is_bot_panel_message(message):
+        if await safe_edit_inline(message, text, reply_markup=inline, **send_kw):
+            return message
+        # Edit failed (deleted/too old) — fall through to one new panel.
     try:
         return await message.answer(text, reply_markup=inline, **send_kw)
     except Exception:
