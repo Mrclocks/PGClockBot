@@ -380,7 +380,7 @@ async def nv_adm_close(
         return
     body = (
         f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
-        "برای بازگشت، «پنل ادمین» را از کیبورد پایین بزنید."
+        "برای بازگشت، دکمه «پنل ادمین» را بزنید."
     )
     await safe_edit_inline(callback.message, body, reply_markup=None)
     await clear_nav_panel(state)
@@ -403,7 +403,7 @@ async def nv_res_close(
         return
     if not is_reseller_bot:
         await safe_edit_inline(
-            callback.message, "از کیبورد پایین ادامه دهید.", reply_markup=None
+            callback.message, "از منوی اصلی ادامه دهید.", reply_markup=None
         )
         await clear_nav_panel(state)
         return
@@ -421,7 +421,7 @@ async def nv_res_close(
         return
     await safe_edit_inline(
         callback.message,
-        "🤝 <b>پنل نماینده</b>\nبرای بازگشت، «پنل مدیریت» را از کیبورد پایین بزنید.",
+        "🤝 <b>پنل نماینده</b>\nبرای بازگشت، دکمه «پنل مدیریت» را بزنید.",
         reply_markup=None,
     )
     await clear_nav_panel(state)

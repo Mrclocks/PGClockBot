@@ -90,11 +90,12 @@ class BotShopIsolationTests(unittest.TestCase):
 
     def test_adm_home_no_reply_kb_on_edit(self):
         src = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        # Must not pass ReplyKeyboardMarkup into edit_text
+        # Must edit the same inline hub — never answer with a ReplyKeyboard.
         home = src.split("async def adm_home")[1].split("async def adm_dash")[0]
-        self.assertNotIn("edit_text(\n            f\"🛠", home)
-        self.assertIn("safe_edit_text", home)
-        self.assertIn("_admin_hub_kb", home)
+        self.assertIn("open_admin_home", home)
+        self.assertNotIn("_admin_hub_kb", home)
+        self.assertNotIn("admin_reply_keyboard", home)
+        self.assertNotIn("message.answer(", home)
 
     def test_adm_payments_platform_filter(self):
         src = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")

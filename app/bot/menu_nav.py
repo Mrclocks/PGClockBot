@@ -172,10 +172,13 @@ async def build_main_reply_keyboard(
         )
     from app.services.users import on as _setting_on
 
+    # Apply CTA is for normal customers only. Admins/resellers already staff;
+    # preview (as_user) still shows it so the customer menu looks accurate.
     show_apply = (
         not is_reseller_bot
         and _setting_on(ui.get("show_reseller_apply"))
         and "reseller_apply" in set(kb._menu_order(ui))
+        and (as_user or role == "user")
     )
     markup = kb.main_reply_keyboard(
         role,

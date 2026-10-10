@@ -2129,13 +2129,24 @@ async def handle_back(
         oid = data2.get(nav.PAY_ORDER_ID)
         if oid:
             from app.bot.menu_nav import present_order_pay
+            from app.config import get_settings
+            from app.db.models import Order
+            from app.services.formatting import format_toman
 
+            order = await session.get(Order, int(oid))
+            summary = None
+            if order is not None:
+                summary = (
+                    f"🛒 سفارش #{order.id}\n"
+                    f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
+                )
             await present_order_pay(
                 message,
                 session,
                 db_user,
                 int(oid),
                 state=state,
+                summary=summary,
                 is_reseller_bot=is_reseller_bot,
                 reseller_owner_id=reseller_owner_id,
             )
