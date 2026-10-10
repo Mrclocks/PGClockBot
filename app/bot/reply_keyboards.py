@@ -702,7 +702,7 @@ def main_reply_keyboard(
     ui: dict | None = None,
     as_user: bool = False,
     show_reseller_creds: bool = False,
-    show_reseller_apply: bool = False,
+    show_reseller_apply: bool | None = None,
     profile=None,
     pg_features: frozenset[str] | set[str] | None = None,
     can_manage_representatives: bool = True,
@@ -713,15 +713,24 @@ def main_reply_keyboard(
     Admin gets the customer menu + «پنل ادمین» (groups live on the inline panel).
     ``as_user`` preview appends ``btn_adm_exit_preview`` when
     ``preview_exit_action`` is set (admin or reseller escape).
+
+    ``show_reseller_apply``: ``None`` → infer from settings/menu_order (safe
+    default for forgotten callers). Shop bots must pass ``False`` explicitly
+    via ``build_main_reply_keyboard``.
     """
     _ = (pg_features, can_manage_representatives)  # ACL applied inside inline hubs
+    if show_reseller_apply is None:
+        show_reseller_apply = (
+            on((ui or {}).get("show_reseller_apply"))
+            and "reseller_apply" in set(_menu_order(ui))
+        )
     map_role = Role.USER.value if as_user else role
     entries = _reply_user_entries(
         map_role,
         has_services=has_services,
         ui=ui,
         show_reseller_creds=False if as_user else show_reseller_creds,
-        show_reseller_apply=show_reseller_apply,
+        show_reseller_apply=bool(show_reseller_apply),
         profile=None if as_user else profile,
     )
     if as_user and preview_exit_action:
