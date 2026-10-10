@@ -324,8 +324,10 @@ async def open_services_list(
     push: bool = True,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
+    heal_reply: bool = False,
 ) -> None:
     from app.bot.menu_nav import build_main_reply_keyboard
+    from app.bot.nav_chrome import heal_main_reply
     from app.bot.nav_inline import present_inline_only
     ui = await get_all_settings(session)
     result = await session.execute(
@@ -361,6 +363,16 @@ async def open_services_list(
             await svc_view(cb, session, db_user, state)
         except TypeError:
             await svc_view(cb, session, db_user)
+        if heal_reply:
+            await heal_main_reply(
+                message,
+                session,
+                db_user,
+                text="سرویس شما — از دکمه‌های پیام بالا ادامه دهید.",
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                ui=ui,
+            )
         return
     body = "📦 <b>سرویس‌های شما</b>\nیکی را انتخاب کنید:"
     from app.bot.nav_inline import services_list_keyboard
@@ -368,6 +380,16 @@ async def open_services_list(
     await present_inline_only(
         message, text=body, inline=services_list_keyboard(services, ui)
     )
+    if heal_reply:
+        await heal_main_reply(
+            message,
+            session,
+            db_user,
+            text="از لیست بالا یک سرویس را انتخاب کنید.",
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+        )
     return
 
 async def open_wallet_home(
@@ -3158,7 +3180,18 @@ async def reply_main_nav(
         data = await state.get_data()
         svc_id = data.get(nav.SERVICE_ID)
         if not svc_id:
-            await message.answer("سرویسی انتخاب نشده — از لیست سرویس‌ها یکی را بزنید.")
+            # Stale reply keyboard after restart (MemoryStorage empty) — reopen
+            # services and re-install the main ReplyKeyboard once (no dead-end).
+            await open_services_list(
+                message,
+                session,
+                db_user,
+                state,
+                push=False,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                heal_reply=True,
+            )
             return
         from app.bot.handlers import services as svc_h
 
