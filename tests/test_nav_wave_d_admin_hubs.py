@@ -257,6 +257,8 @@ class ShowNavKeyboardAdminInlineTests(unittest.IsolatedAsyncioTestCase):
                 nav.NAV_ADMIN_OPS,
                 text="ops",
                 state=state,
+                is_reseller_bot=False,
+                reseller_owner_id=None,
             )
 
         ops_chrome.assert_not_called()

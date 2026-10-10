@@ -37,7 +37,10 @@ async def _admin_hub_kb(session: AsyncSession, db_user: BotUser) -> ReplyKeyboar
     from app.bot.nav_chrome import lasting_staff_reply
 
     classic = await admin_hub_reply_keyboard(session, db_user)
-    return await lasting_staff_reply(session, db_user, classic=classic)
+    return await lasting_staff_reply(
+        session, db_user, classic=classic,
+        is_reseller_bot=False, reseller_owner_id=None,
+    )
 
 async def _staff_reply(
     session: AsyncSession,
@@ -47,7 +50,10 @@ async def _staff_reply(
     """Return lasting staff ReplyKeyboard (stable main under Option B)."""
     from app.bot.nav_chrome import lasting_staff_reply
 
-    return await lasting_staff_reply(session, db_user, classic=classic)
+    return await lasting_staff_reply(
+        session, db_user, classic=classic,
+        is_reseller_bot=False, reseller_owner_id=None,
+    )
 
 async def _answer_users_nav(
     message: Message,
@@ -76,6 +82,8 @@ async def _answer_users_nav(
         state=state,
         reopen_panel=reopen_fn,
         clear_state=clear_state,
+        is_reseller_bot=False,
+        reseller_owner_id=None,
     )
 
 def _plan_line(p: Plan) -> str:

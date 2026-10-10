@@ -420,13 +420,25 @@ async def _deeplink_renew(
             )
         ).scalar_one_or_none()
         if not row:
-            await open_services_list(message, session, db_user)
+            await open_services_list(
+                message,
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
             await message.answer("سرویسی برای تمدید ندارید — از فروشگاه خرید کنید.")
             return
         svc_id = int(row.id)
     svc = await session.get(UserService, int(svc_id))
     if not svc or svc.bot_user_id != db_user.id:
-        await open_services_list(message, session, db_user)
+        await open_services_list(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         await message.answer("سرویس پیدا نشد — از لیست یکی را انتخاب کنید.")
         return
     bubble = await message.answer("🔄 تمدید سرویس…")
@@ -478,13 +490,25 @@ async def _deeplink_config(
             )
         ).scalar_one_or_none()
         if not row:
-            await open_services_list(message, session, db_user)
+            await open_services_list(
+                message,
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
             await message.answer("سرویسی ندارید — پس از خرید، کانفیگ اینجا ارسال می‌شود.")
             return
         svc_id = int(row.id)
     svc = await session.get(UserService, int(svc_id))
     if not svc or svc.bot_user_id != db_user.id:
-        await open_services_list(message, session, db_user)
+        await open_services_list(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         await message.answer("سرویس پیدا نشد — از لیست یکی را انتخاب کنید.")
         return
     bubble = await message.answer("📱 ارسال کانفیگ…")

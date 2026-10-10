@@ -109,6 +109,8 @@ class PresentOrderPayInlineTests(unittest.IsolatedAsyncioTestCase):
                 99,
                 state=state,
                 text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+                is_reseller_bot=False,
+                reseller_owner_id=None,
             )
 
         message.answer.assert_awaited()
@@ -150,7 +152,9 @@ class PresentOrderPayInlineTests(unittest.IsolatedAsyncioTestCase):
             ) as show_nav,
         ):
             await present_order_pay(
-                message, session, db_user, 7, state=state
+                message, session, db_user, 7, state=state,
+                is_reseller_bot=False,
+                reseller_owner_id=None,
             )
 
         message.answer.assert_awaited()
@@ -308,6 +312,8 @@ class ShowNavKeyboardCustomerLevelsTests(unittest.IsolatedAsyncioTestCase):
                 nav.NAV_SHOP,
                 text="فروشگاه",
                 state=state,
+                is_reseller_bot=False,
+                reseller_owner_id=None,
             )
 
         shop_chrome.assert_not_called()
@@ -355,7 +361,9 @@ class PresentTopupMethodsHealTests(unittest.IsolatedAsyncioTestCase):
             ),
         ):
             await present_topup_methods(
-                message, session, db_user, state, 50_000, heal_main=True
+                message, session, db_user, state, 50_000, heal_main=True,
+                is_reseller_bot=False,
+                reseller_owner_id=None,
             )
 
         # methods bubble + heal main KB
