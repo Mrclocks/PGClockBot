@@ -62,8 +62,8 @@ class PresentNavPanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs.get(NAV_PANEL_MSG_KEY), 99)
 
 
-class GroupHubBackCloseTests(unittest.TestCase):
-    def test_ops_people_product_system_back_to_close(self):
+class GroupHubBackHomeTests(unittest.TestCase):
+    def test_ops_people_product_system_back_to_home(self):
         from app.bot.nav_inline import (
             admin_ops_hub_keyboard,
             admin_people_hub_keyboard,
@@ -82,12 +82,12 @@ class GroupHubBackCloseTests(unittest.TestCase):
                 for row in kb_fn({}).inline_keyboard
                 for b in row
             ]
-            self.assertIn("nv:adm:close", data)
-            self.assertNotIn("nv:adm:home", data)
+            self.assertIn("nv:adm:home", data)
+            self.assertNotIn("nv:adm:close", data)
 
 
-class OpenAdminHomeNoDuplicateTests(unittest.IsolatedAsyncioTestCase):
-    async def test_inline_home_does_not_send_groups_keyboard(self):
+class OpenAdminHomePanelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_inline_home_presents_groups_keyboard(self):
         from app.bot.handlers.reply_nav import open_admin_home
 
         message = AsyncMock()
@@ -98,7 +98,6 @@ class OpenAdminHomeNoDuplicateTests(unittest.IsolatedAsyncioTestCase):
         state = AsyncMock()
         state.get_data = AsyncMock(return_value={})
         state.update_data = AsyncMock()
-        main_kb = MagicMock(name="MAIN")
 
         with (
             patch(
@@ -114,9 +113,9 @@ class OpenAdminHomeNoDuplicateTests(unittest.IsolatedAsyncioTestCase):
                 new_callable=AsyncMock,
             ),
             patch(
-                "app.bot.menu_nav.build_main_reply_keyboard",
-                AsyncMock(return_value=(main_kb, {}, "admin")),
-            ),
+                "app.bot.nav_inline.present_nav_panel",
+                new_callable=AsyncMock,
+            ) as present,
             patch(
                 "app.bot.nav_inline.admin_groups_hub_keyboard",
                 return_value="GROUPS",
@@ -124,9 +123,9 @@ class OpenAdminHomeNoDuplicateTests(unittest.IsolatedAsyncioTestCase):
         ):
             await open_admin_home(message, session, db_user, state)
 
-        groups.assert_not_called()
-        markup = message.answer.await_args.kwargs.get("reply_markup")
-        self.assertIs(markup, main_kb)
+        groups.assert_called()
+        present.assert_awaited()
+        self.assertEqual(present.await_args.kwargs.get("inline"), "GROUPS")
 
 
 class WithInlineBackTests(unittest.TestCase):

@@ -387,7 +387,7 @@ async def nv_adm_close(
     state: FSMContext,
     is_reseller_bot: bool = False,
 ):
-    """Close the live admin panel — groups stay on the stable reply keyboard."""
+    """Close the live admin panel — reopen via «پنل ادمین» on the main reply KB."""
     from app.bot.handlers.reply_nav import _deny_unless_owner
     from app.bot.nav_inline import clear_nav_panel, safe_edit_inline
     from app.version import __version__ as local_version
@@ -401,7 +401,7 @@ async def nv_adm_close(
         return
     body = (
         f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
-        "از کیبورد پایین یک گروه را انتخاب کنید."
+        "برای بازگشت، «پنل ادمین» را از کیبورد پایین بزنید."
     )
     await safe_edit_inline(callback.message, body, reply_markup=None)
     await clear_nav_panel(state)
@@ -416,7 +416,7 @@ async def nv_res_close(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Close the live reseller panel — manage shortcuts stay on reply KB."""
+    """Close the live reseller panel — reopen via «پنل مدیریت» on reply KB."""
     from app.bot.nav_inline import clear_nav_panel, safe_edit_inline
     from app.services.reseller_access import load_reseller_actor
 
@@ -443,7 +443,7 @@ async def nv_res_close(
         return
     await safe_edit_inline(
         callback.message,
-        "🤝 <b>پنل نماینده</b>\nاز کیبورد پایین بخش موردنظر را انتخاب کنید.",
+        "🤝 <b>پنل نماینده</b>\nبرای بازگشت، «پنل مدیریت» را از کیبورد پایین بزنید.",
         reply_markup=None,
     )
     await clear_nav_panel(state)

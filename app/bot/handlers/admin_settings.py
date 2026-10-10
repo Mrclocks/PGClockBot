@@ -33,6 +33,11 @@ from app.services.settings_button_labels import (
     shop_button_subs,
 )
 
+
+async def _lasting_kb(session, db_user, classic):
+    from app.bot.nav_chrome import lasting_staff_reply
+    return await lasting_staff_reply(session, db_user, classic=classic)
+
 router = Router(name="admin_settings")
 
 
@@ -418,7 +423,8 @@ async def _panel_link_row(
 
 
 async def _render_hub(callback: CallbackQuery, *, refresh_keyboard: bool = False) -> None:
-    """Back to the settings hub. Section list lives on the reply keyboard."""
+    """Back to the settings hub (inline panel / tip). Reply chrome healed elsewhere."""
+    _ = refresh_keyboard  # legacy flag; lasting KB is restored on cancel/save only
     rows: list[list[InlineKeyboardButton]] = []
     panel_row = await _panel_link_row(for_shop=False)
     if panel_row:
@@ -429,15 +435,6 @@ async def _render_hub(callback: CallbackQuery, *, refresh_keyboard: bool = False
             _SETTINGS_HUB_TEXT,
             reply_markup=markup,
         )
-        if not refresh_keyboard:
-            return
-        try:
-            await callback.message.answer(
-                "کیبورد تنظیمات:",
-                reply_markup=kb.admin_settings_reply_keyboard(),
-            )
-        except Exception:
-            pass
 
 
 async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id: str) -> None:
@@ -839,17 +836,23 @@ async def _finish_settings_text_edit(
     message: Message,
     state: FSMContext,
     session: AsyncSession,
+    db_user: BotUser,
     *,
     loc: tuple[str, str] | None,
     note: str = "✅ ذخیره شد.",
 ) -> None:
-    """Confirm save, restore settings reply KB, return to previous subsection.
+    """Confirm save, restore lasting reply KB, return to previous subsection.
 
-    No dual «بازگشت» rows — hub chrome is never forced here.
+    Under inline nav the lasting KB is the stable main menu (not settings chrome).
     """
     await state.clear()
     await _keep_settings_nav(state)
-    await message.answer(note, reply_markup=kb.admin_settings_reply_keyboard())
+    await message.answer(
+        note,
+        reply_markup=await _lasting_kb(
+            session, db_user, kb.admin_settings_reply_keyboard()
+        ),
+    )
     try:
         await _answer_settings_location(message, session, loc)
     except Exception:
@@ -1010,7 +1013,7 @@ async def settings_edit_save(
         await _keep_settings_nav(state)
         await message.answer(
             "لغو شد.",
-            reply_markup=kb.admin_settings_reply_keyboard(),
+            reply_markup=await _lasting_kb(session, db_user, kb.admin_settings_reply_keyboard()),
         )
         return
     meta = FIELDS.get(key)
@@ -1049,7 +1052,7 @@ async def settings_edit_save(
 
         text = pack_setting_from_message(key, message)
         await set_setting(session, key, text)
-    await _finish_settings_text_edit(message, state, session, loc=loc)
+    await _finish_settings_text_edit(message, state, session, db_user, loc=loc)
 
 
 @settings_actor_required
@@ -1153,7 +1156,7 @@ async def support_title_msg(
         await _keep_settings_nav(state)
         await message.answer(
             "لغو شد.",
-            reply_markup=kb.admin_settings_reply_keyboard(),
+            reply_markup=await _lasting_kb(session, db_user, kb.admin_settings_reply_keyboard()),
         )
         return
     await state.update_data(support_title=text)
@@ -1179,7 +1182,7 @@ async def support_telegram_msg(
         await _keep_settings_nav(state)
         await message.answer(
             "لغو شد.",
-            reply_markup=kb.admin_settings_reply_keyboard(),
+            reply_markup=await _lasting_kb(session, db_user, kb.admin_settings_reply_keyboard()),
         )
         return
     data = await state.get_data()
@@ -1465,17 +1468,13 @@ async def trial_save_name(
         await _keep_settings_nav(state)
         await message.answer(
             "لغو شد.",
-            reply_markup=kb.admin_settings_reply_keyboard(),
+            reply_markup=await _lasting_kb(session, db_user, kb.admin_settings_reply_keyboard()),
         )
         return
     trial = await _ensure_trial(session)
     trial.name = text[:128]
     await session.commit()
-    await _finish_settings_text_edit(
-        message,
-        state,
-        session,
-        loc=("service", "trial"),
+    await _finish_settings_text_edit(message, state, session, db_user, loc=("service", "trial"),
     )
 
 
@@ -1506,7 +1505,7 @@ async def trial_save_days(
         await _keep_settings_nav(state)
         await message.answer(
             "لغو شد.",
-            reply_markup=kb.admin_settings_reply_keyboard(),
+            reply_markup=await _lasting_kb(session, db_user, kb.admin_settings_reply_keyboard()),
         )
         return
     try:
@@ -1517,11 +1516,7 @@ async def trial_save_days(
     trial = await _ensure_trial(session)
     trial.duration_days = days
     await session.commit()
-    await _finish_settings_text_edit(
-        message,
-        state,
-        session,
-        loc=("service", "trial"),
+    await _finish_settings_text_edit(message, state, session, db_user, loc=("service", "trial"),
     )
 
 
@@ -1552,7 +1547,7 @@ async def trial_save_gb(
         await _keep_settings_nav(state)
         await message.answer(
             "لغو شد.",
-            reply_markup=kb.admin_settings_reply_keyboard(),
+            reply_markup=await _lasting_kb(session, db_user, kb.admin_settings_reply_keyboard()),
         )
         return
     try:
@@ -1563,11 +1558,7 @@ async def trial_save_gb(
     trial = await _ensure_trial(session)
     trial.data_limit_gb = None if gb <= 0 else gb
     await session.commit()
-    await _finish_settings_text_edit(
-        message,
-        state,
-        session,
-        loc=("service", "trial"),
+    await _finish_settings_text_edit(message, state, session, db_user, loc=("service", "trial"),
     )
 
 

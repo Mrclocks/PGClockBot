@@ -33,6 +33,11 @@ from app.services.backup import (
 )
 from app.services.updates import local_version
 
+
+async def _lasting_kb(session, db_user, classic):
+    from app.bot.nav_chrome import lasting_staff_reply
+    return await lasting_staff_reply(session, db_user, classic=classic)
+
 router = Router(name="admin_backup")
 
 
@@ -303,14 +308,14 @@ async def backup_restore_ask(callback: CallbackQuery, db_user: BotUser, state: F
 
 @router.message(BackupStates.confirm_restore)
 @require_bot_owner_handler
-async def backup_restore_confirm(message: Message, db_user: BotUser, state: FSMContext):
+async def backup_restore_confirm(message: Message, session, db_user: BotUser, state: FSMContext):
     if not _is_admin(db_user):
         await state.clear()
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_system_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
         return
     if text != "RESTORE":
         await message.answer(
@@ -406,10 +411,10 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
 
 
 @router.message(BackupStates.waiting_upload)
-async def backup_upload_cancel(message: Message, state: FSMContext):
+async def backup_upload_cancel(message: Message, session, db_user: BotUser, state: FSMContext):
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_system_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
         return
     await message.answer("یک فایل ZIP بفرستید یا انصراف.", reply_markup=kb.cancel_reply())

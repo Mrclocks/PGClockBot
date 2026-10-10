@@ -82,7 +82,8 @@ class LeafHubKeyboardTests(unittest.TestCase):
             for b in row
         ]
         self.assertIn("nv:res:ra:res_st_shop", rs)
-        self.assertIn("nv:res:close", rs)
+        self.assertIn("nv:res:home", rs)
+        self.assertNotIn("nv:res:close", rs)
 
         rp = [
             b.callback_data

@@ -785,7 +785,7 @@ async def open_reseller_home(
     push: bool = True,
 ) -> None:
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import clear_nav_panel, is_bot_panel_message, present_nav_panel, safe_edit_inline
+    from app.bot.nav_inline import present_nav_panel, reseller_manage_hub_keyboard
     from app.services.reseller_access import load_reseller_actor
 
     if not is_reseller_bot:
@@ -818,28 +818,19 @@ async def open_reseller_home(
         can_add = False
     body = format_message(
         "🤝 پنل نماینده",
-        "از کیبورد پایین بخش موردنظر را انتخاب کنید.",
+        "یک بخش را از دکمه‌های زیر انتخاب کنید.",
     )
     if is_inline_nav(ui):
-        from app.bot.menu_nav import build_main_reply_keyboard
-
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_RESELLER, push=push)
-        # Manage shortcuts already on stable reply KB — do not mirror inline.
-        if is_bot_panel_message(message):
-            await safe_edit_inline(message, body, reply_markup=None)
-            await clear_nav_panel(state)
-            return
-        main_kb, _, _ = await build_main_reply_keyboard(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-            ui=ui,
+        await present_nav_panel(
+            message,
+            text=body,
+            inline=reseller_manage_hub_keyboard(
+                profile, ui, can_add_representative=can_add
+            ),
+            state=state,
         )
-        await message.answer(body, reply_markup=main_kb)
-        await clear_nav_panel(state)
-        _ = can_add
         return
     await nav.show_nav_keyboard(
         message,
@@ -1617,7 +1608,7 @@ async def open_reseller_plans_hub(
         hub = reseller_plans_hub_keyboard(ui)
         hub_rows = [list(r) for r in hub.inline_keyboard[:-1]]
         list_kb = with_inline_back(
-            kb.reseller_plans_list_keyboard(plans, ui), ui, "nv:res:close"
+            kb.reseller_plans_list_keyboard(plans, ui), ui, "nv:res:home"
         )
         combined = InlineKeyboardMarkup(
             inline_keyboard=hub_rows + [list(r) for r in list_kb.inline_keyboard]
@@ -1656,14 +1647,8 @@ async def open_admin_home(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
-    from app.bot.menu_nav import build_main_reply_keyboard
     from app.bot.nav_mode import is_inline_nav
-    from app.bot.nav_inline import (
-        clear_nav_panel,
-        is_bot_panel_message,
-        present_nav_panel,
-        safe_edit_inline,
-    )
+    from app.bot.nav_inline import admin_groups_hub_keyboard, present_nav_panel
     from app.version import __version__ as local_version
 
     if not await _deny_unless_owner(
@@ -1671,31 +1656,30 @@ async def open_admin_home(
     ):
         return
     ui = await get_all_settings(session)
-    # Inline: groups already on the stable reply KB — never mirror them inline.
     body = (
         f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
-        "از کیبورد پایین یک گروه را انتخاب کنید:\n"
-        "🗓 عملیات روزانه · 👤 افراد · 📦 محصول و PG · 🛠 سیستم"
+        "یک گروه را از دکمه‌های زیر انتخاب کنید."
     )
     if is_inline_nav(ui):
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_ADMIN, push=push)
-        if is_bot_panel_message(message):
-            await safe_edit_inline(message, body, reply_markup=None)
-            await clear_nav_panel(state)
-            return
-        main_kb, _, _ = await build_main_reply_keyboard(
-            session, db_user, is_reseller_bot=is_reseller_bot, ui=ui
+        await present_nav_panel(
+            message,
+            text=body,
+            inline=admin_groups_hub_keyboard(ui),
+            state=state,
         )
-        await message.answer(body, reply_markup=main_kb)
-        await clear_nav_panel(state)
         return
     await nav.show_nav_keyboard(
         message,
         session,
         db_user,
         nav.NAV_ADMIN,
-        text=body,
+        text=(
+            f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
+            "از کیبورد پایین یک گروه را انتخاب کنید:\n"
+            "🗓 عملیات روزانه · 👤 افراد · 📦 محصول و PG · 🛠 سیستم"
+        ),
         state=state,
         push=push,
     )

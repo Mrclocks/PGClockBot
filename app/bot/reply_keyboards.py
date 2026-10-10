@@ -585,7 +585,24 @@ def reseller_hub_main_keyboard(
     *,
     can_add_representative: bool = False,
 ) -> ReplyKeyboardMarkup:
-    """Primary keyboard for shop owner/staff on their dedicated bot (like admin hub)."""
+    """Primary keyboard for shop owner/staff on their dedicated bot.
+
+    Inline: thin entry (manage panel + user preview). Nested leaves live on
+    the edited inline hub. Classic: full manage reply hub (rollback).
+    """
+    from app.bot.nav_mode import is_inline_nav
+
+    if is_inline_nav(ui):
+        _ = (profile, can_add_representative)  # ACL applied inside inline hub
+        entries = [
+            (REPLY_ACTION_RESELLER, "🤝 پنل مدیریت"),
+            (REPLY_ACTION_RES_PREVIEW, "👁 پیش‌نمایش منوی کاربر"),
+        ]
+        rows = _pack_reply_rows(entries, ui, footer=[])
+        return _reply_markup(
+            rows or [[_kb(_home_label(ui), action=REPLY_ACTION_HOME, ui=ui)]],
+            placeholder="از منوی پایین انتخاب کنید…",
+        )
     entries = _reseller_submenu_entries(
         profile, can_add_representative=can_add_representative
     )
@@ -702,23 +719,26 @@ def main_reply_keyboard(
     pg_features: frozenset[str] | set[str] | None = None,
     can_manage_representatives: bool = True,
 ) -> ReplyKeyboardMarkup:
-    """Primary navigation reply keyboard (level 0)."""
+    """Primary navigation reply keyboard (level 0).
+
+    Inline: admin gets the customer menu + «پنل ادمین» (groups live on the
+    edited inline panel). Classic: admin keeps the short 4-group reply hub.
+    """
     from app.bot.nav_mode import is_inline_nav
 
     home_label = _home_label(ui)
+    inline = is_inline_nav(ui)
     # Inline nav: no Home row on level-0 (pointless at home); classic keeps footer.
     home_footer: list[tuple[str, str]] = (
-        [] if is_inline_nav(ui) else [(REPLY_ACTION_HOME, home_label)]
+        [] if inline else [(REPLY_ACTION_HOME, home_label)]
     )
-    if role == Role.ADMIN.value and not as_user:
-        # Platform admin: short 4-group hub (leaves live in group submenus)
-        # Wave A leaves admin chrome classic-shaped; still drop redundant home
-        # footer when inline nav is on (admin hubs use Back inside groups).
+    if role == Role.ADMIN.value and not as_user and not inline:
+        # Classic rollback: short 4-group hub on reply keyboard.
         _ = (pg_features, can_manage_representatives)  # ACL applied inside groups
         entries = _reply_admin_hub_entries(ui)
         rows = _pack_reply_rows(entries, ui, footer=home_footer)
     else:
-        # Preview / customer surface — never append staff-only buttons
+        # Inline admin / preview / customer — user entries (+ btn_admin for admin).
         map_role = Role.USER.value if as_user else role
         entries = _reply_user_entries(
             map_role,
@@ -999,9 +1019,26 @@ def reply_action_map(
     reseller_actor = role == Role.RESELLER.value and is_reseller_bot
 
     if platform_admin:
-        # Leaves first; hub groups overwrite any accidental label collision
+        from app.bot.nav_mode import is_inline_nav
+
+        if is_inline_nav(ui):
+            # Pure-inline: main KB is customer menu + پنل ادمین
+            for key, text in _reply_user_entries(
+                role,
+                has_services=has_services,
+                ui=ui,
+                show_reseller_creds=show_reseller_creds,
+                profile=profile if show_reseller_creds else None,
+            ):
+                if key == "miniapp":
+                    continue
+                mapping[(text or "").strip()] = key
+            admin_label = (_t(ui, "btn_admin") or "").strip()
+            if admin_label:
+                mapping[admin_label] = REPLY_ACTION_ADMIN
+        # Stale classic labels / rollback maps (leaves then hub groups)
         for key, text in _reply_admin_entries(ui):
-            mapping[(text or "").strip()] = key
+            mapping.setdefault((text or "").strip(), key)
         for key, text in _reply_admin_hub_entries(ui):
             mapping[(text or "").strip()] = key
     else:
@@ -1101,13 +1138,20 @@ def reply_action_map(
                     mapping.setdefault((text or "").strip(), key)
 
         if reseller_actor:
+            from app.bot.nav_mode import is_inline_nav
             from app.services.authz import shop_feature_allowed
 
-            # Fail closed: without a live profile, register no reseller panel labels
+            # Pure-inline thin entry labels (always, even without profile)
+            mapping["🤝 پنل مدیریت"] = REPLY_ACTION_RESELLER
+            mapping["👁 پیش‌نمایش منوی کاربر"] = REPLY_ACTION_RES_PREVIEW
+            # Fail closed: without a live profile, register no reseller panel leaves
             if profile is not None:
                 for key, text in _reseller_submenu_entries(
                     profile, can_add_representative=can_add_representative
                 ):
+                    # Under inline, thin entry owns the manage label; leaves stay for classic/stale
+                    if is_inline_nav(ui) and key == "res_dash":
+                        continue
                     mapping[(text or "").strip()] = key
                 if shop_feature_allowed(key="shop_settings", profile=profile):
                     for key, text in _reseller_settings_submenu_entries(ui):
