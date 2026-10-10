@@ -157,13 +157,23 @@ async def nv_support_home(
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     from app.bot.handlers.reply_nav import open_support_home
 
     await callback.answer()
     if not callback.message:
         return
-    await open_support_home(callback.message, session, db_user, state, push=False)
+    await open_support_home(
+        callback.message,
+        session,
+        db_user,
+        state,
+        push=False,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
 
 @router.callback_query(F.data == "nv:resapply")
 async def nv_reseller_apply(

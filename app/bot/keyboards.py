@@ -829,6 +829,17 @@ def shop_kind_keyboard(
     from app.services.button_styles import resolve_category_button_style
 
     rows: list[list[InlineKeyboardButton]] = []
+    # Trial first when eligible — discoverability after welcome CTAs were removed.
+    if trial_on:
+        rows.append(
+            [
+                _ikb(
+                    "🎁 تست",
+                    callback_data="shop:kind:trial",
+                    style=_style(ui, "shop_kind_trial", fallback="primary"),
+                )
+            ]
+        )
     cats = list(categories or [])
     if fixed_on and cats:
         for cat in cats:
@@ -858,16 +869,6 @@ def shop_kind_keyboard(
                     "💎 ثابت",
                     callback_data="shop:kind:fixed",
                     style=_style(ui, "shop_kind_fixed", fallback="primary"),
-                )
-            ]
-        )
-    if trial_on:
-        rows.append(
-            [
-                _ikb(
-                    "🎁 تست",
-                    callback_data="shop:kind:trial",
-                    style=_style(ui, "shop_kind_trial", fallback="primary"),
                 )
             ]
         )
