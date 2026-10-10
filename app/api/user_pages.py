@@ -260,7 +260,10 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.bot_user_admin import admin_credit_user_wallet
+        from app.services.bot_user_admin import (
+            admin_adjust_user_wallet,
+            parse_admin_wallet_amount,
+        )
         from app.services.notifications import actor_label_from_staff
 
         loaded = await _require_scoped_user(session, staff, user_id)
@@ -268,16 +271,15 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return loaded
         user = loaded
         form = await request.form()
-        from app.services.numbers import parse_int
 
         raw = str(form.get("amount") or "").strip()
         note = str(form.get("note") or "").strip()
         try:
-            amount = parse_int(raw)
+            amount = parse_admin_wallet_amount(raw)
         except (TypeError, ValueError):
             return _redirect_user(user_id, err="مبلغ نامعتبر است")
         try:
-            await admin_credit_user_wallet(
+            await admin_adjust_user_wallet(
                 session,
                 user,
                 amount,
@@ -286,7 +288,11 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
-        return _redirect_user(user_id, ok=f"کیف پول {amount:,} تومان شارژ شد")
+        if amount > 0:
+            ok = f"کیف پول {amount:,} تومان شارژ شد"
+        else:
+            ok = f"از کیف پول {abs(amount):,} تومان کسر شد"
+        return _redirect_user(user_id, ok=ok)
 
     @app.post("/users/{user_id}/message")
     async def user_staff_message(

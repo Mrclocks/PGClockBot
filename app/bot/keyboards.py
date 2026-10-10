@@ -2004,7 +2004,7 @@ def admin_user_actions(
     rows: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton(
-                text="💰 شارژ کیف پول", callback_data=f"adm:users:wcredit:{user_id}"
+                text="💰 تنظیم کیف پول", callback_data=f"adm:users:wcredit:{user_id}"
             ),
             InlineKeyboardButton(
                 text="📦 سرویس‌ها", callback_data=f"adm:users:svcs:{user_id}"

@@ -394,9 +394,9 @@ class UserWalletRouteScopeTests(unittest.IsolatedAsyncioTestCase):
             request = AsyncMock()
             request.form = AsyncMock(return_value=_Form(amount="1000", note="x"))
             with patch(
-                "app.services.bot_user_admin.admin_credit_user_wallet",
+                "app.services.bot_user_admin.admin_adjust_user_wallet",
                 new=AsyncMock(),
-            ) as credit:
+            ) as adjust:
                 resp = await self.credit_route.endpoint(
                     user_id=user.id,
                     request=request,
@@ -405,7 +405,7 @@ class UserWalletRouteScopeTests(unittest.IsolatedAsyncioTestCase):
                 )
             self.assertEqual(resp.status_code, 303)
             self.assertIn("err=", resp.headers.get("location", ""))
-            credit.assert_not_awaited()
+            adjust.assert_not_awaited()
 
 
 class LoyaltyAdjustRouteTests(unittest.IsolatedAsyncioTestCase):

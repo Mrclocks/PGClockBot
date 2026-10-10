@@ -1,6 +1,7 @@
 """Shared admin ops for Telegram bot users (web panel + bot handlers).
 
-Money uses ``credit_wallet`` (platform purse by default; pass shop_id for shop purse).
+Money uses ``credit_wallet`` / ``debit_wallet`` (platform purse by default;
+pass shop_id for shop purse). Never write balances outside those helpers.
 VPN quota/links are live from PasarGuard through ``UserService.pg_user_id``.
 """
 
@@ -27,22 +28,49 @@ from app.services.formatting import (
     status_label_plain,
     time_remaining_label,
 )
+from app.services.numbers import normalize_number_text
 from app.services.pasarguard import (
     absolutize_subscription_url,
     build_user_modify_payload,
     get_pg,
     user_subscription_url,
 )
-from app.services.wallet import credit_wallet
+from app.services.wallet import credit_wallet, debit_wallet
 
 logger = logging.getLogger(__name__)
 
 GB = 1024**3
 MAX_ADMIN_WALLET_CREDIT = 50_000_000  # 50M toman hard cap per op
+MAX_ADMIN_WALLET_DEBIT = MAX_ADMIN_WALLET_CREDIT
+MIN_ADMIN_WALLET_ADJUST = 1_000  # absolute toman floor for manual adjust UI/API
 MAX_EXTEND_DAYS = 3650
 MAX_EXTEND_GB = 10_000
 MIN_TELEGRAM_ID = 1
 MAX_TELEGRAM_ID = 9_007_199_254_740_991  # signed int64 safe upper bound
+
+
+def parse_admin_wallet_amount(text: str | None) -> int:
+    """Parse a signed integer toman amount (no float / no scientific notation)."""
+    raw = normalize_number_text(text).replace("−", "-").replace("–", "-")
+    if not raw or raw in {"+", "-"}:
+        raise ValueError("مبلغ نامعتبر است")
+    if any(ch in raw for ch in ".eE"):
+        raise ValueError("مبلغ باید عدد صحیح تومان باشد")
+    if raw.startswith("+"):
+        raw = raw[1:]
+        if not raw or raw.startswith("-"):
+            raise ValueError("مبلغ نامعتبر است")
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError("مبلغ نامعتبر است") from exc
+
+
+def _require_admin_wallet_amount(amount: object) -> int:
+    """Reject bool / non-int; return a plain int (bool is a subclass of int)."""
+    if isinstance(amount, bool) or not isinstance(amount, int):
+        raise ValueError("مبلغ نامعتبر است")
+    return int(amount)
 
 
 @dataclass(frozen=True)
@@ -494,7 +522,7 @@ async def admin_credit_user_wallet(
     shop_id: int | None = None,
 ) -> BotUser:
     """Increase platform or shop wallet (admin). Positive amounts only."""
-    amt = int(amount)
+    amt = _require_admin_wallet_amount(amount)
     if amt <= 0:
         raise ValueError("مبلغ شارژ باید مثبت باشد")
     if amt > MAX_ADMIN_WALLET_CREDIT:
@@ -503,6 +531,54 @@ async def admin_credit_user_wallet(
     if note:
         reason = f"{reason}: {note.strip()[:120]}"
     return await credit_wallet(session, user, amt, reason, shop_id=shop_id)
+
+
+async def admin_debit_user_wallet(
+    session: AsyncSession,
+    user: BotUser,
+    amount: int,
+    *,
+    actor: str,
+    note: str | None = None,
+    shop_id: int | None = None,
+) -> BotUser:
+    """Decrease platform or shop wallet (admin). Fail-closed on shortfall."""
+    amt = _require_admin_wallet_amount(amount)
+    if amt <= 0:
+        raise ValueError("مبلغ کسر باید مثبت باشد")
+    if amt > MAX_ADMIN_WALLET_DEBIT:
+        raise ValueError(f"سقف کسر دستی {MAX_ADMIN_WALLET_DEBIT:,} تومان است")
+    reason = f"کسر ادمین ({(actor or 'admin')[:64]})"
+    if note:
+        reason = f"{reason}: {note.strip()[:120]}"
+    return await debit_wallet(session, user, amt, reason, shop_id=shop_id)
+
+
+async def admin_adjust_user_wallet(
+    session: AsyncSession,
+    user: BotUser,
+    amount: int,
+    *,
+    actor: str,
+    note: str | None = None,
+    shop_id: int | None = None,
+    min_abs: int = MIN_ADMIN_WALLET_ADJUST,
+) -> BotUser:
+    """Signed admin adjust: positive credits, negative debits (atomic shortfall)."""
+    signed = _require_admin_wallet_amount(amount)
+    if signed == 0:
+        raise ValueError("مبلغ نمی‌تواند صفر باشد")
+    abs_amt = abs(signed)
+    floor = int(min_abs)
+    if floor > 0 and abs_amt < floor:
+        raise ValueError(f"حداقل قدرمطلق مبلغ {floor:,} تومان است")
+    if signed > 0:
+        return await admin_credit_user_wallet(
+            session, user, signed, actor=actor, note=note, shop_id=shop_id
+        )
+    return await admin_debit_user_wallet(
+        session, user, abs_amt, actor=actor, note=note, shop_id=shop_id
+    )
 
 
 async def list_wallet_txs(
