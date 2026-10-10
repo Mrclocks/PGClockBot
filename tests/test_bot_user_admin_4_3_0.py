@@ -158,9 +158,12 @@ class UserEditUiTests(unittest.TestCase):
     def test_service_module_exists(self):
         src = Path("app/services/bot_user_admin.py").read_text(encoding="utf-8")
         self.assertIn("admin_credit_user_wallet", src)
+        self.assertIn("admin_debit_user_wallet", src)
+        self.assertIn("admin_adjust_user_wallet", src)
         self.assertIn("list_service_snapshots", src)
         self.assertIn("admin_renew_service", src)
         self.assertIn("MAX_ADMIN_WALLET_CREDIT", src)
+        self.assertIn("MAX_ADMIN_WALLET_DEBIT", src)
 
 
 if __name__ == "__main__":

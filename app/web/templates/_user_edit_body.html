@@ -97,23 +97,23 @@
 
 <section class="edit-section">
   <header class="edit-section-head">
-    <h3>افزایش کیف پول</h3>
-    <p class="muted">به موجودی فروشگاهی اضافه می‌شود و در ربات هم دیده می‌شود.</p>
+    <h3>تنظیم کیف پول</h3>
+    <p class="muted">مبلغ مثبت شارژ می‌کند؛ مبلغ منفی (مثلاً ‎-۵۰۰۰۰‎) از موجودی کم می‌کند. موجودی منفی مجاز نیست.</p>
   </header>
   <form method="post" action="/users/{{ user.id }}/wallet-credit" class="form-stack"
-        data-confirm="مبلغ به کیف پول این کاربر اضافه شود؟"
-        data-confirm-title="تأیید شارژ کیف پول"
-        data-confirm-label="شارژ">
+        data-confirm="موجودی کیف پول این کاربر مطابق مبلغ واردشده تغییر کند؟"
+        data-confirm-title="تأیید تنظیم کیف پول"
+        data-confirm-label="اعمال">
     <div class="user-edit-fields">
       <label class="form-field">مبلغ (تومان)
-        <input name="amount" type="number" data-money min="1000" step="1000" required placeholder="مثلاً ۵۰,۰۰۰" inputmode="numeric" />
+        <input name="amount" type="number" data-money step="1000" required placeholder="مثلاً ۵۰,۰۰۰ یا -۵۰,۰۰۰" inputmode="numeric" />
       </label>
       <label class="form-field">یادداشت
         <input name="note" type="text" maxlength="120" placeholder="اختیاری" />
       </label>
     </div>
     <div class="actions user-edit-actions">
-      <button class="btn" type="submit">شارژ کیف پول</button>
+      <button class="btn" type="submit">اعمال روی کیف پول</button>
     </div>
   </form>
 </section>

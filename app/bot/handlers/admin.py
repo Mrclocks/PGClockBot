@@ -2651,9 +2651,12 @@ async def adm_users_wallet_credit_ask(
     from app.bot.nav_input import ask_text
 
     prompt = (
-        f"💰 مبلغ شارژ کیف پول برای <b>{html.escape(user.full_name or str(user.telegram_id))}</b>\n"
+        f"💰 تنظیم کیف پول برای <b>{html.escape(user.full_name or str(user.telegram_id))}</b>\n"
         f"موجودی فعلی: {format_toman(user.wallet_balance, get_settings().currency)}\n\n"
-        "مبلغ را به تومان ارسال کنید (حداقل ۱۰۰۰):"
+        "مبلغ را به تومان بفرستید:\n"
+        "• مثبت = شارژ (مثلاً ۵۰۰۰۰)\n"
+        "• منفی = کسر (مثلاً -۵۰۰۰۰)\n"
+        "حداقل قدرمطلق ۱۰۰۰ — موجودی منفی مجاز نیست."
     )
     await ask_text(
         callback,
@@ -2693,21 +2696,25 @@ async def adm_users_wallet_credit_save(
         await state.clear()
         await message.answer(deny, reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
         return
-    amount = parse_bot_int(message.text or "")
-    if amount is None or amount < 1000:
-        await message.answer(
-            "مبلغ نامعتبر — حداقل ۱۰۰۰ تومان",
-        )
-        return
-    from app.services.bot_user_admin import admin_credit_user_wallet
+    from app.services.bot_user_admin import (
+        admin_adjust_user_wallet,
+        parse_admin_wallet_amount,
+    )
 
     try:
-        await admin_credit_user_wallet(
+        amount = parse_admin_wallet_amount(message.text or "")
+    except ValueError:
+        await message.answer(
+            "مبلغ نامعتبر — عدد صحیح تومان بفرستید (مثبت یا منفی، حداقل قدرمطلق ۱۰۰۰).",
+        )
+        return
+    try:
+        await admin_adjust_user_wallet(
             session,
             user,
             int(amount),
             actor=f"tg:{db_user.telegram_id}",
-            note="شارژ از ربات ادمین",
+            note="تنظیم از ربات ادمین",
         )
     except ValueError as e:
         await message.answer(user_safe_error(e), reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
@@ -2715,9 +2722,10 @@ async def adm_users_wallet_credit_save(
         return
     await state.clear()
     await session.refresh(user)
+    verb = "شارژ شد" if amount > 0 else "کسر شد"
     await message.answer(
-        f"✅ کیف پول شارژ شد.\n"
-        f"مبلغ: {format_toman(amount, get_settings().currency)}\n"
+        f"✅ کیف پول {verb}.\n"
+        f"مبلغ: {format_toman(abs(amount), get_settings().currency)}\n"
         f"مانده: {format_toman(user.wallet_balance, get_settings().currency)}",
         reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
     )
