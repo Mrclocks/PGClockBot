@@ -43,7 +43,17 @@ from app.services.message_variables import DOMAIN_PAYMENT, render_message_templa
 router = Router(name="shop")
 logger = logging.getLogger(__name__)
 
-async def _show_order_pay(message, session, db_user, order_id, state, text: str):
+async def _show_order_pay(
+    message,
+    session,
+    db_user,
+    order_id,
+    state,
+    text: str,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     """Show order summary then payment methods on the reply keyboard."""
     from app.bot.menu_nav import present_order_pay
     if message is not None:
@@ -55,7 +65,16 @@ async def _show_order_pay(message, session, db_user, order_id, state, text: str)
                 await message.answer(text)
             except Exception:
                 pass
-        await present_order_pay(message, session, db_user, order_id, state=state, text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:")
+        await present_order_pay(
+            message,
+            session,
+            db_user,
+            order_id,
+            state=state,
+            text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
 
 async def shop_under_maintenance(session: AsyncSession, ui: dict | None = None) -> str | None:
     """Return maintenance message if shop buying is gated; renew flows stay open."""
@@ -1396,6 +1415,8 @@ async def shop_trial_contact_cancel(
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui) or (message.text or "").strip() in {
@@ -1410,6 +1431,8 @@ async def shop_trial_contact_cancel(
             db_user,
             text="لغو شد.",
             state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
         return
     await message.answer("لطفاً از دکمه «ارسال شماره تماس» استفاده کنید یا انصراف بزنید.")
@@ -1499,6 +1522,8 @@ async def apply_loyalty_discount_btn(
             db_user,
             order.id,
             state=state,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
             heal_main=True,
         )
 
@@ -1550,14 +1575,28 @@ async def apply_discount_msg(
     except ValueError as e:
         await message.answer(user_safe_error(e))
         await present_order_pay(
-            message, session, db_user, order.id, state=state, heal_main=True
+            message,
+            session,
+            db_user,
+            order.id,
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            heal_main=True,
         )
         return
     await message.answer(
         f"تخفیف اعمال شد ✅\nمبلغ جدید: {format_toman(order.amount, get_settings().currency)}",
     )
     await present_order_pay(
-        message, session, db_user, order.id, state=state, heal_main=True
+        message,
+        session,
+        db_user,
+        order.id,
+        state=state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        heal_main=True,
     )
 
 @router.callback_query(F.data.startswith("pay:wallet:"))

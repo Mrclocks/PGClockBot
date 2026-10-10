@@ -1112,6 +1112,8 @@ async def resapply_buy(
             order.id,
             state=state,
             text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
 
 

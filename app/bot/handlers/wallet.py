@@ -247,6 +247,8 @@ async def present_topup_methods(
     state: FSMContext,
     amount: int,
     *,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
     heal_main: bool = False,
 ) -> None:
     """After amount is known — show pay methods on the inline panel.
@@ -274,7 +276,12 @@ async def present_topup_methods(
         from app.bot.menu_nav import build_main_reply_keyboard
         from app.bot.tg_utils import attach_reply_keyboard
 
-        main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
+        main_kb, _, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         await attach_reply_keyboard(
             message,
             main_kb,

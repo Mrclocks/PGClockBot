@@ -19,6 +19,10 @@ Professional layout
 **cancel_reply (free-text FSM)**
   - On cancel / finish → restore the lasting main ReplyKeyboard
   - Optionally re-present the previous inline hub (still inline)
+
+**heal_main_reply**
+  - The only sanctioned way to attach a ReplyKeyboard to a non-welcome message
+  - Used by legacy-label recovery, contact confirmation, and FSM-expiry paths
 """
 
 from __future__ import annotations
@@ -35,14 +39,17 @@ from app.services.users import get_all_settings
 
 ReopenPanel = Callable[..., Awaitable[Any]]
 
+# When the caller passes chrome-only text, still send a real user-facing line.
+_HEAL_FALLBACK_TEXT = "از منوی پایین ادامه دهید."
+
 
 async def lasting_staff_reply(
     session: AsyncSession,
     db_user: BotUser,
     *,
     classic: ReplyKeyboardMarkup | None = None,
-    is_reseller_bot: bool = False,
-    reseller_owner_id: int | None = None,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
     ui: dict | None = None,
 ) -> ReplyKeyboardMarkup:
     """Always return the stable main ReplyKeyboard (Option B).
@@ -65,6 +72,40 @@ async def lasting_staff_reply(
     return main_kb
 
 
+async def heal_main_reply(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    text: str,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    as_user: bool = False,
+    ui: dict | None = None,
+) -> dict:
+    """Send ONE real message carrying the correct main ReplyKeyboard.
+
+    Never sends keyboard-only filler (``⌨️``, ``·``, …). Role and shop-bot
+    context must be passed so shop owners keep the reseller hub.
+    """
+    from app.bot.menu_nav import build_main_reply_keyboard
+    from app.bot.nav_inline import is_filler_chrome_text
+
+    body = (text or "").strip()
+    if is_filler_chrome_text(body):
+        body = _HEAL_FALLBACK_TEXT
+    markup, resolved_ui, _role = await build_main_reply_keyboard(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        as_user=as_user,
+        ui=ui,
+    )
+    await message.answer(body, reply_markup=markup)
+    return resolved_ui
+
+
 async def answer_staff_nav(
     message: Message,
     session: AsyncSession,
@@ -74,8 +115,8 @@ async def answer_staff_nav(
     classic: ReplyKeyboardMarkup | None = None,
     state: FSMContext | None = None,
     reopen_panel: ReopenPanel | None = None,
-    is_reseller_bot: bool = False,
-    reseller_owner_id: int | None = None,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
     ui: dict | None = None,
     clear_state: bool = False,
     **reopen_kw: Any,
@@ -88,15 +129,16 @@ async def answer_staff_nav(
             await state.clear()
         except Exception:
             pass
-    markup = await lasting_staff_reply(
+    _ = classic
+    await heal_main_reply(
+        message,
         session,
         db_user,
-        classic=classic,
+        text=text,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
         ui=ui,
     )
-    await message.answer(text, reply_markup=markup)
     if reopen_panel is not None:
         await reopen_panel(
             message,

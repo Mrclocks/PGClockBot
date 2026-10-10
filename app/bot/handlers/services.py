@@ -300,7 +300,10 @@ async def svc_view(
 
 @router.callback_query(F.data.startswith("guide:svc:"))
 async def svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    from app.bot.handlers.guides import show_guides_list
+    """Open per-platform guides when the catalog has entries; else plain guide_text."""
+    from app.bot.handlers.guides import _audience_for_user, show_guides_list
+    from app.services.connection_guides import get_connection_guides, guides_for_audience
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
 
     try:
         svc_id = int((callback.data or "").split(":")[-1])
@@ -311,7 +314,32 @@ async def svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if not svc or svc.bot_user_id != db_user.id:
         await callback.answer("یافت نشد", show_alert=True)
         return
-    await show_guides_list(callback, session, db_user, svc_id=svc_id)
+    aud = await _audience_for_user(session, db_user)
+    items = guides_for_audience(await get_connection_guides(session), aud)
+    if items:
+        await show_guides_list(callback, session, db_user, svc_id=svc_id, audience=aud)
+        return
+    ui = await get_all_settings(session)
+    raw = ui.get("guide_text")
+    if not rich_plain_text(raw).strip():
+        raw = (
+            "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، "
+            "فیلد «متن راهنما» را پر کنید."
+        )
+    text, send_kw = outbound_setting_text(raw, title="📘 آموزش اتصال")
+    back = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=ui.get("btn_back") or "⬅️ بازگشت",
+                    callback_data=f"svc:view:{svc_id}",
+                )
+            ]
+        ]
+    )
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(callback.message, text, reply_markup=back, **send_kw)
 
 @router.callback_query(F.data.startswith("svc:link:"))
 async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -440,7 +468,12 @@ async def svc_renew_preview(
 
 @router.callback_query(F.data.startswith("svc:renewconfirm:"))
 async def svc_renew_pay(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     ui = await get_all_settings(session)
     _, _, svc_id, plan_id = callback.data.split(":")
@@ -519,6 +552,8 @@ async def svc_renew_pay(
             order.id,
             state=state,
             text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
 
 @router.callback_query(F.data.startswith("svc:addon:"))
@@ -612,7 +647,12 @@ async def svc_addon(
 
 @router.callback_query(F.data.startswith("svc:addonpay:"))
 async def svc_addon_pay(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     ui = await get_all_settings(session)
     parts = (callback.data or "").split(":")
@@ -701,6 +741,8 @@ async def svc_addon_pay(
             order.id,
             state=state,
             text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
 
 @router.callback_query(F.data.startswith("svc:delask:"))
@@ -747,6 +789,8 @@ async def svc_delete(
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext | None = None,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     # Match svc:del:{id} only — not svc:delask:
     parts = (callback.data or "").split(":")
@@ -791,4 +835,6 @@ async def svc_delete(
             db_user,
             text="سرویس حذف شد — از منوی پایین ادامه دهید.",
             state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )

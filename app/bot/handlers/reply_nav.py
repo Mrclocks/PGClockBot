@@ -255,6 +255,8 @@ async def open_shop_list(
     state: FSMContext,
     *,
     push: bool = True,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ) -> None:
     from app.bot.handlers.shop import (
         _record_shop_funnel,
@@ -284,7 +286,12 @@ async def open_shop_list(
             ui.get("shop_empty_text") or "در حال حاضر پلنی برای فروش فعال نیست.",
             title="🛒 فروشگاه",
         )
-        main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
+        main_kb, _, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         await message.answer(text, reply_markup=main_kb, **send_kw)
         return
     await state.set_state(None)
@@ -315,8 +322,12 @@ async def open_services_list(
     state: FSMContext | None = None,
     *,
     push: bool = True,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    heal_reply: bool = False,
 ) -> None:
     from app.bot.menu_nav import build_main_reply_keyboard
+    from app.bot.nav_chrome import heal_main_reply
     from app.bot.nav_inline import present_inline_only
     ui = await get_all_settings(session)
     result = await session.execute(
@@ -325,7 +336,12 @@ async def open_services_list(
         .order_by(UserService.id.desc())
     )
     services = list(result.scalars().all())
-    main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
+    main_kb, _, _ = await build_main_reply_keyboard(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_SERVICES, push=push)
     if not services:
@@ -347,6 +363,16 @@ async def open_services_list(
             await svc_view(cb, session, db_user, state)
         except TypeError:
             await svc_view(cb, session, db_user)
+        if heal_reply:
+            await heal_main_reply(
+                message,
+                session,
+                db_user,
+                text="سرویس شما — از دکمه‌های پیام بالا ادامه دهید.",
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                ui=ui,
+            )
         return
     body = "📦 <b>سرویس‌های شما</b>\nیکی را انتخاب کنید:"
     from app.bot.nav_inline import services_list_keyboard
@@ -354,6 +380,16 @@ async def open_services_list(
     await present_inline_only(
         message, text=body, inline=services_list_keyboard(services, ui)
     )
+    if heal_reply:
+        await heal_main_reply(
+            message,
+            session,
+            db_user,
+            text="از لیست بالا یک سرویس را انتخاب کنید.",
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+        )
     return
 
 async def open_wallet_home(
@@ -465,6 +501,8 @@ async def open_support_home(
     state: FSMContext | None = None,
     *,
     push: bool = True,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ) -> None:
     from app.bot.nav_inline import present_inline_only, support_hub_keyboard
     from app.services.support_contacts import (
@@ -472,9 +510,11 @@ async def open_support_home(
         parse_support_contacts,
         support_chat_url,
     )
+    from app.services.users import on
 
     from app.services.rich_text import outbound_setting_text
 
+    _ = reseller_owner_id
     ui = await get_all_settings(session)
     contacts = active_support_contacts(parse_support_contacts(ui.get("support_contacts")))
     default_support = "تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
@@ -493,8 +533,11 @@ async def open_support_home(
     order_keys = {
         p.strip() for p in (ui.get("menu_order") or "").split(",") if p.strip()
     }
+    # Platform bot only — never offer reseller apply on a shop bot.
     show_apply = (
-        "reseller_apply" in order_keys
+        not is_reseller_bot
+        and on(ui.get("show_reseller_apply"))
+        and "reseller_apply" in order_keys
         and db_user.role == Role.USER.value
     )
     if state is not None:
@@ -626,6 +669,8 @@ async def open_reseller_apply(
     state: FSMContext | None = None,
     *,
     push: bool = True,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ) -> None:
     from app.bot.handlers.reseller import _resapply_mode_keyboard
     from app.bot.menu_nav import build_main_reply_keyboard
@@ -634,7 +679,12 @@ async def open_reseller_apply(
 
     ui = await get_all_settings(session)
     order_keys = [p.strip() for p in (ui.get("menu_order") or "").split(",") if p.strip()]
-    main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
+    main_kb, _, _ = await build_main_reply_keyboard(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
     if "reseller_apply" not in order_keys:
         await message.answer("درخواست نمایندگی در منو فعال نیست.", reply_markup=main_kb)
         return
@@ -683,7 +733,13 @@ async def open_reseller_home(
     from app.services.reseller_access import load_reseller_actor
 
     if not is_reseller_bot:
-        await open_reseller_creds(message, session, db_user)
+        await open_reseller_creds(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     owner_id, profile = await load_reseller_actor(
         session,
@@ -726,11 +782,23 @@ async def open_reseller_home(
     )
     return
 
-async def open_reseller_creds(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+async def open_reseller_creds(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
     from app.bot.menu_nav import build_main_reply_keyboard
     from app.services.resellers import format_reseller_access_card, get_reseller_profile
 
-    main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
+    main_kb, _, _ = await build_main_reply_keyboard(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
     if db_user.role != Role.RESELLER.value:
         await message.answer("فقط نمایندگان.", reply_markup=main_kb)
         return
@@ -1223,7 +1291,13 @@ async def open_reseller_settings_hub(
     from app.services.resellers import has_bot_perm
 
     if not is_reseller_bot:
-        await open_reseller_creds(message, session, db_user)
+        await open_reseller_creds(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     owner_id, profile = await load_reseller_actor(
         session,
@@ -1272,7 +1346,13 @@ async def open_reseller_plans_hub(
     from app.services.resellers import has_bot_perm
 
     if not is_reseller_bot:
-        await open_reseller_creds(message, session, db_user)
+        await open_reseller_creds(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     owner_id, profile = await load_reseller_actor(
         session,
@@ -1715,7 +1795,15 @@ async def handle_back(
         step = str(data.get(nav.SHOP_STEP) or "hub")
         if step and step != "hub":
             await nav.set_shop_step(state, "hub")
-            await open_shop_list(message, session, db_user, state, push=False)
+            await open_shop_list(
+                message,
+                session,
+                db_user,
+                state,
+                push=False,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
             return
     # 2) Within loyalty club: sub-screen → club hub.
     if current == nav.NAV_LOYALTY:
@@ -1728,20 +1816,50 @@ async def handle_back(
     level = await nav.pop_nav_level(state)
     if level == nav.NAV_SERVICES:
         await open_services_list(
-            message, session, db_user, state, push=False
+            message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
         return
     if level == nav.NAV_WALLET:
         await open_wallet_home(message, session, db_user, state, push=False)
         return
     if level == nav.NAV_SHOP:
-        await open_shop_list(message, session, db_user, state, push=False)
+        await open_shop_list(
+            message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     if level == nav.NAV_RESELLER_APPLY:
-        await open_reseller_apply(message, session, db_user, state, push=False)
+        await open_reseller_apply(
+            message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     if level == nav.NAV_SUPPORT:
-        await open_support_home(message, session, db_user, state, push=False)
+        await open_support_home(
+            message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     if level == nav.NAV_LOYALTY:
         await open_loyalty_home(message, session, db_user, state, push=False)
@@ -1894,7 +2012,13 @@ async def handle_back(
                 await svc_view(cb, session, db_user)
             return
         await open_services_list(
-            message, session, db_user, state, push=False
+            message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
         return
     if level == nav.NAV_USER_PREVIEW:
@@ -1958,6 +2082,9 @@ async def _handle_pay_action(
     db_user: BotUser,
     state: FSMContext,
     action: str,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ) -> None:
     from app.bot.handlers import shop as shop_h
 
@@ -1969,7 +2096,13 @@ async def _handle_pay_action(
     order = await session.get(Order, int(order_id))
     if not order or int(order.user_id) != int(db_user.id):
         await restore_main_reply(
-            message, session, db_user, text="دسترسی به این سفارش مجاز نیست.", state=state
+            message,
+            session,
+            db_user,
+            text="دسترسی به این سفارش مجاز نیست.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
         )
         return
     cb_map = {
@@ -2059,7 +2192,13 @@ async def _soft_reseller(
 
     if not is_reseller_bot:
         if action not in _RESELLER_CAPACITY_ACTIONS:
-            await open_reseller_creds(message, session, db_user)
+            await open_reseller_creds(
+                message,
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
             return
         owner_id, profile = await load_reseller_capacity_actor(
             session,
@@ -2408,7 +2547,14 @@ async def reply_main_nav(
             return
 
     if action == kb.REPLY_ACTION_SHOP:
-        await open_shop_list(message, session, db_user, state)
+        await open_shop_list(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
     elif action == kb.REPLY_ACTION_SHOP_CUSTOM:
         bubble = await message.answer("⏳")
         from app.bot.handlers import shop as shop_h
@@ -2422,7 +2568,14 @@ async def reply_main_nav(
         cb = _SoftCallback(bubble, "shop:kind:wholesale")
         await shop_h.shop_kind_wholesale(cb, session, state)
     elif action == kb.REPLY_ACTION_SERVICES:
-        await open_services_list(message, session, db_user, state)
+        await open_services_list(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
     elif action == kb.REPLY_ACTION_WALLET:
         await open_wallet_home(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_WALLET_TOPUP:
@@ -2430,7 +2583,14 @@ async def reply_main_nav(
     elif action == kb.REPLY_ACTION_WALLET_TX:
         await open_wallet_tx(message, session, db_user)
     elif action == kb.REPLY_ACTION_SUPPORT:
-        await open_support_home(message, session, db_user, state)
+        await open_support_home(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
     elif action == kb.REPLY_ACTION_SUPPORT_NEW:
         await open_support_new(message, session, state)
     elif action == kb.REPLY_ACTION_SUPPORT_LIST:
@@ -2535,7 +2695,14 @@ async def reply_main_nav(
             reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_RESELLER_APPLY:
-        await open_reseller_apply(message, session, db_user, state)
+        await open_reseller_apply(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
     elif action == kb.REPLY_ACTION_RESELLER:
         await open_reseller_home(
             message,
@@ -2546,7 +2713,13 @@ async def reply_main_nav(
             reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_CREDS:
-        await open_reseller_creds(message, session, db_user)
+        await open_reseller_creds(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
     elif action == kb.REPLY_ACTION_ADMIN:
         await open_admin_home(
             message, session, db_user, state, is_reseller_bot=is_reseller_bot
@@ -2946,7 +3119,13 @@ async def reply_main_nav(
         from app.services.resellers import get_reseller_panel_base_url, has_bot_perm
 
         if not is_reseller_bot:
-            await open_reseller_creds(message, session, db_user)
+            await open_reseller_creds(
+                message,
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
             return
         owner_id, profile = await load_reseller_actor(
             session,
@@ -3004,7 +3183,18 @@ async def reply_main_nav(
         data = await state.get_data()
         svc_id = data.get(nav.SERVICE_ID)
         if not svc_id:
-            await message.answer("سرویسی انتخاب نشده — از لیست سرویس‌ها یکی را بزنید.")
+            # Stale reply keyboard after restart (MemoryStorage empty) — reopen
+            # services and re-install the main ReplyKeyboard once (no dead-end).
+            await open_services_list(
+                message,
+                session,
+                db_user,
+                state,
+                push=False,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                heal_reply=True,
+            )
             return
         from app.bot.handlers import services as svc_h
 
@@ -3039,7 +3229,15 @@ async def reply_main_nav(
         except TypeError:
             await fn(cb, session, db_user)
     elif action.startswith("pay_"):
-        await _handle_pay_action(message, session, db_user, state, action)
+        await _handle_pay_action(
+            message,
+            session,
+            db_user,
+            state,
+            action,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
     elif action.startswith("topup_"):
         await _handle_topup_action(message, session, db_user, state, action)
 
