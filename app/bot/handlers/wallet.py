@@ -293,9 +293,11 @@ async def present_topup_methods(
 async def wallet_topup_amount(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser,
     is_reseller_bot: bool = False, reseller_owner_id: int | None = None):
     from app.bot.menu_nav import restore_main_reply
+    from app.bot.nav_input import finish_text_step
 
     ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui):
+        # Legacy reply-label انصراف (stale cancel_reply keyboards).
         await restore_main_reply(
             message,
             session,
@@ -311,21 +313,33 @@ async def wallet_topup_amount(message: Message, state: FSMContext, session: Asyn
         if amount < 1000:
             raise ValueError
     except ValueError:
-        await message.answer(
-            format_message("⚠️ خطا", "مبلغ معتبر وارد کنید (حداقل ۱٬۰۰۰)."),
-            reply_markup=kb.cancel_reply(ui),
+        from app.bot.nav_input import ask_text
+
+        await ask_text(
+            message,
+            state,
+            prompt=format_message("⚠️ خطا", "مبلغ معتبر وارد کنید (حداقل ۱٬۰۰۰)."),
+            cancel_code="w_amt",
+            fsm_state=WalletStates.topup_amount,
         )
         return
-    # Free-text path used cancel_reply — heal stable main KB after methods.
-    await present_topup_methods(
+    # Inline cancel path — edit prompt into methods; no heal-only message.
+    from app.bot import menu_nav as nav
+    from app.bot.nav_inline import topup_methods_keyboard
+
+    body = format_message(
+        "➕ شارژ کیف پول",
+        f"{kv_line('💰', 'مبلغ', f'<b>{format_toman(amount, get_settings().currency)}</b>')}\n\n"
+        + "روش واریز را انتخاب کنید:",
+    )
+    await state.set_state(WalletStates.choose_method)
+    await state.update_data(topup_amount=amount)
+    await nav.set_nav_level(state, nav.NAV_TOPUP_PAY, push=True)
+    await finish_text_step(
         message,
-        session,
-        db_user,
         state,
-        amount,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-        heal_main=True,
+        text=body,
+        inline=topup_methods_keyboard(ui),
     )
 
 async def _topup_instructions(
@@ -735,3 +749,17 @@ async def generic_receipt(
         from app.bot.menu_nav import clear_checkout_nav
 
         await clear_checkout_nav(state)
+
+
+def _register_wallet_cancel_codes() -> None:
+    from app.bot.nav_input import CancelEntry, register_cancel_code
+
+    async def _reopen_topup(message, session, db_user, state, **_kw):
+        from app.bot.handlers.reply_nav import open_wallet_topup
+
+        await open_wallet_topup(message, session, state)
+
+    register_cancel_code("w_amt", CancelEntry(reopen=_reopen_topup))
+
+
+_register_wallet_cancel_codes()

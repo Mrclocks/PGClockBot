@@ -86,10 +86,17 @@ async def support_tickets_home(callback: CallbackQuery, session: AsyncSession):
 
 @router.callback_query(F.data == "support:new")
 async def support_new(callback: CallbackQuery, state: FSMContext):
+    from app.bot.nav_input import ask_text
+
     await callback.answer()
-    await state.set_state(SupportStates.subject)
     if callback.message:
-        await callback.message.answer("موضوع تیکت را بنویسید:", reply_markup=kb.cancel_reply())
+        await ask_text(
+            callback,
+            state,
+            prompt="موضوع تیکت را بنویسید:",
+            cancel_code="s_subj",
+            fsm_state=SupportStates.subject,
+        )
 
 @router.message(SupportStates.subject)
 async def support_subject(
@@ -117,8 +124,15 @@ async def support_subject(
         await message.answer("موضوع را به‌صورت متن بفرستید.")
         return
     await state.update_data(subject=subject)
-    await state.set_state(SupportStates.body)
-    await message.answer("متن پیام را بنویسید:", reply_markup=kb.cancel_reply())
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        message,
+        state,
+        prompt="متن پیام را بنویسید:",
+        cancel_code="s_body",
+        fsm_state=SupportStates.body,
+    )
 
 @router.message(SupportStates.body)
 async def support_body(
@@ -350,3 +364,18 @@ async def support_reply(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
+
+
+def _register_support_cancel_codes() -> None:
+    from app.bot.nav_input import CancelEntry, register_cancel_code
+
+    async def _reopen_support(message, session, db_user, state, **_kw):
+        from app.bot.handlers.reply_nav import open_support_home
+
+        await open_support_home(message, session, db_user, state, push=False)
+
+    register_cancel_code("s_subj", CancelEntry(reopen=_reopen_support))
+    register_cancel_code("s_body", CancelEntry(reopen=_reopen_support))
+
+
+_register_support_cancel_codes()
