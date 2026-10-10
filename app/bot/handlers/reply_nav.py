@@ -7,6 +7,8 @@ Inline under messages: plans, services/user/reseller names, approve/reject, URL 
 
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.filters import BaseFilter
 from aiogram.fsm.context import FSMContext
@@ -23,6 +25,7 @@ from app.services.home_overview import admin_customer_counts
 from app.services.users import get_all_settings
 from app.services.redact import user_safe_error
 
+logger = logging.getLogger(__name__)
 router = Router(name="reply_nav")
 
 class _SoftCallback:
@@ -717,6 +720,11 @@ async def open_reseller_home(
     try:
         queue = await pending_counts(session, shop_id=int(owner_id))
     except Exception:
+        logger.warning(
+            "reseller hub pending_counts failed shop_id=%s",
+            owner_id,
+            exc_info=True,
+        )
         queue = PendingCounts()
     body = format_message(
         "🤝 پنل نماینده",
@@ -1356,11 +1364,11 @@ async def open_admin_home(
         return
     ui = await get_all_settings(session)
     # Platform-only queue — never include shop-tenant rows.
+    queue_line = None
     try:
-        queue = await pending_counts(session, shop_id=None)
-        queue_line = format_queue_summary(queue)
+        queue_line = format_queue_summary(await pending_counts(session, shop_id=None))
     except Exception:
-        queue_line = None
+        logger.warning("admin home pending_counts failed", exc_info=True)
     body = (
         f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
         "یک گروه را از دکمه‌های زیر انتخاب کنید."
@@ -1401,6 +1409,7 @@ async def open_admin_ops_hub(
     try:
         queue = await pending_counts(session, shop_id=None)
     except Exception:
+        logger.warning("admin ops pending_counts failed", exc_info=True)
         queue = PendingCounts()
     body = "🗓 <b>عملیات روزانه</b>\nداشبورد، سفارش‌ها، رسیدها و تیکت‌ها."
     queue_line = format_queue_summary(queue)
