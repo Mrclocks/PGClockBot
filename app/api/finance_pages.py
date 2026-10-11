@@ -74,31 +74,21 @@ async def _payment_bot_token(
     session: AsyncSession,
     payment: Payment,
     *,
-    order: Order | None,
-    payer_reseller_id: int | None,
+    shop_owner_id: int | None,
 ) -> str:
     """Resolve Telegram bot token that owns this receipt file_id.
 
     Never cross tenants: reseller receipts use only that shop's bot token;
     platform receipts use only the platform bot token (no fallback either way).
+    ``shop_owner_id`` is the payment's resolved tenant (None = platform).
     """
     from app.config import get_settings
 
-    if order is not None and order.reseller_id:
+    if shop_owner_id:
         profile = (
             await session.execute(
                 select(ResellerProfile).where(
-                    ResellerProfile.user_id == int(order.reseller_id)
-                )
-            )
-        ).scalar_one_or_none()
-        return ((reveal_bot_token(profile.bot_token) if profile else None) or "").strip()
-
-    if payer_reseller_id:
-        profile = (
-            await session.execute(
-                select(ResellerProfile).where(
-                    ResellerProfile.user_id == int(payer_reseller_id)
+                    ResellerProfile.user_id == int(shop_owner_id)
                 )
             )
         ).scalar_one_or_none()
@@ -167,33 +157,32 @@ async def _authorize_receipt_access(
     staff: dict,
     payment: Payment,
 ) -> tuple[Order | None, int | None] | None:
-    """Return (order, payer_reseller_id) if staff may view this receipt, else None.
+    """Return (order, tenant_shop_id) if staff may view this receipt, else None.
 
-    Platform admins: only platform-scoped payments (no reseller order / no reseller payer).
-    Shop staff: only payments for their shop (order.reseller_id or payer.reseller_id).
+    Platform admins: only platform-scoped payments.
+    Shop staff: only payments for their shop.
+    Wallet top-ups use ``payment.wallet_shop_id`` (not sticky ``BotUser.reseller_id``).
+    Order payments use ``order.reseller_id``.
     """
     order: Order | None = None
     if payment.order_id:
         order = await session.get(Order, int(payment.order_id))
 
-    payer_reseller_id: int | None = None
-    if payment.user_id:
-        payer = await session.get(BotUser, int(payment.user_id))
-        if payer and payer.reseller_id:
-            payer_reseller_id = int(payer.reseller_id)
-
-    order_rid = int(order.reseller_id) if order and order.reseller_id else None
-    tenant_rid = order_rid or payer_reseller_id
+    if payment.is_wallet_topup:
+        wid = getattr(payment, "wallet_shop_id", None)
+        tenant_rid = int(wid) if wid else None
+    else:
+        tenant_rid = int(order.reseller_id) if order and order.reseller_id else None
 
     if is_platform_admin(staff):
         if tenant_rid:
             return None
-        return order, payer_reseller_id
+        return order, None
 
     rid = shop_owner_id(staff)
-    if not rid or not tenant_rid or int(tenant_rid) != int(rid):
+    if not rid or tenant_rid is None or int(tenant_rid) != int(rid):
         return None
-    return order, payer_reseller_id
+    return order, int(tenant_rid)
 
 
 def _groups_for_tab(tab: str) -> tuple[list[str], dict]:
@@ -454,11 +443,11 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             needle = search_q.casefold() if search_q else ""
 
             if is_platform_admin(staff):
-                # Platform scope only — never list reseller-tenant wallet topups/orders.
+                # Platform scope only — top-ups by wallet_shop_id, not sticky BotUser.
                 scope = or_(
                     and_(
                         Payment.is_wallet_topup.is_(True),
-                        BotUser.reseller_id.is_(None),
+                        Payment.wallet_shop_id.is_(None),
                     ),
                     and_(
                         Payment.is_wallet_topup.is_(False),
@@ -483,22 +472,28 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 if not rid:
                     ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
                     return render(request, "finance.html", ctx)
-                scope_filters = (
-                    Order.reseller_id == rid,
-                    Payment.is_wallet_topup.is_(False),
+                scope = or_(
+                    and_(
+                        Payment.is_wallet_topup.is_(True),
+                        Payment.wallet_shop_id == int(rid),
+                    ),
+                    and_(
+                        Payment.is_wallet_topup.is_(False),
+                        Order.reseller_id == int(rid),
+                    ),
                 )
                 count_q = (
                     select(func.count())
                     .select_from(Payment)
-                    .join(Order, Order.id == Payment.order_id)
+                    .outerjoin(Order, Order.id == Payment.order_id)
                     .outerjoin(BotUser, BotUser.id == Payment.user_id)
-                    .where(*scope_filters)
+                    .where(scope)
                 )
                 list_q = (
                     select(Payment)
-                    .join(Order, Order.id == Payment.order_id)
+                    .outerjoin(Order, Order.id == Payment.order_id)
                     .outerjoin(BotUser, BotUser.id == Payment.user_id)
-                    .where(*scope_filters)
+                    .where(scope)
                 )
 
             if search_q:
@@ -704,13 +699,12 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         scoped = await _authorize_receipt_access(session, staff, payment)
         if scoped is None:
             return Response(status_code=403, content="دسترسی ندارید")
-        order, payer_reseller_id = scoped
+        _order, tenant_shop_id = scoped
 
         token = await _payment_bot_token(
             session,
             payment,
-            order=order,
-            payer_reseller_id=payer_reseller_id,
+            shop_owner_id=tenant_shop_id,
         )
         if not token:
             return Response(status_code=503, content="توکن ربات تنظیم نشده")
