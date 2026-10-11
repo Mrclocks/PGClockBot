@@ -99,7 +99,6 @@ NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
 PLATFORM_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset(
     {
         "notify_account_edits",
-        "notify_wallet_topup",
     }
 )
 
@@ -109,6 +108,7 @@ SHOP_NOTIFY_PERM_MAP: dict[str, frozenset[str]] = {
     "notify_new_subscription": frozenset({"orders", "payments"}),
     "notify_pending_approval": frozenset({"payments"}),
     "notify_new_order": frozenset({"orders"}),
+    "notify_wallet_topup": frozenset({"payments"}),
     "notify_new_ticket": frozenset({"tickets"}),
     "notify_auto_approve": frozenset({"payments"}),
 }
@@ -316,8 +316,10 @@ async def _resolve_shop_reseller_id(
     if order is not None and order.reseller_id:
         return int(order.reseller_id)
     if payment is not None:
+        # Purse scope from wallet_shop_id — never sticky BotUser.reseller_id.
         if payment.is_wallet_topup:
-            return None
+            wid = getattr(payment, "wallet_shop_id", None)
+            return int(wid) if wid else None
         if payment.order_id:
             ord_row = await session.get(Order, payment.order_id)
             if ord_row and ord_row.reseller_id:
@@ -680,7 +682,7 @@ async def notify_pending_approval(
     text = format_message("⏳ نیاز به تأیید", info_block(lines) + "\n\n" + tail)
     # Always payrev so shop staff can act on their own bot; ordrev is platform-only.
     markup = _approval_markup(payment_id=payment.id)
-    # Wallet top-ups are platform-only; shop prefs never apply.
+    # Shop top-ups (wallet_shop_id set) route to that shop; platform purse → admins.
     await _dispatch_dual_notify(
         bot,
         session,
@@ -689,7 +691,6 @@ async def notify_pending_approval(
         markup=markup,
         photo=payment.receipt_file_id,
         payment=payment,
-        shop=not payment.is_wallet_topup,
     )
 
 
@@ -913,7 +914,11 @@ async def notify_wallet_topup_ok(
     payment: Payment,
     user_tg_id: int | None,
 ) -> None:
-    if not await notify_enabled(session, "notify_wallet_topup"):
+    wid = getattr(payment, "wallet_shop_id", None)
+    topup_shop = int(wid) if wid else None
+    if not await notify_enabled(
+        session, "notify_wallet_topup", reseller_id=topup_shop
+    ):
         return
     settings = get_settings()
     user = await session.get(BotUser, payment.user_id) if payment.user_id else None
@@ -934,7 +939,6 @@ async def notify_wallet_topup_ok(
         "notify_wallet_topup",
         text,
         payment=payment,
-        shop=False,
     )
 
 
@@ -1072,7 +1076,6 @@ async def notify_auto_approve(
         "notify_auto_approve",
         text,
         payment=payment,
-        shop=not payment.is_wallet_topup,
     )
 
 
@@ -1136,7 +1139,6 @@ async def notify_approved_delivery_stuck(
         markup=markup,
         photo=payment.receipt_file_id,
         payment=payment,
-        shop=not payment.is_wallet_topup,
     )
 
 

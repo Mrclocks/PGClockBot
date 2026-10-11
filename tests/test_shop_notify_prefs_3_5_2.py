@@ -30,8 +30,11 @@ class CatalogAclTests(unittest.TestCase):
         ticket_only = shop_notify_allowed_keys(["tickets", "shop_settings", "plans"])
         self.assertIn("notify_new_ticket", ticket_only)
         self.assertNotIn("notify_account_edits", ticket_only)
+        # Wallet top-up success is payments-scoped (shop purse), not tickets.
         self.assertNotIn("notify_wallet_topup", ticket_only)
-        self.assertEqual(PLATFORM_ONLY_NOTIFY_KEYS, frozenset({"notify_account_edits", "notify_wallet_topup"}))
+        self.assertEqual(PLATFORM_ONLY_NOTIFY_KEYS, frozenset({"notify_account_edits"}))
+        pay_keys = shop_notify_allowed_keys(["payments", "shop_settings", "plans"])
+        self.assertIn("notify_wallet_topup", pay_keys)
 
 
 class IsolationLogicTests(unittest.IsolatedAsyncioTestCase):
@@ -46,8 +49,8 @@ class IsolationLogicTests(unittest.IsolatedAsyncioTestCase):
 
         prefs = await get_shop_notify_prefs(session, 42)
         self.assertIn("notify_new_order", prefs)
+        self.assertIn("notify_wallet_topup", prefs)
         self.assertNotIn("notify_account_edits", prefs)
-        self.assertNotIn("notify_wallet_topup", prefs)
 
     async def test_save_shop_rejects_platform_only_even_if_passed(self):
         from app.services.notifications import save_shop_notify_prefs
@@ -71,8 +74,8 @@ class IsolationLogicTests(unittest.IsolatedAsyncioTestCase):
             )
         payload = bulk.await_args.args[1]
         self.assertEqual(payload.get("notify_new_ticket"), "1")
+        self.assertEqual(payload.get("notify_wallet_topup"), "1")
         self.assertNotIn("notify_account_edits", payload)
-        self.assertNotIn("notify_wallet_topup", payload)
         self.assertEqual(bulk.await_args.kwargs.get("reseller_id"), 7)
 
     async def test_dispatch_uses_independent_gates(self):
