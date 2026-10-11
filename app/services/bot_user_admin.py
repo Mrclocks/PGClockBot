@@ -35,7 +35,7 @@ from app.services.pasarguard import (
     get_pg,
     user_subscription_url,
 )
-from app.services.wallet import credit_wallet, debit_wallet
+from app.services.wallet import credit_wallet, debit_wallet, list_transactions
 
 logger = logging.getLogger(__name__)
 
@@ -616,17 +616,16 @@ async def admin_adjust_user_wallet(
 
 
 async def list_wallet_txs(
-    session: AsyncSession, user_id: int, *, limit: int = 20
+    session: AsyncSession,
+    user_id: int,
+    *,
+    limit: int = 20,
+    shop_id: int | None = None,
 ) -> list[WalletTransaction]:
-    rows = (
-        await session.execute(
-            select(WalletTransaction)
-            .where(WalletTransaction.user_id == int(user_id))
-            .order_by(WalletTransaction.id.desc())
-            .limit(int(limit))
-        )
-    ).scalars().all()
-    return list(rows)
+    """Ledger for one purse (platform when ``shop_id`` is None, else that shop)."""
+    return await list_transactions(
+        session, user_id, limit=limit, shop_id=shop_id
+    )
 
 
 async def get_owned_service(

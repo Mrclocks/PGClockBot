@@ -316,10 +316,14 @@ async def debit_wallet(
         balance_after = int(balance_after)
         user.wallet_balance = balance_after
     else:
+        row = await _get_or_create_shop_wallet(
+            session, user_id=uid, reseller_id=sid
+        )
         with session.no_autoflush:
             result = await session.execute(
                 update(ShopWallet)
                 .where(
+                    ShopWallet.id == int(row.id),
                     ShopWallet.user_id == uid,
                     ShopWallet.reseller_id == sid,
                     ShopWallet.balance >= int(amount),
@@ -332,6 +336,7 @@ async def debit_wallet(
         if balance_after is None:
             raise ValueError("موجودی کافی نیست")
         balance_after = int(balance_after)
+        row.balance = balance_after
 
     session.add(
         WalletTransaction(

@@ -508,6 +508,74 @@ class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(missing[424242], 0)
 
+    async def test_list_wallet_txs_isolates_shop_ledger(self):
+        """Admin edit ledger must match the scoped balance pill (no cross-shop rows)."""
+        from app.services.bot_user_admin import list_wallet_txs
+        from app.services.wallet import credit_wallet
+
+        async with self.Session() as session:
+            owner_a = await self._user(session, 9101, code="TXA")
+            owner_b = await self._user(session, 9102, code="TXB")
+            buyer = await self._user(
+                session, 9103, reseller_id=owner_a.id, code="TXBUY"
+            )
+            await credit_wallet(
+                session, buyer, 12_000, "credit-a", shop_id=owner_a.id
+            )
+            await credit_wallet(
+                session, buyer, 99_000, "credit-b", shop_id=owner_b.id
+            )
+            await credit_wallet(
+                session, buyer, 7_000, "credit-platform", shop_id=None
+            )
+
+            txs_a = await list_wallet_txs(
+                session, buyer.id, limit=20, shop_id=owner_a.id
+            )
+            txs_b = await list_wallet_txs(
+                session, buyer.id, limit=20, shop_id=owner_b.id
+            )
+            txs_platform = await list_wallet_txs(
+                session, buyer.id, limit=20, shop_id=None
+            )
+
+            self.assertEqual([t.amount for t in txs_a], [12_000])
+            self.assertEqual([t.reseller_id for t in txs_a], [owner_a.id])
+            self.assertEqual([t.amount for t in txs_b], [99_000])
+            self.assertEqual([t.reseller_id for t in txs_b], [owner_b.id])
+            self.assertEqual([t.amount for t in txs_platform], [7_000])
+            self.assertEqual([t.reseller_id for t in txs_platform], [None])
+
+    async def test_shop_debit_keeps_identity_map_balance(self):
+        """Shop debit must update the in-session ShopWallet like credit does."""
+        from app.db.models import ShopWallet
+        from app.services.wallet import credit_wallet, debit_wallet, get_wallet_balance
+        from sqlalchemy import select
+
+        async with self.Session() as session:
+            owner = await self._user(session, 9201, code="DBOWN")
+            buyer = await self._user(
+                session, 9202, reseller_id=owner.id, code="DBBUY"
+            )
+            await credit_wallet(
+                session, buyer, 50_000, "seed", shop_id=owner.id, commit=False
+            )
+            await debit_wallet(
+                session, buyer, 20_000, "spend", shop_id=owner.id, commit=False
+            )
+            row = (
+                await session.execute(
+                    select(ShopWallet).where(
+                        ShopWallet.user_id == buyer.id,
+                        ShopWallet.reseller_id == owner.id,
+                    )
+                )
+            ).scalar_one()
+            self.assertEqual(int(row.balance), 30_000)
+            self.assertEqual(
+                await get_wallet_balance(session, buyer, shop_id=owner.id), 30_000
+            )
+
 
 class PaymentTenancyTopupRegression(unittest.IsolatedAsyncioTestCase):
     async def test_reseller_still_blocked_from_platform_topup(self):

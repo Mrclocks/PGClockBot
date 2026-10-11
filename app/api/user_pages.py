@@ -240,7 +240,10 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         )
 
         snaps = await list_service_snapshots(session, int(user_id))
-        wallet_txs = await list_wallet_txs(session, int(user_id), limit=20)
+        # Same shop scope as display_wallet — never mix other purses' ledger rows.
+        wallet_txs = await list_wallet_txs(
+            session, int(user_id), limit=20, shop_id=shop_scope
+        )
         plans = await list_catalog_plans(session, staff, include_trial=False)
         pg_acts = staff_user_actions(staff)
         can_pg_create = bool(pg_acts.get("create"))

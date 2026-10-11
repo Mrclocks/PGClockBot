@@ -602,7 +602,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             else:
                 await session.commit()
             billing_txs = await list_billing_transactions(session, int(user_id), limit=15)
-            wallet_txs = await list_wallet_txs(session, int(user_id), limit=15)
+            # PAYG billing pot is the platform purse (reseller_id IS NULL).
+            wallet_txs = await list_wallet_txs(
+                session, int(user_id), limit=15, shop_id=None
+            )
             billing_rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
             if profile.billing_suspended_at is not None:
                 from app.services.billing_suspend import min_topup_to_unsuspend
