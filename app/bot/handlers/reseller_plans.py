@@ -370,7 +370,14 @@ async def res_plan_name(
 
 
 @router.message(ResellerPlanStates.price)
-async def res_plan_price(message: Message, state: FSMContext, db_user: BotUser):
+async def res_plan_price(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     if kb.is_cancel_text(message.text):
         from app.bot.nav_input import try_legacy_cancel
 
@@ -408,7 +415,14 @@ async def res_plan_price(message: Message, state: FSMContext, db_user: BotUser):
 
 
 @router.message(ResellerPlanStates.days)
-async def res_plan_days(message: Message, state: FSMContext):
+async def res_plan_days(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     if kb.is_cancel_text(message.text):
         from app.bot.nav_input import try_legacy_cancel
 
