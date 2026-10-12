@@ -762,7 +762,9 @@ async def pcm_addon_name(
     message: Message,
     state: FSMContext,
     session: AsyncSession,
+    db_user: BotUser,
     is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
         from app.bot.nav_input import try_legacy_cancel
@@ -840,7 +842,9 @@ async def pcm_addon_amount(
     message: Message,
     state: FSMContext,
     session: AsyncSession,
+    db_user: BotUser,
     is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
         from app.bot.nav_input import try_legacy_cancel
