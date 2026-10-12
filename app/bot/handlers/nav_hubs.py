@@ -142,6 +142,7 @@ async def nv_wallet_home(
         callback.message, text, reply_markup=wallet_hub_keyboard(ui)
     )
     if not ok:
+        from app.bot.handlers.reply_nav import open_wallet_home
         await open_wallet_home(callback.message, session, db_user, state, push=False)
 
 @router.callback_query(F.data == "nv:s:new")

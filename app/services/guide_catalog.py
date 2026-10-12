@@ -286,7 +286,6 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/help/",
         "roles": ["owner", "admin"],
         "nav_group": "کمک",
-        "icon": "upload",
         "aliases": ["دامنه", "nginx", "host", "github pages", "docs"],
     },
 }
