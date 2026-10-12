@@ -285,8 +285,9 @@ def normalize_style(raw: str | None) -> str:
 
 
 # Plan form: inherit sentinel (stored as NULL) + explicit Telegram colors.
+# Default inherit = category color when linked, else plan-kind catalog color.
 PLAN_BUTTON_STYLE_OPTIONS: list[tuple[str, str, str]] = [
-    ("inherit", "ارث از نوع پلن", "default"),
+    ("inherit", "ارث از دسته", "default"),
     *STYLE_OPTIONS,
 ]
 
@@ -569,12 +570,23 @@ def resolve_plan_button_style(
     *,
     kind: str | None = None,
     audience: str = "users",
+    category: object | None = None,
 ) -> str | None:
-    """Telegram inline style for one plan row — override then kind catalog."""
+    """Telegram inline style for one plan row.
+
+    Order: explicit plan override → linked category (incl. category inherit) →
+    plan-kind catalog. Passing ``category`` avoids lazy-load under AsyncSession.
+    """
     stored = getattr(plan, "button_style", None) if plan is not None else None
     if stored is not None:
         explicit = normalize_style(stored)
         return explicit or None
+    cat = category
+    if cat is None and plan is not None:
+        # Only use an already-loaded relationship (never trigger lazy IO).
+        cat = getattr(plan, "__dict__", {}).get("category")
+    if cat is not None:
+        return resolve_category_button_style(ui, cat)
     if kind is None:
         kind = (
             infer_user_plan_kind(plan)

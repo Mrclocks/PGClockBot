@@ -256,11 +256,11 @@ def _shop_picker_copy(*, use_categories: bool) -> tuple[str, str]:
     if use_categories:
         return (
             "ابتدا <b>دسته</b> را از دکمه‌های زیر پیام انتخاب کنید.",
-            "📁 دسته:",
+            "دسته:",
         )
     return (
         "ابتدا <b>نوع پلن</b> را از دکمه‌های زیر پیام انتخاب کنید.",
-        "📦 نوع پلن:",
+        "نوع پلن:",
     )
 
 async def present_shop_kind_picker(
@@ -392,13 +392,14 @@ async def shop_kind_fixed(
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("💎 پلن ثابت", "یکی از پلن‌ها را انتخاب کنید:"),
+            format_message("پلن ثابت", "یکی از پلن‌ها را انتخاب کنید:"),
             reply_markup=kb.plans_keyboard(
                 fixed_plans,
                 ui,
                 back_callback="shop:list",
                 kind="fixed",
                 category_names=cat_names,
+                categories={int(c.id): c for c in all_cats},
             ),
         )
 
@@ -423,9 +424,11 @@ async def shop_category_pick(
     )
     from app.services.users import current_shop_reseller_id
 
+    cats = await list_shop_categories(session, active_only=True)
+    cat_map = {int(c.id): c for c in cats}
     if raw == "none":
         cat_id = None
-        title = "📂 سایر"
+        title = "سایر"
         plans = plans_in_category(fixed_plans, None)
     else:
         try:
@@ -433,12 +436,11 @@ async def shop_category_pick(
         except ValueError:
             await callback.answer("دسته نامعتبر است.", show_alert=True)
             return
-        cats = await list_shop_categories(session, active_only=True)
-        cat = next((c for c in cats if int(c.id) == cat_id), None)
+        cat = cat_map.get(cat_id)
         if not cat or not category_matches_shop(cat, current_shop_reseller_id()):
             await callback.answer("دسته یافت نشد.", show_alert=True)
             return
-        title = f"📁 {cat.name}"
+        title = kb._category_button_label(cat)
         plans = plans_in_category(fixed_plans, cat_id)
     if not plans:
         await callback.answer("پلنی در این دسته نیست.", show_alert=True)
@@ -453,6 +455,7 @@ async def shop_category_pick(
                 ui,
                 back_callback="shop:list",
                 kind="fixed",
+                categories=cat_map,
             ),
         )
 
@@ -475,7 +478,7 @@ async def shop_kind_trial(
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("🎁 پلن تست", "پلن تست را انتخاب کنید:"),
+            format_message("پلن تست", "پلن تست را انتخاب کنید:"),
             reply_markup=kb.plans_keyboard(
                 trial_plans,
                 ui,

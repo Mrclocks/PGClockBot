@@ -1,10 +1,9 @@
-"""Reseller-apply: inline modes + lasting apply chrome (never main menu)."""
+"""Reseller-apply: inline categories/modes + lasting apply chrome (never main menu)."""
 
 from __future__ import annotations
 
 import inspect
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -26,8 +25,8 @@ class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
 
         markup = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="📦 ثابت — 1 پلن", callback_data="resapply:mode:fixed")],
-                [InlineKeyboardButton(text="⚡ PAYG — 0 پلن", callback_data="resapply:mode:payg")],
+                [InlineKeyboardButton(text="اقتصادی", callback_data="resapply:cat:1")],
+                [InlineKeyboardButton(text="بازگشت", callback_data="menu:home")],
             ]
         )
 
@@ -47,10 +46,20 @@ class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch(
                 "app.services.resellers.list_active_reseller_plans",
-                new=AsyncMock(side_effect=[[MagicMock()], []]),
+                new=AsyncMock(return_value=[MagicMock()]),
             ),
             patch(
-                "app.bot.handlers.reseller._resapply_mode_keyboard",
+                "app.bot.handlers.reseller._resapply_picker_copy",
+                new=AsyncMock(
+                    return_value=(
+                        "درخواست نمایندگی",
+                        "ابتدا <b>دسته</b> را از دکمه‌های زیر پیام انتخاب کنید.",
+                        True,
+                    )
+                ),
+            ),
+            patch(
+                "app.bot.handlers.reseller._resapply_home_keyboard",
                 new=AsyncMock(return_value=markup),
             ),
             patch(
@@ -77,10 +86,20 @@ class ResellerApplySourceGuards(unittest.TestCase):
         )
         self.assertNotIn('"نوع پلن:"', fn)
         self.assertNotIn("'نوع پلن:'", fn)
-        self.assertIn("_resapply_mode_keyboard", fn)
+        self.assertIn("_resapply_home_keyboard", fn)
         self.assertIn("present_inline_only", fn)
         self.assertNotIn('text="⌨️ منوی اصلی"', fn)
         self.assertIn("NAV_RESELLER_APPLY", fn)
+
+    def test_plan_detail_single_back(self):
+        src = inspect.getsource(
+            __import__(
+                "app.bot.handlers.reseller", fromlist=["resapply_plan"]
+            ).resapply_plan
+        )
+        self.assertNotIn("تغییر نوع پلن", src)
+        self.assertNotIn("بازگشت به لیست", src)
+        self.assertIn("_resapply_list_back_for_plan", src)
 
 
 if __name__ == "__main__":

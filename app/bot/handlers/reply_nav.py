@@ -221,10 +221,13 @@ class ReplyMenuTextFilter(BaseFilter):
                 mapping[(label or "").strip()] = key
         if kb.is_home_text(text, ui):
             action = kb.REPLY_ACTION_HOME
-        elif text in {kb._back_label(ui), kb.BTN_BACK}:
+        elif text in {kb._back_label(ui), kb.BTN_BACK} or (
+            kb.normalize_reply_label(text) == kb.normalize_reply_label(kb._back_label(ui))
+        ):
             action = kb.REPLY_ACTION_BACK
         else:
-            action = mapping.get(text)
+            # Exact match, then normalized (strips leftover leading emoji/icons).
+            action = kb.resolve_reply_mapping(mapping, text)
         if not action:
             return False
         return {
@@ -719,9 +722,11 @@ async def open_reseller_apply(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> None:
-    from app.bot.handlers.reseller import _resapply_mode_keyboard
+    from app.bot.handlers.reseller import (
+        _resapply_home_keyboard,
+        _resapply_picker_copy,
+    )
     from app.bot.menu_nav import build_main_reply_keyboard
-    from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
     from app.services.resellers import list_active_reseller_plans
 
     ui = await get_all_settings(session)
@@ -741,26 +746,21 @@ async def open_reseller_apply(
     if db_user.role == Role.ADMIN.value:
         await message.answer("ادمین نیاز به درخواست ندارد.", reply_markup=main_kb)
         return
-    fixed_n = len(await list_active_reseller_plans(session, billing_mode=BILLING_MODE_FIXED))
-    payg_n = len(await list_active_reseller_plans(session, billing_mode=BILLING_MODE_PAYG))
-    if fixed_n == 0 and payg_n == 0:
+    all_plans = await list_active_reseller_plans(session)
+    if not all_plans:
         await message.answer(
             format_message(
-                "🤝 نمایندگی",
+                "نمایندگی",
                 "در حال حاضر پلن نمایندگی فعالی تعریف نشده است.\nبعداً دوباره بررسی کنید.",
             ),
             reply_markup=main_kb,
         )
         return
-    text = format_message(
-        "🤝 درخواست نمایندگی",
-        "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
-        "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
-        "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک",
-    )
+    title, body, _use_cats = await _resapply_picker_copy(session)
+    text = format_message(title, body)
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_RESELLER_APPLY, push=push)
-    inline = await _resapply_mode_keyboard(session, ui)
+    inline = await _resapply_home_keyboard(session, ui)
     from app.bot.nav_inline import present_inline_only
 
     await present_inline_only(message, text=text, inline=inline)

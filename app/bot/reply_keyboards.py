@@ -381,19 +381,21 @@ def _admin_plans_list_entries(ui: dict | None = None) -> list[tuple[str, str]]:
 
 def _admin_plans_add_type_entries(audience: str, ui: dict | None = None) -> list[tuple[str, str]]:
     """Plan type picker shown after «افزودن پلن» — mirrors web modal kind step."""
-    _ = ui
     if audience == "resellers":
         return [
-            (REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED, "📦 اشتراک ثابت"),
-            (REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG, "⚡ اشتراک PAYG"),
-            (REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL, "📦 بسته حجم"),
-            (REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS, "👤 بسته کاربر"),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED, "اشتراک ثابت"),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG, "اشتراک PAYG"),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL, "بسته حجم"),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS, "بسته کاربر"),
         ]
+    wholesale = _t(ui, "btn_wholesale") or "فروش عمده"
+    from app.bot.keyboards import _label_or
+
     return [
-        (REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED, "💎 ثابت"),
-        (REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM, "✨ دلخواه"),
-        (REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL, "🎁 تست"),
-        (REPLY_ACTION_ADM_PLANS_KIND_USERS_WHOLESALE, "📦 فروش عمده"),
+        (REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED, _label_or(ui, "btn_shop_kind_fixed", "ثابت")),
+        (REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM, _label_or(ui, "btn_shop_kind_custom", "دلخواه")),
+        (REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL, _label_or(ui, "btn_shop_kind_trial", "تست")),
+        (REPLY_ACTION_ADM_PLANS_KIND_USERS_WHOLESALE, wholesale),
     ]
 
 

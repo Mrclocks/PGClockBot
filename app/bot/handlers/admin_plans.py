@@ -1484,7 +1484,7 @@ async def _show_resplan_color_picker(
         back_callback=back_callback,
         ui=ui,
     )
-    text = "🎨 <b>رنگ دکمه این پلن در ربات</b>\n\n«ارث از نوع پلن» همان رنگ بخش «نوع پلن» در تنظیمات رنگبندی است."
+    text = "🎨 <b>رنگ دکمه این پلن در ربات</b>\n\n«ارث از دسته» یعنی رنگ دسته؛ اگر دسته نداشت، رنگ نوع پلن در تنظیمات رنگبندی."
     if isinstance(target, CallbackQuery):
         if target.message:
             await safe_edit_text(target.message, text, reply_markup=markup)

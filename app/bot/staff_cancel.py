@@ -239,14 +239,32 @@ async def reopen_plan_catalog(
     reseller_owner_id: int | None = None,
     **_kw,
 ) -> None:
-    from app.bot.handlers.plan_catalog_manage import _hub_reply_kb
+    """Cancel from pcm ask_text — lasting main KB + reopen categories inline."""
+    from app.bot.handlers.plan_catalog_manage import open_categories_manage
+    from app.bot.nav_chrome import answer_staff_nav
 
     await state.set_state(None)
-    await message.answer(
-        "لغو شد.",
-        reply_markup=await _hub_reply_kb(
-            session, state, is_reseller_bot=is_reseller_bot
-        ),
+
+    async def _panel(msg, sess, user, st, **_pkw):
+        await open_categories_manage(
+            msg,
+            sess,
+            user,
+            st,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+
+    await answer_staff_nav(
+        message,
+        session,
+        db_user,
+        text="لغو شد.",
+        state=state,
+        reopen_panel=_panel,
+        clear_state=False,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
 
 

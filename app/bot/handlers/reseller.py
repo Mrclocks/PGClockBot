@@ -67,36 +67,96 @@ def _can_start_reseller_apply(db_user: BotUser, owner_id: int | None) -> str | N
     return None
 
 
-async def _resapply_mode_keyboard(session: AsyncSession, ui: dict) -> InlineKeyboardMarkup:
+async def _resapply_home_keyboard(session: AsyncSession, ui: dict) -> InlineKeyboardMarkup:
+    """Category hub (like user shop) when linked; else legacy fixed/PAYG modes."""
     from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
+    from app.services.button_styles import resolve_category_button_style
+    from app.services.plan_categories import (
+        reseller_categories_for_menu,
+        uncategorized_reseller_plans,
+    )
 
-    fixed_n = len(await list_active_reseller_plans(session, billing_mode=BILLING_MODE_FIXED))
-    payg_n = len(await list_active_reseller_plans(session, billing_mode=BILLING_MODE_PAYG))
-    rows = [
-        [
-            InlineKeyboardButton(
-                text=f"📦 ثابت — {fixed_n} پلن",
-                callback_data="resapply:mode:fixed",
+    all_plans = await list_active_reseller_plans(session)
+    cats = await reseller_categories_for_menu(session, reseller_plans=all_plans)
+    rows: list[list[InlineKeyboardButton]] = []
+    if cats:
+        for cat in cats:
+            rows.append(
+                [
+                    kb._ikb(
+                        kb._category_button_label(cat),
+                        callback_data=f"resapply:cat:{int(cat.id)}",
+                        style=resolve_category_button_style(ui, cat),
+                        icon_custom_emoji_id=getattr(cat, "icon_custom_emoji_id", None),
+                    )
+                ]
             )
-        ],
-        [
-            InlineKeyboardButton(
-                text=f"⚡ PAYG — {payg_n} پلن",
-                callback_data="resapply:mode:payg",
+        if uncategorized_reseller_plans(all_plans):
+            rows.append(
+                [
+                    kb._ikb(
+                        "سایر",
+                        callback_data="resapply:cat:none",
+                        style=kb._style(ui, "plan_res_fixed", fallback="primary"),
+                    )
+                ]
             )
-        ],
-        [InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="menu:home")],
-    ]
+    else:
+        fixed_n = len(
+            await list_active_reseller_plans(session, billing_mode=BILLING_MODE_FIXED)
+        )
+        payg_n = len(
+            await list_active_reseller_plans(session, billing_mode=BILLING_MODE_PAYG)
+        )
+        if fixed_n:
+            rows.append(
+                [
+                    kb._ikb(
+                        f"ثابت — {fixed_n} پلن",
+                        callback_data="resapply:mode:fixed",
+                        style=kb._style(ui, "plan_res_fixed", fallback="primary"),
+                    )
+                ]
+            )
+        if payg_n:
+            rows.append(
+                [
+                    kb._ikb(
+                        f"PAYG — {payg_n} پلن",
+                        callback_data="resapply:mode:payg",
+                        style=kb._style(ui, "plan_res_payg", fallback="primary"),
+                    )
+                ]
+            )
+    rows.append(
+        [
+            kb._ikb(
+                kb._label_or(ui, "btn_back", "بازگشت"),
+                callback_data="menu:home",
+                ui=ui,
+                label_key="btn_back",
+                style=kb._style(ui, "back"),
+            )
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# Back-compat alias for tests / older call sites.
+async def _resapply_mode_keyboard(session: AsyncSession, ui: dict) -> InlineKeyboardMarkup:
+    return await _resapply_home_keyboard(session, ui)
 
 
 async def _resapply_plan_list_keyboard(
     plans: list,
     *,
-    mode: str,
+    back_callback: str,
     ui: dict,
+    categories: dict[int, object] | None = None,
 ) -> InlineKeyboardMarkup:
-    rows = []
+    """Plan rows for one category/mode — single Back climbs to category hub."""
+    cat_objs = categories or {}
+    rows: list[list[InlineKeyboardButton]] = []
     for p in plans:
         price = format_toman(p.price, get_settings().currency) if p.price else "رایگان"
         if reseller_plan_mode_of(p) == "payg":
@@ -104,19 +164,31 @@ async def _resapply_plan_list_keyboard(
             extra = f" · {format_toman(rate, get_settings().currency)}/گیگ" if rate else ""
         else:
             extra = ""
+        cid = getattr(p, "category_id", None)
+        cat_obj = cat_objs.get(int(cid)) if cid is not None else None
         rows.append(
             [
-                InlineKeyboardButton(
-                    text=f"{p.name} — {price}{extra}",
+                kb._ikb(
+                    f"{p.name} — {price}{extra}",
                     callback_data=f"resapply:plan:{p.id}",
+                    style=kb._plan_row_style(
+                        ui, p, kind=reseller_plan_mode_of(p), audience="resellers",
+                        category=cat_obj,
+                    ),
                 )
             ]
         )
+    # One Back only — same action as the old «بازگشت به پلن‌ها» (hub).
     rows.append(
-        [InlineKeyboardButton(text="⬅️ انتخاب نوع پلن", callback_data="resapply:home")]
-    )
-    rows.append(
-        [InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="menu:home")]
+        [
+            kb._ikb(
+                kb._label_or(ui, "btn_back", "بازگشت"),
+                callback_data=back_callback,
+                ui=ui,
+                label_key="btn_back",
+                style=kb._style(ui, "back"),
+            )
+        ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1012,6 +1084,36 @@ async def res_payments(
         await safe_edit_text(callback.message, "رسیدهای باز ارسال شد.", reply_markup=None)
 
 
+def _resapply_list_back_for_plan(plan) -> str:
+    """Back from plan detail → category list when linked, else billing-mode list."""
+    cid = getattr(plan, "category_id", None)
+    if cid is not None:
+        return f"resapply:cat:{int(cid)}"
+    mode = reseller_plan_mode_of(plan)
+    return f"resapply:mode:{mode}"
+
+
+async def _resapply_picker_copy(session: AsyncSession) -> tuple[str, str, bool]:
+    """(title, body_html, use_categories) for the apply home step."""
+    from app.services.plan_categories import reseller_categories_for_menu
+
+    plans = await list_active_reseller_plans(session)
+    cats = await reseller_categories_for_menu(session, reseller_plans=plans)
+    if cats:
+        return (
+            "درخواست نمایندگی",
+            "ابتدا <b>دسته</b> را از دکمه‌های زیر پیام انتخاب کنید.",
+            True,
+        )
+    return (
+        "درخواست نمایندگی",
+        "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
+        "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
+        "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک",
+        False,
+    )
+
+
 @router.callback_query(F.data == "resapply:home")
 async def resapply_home(
     callback: CallbackQuery,
@@ -1032,33 +1134,89 @@ async def resapply_home(
     if deny:
         await callback.answer(deny, show_alert=True)
         return
-    from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
-
-    fixed_n = len(await list_active_reseller_plans(session, billing_mode=BILLING_MODE_FIXED))
-    payg_n = len(await list_active_reseller_plans(session, billing_mode=BILLING_MODE_PAYG))
+    all_plans = await list_active_reseller_plans(session)
     await callback.answer()
-    if fixed_n == 0 and payg_n == 0:
+    if not all_plans:
         if callback.message:
             await safe_edit_text(
                 callback.message,
                 format_message(
-                    "🤝 نمایندگی",
+                    "نمایندگی",
                     "در حال حاضر پلن نمایندگی فعالی تعریف نشده است.\nبعداً دوباره بررسی کنید.",
                 ),
                 reply_markup=kb.back_home(ui),
             )
         return
+    title, body, _cats = await _resapply_picker_copy(session)
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message(
-                "🤝 درخواست نمایندگی",
-                "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
-                "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
-                "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک\n\n"
-                "بعد از انتخاب نوع، پلن‌های همان دسته نمایش داده می‌شود.",
+            format_message(title, body),
+            reply_markup=await _resapply_home_keyboard(session, ui),
+        )
+
+
+@router.callback_query(F.data.startswith("resapply:cat:"))
+async def resapply_category(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, _profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    deny = _can_start_reseller_apply(db_user, owner_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
+    raw = (callback.data or "").split(":")[-1]
+    ui = await get_all_settings(session)
+    all_plans = await list_active_reseller_plans(session)
+    from app.services.plan_categories import (
+        list_shop_categories,
+        reseller_plans_in_category,
+    )
+    from app.services.plan_categories import AUDIENCE_RESELLERS
+
+    if raw == "none":
+        cat_id = None
+        title = "سایر"
+        plans = reseller_plans_in_category(all_plans, None)
+    else:
+        try:
+            cat_id = int(raw)
+        except ValueError:
+            await callback.answer("دسته نامعتبر است.", show_alert=True)
+            return
+        cats = await list_shop_categories(
+            session, reseller_id=None, active_only=True, audience=AUDIENCE_RESELLERS
+        )
+        cat = next((c for c in cats if int(c.id) == cat_id), None)
+        if not cat:
+            await callback.answer("دسته یافت نشد.", show_alert=True)
+            return
+        title = kb._category_button_label(cat)
+        plans = reseller_plans_in_category(all_plans, cat_id)
+    if not plans:
+        await callback.answer("پلنی در این دسته نیست.", show_alert=True)
+        return
+    cats_all = await list_shop_categories(
+        session, reseller_id=None, active_only=True, audience=AUDIENCE_RESELLERS
+    )
+    cat_map = {int(c.id): c for c in cats_all}
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(title, "یکی از پلن‌های این دسته را انتخاب کنید."),
+            reply_markup=await _resapply_plan_list_keyboard(
+                plans,
+                back_callback="resapply:home",
+                ui=ui,
+                categories=cat_map,
             ),
-            reply_markup=await _resapply_mode_keyboard(session, ui),
         )
 
 
@@ -1094,21 +1252,23 @@ async def resapply_mode(
             await safe_edit_text(
                 callback.message,
                 format_message(
-                    f"🤝 {label}",
+                    label,
                     "برای این نوع، پلن فعالی تعریف نشده است.\nنوع دیگری را انتخاب کنید."
                     + wallet_hint,
                 ),
-                reply_markup=await _resapply_mode_keyboard(session, ui),
+                reply_markup=await _resapply_home_keyboard(session, ui),
             )
         return
     if callback.message:
         await safe_edit_text(
             callback.message,
             format_message(
-                f"🤝 پلن‌های {label}",
+                f"پلن‌های {label}",
                 "یکی از پلن‌های این دسته را انتخاب کنید." + wallet_hint,
             ),
-            reply_markup=await _resapply_plan_list_keyboard(plans, mode=mode, ui=ui),
+            reply_markup=await _resapply_plan_list_keyboard(
+                plans, back_callback="resapply:home", ui=ui
+            ),
         )
 
 
@@ -1141,16 +1301,31 @@ async def resapply_plan(
         gate = await check_payg_purchase_wallet(session, int(db_user.wallet_balance or 0))
         if not gate.ok:
             body = f"{body}\n\n⚠️ {gate.message}"
+    ui = await get_all_settings(session)
+    # Single Back → plan list (category or mode). No redundant «بازگشت به پلن‌ها».
+    back_cb = _resapply_list_back_for_plan(plan)
     rows = [
-        [InlineKeyboardButton(text="✅ ثبت درخواست", callback_data=f"resapply:buy:{plan.id}")],
-        [InlineKeyboardButton(text="⬅️ بازگشت به لیست", callback_data=f"resapply:mode:{mode}")],
-        [InlineKeyboardButton(text="🔀 تغییر نوع پلن", callback_data="resapply:home")],
+        [
+            InlineKeyboardButton(
+                text="✅ ثبت درخواست",
+                callback_data=f"resapply:buy:{plan.id}",
+            )
+        ],
+        [
+            kb._ikb(
+                kb._label_or(ui, "btn_back", "بازگشت"),
+                callback_data=back_cb,
+                ui=ui,
+                label_key="btn_back",
+                style=kb._style(ui, "back"),
+            )
+        ],
     ]
     await callback.answer()
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message(f"🤝 {plan.name}", body),
+            format_message(plan.name, body),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 

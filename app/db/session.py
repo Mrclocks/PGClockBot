@@ -207,6 +207,12 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
                     "ALTER TABLE plan_categories ADD COLUMN button_style VARCHAR(16)"
                 )
             )
+        if "icon_custom_emoji_id" not in cat_cols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE plan_categories ADD COLUMN icon_custom_emoji_id VARCHAR(64)"
+                )
+            )
     if not insp.has_table("service_addon_packs"):
         sync_conn.execute(
             sql_text(

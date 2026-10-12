@@ -136,6 +136,8 @@ class PlanCategory(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     # NULL = inherit shop_kind_fixed; "" = Telegram default white; else primary/success/danger
     button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Telegram Bot API icon_custom_emoji_id (premium). Name stays plain display text.
+    icon_custom_emoji_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
