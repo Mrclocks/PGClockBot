@@ -78,18 +78,17 @@
         </label>
       </div>
     </div>
-    {% if not is_addon %}
     <label class="form-field" id="edit-reseller-category-field">برچسب دسته (اختیاری)
       <select name="category_id">
         <option value="">— بدون برچسب —</option>
         {% for c in plan_categories or [] %}
-          {% if c.is_active or plan.category_id == c.id %}
+          {% if (c.audience or 'resellers') == 'resellers' and (c.is_active or plan.category_id == c.id) %}
           <option value="{{ c.id }}" {% if plan.category_id == c.id %}selected{% endif %}>{{ c.name }}{% if not c.is_active %} (خاموش){% endif %}</option>
           {% endif %}
         {% endfor %}
       </select>
+      <small class="muted">{% if is_addon %}بسته فقط برای نمایندگانی با همان برچسب روی پلن اشتراک‌شان دیده می‌شود{% else %}برچسب نمایش پلن نمایندگی{% endif %}</small>
     </label>
-    {% endif %}
     <label class="form-field">توضیح
       <textarea name="description" rows="2">{{ plan.description or '' }}</textarea>
     </label>

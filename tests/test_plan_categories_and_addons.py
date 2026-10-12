@@ -14,10 +14,12 @@ from app.services.service_addons import (
     KIND_DURATION,
     KIND_VOLUME,
     amount_label,
+    category_ids_equal,
     format_addon_note,
     format_amount_label,
     is_addon_order,
     pack_belongs_to_staff,
+    pack_matches_service_category,
     pack_matches_shop,
     parse_addon_note,
 )
@@ -109,6 +111,38 @@ class ServiceAddonScopeTests(unittest.TestCase):
         self.assertFalse(pack_matches_shop(shop, None))
         self.assertFalse(pack_matches_shop(shop, 9))
 
+    def test_pack_category_match_is_strict(self):
+        self.assertTrue(category_ids_equal(None, None))
+        self.assertTrue(category_ids_equal(3, 3))
+        self.assertFalse(category_ids_equal(None, 3))
+        self.assertFalse(category_ids_equal(3, None))
+        self.assertFalse(category_ids_equal(3, 4))
+        vip = ServiceAddonPack(
+            id=10,
+            name="VIP 10G",
+            kind=KIND_VOLUME,
+            amount=10,
+            price=5000,
+            owner_reseller_id=None,
+            category_id=7,
+            is_active=True,
+        )
+        bare = ServiceAddonPack(
+            id=11,
+            name="Bare 10G",
+            kind=KIND_VOLUME,
+            amount=10,
+            price=1000,
+            owner_reseller_id=None,
+            category_id=None,
+            is_active=True,
+        )
+        self.assertTrue(pack_matches_service_category(vip, 7))
+        self.assertFalse(pack_matches_service_category(vip, None))
+        self.assertFalse(pack_matches_service_category(vip, 9))
+        self.assertTrue(pack_matches_service_category(bare, None))
+        self.assertFalse(pack_matches_service_category(bare, 7))
+
     def test_note_parse_snapshot_and_legacy(self):
         self.assertEqual(
             parse_addon_note("svc_addon:12:34:volume:10"),
@@ -165,6 +199,24 @@ class WiringTests(unittest.TestCase):
         self.assertIn("plan-category-audience", plans)
         self.assertIn('name="category_id"', plans)
         self.assertIn("category_linked_plans", plans)
+        self.assertIn("plan-pg-warn-dot", plans)
+        self.assertIn("خالی", plans)
+        self.assertIn("pg_live_template_ids", plans)
+        self.assertIn("unified-addon-category", plans)
+        self.assertIn("service-addon-category", plans)
+        self.assertIn("setVisible(catField, true)", plans)
+        self.assertIn("list_packs_for_service", Path("app/bot/handlers/services.py").read_text(encoding="utf-8"))
+        self.assertIn(
+            "0044_service_addon_pack_category",
+            Path("alembic/versions/0044_service_addon_pack_category.py").read_text(
+                encoding="utf-8"
+            ),
+        )
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn("datetime-local", css)
+        self.assertIn("gift-expires-field", css)
+        gift = Path("app/web/templates/_gift_code_fields.html").read_text(encoding="utf-8")
+        self.assertIn("gift-expires-field", gift)
         # Existing plan kinds (ثابت/…) must remain; labels are additive
         self.assertIn("USER_KINDS", plans)
         self.assertIn("{value: 'fixed', label: 'ثابت'}", plans)

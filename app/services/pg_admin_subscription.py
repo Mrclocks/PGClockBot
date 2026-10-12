@@ -882,8 +882,16 @@ async def _notify_expired(session: AsyncSession, sub: PgAdminSubscription) -> No
 
 
 async def list_addon_plans(
-    session: AsyncSession, *, kind: str | None = None
+    session: AsyncSession,
+    *,
+    kind: str | None = None,
+    category_id: int | None | object = ...,
 ) -> list[ResellerPlan]:
+    """Active reseller capacity packs. Optional strict ``category_id`` filter.
+
+    Omit ``category_id`` for the full catalog (admin lists). Pass an int/None
+    to match packs priced for that subscription-plan category.
+    """
     q = select(ResellerPlan).where(
         ResellerPlan.is_active.is_(True),
         ResellerPlan.plan_kind.in_([PLAN_KIND_ADDON_VOLUME, PLAN_KIND_ADDON_USERS]),
@@ -893,6 +901,11 @@ async def list_addon_plans(
             ResellerPlan.is_active.is_(True),
             ResellerPlan.plan_kind == kind,
         )
+    if category_id is not ...:
+        if category_id is None:
+            q = q.where(ResellerPlan.category_id.is_(None))
+        else:
+            q = q.where(ResellerPlan.category_id == int(category_id))
     q = q.order_by(ResellerPlan.sort_order, ResellerPlan.id)
     return list((await session.execute(q)).scalars().all())
 

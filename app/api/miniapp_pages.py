@@ -605,13 +605,15 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         kind: Literal["volume", "duration"] | None = None,
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.service_addons import amount_label, list_packs
+        from app.services.service_addons import amount_label, list_packs_for_service
 
         user = await load_mini_user(session, request)
         _require_commerce(user)
-        await _addon_service(session, user, service_id)
-        # Explicit platform scope, independent of any shop-bot ContextVar.
-        packs = await list_packs(session, None, active_only=True, kind=kind)
+        svc = await _addon_service(session, user, service_id)
+        # Category-matched packs for this service (platform shop in miniapp).
+        packs = await list_packs_for_service(
+            session, svc, active_only=True, kind=kind
+        )
         return _no_store(
             {
                 "kind": kind,
@@ -636,7 +638,9 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         from app.services.service_addons import (
             create_addon_order,
             kind_label,
+            pack_matches_service_category,
             pack_matches_shop,
+            service_plan_category_id,
         )
 
         user = await load_mini_user(session, request)
@@ -660,6 +664,9 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             raise HTTPException(400, "بسته یافت نشد")
         if kind is not None and pack.kind != kind:
             raise HTTPException(400, "نوع بسته با بخش انتخاب‌شده مطابقت ندارد")
+        svc_cat = await service_plan_category_id(session, svc)
+        if not pack_matches_service_category(pack, svc_cat):
+            raise HTTPException(400, "این بسته برای دستهٔ پلن این سرویس نیست")
         await session.refresh(user)
         if int(pack.price or 0) > int(user.wallet_balance or 0):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")

@@ -174,7 +174,12 @@ class Plan(Base):
 
 
 class ServiceAddonPack(Base):
-    """Customer add-on packs: extra volume (GB) or duration (days) on an existing service."""
+    """Customer add-on packs: extra volume (GB) or duration (days) on an existing service.
+
+    ``category_id`` scopes pricing to the same plan category as the service's
+    sales plan — VIP and economy packs can differ. NULL matches only
+    uncategorized services (strict equality).
+    """
 
     __tablename__ = "service_addon_packs"
 
@@ -188,6 +193,11 @@ class ServiceAddonPack(Base):
     # NULL = platform (admin) catalog; set for reseller-owned shop packs
     owner_reseller_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    category_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("plan_categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)

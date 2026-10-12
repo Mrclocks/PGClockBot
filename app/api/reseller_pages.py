@@ -1187,6 +1187,25 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                     f"/plans?err={_q('قیمت بسته باید بیشتر از صفر باشد')}#reseller-plans",
                     status_code=303,
                 )
+            category_id = None
+            try:
+                from app.services.plan_categories import (
+                    AUDIENCE_RESELLERS,
+                    resolve_category_for_plan_write,
+                )
+                from app.services.shop_scope import ShopScopeError
+
+                category_id = await resolve_category_for_plan_write(
+                    session,
+                    staff,
+                    form.get("category_id"),
+                    expected_audience=AUDIENCE_RESELLERS,
+                )
+            except (ShopScopeError, ValueError) as e:
+                return RedirectResponse(
+                    f"/plans?err={_q(str(e))}#reseller-plans-addons",
+                    status_code=303,
+                )
             plan = ResellerPlan(
                 name=name,
                 description=str(form.get("description") or "").strip() or None,
@@ -1213,7 +1232,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 share_pg_panel_url=False,
                 pg_role_id=None,
                 button_style=button_style,
-                category_id=None,
+                category_id=category_id,
                 is_active=bool(form.get("is_active", "1")),
                 sort_order=sort_order,
             )
@@ -1484,6 +1503,25 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             if int(plan.price or 0) <= 0:
                 return RedirectResponse(
                     f"/resellers/plans/{plan_id}/edit?err={_q('قیمت بسته باید بیشتر از صفر باشد')}",
+                    status_code=303,
+                )
+            try:
+                from app.services.plan_categories import (
+                    AUDIENCE_RESELLERS,
+                    resolve_category_for_plan_write,
+                )
+                from app.services.shop_scope import ShopScopeError
+
+                plan.category_id = await resolve_category_for_plan_write(
+                    session,
+                    staff,
+                    form.get("category_id"),
+                    expected_audience=AUDIENCE_RESELLERS,
+                    allow_inactive_id=plan.category_id,
+                )
+            except (ShopScopeError, ValueError) as e:
+                return RedirectResponse(
+                    f"/resellers/plans/{plan_id}/edit?err={_q(str(e))}",
                     status_code=303,
                 )
             # Strip subscription-only knobs — addons never provision admins/groups.

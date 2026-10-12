@@ -657,8 +657,16 @@ async def svc_renew_pay(
 async def svc_addon(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
 ):
-    """List shop-scoped volume/duration packs for an owned service."""
-    from app.services.service_addons import amount_label, kind_label, list_shop_packs
+    """List shop-scoped volume/duration packs for an owned service.
+
+    Packs are filtered to the service's sales-plan category so multi-service
+    users only see prices that match that service.
+    """
+    from app.services.service_addons import (
+        amount_label,
+        kind_label,
+        list_packs_for_service,
+    )
 
     ui = await get_all_settings(session)
     parts = (callback.data or "").split(":")
@@ -678,9 +686,14 @@ async def svc_addon(
             show_alert=True,
         )
         return
-    packs = await list_shop_packs(session, active_only=True, kind=kind_filter)
+    packs = await list_packs_for_service(
+        session, svc, active_only=True, kind=kind_filter
+    )
     if not packs:
-        await callback.answer("بسته‌ای برای خرید فعال نیست", show_alert=True)
+        await callback.answer(
+            "بسته‌ای برای دستهٔ این سرویس فعال نیست — از کارت همین سرویس دوباره تلاش کنید",
+            show_alert=True,
+        )
         return
     await callback.answer()
     rows = [

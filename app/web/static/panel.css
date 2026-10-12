@@ -3429,7 +3429,37 @@ a.btn.btn-star:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--section-gap);
 }
+.settings-grid > .form-field,
+.settings-grid > .setting-item {
+  min-width: 0;
+}
+/* Native datetime-local has a large intrinsic min-width — keep gift/expiry fields in grid. */
+.settings-grid input[type="datetime-local"],
+.form-field.gift-expires-field input[type="datetime-local"],
+.ui-modal-panel input[type="datetime-local"] {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.form-field.gift-expires-field {
+  min-width: 0;
+}
 .setting-item.full { grid-column: 1 / -1; }
+.plan-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.plan-pg-warn-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #ef4444 28%, transparent);
+  flex: 0 0 auto;
+}
 .settings-card { margin-bottom: var(--section-gap); scroll-margin-top: var(--section-gap); }
 .settings-main {
   display: flex;

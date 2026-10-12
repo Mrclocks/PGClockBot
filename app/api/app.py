@@ -2563,6 +2563,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         trial = next((p for p in plans if p.is_trial), None)
         sale_plans = [p for p in plans if not p.is_trial]
         templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
+        pg_live_template_ids: set[int] = set()
+        for t in templates or []:
+            try:
+                tid = t.get("id") if isinstance(t, dict) else None
+                if tid is not None:
+                    pg_live_template_ids.add(int(tid))
+            except (TypeError, ValueError):
+                continue
         rid = catalog_owner_id(staff)
         # Non-admin without shop id must never load platform (admin) settings.
         if not is_platform_admin(staff) and not rid:
@@ -2685,6 +2693,12 @@ def create_api_app(lifespan=None) -> FastAPI:
                     session, staff, plan_categories
                 )
                 service_addon_packs = await list_packs(session, staff)
+                if service_addon_packs:
+                    plan_category_map.update(
+                        await category_map_for_plans(
+                            session, staff, service_addon_packs
+                        )
+                    )
         except Exception:
             import logging
 
@@ -2703,6 +2717,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "custom_group_ids": custom_group_ids,
                 "values": values,
                 "templates": templates,
+                "pg_live_template_ids": pg_live_template_ids,
                 "groups": groups,
                 "pg_error": pg_error,
                 "can_create_template": staff_can_create_pg_template(staff),

@@ -112,6 +112,43 @@ def pack_matches_shop(pack: ServiceAddonPack | None, shop_rid: int | None) -> bo
     return pack.owner_reseller_id is None
 
 
+def category_ids_equal(a: int | None, b: int | None) -> bool:
+    """Strict category match — both unset, or the same positive id."""
+    if a is None and b is None:
+        return True
+    if a is None or b is None:
+        return False
+    return int(a) == int(b)
+
+
+def pack_matches_service_category(
+    pack: ServiceAddonPack | None, service_category_id: int | None
+) -> bool:
+    """Packs are priced per plan category; only same-category packs apply.
+
+    Uncategorized packs (``category_id is None``) match only uncategorized
+    services. Cross-category purchase is fail-closed.
+    """
+    if not pack:
+        return False
+    return category_ids_equal(
+        int(pack.category_id) if pack.category_id is not None else None,
+        int(service_category_id) if service_category_id is not None else None,
+    )
+
+
+async def service_plan_category_id(
+    session: AsyncSession, service: UserService
+) -> int | None:
+    """Category of the sales plan linked to this service (None if unset/missing)."""
+    if not service or not service.plan_id:
+        return None
+    plan = await session.get(Plan, int(service.plan_id))
+    if not plan or plan.category_id is None:
+        return None
+    return int(plan.category_id)
+
+
 def is_addon_order(order: Order | None) -> bool:
     return bool(order and parse_addon_note(order.note))
 
@@ -160,7 +197,13 @@ async def list_shop_packs(
     reseller_id: int | None = None,
     active_only: bool = True,
     kind: str | None = None,
+    category_id: int | None | object = ...,
 ) -> list[ServiceAddonPack]:
+    """List shop packs. Pass ``category_id`` to filter strictly by plan category.
+
+    Omit ``category_id`` (default) to return every shop pack (admin lists).
+    Pass ``None`` explicitly to only return uncategorized packs.
+    """
     from app.services.users import current_shop_reseller_id
 
     rid = reseller_id if reseller_id is not None else current_shop_reseller_id()
@@ -175,7 +218,33 @@ async def list_shop_packs(
         q = q.where(ServiceAddonPack.is_active.is_(True))
     if kind:
         q = q.where(ServiceAddonPack.kind == kind)
+    if category_id is not ...:
+        if category_id is None:
+            q = q.where(ServiceAddonPack.category_id.is_(None))
+        else:
+            q = q.where(ServiceAddonPack.category_id == int(category_id))
     return list((await session.execute(q)).scalars().all())
+
+
+async def list_packs_for_service(
+    session: AsyncSession,
+    service: UserService,
+    *,
+    kind: str | None = None,
+    active_only: bool = True,
+) -> list[ServiceAddonPack]:
+    """Packs purchasable for one service — shop scope ∧ matching plan category."""
+    from app.services.service_automation import service_shop_id
+
+    shop_rid = await service_shop_id(session, service)
+    cat_id = await service_plan_category_id(session, service)
+    return await list_shop_packs(
+        session,
+        reseller_id=shop_rid,
+        active_only=active_only,
+        kind=kind,
+        category_id=cat_id,
+    )
 
 
 async def get_owned_pack(
@@ -239,11 +308,25 @@ async def create_pack(
     price: int,
     description: str | None = None,
     sort_order: int = 0,
+    category_id: int | None | object = ...,
 ) -> ServiceAddonPack:
+    from app.services.plan_categories import (
+        AUDIENCE_USERS,
+        resolve_category_for_plan_write,
+    )
+
     owner_id = require_catalog_owner_id(staff)
     cleaned, k, amt, price_i, desc = _validate_pack_fields(
         name=name, kind=kind, amount=amount, price=price, description=description
     )
+    resolved_cat: int | None = None
+    if category_id is not ...:
+        resolved_cat = await resolve_category_for_plan_write(
+            session,
+            staff,
+            category_id,
+            expected_audience=AUDIENCE_USERS,
+        )
     pack = ServiceAddonPack(
         name=cleaned,
         kind=k,
@@ -251,6 +334,7 @@ async def create_pack(
         price=price_i,
         description=desc,
         owner_reseller_id=owner_id,
+        category_id=resolved_cat,
         sort_order=int(sort_order or 0),
         is_active=True,
     )
@@ -272,7 +356,13 @@ async def update_pack(
     description: str | None = None,
     sort_order: int | None = None,
     is_active: bool | None = None,
+    category_id: int | None | object = ...,
 ) -> ServiceAddonPack:
+    from app.services.plan_categories import (
+        AUDIENCE_USERS,
+        resolve_category_for_plan_write,
+    )
+
     pack = await get_owned_pack(session, pack_id, staff)
     if not pack:
         raise ShopScopeError("بسته یافت نشد")
@@ -293,6 +383,14 @@ async def update_pack(
         pack.sort_order = int(sort_order)
     if is_active is not None:
         pack.is_active = bool(is_active)
+    if category_id is not ...:
+        pack.category_id = await resolve_category_for_plan_write(
+            session,
+            staff,
+            category_id,
+            expected_audience=AUDIENCE_USERS,
+            allow_inactive_id=pack.category_id,
+        )
     await session.commit()
     await session.refresh(pack)
     return pack
@@ -341,6 +439,14 @@ async def create_addon_order(
 
     if await service_shop_id(session, service) != shop_rid:
         raise ValueError("سرویس این فروشگاه نیست")
+
+    # Fail closed: pack category must match the service's sales-plan category.
+    svc_cat = await service_plan_category_id(session, service)
+    if not pack_matches_service_category(pack, svc_cat):
+        raise ValueError(
+            "این بسته برای دستهٔ پلن این سرویس نیست — بسته متناسب با همان سرویس را انتخاب کنید"
+        )
+
     from app.services.service_renewals import assert_service_quota_available
 
     await assert_service_quota_available(session, service.id)

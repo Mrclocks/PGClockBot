@@ -36,15 +36,24 @@
     </thead>
     <tbody>
     {% for p in plans %}
+      {% set tpl_missing = p.pg_template_id and (p.pg_template_id|int) not in (pg_live_template_ids or []) %}
+      {% set pg_empty = (not p.pg_template_id) and not p.pg_group_ids %}
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
-        <td>{{ p.name }}</td>
+        <td>
+          <span class="plan-name-cell">
+            {% if tpl_missing or pg_empty %}<span class="plan-pg-warn-dot" title="منبع پاسارگارد ناقص یا تمپلیت حذف‌شده" aria-label="هشدار"></span>{% endif %}
+            <span>{{ p.name }}</span>
+          </span>
+        </td>
         <td class="col-hide-sm muted">{% if p.category_id and plan_category_map and plan_category_map.get(p.category_id) %}{{ plan_category_map.get(p.category_id).name }}{% else %}—{% endif %}</td>
         <td class="mono" dir="ltr">{{ p.price | money }}</td>
         <td class="col-hide-sm">{% if p.duration_days %}{{ p.duration_days }} روز{% else %}نامحدود{% endif %}</td>
         <td>{% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}</td>
         <td class="mono col-hide-sm">
-          {% if p.pg_template_id %}تمپلیت #{{ p.pg_template_id }}
+          {% if p.pg_template_id %}
+            تمپلیت #{{ p.pg_template_id }}
+            {% if tpl_missing %}<span class="badge warn" title="این تمپلیت در پاسارگارد پیدا نشد">خالی</span>{% endif %}
           {% elif p.pg_group_ids %}گروه {{ p.pg_group_ids }}
           {% else %}—{% endif %}
         </td>
@@ -158,12 +167,13 @@
   </div>
 
   <h3 id="user-service-addons" class="card-subhead">⏱ بسته‌های حجم / زمان</h3>
-  <p class="muted update-card-caption">کاربر روی سرویس فعلی‌اش حجم یا زمان می‌خرد — از «افزودن پلن» با نوع بسته حجم/زمان بسازید.</p>
+  <p class="muted update-card-caption">خرید فقط از داخل کارت سرویس در ربات/مینی‌اپ — برچسب دسته باید با پلن همان سرویس یکی باشد تا قیمت هر دسته جدا بماند.</p>
   <div class="table-wrap">
   <table class="table-compact">
     <thead>
       <tr>
         <th>نام</th>
+        <th class="col-hide-sm">برچسب</th>
         <th>نوع</th>
         <th>مقدار</th>
         <th>قیمت</th>
@@ -178,6 +188,7 @@
           {{ a.name }}
           {% if a.description %}<br><small class="muted">{{ a.description }}</small>{% endif %}
         </td>
+        <td class="col-hide-sm muted">{% if a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
         <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
         <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
         <td class="mono" dir="ltr">{{ a.price | money }}</td>
@@ -193,6 +204,7 @@
                     data-amount="{{ a.amount }}"
                     data-price="{{ a.price }}"
                     data-sort="{{ a.sort_order }}"
+                    data-category="{{ a.category_id or '' }}"
                     data-description="{{ a.description or '' }}">ویرایش</button>
             <form method="post" action="/plans/addons/{{ a.id }}/toggle">
               <button class="btn btn-ghost btn-sm" type="submit">{% if a.is_active %}خاموش{% else %}روشن{% endif %}</button>
@@ -208,7 +220,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">هنوز بسته‌ای نیست — از «افزودن پلن» با نوع بسته حجم یا زمان بسازید.</td></tr>
+      <tr><td colspan="7" class="muted">هنوز بسته‌ای نیست — از «افزودن پلن» با نوع بسته حجم یا زمان بسازید.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -326,7 +338,7 @@
   </div>
 
   <h3 id="reseller-plans-addons" class="card-subhead">📦 بسته‌های حجم / کاربر</h3>
-  <p class="muted update-card-caption">فقط در منوی نمایندگانی که قبلاً اشتراک خریده‌اند دیده می‌شود — بدون گروه، نقش یا دسترسی اضافه.</p>
+  <p class="muted update-card-caption">فقط برای نمایندگان با اشتراک فعال — برچسب دسته باید با پلن اشتراک نماینده یکی باشد تا قیمت هر دسته جدا بماند.</p>
     {{ table_bulk_bar('/resellers/plans/bulk-action', [
     {'key': 'toggle', 'label': 'روشن/خاموش', 'confirm': 'وضعیت {n} پلن نمایندگی تغییر کند؟', 'confirm_title': 'تغییر وضعیت گروهی', 'confirm_label': 'اعمال'},
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن نمایندگی حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
@@ -337,6 +349,7 @@
       <tr>
         {{ table_select_head() }}
         <th>نام</th>
+        <th class="col-hide-sm">برچسب</th>
         <th>نوع</th>
         <th>مقدار</th>
         <th>قیمت</th>
@@ -349,6 +362,7 @@
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
         <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
+        <td class="col-hide-sm muted">{% if p.category_id and reseller_plan_category_map and reseller_plan_category_map.get(p.category_id) %}{{ reseller_plan_category_map.get(p.category_id).name }}{% else %}—{% endif %}</td>
         <td>{% if p.plan_kind == 'addon_users' %}کاربر{% else %}حجم{% endif %}</td>
         <td class="mono">{% if p.plan_kind == 'addon_users' %}+{{ p.addon_users or 0 }} کاربر{% else %}+{{ p.addon_gb or 0 }} گیگ{% endif %}</td>
         <td class="mono" dir="ltr">{{ p.price | money }}</td>
@@ -370,7 +384,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">بسته اضافه نیست — مخاطب پلن: نمایندگان → نوع: بسته حجم/کاربر.</td></tr>
+      <tr><td colspan="8" class="muted">بسته اضافه نیست — مخاطب پلن: نمایندگان → نوع: بسته حجم/کاربر.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -409,6 +423,17 @@
     {# —— User fixed —— #}
     <div id="panel-user-fixed" class="plan-panel">
       <form method="post" action="/plans" class="form-stack">
+        <label class="form-field">برچسب دسته (اختیاری)
+          <select name="category_id" data-plan-category-select data-category-audience="users">
+            <option value="">— بدون برچسب —</option>
+            {% for c in plan_categories or [] %}
+              {% if c.is_active and (c.audience or 'users') == 'users' %}
+              <option value="{{ c.id }}">{{ c.name }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <small class="muted">برچسب نمایش در بات — بسته‌های حجم/زمان همین دسته فقط روی سرویس‌های همین برچسب دیده می‌شوند</small>
+        </label>
         <div class="form-row">
           <label class="form-field">نام پلن
             <input name="name" required placeholder="مثلاً ویژه ۴۰ گیگ" />
@@ -425,17 +450,6 @@
             <small class="muted">برای حجم نامحدود فیلد را <b>خالی</b> بگذارید — عدد صفر نامحدود نیست{% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_data_max %} — سقف زنده: {{ pg_limit_snapshot.per_user_data_max | bytes }}{% endif %}</small>
           </label>
         </div>
-        <label class="form-field">برچسب دسته (اختیاری)
-          <select name="category_id" data-plan-category-select data-category-audience="users">
-            <option value="">— بدون برچسب —</option>
-            {% for c in plan_categories or [] %}
-              {% if c.is_active and (c.audience or 'users') == 'users' %}
-              <option value="{{ c.id }}">{{ c.name }}</option>
-              {% endif %}
-            {% endfor %}
-          </select>
-          <small class="muted">برچسب نمایش در بات — از «برچسب دسته» با مخاطب کاربران بسازید</small>
-        </label>
         <label class="form-field">توضیح کوتاه
           <input name="description" placeholder="نمایش در بات" />
         </label>
@@ -687,9 +701,20 @@
 
     {# —— User service addon packs (volume / duration) —— #}
     <div id="panel-user-addon" class="plan-panel" hidden>
-      <p class="muted update-card-caption" id="user-addon-hint">کاربر می‌تواند این بسته را بخرد و به سرویس فعلی‌اش اضافه کند.</p>
+      <p class="muted update-card-caption" id="user-addon-hint">خرید از کارت همان سرویس در ربات — برچسب دسته را با پلن سرویس یکی بگذارید تا قیمت هر دسته جدا باشد.</p>
       <form method="post" action="/plans/addons" class="form-stack" id="unified-service-addon-form">
         <input type="hidden" name="kind" id="unified-addon-kind" value="volume" />
+        <label class="form-field">برچسب دسته (اختیاری)
+          <select name="category_id" id="unified-addon-category" data-plan-category-select data-category-audience="users">
+            <option value="">— بدون برچسب —</option>
+            {% for c in plan_categories or [] %}
+              {% if c.is_active and (c.audience or 'users') == 'users' %}
+              <option value="{{ c.id }}">{{ c.name }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <small class="muted">فقط روی سرویس‌هایی با همین برچسب پلن دیده می‌شود</small>
+        </label>
         <div class="form-row">
           <label class="form-field">نام بسته
             <input name="name" id="unified-addon-name" required maxlength="128" placeholder="مثلاً ۱۰ گیگ اضافه" />
@@ -726,6 +751,17 @@
         <input type="hidden" name="billing_mode" id="reseller-billing-mode" value="fixed" />
         <input type="hidden" name="plan_kind" id="reseller-plan-kind" value="subscription" />
         <p class="muted update-card-caption" id="reseller-mode-hint">نوع پلن را از بالا انتخاب کنید — فیلدهای مخصوص همان نوع نمایش داده می‌شود.</p>
+        <label class="form-field" id="reseller-category-field">برچسب دسته (اختیاری)
+          <select name="category_id" data-plan-category-select data-category-audience="resellers">
+            <option value="">— بدون برچسب —</option>
+            {% for c in plan_categories or [] %}
+              {% if c.is_active and (c.audience or 'users') == 'resellers' %}
+              <option value="{{ c.id }}">{{ c.name }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <small class="muted" id="reseller-category-hint">برچسب نمایش برای پلن‌های نمایندگی — از «برچسب دسته» با مخاطب نمایندگان بسازید</small>
+        </label>
         <div class="form-row">
           <label class="form-field">نام
             <input name="name" required placeholder="نمایندگی نقره‌ای" id="reseller-plan-name" />
@@ -744,17 +780,6 @@
             <input name="sort_order" type="number" value="0" />
           </label>
         </div>
-        <label class="form-field" id="reseller-category-field">برچسب دسته (اختیاری)
-          <select name="category_id" data-plan-category-select data-category-audience="resellers">
-            <option value="">— بدون برچسب —</option>
-            {% for c in plan_categories or [] %}
-              {% if c.is_active and (c.audience or 'users') == 'resellers' %}
-              <option value="{{ c.id }}">{{ c.name }}</option>
-              {% endif %}
-            {% endfor %}
-          </select>
-          <small class="muted">برچسب نمایش برای پلن‌های نمایندگی — از «برچسب دسته» با مخاطب نمایندگان بسازید</small>
-        </label>
         <label class="form-field">توضیح
           <textarea name="description" rows="2"></textarea>
         </label>
@@ -1013,6 +1038,17 @@
             <option value="duration">زمان (روز)</option>
           </select>
         </label>
+        <label class="form-field">برچسب دسته (اختیاری)
+          <select name="category_id" id="service-addon-category" data-plan-category-select data-category-audience="users">
+            <option value="">— بدون برچسب —</option>
+            {% for c in plan_categories or [] %}
+              {% if c.is_active and (c.audience or 'users') == 'users' %}
+              <option value="{{ c.id }}">{{ c.name }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <small class="muted">فقط سرویس‌های همین دسته این بسته را می‌بینند</small>
+        </label>
         <label class="form-field">مقدار
           <input name="amount" id="service-addon-amount" type="number" min="0.1" step="0.1" required placeholder="۱۰" />
           <small class="muted" id="service-addon-amount-hint">برای حجم می‌تواند اعشار باشد؛ برای زمان عدد صحیح روز</small>
@@ -1039,6 +1075,7 @@
         <thead>
           <tr>
             <th>نام</th>
+            <th class="col-hide-sm">برچسب</th>
             <th>نوع</th>
             <th>مقدار</th>
             <th>قیمت</th>
@@ -1053,6 +1090,7 @@
               {{ a.name }}
               {% if a.description %}<br><small class="muted">{{ a.description }}</small>{% endif %}
             </td>
+            <td class="col-hide-sm muted">{% if a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
             <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
             <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
             <td class="mono" dir="ltr">{{ a.price | money }}</td>
@@ -1067,6 +1105,7 @@
                         data-amount="{{ a.amount }}"
                         data-price="{{ a.price }}"
                         data-sort="{{ a.sort_order }}"
+                        data-category="{{ a.category_id or '' }}"
                         data-description="{{ a.description or '' }}">ویرایش</button>
                 <form method="post" action="/plans/addons/{{ a.id }}/toggle">
                   <button class="btn btn-ghost btn-sm" type="submit">{% if a.is_active %}خاموش{% else %}روشن{% endif %}</button>
@@ -1082,7 +1121,7 @@
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="6" class="muted">هنوز بسته‌ای نیست — از فرم بالا بسازید.</td></tr>
+          <tr><td colspan="7" class="muted">هنوز بسته‌ای نیست — از فرم بالا بسازید.</td></tr>
         {% endfor %}
         </tbody>
       </table>
@@ -1316,7 +1355,13 @@
     setVisible(addon, isAddon);
     setVisible(addonGb, isVol);
     setVisible(addonUsers, isUsers);
-    setVisible(catField, !isAddon);
+    setVisible(catField, true);
+    const catHint = document.getElementById('reseller-category-hint');
+    if (catHint) {
+      catHint.textContent = isAddon
+        ? 'بسته فقط برای نمایندگانی دیده می‌شود که پلن اشتراک‌شان همین برچسب را دارد'
+        : 'برچسب نمایش برای پلن‌های نمایندگی — از «برچسب دسته» با مخاطب نمایندگان بسازید';
+    }
 
     if (isPayg || isAddon) {
       const sw = document.querySelector('#reseller-plan-form input[name="allow_buy_extra"]');
@@ -1638,6 +1683,7 @@
     const priceEl = document.getElementById('service-addon-price');
     const sortEl = document.getElementById('service-addon-sort');
     const descEl = document.getElementById('service-addon-desc');
+    const catEl = document.getElementById('service-addon-category');
     const submitEl = document.getElementById('service-addon-submit');
     const cancelEl = document.getElementById('service-addon-cancel-edit');
     const hintEl = document.getElementById('service-addon-amount-hint');
@@ -1652,6 +1698,11 @@
           : 'حجم به گیگ — اعشار مجاز است';
       }
     }
+    function setSelectValue(el, value){
+      if (!el) return;
+      el.value = value || '';
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
     function resetCreate(){
       form.action = createAction;
       if (nameEl) nameEl.value = '';
@@ -1660,6 +1711,7 @@
       if (priceEl) priceEl.value = '';
       if (sortEl) sortEl.value = '0';
       if (descEl) descEl.value = '';
+      setSelectValue(catEl, '');
       if (submitEl) submitEl.textContent = 'افزودن بسته';
       if (cancelEl) cancelEl.hidden = true;
       syncAmountStep();
@@ -1679,6 +1731,7 @@
         }
         if (sortEl) sortEl.value = btn.getAttribute('data-sort') || '0';
         if (descEl) descEl.value = btn.getAttribute('data-description') || '';
+        setSelectValue(catEl, btn.getAttribute('data-category') || '');
         if (submitEl) submitEl.textContent = 'ذخیره تغییرات';
         if (cancelEl) cancelEl.hidden = false;
         syncAmountStep();

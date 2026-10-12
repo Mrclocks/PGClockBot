@@ -146,6 +146,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
         price: int = Form(...),
         description: str = Form(""),
         sort_order: int = Form(0),
+        category_id: str = Form(""),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
@@ -161,6 +162,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
                 price=price,
                 description=description,
                 sort_order=sort_order,
+                category_id=category_id,
             )
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(
@@ -217,6 +219,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
         price: int = Form(...),
         description: str = Form(""),
         sort_order: int = Form(0),
+        category_id: str = Form(""),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
@@ -233,6 +236,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
                 price=price,
                 description=description,
                 sort_order=sort_order,
+                category_id=category_id,
             )
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(

@@ -1635,7 +1635,9 @@ async def res_addons(
         return
 
     rows: list[list[InlineKeyboardButton]] = []
-    addons = await list_addon_plans(session)
+    # Price packs by the reseller's subscription plan category (strict match).
+    sub_cat = int(plan.category_id) if getattr(plan, "category_id", None) else None
+    addons = await list_addon_plans(session, category_id=sub_cat)
     for p in addons:
         kind = str(getattr(p, "plan_kind", "") or "")
         if kind == "addon_volume":
