@@ -286,12 +286,9 @@
         </select>
         <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن می‌آید</small>
       </label>
-      <label class="form-field">
-        <span class="ui-check">
-          <input type="checkbox" name="confirm_billing_mode_change" value="1" />
-          <span>تأیید تغییر نوع پرداخت (فقط اگر این ادمین از قبل نماینده است و نوع پلن جدید فرق دارد)</span>
-        </span>
-      </label>
+      <div class="ui-switch-list">
+        {{ switch('confirm_billing_mode_change', 'تأیید تغییر نوع پرداخت', checked=false, help='فقط اگر این ادمین از قبل نماینده است و نوع پلن جدید فرق دارد') }}
+      </div>
       <div class="flash warn">پلن پیش‌فرض «ظرفیت فعلی» سقف حجم/کاربر همین ادمین در پاسارگارد را حفظ می‌کند و صفر نمی‌کند. برای سقف ثابت پلن دیگری انتخاب کنید.</div>
       <label class="form-field">رمز عبور مشترک
         <input name="web_password" type="password" autocomplete="new-password" dir="ltr"

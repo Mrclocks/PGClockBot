@@ -51,12 +51,9 @@
             <option value="payg" {% if profile.billing_mode == 'payg' %}selected{% endif %}>PAYG</option>
           </select>
         </label>
-        <label class="form-field">
-          <span class="ui-check">
-            <input type="checkbox" name="confirm_billing_mode_change" value="1" />
-            <span>تأیید تغییر نوع پرداخت: مصرف PAYG از مصرف فعلی ادمین شروع می‌شود و مسدودی PAYG در بازگشت به «ثابت» برداشته می‌شود</span>
-          </span>
-        </label>
+        <div class="ui-switch-list">
+          {{ switch('confirm_billing_mode_change', 'تأیید تغییر نوع پرداخت', checked=false, help='مصرف PAYG از مصرف فعلی ادمین شروع می‌شود و مسدودی PAYG در بازگشت به «ثابت» برداشته می‌شود') }}
+        </div>
       </div>
       <div>
         <label class="form-field">یوزرنیم پاسارگارد
@@ -115,12 +112,9 @@
       </small>
     </label>
     {% if pg_api_key_ready %}
-    <label class="form-field">
-      <span class="ui-check">
-        <input type="checkbox" name="clear_pg_api_key" value="1" />
-        حذف کلید API (بازگشت به احراز هویت با رمز)
-      </span>
-    </label>
+    <div class="ui-switch-list">
+      {{ switch('clear_pg_api_key', 'حذف کلید API', checked=false, help='بازگشت به احراز هویت با رمز') }}
+    </div>
     {% endif %}
     {% endif %}
 
