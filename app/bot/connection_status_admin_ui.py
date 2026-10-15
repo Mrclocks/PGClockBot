@@ -14,19 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.connection_status_ui import admin_page_keyboard, admin_page_text, bot_monitor_access, target_keyboard, target_text
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
-from app.services.connection_monitor_access import MONITOR_ACCESS_DENIED, MonitorAccess
-from app.services.connection_monitor_actions import INVALID_PREFERENCES
-from app.services.connection_monitor_preferences import PREFERENCES_UNAVAILABLE
-from app.services.connection_monitor_queue import QUEUE_UNAVAILABLE
-from app.services.connection_monitor_settings import ACCOUNT_UNAVAILABLE
+from app.services.connection_monitor_access import MonitorAccess
+from app.services.connection_monitor_overview import safe_monitor_error
 from app.services.connection_monitor_views import monitor_admin_page, monitor_target_view
 from app.services.db_safe import rollback_quiet
 from app.services.users import get_all_settings
 
 
 logger = logging.getLogger(__name__)
-SAFE_ERRORS = {MONITOR_ACCESS_DENIED, INVALID_PREFERENCES, PREFERENCES_UNAVAILABLE, QUEUE_UNAVAILABLE,
-               ACCOUNT_UNAVAILABLE, "هاست پایش یافت نشد.", "صفحه نامعتبر است.", "درخواست نامعتبر است.", "شناسه نامعتبر است."}
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +79,6 @@ async def reopen_monitor_home(message: Message, session: AsyncSession, db_user: 
 
 async def monitor_error(message: Message, session: AsyncSession, error: Exception) -> None:
     await rollback_quiet(session)
-    # Domain messages are fixed Persian strings; never echo panel/DB/core errors.
-    text = str(error) if type(error) is ValueError and str(error) in SAFE_ERRORS else "پایش اکنون در دسترس نیست؛ کمی بعد دوباره تلاش کنید."
+    text = safe_monitor_error(error)
     logger.warning("Monitoring admin action failed error_type=%s", type(error).__name__)
     await message.answer(html.escape(text))

@@ -101,6 +101,7 @@ from app.api.funnel_pages import register_funnel_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
+from app.api.connection_monitor_pages import register_connection_monitor_pages
 from app.api.service_import_pages import register_service_import_pages
 from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
 from app.api.login_guard import (
@@ -1490,6 +1491,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
+    register_connection_monitor_pages(app, require_admin=require_admin, get_db=get_db)
 
     @app.get("/settings/ssl/progress")
     async def ssl_progress(staff: dict = Depends(require_admin)):

@@ -1,0 +1,103 @@
+{# «وضعیت اتصال»: runtime switch, dedicated account and host management; the texts form follows. #}
+<div class="card settings-card bot-conn-overview" id="cm-panel" data-base="/connection-monitor">
+  <h2>وضعیت پایش</h2>
+  <p class="muted update-card-caption">قابلیت آزمایشی و پیش‌فرض خاموش است. هاست‌های فعال پاسارگارد از سرور ربات سنجیده می‌شوند؛ این نتیجه اتصال مشتری یا دسترسی از ایران را نشان نمی‌دهد. مسیر و SHA-256 هستهٔ Xray فقط با متغیرهای CONNECTION_MONITOR_XRAY_PATH و CONNECTION_MONITOR_XRAY_SHA256 روی سرور تنظیم می‌شوند.</p>
+  <div class="bot-conn-row" role="list" id="cm-conn" aria-live="polite">
+    <div class="bot-conn is-neutral" role="listitem">
+      <span class="bot-conn-text"><span class="bot-conn-k">در حال بررسی</span></span>
+    </div>
+  </div>
+  <div class="settings-grid">
+    <div class="setting-item full">
+      <label class="toggle-row ui-switch-row" for="cm-enabled">
+        <span class="ui-switch-copy">
+          <strong>فعال‌سازی پایش</strong>
+          <small class="muted">با خاموش شدن، بررسی متوقف و نمایش عمومی همهٔ هاست‌ها برداشته می‌شود. برای روشن شدن، حساب پایش و هستهٔ Xray باید آماده باشند.</small>
+        </span>
+        <span class="ui-switch">
+          <input type="checkbox" id="cm-enabled" disabled />
+          <span class="ui-switch-track" aria-hidden="true"></span>
+        </span>
+      </label>
+    </div>
+  </div>
+  <div class="actions">
+    <button type="button" class="btn btn-ghost" id="cm-refresh">بروزرسانی</button>
+    <button type="button" class="btn btn-ghost" id="cm-verify-core">بررسی هستهٔ Xray</button>
+  </div>
+  <div id="cm-msg" role="status" aria-live="polite"></div>
+</div>
+
+<div class="card settings-card" id="cm-account">
+  <h2>حساب اختصاصی پایش</h2>
+  <p class="muted update-card-caption">نام کاربری یک کاربر فعال و جدا در پاسارگارد که به هیچ مشتری فروخته نشده است. تغییر حساب، پایش را خاموش و نمایش عمومی را برمی‌دارد.</p>
+  <div class="settings-grid">
+    <div class="setting-item full">
+      <label for="cm-username">نام کاربری حساب
+        <input id="cm-username" type="text" dir="ltr" autocomplete="off" spellcheck="false" maxlength="128" />
+      </label>
+    </div>
+  </div>
+  <div class="actions">
+    <button type="button" class="btn" id="cm-save-account">ذخیرهٔ حساب</button>
+  </div>
+</div>
+
+<div class="card settings-card card-flush" id="cm-targets">
+  <div class="card-flush-head">
+    <h2>هاست‌های پایش</h2>
+    <div class="actions"><button type="button" class="btn" id="cm-add-host">افزودن هاست</button></div>
+  </div>
+  <div class="table-wrap">
+    <table class="table-compact">
+      <thead>
+        <tr><th>هاست</th><th>وضعیت</th><th>تأخیر</th><th>آخرین بررسی</th><th>نمایش عمومی</th><th>عملیات</th></tr>
+      </thead>
+      <tbody id="cm-targets-body">
+        <tr><td colspan="6" class="muted">در حال بارگذاری…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="cm-card-foot" id="cm-more-row" hidden>
+    <button type="button" class="btn btn-ghost" id="cm-more">بیشتر</button>
+  </div>
+</div>
+
+<div class="card settings-card" id="cm-edit" hidden>
+  <h2 id="cm-edit-title">ویرایش هاست</h2>
+  <div class="settings-grid">
+    <div class="setting-item">
+      <label for="cm-edit-name">نام عمومی
+        <input id="cm-edit-name" type="text" maxlength="64" autocomplete="off" />
+        <small class="muted">همین نام به مشتریان نشان داده می‌شود؛ حداکثر ۶۴ نویسه.</small>
+      </label>
+    </div>
+    <div class="setting-item">
+      <label for="cm-edit-order">ترتیب نمایش
+        <input id="cm-edit-order" type="number" inputmode="numeric" min="0" max="2147483647" step="1" dir="ltr" />
+        <small class="muted">عدد کمتر بالاتر نمایش داده می‌شود.</small>
+      </label>
+    </div>
+  </div>
+  <div class="actions">
+    <button type="button" class="btn" id="cm-edit-save">ذخیره</button>
+    <button type="button" class="btn btn-ghost" id="cm-edit-cancel">انصراف</button>
+  </div>
+</div>
+
+<div class="card settings-card card-flush" id="cm-picker" hidden>
+  <div class="card-flush-head">
+    <h2>انتخاب هاست فعال</h2>
+    <div class="actions"><button type="button" class="btn btn-ghost" id="cm-picker-close">بستن</button></div>
+  </div>
+  <div class="table-wrap">
+    <table class="table-compact">
+      <thead><tr><th>هاست</th><th>عملیات</th></tr></thead>
+      <tbody id="cm-picker-body"></tbody>
+    </table>
+  </div>
+  <div class="cm-card-foot" id="cm-picker-more-row" hidden>
+    <button type="button" class="btn btn-ghost" id="cm-picker-more">بیشتر</button>
+  </div>
+</div>
+<script src="/static/connection-monitor-admin.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>

@@ -167,3 +167,4 @@ tests/test_reseller_capacity_snapshot.py
 tests/test_reseller_capacity_view.py
 tests/test_random_payment_card.py
 tests/test_panel_alert_notifications.py
+tests/test_connection_monitor_web.py

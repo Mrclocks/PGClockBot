@@ -4274,6 +4274,51 @@ form.settings-form > .actions.sticky-actions,
   border: 0;
 }
 /* Bot & connection settings — status strip + webhook switch */
+/* Cards the monitor tab opens on demand: .settings-card's display would otherwise beat [hidden]. */
+#cm-edit[hidden],
+#cm-picker[hidden] {
+  display: none;
+}
+/* Status tiles: four equal columns on desktop, two on phones, every tile the same height. */
+#cm-conn {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+#cm-conn .bot-conn {
+  min-height: 52px;
+  padding: var(--space-1) var(--space-2);
+}
+#cm-msg:empty {
+  display: none;
+}
+.cm-card-foot {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2) var(--card-pad) var(--card-pad);
+}
+.cm-card-foot[hidden] {
+  display: none;
+}
+@media (max-width: 720px) {
+  #cm-conn {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #cm-conn .bot-conn {
+    padding: var(--space-1) var(--space-2);
+  }
+}
+/* Table cells centre their content; the stacked-form margins on switches and action rows would push it off-line. */
+#cm-targets td .ui-switch,
+#cm-targets td .actions,
+#cm-picker td .actions {
+  margin: 0;
+}
+#cm-targets td .ui-switch {
+  display: flex;
+}
+#cm-targets td .badge {
+  display: flex;
+  width: fit-content;
+}
 .bot-conn-overview > .bot-conn-row {
   margin-top: 0;
 }
