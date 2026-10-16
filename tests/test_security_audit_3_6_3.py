@@ -100,8 +100,7 @@ class BotShopIsolationTests(unittest.TestCase):
     def test_adm_payments_platform_filter(self):
         src = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
         pay = src.split("async def adm_payments")[1].split("async def adm_plans")[0]
-        self.assertIn("Payment.is_wallet_topup.is_(True)", pay)
-        self.assertIn("Order.reseller_id.is_(None)", pay)
+        self.assertIn("payment_shop_clause(None)", pay)
 
 
 class ResellerReplyAclTests(unittest.TestCase):

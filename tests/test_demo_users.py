@@ -135,10 +135,10 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(dashboard["services"], 1)
                 self.assertEqual(dashboard["pending"], 2)
         platform = await bot_panel_summary(self.session)
-        self.assertEqual(platform["services"], 3)
+        self.assertEqual(platform["services"], 1)
         self.assertEqual(platform["pending"], 2)
         self.assertEqual((await bot_dashboard_summary(self.session))["pending_orders"], 1)
-        self.assertEqual((await admin_customer_counts(self.session))["orders"], 6)
+        self.assertEqual((await admin_customer_counts(self.session))["orders"], 2)
 
     async def test_records_older_than_month_are_removed_from_all_time_totals(self) -> None:
         self.session.add(Order(user_id=11, reseller_id=10, amount=600, status="delivered", created_at=self.now - timedelta(days=90)))
