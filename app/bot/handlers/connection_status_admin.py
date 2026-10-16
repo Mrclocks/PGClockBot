@@ -117,4 +117,4 @@ async def monitor_admin_callback(callback: CallbackQuery, session: AsyncSession,
             else:
                 await show_monitor_target(callback.message, session, access, target_id=target_id)
     except Exception as exc:
-        await monitor_error(callback.message, session, exc)
+        await monitor_error(callback.message, session, exc, edit=True)

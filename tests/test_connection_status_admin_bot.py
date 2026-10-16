@@ -228,3 +228,21 @@ class MonitorCancelAndLabelTests(unittest.IsolatedAsyncioTestCase):
         for old in ("📡 تست و وضعیت اتصال", "📡 مدیریت وضعیت اتصال"):
             refreshed = readable_monitor_texts({"btn_connection_status_admin": old})
             self.assertEqual(refreshed["btn_connection_status_admin"], "📡 وضعیت اتصال")
+
+
+class MonitorErrorPlacementTests(MonitorDatabaseCase):
+    async def test_button_error_edits_the_menu_into_the_reason_with_a_back_button(self) -> None:
+        message = SimpleNamespace(answer=AsyncMock())
+        with patch("app.bot.connection_status_admin_ui.safe_edit_text", new_callable=AsyncMock) as edit:
+            async with self.Session() as session:
+                await monitor_error(message, session, MonitorAccountError("inactive"), edit=True)
+        message.answer.assert_not_awaited()
+        self.assertEqual(edit.call_args.args[1], ACCOUNT_MESSAGES["inactive"])
+        buttons = [b for row in edit.call_args.kwargs["reply_markup"].inline_keyboard for b in row]
+        self.assertEqual([b.callback_data for b in buttons], ["cma:home:0"])
+
+    async def test_typed_reply_error_is_sent_as_a_message(self) -> None:
+        message = SimpleNamespace(answer=AsyncMock())
+        async with self.Session() as session:
+            await monitor_error(message, session, MonitorAccountError("inactive"))
+        message.answer.assert_awaited_once()
