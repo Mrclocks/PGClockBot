@@ -17,9 +17,10 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser
+from app.db.models import BotUser, ResellerProfile
 from app.services.authz import AuthDecision
 from app.services.bot_principal_identity import (
     BotPrincipalResolution,
@@ -27,7 +28,7 @@ from app.services.bot_principal_identity import (
     callback_carries_principal_tamper,
     resolve_bot_pg_family_identity,
 )
-from app.services.pg_user_scope import filter_pg_users_for_staff, pg_user_in_staff_scope
+from app.services.pg_user_scope import filter_pg_users_for_staff, is_full_pg_owner, pg_user_in_staff_scope, pg_user_owner_username
 from app.services.principal_pg_authz import (
     apply_level1_pg_local_safety,
     authorize_pg_page,
@@ -146,6 +147,9 @@ class BotPgUserGate:
     staff: dict[str, Any] | None = None
     pg_user: dict[str, Any] | None = None
     pg_client: Any = None
+    # Panel admins that belong to shops. A shop's customers are managed in the web panel only,
+    # never from the platform Owner's personal bot.
+    shop_pg_admins: frozenset[str] = frozenset()
 
 
 def _deny(reason: str, *, resolution: BotPrincipalResolution | None = None) -> BotPgUserGate:
@@ -195,6 +199,21 @@ def sanitize_pg_user_write_payload(payload: Mapping[str, Any] | None) -> dict[st
     for key in _CLIENT_OWNER_KEYS:
         out.pop(key, None)
     return out
+
+
+async def shop_pg_admin_usernames(session: AsyncSession) -> frozenset[str]:
+    """Panel admins of shops that run their own bot; admins without one are platform sub-admins."""
+    rows = await session.scalars(
+        select(func.lower(ResellerProfile.pg_admin_username)).where(
+            ResellerProfile.pg_admin_username.is_not(None), ResellerProfile.pg_admin_username != "",
+            ResellerProfile.bot_token.is_not(None), ResellerProfile.bot_token != ""
+        )
+    )
+    return frozenset(name for name in rows if name)
+
+
+def _is_shop_owned(user: dict[str, Any], shop_admins: frozenset[str]) -> bool:
+    return pg_user_owner_username(user) in shop_admins
 
 
 def _prepare_staff(resolution: BotPrincipalResolution) -> dict[str, Any] | None:
@@ -284,6 +303,8 @@ async def authorize_bot_pg_user_op(
     except Exception:
         return _deny("pg_outage", resolution=resolution)
 
+    # Only the global Owner needs the filter; scoped principals already see just their own users.
+    shop_admins = await shop_pg_admin_usernames(session) if is_full_pg_owner(staff) else frozenset()
     if action in _COLLECTION_ACTIONS:
         return BotPgUserGate(
             allowed=True,
@@ -292,6 +313,7 @@ async def authorize_bot_pg_user_op(
             resolution=resolution,
             staff=staff,
             pg_client=pg_client,
+            shop_pg_admins=shop_admins,
         )
 
     uid = pg_user_id
@@ -311,7 +333,7 @@ async def authorize_bot_pg_user_op(
 
     if not isinstance(raw, dict):
         return _deny("resource_not_found", resolution=resolution)
-    if not pg_user_in_staff_scope(raw, staff):
+    if not pg_user_in_staff_scope(raw, staff) or _is_shop_owned(raw, shop_admins):
         return _deny("resource_out_of_scope", resolution=resolution)
 
     if action in _MUTATE_ID_ACTIONS:
@@ -332,6 +354,7 @@ async def authorize_bot_pg_user_op(
         staff=staff,
         pg_user=raw,
         pg_client=pg_client,
+        shop_pg_admins=shop_admins,
     )
 
 
@@ -367,7 +390,7 @@ async def list_scoped_pg_users(
                         break
                     except (TypeError, ValueError):
                         pass
-    scoped = filter_pg_users_for_staff(users, gate.staff)
+    scoped = [u for u in filter_pg_users_for_staff(users, gate.staff) if not _is_shop_owned(u, gate.shop_pg_admins)]
     if total is not None and len(scoped) != len(users):
         total = None
     return scoped, total
@@ -387,6 +410,6 @@ async def lookup_scoped_pg_user_by_username(
         return None
     if not isinstance(raw, dict):
         return None
-    if not pg_user_in_staff_scope(raw, gate.staff):
+    if not pg_user_in_staff_scope(raw, gate.staff) or _is_shop_owned(raw, gate.shop_pg_admins):
         return None
     return raw
