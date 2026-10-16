@@ -152,7 +152,7 @@ def _restart_footer(ui: dict | None) -> list[tuple[str, str, str]]:
 
 
 def _connection_status_entries(key: str, ui: dict | None, role: str) -> list[tuple[str, str]]:
-    # Admins reach the same data from «تست و وضعیت اتصال»; the customer view stays in user preview.
+    # Admins reach the same data from «وضعیت اتصال»; the customer view stays in user preview.
     if key != CONNECTION_STATUS_MENU_KEY or role == Role.ADMIN.value:
         return []
     return [(CONNECTION_STATUS_MENU_KEY, _t(ui, "btn_connection_status"))]

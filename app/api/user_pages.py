@@ -14,7 +14,7 @@ from app.db.models import BotUser, Plan
 from app.services.authz import authz_from_staff, can_shop
 from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
 from app.services.shop_membership import assert_customer_in_staff_scope
-from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
+from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope, resolve_shop_scope_id
 
 
 def _q(msg: str) -> str:
@@ -253,9 +253,18 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         can_pg_delete = bool(pg_acts.get("delete"))
         from app.services.color_tags import color_tag_meta, color_tags_for_ui
 
+        # The staff note and risk tag are one record on the person; only the shop that attributed
+        # them (the platform for an unattributed person) may read them, a member shop may not.
+        try:
+            assert_bot_user_in_scope(staff, user)
+            show_private_marks = True
+        except ShopScopeError:
+            show_private_marks = False
+
         ctx = {
             "staff": staff,
             "user": user,
+            "show_private_marks": show_private_marks,
             "display_wallet": display_wallet,
             "services": snaps,
             "wallet_txs": wallet_txs,

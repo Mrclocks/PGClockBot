@@ -222,11 +222,11 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
             .order_by(PointsTransaction.id.desc())
             .limit(50)
         )
+        # The entry's own purse decides the shop, not the customer's attribution.
         if scope is not None:
-            txs_q = txs_q.where(BotUser.reseller_id == int(scope))
+            txs_q = txs_q.where(PointsTransaction.reseller_id == int(scope))
         else:
-            # Platform shop only — never list sibling/tenant loyalty txs as global.
-            txs_q = txs_q.where(BotUser.reseller_id.is_(None))
+            txs_q = txs_q.where(PointsTransaction.reseller_id.is_(None))
         txs = [
             {
                 "id": tx.id,

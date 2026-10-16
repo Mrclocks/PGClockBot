@@ -36,6 +36,7 @@ from app.services.loyalty import (
     loyalty_enabled,
     points_balance,
 )
+from app.services.service_scope import customer_may_use_service, shop_services_clause
 from app.services.users import current_shop_reseller_id
 
 logger = logging.getLogger(__name__)
@@ -437,9 +438,10 @@ async def _user_prize_wins(session: AsyncSession, user_id: int, prize_id: int) -
 async def _resolve_service(
     session: AsyncSession, user: BotUser, service_id: int | None
 ) -> UserService | None:
+    scope = shop_prize_scope()
     if service_id is not None:
         svc = await session.get(UserService, int(service_id))
-        if not svc or int(svc.bot_user_id) != int(user.id):
+        if not await customer_may_use_service(session, svc, int(user.id), scope):
             raise ValueError("سرویس معتبر نیست")
         if not svc.pg_user_id:
             raise ValueError("سرویس به پنل متصل نیست")
@@ -451,6 +453,7 @@ async def _resolve_service(
                 .where(
                     UserService.bot_user_id == int(user.id),
                     UserService.pg_user_id.is_not(None),
+                    shop_services_clause(scope),
                 )
                 .order_by(UserService.id.desc())
                 .limit(1)

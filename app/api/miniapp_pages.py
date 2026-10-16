@@ -445,7 +445,7 @@ async def _reseller_ops_payload(
     }
     if profile is not None:
         try:
-            stats = await _reseller_shop_stats(session, int(profile.id))
+            stats = await _reseller_shop_stats(session, int(profile.user_id))
         except Exception:
             await rollback_quiet(session)
     base = (await get_reseller_panel_base_url(session) or "").rstrip("/") or _mini_panel_base()

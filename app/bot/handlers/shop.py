@@ -10,13 +10,14 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id
 from app.services.catalog_pricing import PriceTarget, active_discounts, displayed_quote, price_html, quote_price, sale_price
 from app.bot import keyboards as kb
 from app.bot.handlers.purchase_contact import prompt_purchase_contact_if_needed
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
-from app.db.models import BotUser, Order, PaymentMethod, UserService
+from app.db.models import BotUser, Order, PaymentMethod
 from app.services.redact import user_safe_error
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import (
@@ -218,11 +219,7 @@ async def _shop_kind_flags(
     plans = await list_active_plans(session, include_trial=True)
     if not trial_setting:
         plans = [p for p in plans if not p.is_trial]
-    has_svc = (
-        await session.execute(
-            select(UserService.id).where(UserService.bot_user_id == db_user.id).limit(1)
-        )
-    ).scalar_one_or_none()
+    has_svc = await list_customer_services(session, db_user.id, current_shop_reseller_id(), limit=1)
     if has_svc:
         plans = [p for p in plans if not p.is_trial]
     fixed_plans = [p for p in plans if not p.is_trial]
@@ -1641,7 +1638,7 @@ async def ask_discount(
 
     from app.services.loyalty import list_available_discounts
 
-    ents = await list_available_discounts(session, db_user.id)
+    ents = await list_available_discounts(session, db_user.id, shop_id=current_shop_reseller_id())
     rows: list[list[InlineKeyboardButton]] = []
     for e in ents[:5]:
         rows.append(

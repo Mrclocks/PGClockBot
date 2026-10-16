@@ -58,6 +58,7 @@ class Decision:
     user_id: int
     approved: bool
     service_id: int | None = None
+    shop_id: int | None = None  # the shop the request was made in (None = platform)
 
 
 def _in_scope(scope: int | None) -> ColumnElement[bool]:
@@ -197,7 +198,7 @@ async def approve_request(session: AsyncSession, request_id: int, scope: int | N
         raise ServiceImportError(PANEL_UNAVAILABLE, Reason.PANEL_ERROR) from None
     service_id = int(result.service.id) if result.service is not None else None  # read before _settle expires it
     await _settle(session, request_id, STATUS_APPROVED)
-    return Decision(request_id=int(request_id), user_id=user_id, approved=True, service_id=service_id)
+    return Decision(request_id=int(request_id), user_id=user_id, approved=True, service_id=service_id, shop_id=scope)
 
 
 async def reject_request(session: AsyncSession, request_id: int, scope: int | None, *, decided_by: str) -> Decision:
@@ -218,4 +219,4 @@ async def reject_request(session: AsyncSession, request_id: int, scope: int | No
     await session.commit()
     if result.rowcount != 1 or user_id is None:
         raise ValueError(NOT_PENDING)
-    return Decision(request_id=int(request_id), user_id=int(user_id), approved=False)
+    return Decision(request_id=int(request_id), user_id=int(user_id), approved=False, shop_id=scope)

@@ -11,12 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
-from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
+from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
 from app.services.redact import user_safe_error
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import create_wallet_topup
 from app.services.receipts import submit_receipt
-from app.services.users import get_all_settings, on
+from app.services.ux20 import payment_shop_clause
+from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import list_activity
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 
@@ -749,10 +750,13 @@ async def generic_receipt(
         return
     result = await session.execute(
         select(Payment)
+        .outerjoin(Order, Order.id == Payment.order_id)
         .where(
             Payment.user_id == db_user.id,
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_(None),
+            # Only a payment of the shop whose bot received the photo.
+            payment_shop_clause(current_shop_reseller_id()),
         )
         .order_by(Payment.id.desc())
         .limit(1)

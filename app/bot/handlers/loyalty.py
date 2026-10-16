@@ -193,7 +193,7 @@ async def build_loyalty_text(session: AsyncSession, db_user: BotUser) -> str:
         pass
     tier = await get_tier_for_points(session, await _points(session, db_user))
     stats = await referral_stats(session, db_user.id)
-    month = await month_earned_points(session, db_user.id)
+    month = await month_earned_points(session, db_user.id, shop_id=current_shop_reseller_id())
     lines = [
         kv_line("⭐", "امتیاز شما", f"<b>{await _points(session, db_user)}</b>"),
         kv_line("🏅", "سطح", tier.name),
@@ -1334,7 +1334,7 @@ async def loyalty_wheel_spin(callback: CallbackQuery, session: AsyncSession, db_
 @router.callback_query(F.data == "loy:discounts")
 async def loyalty_discounts(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
-    ents = await list_available_discounts(session, db_user.id)
+    ents = await list_available_discounts(session, db_user.id, shop_id=current_shop_reseller_id())
     if not ents:
         body = "تخفیف فعالی ندارید.\nاز بخش جوایز یک تخفیف بازخرید کنید."
     else:

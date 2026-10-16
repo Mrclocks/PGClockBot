@@ -12,7 +12,7 @@
         {% if user.username %}<span>@{{ user.username }}</span>{% endif %}
         {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
         {% if user.is_demo %}<span class="badge neutral">دمو</span>{% endif %}
-        {% set tag = color_tag_meta(user.color_tag) if color_tag_meta is defined else none %}
+        {% set tag = color_tag_meta(user.color_tag) if (color_tag_meta is defined and show_private_marks|default(true)) else none %}
         {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
       </p>
     </div>
@@ -43,6 +43,7 @@
   </form>
 </section>
 {% endif %}
+{% if show_private_marks|default(true) %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>تگ ریسک</h3>
@@ -56,8 +57,10 @@
     </div>
   </form>
 </section>
+{% endif %}
 
 {% if manage_user %}
+{% if show_private_marks|default(true) %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>یادداشت داخلی</h3>
@@ -72,6 +75,7 @@
     </div>
   </form>
 </section>
+{% endif %}
 
 <section class="edit-section">
   <header class="edit-section-head">

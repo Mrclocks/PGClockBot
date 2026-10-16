@@ -950,7 +950,7 @@ async def adm_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    from sqlalchemy import or_
+    from app.services.ux20 import payment_shop_clause
 
     result = await session.execute(
         select(Payment)
@@ -958,10 +958,7 @@ async def adm_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
         .where(
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_not(None),
-            or_(
-                Payment.is_wallet_topup.is_(True),
-                Order.reseller_id.is_(None),
-            ),
+            payment_shop_clause(None),
         )
         .order_by(Payment.id.desc())
         .limit(15)

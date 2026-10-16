@@ -2393,8 +2393,6 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         # Bot overview (/dashboard): platform admin sees bot boxes;
         # overall web home stays at /home. Resellers stay shop-scoped.
-        from sqlalchemy import or_
-
         from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 
         rid = shop_owner_id(staff)
@@ -2458,12 +2456,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         await session.execute(
                             select(Payment)
                             .outerjoin(Order, Order.id == Payment.order_id)
-                            .where(
-                                or_(
-                                    Payment.is_wallet_topup.is_(True),
-                                    Order.reseller_id.is_(None),
-                                )
-                            )
+                            .where(payment_shop_clause(None))
                             .order_by(Payment.id.desc())
                             .limit(6)
                         )
@@ -3702,7 +3695,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         user = await session.get(BotUser, payment.user_id)
         if user:
             try:
-                shop_rid = getattr(user, "reseller_id", None)
+                shop_rid = payment_shop_id(
+                    payment, await session.get(Order, payment.order_id) if payment.order_id else None
+                )
                 ui = await get_all_settings(session, reseller_id=shop_rid)
                 body = ui.get("payment_reject_text") or body
             except Exception:

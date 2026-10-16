@@ -80,7 +80,10 @@ async def reopen_monitor_home(message: Message, session: AsyncSession, db_user: 
                                **kwargs: object) -> None:
     access = await bot_monitor_access(session, db_user, is_reseller_bot=bool(kwargs.get("is_reseller_bot")))
     await state.set_state(None)
-    await show_monitor_home(message, session, access, edit=False)
+    # Cancel from the inline prompt edits that prompt back into the menu; a typed «انصراف» is the
+    # user's own message, which cannot be edited, so the menu is sent fresh.
+    from_bot = bool(message.from_user and message.from_user.is_bot)
+    await show_monitor_home(message, session, access, edit=from_bot)
 
 
 async def monitor_error(message: Message, session: AsyncSession, error: Exception) -> None:

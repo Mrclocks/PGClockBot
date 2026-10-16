@@ -22,7 +22,7 @@ from app.services.list_query import (
     normalize_search_q,
     parse_list_page,
 )
-from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.shop_scope import is_platform_admin, payment_shop_id, shop_owner_id
 from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
 from app.services.secret_box import reveal_bot_token
 
@@ -167,33 +167,26 @@ async def _authorize_receipt_access(
     staff: dict,
     payment: Payment,
 ) -> tuple[Order | None, int | None] | None:
-    """Return (order, payer_reseller_id) if staff may view this receipt, else None.
+    """Return (order, payment shop id) if staff may view this receipt, else None.
 
-    Platform admins: only platform-scoped payments (no reseller order / no reseller payer).
-    Shop staff: only payments for their shop (order.reseller_id or payer.reseller_id).
+    The shop of a payment is its own: a top-up's wallet shop or its order's shop, never the payer's
+    attribution. Platform admins see platform payments only; shop staff only their shop's.
     """
     order: Order | None = None
     if payment.order_id:
         order = await session.get(Order, int(payment.order_id))
 
-    payer_reseller_id: int | None = None
-    if payment.user_id:
-        payer = await session.get(BotUser, int(payment.user_id))
-        if payer and payer.reseller_id:
-            payer_reseller_id = int(payer.reseller_id)
-
-    order_rid = int(order.reseller_id) if order and order.reseller_id else None
-    tenant_rid = order_rid or payer_reseller_id
+    tenant_rid = payment_shop_id(payment, order)
 
     if is_platform_admin(staff):
         if tenant_rid:
             return None
-        return order, payer_reseller_id
+        return order, None
 
     rid = shop_owner_id(staff)
     if not rid or not tenant_rid or int(tenant_rid) != int(rid):
         return None
-    return order, payer_reseller_id
+    return order, int(tenant_rid)
 
 
 def _groups_for_tab(tab: str) -> tuple[list[str], dict]:

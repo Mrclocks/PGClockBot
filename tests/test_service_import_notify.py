@@ -41,7 +41,9 @@ class NotifyCase(ApprovalCase):
         async with self.Session() as session:
             user = await session.get(BotUser, user_id)
             result = await import_existing_service(session, user=user, raw_link=link, shop_id=shop_id)
-            await announce_new_request(SimpleNamespace(bot=MagicMock()), session, user, result)
+            # The notice follows the bot the customer used, which the dispatcher sets per update.
+            with patch("app.bot.service_import_ui.current_shop_reseller_id", return_value=shop_id):
+                await announce_new_request(SimpleNamespace(bot=MagicMock()), session, user, result)
         return result
 
 

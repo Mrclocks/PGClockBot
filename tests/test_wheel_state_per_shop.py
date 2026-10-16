@@ -107,3 +107,20 @@ class WheelStateMigrationTests(unittest.TestCase):
             self.assertEqual(rows, {7: 3, 8: 2})
             with self.assertRaises(sa.exc.IntegrityError):
                 conn.execute(sa.text("INSERT INTO lucky_wheel_user_state VALUES (9, 7, 5, 0)"))
+
+
+class WheelStateMigrationOtherNameTests(unittest.TestCase):
+    def test_a_per_customer_unique_with_another_name_is_dropped_too(self):
+        spec = importlib.util.spec_from_file_location("wheel_state_migration2", ROOT / "alembic/versions/0062_wheel_state_per_shop.py")
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+        engine = sa.create_engine("sqlite:///:memory:")
+        self.addCleanup(engine.dispose)
+        with engine.begin() as conn:
+            conn.execute(sa.text(
+                "CREATE TABLE lucky_wheel_user_state (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, "
+                "reseller_id INTEGER, CONSTRAINT some_other_name UNIQUE (user_id))"
+            ))
+            with Operations.context(MigrationContext.configure(conn)):
+                migration.upgrade()
+            conn.execute(sa.text("INSERT INTO lucky_wheel_user_state VALUES (1, 7, NULL), (2, 7, 5)"))

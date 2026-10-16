@@ -97,4 +97,5 @@ async def _tell_customer(session: AsyncSession, decision: Decision) -> None:
     await notify_payer(
         session, decision.user_id, title=NOTICE_TITLE,
         body=APPROVED_NOTICE if decision.approved else REJECTED_NOTICE,
+        shop_id=decision.shop_id,
     )

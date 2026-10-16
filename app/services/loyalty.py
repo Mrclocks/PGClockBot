@@ -1033,7 +1033,9 @@ async def referral_stats(session: AsyncSession, user_id: int) -> dict[str, int]:
     return {"total": total, "qualified": qualified, "earned_points": earned}
 
 
-async def month_earned_points(session: AsyncSession, user_id: int) -> int:
+async def month_earned_points(session: AsyncSession, user_id: int, *, shop_id: int | None) -> int:
+    """Points the customer earned this month in one purse (None = platform)."""
+    purse = PointsTransaction.reseller_id == int(shop_id) if shop_id else PointsTransaction.reseller_id.is_(None)
     now = datetime.now(timezone.utc)
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     return int(
@@ -1043,6 +1045,7 @@ async def month_earned_points(session: AsyncSession, user_id: int) -> int:
                     PointsTransaction.user_id == user_id,
                     PointsTransaction.amount > 0,
                     PointsTransaction.created_at >= start,
+                    purse,
                 )
             )
         ).scalar_one()
@@ -1325,8 +1328,13 @@ def _entitlement_expired(ent: LoyaltyDiscountEntitlement, *, now: datetime | Non
 
 
 async def list_available_discounts(
-    session: AsyncSession, user_id: int
+    session: AsyncSession, user_id: int, *, shop_id: int | None
 ) -> list[LoyaltyDiscountEntitlement]:
+    """Discount codes the customer holds from one shop (None = platform)."""
+    scope = (
+        LoyaltyDiscountEntitlement.reseller_id == int(shop_id)
+        if shop_id else LoyaltyDiscountEntitlement.reseller_id.is_(None)
+    )
     rows = list(
         (
             await session.execute(
@@ -1334,6 +1342,7 @@ async def list_available_discounts(
                 .where(
                     LoyaltyDiscountEntitlement.user_id == int(user_id),
                     LoyaltyDiscountEntitlement.status == "available",
+                    scope,
                 )
                 .order_by(LoyaltyDiscountEntitlement.id.desc())
             )

@@ -1207,7 +1207,7 @@ SETTING_GROUPS = {
         ("btn_reseller", "دکمه نماینده", "text", "در کیبورد ربات اختصاصی نماینده"),
         ("btn_reseller_creds", "دکمه اطلاعات ورود نماینده", "text", "در ربات اصلی برای صاحب فروشگاه"),
         ("btn_admin", "دکمه ادمین", "text", ""),
-        ("btn_connection_status_admin", "دکمه تست و وضعیت اتصال", "text", "صفحهٔ اول پنل ادمین"),
+        ("btn_connection_status_admin", "دکمه وضعیت اتصال", "text", "صفحهٔ اول پنل ادمین"),
         ("btn_connection_status", "دکمه وضعیت اتصال مشتری", "text", "منوی اصلی"),
         ("btn_menu_home", "دکمه منوی اصلی (کیبورد)", "text", "خروج از پیش‌نمایش / خانه"),
         ("btn_adm_hub_ops", "گروه عملیات روزانه (ادمین)", "text", "هاب پنل ادمین"),
@@ -1971,6 +1971,7 @@ async def delete_bot_user(
     # raises IntegrityError and the user row stays forever (the real "حذف نمی‌شود"
     # bug). Must run BEFORE deleting UserService (spins/redemptions FK to services).
     from app.db.models import (
+        BotUserShop,
         ChargeCode,
         DeliveryFailure,
         FunnelEvent,
@@ -2029,11 +2030,13 @@ async def delete_bot_user(
     await session.execute(
         update(LuckyWheelSpin).where(LuckyWheelSpin.reseller_id == user_id).values(reseller_id=None)
     )
-    await session.execute(
-        update(LuckyWheelUserState)
-        .where(LuckyWheelUserState.reseller_id == user_id)
-        .values(reseller_id=None)
-    )
+    # A shop's wheel counters go with the shop; relabelling them as the platform's would collide
+    # with the customer's own platform row (one row per customer and shop).
+    await session.execute(delete(LuckyWheelUserState).where(LuckyWheelUserState.reseller_id == user_id))
+    await session.execute(delete(BotUserShop).where(BotUserShop.shop_id == user_id))
+    await session.execute(delete(BotUserShop).where(BotUserShop.bot_user_id == user_id))
+    # Customers and orders of a deleted shop become the platform's (above); so do the services it sold.
+    await session.execute(update(UserService).where(UserService.shop_id == user_id).values(shop_id=None))
     # N1: never NULL-out shop-issued discounts / pending shop top-ups — that
     # would promote them to platform scope. Delete entitlements; reject pending
     # top-ups; only then clear wallet_shop_id for FK cleanup on historical rows.

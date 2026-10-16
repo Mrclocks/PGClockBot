@@ -31,9 +31,9 @@ def _review_markup(*, shop: bool) -> InlineKeyboardMarkup | None:
 
 
 async def notify_service_import_request(
-    bot: Bot, session: AsyncSession, *, user: BotUser, panel_username: str, request_id: int
+    bot: Bot, session: AsyncSession, *, user: BotUser, panel_username: str, request_id: int, shop_id: int | None
 ) -> int:
-    """Notify the customer's own shop (or the platform admins); returns how many chats got it.
+    """Notify the shop the request was made in (or the platform admins); returns how many chats got it.
 
     Best effort: the request is already stored and shows in the settings tab, so a Telegram
     failure never fails the customer's flow.
@@ -49,8 +49,8 @@ async def notify_service_import_request(
     try:
         return await _dispatch_dual_notify(
             bot, session, NOTIFY_KEY, text,
-            markup=_review_markup(shop=bool(user.reseller_id)),
-            ticket_user_id=int(user.id), ticket_reseller_id=int(user.reseller_id) if user.reseller_id else None,
+            markup=_review_markup(shop=bool(shop_id)),
+            ticket_user_id=int(user.id), ticket_reseller_id=int(shop_id) if shop_id else None,
         )
     except (TelegramAPIError, OSError, TimeoutError):
         logger.warning("service import request notice failed request=%s", request_id, exc_info=True)
