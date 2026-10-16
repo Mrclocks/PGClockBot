@@ -16,8 +16,8 @@ MONITOR_TEXT_DEFAULTS = {
     "connection_status_title": "وضعیت هاست‌ها از دید سرور ربات",
     "connection_status_empty": "هنوز هاستی برای نمایش به کاربران انتخاب نشده است.",
     "connection_status_error": "دریافت وضعیت اکنون ممکن نیست؛ کمی بعد دوباره تلاش کنید.",
-    "btn_connection_status_admin": "📡 تست و وضعیت اتصال",
-    "connection_status_admin_title": "📡 تست و وضعیت اتصال",
+    "btn_connection_status_admin": "📡 وضعیت اتصال",
+    "connection_status_admin_title": "📡 وضعیت اتصال",
     "connection_status_account_prompt": "فقط نام کاربری یک کاربر تست موجود در پاسارگارد را بفرستید؛ مثلاً MattDev. این کاربر باید جدا از سرویس مشتری باشد. لینک، توکن یا رمز عبور نفرستید.",
     "connection_status_name_prompt": "این کانفیگ با چه اسمی به کاربران نمایش داده شود؟ حداکثر ۶۴ حرف وارد کنید.",
     "connection_status_order_prompt": "ترتیب نمایش این کانفیگ را با عدد وارد کنید؛ عدد کوچک‌تر بالاتر نمایش داده می‌شود. از صفر شروع کنید.",
@@ -50,8 +50,8 @@ REASON_LABELS = {
 LEGACY_MONITOR_TEXTS = {
     "btn_connection_status": "📡 وضعیت از دید سرور",
     "connection_status_empty": "هنوز موردی برای نمایش عمومی منتشر نشده است.",
-    "btn_connection_status_admin": "📡 مدیریت وضعیت اتصال",
-    "connection_status_admin_title": "📡 وضعیت اتصال هاست‌ها",
+    "btn_connection_status_admin": "📡 تست و وضعیت اتصال",
+    "connection_status_admin_title": "📡 تست و وضعیت اتصال",
     "connection_status_account_prompt": "نام کاربری حساب موجود و اختصاصی پایش در پنل را بفرستید. از حساب مشتری استفاده نکنید.",
     "connection_status_name_prompt": "نام عمومی این هاست را وارد کنید؛ حداکثر ۶۴ نویسه.",
     "connection_status_order_prompt": "ترتیب نمایش را به صورت عدد صحیح از صفر وارد کنید.",
@@ -60,6 +60,12 @@ LEGACY_MONITOR_TEXTS = {
 # Defaults shipped in 0.4.6/0.4.7 that mixed Latin terms into Persian copy.
 LATIN_MIXED_MONITOR_TEXTS = {
     "connection_status_account_prompt": "فقط username یک Test user موجود در PasarGuard را بفرستید؛ مثلاً MattDev. این user باید جدا از سرویس مشتری باشد. لینک، token یا password نفرستید.",
+}
+
+# Admin labels from before 0.4.8; kept so untouched older defaults are refreshed and still match the button.
+OLDER_ADMIN_LABELS = {
+    "btn_connection_status_admin": "📡 مدیریت وضعیت اتصال",
+    "connection_status_admin_title": "📡 وضعیت اتصال هاست‌ها",
 }
 
 LEGACY_HOST_PROMPTS = {
@@ -72,7 +78,7 @@ def readable_monitor_texts(settings: dict[str, str]) -> dict[str, str]:
     """Refresh untouched old defaults while retaining every custom label and menu order."""
     for previous_texts in (LEGACY_MONITOR_TEXTS, LEGACY_HOST_PROMPTS):
         for key, previous in previous_texts.items():
-            outdated = {previous, LATIN_MIXED_MONITOR_TEXTS.get(key, previous)}
+            outdated = {previous, LATIN_MIXED_MONITOR_TEXTS.get(key, previous), OLDER_ADMIN_LABELS.get(key, previous)}
             if settings.get(key) in outdated:
                 settings[key] = MONITOR_TEXT_DEFAULTS[key]
     return settings

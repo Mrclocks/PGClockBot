@@ -17,7 +17,7 @@ from app.services.connection_monitor_access import MONITOR_ACCESS_DENIED, Monito
 from app.services.connection_monitor_admin import MonitorConfigPage
 from app.services.connection_monitor_views import MonitorAdminPage, MonitorTargetView
 from app.services.connection_status_texts import (
-    LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS, REASON_LABELS, STATUS_LABELS as STATUS_LABELS, connection_check_time,
+    LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS, OLDER_ADMIN_LABELS, REASON_LABELS, STATUS_LABELS as STATUS_LABELS, connection_check_time,
 )
 from app.services.formatting import format_number
 from app.services.org_principals import attach_org_principal_fields
@@ -37,7 +37,7 @@ class MonitorAdminLabel(BaseFilter):
         label = ui["btn_connection_status_admin"].strip()
         accepted = {label}
         if label == MONITOR_TEXT_DEFAULTS["btn_connection_status_admin"]:
-            accepted.add(LEGACY_MONITOR_TEXTS["btn_connection_status_admin"])
+            accepted.update((LEGACY_MONITOR_TEXTS["btn_connection_status_admin"], OLDER_ADMIN_LABELS["btn_connection_status_admin"]))
         return message.text.strip() in accepted
 
 

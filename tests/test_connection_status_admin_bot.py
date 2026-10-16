@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
+import unittest
 from unittest.mock import AsyncMock, patch
 
 from aiogram.fsm.context import FSMContext
@@ -198,3 +199,32 @@ class MonitorAdminBotTests(MonitorDatabaseCase):
                         await admin.monitor_admin_entry(self.message, session, self.user, self.state)
                     show.assert_not_called()
                     self.assertIn("دسترسی", answer.call_args.args[0])
+
+
+class MonitorCancelAndLabelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancel_from_prompt_edits_the_prompt_back_into_the_menu(self) -> None:
+        from app.bot.connection_status_admin_ui import reopen_monitor_home
+
+        prompt = SimpleNamespace(from_user=SimpleNamespace(is_bot=True))
+        state = AsyncMock()
+        with patch("app.bot.connection_status_admin_ui.bot_monitor_access", AsyncMock()), \
+             patch("app.bot.connection_status_admin_ui.show_monitor_home", AsyncMock()) as show:
+            await reopen_monitor_home(prompt, AsyncMock(), SimpleNamespace(), state)
+        self.assertTrue(show.call_args.kwargs["edit"])
+
+    async def test_typed_cancel_sends_a_fresh_menu(self) -> None:
+        from app.bot.connection_status_admin_ui import reopen_monitor_home
+
+        typed = SimpleNamespace(from_user=SimpleNamespace(is_bot=False))
+        with patch("app.bot.connection_status_admin_ui.bot_monitor_access", AsyncMock()), \
+             patch("app.bot.connection_status_admin_ui.show_monitor_home", AsyncMock()) as show:
+            await reopen_monitor_home(typed, AsyncMock(), SimpleNamespace(), AsyncMock())
+        self.assertFalse(show.call_args.kwargs["edit"])
+
+    def test_admin_entry_is_named_connection_status_and_earlier_names_are_refreshed(self) -> None:
+        from app.services.connection_status_texts import readable_monitor_texts
+
+        self.assertEqual(MONITOR_TEXT_DEFAULTS["btn_connection_status_admin"], "📡 وضعیت اتصال")
+        for old in ("📡 تست و وضعیت اتصال", "📡 مدیریت وضعیت اتصال"):
+            refreshed = readable_monitor_texts({"btn_connection_status_admin": old})
+            self.assertEqual(refreshed["btn_connection_status_admin"], "📡 وضعیت اتصال")
