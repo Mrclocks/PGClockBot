@@ -83,4 +83,5 @@ async def _tell_customer(session: AsyncSession, result: Resolution) -> None:
     await notify_payer(
         session, result.user_id, title=REFUND_NOTICE_TITLE,
         body=f"سفارش #{result.order_id} به‌دلیل انجام‌نشدن تحویل لغو شد و {result.refunded:,} به کیف پول شما برگشت.",
+        shop_id=result.shop_id,
     )

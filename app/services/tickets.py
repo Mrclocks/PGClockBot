@@ -114,6 +114,7 @@ async def list_open_tickets(
     elif reseller_id is not None:
         q = select(Ticket).where(base, ticket_shop_clause(reseller_id))
     else:
-        q = select(Ticket).where(base)
+        # No scope given means the platform's own tickets, never every shop's.
+        q = select(Ticket).where(base, ticket_shop_clause(None))
     result = await session.execute(q.order_by(Ticket.id.desc()).limit(limit))
     return list(result.scalars().all())

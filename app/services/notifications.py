@@ -353,7 +353,8 @@ async def _resolve_shop_reseller_id(
         return int(order.reseller_id)
     if payment is not None:
         if payment.is_wallet_topup:
-            return None
+            # A top-up belongs to the wallet's shop (None = the platform's wallet).
+            return int(payment.wallet_shop_id) if payment.wallet_shop_id else None
         if payment.order_id:
             ord_row = await session.get(Order, payment.order_id)
             if ord_row and ord_row.reseller_id:
@@ -716,7 +717,7 @@ async def notify_pending_approval(
     text = format_message("⏳ نیاز به تأیید", info_block(lines) + "\n\n" + tail)
     # Always payrev so shop staff can act on their own bot; ordrev is platform-only.
     markup = _approval_markup(payment_id=payment.id)
-    # Wallet top-ups are platform-only; shop prefs never apply.
+    # A shop's wallet top-up is reviewed by that shop; only the platform's own top-ups are platform-only.
     await _dispatch_dual_notify(
         bot,
         session,
@@ -725,7 +726,7 @@ async def notify_pending_approval(
         markup=markup,
         photo=payment.receipt_file_id,
         payment=payment,
-        shop=not payment.is_wallet_topup,
+        shop=not payment.is_wallet_topup or payment.wallet_shop_id is not None,
     )
 
 
@@ -1111,7 +1112,7 @@ async def notify_auto_approve(
         "notify_auto_approve",
         text,
         payment=payment,
-        shop=not payment.is_wallet_topup,
+        shop=not payment.is_wallet_topup or payment.wallet_shop_id is not None,
     )
 
 
@@ -1175,7 +1176,7 @@ async def notify_approved_delivery_stuck(
         markup=markup,
         photo=payment.receipt_file_id,
         payment=payment,
-        shop=not payment.is_wallet_topup,
+        shop=not payment.is_wallet_topup or payment.wallet_shop_id is not None,
     )
 
 

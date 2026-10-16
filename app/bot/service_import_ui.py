@@ -8,7 +8,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.bot.keyboards import _ikb, _style, _t
 from app.services.service_import import SETTING_KEY
-from app.services.users import on
+from app.services.users import current_shop_reseller_id, on
 
 ADD_CALLBACK = "svc:add"
 ADD_BUTTON_LABEL = "🔗 اتصال اشتراک قبلی"
@@ -38,4 +38,5 @@ async def announce_new_request(message, session, user, result) -> None:
     await notify_service_import_request(
         message.bot, session, user=user,
         panel_username=str(result.info.get("username") or ""), request_id=result.request_id,
+        shop_id=current_shop_reseller_id(),
     )

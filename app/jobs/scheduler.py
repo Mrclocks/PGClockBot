@@ -34,20 +34,17 @@ def _resolve_send_bot(
     main_bot: Bot,
     reseller_user_id: int | None,
     profile_by_user: dict[int, int],
-) -> Bot:
-    """Prefer the shop's dedicated bot when alerting that shop's customers."""
+) -> Bot | None:
+    """The bot that may alert this shop's customers: the platform bot, or the shop's own (None if it has none)."""
     if not reseller_user_id:
         return main_bot
     from app.services.reseller_bots import get_reseller_bot_manager
 
     mgr = get_reseller_bot_manager()
-    if not mgr:
-        return main_bot
-    pid = profile_by_user.get(int(reseller_user_id))
-    if pid is None:
-        return main_bot
-    shop_bot = mgr.bot_for_profile_id(int(pid))
-    return shop_bot or main_bot
+    pid = profile_by_user.get(int(reseller_user_id)) if mgr else None
+    if mgr is None or pid is None:
+        return None
+    return mgr.bot_for_profile_id(int(pid))
 
 
 async def check_expiring_services(bot: Bot) -> None:
@@ -185,6 +182,8 @@ async def check_expiring_services(bot: Bot) -> None:
                 if cached_info.get("status") and "expire" in cached_info:
                     sync_service_quota_cache(svc, info=cached_info)
                 send_bot = _resolve_send_bot(bot, shop_rid, profile_by_user)
+                if send_bot is None:
+                    continue  # the shop's own bot is not running: never alert its customers from the platform bot
 
                 # --- remaining TIME percent ---
                 if not svc.notified_expire:

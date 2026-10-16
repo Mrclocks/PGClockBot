@@ -192,3 +192,4 @@ tests/test_shop_points_migration.py
 tests/test_shop_isolation_remaining.py
 tests/test_shop_isolation_review_fixes.py
 tests/test_wheel_state_per_shop.py
+tests/test_shop_isolation_audit_fixes.py

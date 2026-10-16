@@ -159,7 +159,7 @@ async def shop_ops_snapshot(
         select(func.count())
         .select_from(UserService)
         .join(BotUser, BotUser.id == UserService.bot_user_id)
-        .where(UserService.notified_traffic.is_(True), user_scope, BotUser.is_demo.is_(False))
+        .where(UserService.notified_traffic.is_(True), shop_services_clause(reseller_id), BotUser.is_demo.is_(False))
     )
     out["low_volume_services"] = int((await session.execute(low_q)).scalar() or 0)
 
@@ -190,7 +190,7 @@ async def shop_ops_snapshot(
                     Plan.duration_days.is_not(None),
                     UserService.created_at.is_not(None),
                     UserService.created_at >= scan_since,
-                    user_scope,
+                    shop_services_clause(reseller_id),
                     BotUser.is_demo.is_(False),
                 )
             )

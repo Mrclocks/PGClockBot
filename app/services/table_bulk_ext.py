@@ -139,6 +139,7 @@ async def bulk_delete_reseller_users(
     reason: str,
 ) -> tuple[int, int]:
     from app.services.notifications import actor_label_from_staff, notify_account_edit
+    from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
     from app.services.users import delete_bot_user
 
     reason = (reason or "").strip()
@@ -152,6 +153,11 @@ async def bulk_delete_reseller_users(
     for uid in ids:
         user = await session.get(BotUser, uid)
         if not user:
+            fail += 1
+            continue
+        try:
+            assert_bot_user_in_scope(staff, user)
+        except ShopScopeError:
             fail += 1
             continue
         try:

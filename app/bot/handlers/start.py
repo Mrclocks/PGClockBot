@@ -12,7 +12,7 @@ from app.bot.nav_input import delete_user_message
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
-from app.services.service_scope import customer_may_use_service, list_customer_services
+from app.services.service_scope import customer_may_use_service, list_customer_services, shop_services_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
 
@@ -20,7 +20,9 @@ router = Router(name="start")
 
 async def _has_services(session: AsyncSession, user_id: int) -> bool:
     result = await session.execute(
-        select(UserService.id).where(UserService.bot_user_id == user_id).limit(1)
+        select(UserService.id)
+        .where(UserService.bot_user_id == user_id, shop_services_clause(current_shop_reseller_id()))
+        .limit(1)
     )
     return result.scalar_one_or_none() is not None
 

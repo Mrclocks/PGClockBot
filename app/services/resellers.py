@@ -20,6 +20,7 @@ from app.db.models import (
     ResellerPlan,
     ResellerProfile,
     Role,
+    UserService,
 )
 
 logger = logging.getLogger(__name__)
@@ -2173,6 +2174,8 @@ async def revoke_reseller(
     await session.execute(
         update(Order).where(Order.reseller_id == user_id).values(reseller_id=None)
     )
+    # The services the shop sold follow its customers and orders to the platform.
+    await session.execute(update(UserService).where(UserService.shop_id == user_id).values(shop_id=None))
     from app.db.models import Ticket
 
     await session.execute(

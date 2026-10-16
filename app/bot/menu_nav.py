@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.db.models import BotUser, UserService
-from app.services.users import get_all_settings
+from app.services.service_scope import shop_services_clause
+from app.services.users import current_shop_reseller_id, get_all_settings
 
 # FSM data keys (do not collide with shop/wallet payload keys)
 NAV_LEVEL = "_kb_nav"
@@ -65,7 +66,9 @@ REVIEW_ID = "_rev_id"
 
 async def user_has_services(session: AsyncSession, user_id: int) -> bool:
     result = await session.execute(
-        select(UserService.id).where(UserService.bot_user_id == user_id).limit(1)
+        select(UserService.id)
+        .where(UserService.bot_user_id == user_id, shop_services_clause(current_shop_reseller_id()))
+        .limit(1)
     )
     return result.scalar_one_or_none() is not None
 

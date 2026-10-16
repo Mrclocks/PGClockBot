@@ -217,14 +217,19 @@ def get_reseller_bot_manager() -> ResellerBotManager | None:
 ATTRIBUTED_SHOP = object()
 
 
+class ShopBotUnavailable(ValueError):
+    """The shop a message is about has no running or configured bot of its own."""
+
+
 async def open_notify_bot_for_user(session, user, *, shop_id=ATTRIBUTED_SHOP) -> tuple[Bot, bool]:
     """Return (bot, should_close) for notifying a customer.
 
     ``shop_id`` is the shop the message is about (an order's or the acting staff's shop;
     None = platform). Without it the customer's attributed shop is used, which is wrong
     for a person who buys from several shops, so callers that know the shop pass it.
-    Prefers that shop's dedicated bot; otherwise creates a short-lived main-bot instance
-    that the caller must close.
+    A shop's message goes through that shop's bot only: when it has none, ``ShopBotUnavailable``
+    is raised instead of sending shop data through the platform token. Platform messages
+    use a short-lived main-bot instance that the caller must close.
 
     Always returns a bot with HTML parse_mode so format_message / <b> tags render.
     """
@@ -233,8 +238,9 @@ async def open_notify_bot_for_user(session, user, *, shop_id=ATTRIBUTED_SHOP) ->
     reseller_id = getattr(user, "reseller_id", None) if shop_id is ATTRIBUTED_SHOP else shop_id
     if reseller_id:
         bot, should_close = await open_notify_bot_for_reseller(session, int(reseller_id))
-        if bot is not None:
-            return bot, should_close
+        if bot is None:
+            raise ShopBotUnavailable("ربات این فروشگاه برای ارسال پیام در دسترس نیست")
+        return bot, should_close
     return create_bot(), True
 
 

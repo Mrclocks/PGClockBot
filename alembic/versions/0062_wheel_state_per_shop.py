@@ -34,14 +34,24 @@ def _unique_names(inspector: sa.Inspector) -> set[str]:
     return {u["name"] for u in inspector.get_unique_constraints(TABLE) if u.get("name")}
 
 
+def _per_user_unique_names(inspector: sa.Inspector) -> list[str]:
+    """Named unique constraints on exactly (user_id), whatever created them (the 0023 name or a database default)."""
+    return [
+        u["name"] for u in inspector.get_unique_constraints(TABLE)
+        if u.get("name") and list(u.get("column_names") or []) == ["user_id"]
+    ]
+
+
 def upgrade() -> None:
     connection = op.get_bind()
     inspector = sa.inspect(connection)
     if not inspector.has_table(TABLE):
         return
-    if OLD_UNIQUE in _unique_names(inspector):
+    stale = _per_user_unique_names(inspector)
+    if stale:
         with op.batch_alter_table(TABLE) as batch:
-            batch.drop_constraint(OLD_UNIQUE, type_="unique")
+            for name in stale:
+                batch.drop_constraint(name, type_="unique")
     indexes = {i["name"] for i in sa.inspect(connection).get_indexes(TABLE)}
     if SHOP_UNIQUE not in indexes:
         op.create_index(

@@ -182,7 +182,7 @@ async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
             select(
                 select(func.count()).select_from(BotUser).where(BotUser.is_demo.is_(False)).scalar_subquery(),
                 orders_expr,
-                select(func.count()).select_from(UserService).where(non_demo_customer(UserService.bot_user_id)).scalar_subquery(),
+                select(func.count()).select_from(UserService).where(shop_services_clause(None), non_demo_customer(UserService.bot_user_id)).scalar_subquery(),
                 pending_expr,
                 revenue_expr,
                 tickets_expr,
@@ -604,7 +604,7 @@ async def admin_customer_counts(session: AsyncSession) -> dict[str, int]:
     row = (await session.execute(select(
         users.scalar_subquery(),
         users.where(BotUser.is_blocked.is_(True)).scalar_subquery(),
-        select(func.count()).select_from(Order).where(non_demo_customer(Order.user_id)).scalar_subquery(),
+        select(func.count()).select_from(Order).where(Order.reseller_id.is_(None), non_demo_customer(Order.user_id)).scalar_subquery(),
     ))).one()
     return {"users": int(row[0]), "blocked": int(row[1]), "orders": int(row[2])}
 
