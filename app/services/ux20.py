@@ -28,6 +28,7 @@ from app.db.models import (
     Ticket,
     UserService,
 )
+from app.services.connection_guides import serialize_submitted_guides
 from app.services.demo_users import non_demo_customer
 from app.services.pasarguard import is_pg_permission_denied
 from app.services.pg_read_resilience import PG_READ_UNAVAILABLE_MESSAGE, PgReadUnavailable
@@ -1107,6 +1108,11 @@ async def import_shop_bundle(
         for k, v in settings.items()
         if str(k) in DEFAULT_SETTINGS and str(k) in allowed_keys
     }
+    if "connection_guides" in clean:
+        # Media files live on the exporting server; an import keeps only this shop's own media.
+        clean["connection_guides"] = await serialize_submitted_guides(
+            session, clean["connection_guides"], reseller_id=reseller_id
+        )
     if clean:
         await set_settings_bulk(session, clean, reseller_id=reseller_id)
     plans_in = payload.get("plans") or []

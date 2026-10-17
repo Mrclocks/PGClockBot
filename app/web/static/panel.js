@@ -3286,6 +3286,20 @@
         html += '</select></div></div>';
         return html;
       }
+      const GUIDE_LINK_SLOTS = 3;
+      function linksHtml(links) {
+        const list = Array.isArray(links) ? links : [];
+        let html = '<fieldset class="full guides-links"><legend>لینک ویدیو (یوتیوب یا تلگرام، اختیاری)</legend>';
+        for (let i = 0; i < GUIDE_LINK_SLOTS; i++) {
+          const link = list[i] || {};
+          html +=
+            '<div class="guides-link-row">' +
+              '<label>متن دکمه<input type="text" class="guides-link-label" maxlength="48" value="' + esc(link.label) + '" placeholder="▶️ دیدن ویدیو" autocomplete="off" /></label>' +
+              '<label>لینک<input type="url" class="guides-link-url" dir="ltr" maxlength="512" value="' + esc(link.url) + '" placeholder="https://youtu.be/…" autocomplete="off" /></label>' +
+            '</div>';
+        }
+        return html + '</fieldset>';
+      }
       function rowHtml(item) {
         const id = (item && item.id) || uid();
         const enabled = !item || item.enabled === undefined || item.enabled === null
@@ -3319,6 +3333,8 @@
               '</label>' +
               styleSelectHtml(style) +
               '<label class="full">متن آموزش<textarea class="guides-body" rows="4" maxlength="4000" placeholder="مراحل اتصال…">' + esc(item && (item.body || item.text)) + '</textarea></label>' +
+              linksHtml(item && item.links) +
+              '<div class="full guides-media" data-guides-media-slot></div>' +
             '</div>' +
             '<button type="button" class="btn btn-danger btn-sm guides-remove pay-dest-remove-btn">حذف</button>' +
           '</div>'
@@ -3347,6 +3363,12 @@
           const dl = row.querySelector('.guides-deeplink');
           const aud = row.querySelector('.guides-audience');
           const styleSel = row.querySelector('.guides-style');
+          const links = [];
+          row.querySelectorAll('.guides-link-row').forEach((linkRow) => {
+            const url = String((linkRow.querySelector('.guides-link-url') || {}).value || '').trim();
+            const label = String((linkRow.querySelector('.guides-link-label') || {}).value || '').trim();
+            if (url) links.push({ label: label, url: url });
+          });
           entries.push({
             id: rowId,
             title: title,
@@ -3356,6 +3378,7 @@
             enabled: !!(en && en.checked),
             deep_link: !!(dl && dl.checked),
             style: styleSel ? styleSel.value : 'primary',
+            links: links,
           });
         });
         hidden.value = JSON.stringify(entries);
@@ -3366,6 +3389,7 @@
         const rows = (items && items.length ? items : [{}]).map((item) => rowHtml(item)).join('');
         list.innerHTML = rows + addBtnHtml();
         sync(root);
+        root.dispatchEvent(new CustomEvent('guides-rendered'));
       }
       document.querySelectorAll('[data-guides-editor]').forEach((root) => {
         const hidden = root.querySelector('[data-guides-json]');
@@ -3379,6 +3403,7 @@
             if (add) add.insertAdjacentHTML('beforebegin', html);
             else if (list) list.insertAdjacentHTML('afterbegin', html);
             sync(root);
+            root.dispatchEvent(new CustomEvent('guides-rendered'));
             return;
           }
           if (e.target.closest('.guides-remove')) {

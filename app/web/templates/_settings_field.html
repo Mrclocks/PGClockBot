@@ -72,7 +72,8 @@
     <div class="force-channels-list" data-force-channels-list></div>
   </div>
   {% elif kind == 'connection_guides' %}
-  <div class="pay-dest-list guides-editor" data-guides-editor>
+  <div class="pay-dest-list guides-editor" data-guides-editor
+       {% if guides_media_base %}data-guides-media-base="{{ guides_media_base }}" data-guides-media='{{ (guides_media or {})|tojson }}'{% endif %}>
     <div class="pay-dest-head">
       <strong class="pay-dest-title">{{ label }}</strong>
       {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
@@ -80,6 +81,7 @@
     <input type="hidden" name="s_{{ key }}" value="{{ val }}" data-guides-json />
     <div class="pay-dest-rows" data-guides-list></div>
   </div>
+  {% if guides_media_base %}<script src="/static/guide-media.js?v={{ app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>{% endif %}
   {% elif kind == 'payment_cards' %}
   <div class="pay-dest-list" data-pay-dest="cards" data-style-inherit-label="ارث از کارت به کارت">
     <div class="pay-dest-head">

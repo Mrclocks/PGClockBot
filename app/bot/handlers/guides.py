@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
-from aiogram import F, Router
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+import logging
+
+from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramAPIError
+from aiogram.types import (
+    CallbackQuery,
+    FSInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+    InputMediaVideo,
+    Message,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.nav_input import delete_user_message
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, UserService
 from app.services.connection_guides import (
@@ -15,9 +27,11 @@ from app.services.connection_guides import (
     guides_for_audience,
 )
 from app.services.formatting import format_message
+from app.services.guide_media import KIND_VIDEO, MediaToSend, load_file_id_cache, media_to_send, remember_file_ids
 from app.services.service_scope import customer_may_use_service
 from app.services.users import current_shop_reseller_id, get_all_settings
 
+logger = logging.getLogger(__name__)
 router = Router(name="guides")
 
 
@@ -71,6 +85,7 @@ def guide_detail_keyboard(
         if url:
             label = kb._label_or(ui, "btn_guide_open_link", "🔗 باز کردن لینک اشتراک").strip()[:64]
             rows.append([kb._ikb(label, url=url, ui=ui, label_key="btn_guide_open_link")])
+    rows.extend([InlineKeyboardButton(text=link["label"][:64], url=link["url"])] for link in guide.get("links") or [])
     back = f"guide:list:{int(svc_id or 0)}"
     rows.append([kb.back_button(ui, back)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -173,10 +188,53 @@ async def guide_open_cb(
     body = (guide.get("body") or "").strip() or "—"
     title = str(guide.get("title") or "آموزش")
     await callback.answer()
-    if callback.message:
-        await safe_edit_text(
-            callback.message,
-            format_message(f"📘 {title}", body),
-            reply_markup=guide_detail_keyboard(guide, ui, svc_id=svc_id, sub_url=sub_url),
-        )
+    if not callback.message:
+        return
+    text = format_message(f"📘 {title}", body)
+    markup = guide_detail_keyboard(guide, ui, svc_id=svc_id, sub_url=sub_url)
+    rid = current_shop_reseller_id()
+    cache = await load_file_id_cache(session, reseller_id=rid)
+    album = media_to_send(guide, bot_id=callback.bot.id, cache=cache, reseller_id=rid)
+    if not album:
+        await safe_edit_text(callback.message, text, reply_markup=markup)
+        return
+    learned = await send_guide_album(callback.bot, callback.message.chat.id, album)
+    await callback.message.answer(text, reply_markup=markup)
+    await delete_user_message(callback.message)
+    if learned:
+        live = {m["id"] for g in items for m in g.get("media") or []}
+        await remember_file_ids(session, learned, bot_id=callback.bot.id, live_media_ids=live, reseller_id=rid)
+
+
+def _album_item(item: MediaToSend) -> InputMediaPhoto | InputMediaVideo:
+    source = item.file_id or FSInputFile(item.path)
+    return InputMediaVideo(media=source) if item.kind == KIND_VIDEO else InputMediaPhoto(media=source)
+
+
+def _sent_file_id(message: Message) -> str | None:
+    if message.video:
+        return message.video.file_id
+    return message.photo[-1].file_id if message.photo else None
+
+
+async def send_guide_album(bot: Bot, chat_id: int, album: list[MediaToSend]) -> dict[str, str]:
+    """Send the guide's photos and videos; returns the file ids learned for uploaded files."""
+    try:
+        if len(album) == 1:
+            item = album[0]
+            source = item.file_id or FSInputFile(item.path)
+            sent = [
+                await (bot.send_video(chat_id, video=source) if item.kind == KIND_VIDEO else bot.send_photo(chat_id, photo=source))
+            ]
+        else:
+            sent = await bot.send_media_group(chat_id, media=[_album_item(item) for item in album])
+    except TelegramAPIError:
+        logger.warning("guide album send failed chat_id=%s items=%s", chat_id, len(album), exc_info=True)
+        return {}
+    learned = {}
+    for item, message in zip(album, sent, strict=False):
+        file_id = _sent_file_id(message)
+        if item.path is not None and file_id:
+            learned[item.media_id] = file_id
+    return learned
 
