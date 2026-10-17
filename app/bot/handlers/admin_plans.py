@@ -267,7 +267,7 @@ async def send_users_plans_overview(
         "👥 <b>پلن‌های کاربران</b>\n"
         "━━━━━━━━━━━━\n"
         f"پلن‌های ثابت: <b>{len(fixed)}</b>\n"
-        "روی هر پلن بزنید تا ویرایش/حذف — یا «افزودن پلن» را بزنید."
+        "برای ویرایش یا حذف، روی پلن بزنید. برای پلن تازه «افزودن پلن» را بزنید."
     )
     await present_nav_panel(
         message,
@@ -301,7 +301,7 @@ async def send_resellers_plans_overview(
         "🤝 <b>پلن‌های نمایندگان</b>\n"
         "━━━━━━━━━━━━\n"
         f"اشتراک ثابت: <b>{len(fixed)}</b> · PAYG: <b>{len(payg)}</b> · بسته: <b>{len(addons)}</b>\n"
-        "روی هر پلن بزنید — یا «افزودن پلن» را بزنید."
+        "برای ویرایش، روی پلن بزنید. برای پلن تازه «افزودن پلن» را بزنید."
     )
     await present_nav_panel(
         message,
@@ -1105,7 +1105,7 @@ async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotU
     await ask_text(
         callback,
         state,
-        prompt="حجم گیگ (۰ = نامحدود):",
+        prompt="حجم را به گیگابایت بفرستید. برای نامحدود <code>0</code> بفرستید:",
         cancel_code="adm_pln",
         fsm_state=AdminPlansStates.trial_gb,
         edit=True,
@@ -1268,7 +1268,7 @@ async def trial_grp_done_plans(
         return
     selected = [int(x) for x in ((await state.get_data()).get("trial_groups") or [])]
     if not selected:
-        await callback.answer("حداقل یک گروه", show_alert=True)
+        await callback.answer("دست‌کم یک گروه انتخاب کنید", show_alert=True)
         return
     trial = await _ensure_trial(session)
     trial.pg_group_ids = ",".join(str(x) for x in selected)
@@ -1474,7 +1474,7 @@ async def custom_grp_done(
         return
     selected = [int(x) for x in ((await state.get_data()).get("custom_selected_groups") or [])]
     if not selected:
-        await callback.answer("حداقل یک گروه", show_alert=True)
+        await callback.answer("دست‌کم یک گروه انتخاب کنید", show_alert=True)
         return
     await set_setting(session, "custom_plan_group_ids", ",".join(str(x) for x in selected))
     await set_setting(session, "custom_plan_template_id", "")
@@ -2259,7 +2259,7 @@ async def resplan_addon_amount(
     plan_kind = str(data.get("res_plan_kind") or "")
     price = int(data.get("res_plan_price") or 0)
     if price <= 0:
-        await message.answer("قیمت بسته باید بیشتر از صفر باشد — از اول نام را بفرستید.")
+        await message.answer("قیمت بسته باید بیشتر از صفر باشد. از اول شروع کنید و نام بسته را بفرستید.")
         await state.set_state(AdminPlansStates.res_plan_name)
         return
     addon_gb = amount if plan_kind == "addon_volume" else 0
@@ -2426,7 +2426,7 @@ async def _show_resplan_role_picker(
         )
     if not rows:
         rows.append(
-            [InlineKeyboardButton(text="نقشی لود نشد — از پاسارگارد نقش بسازید", callback_data="adm:plans:aud:resellers")]
+            [InlineKeyboardButton(text="نقشی پیدا نشد؛ اول در پاسارگارد نقش بسازید", callback_data="adm:plans:aud:resellers")]
         )
     back = (
         f"adm:resplan:view:{edit_plan_id}"
@@ -2582,7 +2582,7 @@ async def resplan_add_color(
             )
             saved_label = "PAYG" if mode == "payg" else "ثابت"
     except Exception:
-        await callback.answer("ذخیره ناموفق بود", show_alert=True)
+        await callback.answer("ذخیره انجام نشد. دوباره تلاش کنید.", show_alert=True)
         return
     await state.set_state(None)
     await callback.answer(feedback.SAVED)

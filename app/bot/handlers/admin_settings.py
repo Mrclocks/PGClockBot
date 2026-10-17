@@ -1663,7 +1663,7 @@ async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotU
     await ask_text(
         callback,
         state,
-        prompt="حجم به گیگ (۰ = نامحدود):",
+        prompt="حجم را به گیگابایت بفرستید. برای نامحدود <code>0</code> بفرستید:",
         cancel_code="adm_set",
         fsm_state=SettingsStates.trial_gb,
         edit=True,
@@ -1839,7 +1839,7 @@ async def trial_grp_done(
         return
     selected = [int(x) for x in ((await state.get_data()).get("trial_groups") or [])]
     if not selected:
-        await callback.answer("حداقل یک گروه", show_alert=True)
+        await callback.answer("دست‌کم یک گروه انتخاب کنید", show_alert=True)
         return
     trial = await _ensure_trial(session)
     trial.pg_group_ids = ",".join(str(x) for x in selected)

@@ -118,7 +118,7 @@ BTN_STORE_EXTRA: list[Field] = [
 BTN_ADMIN_HUBS: list[Field] = [
     ("btn_adm_hub_ops", "گروه عملیات روزانه", "text"),
     ("btn_adm_hub_people", "گروه افراد", "text"),
-    ("btn_adm_hub_product", "گروه محصول و PG", "text"),
+    ("btn_adm_hub_product", "گروه محصول و پاسارگارد", "text"),
     ("btn_adm_hub_marketing", "گروه بازاریابی", "text"),
     ("btn_adm_hub_system", "گروه سیستم", "text"),
     ("btn_adm_edit_mode", "حالت ویرایش منوها", "text"),
@@ -126,7 +126,7 @@ BTN_ADMIN_HUBS: list[Field] = [
 
 BTN_ADMIN_HUB_ITEMS: list[Field] = [
     ("btn_adm_dash", "داشبورد", "text"),
-    ("btn_adm_reports", "گزارشات", "text"),
+    ("btn_adm_reports", "گزارش‌ها", "text"),
     ("btn_adm_resellers", "نمایندگان", "text"),
     ("btn_adm_loyalty", "باشگاه (ادمین)", "text"),
     ("btn_adm_backup", "بکاپ / ریستور", "text"),
@@ -181,7 +181,7 @@ BTN_ADMIN_PLANS_SUB: list[Field] = [
     ("btn_adm_plans_aud_resellers", "پلن‌های نمایندگان", "text"),
     ("btn_adm_plans_add", "افزودن پلن", "text"),
     ("btn_adm_plans_categories", "برچسب دسته", "text"),
-    ("btn_adm_plans_addons", "بسته حجم/زمان", "text"),
+    ("btn_adm_plans_addons", "بسته حجم و زمان", "text"),
     ("btn_adm_plans_view", "مشاهده پلن‌ها", "text"),
 ]
 

@@ -23,6 +23,7 @@
     "📡 تست و وضعیت اتصال": "connection_status_admin",
     "📡 وضعیت اتصال": "connection_status_admin",
     "📦 محصول و PG": "adm_hub_product",
+    "📦 محصول و پاسارگارد": "adm_hub_product",
     "🗓 عملیات روزانه": "adm_hub_ops",
     "🛠 سیستم": "adm_hub_system"
   },
@@ -56,6 +57,7 @@
     "🎫 تیکت‌ها": "adm_tickets",
     "🏠 منوی اصلی": "home",
     "📈 گزارشات": "adm_reports",
+    "📈 گزارش‌ها": "adm_reports",
     "📊 داشبورد": "adm_dash",
     "🛒 سفارش‌ها": "adm_orders",
     "🧾 رسیدها": "adm_payments"
@@ -94,6 +96,7 @@
     "📦 فروش عمده": "adm_plans_kind_users_wholesale"
   },
   "admin.plans_audience": {
+    "⏱ بسته حجم و زمان": "adm_plans_addons",
     "⏱ بسته حجم/زمان": "adm_plans_addons",
     "⬅️ بازگشت": "back",
     "🏠 منوی اصلی": "home",
@@ -102,6 +105,7 @@
     "🤝 پلن‌های نمایندگان": "adm_plans_aud_resellers"
   },
   "admin.plans_kind_resellers": {
+    "⏱ بسته حجم و زمان": "adm_plans_addons",
     "⏱ بسته حجم/زمان": "adm_plans_addons",
     "➕ افزودن پلن": "adm_plans_add",
     "⬅️ بازگشت": "back",
@@ -109,6 +113,7 @@
     "🏷 برچسب دسته": "adm_plans_categories"
   },
   "admin.plans_kind_users": {
+    "⏱ بسته حجم و زمان": "adm_plans_addons",
     "⏱ بسته حجم/زمان": "adm_plans_addons",
     "➕ افزودن پلن": "adm_plans_add",
     "⬅️ بازگشت": "back",
@@ -132,8 +137,10 @@
   },
   "admin.resellers": {
     "➕ افزودن دستی": "adm_res_add",
+    "➕ افزودن نماینده": "adm_res_add",
     "⬅️ بازگشت": "back",
     "🏠 منوی اصلی": "home",
+    "📋 درخواست‌های در انتظار": "adm_res_apps",
     "📋 درخواست‌های منتظر": "adm_res_apps",
     "📋 لیست نمایندگان": "adm_res_list"
   },

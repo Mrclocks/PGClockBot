@@ -69,7 +69,7 @@ class KeyboardMenu357Tests(unittest.TestCase):
         flat = [b.text for row in admin_reply_keyboard(ui).keyboard for b in row]
         self.assertIn("🗓 عملیات روزانه", flat)
         self.assertIn("👤 افراد", flat)
-        self.assertIn("📦 محصول و PG", flat)
+        self.assertIn("📦 محصول و پاسارگارد", flat)
         self.assertIn("🛠 سیستم", flat)
         self.assertNotIn("👥 کاربران", flat)
         self.assertNotIn("⚙️ تنظیمات", flat)

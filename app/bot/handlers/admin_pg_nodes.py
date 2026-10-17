@@ -753,7 +753,7 @@ async def pg_node_create_port(
         try:
             data["port"] = parse_bot_int(raw)
         except ValueError:
-            await message.answer("پورت نامعتبر — عدد بفرستید یا «-».")
+            await message.answer("پورت را با عدد بفرستید، یا برای رد کردن «-» بفرستید.")
             return
     await state.update_data(node_create=data)
     await state.set_state(None)
@@ -968,7 +968,7 @@ async def pg_node_create_server_ca(
     address = str(data.get("address") or "").strip()
     if not name or not address:
         await state.set_state(None)
-        await message.answer("اطلاعات ناقص — از ابتدا شروع کنید.", reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()))
+        await message.answer("اطلاعات این مرحله کامل نیست. از ابتدا شروع کنید.", reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()))
         return
     payload: dict = {
         "name": name,

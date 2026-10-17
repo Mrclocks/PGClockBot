@@ -813,7 +813,7 @@ def admin_product_reply_keyboard(
         ui,
         footer_row=_submenu_footer(ui),
     )
-    return _reply_markup(rows, placeholder="محصول و PG…")
+    return _reply_markup(rows, placeholder="محصول و پاسارگارد…")
 
 
 def admin_marketing_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
@@ -910,7 +910,7 @@ def pg_reply_keyboard(
 
 def admin_users_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
     rows = _pack_reply_rows(_admin_users_submenu_entries(ui), ui, footer_row=_submenu_footer(ui))
-    return _reply_markup(rows, placeholder="کاربران بات…")
+    return _reply_markup(rows, placeholder="کاربران ربات…")
 
 
 def admin_resellers_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:

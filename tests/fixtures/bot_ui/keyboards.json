@@ -81,7 +81,7 @@
         {
           "callback_data": "nv:adm:product",
           "style": "success",
-          "text": "📦 محصول و PG"
+          "text": "📦 محصول و پاسارگارد"
         },
         {
           "callback_data": "nv:adm:marketing",
@@ -150,7 +150,7 @@
         {
           "callback_data": "nv:adm:product",
           "style": "success",
-          "text": "📦 محصول و PG"
+          "text": "📦 محصول و پاسارگارد"
         },
         {
           "callback_data": "nv:adm:marketing",
@@ -307,7 +307,7 @@
         {
           "callback_data": "adm:reports:week",
           "style": "success",
-          "text": "📈 گزارشات"
+          "text": "📈 گزارش‌ها"
         }
       ],
       [
@@ -566,7 +566,7 @@
         {
           "callback_data": "nv:adm:ra:adm_plans_addons",
           "style": "primary",
-          "text": "⏱ بسته حجم/زمان"
+          "text": "⏱ بسته حجم و زمان"
         }
       ],
       [
@@ -600,7 +600,7 @@
         {
           "callback_data": "nv:adm:ra:adm_plans_addons",
           "style": "primary",
-          "text": "⏱ بسته حجم/زمان"
+          "text": "⏱ بسته حجم و زمان"
         }
       ],
       [
@@ -634,7 +634,7 @@
         {
           "callback_data": "nv:adm:ra:adm_plans_addons",
           "style": "primary",
-          "text": "⏱ بسته حجم/زمان"
+          "text": "⏱ بسته حجم و زمان"
         }
       ],
       [
@@ -678,14 +678,14 @@
         },
         {
           "callback_data": "adm:resapp:list",
-          "text": "📋 درخواست‌های منتظر"
+          "text": "📋 درخواست‌های در انتظار"
         }
       ],
       [
         {
           "callback_data": "adm:resellers:add",
           "style": "primary",
-          "text": "➕ افزودن دستی"
+          "text": "➕ افزودن نماینده"
         }
       ],
       [
@@ -3232,7 +3232,7 @@
       [
         {
           "style": "success",
-          "text": "📦 محصول و PG"
+          "text": "📦 محصول و پاسارگارد"
         },
         {
           "style": "success",
@@ -3379,7 +3379,7 @@
         },
         {
           "style": "success",
-          "text": "📈 گزارشات"
+          "text": "📈 گزارش‌ها"
         }
       ],
       [
@@ -3649,7 +3649,7 @@
         },
         {
           "style": "primary",
-          "text": "⏱ بسته حجم/زمان"
+          "text": "⏱ بسته حجم و زمان"
         }
       ],
       [
@@ -3681,7 +3681,7 @@
       [
         {
           "style": "primary",
-          "text": "⏱ بسته حجم/زمان"
+          "text": "⏱ بسته حجم و زمان"
         }
       ],
       [
@@ -3713,7 +3713,7 @@
       [
         {
           "style": "primary",
-          "text": "⏱ بسته حجم/زمان"
+          "text": "⏱ بسته حجم و زمان"
         }
       ],
       [
@@ -3730,7 +3730,7 @@
     "resize_keyboard": true
   },
   "reply.admin.product": {
-    "input_field_placeholder": "محصول و PG…",
+    "input_field_placeholder": "محصول و پاسارگارد…",
     "is_persistent": false,
     "keyboard": [
       [
@@ -3765,13 +3765,13 @@
           "text": "📋 لیست نمایندگان"
         },
         {
-          "text": "📋 درخواست‌های منتظر"
+          "text": "📋 درخواست‌های در انتظار"
         }
       ],
       [
         {
           "style": "primary",
-          "text": "➕ افزودن دستی"
+          "text": "➕ افزودن نماینده"
         }
       ],
       [
@@ -3873,7 +3873,7 @@
     "resize_keyboard": true
   },
   "reply.admin.users": {
-    "input_field_placeholder": "کاربران بات…",
+    "input_field_placeholder": "کاربران ربات…",
     "is_persistent": false,
     "keyboard": [
       [

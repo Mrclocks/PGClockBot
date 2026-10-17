@@ -14,6 +14,7 @@ import json
 import logging
 from typing import Any
 
+from app.services.retired_text_defaults import retired_labels
 from app.services.rich_text import (
     _ACTION_TO_BTN_KEY,
     button_display_text,
@@ -191,7 +192,11 @@ def register_aliases_on_mapping(mapping: dict[str, str], ui: dict | None) -> Non
         if not is_button_label_key(btn_key):
             continue
         current_labels = set(label_variants(ui.get(btn_key, default_raw)))
-        default_labels = label_variants(default_raw) + list(RETIRED_DEFAULT_LABELS.get(btn_key, ()))
+        default_labels = [
+            *label_variants(default_raw),
+            *RETIRED_DEFAULT_LABELS.get(btn_key, ()),
+            *retired_labels(btn_key),
+        ]
         for default_label in default_labels:
             if not default_label or default_label in current_labels:
                 continue

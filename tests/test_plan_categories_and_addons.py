@@ -299,7 +299,7 @@ class WiringTests(unittest.TestCase):
         listing = dict(kb._admin_plans_list_entries())
         res = dict(kb._reseller_plans_submenu_entries())
         self.assertEqual(aud.get(kb.REPLY_ACTION_ADM_PLANS_CATEGORIES), "🏷 برچسب دسته")
-        self.assertEqual(aud.get(kb.REPLY_ACTION_ADM_PLANS_ADDONS), "⏱ بسته حجم/زمان")
+        self.assertEqual(aud.get(kb.REPLY_ACTION_ADM_PLANS_ADDONS), "⏱ بسته حجم و زمان")
         self.assertIn(kb.REPLY_ACTION_ADM_PLANS_CATEGORIES, listing)
         self.assertIn(kb.REPLY_ACTION_ADM_PLANS_ADDONS, listing)
         self.assertEqual(res.get(kb.REPLY_ACTION_RES_PLAN_CATEGORIES), "🏷 برچسب دسته")

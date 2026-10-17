@@ -95,7 +95,7 @@ def _hub_text(backups: list[dict], ui: dict[str, str] | None = None) -> str:
     if caption:
         lines.extend([caption, ""])
     if not backups:
-        lines.append("هنوز بکاپی نیست.")
+        lines.append("هنوز بکاپی ساخته نشده است.")
     else:
         lines.append(f"تعداد: <b>{len(backups)}</b> (نمایش ۸ مورد اخیر)")
         for b in backups[:8]:
@@ -187,7 +187,7 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser, session: Asyn
         )
     except Exception as e:
         if callback.message:
-            await callback.message.answer(f"❌ ساخت بکاپ ناموفق:\n{user_safe_error(e)}")
+            await callback.message.answer(f"❌ ساخت بکاپ انجام نشد:\n{user_safe_error(e)}")
         return
     path = Path(result["path"])
     caption = (
@@ -359,7 +359,7 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
         actor=f"tg:{db_user.telegram_id}",
     )
     if not result.get("ok"):
-        await message.answer(f"❌ ریستور ناموفق:\n{result.get('error')}")
+        await message.answer(f"❌ ریستور انجام نشد:\n{result.get('error')}")
         return
     msg = "✅ ریستور انجام شد."
     if result.get("safety_id"):
@@ -429,7 +429,7 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
         )
     except Exception as e:
         await state.clear()
-        await message.answer(f"❌ آپلود ناموفق:\n{user_safe_error(e)}")
+        await message.answer(f"❌ آپلود انجام نشد:\n{user_safe_error(e)}")
         return
     await state.clear()
     if not result.get("ok"):

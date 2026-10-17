@@ -23,7 +23,7 @@ class PlansLabelCollisionTests(unittest.TestCase):
         ui = dict(DEFAULT_SETTINGS)
         labels = [text for _action, text in _admin_plans_audience_entries(ui)]
         self.assertEqual(
-            labels, ["📦 پلن‌های کاربران", "🤝 پلن‌های نمایندگان", "🏷 برچسب دسته", "⏱ بسته حجم/زمان"]
+            labels, ["📦 پلن‌های کاربران", "🤝 پلن‌های نمایندگان", "🏷 برچسب دسته", "⏱ بسته حجم و زمان"]
         )
         for hub_label in (_t(ui, "btn_adm_users"), _t(ui, "btn_adm_resellers")):
             self.assertNotIn(hub_label, labels)

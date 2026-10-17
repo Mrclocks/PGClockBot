@@ -102,7 +102,7 @@ async def _present_admin_tickets_list(
     ui = await get_all_settings(session)
     if not tickets:
         markup = with_inline_back(None, ui, "nv:adm:ops")
-        text = "تیکت بازی نیست."
+        text = "تیکت بازی وجود ندارد."
     else:
         rows = [
             [
@@ -508,8 +508,8 @@ async def adm_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         "━━━━━━━━━━━━\n"
         f"👥 کاربران: <b>{users_count}</b>\n"
         f"🛒 سفارش‌ها: <b>{orders_count}</b>\n"
-        f"⏳ منتظر تأیید: <b>{pending_orders}</b>\n"
-        f"🧾 رسید معلق: <b>{pending_pay}</b>\n"
+        f"⏳ در انتظار تأیید: <b>{pending_orders}</b>\n"
+        f"🧾 رسید در انتظار بررسی: <b>{pending_pay}</b>\n"
         f"📦 سرویس‌ها: <b>{services}</b>\n"
         f"🔢 نسخه: <code>v{local_version()}</code>"
     )
@@ -634,7 +634,7 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
             markup = (
                 with_inline_back(None, ui, "nv:adm:ops")
             )
-            await callback.message.edit_text("سفارشی نیست.", reply_markup=markup)
+            await callback.message.edit_text("هنوز سفارشی ثبت نشده است.", reply_markup=markup)
         return
     rows = []
     for o in merged:
@@ -754,7 +754,7 @@ async def _approve_order_bot(
                     pass
         msg = "سفارش تحویل شد"
     else:
-        raise ValueError("این سفارش هنوز قابل تأیید نیست (رسید لازم است)")
+        raise ValueError("این سفارش هنوز رسید پرداخت ندارد و قابل تأیید نیست")
 
     try:
         from app.services.notifications import notify_new_subscription
@@ -779,7 +779,7 @@ async def _approve_order_bot(
 @require_bot_owner_handler
 async def order_approve_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
-        await callback.answer("فقط ادمین", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     order_id = int(callback.data.split(":")[-1])
     order = await session.get(Order, order_id)
@@ -812,7 +812,7 @@ async def order_approve_cb(callback: CallbackQuery, session: AsyncSession, db_us
 @require_bot_owner_handler
 async def order_reject_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
-        await callback.answer("فقط ادمین", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     order_id = int(callback.data.split(":")[-1])
     order = await session.get(Order, order_id)
@@ -900,7 +900,7 @@ async def adm_cancellations(callback: CallbackQuery, session: AsyncSession, db_u
                 )
             ]
         )
-    lines.append("\n<i>تأیید/رد مبلغ‌دار در وب‌پنل: /finance?tab=cancellations</i>")
+    lines.append("\n<i>تأیید یا رد درخواست‌های بازپرداخت‌دار در وب‌پنل: /finance?tab=cancellations</i>")
     markup = with_inline_back(
         InlineKeyboardMarkup(inline_keyboard=kb_rows), ui, "nv:adm:home"
     )
@@ -1024,11 +1024,11 @@ async def adm_plan_edit_ask(
         return
     prompts = {
         "name": "نام جدید پلن:",
-        "price": "قیمت (تومان):",
-        "days": "مدت (روز) — ۰ یا خالی = نامحدود:",
-        "gb": "حجم گیگ (۰ = نامحدود):",
+        "price": "قیمت جدید را به تومان بفرستید:",
+        "days": "مدت را به روز بفرستید. برای نامحدود <code>0</code> بفرستید:",
+        "gb": "حجم را به گیگابایت بفرستید. برای نامحدود <code>0</code> بفرستید:",
         "desc": "توضیح (خالی = حذف):",
-        "sort": "ترتیب نمایش (عدد؛ کمتر = بالاتر):",
+        "sort": "ترتیب نمایش را با عدد بفرستید؛ عدد کوچک‌تر بالاتر نمایش داده می‌شود:",
         "prefix": "پیشوند نام کاربری پاسارگارد (خالی = پیش‌فرض):",
         "suffix": "پسوند نام کاربری پاسارگارد (خالی = حذف):",
     }
@@ -1390,7 +1390,7 @@ async def _show_template_picker(callback: CallbackQuery, *, plan_id: int) -> Non
         )
     if not rows:
         rows.append(
-            [InlineKeyboardButton(text="تمپلیتی نیست — از وب‌پنل بسازید", callback_data="adm:plans")]
+            [InlineKeyboardButton(text="هنوز تمپلیتی نیست؛ از وب‌پنل بسازید", callback_data="adm:plans")]
         )
     back = f"adm:plan:view:{plan_id}" if plan_id else "adm:plans"
     rows.append([kb.back_button(None, back)])
@@ -1430,7 +1430,7 @@ async def _show_group_picker(callback: CallbackQuery, state: FSMContext, *, plan
         )
     if not rows:
         rows.append(
-            [InlineKeyboardButton(text="گروهی نیست — از وب‌پنل بسازید", callback_data="adm:plans")]
+            [InlineKeyboardButton(text="هنوز گروهی نیست؛ از وب‌پنل بسازید", callback_data="adm:plans")]
         )
     else:
         rows.append(
@@ -1776,7 +1776,7 @@ async def adm_plan_new_category(
             session, state, button_style=style
         )
     except Exception:
-        await callback.answer("ساخت پلن ناموفق بود", show_alert=True)
+        await callback.answer("ساخت پلن انجام نشد. دوباره تلاش کنید.", show_alert=True)
         return
     await callback.answer(feedback.SAVED)
     if callback.message:
@@ -2075,7 +2075,7 @@ async def _show_custom_template_picker(callback: CallbackQuery) -> None:
         )
     if not rows:
         rows.append(
-            [InlineKeyboardButton(text="تمپلیتی نیست — از وب‌پنل بسازید", callback_data="adm:custom")]
+            [InlineKeyboardButton(text="هنوز تمپلیتی نیست؛ از وب‌پنل بسازید", callback_data="adm:custom")]
         )
     rows.append([kb.back_button(None, "adm:custom")])
     if callback.message:
@@ -2109,7 +2109,7 @@ async def _show_custom_group_picker(callback: CallbackQuery, state: FSMContext) 
         )
     if not rows:
         rows.append(
-            [InlineKeyboardButton(text="گروهی نیست — از وب‌پنل بسازید", callback_data="adm:custom")]
+            [InlineKeyboardButton(text="هنوز گروهی نیست؛ از وب‌پنل بسازید", callback_data="adm:custom")]
         )
     else:
         rows.append(
@@ -2358,7 +2358,7 @@ async def adm_users_search(
     try:
         tg_id = int((message.text or "").strip())
     except ValueError:
-        await message.answer("آیدی عددی معتبر بفرستید")
+        await message.answer("فقط آیدی عددی تلگرام را بفرستید؛ مثلاً <code>123456789</code>.")
         return
     result = await session.execute(
         select(BotUser).where(
@@ -2742,7 +2742,7 @@ async def adm_users_wallet_credit_save(
         direction = parse_admin_wallet_mode(mode)
     except ValueError:
         await message.answer(
-            "مبلغ نامعتبر — عدد صحیح مثبت تومان بفرستید (حداقل ۱۰۰۰).",
+            "مبلغ را به تومان و با عدد صحیح بفرستید؛ دست‌کم ۱۰۰۰.",
         )
         return
     try:
@@ -2790,7 +2790,7 @@ async def adm_users_services(
         if callback.message:
             await safe_edit_text(
                 callback.message,
-                "سرویسی برای این کاربر نیست.",
+                "این کاربر هنوز سرویسی ندارد.",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
@@ -2875,7 +2875,7 @@ async def adm_users_service_link(
         return
     url = snap.subscription_url
     if not url:
-        await callback.answer("لینک موجود نیست", show_alert=True)
+        await callback.answer("لینک اشتراک برای این سرویس موجود نیست", show_alert=True)
         return
     await callback.answer()
     if callback.message:
@@ -2911,7 +2911,7 @@ async def adm_users_service_renew(
         )
         plan = await session.get(Plan, int(svc.plan_id)) if svc.plan_id else None
         if plan is None:
-            await callback.answer("پلن سرویس مشخص نیست — از وب تمدید کنید", show_alert=True)
+            await callback.answer("پلن این سرویس مشخص نیست؛ از وب‌پنل تمدید کنید", show_alert=True)
             return
         await admin_renew_service(session, svc, plan=plan, reset_traffic=True)
         snap = await service_snapshot(session, svc)
@@ -3210,7 +3210,7 @@ async def adm_svc_adjust_days_entered(
     if not user_id or not service_id:
         await state.set_state(None)
         await message.answer(
-            "نشست منقضی شد — دوباره از منوی سرویس وارد شوید.",
+            "زمان این مرحله تمام شد. دوباره از منوی سرویس وارد شوید.",
             reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
         )
         return
@@ -3269,7 +3269,7 @@ async def adm_svc_adjust_gb_entered(
     if not user_id or not service_id:
         await state.set_state(None)
         await message.answer(
-            "نشست منقضی شد — دوباره از منوی سرویس وارد شوید.",
+            "زمان این مرحله تمام شد. دوباره از منوی سرویس وارد شوید.",
             reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
         )
         return
@@ -3369,7 +3369,7 @@ async def adm_users_block_reason(
     user_id = int(data.get("block_user_id") or 0)
     reason = (message.text or "").strip()
     if len(reason) < 3:
-        await message.answer("علت خیلی کوتاه است — حداقل ۳ کاراکتر.")
+        await message.answer("علت خیلی کوتاه است؛ دست‌کم ۳ حرف بنویسید.")
         return
     user, deny = await _platform_shop_user(session, user_id) if user_id else (None, feedback.NOT_FOUND)
     if deny:
@@ -3490,7 +3490,7 @@ async def adm_users_delete_reason(
     user_id = int(data.get("delete_user_id") or 0)
     await state.clear()
     if not user_id:
-        await message.answer("نشست منقضی شد. دوباره از کارت کاربر اقدام کنید.")
+        await message.answer("زمان این مرحله تمام شد. دوباره از کارت کاربر اقدام کنید.")
         return
 
     from app.services.notifications import notify_account_edit
@@ -3601,7 +3601,7 @@ async def adm_users_unreseller_reason(
     user_id = int(data.get("revoke_user_id") or 0)
     await state.clear()
     if not user_id:
-        await message.answer("نشست منقضی شد. دوباره از کارت کاربر اقدام کنید.")
+        await message.answer("زمان این مرحله تمام شد. دوباره از کارت کاربر اقدام کنید.")
         return
     _user, deny = await _platform_shop_user(session, user_id)
     if deny:
@@ -3711,7 +3711,7 @@ async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_
         f" · {total} نفر"
     )
     if not users:
-        text += "\n\nنماینده‌ای ثبت نشده."
+        text += "\n\nهنوز نماینده‌ای ثبت نشده است."
     if callback.message:
         from app.bot.nav_inline import with_inline_back
 
@@ -4054,7 +4054,7 @@ async def adm_reseller_cap_days_entered(
     user_id = int(data.get("capadj_uid") or 0)
     if not user_id:
         await state.set_state(None)
-        await message.answer("نشست منقضی شد.")
+        await message.answer("زمان این مرحله تمام شد. دوباره شروع کنید.")
         return
     adj_key = f"capadj:{user_id}"
     stored = data.get(adj_key) if isinstance(data.get(adj_key), dict) else {}
@@ -4122,7 +4122,7 @@ async def adm_reseller_cap_gb_entered(
     user_id = int(data.get("capadj_uid") or 0)
     if not user_id:
         await state.set_state(None)
-        await message.answer("نشست منقضی شد.")
+        await message.answer("زمان این مرحله تمام شد. دوباره شروع کنید.")
         return
     adj_key = f"capadj:{user_id}"
     stored = data.get(adj_key) if isinstance(data.get(adj_key), dict) else {}
@@ -4181,7 +4181,7 @@ async def adm_resellers_services(
         if callback.message:
             await safe_edit_text(
                 callback.message,
-                "ادمین پاسارگارد برای این نماینده تنظیم نشده.",
+                "حساب ادمین پاسارگارد برای این نماینده تنظیم نشده است.",
                 reply_markup=back_kb,
             )
         return
@@ -4228,7 +4228,7 @@ async def adm_resellers_services(
         f"صفحه {page_label}{total_bit}"
     )
     if not users:
-        text += "\n\nسرویسی زیر این ادمین نیست."
+        text += "\n\nاین ادمین هنوز سرویسی ندارد."
     else:
         text += f"\n\n{len(users)} کاربر در این صفحه — برای جزئیات انتخاب کنید."
     if callback.message:
@@ -4288,7 +4288,7 @@ async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_use
     if not apps:
         if callback.message:
             await callback.message.edit_text(
-                "درخواست معلقی نیست.",
+                "درخواست بازی وجود ندارد.",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[[kb.back_button(None, "nv:adm:resellers")]]
                 ),
@@ -4343,8 +4343,8 @@ async def adm_resapp_view(callback: CallbackQuery, session: AsyncSession, db_use
     from app.db.models import ResellerApplicationStatus
 
     status_fa = {
-        ResellerApplicationStatus.PENDING_PAYMENT.value: "منتظر پرداخت",
-        ResellerApplicationStatus.AWAITING_APPROVAL.value: "منتظر تأیید",
+        ResellerApplicationStatus.PENDING_PAYMENT.value: "در انتظار پرداخت",
+        ResellerApplicationStatus.AWAITING_APPROVAL.value: "در انتظار تأیید",
         ResellerApplicationStatus.APPROVED.value: "تأیید شده",
         ResellerApplicationStatus.REJECTED.value: "رد شده",
         ResellerApplicationStatus.CANCELLED.value: "لغو شده",
@@ -4480,7 +4480,7 @@ async def make_res(
         can_approve = len(parts) > 1 and parts[1] in {"1", "approve=1", "yes", "بله"}
     except ValueError:
         await message.answer(
-            "فرمت نامعتبر است.\nمثال: <code>123456789 1</code>"
+            "پیام را به همین شکل بفرستید:\n<code>123456789 1</code>"
         )
         return
     result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))

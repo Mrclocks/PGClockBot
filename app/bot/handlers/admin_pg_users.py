@@ -1492,7 +1492,7 @@ async def pg_create_days(
     gb = float(data.get("pg_create_gb") or 0)
     if not uname or not groups:
         await state.clear()
-        await message.answer("داده ناقص است — دوباره شروع کنید.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer("اطلاعات این مرحله کامل نیست. دوباره شروع کنید.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
@@ -1722,7 +1722,7 @@ async def pg_edit_gb_ask(
     await ask_text(
         callback,
         state,
-        prompt="حجم جدید به گیگابایت (۰ = نامحدود):",
+        prompt="حجم جدید را به گیگابایت بفرستید. برای نامحدود <code>0</code> بفرستید:",
         cancel_code="adm_pg_u",
         fsm_state=PgUserStates.edit_gb,
         edit=True,

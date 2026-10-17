@@ -58,7 +58,7 @@ class UserGroupConfirmTests(unittest.TestCase):
     def test_grpdone_uses_safe_edit_and_defensive_finish(self):
         block = ADMIN[ADMIN.find("async def adm_plan_grp_done") : ADMIN.find("async def adm_plan_clear_link")]
         self.assertIn("safe_edit_text", block)
-        self.assertIn("ساخت پلن ناموفق بود", block)
+        self.assertIn("ساخت پلن انجام نشد", block)
         # The color-pick step (also in this slice) now calls a shared
         # _pending_user_plan_finish() wrapper, which itself calls
         # _finish_new_plan() — same defensive finish, one layer of reuse

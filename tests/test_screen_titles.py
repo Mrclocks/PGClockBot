@@ -42,12 +42,12 @@ OLD_HEADINGS = {
     "a.home": "🛠 <b>پنل ادمین</b>",
     "a.ops": "🗓 <b>عملیات روزانه</b>",
     "a.people": "👤 <b>افراد</b>",
-    "a.product": "📦 <b>محصول و PG</b>",
+    "a.product": "📦 <b>محصول و پاسارگارد</b>",
     "a.marketing": "🎯 <b>بازاریابی</b>",
     "a.system": "🛠 <b>سیستم</b>",
     "a.pg": "🖥 <b>عملیات پاسارگارد</b>",
     "a.loyalty": "⭐ <b>باشگاه مشتریان</b>",
-    "a.users": "👥 <b>کاربران بات</b>",
+    "a.users": "👥 <b>کاربران ربات</b>",
     "a.resellers": "🤝 <b>نمایندگان</b>",
     "a.settings": "⚙️ <b>تنظیمات سریع</b>",
     "a.backup": "💾 <b>بکاپ / ریستور</b>",
@@ -159,8 +159,8 @@ class PremiumAndCaptionRenderingTests(unittest.TestCase):
 
     def test_caption_default_custom_hidden_and_escaped(self) -> None:
         key = caption_setting_key("a.people")
-        self.assertEqual(screen_caption(dict(DEFAULT_SETTINGS), "a.people"), "کاربران و نمایندگان.")
-        self.assertEqual(screen_caption({key: "   "}, "a.people"), "کاربران و نمایندگان.")
+        self.assertEqual(screen_caption(dict(DEFAULT_SETTINGS), "a.people"), "مدیریت کاربران ربات و نمایندگان.")
+        self.assertEqual(screen_caption({key: "   "}, "a.people"), "مدیریت کاربران ربات و نمایندگان.")
         self.assertEqual(screen_caption({key: "مشتری‌ها\nو <نماینده‌ها>"}, "a.people"), "مشتری‌ها\nو &lt;نماینده‌ها&gt;")
         self.assertEqual(screen_caption({key: "-"}, "a.people"), "")
         self.assertEqual(with_caption("🗓 <b>x</b>", screen_caption({key: "-"}, "a.people")), "🗓 <b>x</b>")
@@ -187,7 +187,7 @@ class MenuCaptionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_the_people_menu_shows_the_stored_or_hidden_caption(self) -> None:
         ui = dict(DEFAULT_SETTINGS)
-        self.assertEqual(await self._people_hub(ui), "👤 <b>افراد</b>\nکاربران و نمایندگان.")
+        self.assertEqual(await self._people_hub(ui), "👤 <b>افراد</b>\nمدیریت کاربران ربات و نمایندگان.")
         ui[caption_setting_key("a.people")] = pack_rich_text("👍 مشتری‌ها و همکاران", _premium("👍"))
         self.assertEqual(
             await self._people_hub(ui), f'👤 <b>افراد</b>\n<tg-emoji emoji-id="{PREMIUM_ID}">👍</tg-emoji> مشتری‌ها و همکاران'

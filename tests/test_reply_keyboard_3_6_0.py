@@ -126,7 +126,7 @@ class ReplyKeyboard360Tests(unittest.TestCase):
         flat = [b.text for row in admin_reply_keyboard(ui).keyboard for b in row]
         self.assertIn("🗓 عملیات روزانه", flat)
         self.assertIn("👤 افراد", flat)
-        self.assertIn("📦 محصول و PG", flat)
+        self.assertIn("📦 محصول و پاسارگارد", flat)
         self.assertIn("🛠 سیستم", flat)
         # Leaves live in group submenus, not the hub
         self.assertNotIn("📊 داشبورد", flat)
@@ -180,7 +180,7 @@ class ReplyKeyboard360Tests(unittest.TestCase):
         self.assertEqual(mapping["👥 کاربران"], "adm_users")
         self.assertEqual(mapping["🗓 عملیات روزانه"], "adm_hub_ops")
         self.assertEqual(mapping["👤 افراد"], "adm_hub_people")
-        self.assertEqual(mapping["📦 محصول و PG"], "adm_hub_product")
+        self.assertEqual(mapping["📦 محصول و پاسارگارد"], "adm_hub_product")
         self.assertEqual(mapping["🛠 سیستم"], "adm_hub_system")
         from pathlib import Path
 

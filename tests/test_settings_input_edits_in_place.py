@@ -65,7 +65,7 @@ class AdminSettingsInPlaceTests(unittest.IsolatedAsyncioTestCase):
             edit.await_args.kwargs["text"],
             "⚙️ <b>تنظیمات سریع</b>\n"
             "یک بخش را از دکمه‌های زیر انتخاب کنید.\n"
-            "ظاهر، رنگ، گزارش روزانه → وب‌پنل.",
+            "ظاهر، رنگ دکمه‌ها و گزارش روزانه را از وب‌پنل تنظیم کنید.",
         )
 
     async def test_save_sends_one_panel_when_prompt_is_unknown(self):

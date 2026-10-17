@@ -178,7 +178,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_hub_system", "label": "سیستم", "group": "منوی ادمین", "default": ""},
     {"id": "adm_edit_mode", "label": "حالت ویرایش منوها", "group": "منوی ادمین", "default": ""},
     {"id": "adm_dash", "label": "داشبورد ادمین", "group": "منوی ادمین", "default": "success"},
-    {"id": "adm_reports", "label": "گزارشات (ادمین)", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_reports", "label": "گزارش‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_orders", "label": "سفارش‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_payments", "label": "رسیدها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_tickets", "label": "تیکت‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
@@ -204,7 +204,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_plans_add", "label": "افزودن پلن", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_plans_view", "label": "مشاهده پلن‌ها", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_plans_categories", "label": "برچسب دسته (ادمین)", "group": "منوی ادمین", "default": ""},
-    {"id": "adm_plans_addons", "label": "بسته حجم/زمان (ادمین)", "group": "منوی ادمین", "default": "primary"},
+    {"id": "adm_plans_addons", "label": "بسته حجم و زمان (ادمین)", "group": "منوی ادمین", "default": "primary"},
     # Admin loyalty sub
     {"id": "adm_loy_overview", "label": "نمای کلی باشگاه", "group": "باشگاه ادمین", "default": "success"},
     {"id": "adm_loy_rules", "label": "قوانین امتیاز", "group": "باشگاه ادمین", "default": ""},
