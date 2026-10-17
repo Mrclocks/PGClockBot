@@ -1116,6 +1116,12 @@ async def notify_auto_approve(
     )
 
 
+async def notify_wireguard_missing(bot: Bot, session: AsyncSession, detail: str) -> int:
+    """Platform admins: a customer who should get WireGuard files got none."""
+    text = format_message("⚠️ فایل WireGuard تحویل نشد", detail)
+    return await _dispatch_dual_notify(bot, session, "notify_panel_delivery_failures", text, shop=False)
+
+
 async def notify_approved_delivery_stuck(
     bot: Bot,
     session: AsyncSession,

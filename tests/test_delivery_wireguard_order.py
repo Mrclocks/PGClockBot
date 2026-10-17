@@ -23,31 +23,31 @@ Endpoint = example.com:51820
 
 class WireGuardParseTests(unittest.TestCase):
     def test_plain_conf(self):
-        from app.services.wireguard_delivery import parse_wireguard_payload
+        from app.services.wireguard_delivery import parse_wireguard_archive
 
-        files = parse_wireguard_payload(SAMPLE_CONF.encode(), default_stem="u1")
+        files, _total = parse_wireguard_archive(SAMPLE_CONF.encode(), default_stem="u1")
         self.assertEqual(len(files), 1)
         self.assertTrue(files[0].filename.endswith(".conf"))
         self.assertIn(b"PrivateKey", files[0].content)
 
     def test_zip_confs(self):
-        from app.services.wireguard_delivery import parse_wireguard_payload
+        from app.services.wireguard_delivery import parse_wireguard_archive
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
             zf.writestr("node-a.conf", SAMPLE_CONF)
             zf.writestr("readme.txt", "nope")
             zf.writestr("node-b.conf", SAMPLE_CONF.replace("10.66.66.2", "10.66.66.3"))
-        files = parse_wireguard_payload(buf.getvalue())
+        files, _total = parse_wireguard_archive(buf.getvalue())
         self.assertEqual(len(files), 2)
         names = {f.filename for f in files}
         self.assertIn("node-a.conf", names)
         self.assertIn("node-b.conf", names)
 
     def test_rejects_html(self):
-        from app.services.wireguard_delivery import parse_wireguard_payload
+        from app.services.wireguard_delivery import parse_wireguard_archive
 
-        self.assertEqual(parse_wireguard_payload(b"<html>nope</html>"), [])
+        self.assertEqual(parse_wireguard_archive(b"<html>nope</html>"), ([], 0))
 
 
 class CaptionComposeTests(unittest.TestCase):
@@ -67,7 +67,7 @@ class DeliveryOrderContractTests(unittest.TestCase):
 
         src = inspect.getsource(delivery_mod._deliver_subscription_order)
         qr_i = src.index("send_subscription_qr_photo")
-        wg_i = src.index("_send_wireguard_documents")
+        wg_i = src.index("deliver_wireguard")
         guide_i = src.index("_send_delivery_guides")
         self.assertLess(qr_i, wg_i)
         self.assertLess(wg_i, guide_i)
@@ -90,7 +90,6 @@ class DeliveryOrderContractTests(unittest.TestCase):
 class DeliveryFlowMockTests(unittest.IsolatedAsyncioTestCase):
     async def test_qr_success_skips_ready_text_then_wg_then_guides(self):
         from app.services.delivery import send_delivery_to_user
-        from app.services.wireguard_delivery import WireGuardFile
 
         bot = AsyncMock()
         session = AsyncMock()
@@ -163,20 +162,12 @@ class DeliveryFlowMockTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(side_effect=_qr),
             ),
             patch(
-                "app.services.delivery._send_wireguard_documents",
+                "app.services.delivery.deliver_wireguard",
                 AsyncMock(side_effect=_wg),
             ),
             patch(
                 "app.services.delivery._send_delivery_guides",
                 AsyncMock(side_effect=_guides),
-            ),
-            patch(
-                "app.services.wireguard_delivery.fetch_wireguard_files",
-                AsyncMock(
-                    return_value=[
-                        WireGuardFile(filename="u1.conf", content=SAMPLE_CONF.encode())
-                    ]
-                ),
             ),
         ):
             await send_delivery_to_user(bot, 100, session, None, order)

@@ -192,6 +192,7 @@ BTN_ADMIN_MARKETING_SUB: list[Field] = [
 
 BTN_SERVICE_MORE: list[Field] = [
     ("btn_svc_refresh", "رفرش وضعیت", "text"),
+    ("btn_svc_wireguard", "فایل WireGuard", "text"),
     ("btn_svc_auto", "تنظیمات خودکار", "text"),
     ("btn_svc_cancel", "درخواست لغو سرویس", "text"),
     ("btn_svc_delete", "حذف سرویس", "text"),

@@ -929,6 +929,7 @@ DEFAULT_SETTINGS = {
     "btn_res_st_bot": "ربات",
     "btn_res_st_panel": "🌐 وب‌پنل",
     "btn_svc_refresh": "♻️ رفرش وضعیت",
+    "btn_svc_wireguard": "🔐 فایل WireGuard",
     "btn_svc_auto": "⚙️ تنظیمات خودکار",
     "btn_svc_cancel": "📝 درخواست لغو سرویس",
     "btn_svc_delete": "🗑 حذف سرویس",

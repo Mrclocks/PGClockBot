@@ -5,6 +5,7 @@ import json
 import asyncio
 import secrets
 import time
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import httpx
@@ -21,6 +22,14 @@ async def _mutation_request(
 ) -> httpx.Response:
     """Keep mutation timeouts and unknown outcomes independent of web reads."""
     return await client.request(method, url, **kwargs)
+
+
+@dataclass(frozen=True, slots=True)
+class WireGuardResponse:
+    """What the panel answered for a subscription's WireGuard files."""
+
+    status: int | None
+    data: bytes | None
 
 
 class PasarGuardError(Exception):
@@ -895,11 +904,12 @@ class PasarGuardClient:
 
     async def subscription_wireguard_bytes(
         self, token: str, *, subscription_url: str | None = None
-    ) -> bytes | None:
-        """Fetch WireGuard payload (``.zip`` or plain ``.conf``). Public sub route.
+    ) -> WireGuardResponse:
+        """Fetch the WireGuard payload (``.zip`` of ``.conf`` files, or one plain ``.conf``).
 
-        Returns ``None`` when the user has no WireGuard inbound (404/empty/HTML).
-        Uses raw bytes — ``request()`` would corrupt zip via ``resp.text``.
+        ``data`` is ``None`` when the panel offered nothing usable; ``status`` tells why
+        (``None`` = transport error, 406 = WireGuard format switched off in the panel).
+        Raw bytes are used because ``request()`` would corrupt a zip through ``resp.text``.
         """
         path = self._subscription_endpoint(token, "wireguard", subscription_url)
         try:
@@ -915,23 +925,23 @@ class PasarGuardClient:
             )
         except httpx.HTTPError:
             logger.warning("wireguard fetch transport error token=…%s", (token or "")[-6:])
-            return None
-        if resp.status_code in {204, 404}:
-            return None
-        if resp.status_code >= 400:
+            return WireGuardResponse(status=None, data=None)
+        if resp.status_code >= 400 and resp.status_code != 404:
             logger.warning(
                 "wireguard fetch failed status=%s token=…%s",
                 resp.status_code,
                 (token or "")[-6:],
             )
-            return None
         data = resp.content or b""
-        if len(data) < 16:
-            return None
         head = data.lstrip()[:64].lower()
-        if head.startswith(b"<!doctype") or head.startswith(b"<html"):
-            return None
-        return data
+        if (
+            resp.status_code >= 300
+            or len(data) < 16
+            or head.startswith(b"<!doctype")
+            or head.startswith(b"<html")
+        ):
+            return WireGuardResponse(status=resp.status_code, data=None)
+        return WireGuardResponse(status=resp.status_code, data=data)
 
 
 def as_any_list(data: Any, *keys: str) -> list:

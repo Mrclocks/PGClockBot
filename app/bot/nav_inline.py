@@ -1258,13 +1258,14 @@ def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 @editable_screen("c.service")
 def service_card_keyboard(
-    service_id: int, ui: dict | None = None, *, external: bool = False
+    service_id: int, ui: dict | None = None, *, external: bool = False, wireguard: bool = False
 ) -> InlineKeyboardMarkup:
     """Inline actions for one service card (replaces service_actions_reply_keyboard).
 
     Reuses existing ``svc:*`` / ``guide:svc:*`` callbacks — no duplicated business logic.
     Cancel sits above delete so destructive delete stays visually separated. A service that was
     not sold by the bot (``external``) can never be cancelled for a refund, so it has no cancel button.
+    The WireGuard button shows only for a service the panel gave a WireGuard address (``wireguard``).
     """
     sid = int(service_id)
     cancel_rows = (
@@ -1281,6 +1282,21 @@ def service_card_keyboard(
                 )
             ]
         ]
+    )
+    wireguard_rows = (
+        [
+            [
+                _ikb(
+                    _t(ui, "btn_svc_wireguard") or "🔐 فایل WireGuard",
+                    callback_data=f"svc:wg:{sid}",
+                    ui=ui,
+                    label_key="btn_svc_wireguard",
+                    style_id="svc_wireguard",
+                )
+            ]
+        ]
+        if wireguard
+        else []
     )
     rows: list[list[InlineKeyboardButton]] = [
         [
@@ -1315,6 +1331,7 @@ def service_card_keyboard(
                 style_id="guides", style_fallback="primary",
             ),
         ],
+        *wireguard_rows,
         [
             _ikb(
                 _t(ui, "btn_svc_refresh"),

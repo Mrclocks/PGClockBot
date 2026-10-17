@@ -201,3 +201,4 @@ tests/test_wheel_state_per_shop.py
 tests/test_owner_bot_hides_shop_panel_users.py
 tests/test_shop_isolation_audit_fixes.py
 tests/test_dashboard_trend.py
+tests/test_wireguard_delivery_followup.py

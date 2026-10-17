@@ -17,16 +17,25 @@ from app.config import get_settings
 from app.db.models import BotUser, UserService
 from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import get_catalog_plan, list_active_plans
-from app.services.pasarguard import get_pg
+from app.services.pasarguard import absolutize_subscription_url, get_pg
 from app.services.service_import import is_external_service
 from app.services.service_scope import customer_may_use_service, list_customer_services
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
 from app.services.service_live_info import fetch_live_service_info
+from app.services.wireguard_delivery import REASON_DISABLED, REASON_UNAVAILABLE, fetch_wireguard, has_wireguard
+from app.services.wireguard_send import send_wireguard_files
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 
 router = Router(name="services")
+
+WIREGUARD_NONE = "این سرویس فایل WireGuard ندارد."
+WIREGUARD_SEND_FAILED = "ارسال فایل انجام نشد. دوباره امتحان کنید."
+WIREGUARD_NOT_READY = {
+    REASON_DISABLED: "دریافت فایل WireGuard فعلاً در پنل خاموش است. به پشتیبانی خبر دهید.",
+    REASON_UNAVAILABLE: "پنل الان پاسخ نداد. چند دقیقهٔ دیگر دوباره امتحان کنید.",
+}
 
 class CancellationStates(StatesGroup):
     reason = State()
@@ -398,7 +407,9 @@ async def svc_view(
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=service_card_keyboard(svc_id, ui, external=is_external_service(svc)),
+            reply_markup=service_card_keyboard(
+                svc_id, ui, external=is_external_service(svc), wireguard=has_wireguard(info)
+            ),
         )
     if state is not None:
         from app.bot import menu_nav as nav
@@ -490,6 +501,29 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
             info=sub_info if not sub_info.get("error") else None,
             username=svc.pg_username,
         )
+
+@router.callback_query(F.data.startswith("svc:wg:"))
+async def svc_wireguard(callback: CallbackQuery, session: AsyncSession, db_user: BotUser) -> None:
+    try:
+        svc_id = int((callback.data or "").split(":")[-1])
+    except (TypeError, ValueError):
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    svc = await session.get(UserService, svc_id)
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        return
+    fetched = await fetch_wireguard(
+        absolutize_subscription_url(svc.subscription_url) or svc.subscription_url,
+        username=svc.pg_username,
+    )
+    if not fetched.files:
+        await callback.answer(WIREGUARD_NOT_READY.get(fetched.reason, WIREGUARD_NONE), show_alert=True)
+        return
+    if await send_wireguard_files(callback.bot, db_user.telegram_id, fetched):
+        await callback.answer()
+    else:
+        await callback.answer(WIREGUARD_SEND_FAILED, show_alert=True)
 
 @router.callback_query(F.data.startswith("svc:renew:"))
 async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):

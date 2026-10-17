@@ -88,6 +88,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "svc_link", "label": "لینک و QR", "group": "زیرمنوها", "default": ""},
     {"id": "svc_addon", "label": "حجم / زمان سرویس", "group": "زیرمنوها", "default": "primary"},
     {"id": "svc_refresh", "label": "رفرش وضعیت سرویس", "group": "زیرمنوها", "default": ""},
+    {"id": "svc_wireguard", "label": "فایل WireGuard سرویس", "group": "زیرمنوها", "default": ""},
     {"id": "svc_auto", "label": "تنظیمات خودکار سرویس", "group": "زیرمنوها", "default": ""},
     {"id": "svc_cancel", "label": "درخواست لغو سرویس", "group": "زیرمنوها", "default": ""},
     {"id": "svc_delete", "label": "حذف سرویس", "group": "زیرمنوها", "default": "danger"},

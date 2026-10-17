@@ -18,6 +18,8 @@ from app.services.pasarguard import absolutize_subscription_url, get_pg
 from app.services.qrcode_gen import make_subscription_qr
 from app.services.message_variables import DOMAIN_ORDER, DOMAIN_WALLET, render_message_template
 from app.services.users import get_all_settings, on
+from app.services.wireguard_delivery import has_wireguard
+from app.services.wireguard_send import deliver_wireguard
 
 logger = logging.getLogger(__name__)
 
@@ -418,40 +420,6 @@ async def _send_delivery_guides(
         logger.debug("delivery guides button failed", exc_info=True)
 
 
-async def _send_wireguard_documents(
-    bot: Bot,
-    chat_id: int,
-    *,
-    sub_url: str | None,
-    username: str | None = None,
-) -> int:
-    """Send WireGuard ``.conf`` files when the subscription has them. Best-effort."""
-    if not sub_url:
-        return 0
-    from app.services.wireguard_delivery import fetch_wireguard_files
-
-    try:
-        files = await fetch_wireguard_files(sub_url, username=username)
-    except Exception:
-        logger.warning("wireguard delivery fetch failed", exc_info=True)
-        return 0
-    sent = 0
-    for item in files:
-        try:
-            caption = "🔐 کانفیگ WireGuard" if sent == 0 else None
-            await bot.send_document(
-                chat_id,
-                document=BufferedInputFile(item.content, filename=item.filename),
-                caption=caption,
-            )
-            sent += 1
-        except Exception:
-            logger.warning(
-                "wireguard document send failed file=%s", item.filename, exc_info=True
-            )
-    return sent
-
-
 async def _try_send_html(
     bot: Bot,
     chat_id: int,
@@ -676,8 +644,14 @@ async def _deliver_subscription_order(
             )
 
     if is_subscription and sub_url and not wholesale:
-        await _send_wireguard_documents(
-            bot, chat_id, sub_url=sub_url, username=wg_username
+        await deliver_wireguard(
+            bot,
+            chat_id,
+            session,
+            sub_url=sub_url,
+            username=wg_username,
+            expected=has_wireguard(sub_info),
+            ui=ui,
         )
     if is_subscription and (notify_ok or qr_sent):
         await _send_delivery_guides(
