@@ -38,6 +38,9 @@ from app.services.orders import (
     reject_order,
     reject_payment,
 )
+from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
+from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
+from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.payer_notify import notify_payer
 from app.services.resellers import (
@@ -1449,6 +1452,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         require_shop_settings=require_perm("shop_settings"),
         get_db=get_db,
+    )
+    register_guide_media_pages(
+        app, require_admin=require_admin, require_shop_settings=require_perm("shop_settings"), get_db=get_db
     )
     from app.api.loyalty_pages import register_loyalty_pages
 
@@ -4434,6 +4440,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             "saved": request.query_params.get("saved") == "1",
             "saved_msg": request.query_params.get("msg") or "",
         }
+        if tab == "guides":
+            ctx["guides_media"] = await guides_media_view(session, GUIDE_MEDIA_PLATFORM_BASE, reseller_id=None)
+            ctx["guides_media_base"] = GUIDE_MEDIA_PLATFORM_BASE
         # Single flash above page title (base.html) — avoid below-title duplicates
         if request.query_params.get("saved") == "1":
             ctx["flash_ok"] = request.query_params.get("msg") or "ذخیره شد."
@@ -5115,15 +5124,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                     val = normalize_force_join_channel_value(val)
                 if key == "connection_guides":
-                    import json as _json
-
-                    from app.services.connection_guides import serialize_connection_guides
-
-                    try:
-                        parsed = _json.loads(val) if (val or "").strip() else []
-                    except _json.JSONDecodeError:
-                        parsed = []
-                    val = serialize_connection_guides(parsed if isinstance(parsed, list) else [])
+                    val = await serialize_submitted_guides(session, val, reseller_id=None)
                 if key == "receipt_dup_policy":
                     from app.services.receipt_fingerprints import normalize_dup_policy
 
@@ -5178,6 +5179,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             payload = merge_rich_settings_on_save(existing, payload)
         if payload:
             await set_settings_bulk(session, payload)
+            if "connection_guides" in payload:
+                await prune_guide_media(session, reseller_id=None)
         elif known:
             # Empty payload with expected keys usually means the request body was
             # lost (e.g. CSRF middleware consumed the stream). Do not flash success.

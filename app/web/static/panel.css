@@ -10647,6 +10647,47 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   max-width: none;
   width: 100%;
 }
+/* Guides editor: video links and the photo/video album of each guide */
+.guides-links,
+.guides-media-box {
+  border: 1px solid var(--border);
+  border-radius: var(--menu-item-radius);
+  padding: var(--space-2);
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.guides-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--space-2);
+}
+.guides-media-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+.guides-media-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.guides-media-actions {
+  display: inline-flex;
+  gap: var(--space-1);
+  margin-inline-start: auto;
+}
+.guides-media-missing {
+  color: var(--danger);
+}
+@media (max-width: 640px) {
+  .guides-link-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 
 .supports-fields-grid .supports-enabled-field {
   display: flex !important;

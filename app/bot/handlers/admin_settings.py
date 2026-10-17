@@ -45,6 +45,8 @@ from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
+from app.bot.handlers.guide_editor import GUIDES_SECTION
+from app.bot.handlers.guide_editor import entry_button as guides_entry_button
 
 
 def _hub_markup(ui: dict[str, str]) -> InlineKeyboardMarkup:
@@ -292,9 +294,6 @@ SECTIONS: dict[str, dict] = {
                 ("btn_guides", "دکمه فهرست آموزش", "text"),
                 ("btn_guide_open_link", "دکمه لینک اشتراک", "text"),
             ]),
-            ("hint", "ویرایش آموزش‌ها", [
-                ("connection_guides", "JSON آموزش‌ها (از وب‌پنل)", "textarea"),
-            ]),
         ],
     },
     # Deep plan/naming tools — kept for callback compatibility (plans hub),
@@ -496,6 +495,8 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
     )
     if sec_id == COLORS_SECTION:
         rows.append([colors_entry_button(for_reseller=False)])
+    if sec_id == GUIDES_SECTION:
+        rows.append([guides_entry_button(for_reseller=False)])
     rows.append(_back_row("adm:st:hub"))
     if callback.message:
         await callback.message.edit_text(
@@ -1143,18 +1144,6 @@ async def settings_edit_save(
         from app.services.receipt_fingerprints import normalize_dup_policy
 
         text = normalize_dup_policy(text)
-    elif key == "connection_guides":
-        import json as _json
-
-        from app.services.connection_guides import serialize_connection_guides
-
-        try:
-            parsed = _json.loads(text) if text else []
-        except _json.JSONDecodeError:
-            await message.answer("JSON نامعتبر است. از وب‌پنل → آموزش اتصال ویرایش کنید.")
-            return
-        text = serialize_connection_guides(parsed if isinstance(parsed, list) else [])
-        await set_setting(session, key, text)
     else:
         from app.services.rich_text import pack_setting_from_message
 

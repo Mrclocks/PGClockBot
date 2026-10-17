@@ -20,6 +20,8 @@ from app.services.resellers import (
     SHOP_SETTINGS_DOMAIN_REDIRECTS,
     complete_reseller_setup,
 )
+from app.api.guide_media_pages import SHOP_BASE, guides_media_view
+from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.secret_box import reveal_bot_token
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
@@ -301,6 +303,9 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             )
             if not (values.get("admin_daily_report_template") or "").strip():
                 values["admin_daily_report_template"] = DEFAULT_REPORT_TEMPLATE
+        elif tab == "guides":
+            ctx["guides_media"] = await guides_media_view(session, SHOP_BASE, reseller_id=rid)
+            ctx["guides_media_base"] = SHOP_BASE
 
         return render(request, "shop_settings.html", ctx)
 
@@ -430,15 +435,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
 
                     val = normalize_force_join_channel_value(val)
                 if key == "connection_guides":
-                    import json as _json
-
-                    from app.services.connection_guides import serialize_connection_guides
-
-                    try:
-                        parsed = _json.loads(val) if (val or "").strip() else []
-                    except _json.JSONDecodeError:
-                        parsed = []
-                    val = serialize_connection_guides(parsed if isinstance(parsed, list) else [])
+                    val = await serialize_submitted_guides(session, val, reseller_id=rid)
                 if key == "receipt_dup_policy":
                     from app.services.receipt_fingerprints import normalize_dup_policy
 
@@ -511,6 +508,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             existing = await get_all_settings(session, reseller_id=rid)
             payload = merge_rich_settings_on_save(existing, payload)
         await set_settings_bulk(session, payload, reseller_id=rid)
+        if "connection_guides" in payload:
+            await prune_guide_media(session, reseller_id=rid)
         return _redirect_after_save(request, f"/shop-settings?tab={tab}")
 
     @app.post("/shop-settings/cancel-pending-orders")

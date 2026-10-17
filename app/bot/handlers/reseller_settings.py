@@ -40,6 +40,8 @@ from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
+from app.bot.handlers.guide_editor import GUIDES_SECTION
+from app.bot.handlers.guide_editor import entry_button as guides_entry_button
 from app.bot.handlers.screen_editor import entry_button as editor_entry_button
 from app.services.screen_editor import is_editor_enabled
 
@@ -195,9 +197,6 @@ SECTIONS: dict[str, dict] = {
             ("labels", "متن دکمه‌ها", [
                 ("btn_guides", "دکمه فهرست آموزش", "text"),
                 ("btn_guide_open_link", "دکمه لینک اشتراک", "text"),
-            ]),
-            ("hint", "ویرایش آموزش‌ها", [
-                ("connection_guides", "JSON آموزش‌ها (از وب‌پنل)", "textarea"),
             ]),
         ],
     },
@@ -507,6 +506,8 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
                 for sub_id, label, _fields in sec.get("subs") or []
             ]
         )
+        if sec_id == GUIDES_SECTION:
+            rows.append([guides_entry_button(for_reseller=True)])
         if sec_id == COLORS_SECTION:
             rows.append([colors_entry_button(for_reseller=True)])
             # Shop owners can only edit while the platform owner has the editor enabled.

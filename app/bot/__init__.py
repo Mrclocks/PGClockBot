@@ -105,6 +105,7 @@ def bot_routers() -> list[Router]:
         connection_status_admin,
         connection_status_admin_input,
         connection_status,
+        guide_editor,
         loyalty,
         nav_hubs,
         marketing_tools,
@@ -167,6 +168,8 @@ def bot_routers() -> list[Router]:
         admin_settings.router,
         button_colors.owner_router,
         button_colors.shop_router,
+        guide_editor.owner_router,
+        guide_editor.shop_router,
         admin_backup.router,
         admin_pg_users.router,
         admin_pg_nodes.router,
@@ -198,6 +201,7 @@ def create_dispatcher() -> Dispatcher:
         button_colors,
         connection_status_admin,
         connection_status_admin_input,
+        guide_editor,
         screen_editor,
     )
 
@@ -209,6 +213,7 @@ def create_dispatcher() -> Dispatcher:
         admin_backup.router,
         admin_settings.router,
         button_colors.owner_router,
+        guide_editor.owner_router,
         screen_editor.owner_router,
         admin_plans.router,
         connection_status_admin.router,
