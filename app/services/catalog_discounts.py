@@ -85,7 +85,7 @@ async def validate_target(session: AsyncSession, data: DiscountInput, shop_id: i
 def announcement(row: CatalogDiscount, *, duration_hours: int | None) -> str:
     value = f"{format_number(row.reduction_value)}٪" if row.reduction_kind == "percent" else format_toman(row.reduction_value)
     heading = "کاهش دائمی قیمت‌ها" if row.mode == "permanent" else "تخفیف جدید"
-    duration = "دائمی؛ بدون تاریخ پایان" if row.ends_at is None else f"{format_number(duration_hours)} ساعت؛ تا {expiry_input(row.ends_at) + " (تهران)"}"
+    duration = "دائمی؛ بدون تاریخ پایان" if row.ends_at is None else f"{format_number(duration_hours)} ساعت؛ تا {expiry_input(row.ends_at)} (تهران)"
     return f"{heading}\n{row.title}\nمحدوده: {SCOPES[row.scope]}\nکاهش قیمت: {value}\nمدت: {duration}"
 
 

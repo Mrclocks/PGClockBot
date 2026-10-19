@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Generic, TypeVar
 
 from aiogram.types import InlineKeyboardButton
 
@@ -16,8 +17,11 @@ PAGE_SUFFIX = ":p:"
 PREVIOUS_TEXT = "◀️ قبلی"
 NEXT_TEXT = "بعدی ▶️"
 
+# A TypeVar, not ``class Page[T]``: the installer also runs the panel on Python 3.11.
+T = TypeVar("T")
+
 @dataclass(frozen=True, slots=True)
-class Page[T]:
+class Page(Generic[T]):
     items: list[T]
     index: int
     count: int
@@ -40,7 +44,7 @@ def page_callback(base: str, index: int) -> str:
     return base if index <= 0 else f"{base}{PAGE_SUFFIX}{index}"
 
 
-def page_of[T](items: Sequence[T], index: int, size: int) -> Page[T]:
+def page_of(items: Sequence[T], index: int, size: int) -> Page[T]:
     """Page ``index`` of ``items``; an index past the end shows the last page."""
     total = len(items)
     count = max(1, -(-total // size))

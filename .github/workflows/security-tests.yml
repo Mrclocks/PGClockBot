@@ -31,3 +31,16 @@ jobs:
 
       - name: Run curated security regression suite
         run: bash scripts/run_security_tests.sh
+
+  # The installer runs the panel on Python 3.11 or 3.12: newer-only syntax must not ship.
+  python-311-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile every module with Python 3.11
+        run: python -m compileall -q app alembic scripts run.py

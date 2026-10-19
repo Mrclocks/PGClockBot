@@ -1114,8 +1114,9 @@ PY
   esac
 }
 
-# Panel venv targets CPython 3.10–3.12 (wheels). 3.13+ often builds from
-# source and stalls/OOMs on small VPS — prefer python3.12 explicitly.
+# Panel venv targets CPython 3.11–3.12 (wheels). The code uses 3.11 features
+# (StrEnum, asyncio.timeout, TaskGroup), so 3.10 cannot run it. 3.13+ often builds
+# from source and stalls/OOMs on small VPS — prefer python3.12 explicitly.
 _python_minor() {
   local bin="$1"
   "$bin" -c 'import sys; print(sys.version_info.minor)' 2>/dev/null || echo ""
@@ -1126,7 +1127,7 @@ _python_is_supported() {
   local maj min
   maj="$("$bin" -c 'import sys; print(sys.version_info.major)' 2>/dev/null || echo 0)"
   min="$(_python_minor "$bin")"
-  [[ "$maj" == "3" && -n "$min" && "$min" -ge 10 && "$min" -le 12 ]]
+  [[ "$maj" == "3" && -n "$min" && "$min" -ge 11 && "$min" -le 12 ]]
 }
 
 _try_apt_install_python312() {
@@ -1153,8 +1154,8 @@ _try_apt_install_python312() {
 }
 
 ensure_python() {
-  # Order: pinned 3.12 → 3.11 → 3.10 → generic python3 only if 3.10–3.12.
-  local candidates=(python3.12 python3.11 python3.10)
+  # Order: pinned 3.12 → 3.11 → generic python3 only if 3.11–3.12; else install 3.12.
+  local candidates=(python3.12 python3.11)
   local c=""
   SYSTEM_PY=""
   for c in "${candidates[@]}"; do
@@ -1178,7 +1179,7 @@ ensure_python() {
     if command -v python3 >/dev/null 2>&1; then
       have=" Detected: python3 $($(command -v python3) -c 'import sys; print("%d.%d" % (sys.version_info.major, sys.version_info.minor))' 2>/dev/null || echo '?')."
     fi
-    err "Need Python 3.10–3.12 for install (3.12 recommended).${have}"
+    err "Need Python 3.11–3.12 for install (3.12 recommended).${have}"
     err "Try: sudo add-apt-repository -y ppa:deadsnakes/ppa && sudo apt update && sudo apt install -y python3.12 python3.12-venv"
     err "Python 3.13+ often compiles packages from source and hangs on small VPS."
     return 1
@@ -1190,7 +1191,7 @@ ensure_venv() {
   if [[ -z "${SYSTEM_PY:-}" ]]; then
     ensure_python || return 1
   fi
-  # Recreate venv when it was built with an unsupported interpreter (e.g. 3.14).
+  # Recreate venv when it was built with an unsupported interpreter (e.g. 3.10 or 3.14).
   if [[ -x .venv/bin/python ]]; then
     if ! _python_is_supported .venv/bin/python; then
       local old_ver
