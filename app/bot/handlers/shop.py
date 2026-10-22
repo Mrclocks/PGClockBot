@@ -2401,9 +2401,7 @@ async def pay_psp_cb(
         )
     body += f"\n\n(پرداخت #{payment.id})"
     rows: list[list[InlineKeyboardButton]] = []
-    from app.services.payment_settlement import public_checkout_button_url
-
-    link = public_checkout_button_url(settlement)
+    link = (settlement.checkout_url or "").strip()
     if link.startswith("http://") or link.startswith("https://"):
         rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
     if callback.message:

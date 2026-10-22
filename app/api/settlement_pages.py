@@ -5,18 +5,16 @@ Public surface:
   - Card-auto webhooks — per-tenant path + HMAC secret from that tenant only
   - BezanBeCard callback/return — tenant path + checkout token; always re-fetches API
   - Mock checkout/pay — ONLY when ALLOW_SETTLEMENT_MOCK=1 + one-time token
-  - Checkout go-link — panel-hosted redirect that hides the PSP host in Telegram
 """
 
 from __future__ import annotations
 
 import logging
-import secrets
 from html import escape
 from typing import Any, Callable
 
 from fastapi import Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.status_render import render_status_page
@@ -87,54 +85,6 @@ def _bbc_return_page(settlement: Any) -> tuple[str, str, str]:
         "هنوز واریزی ثبت نشده",
         "بعد از واریز دقیقِ مبلغ یکتا، تأیید و تحویل خودکار انجام می‌شود.",
     )
-
-
-def _register_checkout_go(app: Any, get_db: Callable[..., Any]) -> None:
-    @app.get("/payments/settlement/go/{settlement_id}")
-    async def settlement_checkout_go(
-        settlement_id: int,
-        request: Request,
-        session: AsyncSession = Depends(get_db),
-    ):
-        """302 to the real checkout URL after a token check (hides PSP host in Telegram)."""
-        from app.db.models import PaymentSettlement
-
-        token = (request.query_params.get("t") or "").strip()
-        settlement = await session.get(PaymentSettlement, settlement_id)
-        expected = (settlement.checkout_token if settlement else "") or ""
-        if (
-            not settlement
-            or not token
-            or not expected
-            or not secrets.compare_digest(token, expected)
-        ):
-            return _status(
-                request,
-                kind="error",
-                title="لینک نامعتبر است",
-                message="به ربات برگردید و دوباره پرداخت را شروع کنید.",
-                http_status=404,
-                watermark="404",
-            )
-        if settlement.status == SettlementStatus.SETTLED.value:
-            return _status(
-                request,
-                kind="ok",
-                title="قبلاً تأیید شده",
-                message="این پرداخت پیش‌تر تسویه شده است؛ به تلگرام برگردید.",
-                watermark="OK",
-            )
-        target = (settlement.checkout_url or "").strip()
-        if not target.startswith("https://"):
-            return _status(
-                request,
-                kind="error",
-                title="لینک پرداخت آماده نیست",
-                message="به ربات برگردید و دوباره تلاش کنید.",
-                http_status=400,
-                watermark="ERR",
-            )
-        return RedirectResponse(url=target, status_code=302)
 
 
 def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
@@ -501,7 +451,6 @@ def _register_bbc(app: Any, get_db: Callable[..., Any]) -> None:
 
 
 def register_settlement_pages(app, *, get_db):
-    _register_checkout_go(app, get_db)
     _register_mock_psp(app, get_db)
     _register_psp_return(app, get_db)
     _register_card_auto(app, get_db)

@@ -62,31 +62,6 @@ def _public_base() -> str:
     return (cfg.public_base_url or cfg.webhook_url or "").rstrip("/")
 
 
-def public_checkout_button_url(settlement: PaymentSettlement) -> str:
-    """URL shown on the Telegram button — panel redirect when possible (hides PSP host).
-
-    Telegram always confirms external url-buttons; we cannot skip that dialog.
-    Routing through the panel origin keeps ``payment.*`` out of the prompt.
-    Falls back to the raw checkout URL when no public base or checkout token exists.
-    """
-    raw = (settlement.checkout_url or "").strip()
-    token = (settlement.checkout_token or "").strip()
-    if not raw or not token or int(getattr(settlement, "id", 0) or 0) <= 0:
-        return raw
-    try:
-        from app.services.public_https import https_public_base
-
-        base = https_public_base() or _public_base()
-    except Exception:
-        base = _public_base()
-    base = (base or "").rstrip("/")
-    if not base.startswith("http://") and not base.startswith("https://"):
-        return raw
-    from urllib.parse import quote
-
-    return f"{base}/payments/settlement/go/{int(settlement.id)}?t={quote(token, safe='')}"
-
-
 def _on(val: str | None) -> bool:
     return str(val or "").strip().lower() in {"1", "true", "yes", "on"}
 
