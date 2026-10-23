@@ -97,7 +97,7 @@ def test_plan_prices_use_grouping_while_price_inputs_keep_numeric_defaults(templ
 
 
 def test_financial_report_groups_revenue_and_payment_totals(template_env: Environment) -> None:
-    report = {"periods": {"day": {"revenue": 1234567}},
+    report = {"previous": {"revenue": 1234567}, "change_percent": None, "ops": {}, "timeline": [],
               "active": {"revenue": 2345678, "avg_order": 125000},
               "payment_methods": [{"label": "کیف پول", "amount": 3456789, "count": 1}]}
     html = template_env.get_template("_finance_reports.html").render(report=report)

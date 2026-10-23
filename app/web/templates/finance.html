@@ -8,6 +8,12 @@
 {%- else -%}مدیریت مالی
 {%- endif -%}
 {% endblock %}
+{% block head %}
+{% if finance_tab == 'reports' %}<link rel="stylesheet" href="/static/finance-reports.css?v={{ app_version }}" />{% endif %}
+{% endblock %}
+{% block page_scripts %}
+{% if finance_tab == 'reports' %}<script src="/static/finance-reports.js?v={{ app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>{% endif %}
+{% endblock %}
 {% block content %}
 {% set finance_tab = finance_tab or 'reports' %}
 <div class="page-head">

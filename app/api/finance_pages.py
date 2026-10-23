@@ -12,6 +12,7 @@ from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.finance_report_context import build_finance_report_context
 from app.db.models import BotUser, Order, Payment, Plan, ResellerProfile
 from app.services.authz import authz_from_staff, can_shop
 from app.services.list_query import (
@@ -328,7 +329,6 @@ def register_finance_pages(app, *, render, require_staff, get_db):
 
         if tab == "reports" and (can_orders or can_payments):
             from app.services.db_safe import recover_session
-            from app.services.finance_reports import build_finance_report
 
             await recover_session(session)
             if is_platform_admin(staff):
@@ -338,10 +338,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 if not rid:
                     ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
                     return render(request, "finance.html", ctx)
-            ctx["report"] = await build_finance_report(
-                session, reseller_id=rid, period=report_period
-            )
-            ctx["report_period"] = report_period
+            ctx.update(await build_finance_report_context(
+                session, reseller_id=rid, query=request.query_params,
+            ))
 
         elif tab == "orders" and can_orders:
             base_filters = []

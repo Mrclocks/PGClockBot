@@ -7,7 +7,7 @@ platform shop). Never fall through to another tenant's rows.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, case, func, or_, select
@@ -40,6 +40,17 @@ PERIOD_LABELS_FA = {
     "week": "۷ روز",
     "month": "۳۰ روز",
 }
+PAYMENT_METHOD_LABELS = {
+    "card": "کارت", "wallet": "کیف پول", "stars": "استارز", "gateway": "درگاه",
+    "crypto": "رمزارز", "psp": "درگاه بانکی", "—": "نامشخص",
+}
+
+
+class PaymentMethodSummary(TypedDict):
+    method: str
+    label: str
+    count: int
+    amount: int
 
 
 def normalize_report_period(raw: str | None) -> ReportPeriod:
@@ -216,15 +227,19 @@ async def shop_payment_method_breakdown(
     *,
     reseller_id: int | None,
     since: datetime,
-) -> list[dict[str, Any]]:
-    """Delivered-order payment methods in [since, now] for the shop."""
+    until: datetime | None = None,
+) -> list[PaymentMethodSummary]:
+    """Shop sales since a start instant, with an optional exclusive end."""
     if reseller_id is None:
         scope = Order.reseller_id.is_(None)
     else:
         scope = Order.reseller_id == int(reseller_id)
     # Label + group_by(same label) — required for PostgreSQL GROUP BY rules
     # (SQLite is looser and hid this). Do not repeat coalesce() in group_by.
-    method_col = func.coalesce(Order.payment_method, "—").label("pay_method")
+    method_col = case(
+        (Order.payment_method.in_(tuple(PAYMENT_METHOD_LABELS)), Order.payment_method),
+        else_="—",
+    ).label("pay_method")
     rows = (
         await session.execute(
             select(
@@ -235,21 +250,22 @@ async def shop_payment_method_breakdown(
             .where(
                 Order.status == "delivered",
                 Order.created_at >= since,
+                Order.created_at < until if until is not None else True,
                 scope,
                 non_demo_customer(Order.user_id),
             )
             .group_by(method_col)
             .order_by(func.count().desc())
+            .limit(len(PAYMENT_METHOD_LABELS))
         )
     ).all()
-    labels = {"card": "کارت", "wallet": "کیف پول", "stars": "Stars", "—": "نامشخص"}
     out = []
     for method, count, amount in rows:
         key = str(method or "—")
         out.append(
             {
                 "method": key,
-                "label": labels.get(key, key),
+                "label": PAYMENT_METHOD_LABELS[key],
                 "count": int(count or 0),
                 "amount": int(amount or 0),
             }

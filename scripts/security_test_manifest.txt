@@ -26,6 +26,8 @@ tests/test_connection_status_migration.py
 tests/test_purchase_contact_and_cancellation_notices.py
 # Monetary display escaping and canonical refund form values.
 tests/test_web_money_formatting.py
+# Finance date/time reports: authenticated shop scope, permissions and escaped filters.
+tests/test_finance_report_dashboard.py
 # Migration channel compatibility and cache isolation.
 tests/test_update_migration_metadata.py
 # --- ACL / RBAC / authz audits ---

@@ -1,167 +1,150 @@
-{# Finance reports tab — expects: report (build_finance_report), report_period #}
+{# Read-only finance dashboard; every period metric uses the same half-open window. #}
+{% set filters = report_filters|default({}) %}
 {% set report = report or {} %}
-{% set periods = report.periods or {} %}
-{% set day = periods.day or {} %}
-{% set week = periods.week or {} %}
-{% set month = periods.month or {} %}
-{% set active = report.active or {} %}
-{% set ops = report.ops or {} %}
-{% set period = report_period or report.period or 'week' %}
-{% set methods = report.payment_methods or [] %}
-
-<section class="card home-periods-card finance-report-compare" aria-label="مقایسه بازه‌ها">
-  <header class="home-periods-head">
-    <h2>مقایسه فروش</h2>
-    <p class="muted">امروز · ۷ روز · ۳۰ روز — فروش = تحویل‌شده</p>
-  </header>
-  <div class="home-period-grid">
-    <a class="home-period finance-report-period{% if period=='day' %} is-active{% endif %}" href="/finance?tab=reports&period=day">
-      <h3 class="home-period-label">امروز</h3>
-      <dl class="home-period-metrics">
-        <div><dt>درآمد</dt><dd><span dir="ltr">{{ day.revenue | money }}</span></dd></div>
-        <div><dt>فروش موفق</dt><dd>{{ day.delivered | num }}</dd></div>
-        <div><dt>سفارش</dt><dd>{{ day.orders | num }}</dd></div>
-        <div><dt>کاربر جدید</dt><dd>{{ day.new_users | num }}</dd></div>
-      </dl>
-    </a>
-    <a class="home-period finance-report-period{% if period=='week' %} is-active{% endif %}" href="/finance?tab=reports&period=week">
-      <h3 class="home-period-label">۷ روز</h3>
-      <dl class="home-period-metrics">
-        <div><dt>درآمد</dt><dd><span dir="ltr">{{ week.revenue | money }}</span></dd></div>
-        <div><dt>فروش موفق</dt><dd>{{ week.delivered | num }}</dd></div>
-        <div><dt>سفارش</dt><dd>{{ week.orders | num }}</dd></div>
-        <div><dt>کاربر جدید</dt><dd>{{ week.new_users | num }}</dd></div>
-      </dl>
-    </a>
-    <a class="home-period finance-report-period{% if period=='month' %} is-active{% endif %}" href="/finance?tab=reports&period=month">
-      <h3 class="home-period-label">۳۰ روز</h3>
-      <dl class="home-period-metrics">
-        <div><dt>درآمد</dt><dd><span dir="ltr">{{ month.revenue | money }}</span></dd></div>
-        <div><dt>فروش موفق</dt><dd>{{ month.delivered | num }}</dd></div>
-        <div><dt>سفارش</dt><dd>{{ month.orders | num }}</dd></div>
-        <div><dt>کاربر جدید</dt><dd>{{ month.new_users | num }}</dd></div>
-      </dl>
-    </a>
-  </div>
-</section>
-
-<div class="home-panels finance-report-panels">
-  <section class="home-panel home-panel-neutral">
-    <div class="home-panel-head">
-      <div class="home-panel-title">
-        <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M6 14l3-6 3 4 3-5 3 7"/></svg>
-        <h2 class="home-panel-h">فروش — {{ report.period_label or '۷ روز' }}</h2>
+{% set period = filters.period|default('week') %}
+<div class="finance-dashboard">
+  <section class="card finance-filters" aria-labelledby="finance-filter-title">
+    <header class="finance-section-head">
+      <div>
+        <h2 id="finance-filter-title">گزارش مالی فروشگاه</h2>
+        <p class="muted">بازه را انتخاب کنید تا خلاصه، نمودار و جزئیات با هم به‌روز شوند.</p>
       </div>
-      <p class="muted home-panel-sub">بازه انتخاب‌شده · میانگین روی فروش موفق</p>
-    </div>
-    <div class="home-panel-grid">
-      <div class="stat">
-        <div class="stat-top"><span>مبلغ کل فروش</span></div>
-        <strong dir="ltr">{{ active.revenue | money }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>تعداد فروش</span></div>
-        <strong>{{ active.delivered | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>سفارش ثبت‌شده</span></div>
-        <strong>{{ active.orders | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>میانگین فروش</span></div>
-        <strong dir="ltr">{{ active.avg_order | money }}</strong>
-      </div>
-    </div>
-  </section>
-
-  <section class="home-panel home-panel-neutral">
-    <div class="home-panel-head">
-      <div class="home-panel-title">
-        <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
-        <h2 class="home-panel-h">کاربران</h2>
-      </div>
-      <p class="muted home-panel-sub">موجودی فروشگاه · کاربر جدید در بازه</p>
-    </div>
-    <div class="home-panel-grid">
-      <div class="stat">
-        <div class="stat-top"><span>کاربران کل</span></div>
-        <strong>{{ ops.total_users | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>کاربر اضافه‌شده</span></div>
-        <strong>{{ active.new_users | num }}</strong>
-      </div>
-      <a class="stat" href="/users?filter=blocked">
-        <div class="stat-top"><span>مسدود</span></div>
-        <strong>{{ ops.blocked_users | num }}</strong>
-      </a>
-      <a class="stat" href="/users?filter=no_service">
-        <div class="stat-top"><span>بدون سرویس</span></div>
-        <strong>{{ ops.no_service_users | num }}</strong>
-      </a>
-    </div>
-  </section>
-
-  <section class="home-panel home-panel-neutral">
-    <div class="home-panel-head">
-      <div class="home-panel-title">
-        <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a5 5 0 0 1 5 5v2.2l1.8 3.3H5.2L7 11.2V9a5 5 0 0 1 5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>
-        <h2 class="home-panel-h">عملیات</h2>
-      </div>
-      <p class="muted home-panel-sub">اقدام فوری · لینک به صف‌های مرتبط</p>
-    </div>
-    <div class="home-panel-grid">
-      <a class="stat" href="/finance?tab=payments">
-        <div class="stat-top"><span>رسید معلق</span></div>
-        <strong>{{ ops.pending_receipts | num }}</strong>
-      </a>
-      <a class="stat" href="/tickets">
-        <div class="stat-top"><span>تیکت باز</span></div>
-        <strong>{{ ops.open_tickets | num }}</strong>
-      </a>
-      <a class="stat" href="/finance?tab=delivery">
-        <div class="stat-top"><span>تحویل ناموفق</span></div>
-        <strong>{{ ops.delivery_failures | num }}</strong>
-      </a>
-      <a class="stat" href="/users?filter=expiring">
-        <div class="stat-top"><span>نزدیک انقضا</span></div>
-        <strong>{{ ops.expiring_services | num }}</strong>
-      </a>
-      <a class="stat" href="/users?filter=low_volume">
-        <div class="stat-top"><span>حجم کم</span></div>
-        <strong>{{ ops.low_volume_services | num }}</strong>
-      </a>
-    </div>
-  </section>
-</div>
-
-{% if methods %}
-<section class="card finance-report-methods" aria-label="روش پرداخت">
-  <header class="home-periods-head">
-    <h2>روش پرداخت — {{ report.period_label or '' }}</h2>
-    <p class="muted">فقط فروش موفق در بازه</p>
-  </header>
-  <div class="table-wrap">
-    <table class="table-compact">
-      <thead>
-        <tr>
-          <th>روش</th>
-          <th data-sort-type="num">تعداد</th>
-          <th data-sort-type="num">مبلغ</th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for m in methods %}
-        <tr>
-          <td>{{ m.label }}</td>
-          <td class="mono" dir="ltr">{{ m.count | num }}</td>
-          <td class="mono" dir="ltr">{{ m.amount | money }}</td>
-        </tr>
+      <span class="badge neutral">ساعت تهران</span>
+    </header>
+    <nav class="finance-presets" aria-label="بازهٔ گزارش">
+      {% for key, label in [('day', 'امروز'), ('week', '۷ روز اخیر'), ('month', '۳۰ روز اخیر')] %}
+      <a class="btn btn-ghost{% if period == key %} is-active{% endif %}" href="/finance?tab=reports&amp;period={{ key }}"{% if period == key %} aria-current="true"{% endif %}>{{ label }}</a>
       {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
-{% endif %}
+      <button type="button" class="btn btn-ghost{% if period == 'custom' %} is-active{% endif %}" data-finance-custom-toggle aria-controls="finance-custom-range" aria-expanded="{{ 'true' if period == 'custom' else 'false' }}">بازهٔ دلخواه</button>
+    </nav>
+    <form id="finance-custom-range" class="finance-range-form" action="/finance" method="get" data-finance-range data-panel-validate="0"{% if period != 'custom' %} hidden{% endif %}>
+      <input type="hidden" name="tab" value="reports" />
+      <input type="hidden" name="period" value="custom" />
+      <label class="form-field" for="finance-start">
+        <span>از تاریخ و ساعت</span>
+        <input id="finance-start" type="datetime-local" name="start" value="{{ filters.start|default('') }}" min="2000-01-01T00:00" max="9998-12-31T23:59" step="60" required dir="ltr" aria-describedby="finance-range-help" />
+      </label>
+      <label class="form-field" for="finance-end">
+        <span>تا تاریخ و ساعت</span>
+        <input id="finance-end" type="datetime-local" name="end" value="{{ filters.end|default('') }}" min="2000-01-01T00:00" max="9998-12-31T23:59" step="60" required dir="ltr" aria-describedby="finance-range-help" />
+      </label>
+      <button class="btn" type="submit" data-finance-submit>نمایش گزارش</button>
+      <p id="finance-range-help" class="muted finance-range-help">تاریخ ورودی میلادی و ساعت به وقت تهران است. شروع بازه محاسبه می‌شود؛ لحظهٔ پایان محاسبه نمی‌شود. حداکثر بازه: ۳۶۶ روز.</p>
+      <p class="finance-range-status muted" role="status" data-finance-status></p>
+    </form>
+    {% if report_error %}<p class="err" role="alert">{{ report_error }}</p>{% endif %}
+  </section>
 
-<p class="muted finance-report-stamp">به‌روزرسانی: {{ report.generated_at or '—' }}</p>
+  {% if report %}
+  {% set active = report.active %}
+  {% set ops = report.ops %}
+  <section aria-labelledby="finance-summary-title">
+    <header class="finance-section-head finance-range-heading">
+      <div>
+        <h2 id="finance-summary-title">خلاصهٔ {{ report.period_label }}</h2>
+        <p class="muted finance-window"><span>{{ report.start_label }}</span><span aria-hidden="true">←</span><span>{{ report.end_label }}</span></p>
+      </div>
+      <span class="muted">مبالغ به {{ report.currency }} · فروش موفق = سفارش تحویل‌شده</span>
+    </header>
+    <div class="finance-summary-grid home-period-grid">
+      <article class="card finance-kpi finance-kpi-primary">
+        <dl><dt>درآمد</dt><dd><span dir="ltr">{{ active.revenue|money }}</span></dd></dl>
+        {% if report.change_percent is not none %}
+        <p class="finance-change{% if report.change_percent > 0 %} is-up{% elif report.change_percent < 0 %} is-down{% endif %}"><span dir="ltr">{{ report.change_percent|num }}٪</span> نسبت به بازهٔ قبل</p>
+        {% else %}<p class="muted">بازهٔ قبل فروش موفق نداشت</p>{% endif %}
+      </article>
+      <article class="card finance-kpi">
+        <dl><dt>فروش موفق</dt><dd><span dir="ltr">{{ active.delivered|num }}</span></dd></dl>
+        <p class="muted">از {{ active.orders|num }} سفارش ثبت‌شده</p>
+      </article>
+      <article class="card finance-kpi">
+        <dl><dt>میانگین مبلغ فروش</dt><dd><span dir="ltr">{{ active.avg_order|money }}</span></dd></dl>
+        <p class="muted">به ازای هر سفارش تحویل‌شده</p>
+      </article>
+      <article class="card finance-kpi">
+        <dl><dt>کاربر جدید</dt><dd><span dir="ltr">{{ active.new_users|num }}</span></dd></dl>
+        <p class="muted">ثبت‌نام در بازهٔ انتخاب‌شده</p>
+      </article>
+    </div>
+  </section>
+
+  <div class="finance-report-panels finance-analysis-grid">
+    <section class="card finance-trend" aria-labelledby="finance-trend-title">
+      <header class="finance-section-head">
+        <div><h2 id="finance-trend-title">روند فروش موفق</h2><p class="muted">تفکیک {{ report.interval_label }} · بر اساس زمان ثبت سفارش</p></div>
+        <span class="badge neutral">{{ report.interval_label }}</span>
+      </header>
+      {% if active.delivered %}
+      <div class="finance-chart-scale"><span>بیشینه: <b dir="ltr">{{ report.chart_peak|money }}</b></span><span>{{ report.currency }}</span></div>
+      <svg class="finance-trend-chart" viewBox="-12 -12 824 224" role="img" aria-labelledby="finance-chart-title finance-chart-description" preserveAspectRatio="none">
+        <title id="finance-chart-title">روند مبلغ فروش موفق در بازهٔ انتخاب‌شده</title>
+        <desc id="finance-chart-description">جمع فروش {{ active.revenue|money }}؛ {{ active.delivered|num }} فروش موفق. جزئیات هر نقطه در جدول زیر نمودار در دسترس است.</desc>
+        {% for y in [0, 50, 100, 150, 200] %}<line class="finance-chart-grid" x1="0" y1="{{ y }}" x2="800" y2="{{ y }}" />{% endfor %}
+        {% if report.timeline|length == 1 %}
+        <rect class="finance-chart-area" x="0" y="{{ report.timeline[0].y }}" width="800" height="{{ 200 - report.timeline[0].y }}" />
+        <line class="finance-chart-line" x1="0" y1="{{ report.timeline[0].y }}" x2="800" y2="{{ report.timeline[0].y }}" />
+        {% else %}
+        <polygon class="finance-chart-area" points="0,200 {{ report.chart_points }} 800,200" />
+        <polyline class="finance-chart-line" points="{{ report.chart_points }}" />
+        {% endif %}
+        {% for point in report.timeline %}
+        <circle class="finance-chart-point" cx="{{ point.x }}" cy="{{ point.y }}" r="3"><title>{{ point.start }} تا {{ point.end }} · {{ point.revenue|money }} · {{ point.delivered|num }} فروش</title></circle>
+        {% endfor %}
+      </svg>
+      <div class="finance-chart-labels"><span>{{ report.timeline[0].start }}</span><span>{{ report.timeline[-1].start }}</span></div>
+      {% else %}
+      <div class="finance-empty"><strong>در این بازه فروش موفقی ثبت نشده است.</strong><p class="muted">بازهٔ دیگری انتخاب کنید یا وضعیت سفارش‌ها را بررسی کنید.</p></div>
+      {% endif %}
+      <details class="finance-trend-details">
+        <summary>مشاهدهٔ جدول جزئیات نمودار</summary>
+        <div class="table-wrap"><table class="table-compact">
+          <caption class="muted">بازه‌ها به وقت تهران؛ لحظهٔ پایان هر ردیف محاسبه نمی‌شود.</caption>
+          <thead><tr><th scope="col">شروع</th><th scope="col">پایان</th><th scope="col">فروش موفق</th><th scope="col">مبلغ فروش</th></tr></thead>
+          <tbody>{% for point in report.timeline %}<tr><th scope="row">{{ point.start }}</th><td>{{ point.end }}</td><td dir="ltr">{{ point.delivered|num }}</td><td dir="ltr">{{ point.revenue|money }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+      </details>
+    </section>
+
+    <section class="card finance-report-methods" aria-labelledby="finance-methods-title">
+      <header class="finance-section-head"><div><h2 id="finance-methods-title">روش پرداخت</h2><p class="muted">سهم از مبلغ فروش موفق همین بازه</p></div></header>
+      {% for method in report.payment_methods %}
+      <div class="finance-method">
+        <div class="finance-method-head"><strong>{{ method.label }}</strong><span dir="ltr">{{ method.amount|money }}</span></div>
+        {% set share = (method.amount * 100 // active.revenue) if active.revenue > 0 else 0 %}
+        <svg class="finance-method-meter" viewBox="0 0 100 6" preserveAspectRatio="none" role="img" aria-label="سهم {{ method.label }}: {{ share|num }} درصد"><rect class="finance-meter-track" width="100" height="6" rx="3" /><rect class="finance-meter-fill" width="{{ share }}" height="6" rx="3" /></svg>
+        <p class="muted">{{ method.count|num }} فروش <span aria-hidden="true">·</span> {{ share|num }}٪ از مبلغ فروش</p>
+      </div>
+      {% else %}<div class="finance-empty"><strong>پرداختی برای فروش موفق این بازه وجود ندارد.</strong></div>{% endfor %}
+    </section>
+  </div>
+
+  <section class="card" aria-labelledby="finance-comparison-title">
+    <header class="finance-section-head"><div><h2 id="finance-comparison-title">مقایسه با بازهٔ قبل</h2><p class="muted">بازهٔ قبلی دقیقاً هم‌اندازهٔ بازهٔ انتخاب‌شده است.</p><p class="muted">{{ report.previous_label }} ← {{ report.start_label }}</p></div></header>
+    <div class="table-wrap"><table class="table-compact">
+      <thead><tr><th scope="col">شاخص</th><th scope="col">بازهٔ انتخاب‌شده</th><th scope="col">بازهٔ قبل</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">مبلغ فروش موفق</th><td dir="ltr">{{ active.revenue|money }}</td><td dir="ltr">{{ report.previous.revenue|money }}</td></tr>
+        <tr><th scope="row">فروش موفق</th><td dir="ltr">{{ active.delivered|num }}</td><td dir="ltr">{{ report.previous.delivered|num }}</td></tr>
+        <tr><th scope="row">کل سفارش‌ها</th><td dir="ltr">{{ active.orders|num }}</td><td dir="ltr">{{ report.previous.orders|num }}</td></tr>
+        <tr><th scope="row">میانگین مبلغ فروش</th><td dir="ltr">{{ active.avg_order|money }}</td><td dir="ltr">{{ report.previous.avg_order|money }}</td></tr>
+        <tr><th scope="row">در انتظار پرداخت یا تحویل</th><td dir="ltr">{{ active.pending|num }}</td><td dir="ltr">{{ report.previous.pending|num }}</td></tr>
+        <tr><th scope="row">لغوشده، ردشده یا ناموفق</th><td dir="ltr">{{ active.unsuccessful|num }}</td><td dir="ltr">{{ report.previous.unsuccessful|num }}</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="card" aria-labelledby="finance-ops-title">
+    <header class="finance-section-head"><div><h2 id="finance-ops-title">وضعیت فعلی فروشگاه</h2><p class="muted">این اعداد وضعیت همین حالا هستند و به فیلتر زمانی وابسته نیستند.</p></div></header>
+    <div class="finance-ops-grid">
+      {% for label, value, url in [
+        ('کل کاربران', ops.total_users, '/users'), ('کاربران مسدود', ops.blocked_users, '/users?filter=blocked'),
+        ('بدون سرویس', ops.no_service_users, '/users?filter=no_service'), ('رسید معلق', ops.pending_receipts, '/finance?tab=payments'),
+        ('تحویل ناموفق', ops.delivery_failures, '/finance?tab=delivery'), ('تیکت باز', ops.open_tickets, '/tickets'),
+        ('نزدیک انقضا', ops.expiring_services, '/users?filter=expiring'), ('حجم کم', ops.low_volume_services, '/users?filter=low_volume')
+      ] %}<a class="finance-ops-item" href="{{ url }}"><span>{{ label }}</span><strong dir="ltr">{{ value|num }}</strong></a>{% endfor %}
+    </div>
+  </section>
+  <p class="muted finance-report-note">مبنای بازه، زمان ثبت سفارش و مبنای فروش موفق، وضعیت فعلی «تحویل‌شده» است. شارژ کیف پول فروش محسوب نمی‌شود. کاربران دمو در محاسبات نیستند.</p>
+  <p class="muted finance-report-note">به‌روزرسانی: {{ report.generated_at }}</p>
+  {% endif %}
+</div>
