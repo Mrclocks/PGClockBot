@@ -127,7 +127,7 @@
   ]) }}
   {% endif %}
   <div class="table-wrap">
-  <table class="table-compact users-ops-table" data-sortable{% if manage or ops %} data-bulk-select{% endif %}>
+  <table class="table-compact users-ops-table users-cards-sm" data-sortable{% if manage or ops %} data-bulk-select{% endif %}>
     <thead>
       <tr>
         {% if manage or ops %}{{ table_select_head() }}{% endif %}
@@ -166,6 +166,7 @@
               </span>
               {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}" title="تگ ریسک">{{ tag.title_fa }}</span>{% endif %}
             </span>
+            <span class="users-card-tg mono" dir="ltr">{{ u.telegram_id }}</span>
           </div>
         </td>
         <td class="col-svc" data-sort-value="{{ row.services[0].label if row.service_count > 0 else '' }}">
@@ -197,9 +198,9 @@
           </label>
           {% endif %}
         </td>
-        <td class="col-vol users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
-        <td class="col-exp users-exp-cell" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
-        <td class="mono col-wallet" dir="ltr" data-sort-value="{{ row.wallet_balance }}">{{ row.wallet_balance | money }}</td>
+        <td class="col-vol users-vol-cell" data-label="حجم" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
+        <td class="col-exp users-exp-cell" data-label="انقضا" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
+        <td class="mono col-wallet" dir="ltr" data-label="کیف پول" data-sort-value="{{ row.wallet_balance }}">{{ row.wallet_balance | money }}</td>
         <td class="col-status" data-sort-value="{{ '1' if u.is_blocked else '0' }}">
           {% if u.is_blocked %}
           <span class="badge blocked">مسدود</span>

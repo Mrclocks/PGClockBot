@@ -757,6 +757,112 @@ html[data-theme="light"] .badge.badge-risk-tag {
   font-variant-numeric: tabular-nums;
   text-align: end;
 }
+.users-card-tg { display: none; }
+/* Phones: each user row becomes a card, so the table never scrolls sideways.
+   The row stays a <tr>, so sorting, bulk select and row actions keep working. */
+@media (max-width: 880px) {
+  .table-wrap:has(> .users-cards-sm) {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+  .users-cards-sm,
+  .users-cards-sm > tbody { display: block; width: 100%; }
+  .users-cards-sm > thead > tr {
+    display: flex;
+    padding: 0 calc(var(--space-2) + 1px) var(--space-1_5);
+  }
+  .users-cards-sm > thead > tr > th { display: none; }
+  .users-cards-sm > thead > tr > th.col-select {
+    display: flex;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .users-cards-sm .table-select-all {
+    display: inline-flex !important;
+    min-height: 0;
+    line-height: 1.5;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted-fg);
+  }
+  .users-cards-sm .table-select-all::after { content: "انتخاب همه"; }
+  .users-cards-sm > tbody > tr { display: block; }
+  .users-cards-sm > tbody > tr.users-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-areas:
+      "name name name name stat act"
+      "svc svc svc svc svc svc"
+      "vol vol exp exp wal wal";
+    gap: var(--space-1);
+    margin-bottom: var(--space-1_5);
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+  }
+  .users-cards-sm > tbody > tr.users-row > td {
+    display: block;
+    min-width: 0;
+    max-width: none;
+    width: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .users-cards-sm > tbody > tr.users-row > td.col-select {
+    position: absolute;
+    top: var(--space-2);
+    inset-inline-start: var(--space-2);
+  }
+  .users-cards-sm > tbody > tr.users-row:has(> td.col-select) > td.col-name {
+    padding-inline-start: calc(var(--space-3) + var(--space-0));
+  }
+  .users-cards-sm td.col-name { grid-area: name; }
+  .users-cards-sm td.col-status { grid-area: stat; align-self: start; justify-self: end; }
+  .users-cards-sm td.col-actions { grid-area: act; align-self: start; justify-self: end; }
+  .users-cards-sm td.col-svc { grid-area: svc; text-align: start; }
+  .users-cards-sm td.col-vol { grid-area: vol; }
+  .users-cards-sm td.col-exp { grid-area: exp; }
+  .users-cards-sm td.col-wallet { grid-area: wal; direction: rtl; text-align: start; }
+  .users-cards-sm .users-card-tg {
+    display: block;
+    width: fit-content;
+    font-size: 12px;
+    color: var(--muted-fg);
+    user-select: all;
+  }
+  .users-cards-sm .users-svc-name { justify-content: flex-start; text-align: start; }
+  .users-cards-sm .users-svc-select-wrap,
+  .users-cards-sm .users-svc-select { width: 100%; max-width: none; }
+  .users-cards-sm > tbody > tr.users-row > td[data-label] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-1) var(--space-1_5);
+    border-radius: var(--menu-radius);
+    background: var(--table-head-bg);
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .users-cards-sm > tbody > tr.users-row > td[data-label]::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted-fg);
+  }
+}
 .users-svc-name {
   display: inline-flex;
   align-items: center;
