@@ -1,24 +1,33 @@
 /* Phone list layout for tables marked .table-list-sm (styles in panel.css).
    - «N سرویس» buttons open the row's nested list (aria-expanded / aria-controls).
-   - The header sort menu lists each sortable column both ways and drives the table's
+   - The header sort menu offers only the columns a template marks with
+     data-list-sort-label (one direction each, data-list-sort-dir) and drives the table's
      own header sort (panel.js), so the desktop and the list stay in the same order.
    - A modal body marked [data-load-fragment] is filled from the opener's data-modal-load. */
 (function () {
   'use strict';
 
-  var DIRECTIONS = [['ascending', '↑'], ['descending', '↓']];
+  /* A menu with fewer choices than this is no choice at all: it is not shown. */
+  var MIN_SORT_OPTIONS = 2;
 
-  /* [{label, sortType}] in header order (null for a column that does not sort) →
-     menu options {value: "index:direction", label}. */
+  /* [{listLabel, listDir, listOrder, sortType}] in header order (null for a column that
+     is not offered) → menu options {value: "index:direction", label}, by listOrder and
+     then header order, so every list reads «جدیدترین» first and «نام» last. */
   function sortOptions(headers) {
-    var out = [];
+    var picked = [];
     headers.forEach(function (h, index) {
-      if (!h || !h.sortType || !h.label) return;
-      DIRECTIONS.forEach(function (d) {
-        out.push({ value: index + ':' + d[0], label: h.label + ' ' + d[1] });
+      if (!h || !h.sortType || !h.listLabel) return;
+      var order = Number(h.listOrder);
+      picked.push({
+        order: Number.isFinite(order) ? order : Infinity,
+        index: index,
+        value: index + ':' + (h.listDir === 'descending' ? 'descending' : 'ascending'),
+        label: h.listLabel,
       });
     });
-    return out;
+    if (picked.length < MIN_SORT_OPTIONS) return [];
+    picked.sort(function (a, b) { return a.order - b.order || a.index - b.index; });
+    return picked.map(function (p) { return { value: p.value, label: p.label }; });
   }
 
   function parseSortValue(value) {
@@ -44,18 +53,27 @@
     if (!select) return;
     var heads = headerCells(table);
     var options = sortOptions(heads.map(function (th) {
-      return { label: (th.textContent || '').trim(), sortType: th.getAttribute('data-sort-type') };
+      return {
+        listLabel: (th.getAttribute('data-list-sort-label') || '').trim(),
+        listDir: th.getAttribute('data-list-sort-dir'),
+        listOrder: th.getAttribute('data-list-sort-order'),
+        sortType: th.getAttribute('data-sort-type'),
+      };
     }));
     if (!options.length) {
-      /* Nothing to sort by: drop the menu so no empty control is left in the header. */
+      /* Nothing worth choosing: drop the menu so no empty control is left in the header. */
       var enhanced = select.closest('.ui-select');
       (enhanced || select).remove();
       return;
     }
+    /* An empty, disabled first option keeps «مرتب‌سازی» as the closed label (panel.js reads
+       the placeholder attribute) without listing it as a choice in the open menu. */
     var placeholder = document.createElement('option');
     placeholder.value = '';
-    placeholder.textContent = 'مرتب‌سازی';
+    placeholder.disabled = true;
+    placeholder.selected = true;
     select.appendChild(placeholder);
+    select.setAttribute('placeholder', 'مرتب‌سازی');
     options.forEach(function (o) {
       var opt = document.createElement('option');
       opt.value = o.value;

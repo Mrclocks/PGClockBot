@@ -35,10 +35,10 @@
     <thead>
       <tr>
         {% if can_disable or can_enable or can_reset or can_revoke or can_delete %}{{ table_select_head() }}{% endif %}
-        <th data-sort-type="text">نام کاربری</th>
+        <th data-sort-type="text" data-list-sort-label="نام" data-list-sort-dir="ascending" data-list-sort-order="3">نام کاربری</th>
         <th data-sort-type="text">وضعیت</th>
-        <th data-sort-type="num">حجم</th>
-        <th class="col-hide-sm" data-sort-type="num">انقضا</th>
+        <th data-sort-type="num" data-list-sort-label="بیشترین مصرف" data-list-sort-dir="descending" data-list-sort-order="2">حجم</th>
+        <th class="col-hide-sm" data-sort-type="num" data-list-sort-label="زودترین انقضا" data-list-sort-dir="ascending" data-list-sort-order="1">انقضا</th>
                 {% if is_admin %}<th class="col-hide-sm" data-sort-type="text">ادمین مالک</th>{% endif %}
         <th class="col-actions"></th>
         <th class="li-head" scope="col"><span class="li-count">{{ users | length | num }} کاربر</span><select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select></th>
@@ -82,7 +82,7 @@
           {% else %}—{% endif %}
           </span>
         </td>
-        <td class="mono muted col-hide-sm li-value" dir="ltr" data-sort-value="{{ days_left if days_left is not none else '' }}">
+        <td class="mono muted col-hide-sm li-value" dir="ltr" data-sort-value="{{ days_left if days_left is not none else 9999 }}">
           <span class="li-only">{% if days_left is not none %}{{ days_left }} روز{% else %}—{% endif %}</span><span class="li-hide">
           {% if u.get('_expire_text') %}{{ u.get('_expire_text') }}{% elif u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}</span>
         </td>

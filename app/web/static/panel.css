@@ -2617,6 +2617,8 @@ a.btn.btn-ghost:hover {
     color: var(--muted-fg);
   }
   .table-list-sm .li-sort { width: auto; max-width: 60%; height: 32px; min-height: 32px; font-size: 12px; }
+  /* panel.js sizes the open menu to this control: wide enough for the longest choice on one line. */
+  .table-list-sm .li-head .ui-select { min-width: 9.5rem; }
 
   /* Line one: the name in the text colour, its id after it in the caption colour. Never wraps. */
   .table-list-sm .li-title { grid-area: title; font-size: 14px; font-weight: 600; line-height: 22px; color: var(--foreground); }

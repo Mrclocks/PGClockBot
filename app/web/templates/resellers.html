@@ -153,13 +153,13 @@
     <thead>
       <tr>
         {% if owner_view %}{{ table_select_head() }}{% endif %}
-        <th data-sort-type="text">کاربر</th>
+        <th data-sort-type="text" data-list-sort-label="نام" data-list-sort-dir="ascending" data-list-sort-order="3">کاربر</th>
         <th class="col-hide-sm" data-sort-type="num">تلگرام</th>
         <th class="col-hide-sm" data-sort-type="text">نقش</th>
         <th data-sort-type="text">نوع پلن</th>
         <th data-sort-type="text">وضعیت</th>
-        <th class="reseller-quota-th" data-sort-type="num">کاربران</th>
-        <th class="reseller-quota-th" data-sort-type="num">حجم</th>
+        <th class="reseller-quota-th" data-sort-type="num" data-list-sort-label="بیشترین کاربر" data-list-sort-dir="descending" data-list-sort-order="1">کاربران</th>
+        <th class="reseller-quota-th" data-sort-type="num" data-list-sort-label="بیشترین مصرف" data-list-sort-dir="descending" data-list-sort-order="2">حجم</th>
         <th class="col-hide-sm" data-sort-type="text">وب</th>
         <th class="col-hide-sm" data-sort-type="text">ربات</th>
         <th class="col-hide-sm" data-sort-type="text">راه‌اندازی</th>
