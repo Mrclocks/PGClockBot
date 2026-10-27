@@ -114,6 +114,12 @@ class UserCardTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(HOSTILE_NAME, response.text)
         self.assertIn("&lt;script&gt;", response.text)
 
+    async def test_a_latin_name_keeps_the_header_right_to_left(self) -> None:
+        self.staff = OWNER.copy()
+        response = await self.client.get("/users/1/card")
+        self.assertIn("<strong><bdi>Platform customer</bdi></strong>", response.text)
+        self.assertNotIn('<strong dir="auto">', response.text)
+
     async def test_owner_sees_the_platform_purse_and_services(self) -> None:
         self.staff = OWNER.copy()
         response = await self.client.get("/users/1/card")

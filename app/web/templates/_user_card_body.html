@@ -2,7 +2,7 @@
 {% set u = card.user %}
 <div class="user-card">
   <header class="user-card-head">
-    <strong dir="auto">{{ u.full_name or u.username or "—" }}</strong>
+    <strong><bdi>{{ u.full_name or u.username or "—" }}</bdi></strong>
     <span class="muted">
       {% if u.username %}<bdi dir="ltr">@{{ u.username }}</bdi> · {% endif %}آیدی <bdi dir="ltr">{{ u.telegram_id }}</bdi>
     </span>
