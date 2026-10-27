@@ -30,7 +30,7 @@
         {% if can_delete %}{% if g.get('id') %}{{ table_select_cell(g.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
         <td class="mono">{{ g.get('id') }}</td>
         <td class="li-title"><span dir="auto">{{ g.get('name') }}</span> <span class="li-only li-id" dir="ltr">(#{{ g.get('id') }})</span></td>
-        <td class="mono muted col-hide-sm li-sub"><bdi dir="ltr">{{ g.get('inbound_tags') or '—' }}</bdi></td>
+        <td class="mono muted col-hide-sm li-sub">{% set group_tags = g.get('inbound_tags') or [] %}<bdi dir="ltr">{{ (group_tags if group_tags is string else group_tags|join(' · ')) or '—' }}</bdi></td>
         <td class="mono col-hide-sm li-value">{{ g.get('total_users') if g.get('total_users') is not none else '—' }}<span class="li-only"> کاربر</span></td>
         <td class="li-badge">{% if g.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
         <td class="col-actions">
