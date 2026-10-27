@@ -15,18 +15,13 @@ from app.services.shop_scope import is_platform_admin, shop_owner_id
 
 PLATFORM_BACK = "/settings?tab=miniapp"
 SHOP_BACK = "/shop-settings?tab=miniapp"
-# The colour picker posts a preset, "" for the default, or this value with a custom colour.
-CUSTOM_ACCENT = "custom"
-CUSTOM_ACCENT_FIELD = "miniapp_accent_custom"
 SAVED_MESSAGE = "تنظیمات مینی‌اپ ذخیره شد"
 NO_SHOP = "فروشگاه شما پیدا نشد"
 
 
 def _form_values(form) -> tuple[str, str]:
-    """The submitted accent (a preset, "" for the default, or the custom colour) and notice."""
-    choice = str(form.get(ACCENT_SETTING) or "")
-    accent = str(form.get(CUSTOM_ACCENT_FIELD) or "") if choice == CUSTOM_ACCENT else choice
-    return accent, str(form.get(NOTICE_SETTING) or "")
+    """The submitted accent (a preset, or "" for the default) and notice."""
+    return str(form.get(ACCENT_SETTING) or ""), str(form.get(NOTICE_SETTING) or "")
 
 
 async def _save(session: AsyncSession, form, *, shop_id: int | None, back: str) -> RedirectResponse | None:
