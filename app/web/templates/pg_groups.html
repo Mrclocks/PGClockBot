@@ -22,17 +22,17 @@
   ]) }}
   {% endif %}
   <div class="table-wrap">
-  <table class="table-compact"{% if can_delete %} data-bulk-select{% endif %}>
-    <thead><tr>{% if can_delete %}{{ table_select_head() }}{% endif %}<th class="col-id">شناسه</th><th class="col-name">نام</th><th class="col-hide-sm col-text">اینباندها</th><th class="col-hide-sm col-amount">کاربران</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr></thead>
+  <table class="table-compact table-list-sm"{% if can_delete %} data-bulk-select{% endif %}>
+    <thead><tr>{% if can_delete %}{{ table_select_head() }}{% endif %}<th class="col-id">شناسه</th><th class="col-name">نام</th><th class="col-hide-sm col-text">اینباندها</th><th class="col-hide-sm col-amount">کاربران</th><th class="col-status">وضعیت</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ groups | length | num }} گروه</span></th></tr></thead>
     <tbody>
     {% for g in groups %}
       <tr data-bulk-ops="{% if can_delete and g.get('id') %}delete{% endif %}">
         {% if can_delete %}{% if g.get('id') %}{{ table_select_cell(g.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
         <td class="mono">{{ g.get('id') }}</td>
-        <td>{{ g.get('name') }}</td>
-        <td class="mono muted col-hide-sm">{{ g.get('inbound_tags') or '—' }}</td>
-        <td class="mono col-hide-sm">{{ g.get('total_users') if g.get('total_users') is not none else '—' }}</td>
-        <td>{% if g.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
+        <td class="li-title"><span dir="auto">{{ g.get('name') }}</span> <span class="li-only li-id" dir="ltr">(#{{ g.get('id') }})</span></td>
+        <td class="mono muted col-hide-sm li-sub"><bdi dir="ltr">{{ g.get('inbound_tags') or '—' }}</bdi></td>
+        <td class="mono col-hide-sm li-value">{{ g.get('total_users') if g.get('total_users') is not none else '—' }}<span class="li-only"> کاربر</span></td>
+        <td class="li-badge">{% if g.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
         <td class="col-actions">
           {% if (can_update or can_delete) and g.get('id') %}
           {% call row_actions() %}

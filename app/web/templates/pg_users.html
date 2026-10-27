@@ -31,7 +31,7 @@
   ]) }}
   {% endif %}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable{% if can_disable or can_enable or can_reset or can_revoke or can_delete %} data-bulk-select{% endif %}>
+  <table class="table-compact table-list-sm" data-sortable{% if can_disable or can_enable or can_reset or can_revoke or can_delete %} data-bulk-select{% endif %}>
     <thead>
       <tr>
         {% if can_disable or can_enable or can_reset or can_revoke or can_delete %}{{ table_select_head() }}{% endif %}
@@ -41,6 +41,7 @@
         <th class="col-hide-sm" data-sort-type="num">انقضا</th>
                 {% if is_admin %}<th class="col-hide-sm" data-sort-type="text">ادمین مالک</th>{% endif %}
         <th class="col-actions"></th>
+        <th class="li-head" scope="col"><span class="li-count">{{ users | length | num }} کاربر</span><select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select></th>
       </tr>
     </thead>
     <tbody>
@@ -61,8 +62,8 @@
       {% endif %}
       <tr data-bulk-ops="{{ ns.ops.rstrip(',') }}">
         {% if can_disable or can_enable or can_reset or can_revoke or can_delete %}{% if uid %}{{ table_select_cell(uid) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
-        <td class="mono" dir="ltr" data-sort-value="{{ u.get('username') or '' }}">{{ u.get('username') or '—' }}</td>
-        <td data-sort-value="{{ '0' if disabled else '1' }}">
+        <td class="mono li-title" dir="ltr" data-sort-value="{{ u.get('username') or '' }}">{{ u.get('username') or '—' }}</td>
+        <td class="li-badge" data-sort-value="{{ '0' if disabled else '1' }}">
           {% if disabled %}
           <span class="badge warn">غیرفعال</span>
           {% elif u.get('status') == 'on_hold' %}
@@ -71,7 +72,8 @@
           <span class="badge active">{{ u.get('status') or 'فعال' }}</span>
           {% endif %}
         </td>
-        <td class="mono reseller-quota-cell" data-sort-value="{{ u.get('used_traffic') if u.get('used_traffic') is not none else '' }}">
+        <td class="mono reseller-quota-cell li-sub" data-sort-value="{{ u.get('used_traffic') if u.get('used_traffic') is not none else '' }}">
+          <span class="li-only">حجم</span>
           <span class="byte-size reseller-quota-line">
           {% if u.get('data_limit') %}
             {{ (u.get('used_traffic') or 0) | bytes_ratio(u.get('data_limit')) }}
@@ -80,8 +82,9 @@
           {% else %}—{% endif %}
           </span>
         </td>
-        <td class="mono muted col-hide-sm" dir="ltr" data-sort-value="{{ days_left if days_left is not none else '' }}">
-          {% if u.get('_expire_text') %}{{ u.get('_expire_text') }}{% elif u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}
+        <td class="mono muted col-hide-sm li-value" dir="ltr" data-sort-value="{{ days_left if days_left is not none else '' }}">
+          <span class="li-only">{% if days_left is not none %}{{ days_left }} روز{% else %}—{% endif %}</span><span class="li-hide">
+          {% if u.get('_expire_text') %}{{ u.get('_expire_text') }}{% elif u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}</span>
         </td>
         {% if is_admin %}
         {% set adm = u.get('admin') %}

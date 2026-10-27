@@ -31,7 +31,7 @@
   ]) }}
   {% endif %}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable{% if can_reconnect or can_update or can_delete %} data-bulk-select{% endif %}>
+  <table class="table-compact table-list-sm" data-sortable{% if can_reconnect or can_update or can_delete %} data-bulk-select{% endif %}>
     <thead><tr>
       {% if can_reconnect or can_update or can_delete %}{{ table_select_head() }}{% endif %}
       <th class="col-id" data-sort-type="num">شناسه</th>
@@ -42,6 +42,7 @@
       <th data-sort-type="num">دانلود</th>
       <th data-sort-type="num">مجموع ترافیک</th>
       <th class="col-actions"></th>
+      <th class="li-head" scope="col"><span class="li-count">{{ nodes | length | num }} نود</span><select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select></th>
     </tr></thead>
     <tbody>
     {% for n in nodes %}
@@ -54,9 +55,9 @@
       <tr data-bulk-ops="{{ ns.ops.rstrip(',') }}">
         {% if can_reconnect or can_update or can_delete %}{% if n.get('id') %}{{ table_select_cell(n.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
         <td class="mono" dir="ltr" data-sort-value="{{ n.get('id') or 0 }}">{{ n.get('id') }}</td>
-        <td data-sort-value="{{ n.get('name') or '' }}">{{ n.get('name') or '—' }}</td>
-        <td class="mono" dir="ltr" data-sort-value="{{ n.get('address') or n.get('host') or '' }}">{{ n.get('address') or n.get('host') or '—' }}{% if n.get('port') %}:{{ n.get('port') }}{% endif %}</td>
-        <td data-sort-value="{{ (n.get('status') or n.get('connection_status') or '')|string|lower }}">
+        <td class="li-title" data-sort-value="{{ n.get('name') or '' }}"><span dir="auto">{{ n.get('name') or '—' }}</span> <span class="li-only li-id" dir="ltr">(#{{ n.get('id') }})</span></td>
+        <td class="mono li-sub" data-sort-value="{{ n.get('address') or n.get('host') or '' }}"><bdi dir="ltr">{{ n.get('address') or n.get('host') or '—' }}{% if n.get('port') %}:{{ n.get('port') }}{% endif %}</bdi></td>
+        <td class="li-badge" data-sort-value="{{ (n.get('status') or n.get('connection_status') or '')|string|lower }}">
           {% set st = (n.get('status') or n.get('connection_status') or '')|string|lower %}
           <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled','disconnected'] %}danger{% else %}neutral{% endif %}">
             {{ n.get('status') or n.get('connection_status') or '—' }}
@@ -68,7 +69,7 @@
         <td class="mono reseller-quota-cell" data-sort-value="{{ n.get('_traffic_down') if n.get('_traffic_down') is not none else '' }}">
           <span class="byte-size reseller-quota-line">{{ n.get('_traffic_down_text') or '—' }}</span>
         </td>
-        <td class="mono reseller-quota-cell" data-sort-value="{{ n.get('_traffic_total') if n.get('_traffic_total') is not none else '' }}">
+        <td class="mono reseller-quota-cell li-value" data-sort-value="{{ n.get('_traffic_total') if n.get('_traffic_total') is not none else '' }}">
           <span class="byte-size reseller-quota-line">{{ n.get('_traffic_total_text') or '—' }}</span>
         </td>
         <td class="col-actions">

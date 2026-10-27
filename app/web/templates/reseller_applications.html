@@ -20,22 +20,23 @@
     {'key': 'reject', 'label': 'رد', 'class': 'btn-danger', 'confirm': '{n} درخواست رد شوند؟', 'confirm_title': 'رد گروهی', 'confirm_label': 'رد', 'danger': true},
   ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-bulk-select>
+  <table class="table-compact table-list-sm" data-bulk-select>
     <thead>
-      <tr>{{ table_select_head() }}<th class="col-id">#</th><th class="col-user">کاربر</th><th class="col-hide-sm col-name">پلن</th><th class="col-amount">مبلغ</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr>
+      <tr>{{ table_select_head() }}<th class="col-id">#</th><th class="col-user">کاربر</th><th class="col-hide-sm col-name">پلن</th><th class="col-amount">مبلغ</th><th class="col-status">وضعیت</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ apps | length | num }} درخواست</span></th></tr>
     </thead>
     <tbody>
     {% for a in apps %}
       <tr data-bulk-ops="{% if a.status == 'awaiting_approval' %}approve,reject{% elif a.status == 'pending_payment' %}reject{% endif %}">
         {{ table_select_cell(a.id) }}
         <td class="mono">{{ a.id }}</td>
-        <td>
-          {{ a.user.full_name or a.user.username or '—' if a.user else '—' }}
-          <br><small class="muted mono">{{ a.user.telegram_id if a.user else '' }}</small>
+        <td class="li-title">
+          <span dir="auto">{{ a.user.full_name or a.user.username or '—' if a.user else '—' }}</span>
+          <br class="li-hide"><small class="muted mono li-hide">{{ a.user.telegram_id if a.user else '' }}</small>
+          {% if a.user %}<span class="li-only li-id" dir="ltr">({{ a.user.telegram_id }})</span>{% endif %}
         </td>
-        <td class="col-hide-sm">{{ a.plan.name if a.plan else '—' }}</td>
-        <td class="mono" dir="ltr">{{ (a.plan.price if a.plan else 0) | money }}</td>
-        <td>
+        <td class="col-hide-sm li-sub"><span>{{ a.plan.name if a.plan else '—' }}</span> <span class="li-only">· درخواست <bdi dir="ltr">#{{ a.id }}</bdi></span></td>
+        <td class="mono li-value" dir="ltr">{{ (a.plan.price if a.plan else 0) | money }}</td>
+        <td class="li-badge">
           {% if a.status == 'awaiting_approval' %}<span class="badge pending">منتظر تأیید</span>
           {% elif a.status == 'pending_payment' %}<span class="badge pending">منتظر پرداخت</span>
           {% elif a.status == 'approved' %}<span class="badge approved">تأیید شده</span>
@@ -54,7 +55,7 @@
           <form method="post" action="/resellers/applications/{{ a.id }}/reject" data-confirm="درخواست منتظر پرداخت رد/لغو شود؟ کاربر می‌تواند دوباره درخواست بدهد." data-confirm-title="رد درخواست" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-ghost btn-sm" type="submit">رد / لغو</button></form>
           {% endcall %}
           {% else %}
-          <span class="muted">—</span>
+          <span class="muted li-hide">—</span>
           {% endif %}
         </td>
       </tr>

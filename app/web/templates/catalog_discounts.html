@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_title, row_actions %}
 {% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}تخفیف‌ها{% endblock %}
 {% block content %}
@@ -77,7 +77,7 @@
     <h2>تاریخچه</h2>
   </div>
   <div class="table-wrap">
-    <table class="table-compact">
+    <table class="table-compact table-list-sm">
       <thead>
         <tr>
           <th class="col-text">عنوان</th>
@@ -88,21 +88,28 @@
           <th class="col-status">وضعیت</th>
           <th class="col-hide-sm col-status">اطلاع‌رسانی</th>
           <th class="col-actions"></th>
+          <th class="li-head" scope="col"><span class="li-count">{{ discounts | length | num }} تغییر قیمت</span></th>
         </tr>
       </thead>
       <tbody>
       {% for row in discounts %}
         {% set announcement = announcement_status.get(row.campaign_id) if row.campaign_id else None %}
         <tr>
-          <td>{{ row.title }}</td>
-          <td class="col-hide-sm">{{ scopes.get(row.scope) }}</td>
+          <td class="li-title"><span dir="auto">{{ row.title }}</span></td>
+          <td class="col-hide-sm li-sub">
+            {#- On phones line two: scope · mode · end, then the announcement. -#}
+            <span>{{ scopes.get(row.scope) }}</span>
+            <span class="li-only">· {{ modes.get(row.mode) }} · {% if row.ends_at %}تا <bdi dir="ltr">{{ deadlines.get(row.id) }}</bdi>{% else %}دائمی{% endif %}</span>
+            {% if row.campaign_id %}<span class="li-only badge {{ announcement_tones.get(announcement, 'neutral') }}">{{ announcement_labels.get(announcement, 'ثبت‌شده') }}</span>{% endif %}
+          </td>
           <td class="col-hide-sm">{{ modes.get(row.mode) }}</td>
-          <td class="cell-tight"><span dir="ltr">{{ row.reduction_value | num if row.reduction_kind == 'percent' else row.reduction_value | money }}</span> {{ '٪' if row.reduction_kind == 'percent' else 'تومان' }}</td>
+          <td class="cell-tight li-value"><span dir="ltr">{{ row.reduction_value | num if row.reduction_kind == 'percent' else row.reduction_value | money }}</span> {{ '٪' if row.reduction_kind == 'percent' else 'تومان' }}</td>
           <td class="cell-tight">{% if row.ends_at %}<span dir="ltr" class="mono">{{ deadlines.get(row.id) }}</span> <small class="muted">(تهران)</small>{% else %}دائمی{% endif %}</td>
-          <td class="cell-tight"><span class="badge {{ 'ok' if row.is_active else 'neutral' }}">{{ 'ثبت‌شده' if row.is_active else 'متوقف‌شده' }}</span></td>
+          <td class="cell-tight li-badge"><span class="badge {{ 'ok' if row.is_active else 'neutral' }}">{{ 'ثبت‌شده' if row.is_active else 'متوقف‌شده' }}</span></td>
           <td class="col-hide-sm cell-tight">{% if row.campaign_id %}<span class="badge {{ announcement_tones.get(announcement, 'neutral') }}">{{ announcement_labels.get(announcement, 'ثبت‌شده') }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
           <td class="col-actions">
             {% if row.is_active %}
+            {% call row_actions() %}
             <form method="post" action="/catalog-discounts/{{ row.id }}/stop"
                   data-confirm="این تغییر قیمت متوقف می‌شود و قیمت‌ها با قوانین باقی‌مانده محاسبه می‌شوند. اطلاع‌رسانی باقی‌مانده نیز متوقف می‌شود. ادامه می‌دهید؟"
                   data-confirm-title="توقف تغییر قیمت"
@@ -111,6 +118,7 @@
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <button class="btn btn-danger btn-sm" type="submit">توقف</button>
             </form>
+            {% endcall %}
             {% endif %}
           </td>
         </tr>

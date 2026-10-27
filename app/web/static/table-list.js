@@ -46,7 +46,12 @@
     var options = sortOptions(heads.map(function (th) {
       return { label: (th.textContent || '').trim(), sortType: th.getAttribute('data-sort-type') };
     }));
-    if (!options.length) return;
+    if (!options.length) {
+      /* Nothing to sort by: drop the menu so no empty control is left in the header. */
+      var enhanced = select.closest('.ui-select');
+      (enhanced || select).remove();
+      return;
+    }
     var placeholder = document.createElement('option');
     placeholder.value = '';
     placeholder.textContent = 'مرتب‌سازی';

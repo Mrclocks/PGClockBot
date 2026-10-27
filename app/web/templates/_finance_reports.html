@@ -153,21 +153,22 @@
   </ul>
   {% endif %}
   <div class="table-wrap">
-    <table class="table-compact">
+    <table class="table-compact table-list-sm">
       <thead>
         <tr>
           <th>روش</th>
           <th data-sort-type="num">تعداد</th>
           <th data-sort-type="num">مبلغ</th>
           <th class="finance-method-share">سهم از فروش</th>
+          <th class="li-head" scope="col"><span class="li-count">روش‌های پرداخت</span></th>
         </tr>
       </thead>
       <tbody>
       {% for m in methods %}
         <tr>
-          <td>{{ m.label }}</td>
-          <td class="mono" dir="ltr">{{ m.count | num }}</td>
-          <td class="mono" dir="ltr">{{ m.amount | money }}</td>
+          <td class="li-title">{{ m.label }}</td>
+          <td class="mono li-sub"><span>{{ m.count | num }} پرداخت</span> <span class="li-only">· سهم <bdi dir="ltr">{{ m.share_pct }}%</bdi></span></td>
+          <td class="mono li-value" dir="ltr">{{ m.amount | money }}</td>
           <td class="finance-method-share">
             <div class="ov-meter" data-tone="neutral" role="img" aria-label="{{ m.label }}: {{ m.share_pct }}٪ از فروش">
               <div class="ov-meter-top"><small dir="ltr">{{ m.share_pct }}%</small></div>

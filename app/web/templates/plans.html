@@ -181,7 +181,7 @@
   <h3 id="user-service-addons" class="card-subhead">⏱ بسته‌های حجم / زمان</h3>
   <p class="muted update-card-caption">فقط از کارت سرویس در ربات یا مینی‌اپ خریداری می‌شود. برای قیمت جدا، برچسب دسته را با پلن همان سرویس یکی بگذارید.</p>
   <div class="table-wrap">
-  <table class="table-compact">
+  <table class="table-compact table-list-sm">
     <thead>
       <tr>
         <th>نام</th>
@@ -191,20 +191,24 @@
         <th>قیمت</th>
         <th>وضعیت</th>
         <th class="col-actions"></th>
+        <th class="li-head" scope="col"><span class="li-count">{{ (service_addon_packs or []) | length | num }} بسته</span></th>
       </tr>
     </thead>
     <tbody>
     {% for a in service_addon_packs or [] %}
       <tr>
-        <td>
-          {{ a.name }}
-          {% if a.description %}<br><small class="muted">{{ a.description }}</small>{% endif %}
+        <td class="li-title">
+          <span dir="auto">{{ a.name }}</span>
+          {% if a.description %}<br class="li-hide"><small class="muted li-hide">{{ a.description }}</small>{% endif %}
         </td>
         <td class="col-hide-sm muted">{% if a.is_general %}عمومی{% elif a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
-        <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
+        <td class="li-sub">
+          <span>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</span>
+          <span class="li-only">· {% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %} · {% if a.is_general %}عمومی{% elif a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}بدون برچسب{% endif %}</span>
+        </td>
         <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
-        <td class="mono" dir="ltr">{{ a.price | money }}</td>
-        <td>{% if a.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+        <td class="mono li-value" dir="ltr">{{ a.price | money }}</td>
+        <td class="li-badge">{% if a.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
             <button type="button" class="btn btn-ghost btn-sm"
@@ -257,7 +261,7 @@
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن نمایندگی حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
   ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-bulk-select>
+  <table class="table-compact table-list-sm" data-bulk-select>
     <thead>
       <tr>
         {{ table_select_head() }}
@@ -265,15 +269,17 @@
         <th>قیمت ورود</th>
         <th>وضعیت</th>
         <th class="col-actions"></th>
+        <th class="li-head" scope="col"><span class="li-count">{{ fixed_reseller_plans | length | num }} پلن</span></th>
       </tr>
     </thead>
     <tbody>
     {% for p in fixed_reseller_plans %}
       <tr data-bulk-ops="{% if p.is_system %}{% else %}toggle,delete{% endif %}">
         {{ table_select_cell(p.id) }}
-        <td>{{ p.name }}{% if p.is_system or (p.plan_kind or '') == 'current_capacity' %} <span class="badge">سیستمی</span>{% endif %}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
-        <td class="mono" dir="ltr">{{ p.price | money }}</td>
-        <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+        {% set is_system_plan = p.is_system or (p.plan_kind or '') == 'current_capacity' %}
+        <td class="li-title"><span dir="auto">{{ p.name }}</span>{% if is_system_plan %} <span class="badge li-hide">سیستمی</span>{% endif %}{% if p.description %}<br class="li-hide"><small class="muted li-hide">{{ p.description }}</small>{% endif %}</td>
+        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
             <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
@@ -291,6 +297,7 @@
             {% endif %}
           {% endcall %}
         </td>
+        <td class="li-only-cell li-sub">{% if is_system_plan %}<span class="badge neutral">سیستمی</span>{% endif %}<span dir="auto">{{ p.description or 'اشتراک ثابت' }}</span></td>
       </tr>
     {% else %}
       <tr><td colspan="5" class="muted">پلن اشتراک ثابت نیست — از «افزودن پلن» با مخاطب نمایندگان بسازید.</td></tr>
@@ -305,7 +312,7 @@
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن نمایندگی حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
   ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-bulk-select>
+  <table class="table-compact table-list-sm" data-bulk-select>
     <thead>
       <tr>
         {{ table_select_head() }}
@@ -315,17 +322,18 @@
         <th class="col-hide-sm">گروه‌ها</th>
         <th>وضعیت</th>
         <th class="col-actions"></th>
+        <th class="li-head" scope="col"><span class="li-count">{{ payg_reseller_plans | length | num }} پلن</span></th>
       </tr>
     </thead>
     <tbody>
     {% for p in payg_reseller_plans %}
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
-        <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
-        <td class="mono" dir="ltr">{{ p.price | money }}</td>
-        <td class="mono col-hide-sm" dir="ltr">{% if p.price_per_gb %}{{ p.price_per_gb | money }}{% else %}—{% endif %}</td>
+        <td class="li-title"><span dir="auto">{{ p.name }}</span>{% if p.description %}<br class="li-hide"><small class="muted li-hide">{{ p.description }}</small>{% endif %}</td>
+        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="col-hide-sm li-sub"><span class="li-only">هر گیگ</span> <bdi dir="ltr">{% if p.price_per_gb %}{{ p.price_per_gb | money }}{% else %}—{% endif %}</bdi> <span class="li-only">· گروه <bdi dir="ltr">{{ p.pg_group_ids or '—' }}</bdi></span></td>
         <td class="mono col-hide-sm">{{ p.pg_group_ids or '—' }}</td>
-        <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+        <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
             <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
@@ -356,7 +364,7 @@
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن نمایندگی حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
   ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-bulk-select>
+  <table class="table-compact table-list-sm" data-bulk-select>
     <thead>
       <tr>
         {{ table_select_head() }}
@@ -367,18 +375,22 @@
         <th>قیمت</th>
         <th>وضعیت</th>
         <th class="col-actions"></th>
+        <th class="li-head" scope="col"><span class="li-count">{{ addon_reseller_plans | length | num }} بسته</span></th>
       </tr>
     </thead>
     <tbody>
     {% for p in addon_reseller_plans %}
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
-        <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
+        <td class="li-title"><span dir="auto">{{ p.name }}</span>{% if p.description %}<br class="li-hide"><small class="muted li-hide">{{ p.description }}</small>{% endif %}</td>
         <td class="col-hide-sm muted">{% if p.category_id and reseller_plan_category_map and reseller_plan_category_map.get(p.category_id) %}{{ reseller_plan_category_map.get(p.category_id).name }}{% else %}—{% endif %}</td>
-        <td>{% if p.plan_kind == 'addon_users' %}کاربر{% else %}حجم{% endif %}</td>
+        <td class="li-sub">
+          <span>{% if p.plan_kind == 'addon_users' %}کاربر{% else %}حجم{% endif %}</span>
+          <span class="li-only">· {% if p.plan_kind == 'addon_users' %}+{{ p.addon_users or 0 }} کاربر{% else %}+{{ p.addon_gb or 0 }} گیگ{% endif %}{% if p.category_id and reseller_plan_category_map and reseller_plan_category_map.get(p.category_id) %} · {{ reseller_plan_category_map.get(p.category_id).name }}{% endif %}</span>
+        </td>
         <td class="mono">{% if p.plan_kind == 'addon_users' %}+{{ p.addon_users or 0 }} کاربر{% else %}+{{ p.addon_gb or 0 }} گیگ{% endif %}</td>
-        <td class="mono" dir="ltr">{{ p.price | money }}</td>
-        <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
             <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>

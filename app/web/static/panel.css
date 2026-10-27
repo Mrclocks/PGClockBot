@@ -2501,7 +2501,7 @@ a.btn.btn-ghost:hover {
 .cell-name-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .cell-name-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
 .table-list-sm .li-only,
-.table-list-sm :is(th.li-head, td.li-more) { display: none; }
+.table-list-sm :is(th.li-head, td.li-more, td.li-only-cell) { display: none; }
 @media (max-width: 880px) {
   .table-list-sm,
   .table-list-sm > thead,
@@ -2676,6 +2676,7 @@ a.btn.btn-ghost:hover {
   .table-list-sm .li-value :is(.reseller-quota, .byte-stack) { display: inline; }
   .table-list-sm .li-title :is(.plan-name-cell, .cell-user-link) { display: inline; color: inherit; }
   .table-list-sm .li-tone-warn { color: var(--warn-fg); }
+  .table-list-sm > tbody > tr > td.li-badge:not(:has(.badge)) { font-size: 12px; color: var(--muted-fg); white-space: nowrap; }
   .table-list-sm .li-tone-danger { color: var(--danger); }
 
   /* Every chip (tags, status, «N سرویس») is 20px tall with its text and icon centred. */
