@@ -2524,6 +2524,18 @@ a.btn.btn-ghost:hover {
     border-bottom: 1px solid var(--border);
   }
   .table-list-sm > tbody > tr:last-child { border-bottom: 0; }
+  /* The empty-state row («… نیست») is one centred caption line. */
+  .table-list-sm > tbody > tr:has(> td[colspan]) { display: block; padding: var(--space-2) var(--space-1_5); }
+  .table-list-sm > tbody > tr > td[colspan] {
+    display: block;
+    width: auto;
+    padding: 0 !important;
+    border: 0;
+    font-size: 13px;
+    text-align: center;
+    color: var(--muted-fg);
+    white-space: normal;
+  }
   .table-list-sm > :is(thead, tbody) > tr > :is(th, td) { display: none; }
   .table-list-sm > :is(thead, tbody) > tr > :is(.col-select, .li-head, .li-title, .li-sub, .li-value, .li-badge, .col-actions, .li-more) {
     display: block;
@@ -2540,6 +2552,9 @@ a.btn.btn-ghost:hover {
     text-overflow: ellipsis;
   }
   .table-list-sm .li-hide { display: none !important; }
+  /* A cell the list uses stays visible even where the table hides it for width. */
+  .table-list-sm > tbody > tr > td.col-hide-sm:is(.li-title, .li-value) { display: block !important; }
+  .table-list-sm > tbody > tr > td.col-hide-sm:is(.li-sub, .li-badge) { display: flex !important; }
   .table-list-sm .li-only { display: inline; }
   .table-list-sm > :is(thead, tbody) > tr > .col-select {
     grid-area: sel;
@@ -2566,6 +2581,19 @@ a.btn.btn-ghost:hover {
   .table-list-sm .col-actions .row-actions-toggle--icon { display: inline-flex !important; flex: 0 0 32px; box-sizing: border-box; width: 32px; height: 32px; margin: 0; }
   .table-list-sm .col-actions .row-actions-toggle--label { display: none !important; }
   .table-list-sm .col-actions .row-actions-menu:not(.is-ported) { display: none !important; }
+  /* A row whose only action is «open» gets a 32px chevron in the menu button's place. */
+  .table-list-sm .li-open {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--control-radius);
+    color: var(--foreground);
+  }
+  .table-list-sm .li-open .ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   /* Time-left colours already flag the row; the dot would only crowd the name. */
   .table-list-sm :is(.li-title, .li-sub) .alert-dot { display: none; }
   .table-list-sm :is(.table-select-all, .table-select-row) { min-height: 0; height: 20px; }
@@ -2631,6 +2659,7 @@ a.btn.btn-ghost:hover {
   }
   .table-list-sm > tbody > tr > td.li-sub > * { flex: 0 0 auto; }
   .table-list-sm .li-sub .users-svc-name { display: inline-flex; align-items: center; gap: var(--space-0); }
+  .table-list-sm .li-sub .cell-user-link { border: 0; text-decoration: none; color: inherit; }
 
   /* Side column: the value on line one, the status on line two, both at the inline end. */
   .table-list-sm .li-value {
@@ -2643,6 +2672,9 @@ a.btn.btn-ghost:hover {
     font-variant-numeric: tabular-nums;
   }
   .table-list-sm > tbody > tr > td.li-badge { grid-area: badge; display: flex; align-items: center; justify-content: flex-end; height: 22px; }
+  .table-list-sm .li-badge .status-tags { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-0); }
+  .table-list-sm .li-value :is(.reseller-quota, .byte-stack) { display: inline; }
+  .table-list-sm .li-title :is(.plan-name-cell, .cell-user-link) { display: inline; color: inherit; }
   .table-list-sm .li-tone-warn { color: var(--warn-fg); }
   .table-list-sm .li-tone-danger { color: var(--danger); }
 
