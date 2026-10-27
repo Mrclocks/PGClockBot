@@ -225,6 +225,16 @@ async def set_shop_miniapp(session: AsyncSession, profile: ResellerProfile, *, e
     await session.commit()
 
 
+async def set_platform_shop_miniapps(session: AsyncSession, *, enabled: bool) -> bool:
+    """The platform switch for every shop's Mini App; True when it changed."""
+    wanted = "1" if enabled else "0"
+    current = "1" if on(await get_setting(session, PLATFORM_SWITCH, "0")) else "0"
+    if current == wanted:
+        return False
+    await set_setting(session, PLATFORM_SWITCH, wanted)
+    return True
+
+
 def switch_value(form: Mapping[str, Any], key: str) -> str:
     """A settings checkbox: an unticked box posts nothing and means off."""
     return "1" if str(form.get(key) or "") == "1" else "0"

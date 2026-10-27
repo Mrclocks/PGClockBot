@@ -282,6 +282,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             ctx["bot_status"] = await _bot_token_status(token)
             ctx["bot_token_masked"] = ("••••" + token[-6:]) if len(token) > 8 else ("••••" if token else "")
             ctx["bot_username"] = (profile.bot_username if profile else "") or ""
+        elif tab == "miniapp":
             ctx.update(await _miniapp_switch_context(session, profile))
         elif tab == "links":
             from app.services.ux20 import build_magic_links_context
@@ -650,9 +651,9 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         try:
             await set_shop_miniapp(session, profile, enabled=switch_value(form, SHOP_SWITCH) == "1")
         except ValueError as exc:
-            return RedirectResponse(f"/shop-settings?tab=bot&err={quote(str(exc))}", status_code=303)
+            return RedirectResponse(f"/shop-settings?tab=miniapp&err={quote(str(exc))}", status_code=303)
         schedule_shop_menu_sync([int(profile.id)])
-        return RedirectResponse("/shop-settings?tab=bot&saved=1", status_code=303)
+        return RedirectResponse("/shop-settings?tab=miniapp&saved=1", status_code=303)
 
     @app.post("/shop-settings/menu-layout")
     async def shop_menu_layout_save(

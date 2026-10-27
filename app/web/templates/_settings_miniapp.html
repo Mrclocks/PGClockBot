@@ -1,0 +1,91 @@
+{# «مینی‌اپ» settings tab (platform and shop).
+   Expects: values, csrf_token, miniapp_brand_action, settings_base, shop_mode;
+   platform: miniapp_url; shop: miniapp_available, miniapp_on, miniapp_url (for _shop_miniapp_switch). #}
+{% set accent = (values.get('miniapp_accent_color', '') or '')|lower %}
+{% set presets = [
+  ('#2563eb', 'آبی'), ('#16a34a', 'سبز'), ('#9333ea', 'بنفش'), ('#db2777', 'صورتی'),
+  ('#0d9488', 'فیروزه‌ای'), ('#dc2626', 'قرمز'), ('#ca8a04', 'طلایی'),
+] %}
+{% set preset_keys = presets|map('first')|list %}
+{% set is_custom = accent and accent not in preset_keys %}
+{% set preview = accent or '#f97316' %}
+
+{% if shop_mode %}
+  {% include "_shop_miniapp_switch.html" %}
+{% endif %}
+
+<form method="post" action="{{ miniapp_brand_action }}" class="settings-form" id="miniapp-brand-form">
+  {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
+  <div class="card settings-card">
+    <h2>ظاهر مینی‌اپ</h2>
+    <p class="muted update-card-caption">
+      نام، کپشن و عکس پروفایل ربات (تب <a href="{{ settings_base }}?tab=appearance">هویت ربات</a>) نام، شعار و لوگوی فروشگاه در مینی‌اپ هستند.
+      اینجا رنگ اصلی و اطلاعیهٔ صفحهٔ خانه را تعیین می‌کنید.
+    </p>
+    <fieldset class="miniapp-accent" data-miniapp-accent>
+      <legend>رنگ برند</legend>
+      <div class="color-tag-picker" role="radiogroup" aria-label="رنگ برند مینی‌اپ">
+        <label class="color-tag-option" style="--tag-color: #f97316">
+          <input type="radio" name="miniapp_accent_color" value="" data-accent="#f97316" {% if not accent %}checked{% endif %} />
+          <span class="accent-dot" aria-hidden="true"></span><span class="color-tag-label">پیش‌فرض (نارنجی)</span>
+        </label>
+        {% for hex, title in presets %}
+        <label class="color-tag-option" style="--tag-color: {{ hex }}">
+          <input type="radio" name="miniapp_accent_color" value="{{ hex }}" data-accent="{{ hex }}" {% if accent == hex %}checked{% endif %} />
+          <span class="accent-dot" aria-hidden="true"></span><span class="color-tag-label">{{ title }}</span>
+        </label>
+        {% endfor %}
+        <label class="color-tag-option" style="--tag-color: {{ accent if is_custom else '#64748b' }}" data-accent-custom-option>
+          <input type="radio" name="miniapp_accent_color" value="custom" {% if is_custom %}checked{% endif %} />
+          <span class="accent-dot" aria-hidden="true"></span><span class="color-tag-label">رنگ دلخواه</span>
+        </label>
+        <input class="accent-custom-input" type="color" name="miniapp_accent_custom" value="{{ accent if is_custom else '#64748b' }}"
+               aria-label="انتخاب رنگ دلخواه" data-accent-custom />
+      </div>
+      <div class="miniapp-accent-preview" style="--preview: {{ preview }}" data-accent-preview aria-hidden="true">
+        <span class="miniapp-preview-hero"><small>موجودی کیف پول</small><strong>۲۴۵٬۰۰۰ تومان</strong></span>
+        <span class="miniapp-preview-btn">خرید سرویس</span>
+        <span class="miniapp-preview-tile"></span>
+      </div>
+      <small class="muted">پیش‌نمایش: کارت کیف پول، دکمه‌ها و میانبر اصلی با این رنگ نمایش داده می‌شوند.</small>
+    </fieldset>
+    <div class="settings-grid">
+      <div class="setting-item full">
+        <label>اطلاعیهٔ صفحهٔ خانه
+          <textarea name="miniapp_notice" rows="2" maxlength="200">{{ values.get('miniapp_notice', '') }}</textarea>
+          <small class="muted">حداکثر ۲۰۰ کاراکتر، یک خط — مثلاً تخفیف یا خبر فروشگاه. خالی = بدون اطلاعیه.</small>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  {% if not shop_mode %}
+  <div class="card settings-card">
+    <h2>مینی‌اپ فروشگاه نمایندگان</h2>
+    <div class="settings-grid">
+      <div class="setting-item full">
+        <label class="toggle-row ui-switch-row">
+          <span class="ui-switch-copy">
+            <strong>مینی‌اپ برای فروشگاه نمایندگان</strong>
+            <small class="muted">روشن = نماینده‌هایی که دسترسی «مینی‌اپ فروشگاه برای مشتریان» در بسته‌شان هست، می‌توانند از تنظیمات ربات خودشان مینی‌اپ فروشگاهشان را روشن کنند. مشتری هر فروشگاه فقط اطلاعات همان فروشگاه را می‌بیند. خاموش کردن، مینی‌اپ همهٔ فروشگاه‌ها را فوراً می‌بندد.</small>
+          </span>
+          <span class="ui-switch">
+            <input type="checkbox" name="miniapp_shops_enabled" value="1" {% if values.get('miniapp_shops_enabled', '0') in ['1','true','yes','on'] %}checked{% endif %} />
+            <span class="ui-switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+      </div>
+    </div>
+    <p class="muted update-card-caption">
+      آدرس مینی‌اپ:
+      {% if miniapp_url %}<code dir="ltr">{{ miniapp_url }}</code>{% else %}هنوز HTTPS فعال نیست{% endif %}
+      — دامنهٔ مینی‌اپ را در <a href="/settings?tab=ssl#miniapp-domain">تنظیمات وب پنل › دامنه‌ها</a> تعیین کنید.
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="actions sticky-actions">
+    <button class="btn" type="submit">ذخیرهٔ تنظیمات مینی‌اپ</button>
+  </div>
+</form>
+<script src="/static/miniapp-brand-form.js?v={{ app_version }}" defer></script>

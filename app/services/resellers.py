@@ -56,6 +56,7 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("screens", "تیتر و توضیح منوها"),
     ("colors", "رنگبندی دکمه‌ها"),
     ("menu", "منوی بات"),
+    ("miniapp", "مینی‌اپ"),
     ("links", "لینک‌های سریع"),
     ("qr", "QR اشتراک"),
     ("limits", "محدودیت"),

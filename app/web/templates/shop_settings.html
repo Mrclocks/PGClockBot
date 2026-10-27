@@ -52,7 +52,6 @@
         <button class="btn" type="submit">ذخیره و اتصال ربات</button>
       </div>
     </form>
-    {% include "_shop_miniapp_switch.html" %}
 
   {% elif tab == 'links' %}
     {% include "_settings_links.html" %}
@@ -60,8 +59,11 @@
   {% elif tab == 'appearance' %}
     {% set settings_action = '/shop-settings?tab=appearance' %}
     {% include "_settings_appearance.html" %}
+
+  {% elif tab == 'miniapp' %}
     {% set miniapp_brand_action = '/shop-settings/miniapp-brand' %}
-    {% include "_miniapp_brand_form.html" %}
+    {% set settings_base = '/shop-settings' %}
+    {% include "_settings_miniapp.html" %}
 
   {% elif tab == 'menu' %}
     <div class="card menu-layout-intro">
