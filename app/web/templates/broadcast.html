@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, table_select_head, table_select_cell, table_bulk_bar %}
+{% from "macros.html" import page_title, row_actions, table_select_head, table_select_cell, table_bulk_bar %}
 {% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}پیام گروهی{% endblock %}
 {% block content %}
@@ -50,9 +50,9 @@
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} رکورد تاریخچه حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
   ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-bulk-select>
+  <table class="table-compact table-list-sm" data-bulk-select>
     <thead>
-      <tr>{{ table_select_head() }}<th class="col-id">#</th><th class="col-time">زمان</th><th class="col-hide-sm col-user">مخاطب</th><th class="col-text">متن</th><th class="col-status">نتیجه</th><th class="col-hide-sm col-user">توسط</th><th class="col-actions"></th></tr>
+      <tr>{{ table_select_head() }}<th class="col-id">#</th><th class="col-time">زمان</th><th class="col-hide-sm col-user">مخاطب</th><th class="col-text">متن</th><th class="col-status">نتیجه</th><th class="col-hide-sm col-user">توسط</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ history | length | num }} پیام</span></th></tr>
     </thead>
     <tbody>
     {% for row in history %}
@@ -60,11 +60,16 @@
         {{ table_select_cell(row.id) }}
         <td class="mono cell-tight">{{ row.id }}</td>
         <td class="mono muted cell-tight">{{ row.created_at }}</td>
-        <td class="col-hide-sm">{{ audience_labels.get(row.audience, row.audience) }}</td>
-        <td class="broadcast-snippet">{{ row.text[:120] }}{% if row.text|length > 120 %}…{% endif %}</td>
-        <td class="mono cell-tight">{{ row.ok_count }}/{{ row.total }}{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}</td>
+        <td class="col-hide-sm li-sub">
+          {#- On phones line two: audience · time · sender. -#}
+          <span>{{ audience_labels.get(row.audience, row.audience) }}</span>
+          <span class="li-only">· <bdi dir="ltr">{{ (row.created_at|string)[:16] }}</bdi>{% if row.created_by %} · {{ row.created_by }}{% endif %}</span>
+        </td>
+        <td class="broadcast-snippet li-title"><span dir="auto">{{ row.text[:120] }}{% if row.text|length > 120 %}…{% endif %}</span></td>
+        <td class="mono cell-tight li-value"><bdi dir="ltr">{{ row.ok_count }}/{{ row.total }}</bdi><span class="li-hide">{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}</span></td>
         <td class="muted col-hide-sm">{{ row.created_by or '—' }}</td>
         <td class="col-actions">
+          {% call row_actions() %}
           <form method="post" action="/broadcast/history/{{ row.id }}/delete"
                 data-confirm="این رکورد حذف شود؟"
                 data-confirm-title="تأیید حذف"
@@ -72,7 +77,9 @@
                 data-confirm-label="حذف">
             <button class="btn btn-danger btn-sm" type="submit">حذف</button>
           </form>
+          {% endcall %}
         </td>
+        <td class="li-only-cell li-badge">{% if row.fail_count %}<span class="badge rejected">{{ row.fail_count }} ناموفق</span>{% else %}<span class="badge ok">موفق</span>{% endif %}</td>
       </tr>
     {% else %}
       <tr><td colspan="8" class="muted">هنوز پیامی ارسال نشده</td></tr>

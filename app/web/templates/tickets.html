@@ -21,7 +21,7 @@
     {'key': 'close', 'label': 'بستن', 'confirm': '{n} تیکت پنلی بسته شوند؟', 'confirm_title': 'بستن گروهی', 'confirm_label': 'بستن', 'warn': true},
   ]) }}
   <div class="table-wrap">
-  <table data-bulk-select>
+  <table class="table-list-sm" data-bulk-select>
     <thead>
       <tr>
         {{ table_select_head() }}
@@ -31,7 +31,8 @@
         <th>اولویت</th>
         <th>وضعیت</th>
         <th>به‌روزرسانی</th>
-        <th></th>
+        <th class="col-actions"></th>
+        <th class="li-head" scope="col"><span class="li-count">{{ panel_tickets | length | num }} تیکت</span></th>
       </tr>
     </thead>
     <tbody>
@@ -50,23 +51,30 @@
           {% endif %}
         </td>
         {% endif %}
-        <td>
-          {{ t.subject }}
+        <td class="li-title">
+          <span dir="auto">{{ t.subject }}</span>
+          <span class="li-only li-id" dir="ltr">(#{{ t.id }})</span>
           {% if t.answered_unread and not is_owner %}
-          <span class="badge answered">پاسخ جدید</span>
+          <span class="badge answered li-hide">پاسخ جدید</span>
           {% elif t.owner_unread and is_owner %}
-          <span class="badge open">جدید</span>
+          <span class="badge open li-hide">جدید</span>
           {% endif %}
         </td>
-        <td>
+        <td class="li-sub">
+          {#- On phones line two: unread, sender, priority and last update. -#}
+          {% if t.answered_unread and not is_owner %}<span class="li-only badge answered">پاسخ جدید</span>
+          {% elif t.owner_unread and is_owner %}<span class="li-only badge open">جدید</span>{% endif %}
+          {% if is_owner and t.opener_label %}<span class="li-only" dir="auto">{{ t.opener_label }}</span>{% endif %}
           <span class="badge {{ priority_badge.get(t.priority, 'neutral') }}">{{ panel_tkt_priority(t.priority) }}</span>
+          <span class="li-only">· <bdi dir="ltr">{{ (t.updated_at|string)[:16] }}</bdi></span>
         </td>
-        <td>
+        <td class="li-badge">
           <span class="badge {{ status_badge.get(t.status, 'neutral') }}">{{ panel_tkt_status(t.status) }}</span>
         </td>
         <td class="muted mono" dir="ltr">{{ t.updated_at }}</td>
-        <td>
-          <a class="btn btn-sm btn-ghost" href="/tickets?view={{ t.id }}">مشاهده</a>
+        <td class="col-actions">
+          <a class="btn btn-sm btn-ghost li-hide" href="/tickets?view={{ t.id }}">مشاهده</a>
+          <a class="li-only li-open" href="/tickets?view={{ t.id }}" aria-label="مشاهده تیکت #{{ t.id }}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></a>
         </td>
       </tr>
     {% else %}
@@ -86,32 +94,36 @@
       {'key': 'close', 'label': 'بستن', 'confirm': '{n} تیکت بسته شوند؟', 'confirm_title': 'بستن گروهی', 'confirm_label': 'بستن', 'warn': true},
     ]) }}
     <div class="table-wrap">
-    <table data-bulk-select>
+    <table class="table-list-sm" data-bulk-select>
       <thead><tr>
         {{ table_select_head() }}
-        <th class="col-id">#</th><th class="col-user">کاربر</th><th class="col-subject">موضوع</th><th class="col-status">وضعیت</th><th class="col-time">زمان</th><th class="col-actions"></th></tr></thead>
+        <th class="col-id">#</th><th class="col-user">کاربر</th><th class="col-subject">موضوع</th><th class="col-status">وضعیت</th><th class="col-time">زمان</th><th class="col-actions"></th>
+        <th class="li-head" scope="col"><span class="li-count">{{ tg_rows | length | num }} تیکت</span></th></tr></thead>
       <tbody>
       {% for row in tg_rows %}
         {% set t = row.ticket %}
         <tr data-bulk-ops="{% if t.status != 'closed' %}close{% endif %}">
           {{ table_select_cell(t.id) }}
           <td class="mono">{{ t.id }}</td>
-          <td>
+          <td class="li-sub">
+            {#- On phones line two: who asked and when. -#}
             {% if row.user_id %}
-            <a class="cell-user-link" href="/users?uid={{ row.user_id }}">{{ row.user_label }}</a>
+            <a class="cell-user-link" href="/users?uid={{ row.user_id }}" dir="auto">{{ row.user_label }}</a>
             {% else %}
-            {{ row.user_label }}
+            <span dir="auto">{{ row.user_label }}</span>
             {% endif %}
+            <span class="li-only">· <bdi dir="ltr">{{ ((t.updated_at or t.created_at)|string)[:16] }}</bdi></span>
           </td>
-          <td>{{ t.subject }}</td>
-          <td>
+          <td class="li-title"><span dir="auto">{{ t.subject }}</span> <span class="li-only li-id" dir="ltr">(#{{ t.id }})</span></td>
+          <td class="li-badge">
             <span class="badge {% if t.status=='open' %}open{% elif t.status=='closed' %}neutral{% else %}answered{% endif %}">
               {{ tkt_status(t.status) }}
             </span>
           </td>
           <td class="muted mono" dir="ltr">{{ t.updated_at or t.created_at }}</td>
-          <td>
-            <a class="btn btn-sm btn-ghost" href="/tickets?tg={{ t.id }}">مشاهده</a>
+          <td class="col-actions">
+            <a class="btn btn-sm btn-ghost li-hide" href="/tickets?tg={{ t.id }}">مشاهده</a>
+            <a class="li-only li-open" href="/tickets?tg={{ t.id }}" aria-label="مشاهده تیکت #{{ t.id }}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></a>
           </td>
         </tr>
       {% else %}

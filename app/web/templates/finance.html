@@ -56,7 +56,7 @@
     {'key': 'cancel', 'label': 'لغو', 'confirm': '{n} سفارش لغو شوند؟', 'confirm_title': 'لغو گروهی', 'confirm_label': 'لغو', 'warn': true},
   ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable data-bulk-select>
+  <table class="table-compact table-list-sm" data-sortable data-bulk-select>
     <thead>
       <tr>
         {{ table_select_head() }}
@@ -68,6 +68,10 @@
         <th class="col-hide-sm" data-sort-type="text">روش</th>
         <th class="col-hide-sm" data-sort-type="text">زمان</th>
         <th class="col-actions"></th>
+        <th class="li-head" scope="col">
+          <span class="li-count">{{ orders | length | num }} سفارش</span>
+          <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
+        </th>
       </tr>
     </thead>
     <tbody>
@@ -90,22 +94,30 @@
       <tr data-bulk-ops="{{ ns.ops }}">
         {{ table_select_cell(o.id) }}
         <td class="mono" data-sort-value="{{ o.id }}">{{ o.id }}</td>
-        <td data-sort-value="{{ uname }}">
+        <td class="li-title" data-sort-value="{{ uname }}">
           {% if o.user and o.user.id %}
-          <a class="cell-user-link" href="/users?uid={{ o.user.id }}">{{ uname }}</a>
-          {% if o.user.is_demo %}<span class="badge neutral" title="در گزارش‌های مالی محاسبه نمی‌شود">دمو</span>{% endif %}
+          <a class="cell-user-link" href="/users?uid={{ o.user.id }}" dir="auto">{{ uname }}</a>
+          <span class="li-only li-id" dir="ltr">(#{{ o.id }})</span>
+          {% if o.user.is_demo %}<span class="badge neutral li-hide" title="در گزارش‌های مالی محاسبه نمی‌شود">دمو</span>{% endif %}
           {% else %}
-          {{ uname }}
+          <span dir="auto">{{ uname }}</span>
+          <span class="li-only li-id" dir="ltr">(#{{ o.id }})</span>
           {% endif %}
         </td>
-        <td class="col-hide-sm" data-sort-value="{{ pname }}">{{ pname }}</td>
-        <td class="mono" data-sort-value="{{ o.amount }}" dir="ltr">{{ o.amount | money }}</td>
-        <td data-sort-value="{{ o.status }}">
+        <td class="col-hide-sm li-sub" data-sort-value="{{ pname }}">
+          {#- On phones line two: the tags that matter, then plan · method · time. -#}
+          {% if o.user and o.user.is_demo %}<span class="li-only badge neutral">دمو</span>{% endif %}
+          {% if o.id in (stuck_order_ids or []) %}<span class="li-only badge warn">گیرکرده</span>{% endif %}
+          <span>{{ pname }}</span>
+          <span class="li-only">· {% if o.payment_method=='card' %}کارت به کارت{% elif o.payment_method=='wallet' %}کیف پول{% elif o.payment_method=='psp' %}درگاه آنلاین{% elif o.payment_method=='bbc' %}بزن به کارت{% elif o.payment_method=='gateway' %}درگاه لینک{% elif o.payment_method=='crypto' %}رمزارز{% elif o.payment_method=='stars' %}استارز{% else %}{{ o.payment_method or "—" }}{% endif %} · <bdi dir="ltr">{{ (o.created_at|string)[:16] }}</bdi></span>
+        </td>
+        <td class="mono li-value" data-sort-value="{{ o.amount }}" dir="ltr">{{ o.amount | money }}</td>
+        <td class="li-badge" data-sort-value="{{ o.status }}">
           <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled','failed'] %}rejected{% else %}neutral{% endif %}">
             {{ ord_status(o.status) }}
           </span>
           {% if o.id in (stuck_order_ids or []) %}
-          <span class="badge warn badge-inline" title="پرداخت شده بدون سرویس">گیرکرده</span>
+          <span class="badge warn badge-inline li-hide" title="پرداخت شده بدون سرویس">گیرکرده</span>
           {% endif %}
         </td>
         <td class="col-hide-sm" data-sort-value="{{ o.payment_method or '' }}">{% if o.payment_method=='card' %}کارت به کارت{% elif o.payment_method=='wallet' %}کیف پول{% elif o.payment_method=='psp' %}درگاه آنلاین{% elif o.payment_method=='bbc' %}بزن به کارت{% elif o.payment_method=='gateway' %}درگاه لینک{% elif o.payment_method=='crypto' %}رمزارز{% elif o.payment_method=='stars' %}استارز{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
@@ -166,7 +178,7 @@
             {% endif %}
           {% endcall %}
           {% else %}
-          <span class="muted">—</span>
+          <span class="muted li-hide">—</span>
           {% endif %}
         </td>
       </tr>
@@ -217,7 +229,7 @@
     {'key': 'reject', 'label': 'رد', 'class': 'btn-danger', 'confirm': '{n} پرداخت رد شوند؟', 'confirm_title': 'رد گروهی', 'confirm_label': 'رد', 'danger': true},
   ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable data-bulk-select>
+  <table class="table-compact table-list-sm" data-sortable data-bulk-select>
     <thead><tr>
       {{ table_select_head() }}
       <th class="col-id" data-sort-type="num">#</th>
@@ -227,6 +239,10 @@
       <th data-sort-type="text">وضعیت</th>
       <th class="col-hide-sm" data-sort-type="num">سفارش</th>
       <th class="col-actions"></th>
+      <th class="li-head" scope="col">
+        <span class="li-count">{{ payments | length | num }} پرداخت</span>
+        <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
+      </th>
     </tr></thead>
     <tbody>
     {% for p in payments %}
@@ -235,17 +251,23 @@
       <tr data-bulk-ops="{% if p.status == 'pending' %}approve,reject{% endif %}">
         {{ table_select_cell(p.id) }}
         <td class="mono" data-sort-value="{{ p.id }}">{{ p.id }}</td>
-        <td data-sort-value="{{ uname }}">
+        <td class="li-title" data-sort-value="{{ uname }}">
           {% if payer and payer.id %}
-          <a class="cell-user-link" href="/users?uid={{ payer.id }}">{{ uname }}</a>
-          {% if payer.is_demo %}<span class="badge neutral" title="در گزارش‌های مالی محاسبه نمی‌شود">دمو</span>{% endif %}
+          <a class="cell-user-link" href="/users?uid={{ payer.id }}" dir="auto">{{ uname }}</a>
+          {% if payer.is_demo %}<span class="badge neutral li-hide" title="در گزارش‌های مالی محاسبه نمی‌شود">دمو</span>{% endif %}
           {% else %}
-          {{ uname }}
+          <span dir="auto">{{ uname }}</span>
           {% endif %}
+          <span class="li-only li-id" dir="ltr">(#{{ p.id }})</span>
         </td>
-        <td class="mono" data-sort-value="{{ p.amount }}" dir="ltr">{{ p.amount | money }}</td>
-        <td class="col-hide-sm" data-sort-value="{{ 'wallet' if p.is_wallet_topup else 'buy' }}">{{ "شارژ کیف" if p.is_wallet_topup else "خرید" }}</td>
-        <td data-sort-value="{{ p.status }}">
+        <td class="mono li-value" data-sort-value="{{ p.amount }}" dir="ltr">{{ p.amount | money }}</td>
+        <td class="col-hide-sm li-sub" data-sort-value="{{ 'wallet' if p.is_wallet_topup else 'buy' }}">
+          {#- On phones line two: the tags that matter, then kind · order. -#}
+          {% if payer and payer.is_demo %}<span class="li-only badge neutral">دمو</span>{% endif %}
+          <span>{{ "شارژ کیف" if p.is_wallet_topup else "خرید" }}</span>
+          {% if p.order_id %}<span class="li-only">· سفارش <bdi dir="ltr">#{{ p.order_id }}</bdi></span>{% endif %}
+        </td>
+        <td class="li-badge" data-sort-value="{{ p.status }}">
           <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">
             {{ pay_status(p.status) }}
           </span>
@@ -263,10 +285,10 @@
             {% endif %}
           {% endcall %}
           {% if p.status == 'pending' and (receipt_matches or {}).get(p.id) %}
-          <small class="muted" style="display:block;margin-top:var(--space-0)">هم‌مبلغ: {% for m in receipt_matches[p.id][:3] %}#{{ m.id }}{% if not loop.last %}، {% endif %}{% endfor %}</small>
+          <small class="muted li-hide" style="display:block;margin-top:var(--space-0)">هم‌مبلغ: {% for m in receipt_matches[p.id][:3] %}#{{ m.id }}{% if not loop.last %}، {% endif %}{% endfor %}</small>
           {% endif %}
           {% else %}
-          <span class="muted">—</span>
+          <span class="muted li-hide">—</span>
           {% endif %}
         </td>
       </tr>
@@ -313,7 +335,7 @@
     {'key': 'dismiss', 'label': 'حذف از لیست', 'class': 'btn-ghost', 'confirm': '{n} سفارش از لیست تحویل ناموفق حذف شود؟ چیزی ارسال نمی‌شود و خود سفارش تغییری نمی‌کند.', 'confirm_title': 'حذف از لیست', 'confirm_label': 'حذف از لیست'},
   ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable data-bulk-select>
+  <table class="table-compact table-list-sm" data-sortable data-bulk-select>
     <thead>
       <tr>
         {{ table_select_head() }}
@@ -323,6 +345,10 @@
         <th class="col-hide-sm" data-sort-type="text">خطا</th>
         <th data-sort-type="num">تلاش</th>
         <th class="col-actions"></th>
+        <th class="li-head" scope="col">
+          <span class="li-count">{{ ((stuck_only_order_ids or []) | length + delivery_failures | length) | num }} سفارش</span>
+          <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
+        </th>
       </tr>
     </thead>
     <tbody>
@@ -335,8 +361,9 @@
       <tr data-bulk-ops="retry">
         {{ table_select_cell(oid) }}
         <td class="mono" data-sort-value="{{ oid }}">#{{ oid }} <span class="badge warn badge-inline">گیرکرده</span></td>
-        <td data-sort-value="{{ uname }}">{{ uname }}</td>
-        <td data-sort-value="{{ diag.kind if diag else 'stuck' }}">
+        <td class="li-title" data-sort-value="{{ uname }}"><span dir="auto">{{ uname }}</span> <span class="li-only li-id" dir="ltr">(#{{ oid }})</span></td>
+        <td class="li-sub" data-sort-value="{{ diag.kind if diag else 'stuck' }}">
+          <span class="li-only badge warn">گیرکرده</span>
           {% set why = (stuck_reasons or {}).get(oid) %}
           <span class="badge warn badge-inline" title="{{ diag.detail_fa if diag else '' }}">{{ why.kind if why else (diag.label_fa if diag else 'تحویل ناقص') }}</span>
           {% if diag and diag.payment_status %}
@@ -344,7 +371,7 @@
           {% endif %}
         </td>
         <td class="col-hide-sm muted" data-sort-value="stuck">{{ why.reason if why else 'پرداخت شده ولی سرویسی ساخته نشد' }}</td>
-        <td class="mono" data-sort-value="0">—</td>
+        <td class="mono li-value" data-sort-value="0">—</td>
         <td class="col-actions">
           {% call row_actions() %}
             <form method="post" action="/orders/{{ oid }}/retry-delivery"
@@ -367,8 +394,9 @@
       <tr data-bulk-ops="retry,dismiss">
         {{ table_select_cell(f.order_id) }}
         <td class="mono" data-sort-value="{{ f.order_id }}">#{{ f.order_id }}{% if f.order_id in (stuck_order_ids or []) %} <span class="badge warn badge-inline">گیرکرده</span>{% endif %}</td>
-        <td data-sort-value="{{ uname }}">{{ uname }}</td>
-        <td data-sort-value="{{ diag.kind if diag else 'fail' }}">
+        <td class="li-title" data-sort-value="{{ uname }}"><span dir="auto">{{ uname }}</span> <span class="li-only li-id" dir="ltr">(#{{ f.order_id }})</span></td>
+        <td class="li-sub" data-sort-value="{{ diag.kind if diag else 'fail' }}">
+          {% if f.order_id in (stuck_order_ids or []) %}<span class="li-only badge warn">گیرکرده</span>{% endif %}
           {% if diag and diag.kind == 'approved_resend' %}
           <span class="badge pending badge-inline" title="{{ diag.detail_fa }}">{{ diag.label_fa }}</span>
           {% elif diag and diag.kind == 'approved_fulfill' %}
@@ -383,7 +411,7 @@
           {% endif %}
         </td>
         <td class="col-hide-sm muted" data-sort-value="{{ f.error or '' }}">{{ (f.error or '—')[:120] }}</td>
-        <td class="mono" data-sort-value="{{ f.attempts }}">{{ f.attempts }}</td>
+        <td class="mono li-value" data-sort-value="{{ f.attempts }}"><span class="li-only">تلاش </span>{{ f.attempts }}</td>
         <td class="col-actions">
           {% call row_actions() %}
             <form method="post" action="/orders/{{ f.order_id }}/retry-delivery"

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, card_title %}
+{% from "macros.html" import page_title, card_title, row_actions %}
 {% block title %}اشتراک من{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -48,24 +48,29 @@
   <div class="card-flush-head">{{ card_title('payments', 'تمدید یا تغییر بسته') }}</div>
   <p class="muted">با تمدید، مدت بسته از تاریخ انقضای فعلی اضافه می‌شود و ظرفیت بستهٔ انتخابی همین حالا اعمال می‌شود. مصرف کاربران صفر می‌شود و هزینه از کیف پول کسر می‌شود.</p>
   <div class="table-wrap">
-    <table class="table-compact">
+    <table class="table-compact table-list-sm">
       <thead>
-        <tr><th>بسته</th><th>ظرفیت</th><th>مدت</th><th>مبلغ</th><th></th></tr>
+        <tr><th>بسته</th><th>ظرفیت</th><th>مدت</th><th>مبلغ</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ ov.choices | length | num }} بسته</span></th></tr>
       </thead>
       <tbody>
         {% for c in ov.choices %}
         <tr>
-          <td>
-            {{ c.plan.name }}
-            <span class="badge {{ 'ok' if c.relation == 'upgrade' else ('warn' if c.relation == 'downgrade' else 'info') }}">{{ c.label }}</span>
+          <td class="li-title">
+            <span dir="auto">{{ c.plan.name }}</span>
+            <span class="badge li-hide {{ 'ok' if c.relation == 'upgrade' else ('warn' if c.relation == 'downgrade' else 'info') }}">{{ c.label }}</span>
           </td>
-          <td><span dir="ltr">{{ (c.plan.included_users | num) if c.plan.included_users else '∞' }}</span> کاربر · {{ ((c.plan.included_gb | num) ~ ' گیگ') if c.plan.included_gb else 'حجم ∞' }}</td>
+          <td class="li-sub">
+            <span class="li-only badge {{ 'ok' if c.relation == 'upgrade' else ('warn' if c.relation == 'downgrade' else 'info') }}">{{ c.label }}</span>
+            <span><span dir="ltr">{{ (c.plan.included_users | num) if c.plan.included_users else '∞' }}</span> کاربر · {{ ((c.plan.included_gb | num) ~ ' گیگ') if c.plan.included_gb else 'حجم ∞' }}</span>
+            <span class="li-only">· {{ (c.plan.duration_days | num) ~ ' روز' if c.plan.duration_days else 'بدون انقضا' }}{% if c.blocked %} · {{ c.blocked }}{% endif %}</span>
+          </td>
           <td>{{ (c.plan.duration_days | num) ~ ' روز' if c.plan.duration_days else 'بدون انقضا' }}</td>
-          <td><span dir="ltr">{{ c.invoice.total | money }}</span> تومان</td>
-          <td>
+          <td class="li-value"><span dir="ltr">{{ c.invoice.total | money }}</span> <span class="li-hide">تومان</span></td>
+          <td class="col-actions">
             {% if c.blocked %}
-            <span class="muted">{{ c.blocked }}</span>
+            <span class="muted li-hide">{{ c.blocked }}</span>
             {% else %}
+            {% call row_actions() %}
             <form method="post" action="/my-subscription/renew"
                   data-confirm="{{ ('تمدید «' ~ c.plan.name ~ '» با ' ~ (c.invoice.total | money) ~ ' تومان از کیف پول؟') if c.relation == 'current' else ('تغییر به «' ~ c.plan.name ~ '» و پرداخت ' ~ (c.invoice.total | money) ~ ' تومان از کیف پول؟ ظرفیت بستهٔ جدید همین حالا اعمال می‌شود.') }}"
                   data-confirm-title="{{ 'تمدید بسته' if c.relation == 'current' else c.label ~ ' بسته' }}"
@@ -75,6 +80,7 @@
               <input type="hidden" name="generation" value="{{ ov.generation }}">
               <button type="submit" class="btn btn-sm{{ '' if c.relation in ('current', 'upgrade') else ' btn-ghost' }}">{{ 'تمدید' if c.relation == 'current' else c.label }}</button>
             </form>
+            {% endcall %}
             {% endif %}
           </td>
         </tr>

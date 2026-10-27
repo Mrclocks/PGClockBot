@@ -14,7 +14,7 @@
   <p class="muted">ادمینی یافت نشد یا دسترسی کافی نیست.</p>
   {% else %}
   <div class="table-wrap">
-  <table class="table-compact">
+  <table class="table-compact table-list-sm">
     <thead>
       <tr>
         <th class="col-id col-hide-sm">شناسه</th>
@@ -24,6 +24,7 @@
         <th>حجم</th>
         <th>دسترسی وب‌پنل</th>
         <th class="col-actions"></th>
+        <th class="li-head" scope="col"><span class="li-count">{{ admins | length | num }} ادمین</span></th>
       </tr>
     </thead>
     <tbody>
@@ -35,19 +36,21 @@
       {% set src = st.get('source') or 'none' %}
       <tr>
         <td class="mono col-hide-sm">{{ a.get('id') or '—' }}</td>
-        <td dir="ltr">{{ uname or '—' }}</td>
-        <td class="mono muted col-hide-sm">
+        <td class="li-title" dir="ltr">{{ uname or '—' }}</td>
+        <td class="mono muted col-hide-sm li-sub">
+          {#- On phones line two: role and status, then users used. -#}
           {% if a.get('role') and a.get('role').get('name') %}{{ a.get('role').get('name') }} · {% endif %}
           {% if a.get('is_sudo') %}دسترسی کامل · {% endif %}
           {% if a.get('status') %}{{ a.get('status') }}{% endif %}
-          {% if a.get('note') %}<br><small class="muted">{{ a.get('note') }}</small>{% endif %}
+          {% if a.get('note') %}<br class="li-hide"><small class="muted li-hide">{{ a.get('note') }}</small>{% endif %}
+          <span class="li-only">· کاربران <bdi dir="ltr">{{ usage.get('users_text') or '—' }}</bdi></span>
         </td>
         <td class="mono" dir="ltr" title="مصرف / سقف کاربران">{{ usage.get('users_text') or '—' }}</td>
-        <td class="mono reseller-quota-cell" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
+        <td class="mono reseller-quota-cell li-value" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
           <div class="reseller-quota byte-stack">
             <span class="reseller-quota-line byte-size">{{ usage.get('traffic_text') or '—' }}</span>
             {% if usage.get('lifetime_text') %}
-            <small class="muted reseller-quota-life byte-size">Σ {{ usage.get('lifetime_text') }}</small>
+            <small class="muted reseller-quota-life byte-size li-hide">Σ {{ usage.get('lifetime_text') }}</small>
             {% endif %}
           </div>
         </td>
@@ -153,6 +156,12 @@
             {% endif %}
           {% endcall %}
           {% endif %}
+        </td>
+        <td class="li-only-cell li-badge">
+          {%- if src == 'reseller' %}<span class="badge approved">نماینده</span>
+          {%- elif src == 'owner' %}<span class="badge approved">ادمین اصلی</span>
+          {%- elif src == 'pg_staff' %}<span class="badge {{ 'approved' if st.get('is_active') else 'neutral' }}">{{ 'وب فعال' if st.get('is_active') else 'وب غیرفعال' }}</span>
+          {%- else %}<span class="badge neutral">بدون وب</span>{% endif -%}
         </td>
       </tr>
     {% endfor %}
