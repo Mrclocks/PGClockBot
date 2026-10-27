@@ -45,6 +45,7 @@ from app.services.payment_settlement import (
     create_psp_checkout,
     public_checkout_button_url,
 )
+from app.services.psp_gateways import enabled_psp_gateways
 from app.services.receipts import submit_receipt
 from app.services.rich_text import visible_text
 from app.services.users import on
@@ -123,7 +124,7 @@ def _destination_label(method: str, item: dict[str, Any]) -> str:
     if method == "card":
         label = f"…{str(item.get('number') or '')[-4:]}"
         return f"{label} ({str(item['holder'])[:12]})" if item.get("holder") else label
-    if method == "gateway":
+    if method in ("gateway", "psp"):
         return str(item.get("name") or "درگاه")[:24]
     return f"{item.get('asset') or 'USDT'} …{str(item.get('address') or '')[-6:]}"
 
@@ -135,7 +136,13 @@ def _destinations(method: str, ui: dict) -> list[dict[str, Any]]:
         return enabled_gateways(ui)
     if method == "crypto":
         return enabled_crypto_wallets(ui)
+    if method == "psp":
+        return [{"id": g.id, "name": g.name} for g in enabled_psp_gateways(ui)]
     return []
+
+
+def _psp_gateway_by_id(ui: dict, dest_id: str) -> dict[str, Any] | None:
+    return next((item for item in _destinations("psp", ui) if item["id"] == dest_id), None)
 
 
 def _method_choices(method: str, ui: dict) -> list[dict[str, str]]:
@@ -153,7 +160,7 @@ def topup_options(ui: dict) -> dict[str, Any]:
         flag, _method = TOPUP_METHODS[key]
         if not on(ui.get(flag)):
             continue
-        if key != "psp" and not _destinations(key, ui):
+        if not _destinations(key, ui):
             continue
         label_key, fallback = METHOD_LABELS[key]
         methods.append({
@@ -207,7 +214,7 @@ def _choose_destination(method: str, ui: dict, dest_id: object, seed: str) -> di
     if dest_id is not None:
         if not isinstance(dest_id, str) or not _DEST_ID.match(dest_id):
             raise TopupError("مقصد پرداخت نامعتبر است")
-        lookup = {"card": card_by_id, "gateway": gateway_by_id, "crypto": crypto_by_id}[method]
+        lookup = {"card": card_by_id, "gateway": gateway_by_id, "crypto": crypto_by_id, "psp": _psp_gateway_by_id}[method]
         chosen = lookup(ui, dest_id)
         if chosen is None:
             raise TopupError("این مقصد پرداخت دیگر فعال نیست")
@@ -279,7 +286,7 @@ async def start_topup(
     if not on(ui.get(flag)):
         raise TopupError("این روش پرداخت غیرفعال است")
     value = _validate_amount(amount)
-    destination = None if method == "psp" else _choose_destination(method, ui, dest_id, f"topup:{user_id}:{value}")
+    destination = _choose_destination(method, ui, dest_id, f"topup:{user_id}:{value}")
     await _assert_open_topup_room(session, user_id, shop_id, now or datetime.now(timezone.utc))
     payment = await create_wallet_topup(session, int(user_id), value, method=payment_method, wallet_shop_id=shop_id)
     payment_id = int(payment.id)
@@ -313,7 +320,9 @@ async def _prepare_payment(
         payment_id=int(payment.id), method=method, amount=value, needs_receipt=method in RECEIPT_METHODS,
     )
     if method == "psp":
-        settlement = await create_psp_checkout(session, payment, description=f"شارژ کیف پول #{payment.id}")
+        settlement = await create_psp_checkout(
+            session, payment, description=f"شارژ کیف پول #{payment.id}", gateway_id=str(destination["id"])
+        )
         url = public_checkout_button_url(settlement, ui=ui)
         start.checkout_url = url if url.startswith(("https://", "http://")) else None
         start.settlement_id = int(settlement.id)

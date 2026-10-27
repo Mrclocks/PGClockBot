@@ -17,7 +17,7 @@ from app.bot import bbc_checkout_view as bbc_view
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
 from app.bot.handlers.purchase_contact import prompt_purchase_contact_if_needed
-from app.bot.handlers.psp_check import psp_check_button
+from app.bot.handlers.psp_check import PICK_GATEWAY_TEXT, psp_check_button, psp_gateway_picker
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, PaymentMethod
@@ -32,6 +32,7 @@ from app.services.formatting import (
     info_block,
     kv_line,
 )
+from app.services.psp_gateways import gateway_choices
 from app.services.orders import (
     is_customer_order_in_current_shop,
     apply_discount_to_order,
@@ -2306,7 +2307,30 @@ async def pay_stars_cb(
         if callback.message:
             await callback.message.answer(f"خطا در ساخت فاکتور استارز: {user_safe_error(e)}")
 
-@router.callback_query(F.data.startswith("pay:psp:"))
+def _psp_callback_target(data: str) -> tuple[int, str | None]:
+    """``pay:psp:<order_id>`` or ``pay:psp:<order_id>:<gateway_id>`` from the gateway picker."""
+    parts = data.split(":")
+    gateway_id = parts[3] if len(parts) > 3 else None
+    return int(parts[2]), gateway_id
+
+
+async def _asked_psp_gateway(callback: CallbackQuery, ui: dict, order_id: int) -> bool:
+    """Show the gateway picker when the shop has several; True when it was shown."""
+    from app.bot.nav_input import cancel_keyboard
+
+    choices = gateway_choices(ui)
+    if not choices:
+        return False
+    await callback.answer()
+    if callback.message:
+        markup = psp_gateway_picker(
+            choices, prefix="pay", order_id=order_id, extra_rows=cancel_keyboard("pay_wait").inline_keyboard
+        )
+        await safe_edit_text(callback.message, format_message("🏦 درگاه آنلاین", PICK_GATEWAY_TEXT), reply_markup=markup)
+    return True
+
+
+@router.callback_query(F.data.regexp(r"^pay:psp:\d+(?::\w{1,32})?$"))
 async def pay_psp_cb(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -2322,10 +2346,12 @@ async def pay_psp_cb(
     if not on(ui.get("pay_psp_enabled")):
         await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
         return
-    order_id = int((callback.data or "").split(":")[-1])
+    order_id, gateway_id = _psp_callback_target(callback.data or "")
     order = await session.get(Order, order_id)
     if not is_customer_order_in_current_shop(order, db_user.id):
         await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
+        return
+    if gateway_id is None and await _asked_psp_gateway(callback, ui, order_id):
         return
     # Answer before the gateway call so Telegram does not expire the tap.
     await callback.answer("در حال آماده‌سازی درگاه…")
@@ -2337,6 +2363,7 @@ async def pay_psp_cb(
             session,
             payment,
             description=f"سفارش #{order.id}",
+            gateway_id=gateway_id,
         )
     except ValueError as e:
         if callback.message:
