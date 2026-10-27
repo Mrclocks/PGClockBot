@@ -1,13 +1,10 @@
 {# «مینی‌اپ» settings tab (platform and shop).
    Expects: values, csrf_token, miniapp_brand_action, settings_base, shop_mode;
-   platform: miniapp_url; shop: miniapp_available, miniapp_on, miniapp_url (for _shop_miniapp_switch). #}
-{% set accent = (values.get('miniapp_accent_color', '') or '')|lower %}
-{% set presets = [
-  ('#2563eb', 'آبی'), ('#16a34a', 'سبز'), ('#9333ea', 'بنفش'), ('#db2777', 'صورتی'),
-  ('#0d9488', 'فیروزه‌ای'), ('#dc2626', 'قرمز'), ('#ca8a04', 'طلایی'),
-] %}
-{% set preset_keys = presets|map('first')|list %}
-{% set is_custom = accent and accent not in preset_keys %}
+   platform: miniapp_url; shop: miniapp_available, miniapp_on, miniapp_url (for _shop_miniapp_switch).
+   Global: miniapp_accent_presets. A saved colour that is not a preset shows as the default. #}
+{% set presets = miniapp_accent_presets %}
+{% set saved = (values.get('miniapp_accent_color', '') or '')|lower %}
+{% set accent = saved if saved in presets|map('first')|list else '' %}
 {% set preview = accent or '#f97316' %}
 
 {% if shop_mode %}
@@ -35,12 +32,6 @@
           <span class="accent-dot" aria-hidden="true"></span><span class="color-tag-label">{{ title }}</span>
         </label>
         {% endfor %}
-        <label class="color-tag-option" style="--tag-color: {{ accent if is_custom else '#64748b' }}" data-accent-custom-option>
-          <input type="radio" name="miniapp_accent_color" value="custom" {% if is_custom %}checked{% endif %} />
-          <span class="accent-dot" aria-hidden="true"></span><span class="color-tag-label">رنگ دلخواه</span>
-        </label>
-        <input class="accent-custom-input" type="color" name="miniapp_accent_custom" value="{{ accent if is_custom else '#64748b' }}"
-               aria-label="انتخاب رنگ دلخواه" data-accent-custom />
       </div>
       <div class="miniapp-accent-preview" style="--preview: {{ preview }}" data-accent-preview aria-hidden="true">
         <span class="miniapp-preview-hero"><small>موجودی کیف پول</small><strong>۲۴۵٬۰۰۰ تومان</strong></span>

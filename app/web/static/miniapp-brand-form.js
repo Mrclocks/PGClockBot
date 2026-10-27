@@ -1,9 +1,8 @@
-/* «مینی‌اپ» settings tab: live preview of the brand colour; picking a custom colour selects it. */
+/* «مینی‌اپ» settings tab: live preview of the chosen preset brand colour. */
 (function () {
   "use strict";
 
   const DEFAULT_ACCENT = "#f97316";
-  const HEX = /^#[0-9a-f]{6}$/i;
   const INK_DARK = "#1c1007";
 
   function luminance(hex) {
@@ -23,17 +22,11 @@
   /** The colour the form would save, for the preview. */
   function chosenColour(root) {
     const picked = root.querySelector('input[name="miniapp_accent_color"]:checked');
-    const custom = root.querySelector("[data-accent-custom]");
-    if (!picked) return DEFAULT_ACCENT;
-    if (picked.value === "custom") return custom && HEX.test(custom.value) ? custom.value : DEFAULT_ACCENT;
-    return picked.getAttribute("data-accent") || DEFAULT_ACCENT;
+    return (picked && picked.getAttribute("data-accent")) || DEFAULT_ACCENT;
   }
 
   function bind(root) {
     const preview = root.querySelector("[data-accent-preview]");
-    const custom = root.querySelector("[data-accent-custom]");
-    const customOption = root.querySelector("[data-accent-custom-option]");
-    const customRadio = customOption && customOption.querySelector("input");
     const update = () => {
       if (!preview) return;
       const colour = chosenColour(root);
@@ -41,13 +34,6 @@
       preview.style.setProperty("--preview-ink", inkFor(colour));
     };
     root.addEventListener("change", update);
-    if (custom && customRadio) {
-      custom.addEventListener("input", () => {
-        customRadio.checked = true;
-        if (HEX.test(custom.value)) customOption.style.setProperty("--tag-color", custom.value);
-        update();
-      });
-    }
     update();
   }
 

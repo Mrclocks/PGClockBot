@@ -2,7 +2,8 @@
 
 Name, caption and photo come from the bot's Telegram profile (settings → هویت ربات), so a
 shop sets them once for both its bot and its Mini App. Accent colour and notice are the
-Mini App's own settings. Everything is read from the settings of the Mini App's shop only;
+Mini App's own settings; the colour is one of a fixed set of presets (each tested for
+readable text on it), never a free colour. Everything is read from the settings of the Mini App's shop only;
 a shop never sees the platform's values (``get_all_settings`` keeps shops isolated).
 """
 
@@ -26,7 +27,17 @@ PLATFORM_TITLE_SETTING = "shop_title"
 NAME_MAX = 64
 CAPTION_MAX = 120
 NOTICE_MAX = 200
-ACCENT_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
+# (colour, title) choices besides the default orange, which is stored as "".
+ACCENT_PRESETS: tuple[tuple[str, str], ...] = (
+    ("#2563eb", "آبی"),
+    ("#16a34a", "سبز"),
+    ("#9333ea", "بنفش"),
+    ("#db2777", "صورتی"),
+    ("#0d9488", "فیروزه‌ای"),
+    ("#dc2626", "قرمز"),
+    ("#ca8a04", "طلایی"),
+)
+_PRESET_COLOURS = frozenset(colour for colour, _ in ACCENT_PRESETS)
 # Profile photos are saved by bot_appearance as uploads/<prefix>_bot_tg_photo_<hex>.jpg.
 PHOTO_PATTERN = re.compile(r"^uploads/[A-Za-z0-9_-]{1,96}\.jpg$")
 PUBLIC_MEDIA_PREFIX = "/media/"
@@ -47,13 +58,11 @@ class MiniBrand:
 
 
 def normalize_accent(value: str | None) -> str:
-    """Lower-case ``#rrggbb``, or "" for the default colour; anything else is refused."""
-    text = (value or "").strip()
-    if not text:
-        return ""
-    if not ACCENT_PATTERN.fullmatch(text):
-        raise ValueError("رنگ برند باید به شکل ‎#RRGGBB‎ باشد")
-    return text.lower()
+    """One of ``ACCENT_PRESETS`` (lower-case), or "" for the default colour; anything else is refused."""
+    text = (value or "").strip().lower()
+    if text and text not in _PRESET_COLOURS:
+        raise ValueError("رنگ برند را از رنگ‌های آماده انتخاب کنید")
+    return text
 
 
 def normalize_notice(value: str | None) -> str:
@@ -74,7 +83,8 @@ def _logo_url(value: str | None) -> str:
 
 
 def _stored_accent(value: str | None) -> str:
-    # A bad stored value (edited by hand) falls back to the default instead of failing the launch.
+    # A colour that is not a preset (a custom colour saved before presets only, or a hand edit)
+    # falls back to the default instead of failing the launch.
     try:
         return normalize_accent(value)
     except ValueError:

@@ -12557,16 +12557,6 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   background: var(--tag-color);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color) 28%, transparent);
 }
-.accent-custom-input {
-  width: 40px;
-  height: 32px;
-  padding: 2px;
-  align-self: center;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: transparent;
-  cursor: pointer;
-}
 .miniapp-accent-preview {
   display: flex;
   flex-wrap: wrap;

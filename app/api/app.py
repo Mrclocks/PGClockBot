@@ -44,6 +44,7 @@ from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
+from app.services.miniapp_branding import ACCENT_PRESETS
 from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 from app.services.payer_notify import notify_payer
 from app.services.resellers import (
@@ -138,6 +139,7 @@ templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
 templates.env.globals["app_version"] = local_version()
 templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
+templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
 templates.env.globals["panel_script_cache_key"] = get_panel_asset_cache_key("panel.js")
 templates.env.globals["panel_widget_cache_key"] = get_panel_asset_cache_key("panel_widget_request.js")
 templates.env.globals["money_inputs_cache_key"] = get_panel_asset_cache_key("money-inputs.js")
