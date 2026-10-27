@@ -79,10 +79,38 @@ def under_systemd_service() -> bool:
         return False
 
 
+def _installed_helper_is_current() -> bool:
+    """The installed helper matches this release's copy (an update may add operations)."""
+    try:
+        return HELPER_INSTALL_PATH.read_bytes() == HELPER_SOURCE.read_bytes()
+    except OSError:
+        # Unreadable or missing: let the caller reinstall when it can.
+        return False
+
+
+def helper_capabilities() -> frozenset[str]:
+    """Optional operations the installed helper supports; empty for helpers that predate them."""
+    if not HELPER_INSTALL_PATH.is_file():
+        return frozenset()
+    try:
+        result = _run(["sudo", "-n", str(HELPER_INSTALL_PATH), "capabilities"], timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        logger.warning("helper capabilities probe failed", exc_info=True)
+        return frozenset()
+    if result.returncode != 0:
+        return frozenset()
+    return frozenset((result.stdout or "").split())
+
+
 def ensure_restart_helper() -> tuple[bool, str]:
-    """Install ctl helper + sudoers so the service user can restart without a password."""
+    """Install ctl helper + sudoers so the service user can restart without a password.
+
+    An installed helper from an older release is replaced when sudo allows it, so new
+    operations (a second certificate name, for one) are available after an update.
+    """
     if HELPER_INSTALL_PATH.is_file() and SUDOERS_PATH.is_file():
-        if _sudo_restart_works():
+        # An older helper that cannot be replaced still restarts the service as before.
+        if (_installed_helper_is_current() or not can_passwordless_sudo()) and _sudo_restart_works():
             return True, "helper آماده است"
 
     if not HELPER_SOURCE.is_file():

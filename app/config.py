@@ -228,10 +228,11 @@ class Settings(BaseSettings):
         it is already ``https://…``. Never return ``http://`` (Telegram rejects it).
         """
         try:
-            from app.services.ssl_certs import https_is_active, public_panel_base_url
+            from app.services.ssl_certs import https_is_active, public_miniapp_base_url
 
             if https_is_active():
-                live = (public_panel_base_url() or "").strip().rstrip("/")
+                # The Mini App's own domain when one is set on the certificate, else the panel's.
+                live = (public_miniapp_base_url() or "").strip().rstrip("/")
                 if live.startswith("https://"):
                     return live
         except Exception:

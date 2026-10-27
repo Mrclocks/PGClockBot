@@ -4603,6 +4603,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             action = str(form.get("action") or "issue").strip()
             domain = normalize_domain(str(form.get("domain") or ""))
             email = str(form.get("acme_email") or "").strip()
+            # The Mini App's own domain; blank or «same as the panel» keeps the panel's.
+            same_miniapp = str(form.get("miniapp_same_domain") or "") in {"1", "on", "true", "yes"}
+            miniapp_domain = "" if same_miniapp else normalize_domain(str(form.get("miniapp_domain") or ""))
+            if miniapp_domain == domain:
+                miniapp_domain = ""
 
             if action == "enable":
                 # Enable only applies the cert already on disk. Switching domains
@@ -4646,6 +4651,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                     "/settings?tab=ssl&err=" + quote("دامنه نامعتبر است"),
                     status_code=303,
                 )
+            if miniapp_domain and not is_valid_domain(miniapp_domain):
+                return RedirectResponse(
+                    "/settings?tab=ssl&err=" + quote("دامنهٔ مینی‌اپ نامعتبر است"),
+                    status_code=303,
+                )
             if not email or "@" not in email:
                 return RedirectResponse(
                     "/settings?tab=ssl&err=" + quote("ایمیل معتبر لازم است"),
@@ -4657,14 +4667,16 @@ def create_api_app(lifespan=None) -> FastAPI:
             meta = read_meta()
             meta["pending_domain"] = domain
             meta["pending_email"] = email
+            meta["pending_miniapp_domain"] = miniapp_domain
             meta["last_error"] = None
             write_meta(meta)
             force = action == "renew"
-            result = start_issue_job(domain=domain, email=email, force=force)
+            result = start_issue_job(domain=domain, email=email, force=force, miniapp_domain=miniapp_domain)
             if not result.get("ok"):
                 meta = read_meta()
                 meta.pop("pending_domain", None)
                 meta.pop("pending_email", None)
+                meta.pop("pending_miniapp_domain", None)
                 write_meta(meta)
                 return RedirectResponse(
                     "/settings?tab=ssl&err=" + quote(str(result.get("error") or "خطا")[:400]),
