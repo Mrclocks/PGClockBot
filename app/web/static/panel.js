@@ -3056,7 +3056,50 @@
         if (styleVal === '') return { button_style: '' };
         return { button_style: styleVal };
       }
+      function optionsHtml(pairs, current) {
+        return pairs.map(function (o) {
+          return '<option value="' + o[0] + '"' + (current === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        }).join('');
+      }
+      /* API gateway row: the saved key is never sent to the browser, only has_secret. */
+      function pspRowHtml(item) {
+        const id = item.id || uid();
+        const saved = item.id ? ' data-pay-dest-saved' : '';
+        const provider = item.provider || 'zarinpal';
+        const keyHint = item.has_secret ? '•••••••• ذخیره شده؛ برای تغییر بنویسید' : 'وارد کنید';
+        return (
+          '<div class="pay-dest-row" data-pay-dest-row' + saved + ' data-pay-dest-id="' + attrEsc(id) + '">' +
+            '<div class="pay-dest-fields">' +
+              '<label>نام درگاه<input type="text" class="pay-dest-psp-name" maxlength="64" value="' + attrEsc(item.name) + '" autocomplete="off" /></label>' +
+              '<label>ارائه‌دهنده<select class="pay-dest-psp-provider">' +
+                optionsHtml([['zarinpal', 'زرین‌پال'], ['sunpay', 'سان‌پی (SunPay)'], ['mock', 'Mock (فقط تست محلی)']], provider) +
+              '</select></label>' +
+              '<label>مرچنت / کلید API<input type="password" class="pay-dest-psp-key" dir="ltr" value="" autocomplete="new-password" placeholder="' + attrEsc(keyHint) + '" /></label>' +
+              '<label>آدرس پایه (فقط سان‌پی)<input type="text" class="pay-dest-psp-url" dir="ltr" value="' + attrEsc(item.pay_url) + '" placeholder="https://pay.example.com" autocomplete="off" /></label>' +
+              '<label>روش درخواست سان‌پی<select class="pay-dest-psp-method">' +
+                optionsHtml([['GET', 'GET (مستند)'], ['POST', 'POST']], item.request_method || 'GET') +
+              '</select></label>' +
+              '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-sandbox"' + (item.sandbox ? ' checked' : '') + ' /> سندباکس زرین‌پال</label>' +
+              '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-enabled"' + (item.enabled === false ? '' : ' checked') + ' /> فعال</label>' +
+            '</div>' +
+            '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+          '</div>'
+        );
+      }
+      function pspEntry(row, rowId, idx) {
+        const val = (cls) => String((row.querySelector(cls) || {}).value || '').trim();
+        const checked = (cls) => Boolean((row.querySelector(cls) || {}).checked);
+        const name = val('.pay-dest-psp-name');
+        const key = val('.pay-dest-psp-key');
+        if (!name && !key && !row.hasAttribute('data-pay-dest-saved')) return null;
+        return {
+          id: rowId, name: name, provider: val('.pay-dest-psp-provider'), merchant_id: key,
+          pay_url: val('.pay-dest-psp-url'), request_method: val('.pay-dest-psp-method'),
+          sandbox: checked('.pay-dest-psp-sandbox'), enabled: checked('.pay-dest-psp-enabled'), sort: idx,
+        };
+      }
       function rowHtml(kind, item, inheritLabel) {
+        if (kind === 'psp') return pspRowHtml(item || {});
         const id = (item && item.id) || uid();
         const styleHtml = styleSelectHtml(storedStyleValue(item), inheritLabel);
         if (kind === 'cards') {
@@ -3113,6 +3156,9 @@
             const holder = String((row.querySelector('.pay-dest-card-holder') || {}).value || '').trim();
             if (!number) return;
             entries.push(Object.assign({ id: rowId, number: number, holder: holder, enabled: true, sort: idx }, stylePatch));
+          } else if (kind === 'psp') {
+            const entry = pspEntry(row, rowId, idx);
+            if (entry) entries.push(entry);
           } else if (kind === 'gateways') {
             const name = String((row.querySelector('.pay-dest-gw-name') || {}).value || '').trim();
             const link = String((row.querySelector('.pay-dest-gw-link') || {}).value || '').trim();
@@ -3169,9 +3215,7 @@
           }
         });
         root.addEventListener('input', () => sync(root));
-        root.addEventListener('change', (e) => {
-          if (e.target && e.target.classList && e.target.classList.contains('pay-dest-style')) sync(root);
-        });
+        root.addEventListener('change', () => sync(root));
       });
     })();
 

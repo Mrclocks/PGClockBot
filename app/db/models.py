@@ -351,6 +351,9 @@ class PaymentSettlement(Base):
     tenant_key: Mapped[int] = mapped_column(Integer, default=0, index=True)
     channel: Mapped[str] = mapped_column(String(32), index=True)  # psp | card_auto | bbc
     provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | sunpay | generic | bezanbecard
+    # PSP channel: which of the shop's API gateways (``psp_gateways`` setting) issued the checkout;
+    # NULL = created before several gateways existed (the single configured gateway).
+    gateway_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(
         String(32), default=SettlementStatus.CREATED.value, index=True
     )

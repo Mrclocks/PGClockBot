@@ -11,11 +11,12 @@ import logging
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CallbackQuery, InlineKeyboardButton
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser
 from app.services.payment_settlement import PspCheckOutcome, check_psp_payment, claim_psp_check_slot
+from app.services.psp_gateways import PspGateway
 from app.services.redact import user_safe_error
 from app.services.users import current_shop_reseller_id
 
@@ -25,6 +26,7 @@ router = Router(name="psp_check")
 
 CHECK_PREFIX = "pspchk:"
 CHECK_BUTTON_TEXT = "🔄 بررسی پرداخت"
+PICK_GATEWAY_TEXT = "یکی از درگاه‌های پرداخت آنلاین را انتخاب کنید:"
 
 OUTCOME_TEXT = {
     PspCheckOutcome.SETTLED: "✅ پرداخت شما تأیید شد. اگر سرویس یا شارژ را هنوز در چت نمی‌بینید، چند لحظه صبر کنید.",
@@ -42,6 +44,17 @@ def psp_check_button(settlement_id: int) -> InlineKeyboardButton:
     return InlineKeyboardButton(
         text=CHECK_BUTTON_TEXT, callback_data=f"{CHECK_PREFIX}{int(settlement_id)}"
     )
+
+
+def psp_gateway_picker(
+    gateways: list[PspGateway], *, prefix: str, order_id: int, extra_rows: list[list[InlineKeyboardButton]] | None = None
+) -> InlineKeyboardMarkup:
+    """One button per gateway: ``<prefix>:psp:<order_id>:<gateway_id>``."""
+    rows = [
+        [InlineKeyboardButton(text=f"🏦 {g.name[:32]}", callback_data=f"{prefix}:psp:{int(order_id)}:{g.id}")]
+        for g in gateways
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=[*rows, *(extra_rows or [])])
 
 
 @router.callback_query(F.data.regexp(rf"^{CHECK_PREFIX}\d+$"))

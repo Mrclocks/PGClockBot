@@ -39,6 +39,7 @@ from app.db.models import (
 from app.services.orders import approve_payment
 from app.services.shop_scope import payment_shop_id
 from app.services.payment_providers import get_psp_adapter
+from app.services.psp_gateways import PspGateway, choose_psp_gateway, find_psp_gateway
 from app.services.payment_providers.base import CheckoutRequest, VerifyResult
 from app.services.payment_providers.card_auto import (
     parse_card_auto_event,
@@ -416,14 +417,42 @@ def _checkout_to_keep(existing: PaymentSettlement) -> bool:
     )
 
 
+def _checkout_gateway(ui: dict, gateway_id: str | None) -> PspGateway:
+    gateway = choose_psp_gateway(ui, gateway_id)
+    if gateway.provider == "mock" and not settlement_mock_allowed():
+        raise ValueError(
+            "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را zarinpal یا sunpay بگذارید"
+        )
+    return gateway
+
+
+def _verify_gateway(ui: dict, settlement: PaymentSettlement) -> PspGateway:
+    """The gateway the checkout was created on; verifying with another merchant is never safe."""
+    gateway = find_psp_gateway(ui, settlement.gateway_id)
+    if gateway is None or gateway.provider != settlement.provider:
+        logger.warning(
+            "psp verify: gateway %s of settlement %s was removed or changed provider",
+            settlement.gateway_id,
+            settlement.id,
+        )
+        raise ValueError("درگاه این پرداخت در تنظیمات فروشگاه پیدا نشد")
+    return gateway
+
+
 async def create_psp_checkout(
     session: AsyncSession,
     payment: Payment,
     *,
     reseller_id: int | None = None,
     description: str = "",
+    gateway_id: str | None = None,
 ) -> PaymentSettlement:
-    """Create or reuse the single open PSP settlement for this payment (race-safe)."""
+    """Create or reuse the single open PSP settlement for this payment (race-safe).
+
+    ``gateway_id`` picks one of the shop's enabled gateways (the first when omitted). An
+    open checkout that already has a link is returned as is, whichever gateway it uses:
+    the customer may already be paying it.
+    """
     if payment.status != PaymentStatus.PENDING.value:
         raise ValueError("پرداخت قابل شروع درگاه نیست")
     if int(payment.amount) <= 0:
@@ -437,11 +466,8 @@ async def create_psp_checkout(
     if not _on(ui.get("pay_psp_enabled")):
         raise ValueError("پرداخت درگاه API غیرفعال است")
 
-    provider = str(ui.get("psp_provider") or "zarinpal").strip().lower() or "zarinpal"
-    if provider == "mock" and not settlement_mock_allowed():
-        raise ValueError(
-            "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را zarinpal یا sunpay بگذارید"
-        )
+    gateway = _checkout_gateway(ui, gateway_id)
+    provider = gateway.provider
 
     # SunPay requires a public https callback (same resolution as BezanBeCard).
     # Zarinpal/mock keep the previous env-based base (http allowed for local/mock).
@@ -478,6 +504,7 @@ async def create_psp_checkout(
         settlement.shop_owner_id = shop_owner_id
         settlement.tenant_key = tenant_key_for(shop_owner_id)
         settlement.provider = provider
+        settlement.gateway_id = gateway.id
         settlement.amount = int(payment.amount)
         settlement.status = SettlementStatus.CREATED.value
         settlement.error_message = None
@@ -493,6 +520,7 @@ async def create_psp_checkout(
             tenant_key=tenant_key_for(shop_owner_id),
             channel=CHANNEL_PSP,
             provider=provider,
+            gateway_id=gateway.id,
             status=SettlementStatus.CREATED.value,
             amount=int(payment.amount),
             currency="IRT",
@@ -536,7 +564,7 @@ async def create_psp_checkout(
             raise ValueError("ساخت تسویه همزمان ناموفق بود — دوباره تلاش کنید")
         settlement = inserted
 
-    adapter = get_psp_adapter(provider, ui=ui, public_base_url=base)
+    adapter = get_psp_adapter(provider, ui=gateway.adapter_settings(), public_base_url=base)
     token = settlement.checkout_token or secrets.token_urlsafe(24)
     settlement.checkout_token = token
     callback_url = f"{base}/payments/settlement/psp/{provider}/return/{int(settlement.id)}"
@@ -1010,7 +1038,9 @@ async def complete_psp_return(
     ui = await get_all_settings(session, reseller_id=settlement.shop_owner_id)
 
     base = _public_base() or "http://127.0.0.1:8000"
-    adapter = get_psp_adapter(provider, ui=ui, public_base_url=base)
+    adapter = get_psp_adapter(
+        provider, ui=_verify_gateway(ui, settlement).adapter_settings(), public_base_url=base
+    )
     callback_invoice_matches_settlement(
         callback_params, settlement_id=int(settlement.id)
     )

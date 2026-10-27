@@ -7,14 +7,13 @@
 {% set options = field[4] if field|length > 4 else [] %}
 {% set val = values.get(key, '') %}
 {# Full-span kinds + lone payment/text keys that look half-empty in a 2-col modal grid #}
-{% set full_kinds = ['textarea', 'image', 'toggle', 'btn_color', 'force_channels', 'connection_guides', 'payment_cards', 'payment_gateways', 'payment_crypto_wallets'] %}
+{% set full_kinds = ['textarea', 'image', 'toggle', 'btn_color', 'force_channels', 'connection_guides', 'payment_cards', 'payment_gateways', 'payment_crypto_wallets', 'psp_gateways'] %}
 {% set full_keys = [
   'referral_bonus',
   'pending_order_ttl_hours',
   'btn_pay_card', 'btn_pay_gateway', 'btn_pay_crypto', 'btn_pay_stars',
   'stars_toman_per_star', 'stars_title', 'stars_description',
-  'psp_provider', 'psp_merchant_id', 'psp_pay_url',
-  'psp_sunpay_request_method', 'psp_checkout_link_mode',
+  'psp_checkout_link_mode',
   'bbc_api_key', 'btn_pay_bbc',
   'btn_force_join', 'btn_force_join_check',
   'btn_guides', 'btn_guide_open_link',
@@ -102,6 +101,16 @@
       {{ setting_help(help, class_name='pay-dest-help') }}
     </div>
     <input type="hidden" name="s_payment_gateways" value="{{ values.get('payment_gateways', '[]') }}" data-pay-dest-json />
+    <div class="pay-dest-rows" data-pay-dest-list></div>
+  </div>
+  {% elif kind == 'psp_gateways' %}
+  <div class="pay-dest-list" data-pay-dest="psp">
+    <div class="pay-dest-head">
+      <strong class="pay-dest-title">{{ label }}</strong>
+      {{ setting_help(help, class_name='pay-dest-help') }}
+    </div>
+    {# Credentials never reach the browser (fails closed to an empty list); a blank key keeps the saved one. #}
+    <input type="hidden" name="s_psp_gateways" value="{{ psp_gateways_form_json(values) if psp_gateways_form_json is defined else '[]' }}" data-pay-dest-json />
     <div class="pay-dest-rows" data-pay-dest-list></div>
   </div>
   {% elif kind == 'payment_crypto_wallets' %}

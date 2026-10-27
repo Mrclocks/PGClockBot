@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import bbc_checkout_view as bbc_view
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
-from app.bot.handlers.psp_check import psp_check_button
+from app.bot.handlers.psp_check import PICK_GATEWAY_TEXT, psp_check_button, psp_gateway_picker
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
@@ -23,6 +23,7 @@ from app.services.bbc_settlement import (
 from app.services.redact import user_safe_error
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import create_wallet_topup
+from app.services.psp_gateways import gateway_choices
 from app.services.receipts import submit_receipt
 from app.services.ux20 import payment_shop_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
@@ -460,6 +461,76 @@ async def _topup_instructions(
     rows.append([kb.back_button(ui, "wallet:home")])
     return text, InlineKeyboardMarkup(inline_keyboard=rows), send_kw
 
+async def _show_psp_topup(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    state: FSMContext,
+    db_user: BotUser,
+    ui: dict,
+    *,
+    amount: int,
+    method: str,
+    gateway_id: str | None,
+) -> None:
+    """Wallet top-up through an API gateway; asks which one first when the shop has several."""
+    from app.services.payment_settlement import create_psp_checkout
+
+    choices = gateway_choices(ui)
+    if choices and gateway_id is None:
+        await callback.answer()
+        if callback.message:
+            markup = psp_gateway_picker(
+                choices, prefix="wtop", order_id=0, extra_rows=[[kb.back_button(ui, "wallet:home")]]
+            )
+            await safe_edit_text(callback.message, format_message("🏦 درگاه آنلاین", PICK_GATEWAY_TEXT), reply_markup=markup)
+        return
+    # Answer before the gateway call so Telegram does not expire the tap.
+    await callback.answer("در حال آماده‌سازی درگاه…")
+    payment = await create_wallet_topup(session, db_user.id, amount, method=method)
+    try:
+        settlement = await create_psp_checkout(
+            session, payment, description=f"شارژ کیف پول #{payment.id}", gateway_id=gateway_id
+        )
+    except ValueError as e:
+        if callback.message:
+            await callback.message.answer(user_safe_error(e))
+        return
+    amount_txt = format_toman(amount, get_settings().currency)
+    try:
+        body = render_message_template(
+            ui.get("psp_pay_text") or "",
+            domain=DOMAIN_PAYMENT,
+            amount=amount_txt,
+            order_id=0,
+            payment_id=payment.id,
+            shop_title=ui.get("shop_title") or "",
+        )
+    except Exception:
+        body = f"مبلغ {amount_txt} را از درگاه آنلاین پرداخت کنید."
+    body += f"\n\n(پرداخت #{payment.id})"
+    from app.services.payment_settlement import (
+        public_checkout_button_url,
+        with_psp_checkout_guidance,
+    )
+
+    body = with_psp_checkout_guidance(body)
+    rows: list[list[InlineKeyboardButton]] = []
+    link = public_checkout_button_url(settlement, ui=ui)
+    if link.startswith("http://") or link.startswith("https://"):
+        rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
+        rows.append([psp_check_button(int(settlement.id))])
+    rows.append(
+        [kb.back_button(ui, "wallet:home")]
+    )
+    await state.clear()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message("🏦 درگاه آنلاین", body),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
 async def _show_bbc_topup(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -543,53 +614,9 @@ async def wtop_choose_method(
         return
 
     if key == "psp":
-        from app.services.payment_settlement import create_psp_checkout
-
-        # Answer before the gateway call so Telegram does not expire the tap.
-        await callback.answer("در حال آماده‌سازی درگاه…")
-        payment = await create_wallet_topup(session, db_user.id, amount, method=method)
-        try:
-            settlement = await create_psp_checkout(
-                session, payment, description=f"شارژ کیف پول #{payment.id}"
-            )
-        except ValueError as e:
-            if callback.message:
-                await callback.message.answer(user_safe_error(e))
-            return
-        amount_txt = format_toman(amount, get_settings().currency)
-        try:
-            body = render_message_template(
-                ui.get("psp_pay_text") or "",
-                domain=DOMAIN_PAYMENT,
-                amount=amount_txt,
-                order_id=0,
-                payment_id=payment.id,
-                shop_title=ui.get("shop_title") or "",
-            )
-        except Exception:
-            body = f"مبلغ {amount_txt} را از درگاه آنلاین پرداخت کنید."
-        body += f"\n\n(پرداخت #{payment.id})"
-        from app.services.payment_settlement import (
-            public_checkout_button_url,
-            with_psp_checkout_guidance,
+        await _show_psp_topup(
+            callback, session, state, db_user, ui, amount=amount, method=method, gateway_id=dest_id
         )
-
-        body = with_psp_checkout_guidance(body)
-        rows: list[list[InlineKeyboardButton]] = []
-        link = public_checkout_button_url(settlement, ui=ui)
-        if link.startswith("http://") or link.startswith("https://"):
-            rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
-            rows.append([psp_check_button(int(settlement.id))])
-        rows.append(
-            [kb.back_button(ui, "wallet:home")]
-        )
-        await state.clear()
-        if callback.message:
-            await safe_edit_text(
-                callback.message,
-                format_message("🏦 درگاه آنلاین", body),
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-            )
         return
 
     if key == "bbc":

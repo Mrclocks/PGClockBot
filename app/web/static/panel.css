@@ -10750,6 +10750,15 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .pay-dest-fields input {
   width: 100%;
 }
+.pay-dest-fields .pay-dest-check {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 13px;
+}
+.pay-dest-fields .pay-dest-check input {
+  width: auto;
+}
 .pay-dest-remove-btn {
   width: 100%;
   justify-content: center;

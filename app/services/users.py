@@ -19,6 +19,7 @@ from app.services.screen_titles import SCREEN_TEXT_TAB, screen_text_defaults, sc
 from app.services.settings_button_labels import appearance_button_subs, shop_button_subs
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
+from app.services.psp_gateways import KEY_PSP_GATEWAYS, merge_submitted_psp_gateways
 from app.services.retired_text_defaults import refresh_retired_defaults
 from app.services.user_purge import purge_user_references
 
@@ -644,6 +645,16 @@ async def set_setting(
     clear_settings_cache(0)
 
 
+async def _keep_saved_psp_credentials(
+    session: AsyncSession, values: dict[str, str], rid: int | None
+) -> dict[str, str]:
+    """A gateway submitted without its credential keeps the one already saved."""
+    if KEY_PSP_GATEWAYS not in values:
+        return values
+    existing_ui = await get_all_settings(session, reseller_id=rid)
+    return {**values, KEY_PSP_GATEWAYS: merge_submitted_psp_gateways(values[KEY_PSP_GATEWAYS], existing_ui)}
+
+
 async def set_settings_bulk(
     session: AsyncSession,
     values: dict[str, str],
@@ -680,6 +691,7 @@ async def set_settings_bulk(
             if legacy in merged:
                 values[legacy] = merged[legacy]
     rid = _effective_reseller_id(reseller_id)
+    values = await _keep_saved_psp_credentials(session, values, rid)
     if any(is_button_label_key(k) for k in values if k != ALIAS_SETTING_KEY):
         existing_ui = await get_all_settings(session, reseller_id=rid)
         alias_extra = merge_alias_updates_for_payload(
@@ -1041,6 +1053,8 @@ DEFAULT_SETTINGS = {
     "pay_bbc_enabled": "0",
     "pay_card_auto_enabled": "0",
     "pay_discount_enabled": "1",
+    # JSON list of API gateways (see psp_gateways.py); empty = the single psp_* gateway below.
+    "psp_gateways": "[]",
     "psp_provider": "zarinpal",
     "psp_merchant_id": "",
     "psp_pay_url": "",
@@ -1658,42 +1672,11 @@ SETTING_GROUPS = {
     ],
     "درگاه آنلاین API": [
         (
-            "psp_provider",
-            "ارائه‌دهنده",
-            "select",
-            "zarinpal / sunpay = درگاه واقعی؛ mock فقط با ALLOW_SETTLEMENT_MOCK=1 روی سرور",
-            [
-                ("zarinpal", "زرین‌پال"),
-                ("sunpay", "سان‌پی (SunPay)"),
-                ("mock", "Mock (فقط تست محلی)"),
-            ],
-        ),
-        (
-            "psp_merchant_id",
-            "مرچنت / کلید API",
-            "password",
-            "زرین‌پال: Merchant ID — سان‌پی: api_key. خالی بماند = بدون تغییر. برای mock لازم نیست",
-        ),
-        (
-            "psp_pay_url",
-            "آدرس پایه درگاه (PAY_URL)",
-            "text",
-            "فقط سان‌پی و فقط https عمومی: مثلاً https://pay.example.com — "
-            "http و localhost/IP خصوصی رد می‌شوند",
-        ),
-        (
-            "psp_sunpay_request_method",
-            "روش درخواست سان‌پی (/api/request)",
-            "select",
-            "پیش‌فرض GET مطابق مستند؛ اگر درگاه بدنهٔ GET را نخواند POST را امتحان کنید "
-            "(تا تأیید با درگاه واقعی نهایی نیست)",
-            [("GET", "GET (مستند)"), ("POST", "POST")],
-        ),
-        (
-            "psp_sandbox",
-            "حالت سندباکس",
-            "toggle",
-            "روشن = محیط آزمایشی زرین‌پال (برای سان‌پی اثر ندارد)",
+            "psp_gateways",
+            "درگاه‌ها",
+            "psp_gateways",
+            "چند درگاه — دکمه + برای افزودن؛ با بیش از یک درگاه فعال، مشتری انتخاب می‌کند. "
+            "زرین‌پال: Merchant ID — سان‌پی: api_key و آدرس https. کلید خالی = بدون تغییر",
         ),
         (
             "psp_checkout_link_mode",
