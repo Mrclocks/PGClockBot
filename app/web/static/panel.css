@@ -2506,6 +2506,8 @@ a.btn.btn-ghost:hover {
   .table-list-sm,
   .table-list-sm > thead,
   .table-list-sm > tbody { display: block; width: 100%; min-width: 0 !important; }
+  /* Two lines of 22px each: every row is the same height whatever it holds, and the select
+     box and menu button (centred on both lines) never move. */
   .table-list-sm > :is(thead, tbody) > tr {
     display: grid;
     grid-template-columns: 20px minmax(0, 1fr) 76px 32px;
@@ -2513,10 +2515,10 @@ a.btn.btn-ghost:hover {
       "sel title value act"
       "sel sub   badge act"
       "more more more  more";
-    grid-template-rows: 22px 18px auto;
+    grid-template-rows: 22px 22px auto;
     align-items: center;
     column-gap: var(--space-1_5);
-    row-gap: 2px;
+    row-gap: var(--space-0);
     padding: var(--space-1_5);
     border-bottom: 1px solid var(--border);
   }
@@ -2538,17 +2540,34 @@ a.btn.btn-ghost:hover {
   }
   .table-list-sm .li-hide { display: none !important; }
   .table-list-sm .li-only { display: inline; }
-  .table-list-sm .col-select { grid-area: sel; grid-row: 1 / 3; overflow: visible; }
-  .table-list-sm > tbody > tr > td.col-actions { grid-area: act; grid-row: 1 / 3; display: flex; justify-content: center; overflow: visible; }
+  .table-list-sm > :is(thead, tbody) > tr > .col-select {
+    grid-area: sel;
+    grid-row: 1 / 3;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+  }
+  .table-list-sm > tbody > tr > td.col-actions {
+    grid-area: act;
+    grid-row: 1 / 3;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    overflow: visible;
+  }
   /* Always the 32px menu button, in the same place on every row: the select box sits as far
      from the right edge as this button from the left. */
   .table-list-sm .col-actions .row-actions { flex: 0 0 32px; width: 32px; height: 32px; min-height: 32px; justify-content: center; }
-  .table-list-sm .col-actions .row-actions-toggle--icon { display: inline-flex !important; flex: 0 0 32px; margin: 0; }
+  .table-list-sm .col-actions .row-actions-toggle--icon { display: inline-flex !important; flex: 0 0 32px; box-sizing: border-box; width: 32px; height: 32px; margin: 0; }
   .table-list-sm .col-actions .row-actions-toggle--label { display: none !important; }
   .table-list-sm .col-actions .row-actions-menu:not(.is-ported) { display: none !important; }
   /* Time-left colours already flag the row; the dot would only crowd the name. */
   .table-list-sm :is(.li-title, .li-sub) .alert-dot { display: none; }
-  .table-list-sm :is(.table-select-all, .table-select-row) { min-height: 0; }
+  .table-list-sm :is(.table-select-all, .table-select-row) { min-height: 0; height: 20px; }
 
   /* Header: select-all, count, sort menu. */
   .table-list-sm > thead > tr {
@@ -2557,6 +2576,7 @@ a.btn.btn-ghost:hover {
     padding-block: var(--space-1);
     background: var(--table-head-bg);
   }
+  .table-list-sm > thead > tr > .col-select { grid-row: 1; }
   .table-list-sm > thead > tr > th.li-head {
     grid-area: head;
     display: flex;
@@ -2569,17 +2589,49 @@ a.btn.btn-ghost:hover {
   }
   .table-list-sm .li-sort { width: auto; max-width: 60%; height: 32px; min-height: 32px; font-size: 12px; }
 
-  /* Line one: the name in the text colour, its id after it in the caption colour. */
+  /* Line one: the name in the text colour, its id after it in the caption colour. Never wraps. */
   .table-list-sm .li-title { grid-area: title; font-size: 14px; font-weight: 600; line-height: 22px; color: var(--foreground); }
   .table-list-sm .li-title .cell-name,
-  .table-list-sm .li-title .cell-name-primary { display: flex; flex-direction: row; align-items: baseline; gap: var(--space-0); width: auto; min-width: 0; }
+  .table-list-sm .li-title .cell-name-primary {
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: baseline;
+    gap: var(--space-0);
+    width: auto;
+    min-width: 0;
+    height: 22px;
+  }
   .table-list-sm .li-title .cell-name-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .table-list-sm .li-id { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 400; color: var(--muted-fg); }
 
-  /* Line two and the side column: caption colour, one line each. */
-  .table-list-sm .li-sub { grid-area: sub; font-size: 12px; line-height: 18px; color: var(--muted-fg); text-align: start; }
-  .table-list-sm .li-sub > * { display: inline; }
-  .table-list-sm .li-sub .badge { margin-inline-end: var(--space-0); }
+  /* Line two: chips and text on one line that scrolls sideways when it does not fit,
+     so nothing wraps under the name or slides under the side column. */
+  .table-list-sm > tbody > tr > td.li-sub {
+    grid-area: sub;
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: center;
+    gap: var(--space-0);
+    height: 22px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    text-overflow: clip;
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--muted-fg);
+  }
+  .table-list-sm > tbody > tr > td.li-sub::-webkit-scrollbar { display: none; }
+  /* More chips past the edge: fade the far end so the cut reads as «scroll for more». */
+  .table-list-sm > tbody > tr > td.li-sub.has-more {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--space-3));
+    mask-image: linear-gradient(to right, transparent, #000 var(--space-3));
+  }
+  .table-list-sm > tbody > tr > td.li-sub > * { flex: 0 0 auto; }
+  .table-list-sm .li-sub .users-svc-name { display: inline-flex; align-items: center; gap: var(--space-0); }
+
+  /* Side column: the value on line one, the status on line two, both at the inline end. */
   .table-list-sm .li-value {
     grid-area: value;
     justify-self: end;
@@ -2589,28 +2641,40 @@ a.btn.btn-ghost:hover {
     color: var(--foreground);
     font-variant-numeric: tabular-nums;
   }
-  .table-list-sm .li-badge { grid-area: badge; justify-self: end; line-height: 18px; }
-  .table-list-sm :is(.li-sub, .li-badge) .badge { font-size: 11px; line-height: 16px; padding: 0 var(--space-1); }
+  .table-list-sm > tbody > tr > td.li-badge { grid-area: badge; display: flex; align-items: center; justify-content: flex-end; height: 22px; }
   .table-list-sm .li-tone-warn { color: var(--warn-fg); }
   .table-list-sm .li-tone-danger { color: var(--danger); }
 
-  /* «N سرویس» and the nested list it opens. */
-  .table-list-sm .li-expand {
+  /* Every chip (tags, status, «N سرویس») is 20px tall with its text and icon centred. */
+  .table-list-sm :is(.li-sub, .li-badge) :is(.badge, .li-expand) {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 2px;
-    height: 18px;
+    box-sizing: border-box;
+    height: 20px;
+    margin: 0;
     padding: 0 var(--space-1);
-    border: 1px solid var(--border);
+    border-width: 1px;
+    border-style: solid;
     border-radius: var(--control-radius);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  .table-list-sm .li-expand {
+    border-color: var(--border);
     background: transparent;
     color: var(--foreground);
-    font: inherit;
-    font-size: 11px;
+    font-family: inherit;
     cursor: pointer;
   }
-  .table-list-sm .li-expand::after { content: "⌄"; line-height: 1; }
-  .table-list-sm .li-expand[aria-expanded="true"]::after { content: "⌃"; }
+  .table-list-sm .li-expand svg { width: 12px; height: 12px; transition: transform var(--motion-fast, 150ms) ease; }
+  .table-list-sm .li-expand[aria-expanded="true"] svg { transform: rotate(180deg); }
+
+  /* The nested list «N سرویس» opens: same columns and line heights as the rows. */
   .table-list-sm > tbody > tr > td.li-more { grid-area: more; overflow: visible; white-space: normal; }
   .table-list-sm .li-children {
     margin: var(--space-1_5) calc(-1 * var(--space-1_5)) calc(-1 * var(--space-1_5));
@@ -2623,15 +2687,21 @@ a.btn.btn-ghost:hover {
     grid-template-areas:
       ". title value ."
       ". sub   badge .";
-    grid-template-rows: 20px 18px;
+    grid-template-rows: 22px 22px;
     align-items: center;
     column-gap: var(--space-1_5);
-    row-gap: 2px;
+    row-gap: var(--space-0);
     padding: var(--space-1) var(--space-1_5);
   }
   .table-list-sm .li-child + .li-child { border-top: 1px dashed var(--border); }
   .table-list-sm .li-child > * { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .table-list-sm .li-child > .li-title { font-size: 13px; font-weight: 500; line-height: 20px; }
+  .table-list-sm .li-child > .li-title { font-size: 13px; font-weight: 500; line-height: 22px; }
+  .table-list-sm .li-child > .li-title { grid-area: title; }
+  .table-list-sm .li-child > .li-value { grid-area: value; }
+  .table-list-sm .li-child > .li-sub { grid-area: sub; font-size: 12px; line-height: 22px; color: var(--muted-fg); }
+  .table-list-sm .li-child > .li-badge { grid-area: badge; }
+  .table-list-sm .li-child > .li-badge { display: flex; align-items: center; justify-content: flex-end; height: 22px; }
+  .table-list-sm .li-child > .li-badge .badge { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 20px; padding: 0 var(--space-1); font-size: 11px; font-weight: 600; line-height: 1; }
 }
 
 /* User card (modal): account facts as label / value lines, then one block per service. */

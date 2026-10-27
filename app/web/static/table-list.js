@@ -114,5 +114,26 @@
     loadFragment(d.url, target);
   });
 
-  document.querySelectorAll('table.table-list-sm').forEach(buildSortMenu);
+  /* .has-more on a second line that runs past its edge and is not scrolled to the end. */
+  function markOverflow(cell) {
+    var hidden = cell.scrollWidth - cell.clientWidth - Math.abs(cell.scrollLeft);
+    cell.classList.toggle('has-more', hidden > 1);
+  }
+
+  function watchOverflow(table) {
+    var cells = table.querySelectorAll('td.li-sub');
+    cells.forEach(function (cell) {
+      markOverflow(cell);
+      cell.addEventListener('scroll', function () { markOverflow(cell); }, { passive: true });
+    });
+    if (typeof ResizeObserver !== 'undefined') {
+      var ro = new ResizeObserver(function () { cells.forEach(markOverflow); });
+      ro.observe(table);
+    }
+  }
+
+  document.querySelectorAll('table.table-list-sm').forEach(function (table) {
+    buildSortMenu(table);
+    watchOverflow(table);
+  });
 })();

@@ -182,7 +182,7 @@
               that set this person apart. -#}
           {% if row.service_count > 1 %}
           <button type="button" class="li-only li-expand" aria-expanded="false"
-                  aria-controls="user-{{ u.id }}-services">{{ row.service_count | num }} سرویس</button>
+                  aria-controls="user-{{ u.id }}-services">{{ row.service_count | num }} سرویس<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
           {% endif %}
           {% if u.is_demo %}<span class="li-only badge neutral">دمو</span>{% endif %}
           {% if u.role in ('admin', 'reseller') %}<span class="li-only badge {{ 'role-admin' if u.role == 'admin' else 'role-reseller' }}">{{ 'مدیر' if u.role == 'admin' else 'نماینده' }}</span>{% endif %}
