@@ -178,7 +178,12 @@
           </div>
         </td>
         <td class="col-svc li-sub" data-sort-value="{{ row.services[0].label if row.service_count > 0 else '' }}">
-          {#- On phones the tags that set this person apart lead the second line. -#}
+          {#- On phones the second line leads with «N سرویس» (always reachable), then the tags
+              that set this person apart. -#}
+          {% if row.service_count > 1 %}
+          <button type="button" class="li-only li-expand" aria-expanded="false"
+                  aria-controls="user-{{ u.id }}-services">{{ row.service_count | num }} سرویس</button>
+          {% endif %}
           {% if u.is_demo %}<span class="li-only badge neutral">دمو</span>{% endif %}
           {% if u.role in ('admin', 'reseller') %}<span class="li-only badge {{ 'role-admin' if u.role == 'admin' else 'role-reseller' }}">{{ 'مدیر' if u.role == 'admin' else 'نماینده' }}</span>{% endif %}
           {% if tag and tag.key != color_tag_meta(none).key %}<span class="li-only badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
@@ -196,8 +201,6 @@
             {% if sel.id is none and s.has_alert %}{% set sel.id = s.id %}{% endif %}
           {% endfor %}
           {% if sel.id is none %}{% set sel.id = row.services[0].id %}{% endif %}
-          <button type="button" class="li-only li-expand" aria-expanded="false"
-                  aria-controls="user-{{ u.id }}-services">{{ row.service_count | num }} سرویس</button>
           <label class="users-svc-select-wrap li-hide">
             <span class="sr-only">سرویس‌های کاربر</span>
             <select class="select-sm users-svc-select" data-uid="{{ u.id }}" aria-label="سرویس‌های کاربر">

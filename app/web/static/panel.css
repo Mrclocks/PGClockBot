@@ -2517,7 +2517,7 @@ a.btn.btn-ghost:hover {
     align-items: center;
     column-gap: var(--space-1_5);
     row-gap: 2px;
-    padding: var(--space-1_5) var(--space-2);
+    padding: var(--space-1_5);
     border-bottom: 1px solid var(--border);
   }
   .table-list-sm > tbody > tr:last-child { border-bottom: 0; }
@@ -2528,7 +2528,8 @@ a.btn.btn-ghost:hover {
     min-width: 0;
     max-width: none;
     height: auto;
-    padding: 0;
+    /* !important: the flush-card edge padding on first/last cells must not shift the grid. */
+    padding: 0 !important;
     border: 0;
     background: transparent;
     overflow: hidden;
@@ -2539,9 +2540,14 @@ a.btn.btn-ghost:hover {
   .table-list-sm .li-only { display: inline; }
   .table-list-sm .col-select { grid-area: sel; grid-row: 1 / 3; overflow: visible; }
   .table-list-sm > tbody > tr > td.col-actions { grid-area: act; grid-row: 1 / 3; display: flex; justify-content: center; overflow: visible; }
+  /* Always the 32px menu button, in the same place on every row: the select box sits as far
+     from the right edge as this button from the left. */
+  .table-list-sm .col-actions .row-actions { flex: 0 0 32px; width: 32px; height: 32px; min-height: 32px; justify-content: center; }
+  .table-list-sm .col-actions .row-actions-toggle--icon { display: inline-flex !important; flex: 0 0 32px; margin: 0; }
+  .table-list-sm .col-actions .row-actions-toggle--label { display: none !important; }
+  .table-list-sm .col-actions .row-actions-menu:not(.is-ported) { display: none !important; }
   /* Time-left colours already flag the row; the dot would only crowd the name. */
   .table-list-sm :is(.li-title, .li-sub) .alert-dot { display: none; }
-  .table-list-sm .row-actions-toggle--icon { width: 32px; height: 32px; }
   .table-list-sm :is(.table-select-all, .table-select-row) { min-height: 0; }
 
   /* Header: select-all, count, sort menu. */
@@ -2607,7 +2613,7 @@ a.btn.btn-ghost:hover {
   .table-list-sm .li-expand[aria-expanded="true"]::after { content: "⌃"; }
   .table-list-sm > tbody > tr > td.li-more { grid-area: more; overflow: visible; white-space: normal; }
   .table-list-sm .li-children {
-    margin: var(--space-1_5) calc(-1 * var(--space-2)) calc(-1 * var(--space-1_5));
+    margin: var(--space-1_5) calc(-1 * var(--space-1_5)) calc(-1 * var(--space-1_5));
     background: var(--table-head-bg);
     border-top: 1px solid var(--border);
   }
@@ -2621,7 +2627,7 @@ a.btn.btn-ghost:hover {
     align-items: center;
     column-gap: var(--space-1_5);
     row-gap: 2px;
-    padding: var(--space-1) var(--space-2);
+    padding: var(--space-1) var(--space-1_5);
   }
   .table-list-sm .li-child + .li-child { border-top: 1px dashed var(--border); }
   .table-list-sm .li-child > * { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
