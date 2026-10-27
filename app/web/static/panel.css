@@ -12225,3 +12225,69 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   .ov-node-name, .ov-node-traffic { grid-column: 1 / -1; }
   .ov-rate strong { font-size: 20px; }
 }
+
+/* ---------- Mini App settings: brand colour pills and a live preview ---------- */
+.miniapp-accent {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5);
+}
+.miniapp-accent legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+  font-weight: 600;
+}
+.accent-dot {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--tag-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color) 28%, transparent);
+}
+.accent-custom-input {
+  width: 40px;
+  height: 32px;
+  padding: 2px;
+  align-self: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+.miniapp-accent-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1_5);
+  padding: var(--space-1_5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.miniapp-preview-hero {
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: var(--space-1_5) var(--space-2);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--preview) 45%, #000);
+  color: #fff;
+}
+.miniapp-preview-hero small { opacity: 0.85; }
+.miniapp-preview-btn {
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  background: var(--preview);
+  color: var(--preview-ink, #1c1007);
+  font-weight: 700;
+}
+.miniapp-preview-tile {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: var(--preview);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--preview) 22%, transparent);
+}

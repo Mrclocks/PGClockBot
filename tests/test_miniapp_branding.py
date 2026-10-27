@@ -89,26 +89,44 @@ class BrandValueTests(unittest.TestCase):
         self.assertEqual(brand.accent, "")
 
 
+class MiniAppTabTests(unittest.TestCase):
+    def test_the_tab_sits_in_the_look_group_for_the_owner_and_shops(self) -> None:
+        from app.services.resellers import RESELLER_SETTINGS_TABS
+        from app.services.settings_tab_groups import group_settings_tabs
+        from app.services.users import SETTINGS_TABS
+
+        for tabs in (SETTINGS_TABS, RESELLER_SETTINGS_TABS):
+            groups = {g.key: g for g in group_settings_tabs(tabs, "miniapp")}
+            self.assertIn("miniapp", [t.key for t in groups["look"].tabs])
+            self.assertTrue(groups["look"].is_active)
+
+
 class BrandFormTemplateTests(unittest.TestCase):
     def render(self, values: dict[str, str]) -> str:
         env = Environment(loader=FileSystemLoader(ROOT / "app/web/templates"), autoescape=select_autoescape())
-        return env.get_template("_miniapp_brand_form.html").render(
+        return env.get_template("_settings_miniapp.html").render(
             values=values, miniapp_brand_action="/shop-settings/miniapp-brand", csrf_token="tok",
+            settings_base="/shop-settings", shop_mode=False, miniapp_url="https://panel.example.com/miniapp/",
         )
 
     def test_form_shows_saved_values_escaped_with_csrf(self) -> None:
         html = self.render({ACCENT_SETTING: "#2563eb", NOTICE_SETTING: "<script>x</script>"})
         self.assertIn('action="/shop-settings/miniapp-brand"', html)
         self.assertIn('name="csrf_token" value="tok"', html)
-        self.assertIn('value="#2563eb"', html)
+        self.assertRegex(html, r'name="miniapp_accent_color" value="#2563eb" data-accent="#2563eb" checked')
         self.assertIn("&lt;script&gt;x&lt;/script&gt;", html)
         self.assertNotIn("<script>x", html)
-        self.assertNotRegex(html, r'name="miniapp_accent_default" value="1"\s+checked')
 
-    def test_default_colour_switch_is_on_without_a_saved_colour(self) -> None:
+    def test_default_pill_is_chosen_without_a_saved_colour(self) -> None:
         html = self.render({})
-        self.assertRegex(html, r'name="miniapp_accent_default" value="1"\s+checked')
-        self.assertIn('value="#f97316"', html)
+        self.assertRegex(html, r'name="miniapp_accent_color" value="" data-accent="#f97316" checked')
+        self.assertIn("--preview: #f97316", html)
+
+    def test_a_colour_outside_the_presets_selects_custom(self) -> None:
+        html = self.render({ACCENT_SETTING: "#123456"})
+        self.assertRegex(html, r'name="miniapp_accent_color" value="custom" checked')
+        self.assertIn('name="miniapp_accent_custom" value="#123456"', html)
+        self.assertIn("--preview: #123456", html)
 
 
 class BrandScopeTests(unittest.IsolatedAsyncioTestCase):
@@ -217,13 +235,17 @@ class BrandScopeTests(unittest.IsolatedAsyncioTestCase):
         platform = await self.settings(None)
         self.assertEqual((platform[ACCENT_SETTING], platform[NOTICE_SETTING]), ("#111111", "platform sale"))
 
-    async def test_the_default_colour_switch_clears_the_custom_colour(self) -> None:
+    async def test_the_default_pill_clears_the_colour_and_custom_saves_the_picked_one(self) -> None:
         self.staff = {"role": "reseller", "bot_user_id": SHOP}
         await self.client.post("/shop-settings/miniapp-brand", data={
-            ACCENT_SETTING: "#16a34a", "miniapp_accent_default": "1", NOTICE_SETTING: "",
+            ACCENT_SETTING: "", "miniapp_accent_custom": "#16a34a", NOTICE_SETTING: "",
         })
         shop = await self.settings(SHOP)
         self.assertEqual((shop[ACCENT_SETTING], shop[NOTICE_SETTING]), ("", ""))
+        await self.client.post("/shop-settings/miniapp-brand", data={
+            ACCENT_SETTING: "custom", "miniapp_accent_custom": "#ABCDEF", NOTICE_SETTING: "",
+        })
+        self.assertEqual((await self.settings(SHOP))[ACCENT_SETTING], "#abcdef")
 
     async def test_invalid_input_is_refused_and_nothing_changes(self) -> None:
         self.staff = {"role": "reseller", "bot_user_id": SHOP}
@@ -251,6 +273,21 @@ class BrandScopeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("saved=1", response.headers["location"])
         self.assertEqual((await self.settings(None))[ACCENT_SETTING], "#9333ea")
         self.assertEqual((await self.settings(SHOP))[ACCENT_SETTING], "#2563eb")
+
+    async def test_the_platform_tab_turns_the_reseller_switch_and_refreshes_shop_bots_only_on_change(self) -> None:
+        self.staff = {"role": "admin"}
+        with patch("app.api.miniapp_brand_pages.schedule_shop_menu_sync") as sync:
+            await self.client.post("/settings/miniapp-brand", data={ACCENT_SETTING: "", "miniapp_shops_enabled": "1"})
+            self.assertEqual((await self.settings(None))[PLATFORM_SWITCH], "1")
+            sync.assert_not_called()
+            await self.client.post("/settings/miniapp-brand", data={ACCENT_SETTING: ""})
+            self.assertEqual((await self.settings(None))[PLATFORM_SWITCH], "0")
+            sync.assert_called_once()
+
+    async def test_a_shop_tab_save_never_touches_the_platform_switch(self) -> None:
+        self.staff = {"role": "reseller", "bot_user_id": SHOP}
+        await self.client.post("/shop-settings/miniapp-brand", data={ACCENT_SETTING: "", "miniapp_shops_enabled": "0"})
+        self.assertEqual((await self.settings(None))[PLATFORM_SWITCH], "1")
 
     async def test_save_rejects_bad_values_at_the_service(self) -> None:
         async with self.Session() as session:

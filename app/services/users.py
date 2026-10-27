@@ -1151,6 +1151,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     (SCREEN_TEXT_TAB, "تیتر و توضیح منوها"),
     ("colors", "رنگبندی دکمه‌ها"),
     ("menu", "منوی بات"),
+    ("miniapp", "مینی‌اپ"),
     ("links", "لینک‌های سریع"),
     ("qr", "QR اشتراک"),
     ("naming", "نام‌گذاری سرویس"),

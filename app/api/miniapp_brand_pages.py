@@ -1,4 +1,4 @@
-"""Panel forms that save a Mini App's brand colour and notice (platform and each shop)."""
+"""Panel forms on the «مینی‌اپ» settings tab: brand colour, notice and the reseller switch."""
 
 from __future__ import annotations
 
@@ -9,28 +9,37 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.miniapp_branding import ACCENT_SETTING, NOTICE_SETTING, save_mini_brand
+from app.services.miniapp_shop import PLATFORM_SWITCH, set_platform_shop_miniapps, switch_value
+from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 
-PLATFORM_BACK = "/settings?tab=appearance"
-SHOP_BACK = "/shop-settings?tab=appearance"
-DEFAULT_ACCENT_FIELD = "miniapp_accent_default"
-SAVED_MESSAGE = "ظاهر مینی‌اپ ذخیره شد"
+PLATFORM_BACK = "/settings?tab=miniapp"
+SHOP_BACK = "/shop-settings?tab=miniapp"
+# The colour picker posts a preset, "" for the default, or this value with a custom colour.
+CUSTOM_ACCENT = "custom"
+CUSTOM_ACCENT_FIELD = "miniapp_accent_custom"
+SAVED_MESSAGE = "تنظیمات مینی‌اپ ذخیره شد"
 NO_SHOP = "فروشگاه شما پیدا نشد"
 
 
 def _form_values(form) -> tuple[str, str]:
-    """The submitted accent ("" when «default colour» is ticked) and notice."""
-    use_default = str(form.get(DEFAULT_ACCENT_FIELD) or "") in {"1", "on", "true", "yes"}
-    accent = "" if use_default else str(form.get(ACCENT_SETTING) or "")
+    """The submitted accent (a preset, "" for the default, or the custom colour) and notice."""
+    choice = str(form.get(ACCENT_SETTING) or "")
+    accent = str(form.get(CUSTOM_ACCENT_FIELD) or "") if choice == CUSTOM_ACCENT else choice
     return accent, str(form.get(NOTICE_SETTING) or "")
 
 
-async def _save(session: AsyncSession, request: Request, *, shop_id: int | None, back: str) -> RedirectResponse:
-    accent, notice = _form_values(await request.form())
+async def _save(session: AsyncSession, form, *, shop_id: int | None, back: str) -> RedirectResponse | None:
+    """None when saved; a redirect carrying the error otherwise."""
+    accent, notice = _form_values(form)
     try:
         await save_mini_brand(session, shop_id=shop_id, accent=accent, notice=notice)
     except ValueError as exc:
         return RedirectResponse(f"{back}&err={quote(str(exc))}", status_code=303)
+    return None
+
+
+def _saved(back: str) -> RedirectResponse:
     return RedirectResponse(f"{back}&saved=1&msg={quote(SAVED_MESSAGE)}", status_code=303)
 
 
@@ -41,7 +50,14 @@ def register_miniapp_brand_pages(app: FastAPI, *, require_admin, require_shop_se
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ) -> RedirectResponse:
-        return await _save(session, request, shop_id=None, back=PLATFORM_BACK)
+        form = await request.form()
+        failed = await _save(session, form, shop_id=None, back=PLATFORM_BACK)
+        if failed is not None:
+            return failed
+        if await set_platform_shop_miniapps(session, enabled=switch_value(form, PLATFORM_SWITCH) == "1"):
+            # Shop bots' «Open» buttons appear or go away with the switch.
+            schedule_shop_menu_sync()
+        return _saved(PLATFORM_BACK)
 
     @app.post("/shop-settings/miniapp-brand")
     async def shop_miniapp_brand_save(
@@ -55,4 +71,5 @@ def register_miniapp_brand_pages(app: FastAPI, *, require_admin, require_shop_se
         shop_id = shop_owner_id(staff)
         if not shop_id:
             return RedirectResponse(f"{SHOP_BACK}&err={quote(NO_SHOP)}", status_code=303)
-        return await _save(session, request, shop_id=int(shop_id), back=SHOP_BACK)
+        failed = await _save(session, await request.form(), shop_id=int(shop_id), back=SHOP_BACK)
+        return failed or _saved(SHOP_BACK)

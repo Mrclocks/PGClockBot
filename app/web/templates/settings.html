@@ -121,8 +121,10 @@
   {% elif tab == 'appearance' %}
     {% set settings_action = '/settings?tab=appearance' %}
     {% include "_settings_appearance.html" %}
+  {% elif tab == 'miniapp' %}
     {% set miniapp_brand_action = '/settings/miniapp-brand' %}
-    {% include "_miniapp_brand_form.html" %}
+    {% set settings_base = '/settings' %}
+    {% include "_settings_miniapp.html" %}
   {% elif tab == 'menu' %}
     {% include "_settings_menu.html" %}
     {% set reset_action = '/settings?tab=menu' %}
