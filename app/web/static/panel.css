@@ -2507,10 +2507,11 @@ a.btn.btn-ghost:hover {
   .table-list-sm > thead,
   .table-list-sm > tbody { display: block; width: 100%; min-width: 0 !important; }
   /* Two lines of 22px each: every row is the same height whatever it holds, and the select
-     box and menu button (centred on both lines) never move. */
+     box and menu button (centred on both lines) never move. The side column is only as wide
+     as its value and status (both sit at its far edge), so line two runs right up to them. */
   .table-list-sm > :is(thead, tbody) > tr {
     display: grid;
-    grid-template-columns: 20px minmax(0, 1fr) 76px 32px;
+    grid-template-columns: 20px minmax(0, 1fr) auto 32px;
     grid-template-areas:
       "sel title value act"
       "sel sub   badge act"
@@ -2625,8 +2626,8 @@ a.btn.btn-ghost:hover {
   .table-list-sm > tbody > tr > td.li-sub::-webkit-scrollbar { display: none; }
   /* More chips past the edge: fade the far end so the cut reads as «scroll for more». */
   .table-list-sm > tbody > tr > td.li-sub.has-more {
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--space-3));
-    mask-image: linear-gradient(to right, transparent, #000 var(--space-3));
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--space-2));
+    mask-image: linear-gradient(to right, transparent, #000 var(--space-2));
   }
   .table-list-sm > tbody > tr > td.li-sub > * { flex: 0 0 auto; }
   .table-list-sm .li-sub .users-svc-name { display: inline-flex; align-items: center; gap: var(--space-0); }
@@ -2683,7 +2684,7 @@ a.btn.btn-ghost:hover {
   }
   .table-list-sm .li-child {
     display: grid;
-    grid-template-columns: 20px minmax(0, 1fr) 76px 32px;
+    grid-template-columns: 20px minmax(0, 1fr) auto 32px;
     grid-template-areas:
       ". title value ."
       ". sub   badge .";
