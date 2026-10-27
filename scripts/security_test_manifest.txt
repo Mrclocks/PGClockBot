@@ -271,3 +271,4 @@ tests/test_miniapp_shop_extras.py
 tests/test_shop_notify_isolation.py
 tests/test_user_search.py
 tests/test_psp_gateways.py
+tests/test_user_card.py

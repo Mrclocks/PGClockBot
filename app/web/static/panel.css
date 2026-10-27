@@ -2480,6 +2480,196 @@ a.btn.btn-ghost:hover {
   /* Clip thead/row paints to the rounded frame (no broken corners on hover/scroll) */
   isolation: isolate;
 }
+/* ---------- Tables as lists on phones (.table-list-sm) ----------
+   Below 880px a marked table becomes a list of two-line rows of one fixed height, on one
+   grid, so every value sits in the same place on every row:
+       [select]  .li-title (name + id)        .li-value  [actions]
+                 .li-sub  (caption colour)    .li-badge
+   .li-more holds an optional nested list under the row (.li-children > .li-child, same
+   grid). .li-head is the list's header (count + sort menu); .li-only shows only in the
+   list and .li-hide only in the table. Any other cell is left out of the list, so the
+   row stays a <tr> and sorting, bulk select and row actions keep working. */
+.cell-name-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.cell-name-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.cell-name-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
+.table-list-sm .li-only,
+.table-list-sm :is(th.li-head, td.li-more) { display: none; }
+@media (max-width: 880px) {
+  .table-list-sm,
+  .table-list-sm > thead,
+  .table-list-sm > tbody { display: block; width: 100%; min-width: 0 !important; }
+  .table-list-sm > :is(thead, tbody) > tr {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) 76px 32px;
+    grid-template-areas:
+      "sel title value act"
+      "sel sub   badge act"
+      "more more more  more";
+    grid-template-rows: 22px 18px auto;
+    align-items: center;
+    column-gap: var(--space-1_5);
+    row-gap: 2px;
+    padding: var(--space-1_5) var(--space-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .table-list-sm > tbody > tr:last-child { border-bottom: 0; }
+  .table-list-sm > :is(thead, tbody) > tr > :is(th, td) { display: none; }
+  .table-list-sm > :is(thead, tbody) > tr > :is(.col-select, .li-head, .li-title, .li-sub, .li-value, .li-badge, .col-actions, .li-more) {
+    display: block;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .table-list-sm .li-hide { display: none !important; }
+  .table-list-sm .li-only { display: inline; }
+  .table-list-sm .col-select { grid-area: sel; grid-row: 1 / 3; overflow: visible; }
+  .table-list-sm > tbody > tr > td.col-actions { grid-area: act; grid-row: 1 / 3; display: flex; justify-content: center; overflow: visible; }
+  /* Time-left colours already flag the row; the dot would only crowd the name. */
+  .table-list-sm :is(.li-title, .li-sub) .alert-dot { display: none; }
+  .table-list-sm .row-actions-toggle--icon { width: 32px; height: 32px; }
+  .table-list-sm :is(.table-select-all, .table-select-row) { min-height: 0; }
+
+  /* Header: select-all, count, sort menu. */
+  .table-list-sm > thead > tr {
+    grid-template-rows: 32px;
+    grid-template-areas: "sel head head head";
+    padding-block: var(--space-1);
+    background: var(--table-head-bg);
+  }
+  .table-list-sm > thead > tr > th.li-head {
+    grid-area: head;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-1_5);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted-fg);
+  }
+  .table-list-sm .li-sort { width: auto; max-width: 60%; height: 32px; min-height: 32px; font-size: 12px; }
+
+  /* Line one: the name in the text colour, its id after it in the caption colour. */
+  .table-list-sm .li-title { grid-area: title; font-size: 14px; font-weight: 600; line-height: 22px; color: var(--foreground); }
+  .table-list-sm .li-title .cell-name,
+  .table-list-sm .li-title .cell-name-primary { display: flex; flex-direction: row; align-items: baseline; gap: var(--space-0); width: auto; min-width: 0; }
+  .table-list-sm .li-title .cell-name-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .table-list-sm .li-id { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 400; color: var(--muted-fg); }
+
+  /* Line two and the side column: caption colour, one line each. */
+  .table-list-sm .li-sub { grid-area: sub; font-size: 12px; line-height: 18px; color: var(--muted-fg); text-align: start; }
+  .table-list-sm .li-sub > * { display: inline; }
+  .table-list-sm .li-sub .badge { margin-inline-end: var(--space-0); }
+  .table-list-sm .li-value {
+    grid-area: value;
+    justify-self: end;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 22px;
+    color: var(--foreground);
+    font-variant-numeric: tabular-nums;
+  }
+  .table-list-sm .li-badge { grid-area: badge; justify-self: end; line-height: 18px; }
+  .table-list-sm :is(.li-sub, .li-badge) .badge { font-size: 11px; line-height: 16px; padding: 0 var(--space-1); }
+  .table-list-sm .li-tone-warn { color: var(--warn-fg); }
+  .table-list-sm .li-tone-danger { color: var(--danger); }
+
+  /* «N سرویس» and the nested list it opens. */
+  .table-list-sm .li-expand {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 18px;
+    padding: 0 var(--space-1);
+    border: 1px solid var(--border);
+    border-radius: var(--control-radius);
+    background: transparent;
+    color: var(--foreground);
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .table-list-sm .li-expand::after { content: "⌄"; line-height: 1; }
+  .table-list-sm .li-expand[aria-expanded="true"]::after { content: "⌃"; }
+  .table-list-sm > tbody > tr > td.li-more { grid-area: more; overflow: visible; white-space: normal; }
+  .table-list-sm .li-children {
+    margin: var(--space-1_5) calc(-1 * var(--space-2)) calc(-1 * var(--space-1_5));
+    background: var(--table-head-bg);
+    border-top: 1px solid var(--border);
+  }
+  .table-list-sm .li-child {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) 76px 32px;
+    grid-template-areas:
+      ". title value ."
+      ". sub   badge .";
+    grid-template-rows: 20px 18px;
+    align-items: center;
+    column-gap: var(--space-1_5);
+    row-gap: 2px;
+    padding: var(--space-1) var(--space-2);
+  }
+  .table-list-sm .li-child + .li-child { border-top: 1px dashed var(--border); }
+  .table-list-sm .li-child > * { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .table-list-sm .li-child > .li-title { font-size: 13px; font-weight: 500; line-height: 20px; }
+}
+
+/* User card (modal): account facts as label / value lines, then one block per service. */
+.user-card { display: flex; flex-direction: column; gap: var(--space-2); }
+.user-card-head { display: flex; flex-direction: column; gap: 2px; }
+.user-card-head strong { font-size: 17px; font-weight: 700; }
+.user-card-head .muted { font-size: 12px; }
+.user-card-label { margin: 0 0 var(--space-1); font-size: 13px; font-weight: 600; color: var(--muted-fg); }
+.kv-list { margin: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.kv-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1_5);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-2);
+  font-size: 13px;
+}
+.kv-list > div + div { border-top: 1px solid var(--border); }
+.kv-list dt { color: var(--muted-fg); }
+.kv-list dd { margin: 0; font-weight: 600; text-align: end; font-variant-numeric: tabular-nums; }
+.user-card-service {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+  padding: var(--space-1_5) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.user-card-service + .user-card-service { margin-top: var(--space-1); }
+.user-card-service > div { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1_5); min-width: 0; }
+.user-card-service > div:first-child { font-size: 14px; }
+.user-card-service > div.muted { font-size: 12px; }
+.user-card-service .li-tone-warn { color: var(--warn-fg); font-weight: 600; }
+.user-card-service .li-tone-danger { color: var(--danger); font-weight: 600; }
+.user-card-empty { margin: 0; }
+.user-card-actions {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-1);
+}
+.user-card-actions .btn { width: 100%; }
+.user-card-actions .btn:only-child { grid-column: 1 / -1; }
+
 .card > .table-wrap {
   border: 1px solid var(--border);
   border-radius: var(--radius);

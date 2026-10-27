@@ -127,7 +127,7 @@
   ]) }}
   {% endif %}
   <div class="table-wrap">
-  <table class="table-compact users-ops-table" data-sortable{% if manage or ops %} data-bulk-select{% endif %}>
+  <table class="table-compact users-ops-table table-list-sm" data-sortable{% if manage or ops %} data-bulk-select{% endif %}>
     <thead>
       <tr>
         {% if manage or ops %}{{ table_select_head() }}{% endif %}
@@ -140,6 +140,10 @@
         <th class="col-wallet" data-sort-type="num">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
         {% if ops or manage or provision or edit_svc %}<th class="col-actions"></th>{% endif %}
+        <th class="li-head" scope="col">
+          <span class="li-count">{{ rows | length | num }} کاربر</span>
+          <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
+        </th>
       </tr>
     </thead>
     <tbody>
@@ -152,14 +156,19 @@
         {% if manage or ops %}{{ table_select_cell(u.id) }}{% endif %}
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.id }}">{{ u.id }}</td>
         <td class="mono col-tg col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
-        <td class="col-name" data-sort-value="{{ u.full_name or u.username or '' }}">
+        <td class="col-name li-title" data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">
             <span class="cell-name-primary">
               {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
-              <span class="cell-name-text">{{ u.full_name or u.username or "—" }}</span>
+              <button type="button" class="cell-name-text cell-name-link"
+                      data-modal-open="modal-user-card"
+                      data-modal-load="/users/{{ u.id }}/card"
+                      data-modal-load-target="user-card-body"
+                      dir="auto">{{ u.full_name or u.username or "—" }}</button>
+              <span class="li-only li-id" dir="ltr">({{ u.telegram_id }})</span>
               {% if row.has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
             </span>
-            <span class="cell-name-tags">
+            <span class="cell-name-tags li-hide">
               {% if u.is_demo %}<span class="badge neutral">دمو</span>{% endif %}
               <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
                 {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
@@ -168,12 +177,17 @@
             </span>
           </div>
         </td>
-        <td class="col-svc" data-sort-value="{{ row.services[0].label if row.service_count > 0 else '' }}">
+        <td class="col-svc li-sub" data-sort-value="{{ row.services[0].label if row.service_count > 0 else '' }}">
+          {#- On phones the tags that set this person apart lead the second line. -#}
+          {% if u.is_demo %}<span class="li-only badge neutral">دمو</span>{% endif %}
+          {% if u.role in ('admin', 'reseller') %}<span class="li-only badge {{ 'role-admin' if u.role == 'admin' else 'role-reseller' }}">{{ 'مدیر' if u.role == 'admin' else 'نماینده' }}</span>{% endif %}
+          {% if tag and tag.key != color_tag_meta(none).key %}<span class="li-only badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
           {% if row.service_count == 0 %}
           <span class="muted">بدون سرویس</span>
           {% elif row.service_count == 1 %}
           <span class="users-svc-name" title="{{ row.services[0].label }}">
-            <span class="users-svc-name-text">{{ row.services[0].label }}</span>
+            <span class="users-svc-name-text li-hide">{{ row.services[0].label }}</span>
+            <span class="li-only">{{ row.services[0].plan_name or row.services[0].label }} · {{ row.services[0].volume_text }}</span>
             {% if row.services[0].has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
           </span>
           {% else %}
@@ -182,7 +196,9 @@
             {% if sel.id is none and s.has_alert %}{% set sel.id = s.id %}{% endif %}
           {% endfor %}
           {% if sel.id is none %}{% set sel.id = row.services[0].id %}{% endif %}
-          <label class="users-svc-select-wrap">
+          <button type="button" class="li-only li-expand" aria-expanded="false"
+                  aria-controls="user-{{ u.id }}-services">{{ row.service_count | num }} سرویس</button>
+          <label class="users-svc-select-wrap li-hide">
             <span class="sr-only">سرویس‌های کاربر</span>
             <select class="select-sm users-svc-select" data-uid="{{ u.id }}" aria-label="سرویس‌های کاربر">
               {% for s in row.services %}
@@ -198,9 +214,9 @@
           {% endif %}
         </td>
         <td class="col-vol users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
-        <td class="col-exp users-exp-cell" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
+        <td class="col-exp users-exp-cell li-value li-tone-{{ row.expire_tone or 'none' }}" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
         <td class="mono col-wallet" dir="ltr" data-sort-value="{{ row.wallet_balance }}">{{ row.wallet_balance | money }}</td>
-        <td class="col-status" data-sort-value="{{ '1' if u.is_blocked else '0' }}">
+        <td class="col-status li-badge" data-sort-value="{{ '1' if u.is_blocked else '0' }}">
           {% if u.is_blocked %}
           <span class="badge blocked">مسدود</span>
           {% else %}
@@ -260,6 +276,21 @@
             {% endif %}
             {% endif %}
           {% endcall %}
+        </td>
+        {% endif %}
+        {% if row.service_count > 1 %}
+        {#- Phones only: the user's services, opened from «N سرویس» on the second line. -#}
+        <td class="li-more">
+          <div class="li-children" id="user-{{ u.id }}-services" hidden>
+            {% for s in row.services %}
+            <div class="li-child">
+              <span class="li-title" dir="auto">{{ s.plan_name or s.label }}</span>
+              <span class="li-value li-tone-{{ s.expire_tone or 'none' }}">{{ s.expire_text }}</span>
+              <span class="li-sub">{% if s.pg_username %}<bdi dir="ltr">{{ s.pg_username }}</bdi> · {% endif %}{{ s.volume_text }}</span>
+              <span class="li-badge">{% if s.has_alert %}<span class="badge warn">هشدار</span>{% endif %}</span>
+            </div>
+            {% endfor %}
+          </div>
         </td>
         {% endif %}
       </tr>
@@ -364,6 +395,19 @@
 
 {% endif %}
 {% if edit_svc %}
+<div class="ui-modal" id="modal-user-card" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-card-title">
+    <div class="ui-modal-head">
+      {{ modal_title('users', 'اطلاعات کاربر', tone='brand', heading_id='user-card-title') }}
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div id="user-card-body" data-load-fragment>
+      <p class="muted">در حال بارگذاری…</p>
+    </div>
+  </div>
+</div>
+
 <div class="ui-modal" id="modal-user-edit" hidden
      data-modal-strip-keys="edit,ok,err,_">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>

@@ -14,8 +14,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, Plan
 from app.services.authz import authz_from_staff, can_shop
 from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
+from app.services.pg_access import staff_user_actions
+from app.services.platform_identity import is_explicit_owner_staff
 from app.services.shop_membership import assert_customer_in_staff_scope
-from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope, resolve_shop_scope_id
+from app.services.shop_scope import (
+    ShopScopeError,
+    assert_bot_user_in_scope,
+    bot_user_in_scope,
+    resolve_shop_scope_id,
+)
+from app.services.user_card import build_user_card
 
 
 def _q(msg: str) -> str:
@@ -288,6 +296,41 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         if as_fragment:
             return render(request, "_user_edit_body.html", ctx)
         return render(request, "user_edit.html", ctx)
+
+    @app.get("/users/{user_id}/card", response_class=HTMLResponse)
+    async def user_card(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_ops),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Read-only user card for the users list (modal fragment)."""
+        loaded = await _require_scoped_user(session, staff, user_id, fragment=True)
+        if isinstance(loaded, (RedirectResponse, HTMLResponse)):
+            return loaded
+        try:
+            shop_scope = resolve_shop_scope_id(staff)
+        except ShopScopeError as exc:
+            return HTMLResponse(
+                f'<div class="flash err">{html.escape(exc.message)}</div>', status_code=403
+            )
+        card = await build_user_card(
+            session,
+            loaded,
+            shop_id=shop_scope,
+            show_private_marks=bot_user_in_scope(staff, loaded),
+        )
+        pg_acts = staff_user_actions(staff)
+        in_shop = is_explicit_owner_staff(staff) or shop_scope is not None
+        return render(
+            request,
+            "_user_card_body.html",
+            {
+                "card": card,
+                "can_edit": in_shop and any(pg_acts.get(k) for k in ("create", "update", "delete")),
+                "can_message": not loaded.is_blocked,
+            },
+        )
 
     @app.post("/users/{user_id}/wallet-credit")
     async def user_wallet_credit(
