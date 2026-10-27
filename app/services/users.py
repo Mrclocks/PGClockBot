@@ -1182,7 +1182,8 @@ PANEL_SETTINGS_TABS: list[tuple[str, str]] = [
     ("general", "عمومی"),
     ("backup", "بکاپ"),
     ("pwa", "وب‌اپ"),
-    ("ssl", "SSL"),
+    # Tab key stays "ssl" so saved links keep working.
+    ("ssl", "دامنه‌ها"),
     ("update", "آپدیت"),
 ]
 PANEL_SETTINGS_KEYS = {t[0] for t in PANEL_SETTINGS_TABS}

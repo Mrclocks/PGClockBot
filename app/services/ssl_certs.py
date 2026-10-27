@@ -170,9 +170,10 @@ def _clear_pending_issue(
     data = meta if meta is not None else read_meta()
     if not isinstance(data, dict):
         data = {}
-    had_pending = bool(data.get("pending_domain") or data.get("pending_email"))
+    had_pending = bool(data.get("pending_domain") or data.get("pending_email") or data.get("pending_miniapp_domain"))
     data.pop("pending_domain", None)
     data.pop("pending_email", None)
+    data.pop("pending_miniapp_domain", None)
     # Write when caller already mutated ``meta`` (errors), or pending keys existed.
     if write and (meta is not None or had_pending):
         write_meta(data)
@@ -221,6 +222,26 @@ def public_panel_base_url() -> str:
     except Exception:
         logger.exception("public_panel_base_url http fallback failed")
         return ""
+
+
+def separate_miniapp_domain(meta: dict[str, Any] | None = None) -> str:
+    """The Mini App's own domain when it differs from the panel's, else ""."""
+    data = meta if meta is not None else read_meta()
+    panel = normalize_domain(data.get("domain") or data.get("host") or data.get("panel_domain") or "")
+    miniapp = normalize_domain(data.get("miniapp_domain") or "")
+    return miniapp if miniapp and miniapp != panel and is_valid_domain(miniapp) else ""
+
+
+def public_miniapp_base_url() -> str:
+    """HTTPS origin of the Mini App: its own domain when set (it is on the certificate), else the panel's."""
+    try:
+        if https_is_active():
+            own = separate_miniapp_domain()
+            if own:
+                return public_https_url(own).rstrip("/")
+    except Exception:
+        logger.exception("public_miniapp_base_url failed")
+    return public_panel_base_url()
 
 
 def public_https_url(domain: str | None = None) -> str:
@@ -358,6 +379,9 @@ def cert_status() -> dict[str, Any]:
         "pending_domain": normalize_domain(meta.get("pending_domain") or ""),
         "pending_email": (meta.get("pending_email") or "").strip(),
         "public_https": public_https_url(domain) if domain else "",
+        "miniapp_domain": separate_miniapp_domain(meta),
+        "pending_miniapp_domain": normalize_domain(meta.get("pending_miniapp_domain") or ""),
+        "public_miniapp": (public_https_url(separate_miniapp_domain(meta) or domain) + "/miniapp/") if domain else "",
         "web_port": port,
         "progress": read_progress(),
         "running": job_running(),
@@ -550,7 +574,14 @@ def _stop_acme_http(proc: subprocess.Popen | None) -> None:
     _run(_with_sudo(["pkill", "-f", str(ACME_HELPER)]), timeout=10)
 
 
-def _certbot_issue(domain: str, email: str, *, force: bool = False) -> tuple[bool, str]:
+HELPER_TOO_OLD = (
+    "برنامهٔ کمکی صدور گواهی روی سرور قدیمی است و دامنهٔ جدای مینی‌اپ را نمی‌شناسد. "
+    "دسترسی sudo بدون رمز را برای به‌روزرسانی آن فعال کنید، یا فعلاً دامنهٔ مینی‌اپ را همان دامنهٔ پنل بگذارید."
+)
+
+
+def _certbot_issue(domain: str, email: str, *, force: bool = False, also: str = "") -> tuple[bool, str]:
+    """One certificate for ``domain`` (lineage ``pgclock-<domain>``), plus ``also`` when set."""
     bin_path = certbot_bin()
     if not bin_path:
         return False, "certbot پیدا نشد"
@@ -567,6 +598,7 @@ def _certbot_issue(domain: str, email: str, *, force: bool = False) -> tuple[boo
         f"pgclock-{domain}",
         "-d",
         domain,
+        *(["-d", also] if also else []),
         "--key-type",
         "ecdsa",
         "--elliptic-curve",
@@ -599,11 +631,14 @@ def _certbot_issue(domain: str, email: str, *, force: bool = False) -> tuple[boo
         _set_progress(pct=50, stage="challenge", message="درخواست گواهی از Let's Encrypt…", done=False)
         _install_progress("ACME challenge running — waiting for Let's Encrypt…")
         # Prefer constrained ctl helper (no raw certbot sudo). Fall back only if helper missing.
-        from app.services.service_control import HELPER_INSTALL_PATH, ensure_restart_helper
+        from app.services.service_control import HELPER_INSTALL_PATH, ensure_restart_helper, helper_capabilities
 
         ensure_restart_helper()
         ctl = HELPER_INSTALL_PATH if HELPER_INSTALL_PATH.is_file() else None
         if ctl is not None:
+            # An older helper would drop the extra name silently; refuse instead.
+            if also and "san" not in helper_capabilities():
+                return False, HELPER_TOO_OLD
             cmd = _with_sudo(
                 [
                     str(ctl),
@@ -612,6 +647,7 @@ def _certbot_issue(domain: str, email: str, *, force: bool = False) -> tuple[boo
                     email,
                     str(WEBROOT_DIR),
                     *(["--force"] if force else []),
+                    *(["--also", also] if also else []),
                 ]
             )
         else:
@@ -654,10 +690,18 @@ def issue_or_renew(
     force: bool = False,
     enable: bool = True,
     restart: bool = True,
+    miniapp_domain: str = "",
 ) -> dict[str, Any]:
-    """Issue/renew Let's Encrypt certificate, then optionally enable HTTPS."""
+    """Issue/renew Let's Encrypt certificate, then optionally enable HTTPS.
+
+    ``miniapp_domain`` (optional) is put on the same certificate so the Mini App can be
+    served from its own address; empty or equal to ``domain`` means the panel's domain.
+    """
     ensure_dirs()
     domain = normalize_domain(domain)
+    miniapp_domain = normalize_domain(miniapp_domain)
+    if miniapp_domain == domain:
+        miniapp_domain = ""
     email = (email or "").strip()
     prev = read_meta()
     was_enabled = bool(prev.get("ssl_enabled"))
@@ -666,6 +710,10 @@ def issue_or_renew(
         _set_progress(pct=100, stage="error", message="دامنه نامعتبر است", done=True, ok=False)
         _clear_pending_issue(read_meta(), write=True)
         return {"ok": False, "error": "دامنه نامعتبر است (مثال: panel.example.com)"}
+    if miniapp_domain and not is_valid_domain(miniapp_domain):
+        _set_progress(pct=100, stage="error", message="دامنهٔ مینی‌اپ نامعتبر است", done=True, ok=False)
+        _clear_pending_issue(read_meta(), write=True)
+        return {"ok": False, "error": "دامنهٔ مینی‌اپ نامعتبر است (مثال: app.example.com)"}
     if not email or "@" not in email or "." not in email.split("@")[-1]:
         _set_progress(pct=100, stage="error", message="ایمیل نامعتبر است", done=True, ok=False)
         _clear_pending_issue(read_meta(), write=True)
@@ -695,7 +743,7 @@ def issue_or_renew(
 
     _set_progress(pct=22, stage="ready", message="certbot آماده است", done=False)
     _install_progress("certbot ready · requesting certificate (HTTP-01 on :80)…")
-    ok, log = _certbot_issue(domain, email, force=force)
+    ok, log = _certbot_issue(domain, email, force=force, also=miniapp_domain)
     if not ok:
         meta = read_meta()
         meta["last_error"] = log[-2000:]
@@ -726,7 +774,8 @@ def issue_or_renew(
         "domain": domain,
         "host": domain,
         "panel_domain": domain,
-        "miniapp_domain": domain,
+        # On the certificate together with the panel domain (or the panel domain itself).
+        "miniapp_domain": miniapp_domain or domain,
         "email": email,
         "issued_at": now,
         "expires_at": expires_at,
@@ -1104,7 +1153,7 @@ def disable_https(*, restart: bool = True) -> dict[str, Any]:
     return {"ok": True}
 
 
-def start_issue_job(*, domain: str, email: str, force: bool = False) -> dict[str, Any]:
+def start_issue_job(*, domain: str, email: str, force: bool = False, miniapp_domain: str = "") -> dict[str, Any]:
     """Background issue/renew — enables HTTPS and restarts when cert succeeds."""
     global _JOB_RUNNING
     with _JOB_LOCK:
@@ -1115,7 +1164,7 @@ def start_issue_job(*, domain: str, email: str, force: bool = False) -> dict[str
     def _worker() -> None:
         global _JOB_RUNNING
         try:
-            issue_or_renew(domain=domain, email=email, force=force)
+            issue_or_renew(domain=domain, email=email, force=force, miniapp_domain=miniapp_domain)
         except Exception as exc:
             logger.exception("SSL job failed")
             _set_progress(pct=100, stage="error", message=str(exc)[:240], done=True, ok=False)
