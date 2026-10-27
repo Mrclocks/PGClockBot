@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import time
@@ -145,6 +146,8 @@ class UserPhotoRouteTests(unittest.IsolatedAsyncioTestCase):
         self.fetch.side_effect = TelegramNetworkError(
             method=GetUserProfilePhotos(user_id=9011), message=f"https://api.telegram.org/file/bot{SHOP_A_TOKEN}/x",
         )
+        # Alembic's fileConfig (run by earlier migration tests) disables loggers that already exist.
+        logging.getLogger("app.services.user_photo").disabled = False
         with self.assertLogs("app.services.user_photo", level="WARNING") as logs:
             first = await self.client.get(f"/users/{CUSTOMER}/photo")
         self.assertEqual(first.status_code, 404)
