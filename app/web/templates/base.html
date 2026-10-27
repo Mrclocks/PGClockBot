@@ -161,18 +161,6 @@
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 5v4M19 7h1"/><path d="M4 12h3M11 10v4M13 12h7"/><path d="M4 17h11M19 15v4M21 17h-1"/></svg>
             <span>تنظیمات وب پنل</span>
           </a>
-          {% if is_reseller %}
-          <a href="/my-subscription" class="nav-item nav-item-home {% if path.startswith('/my-subscription') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18M7 15h3"/></svg>
-            <span>اشتراک من</span>
-          </a>
-          {% endif %}
-          {% if ident.can_add_representative %}
-          <a href="/resellers" class="nav-item nav-item-home {% if path.startswith('/resellers') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
-            <span>نمایندگان من</span>
-          </a>
-          {% endif %}
           {% if is_pg_staff %}
           <a href="/tickets" class="nav-item nav-item-home {% if path.startswith('/tickets') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
@@ -194,6 +182,13 @@
             <span>نمای کلی</span>
           </a>
           {% endif %}
+          {# A shop owner's own package and sub-representatives belong with the shop, not the web panel. #}
+          {% if is_reseller and not is_owner %}
+          <a href="/my-subscription" class="nav-item nav-item-bot {% if path.startswith('/my-subscription') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18M7 15h3"/></svg>
+            <span>اشتراک من</span>
+          </a>
+          {% endif %}
           {% if is_owner %}
           <a href="/users" class="nav-item nav-item-bot {% if path.startswith('/users') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
@@ -203,6 +198,12 @@
           <a href="/users" class="nav-item nav-item-bot {% if path.startswith('/users') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
             <span>مشتریان</span>
+          </a>
+          {% endif %}
+          {% if not is_owner and ident.can_add_representative %}
+          <a href="/resellers" class="nav-item nav-item-bot {% if path.startswith('/resellers') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
+            <span>نمایندگان من</span>
           </a>
           {% endif %}
           {% if is_owner %}
