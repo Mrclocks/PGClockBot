@@ -1,0 +1,56 @@
+{# User card (modal fragment): one customer's account and services as the current shop sees them. #}
+{% set u = card.user %}
+<div class="user-card">
+  <header class="user-card-head">
+    <strong dir="auto">{{ u.full_name or u.username or "—" }}</strong>
+    <span class="muted">
+      {% if u.username %}<bdi dir="ltr">@{{ u.username }}</bdi> · {% endif %}آیدی <bdi dir="ltr">{{ u.telegram_id }}</bdi>
+    </span>
+  </header>
+
+  {% if can_edit or can_message %}
+  <div class="user-card-actions">
+    {% if can_edit %}
+    <button type="button" class="btn"
+            data-modal-open="modal-user-edit"
+            data-modal-load="/users/{{ u.id }}/edit?fragment=1"
+            data-modal-load-target="user-edit-body"
+            data-edit-url="/users/{{ u.id }}/edit?fragment=1"
+            data-edit-title="ویرایش کاربر #{{ u.id }}">ویرایش</button>
+    {% endif %}
+    {% if can_message %}
+    <button type="button" class="btn btn-ghost"
+            data-modal-open="modal-user-message"
+            data-msg-uid="{{ u.id }}"
+            data-msg-name="{{ u.full_name or u.username or u.telegram_id }}">پیام</button>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <section aria-labelledby="user-card-account">
+    <h3 class="user-card-label" id="user-card-account">حساب</h3>
+    <dl class="kv-list">
+      <div><dt>وضعیت</dt><dd>{% if u.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}</dd></div>
+      <div><dt>نقش</dt><dd>{% if u.role == 'admin' %}مدیر{% elif u.role == 'reseller' %}نماینده{% else %}کاربر{% endif %}{% if u.is_demo %} · دمو{% endif %}</dd></div>
+      {% if card.risk_tag %}
+      <div><dt>تگ ریسک</dt><dd><span class="badge badge-risk-tag" style="--tag-color: {{ card.risk_tag.hex }}">{{ card.risk_tag.title_fa }}</span></dd></div>
+      {% endif %}
+      <div><dt>کیف پول</dt><dd><bdi dir="ltr">{{ card.wallet_balance | money }}</bdi> تومان</dd></div>
+      <div><dt>خرید موفق</dt><dd><bdi dir="ltr">{{ card.paid_total | money }}</bdi> تومان · {{ card.paid_count | num }} سفارش</dd></div>
+      <div><dt>عضویت</dt><dd>{{ card.joined }}</dd></div>
+    </dl>
+  </section>
+
+  <section aria-labelledby="user-card-services">
+    <h3 class="user-card-label" id="user-card-services">سرویس‌ها ({{ card.services | length | num }})</h3>
+    {% for s in card.services %}
+    <div class="user-card-service">
+      <div><strong>{{ s.plan_name or s.label }}</strong><span class="li-tone-{{ s.expire_tone or 'none' }}">{{ s.expire_text }}</span></div>
+      <div class="muted">{% if s.pg_username %}<bdi dir="ltr">{{ s.pg_username }}</bdi>{% else %}<span></span>{% endif %}<span>{{ s.volume_text }}</span></div>
+    </div>
+    {% else %}
+    <p class="muted user-card-empty">سرویسی در این فروشگاه ندارد.</p>
+    {% endfor %}
+  </section>
+
+</div>
