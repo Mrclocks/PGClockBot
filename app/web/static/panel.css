@@ -758,57 +758,53 @@ html[data-theme="light"] .badge.badge-risk-tag {
   text-align: end;
 }
 .users-card-tg { display: none; }
-/* Phones: each user row becomes a card, so the table never scrolls sideways.
-   The row stays a <tr>, so sorting, bulk select and row actions keep working. */
+/* Phones and small tablets: each user is a compact three-line list item instead of a wide
+   table row, so the table never scrolls sideways. The row stays a <tr>, so sorting,
+   bulk select and row actions keep working. */
 @media (max-width: 880px) {
-  .table-wrap:has(> .users-cards-sm) {
-    overflow: visible;
-    border: 0;
-    background: transparent;
-  }
   .users-cards-sm,
+  .users-cards-sm > thead,
   .users-cards-sm > tbody { display: block; width: 100%; }
   .users-cards-sm > thead > tr {
     display: flex;
-    padding: 0 calc(var(--space-2) + 1px) var(--space-1_5);
+    border-bottom: 1px solid var(--border);
   }
   .users-cards-sm > thead > tr > th { display: none; }
   .users-cards-sm > thead > tr > th.col-select {
     display: flex;
+    flex: 1;
     width: auto;
     min-width: 0;
     max-width: none;
-    padding: 0;
+    padding: var(--space-1) var(--space-1_5) !important;
     border: 0;
-    background: transparent;
+    background: var(--table-head-bg);
   }
-  .users-cards-sm .table-select-all {
+  .users-cards-sm > thead th.col-select .table-select-all {
     display: inline-flex !important;
+    justify-content: flex-start;
+    gap: var(--space-1);
     min-height: 0;
     line-height: 1.5;
-    align-items: center;
-    gap: var(--space-1);
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 12px;
     color: var(--muted-fg);
   }
   .users-cards-sm .table-select-all::after { content: "انتخاب همه"; }
   .users-cards-sm > tbody > tr { display: block; }
   .users-cards-sm > tbody > tr.users-row {
-    position: relative;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: auto auto auto auto minmax(0, 1fr) auto auto;
     grid-template-areas:
-      "name name name name stat act"
-      "svc svc svc svc svc svc"
-      "vol vol exp exp wal wal";
-    gap: var(--space-1);
-    margin-bottom: var(--space-1_5);
-    padding: var(--space-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg-card);
+      "sel name name name name stat act"
+      "sel svc  svc  svc  svc  svc  act"
+      "sel vol  exp  wal  .    .    act";
+    align-items: center;
+    column-gap: var(--space-1);
+    row-gap: 2px;
+    padding: var(--space-1) var(--space-1_5);
+    border-bottom: 1px solid var(--border);
   }
+  .users-cards-sm > tbody > tr.users-row:last-child { border-bottom: 0; }
   .users-cards-sm > tbody > tr.users-row > td {
     display: block;
     min-width: 0;
@@ -818,49 +814,53 @@ html[data-theme="light"] .badge.badge-risk-tag {
     border: 0;
     background: transparent;
   }
-  .users-cards-sm > tbody > tr.users-row > td.col-select {
-    position: absolute;
-    top: var(--space-2);
-    inset-inline-start: var(--space-2);
-  }
-  .users-cards-sm > tbody > tr.users-row:has(> td.col-select) > td.col-name {
-    padding-inline-start: calc(var(--space-3) + var(--space-0));
-  }
+  .users-cards-sm td.col-select { grid-area: sel; align-self: start; }
+  .users-cards-sm .table-select-row { min-height: 22px; }
   .users-cards-sm td.col-name { grid-area: name; }
-  .users-cards-sm td.col-status { grid-area: stat; align-self: start; justify-self: end; }
-  .users-cards-sm td.col-actions { grid-area: act; align-self: start; justify-self: end; }
-  .users-cards-sm td.col-svc { grid-area: svc; text-align: start; }
+  .users-cards-sm td.col-status { grid-area: stat; }
+  .users-cards-sm td.col-status .badge.active { display: none; }
+  .users-cards-sm td.col-actions { grid-area: act; }
+  .users-cards-sm .row-actions-toggle--icon { width: 30px; height: 30px; }
+  .users-cards-sm td.col-svc { grid-area: svc; text-align: start; font-size: 12px; }
   .users-cards-sm td.col-vol { grid-area: vol; }
   .users-cards-sm td.col-exp { grid-area: exp; }
-  .users-cards-sm td.col-wallet { grid-area: wal; direction: rtl; text-align: start; }
-  .users-cards-sm .users-card-tg {
-    display: block;
-    width: fit-content;
+  .users-cards-sm td.col-wallet { grid-area: wal; direction: rtl; }
+  .users-cards-sm :is(td.col-vol, td.col-exp, td.col-wallet) {
     font-size: 12px;
+    color: var(--muted-fg);
+    white-space: nowrap;
+  }
+  .users-cards-sm :is(td.col-vol, td.col-exp)::after {
+    content: "·";
+    margin-inline-start: var(--space-1);
+  }
+  .users-cards-sm td[data-label]::before {
+    content: attr(data-label) " ";
+  }
+  .users-cards-sm .cell-name {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: var(--space-1);
+    row-gap: 2px;
+    width: auto;
+  }
+  .users-cards-sm .cell-name-text { font-weight: 700; }
+  .users-cards-sm .cell-name-tags { display: inline-flex; gap: var(--space-0); }
+  .users-cards-sm .cell-name-tags > .badge { font-size: 10px; padding-block: 0; }
+  .users-cards-sm .users-card-tg {
+    display: inline;
+    font-size: 11px;
     color: var(--muted-fg);
     user-select: all;
   }
-  .users-cards-sm .users-svc-name { justify-content: flex-start; text-align: start; }
+  .users-cards-sm .users-svc-name { justify-content: flex-start; text-align: start; font-size: 12px; }
   .users-cards-sm .users-svc-select-wrap,
   .users-cards-sm .users-svc-select { width: 100%; max-width: none; }
-  .users-cards-sm > tbody > tr.users-row > td[data-label] {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: var(--space-1) var(--space-1_5);
-    border-radius: var(--menu-radius);
-    background: var(--table-head-bg);
-    font-size: 13px;
-    font-weight: 700;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .users-cards-sm > tbody > tr.users-row > td[data-label]::before {
-    content: attr(data-label);
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--muted-fg);
+  .users-cards-sm .users-svc-select-wrap .ui-select-toggle {
+    height: 30px;
+    min-height: 30px;
+    font-size: 12px !important;
   }
 }
 .users-svc-name {

@@ -198,8 +198,8 @@
           </label>
           {% endif %}
         </td>
-        <td class="col-vol users-vol-cell" data-label="حجم" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
-        <td class="col-exp users-exp-cell" data-label="انقضا" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
+        <td class="col-vol users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
+        <td class="col-exp users-exp-cell" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
         <td class="mono col-wallet" dir="ltr" data-label="کیف پول" data-sort-value="{{ row.wallet_balance }}">{{ row.wallet_balance | money }}</td>
         <td class="col-status" data-sort-value="{{ '1' if u.is_blocked else '0' }}">
           {% if u.is_blocked %}
