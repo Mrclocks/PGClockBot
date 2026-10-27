@@ -757,112 +757,6 @@ html[data-theme="light"] .badge.badge-risk-tag {
   font-variant-numeric: tabular-nums;
   text-align: end;
 }
-/* Phones and small tablets: each user is a three-line list item on one shared grid, so
-   values line up from row to row and the table never scrolls sideways. The header keeps
-   only the volume / expiry / wallet titles (still sortable) above their columns. The
-   row stays a <tr>, so sorting, bulk select and row actions keep working. */
-@media (max-width: 880px) {
-  .users-list-sm,
-  .users-list-sm > thead,
-  .users-list-sm > tbody { display: block; width: 100%; }
-  .users-list-sm > thead > tr,
-  .users-list-sm > tbody > tr.users-row {
-    display: grid;
-    grid-template-columns: 22px repeat(3, minmax(0, 1fr)) 30px;
-    column-gap: var(--space-1_5);
-    align-items: center;
-    padding-inline: var(--space-1_5);
-  }
-  .users-list-sm > thead > tr {
-    grid-template-areas: "sel vol exp wal .";
-    padding-block: var(--space-1);
-    background: var(--table-head-bg);
-    border-bottom: 1px solid var(--border);
-  }
-  .users-list-sm > thead > tr > th { display: none; }
-  .users-list-sm > thead > tr > th:is(.col-select, .col-vol, .col-exp, .col-wallet) {
-    display: block;
-    width: auto;
-    min-width: 0;
-    max-width: none;
-    padding: 0 !important;
-    border: 0;
-    background: transparent;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--muted-fg);
-    text-align: start;
-    white-space: nowrap;
-  }
-  .users-list-sm > thead th.col-select .table-select-all { min-height: 0; }
-  .users-list-sm > thead > tr > th.col-select { grid-area: sel; }
-  .users-list-sm > thead > tr > th.col-vol { grid-area: vol; }
-  .users-list-sm > thead > tr > th.col-exp { grid-area: exp; }
-  .users-list-sm > thead > tr > th.col-wallet { grid-area: wal; }
-  .users-list-sm > tbody > tr { display: block; }
-  .users-list-sm > tbody > tr.users-row {
-    grid-template-rows: repeat(3, 20px);
-    grid-template-areas:
-      "sel name name tg   act"
-      "sel svc  svc  stat act"
-      "sel vol  exp  wal  act";
-    row-gap: var(--space-0);
-    padding-block: var(--space-1_5);
-    border-bottom: 1px solid var(--border);
-  }
-  .users-list-sm > tbody > tr.users-row:last-child { border-bottom: 0; }
-  .users-list-sm > tbody > tr.users-row > td {
-    display: block;
-    min-width: 0;
-    max-width: none;
-    width: auto;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    font-size: 12px;
-    line-height: 20px;
-    text-align: start;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .users-list-sm > tbody > tr.users-row > td.col-select { grid-area: sel; overflow: visible; }
-  .users-list-sm .table-select-row { min-height: 20px; }
-  .users-list-sm td.col-name { grid-area: name; }
-  .users-list-sm > tbody > tr.users-row > td.col-tg {
-    display: block !important;
-    grid-area: tg;
-    direction: rtl;
-    color: var(--muted-fg);
-    user-select: all;
-  }
-  .users-list-sm td.col-svc { grid-area: svc; }
-  .users-list-sm td.col-status { grid-area: stat; }
-  .users-list-sm td.col-status .badge.active { display: none; }
-  .users-list-sm td.col-vol { grid-area: vol; }
-  .users-list-sm td.col-exp { grid-area: exp; }
-  .users-list-sm > tbody > tr.users-row > td.col-wallet { grid-area: wal; direction: rtl; }
-  .users-list-sm > tbody > tr.users-row > td.col-actions { grid-area: act; overflow: visible; }
-  .users-list-sm .row-actions-toggle--icon { width: 30px; height: 30px; }
-  .users-list-sm .cell-name { flex-direction: row; align-items: center; gap: var(--space-1); width: auto; }
-  .users-list-sm .cell-name-text { font-size: 14px; font-weight: 700; }
-  .users-list-sm .cell-name-primary { flex: 0 1 auto; }
-  .users-list-sm .cell-name-tags { display: inline-flex; flex: 0 0 auto; gap: var(--space-0); }
-  .users-list-sm .cell-name-tags > .badge { font-size: 10px; line-height: 16px; padding-block: 0; }
-  /* Only tags that tell something apart: plain «کاربر» and the default risk tag are hidden. */
-  .users-list-sm .cell-name-tags > :is(.role-user, .badge-risk-tag.is-default) { display: none; }
-  .users-list-sm .users-svc-name { justify-content: flex-start; font-size: 12px; }
-  .users-list-sm .users-svc-select-wrap,
-  .users-list-sm .users-svc-select { width: 100%; max-width: none; }
-  .users-list-sm .users-svc-select-wrap .ui-select-toggle {
-    height: 20px;
-    min-height: 20px;
-    padding-block: 0;
-    border: 0;
-    background: transparent;
-    font-size: 12px !important;
-  }
-}
 .users-svc-name {
   display: inline-flex;
   align-items: center;
@@ -2586,6 +2480,112 @@ a.btn.btn-ghost:hover {
   /* Clip thead/row paints to the rounded frame (no broken corners on hover/scroll) */
   isolation: isolate;
 }
+/* ---------- List tables on phones ----------
+   A table with .table-list-sm turns each row into a list item on phones and small tablets,
+   so it never scrolls sideways. Every row and the header share one three-column grid with
+   fixed line heights, so each value sits under its title on every row:
+     .cell-title   the row's name, on its own first line (keeps the text colour)
+     .cell-wide    a cell (and its header) that takes a whole line
+     .cell-inline-id  an id shown in brackets after the name, only in this layout
+     .list-hide    a cell (and its header) left out of this layout
+   Other cells flow into the grid in table order and use the caption colour. Select and
+   action cells sit at the row's two ends. Columns hidden for width (.col-hide-sm) come
+   back, since the list has room for them. Rows stay <tr>s, so sorting, bulk select and
+   row actions keep working. */
+.cell-inline-id { display: none; }
+@media (max-width: 880px) {
+  .table-list-sm,
+  .table-list-sm > thead,
+  .table-list-sm > tbody { display: block; width: 100%; min-width: 0; }
+  .table-list-sm > thead > tr,
+  .table-list-sm > tbody > tr:has(> td + td) {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 22px;
+    align-items: center;
+    column-gap: var(--space-1_5);
+    row-gap: var(--space-0);
+    padding: var(--space-1_5);
+    border-bottom: 1px solid var(--border);
+  }
+  .table-list-sm > tbody > tr:last-child { border-bottom: 0; }
+  .table-list-sm > :is(thead, tbody) > tr:has(> .col-select) { padding-inline-start: calc(var(--space-1_5) + 30px); }
+  .table-list-sm > :is(thead, tbody) > tr:has(> .col-actions) { padding-inline-end: calc(var(--space-1_5) + 40px); }
+  .table-list-sm > thead > tr {
+    padding-block: var(--space-1);
+    background: var(--table-head-bg);
+  }
+  .table-list-sm > :is(thead, tbody) > tr > :is(th, td) {
+    display: block;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: 22px;
+    padding: 0 !important;
+    border: 0;
+    background: transparent;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 22px;
+    color: var(--muted-fg);
+    text-align: start !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .table-list-sm > :is(thead, tbody) > tr > [dir="ltr"] { text-align: end !important; }
+  /* A cell built from blocks (a note under a value, several badges) stays on its one line. */
+  .table-list-sm > tbody > tr > td:has(> :is(div, form, .status-tags)) {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  .table-list-sm > tbody > tr > td :is(div, .status-tags) {
+    display: inline-flex;
+    flex-flow: row nowrap;
+    align-items: center;
+    gap: var(--space-0);
+    min-width: 0;
+    white-space: nowrap;
+  }
+  .table-list-sm > thead > tr > th { font-size: 11px; font-weight: 600; }
+  .table-list-sm .col-hide-sm { display: block !important; }
+  .table-list-sm :is(.list-hide, th.cell-title, th.col-actions) { display: none !important; }
+  .table-list-sm .cell-wide { grid-column: 1 / -1; }
+  .table-list-sm > tbody > tr > td.cell-title {
+    grid-column: 1 / -1;
+    color: var(--foreground);
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .table-list-sm .cell-inline-id {
+    display: inline;
+    margin-inline-start: var(--space-0);
+    color: var(--muted-fg);
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .table-list-sm .cell-inline-id::before { content: "("; }
+  .table-list-sm .cell-inline-id::after { content: ")"; }
+  .table-list-sm > :is(thead, tbody) > tr > :is(.col-select, .col-actions) {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    overflow: visible;
+  }
+  .table-list-sm > :is(thead, tbody) > tr > .col-select { inset-inline-start: var(--space-1_5); }
+  .table-list-sm > tbody > tr > .col-actions { inset-inline-end: var(--space-1_5); }
+  .table-list-sm :is(.table-select-all, .table-select-row) { min-height: 0; }
+  .table-list-sm .row-actions-toggle--icon { width: 30px; height: 30px; }
+  .table-list-sm .badge { font-size: 10px; line-height: 16px; padding-block: 0; }
+  .table-list-sm .cell-name { flex-direction: row; align-items: center; gap: var(--space-1); width: auto; }
+  .table-list-sm .cell-name-tags { display: inline-flex; gap: var(--space-0); }
+  /* Tags every row would carry tell nothing apart: plain «کاربر» and the default risk tag. */
+  .table-list-sm .cell-name-tags > :is(.role-user, .badge-risk-tag.is-default) { display: none; }
+  .table-list-sm > tbody > tr > td :is(.btn, .ui-select-toggle) { height: 22px; min-height: 22px; font-size: 12px !important; }
+}
+
 .card > .table-wrap {
   border: 1px solid var(--border);
   border-radius: var(--radius);

@@ -149,13 +149,13 @@
   ]) }}
   {% endif %}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable{% if owner_view %} data-bulk-select{% endif %}>
+  <table class="table-compact table-list-sm" data-sortable{% if owner_view %} data-bulk-select{% endif %}>
     <thead>
       <tr>
         {% if owner_view %}{{ table_select_head() }}{% endif %}
-        <th data-sort-type="text">کاربر</th>
-        <th class="col-hide-sm" data-sort-type="num">تلگرام</th>
-        <th class="col-hide-sm" data-sort-type="text">نقش</th>
+        <th class="cell-title" data-sort-type="text">کاربر</th>
+        <th class="col-hide-sm list-hide" data-sort-type="num">تلگرام</th>
+        <th class="col-hide-sm list-hide" data-sort-type="text">نقش</th>
         <th data-sort-type="text">نوع پلن</th>
         <th data-sort-type="text">وضعیت</th>
         <th class="reseller-quota-th" data-sort-type="num">کاربران</th>
@@ -171,20 +171,21 @@
       {% set usage = (reseller_usage or {}).get(u.id) or {} %}
       <tr{% if owner_view %} data-bulk-ops="delete_reseller,delete_user"{% endif %}>
         {% if owner_view %}{{ table_select_cell(u.id) }}{% endif %}
-        <td data-sort-value="{{ u.full_name or u.username or '' }}">
+        <td class="cell-title" data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">
             <span class="cell-name-primary">
               {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
               <span class="cell-name-text">{{ u.full_name or u.username or '—' }}</span>
-              {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
+              <span class="cell-inline-id mono" dir="ltr">{{ u.telegram_id }}</span>
+              {% if tag %}<span class="badge badge-risk-tag{% if tag.key == color_tag_meta(none).key %} is-default{% endif %}" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
               {% if owner_view and oversold_shop_ids and u.id in oversold_shop_ids %}
               <span class="badge rejected">تجاوز از سقف حجم</span>
               {% endif %}
             </span>
           </div>
         </td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
-        <td class="col-hide-sm" data-sort-value="{{ u.role }}">
+        <td class="mono col-hide-sm list-hide" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
+        <td class="col-hide-sm list-hide" data-sort-value="{{ u.role }}">
           <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
             {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
           </span>

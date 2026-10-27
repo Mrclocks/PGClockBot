@@ -127,14 +127,14 @@
   ]) }}
   {% endif %}
   <div class="table-wrap">
-  <table class="table-compact users-ops-table users-list-sm" data-sortable{% if manage or ops %} data-bulk-select{% endif %}>
+  <table class="table-compact users-ops-table table-list-sm" data-sortable{% if manage or ops %} data-bulk-select{% endif %}>
     <thead>
       <tr>
         {% if manage or ops %}{{ table_select_head() }}{% endif %}
-        <th class="col-id col-hide-sm" data-sort-type="num">#</th>
-        <th class="col-tg col-hide-sm" data-sort-type="num">تلگرام</th>
-        <th class="col-name" data-sort-type="text">نام</th>
-        <th class="col-svc" data-sort-type="text">سرویس</th>
+        <th class="col-id col-hide-sm list-hide" data-sort-type="num">#</th>
+        <th class="col-tg col-hide-sm list-hide" data-sort-type="num">تلگرام</th>
+        <th class="col-name cell-title" data-sort-type="text">نام</th>
+        <th class="col-svc cell-wide" data-sort-type="text">سرویس</th>
         <th class="col-vol" data-sort-type="text">حجم</th>
         <th class="col-exp" data-sort-type="num">انقضا</th>
         <th class="col-wallet" data-sort-type="num">کیف پول</th>
@@ -150,13 +150,14 @@
           id="user-{{ u.id }}"
           data-bulk-ops="{% if manage and not u.is_blocked %}block,{% endif %}{% if manage and u.is_blocked %}unblock,{% endif %}{% if ops and pg_update and row.service_count > 0 %}renew,{% endif %}{% if manage and u.role != 'admin' %}delete{% endif %}">
         {% if manage or ops %}{{ table_select_cell(u.id) }}{% endif %}
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.id }}">{{ u.id }}</td>
-        <td class="mono col-tg col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
-        <td class="col-name" data-sort-value="{{ u.full_name or u.username or '' }}">
+        <td class="mono col-hide-sm list-hide" dir="ltr" data-sort-value="{{ u.id }}">{{ u.id }}</td>
+        <td class="mono col-tg col-hide-sm list-hide" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
+        <td class="col-name cell-title" data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">
             <span class="cell-name-primary">
               {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
               <span class="cell-name-text">{{ u.full_name or u.username or "—" }}</span>
+              <span class="cell-inline-id mono" dir="ltr">{{ u.telegram_id }}</span>
               {% if row.has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
             </span>
             <span class="cell-name-tags">
@@ -168,7 +169,7 @@
             </span>
           </div>
         </td>
-        <td class="col-svc" data-sort-value="{{ row.services[0].label if row.service_count > 0 else '' }}">
+        <td class="col-svc cell-wide" data-sort-value="{{ row.services[0].label if row.service_count > 0 else '' }}">
           {% if row.service_count == 0 %}
           <span class="muted">بدون سرویس</span>
           {% elif row.service_count == 1 %}

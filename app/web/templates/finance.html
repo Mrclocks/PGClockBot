@@ -56,12 +56,12 @@
     {'key': 'cancel', 'label': 'لغو', 'confirm': '{n} سفارش لغو شوند؟', 'confirm_title': 'لغو گروهی', 'confirm_label': 'لغو', 'warn': true},
   ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable data-bulk-select>
+  <table class="table-compact table-list-sm" data-sortable data-bulk-select>
     <thead>
       <tr>
         {{ table_select_head() }}
-        <th class="col-id" data-sort-type="num">#</th>
-        <th data-sort-type="text">کاربر</th>
+        <th class="col-id list-hide" data-sort-type="num">#</th>
+        <th class="cell-title" data-sort-type="text">کاربر</th>
         <th class="col-hide-sm" data-sort-type="text">پلن</th>
         <th data-sort-type="num">مبلغ</th>
         <th data-sort-type="text">وضعیت</th>
@@ -89,10 +89,11 @@
       {% endif %}
       <tr data-bulk-ops="{{ ns.ops }}">
         {{ table_select_cell(o.id) }}
-        <td class="mono" data-sort-value="{{ o.id }}">{{ o.id }}</td>
-        <td data-sort-value="{{ uname }}">
+        <td class="mono list-hide" data-sort-value="{{ o.id }}">{{ o.id }}</td>
+        <td class="cell-title" data-sort-value="{{ uname }}">
           {% if o.user and o.user.id %}
           <a class="cell-user-link" href="/users?uid={{ o.user.id }}">{{ uname }}</a>
+          <span class="cell-inline-id mono" dir="ltr">#{{ o.id }}</span>
           {% if o.user.is_demo %}<span class="badge neutral" title="در گزارش‌های مالی محاسبه نمی‌شود">دمو</span>{% endif %}
           {% else %}
           {{ uname }}

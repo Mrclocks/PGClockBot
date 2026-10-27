@@ -28,9 +28,9 @@
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
   ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-bulk-select>
+  <table class="table-compact table-list-sm" data-bulk-select>
     <thead>
-      <tr>{{ table_select_head() }}<th>نام</th><th class="col-hide-sm">برچسب</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th></tr>
+      <tr>{{ table_select_head() }}<th class="cell-title">نام</th><th class="col-hide-sm">برچسب</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th></tr>
     </thead>
     <tbody>
     {% for p in plans %}
@@ -38,7 +38,7 @@
       {% set pg_empty = (not p.pg_template_id) and not p.pg_group_ids %}
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
-        <td>
+        <td class="cell-title">
           <span class="plan-name-cell">
             {% if tpl_missing or pg_empty %}<span class="plan-pg-warn-dot" title="منبع پاسارگارد ناقص یا تمپلیت حذف‌شده" aria-label="هشدار"></span>{% endif %}
             <span>{{ p.name }}</span>
@@ -90,7 +90,7 @@
     {% endfor %}
       <tr>
         <td class="col-select"></td>
-        <td>پلن تست{% if trial %} — {{ trial.name }}{% endif %}</td>
+        <td class="cell-title">پلن تست{% if trial %} — {{ trial.name }}{% endif %}</td>
         <td class="col-hide-sm muted">—</td>
         <td class="mono">رایگان</td>
         <td class="col-hide-sm">{% if trial %}{{ trial.duration_days }} روز{% else %}—{% endif %}</td>
@@ -117,7 +117,7 @@
       </tr>
       <tr>
         <td class="col-select"></td>
-        <td>پلن دلخواه</td>
+        <td class="cell-title">پلن دلخواه</td>
         <td class="col-hide-sm muted">—</td>
         <td class="mono">هر گیگ / روز</td>
         <td class="col-hide-sm">{{ values.get('custom_plan_min_days','1') }}–{{ values.get('custom_plan_max_days','365') }} روز</td>
@@ -144,7 +144,7 @@
       </tr>
       <tr>
         <td class="col-select"></td>
-        <td>فروش عمده</td>
+        <td class="cell-title">فروش عمده</td>
         <td class="col-hide-sm muted">—</td>
         <td class="mono">تخفیف پلکانی</td>
         <td class="col-hide-sm">—</td>
