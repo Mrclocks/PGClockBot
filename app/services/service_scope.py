@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models import UserService
+from app.services.service_ownership import canonical_legacy_owner_matches, legacy_service_clause
 
 SERVICE_OUTSIDE_SHOP_MESSAGE = "این سرویس متعلق به فروشگاه دیگری است و از اینجا قابل مدیریت نیست"
 _OWNER_UNKNOWN_MESSAGE = "مالکیت فروشگاه سرویس مشخص نیست"
@@ -42,7 +43,9 @@ async def customer_may_use_service(
     session: AsyncSession, service: UserService | None, user_id: int, shop_id: int | None
 ) -> bool:
     """True when the service is this customer's and was sold by the bot they are using."""
-    if service is None or int(service.bot_user_id) != int(user_id):
+    if service is None or service.bot_user_id != user_id:
+        return False
+    if not await canonical_legacy_owner_matches(session, service):
         return False
     try:
         return await service_shop_id(session, service) == shop_id
@@ -62,7 +65,7 @@ async def list_customer_services(
     """The customer's services sold by ``shop_id``, newest first."""
     query = (
         select(UserService)
-        .where(UserService.bot_user_id == int(user_id), shop_services_clause(shop_id))
+        .where(legacy_service_clause(), UserService.bot_user_id == int(user_id), shop_services_clause(shop_id))
         .order_by(UserService.id.desc())
     )
     if limit:
@@ -88,7 +91,7 @@ async def search_customer_services(
     query = (
         select(UserService)
         .where(
-            UserService.bot_user_id == int(user_id),
+            legacy_service_clause(), UserService.bot_user_id == int(user_id),
             shop_services_clause(shop_id),
             _service_name_clause(text),
         )
@@ -112,7 +115,7 @@ async def page_customer_services(
     Returns the page and whether older services remain. ``text`` narrows by name.
     """
     query = select(UserService).where(
-        UserService.bot_user_id == int(user_id), shop_services_clause(shop_id)
+        legacy_service_clause(), UserService.bot_user_id == int(user_id), shop_services_clause(shop_id)
     )
     if before_id is not None:
         query = query.where(UserService.id < int(before_id))

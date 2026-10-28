@@ -11,6 +11,7 @@ from typing import Any, Optional
 import httpx
 
 from app.config import get_settings, normalize_pg_subscription_path, pg_api_base_candidates
+from app.services.integration_runtime import integration_execution_active
 from app.services.pg_read_resilience import DNS_CACHE_TTL_SEC, panel_read_request, reset_read_circuits, validate_panel_base
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 
@@ -418,7 +419,15 @@ class PasarGuardClient:
             return f"u:{user}@{base}:{self._cache_partition}"
         return f"owner@{base}:{self._cache_partition}"
 
-    async def request(
+    async def request(self, method: str, path: str, **kwargs: Any) -> Any:
+        if method.upper() == "GET" or not getattr(self, "_integration_fences_enabled", False):
+            return await self._request_unfenced(method, path, **kwargs)
+        # Defer operation-model imports until integration writes are activated.
+        from app.services.integration_panel_mutations import panel_mutation
+
+        return await panel_mutation(self, method, path, kwargs)
+
+    async def _request_unfenced(
         self,
         method: str,
         path: str,
@@ -426,6 +435,7 @@ class PasarGuardClient:
         auth: bool = True,
         use_cache: bool = True,
         resolve_api_base: bool = True,
+        retry_auth: bool = True,
         **kwargs: Any,
     ) -> Any:
         from app.services.pg_read_cache import cache_get, cache_put, invalidate_ident
@@ -446,7 +456,7 @@ class PasarGuardClient:
             await self._ensure_api_base()
         send_request = panel_read_request if method_u == "GET" else _mutation_request
         resp = await send_request(self._client, method, path, headers=headers, **kwargs)
-        if resp.status_code == 401 and auth:
+        if resp.status_code == 401 and auth and retry_auth:
             # Bearer: clear JWT and re-login once. API key: same key cannot recover —
             # skip retry (would only double the same unauthorized request).
             if not self._api_key:
@@ -983,12 +993,17 @@ def _cached_client_ready(client: Any) -> bool:
     return bool(getattr(client, "_token", None) or getattr(client, "_api_key", None))
 
 
+def _fenced_pg_client(client: PasarGuardClient) -> PasarGuardClient:
+    client._integration_fences_enabled = integration_execution_active()
+    return client
+
+
 def get_pg() -> PasarGuardClient:
     """Platform owner PasarGuard client (env credentials)."""
     global _pg
     if _pg is None:
         _pg = PasarGuardClient()
-    return _pg
+    return _fenced_pg_client(_pg)
 
 
 def reset_pg() -> None:
@@ -1086,7 +1101,7 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
     cache_key = (rid, uname)
     cached = _pg_reseller_cache.get(cache_key)
     if _cached_client_ready(cached):
-        return cached
+        return _fenced_pg_client(cached)
 
     from app.services.org_principals import get_principal_by_reseller_profile
 
@@ -1114,7 +1129,7 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
         for stale_key in [k for k in _pg_reseller_cache if k[0] == rid and k != cache_key]:
             _pg_reseller_cache.pop(stale_key, None)
         _pg_reseller_cache[cache_key] = client
-        return client
+        return _fenced_pg_client(client)
 
     password = decrypt_secret(profile.pg_admin_password_enc)
     if not password:
@@ -1134,7 +1149,7 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
     for stale_key in [k for k in _pg_reseller_cache if k[0] == rid and k != cache_key]:
         _pg_reseller_cache.pop(stale_key, None)
     _pg_reseller_cache[cache_key] = client
-    return client
+    return _fenced_pg_client(client)
 
 
 async def get_pg_for_staff(
@@ -1177,7 +1192,7 @@ async def get_pg_for_staff(
     cache_key = (sid, uname)
     cached = _pg_staff_cache.get(cache_key)
     if _cached_client_ready(cached):
-        return cached
+        return _fenced_pg_client(cached)
     api_key = decrypt_secret(getattr(row, "pg_api_key_enc", None))
     if api_key:
         client = PasarGuardClient(username=row.pg_username, api_key=api_key)
@@ -1186,7 +1201,7 @@ async def get_pg_for_staff(
         for stale_key in [k for k in _pg_staff_cache if k[0] == sid and k != cache_key]:
             _pg_staff_cache.pop(stale_key, None)
         _pg_staff_cache[cache_key] = client
-        return client
+        return _fenced_pg_client(client)
     password = decrypt_secret(row.pg_admin_password_enc)
     if not password:
         raise PasarGuardError(
@@ -1202,7 +1217,16 @@ async def get_pg_for_staff(
     for stale_key in [k for k in _pg_staff_cache if k[0] == sid and k != cache_key]:
         _pg_staff_cache.pop(stale_key, None)
     _pg_staff_cache[cache_key] = client
-    return client
+    return _fenced_pg_client(client)
+
+
+def _principal_client_reusable(client: PasarGuardClient | None, *, authenticate: bool) -> bool:
+    return client is not None and (not authenticate or _cached_client_ready(client))
+
+
+async def _authenticate_principal_client(client: PasarGuardClient, *, authenticate: bool) -> None:
+    if authenticate:
+        await client.ensure_token()
 
 
 async def get_pg_for_principal(
@@ -1210,6 +1234,7 @@ async def get_pg_for_principal(
     *,
     principal_id: int | None = None,
     pg_username: str | None = None,
+    authenticate: bool = True,
 ) -> PasarGuardClient:
     """PasarGuard client for a Level-1 or Level-2 OrgPrincipal — never Owner env token.
 
@@ -1273,17 +1298,17 @@ async def get_pg_for_principal(
     pid = int(row.id)
     cache_key = (pid, uname.lower())
     cached = _pg_principal_cache.get(cache_key)
-    if _cached_client_ready(cached):
-        return cached
+    if _principal_client_reusable(cached, authenticate=authenticate):
+        return _fenced_pg_client(cached)
     api_key = decrypt_secret(getattr(row, "pg_api_key_enc", None))
     if api_key:
         client = PasarGuardClient(username=uname, api_key=api_key)
         api_key = ""
-        await client.ensure_token()
+        await _authenticate_principal_client(client, authenticate=authenticate)
         for stale_key in [k for k in _pg_principal_cache if k[0] == pid and k != cache_key]:
             _pg_principal_cache.pop(stale_key, None)
         _pg_principal_cache[cache_key] = client
-        return client
+        return _fenced_pg_client(client)
     password = decrypt_secret(row.pg_password_enc)
     if not password:
         raise PasarGuardError(
@@ -1294,11 +1319,11 @@ async def get_pg_for_principal(
     client = PasarGuardClient(username=uname, password=password)
     # Local plaintext reference must not outlive token acquisition.
     password = ""
-    await client.ensure_token()
+    await _authenticate_principal_client(client, authenticate=authenticate)
     for stale_key in [k for k in _pg_principal_cache if k[0] == pid and k != cache_key]:
         _pg_principal_cache.pop(stale_key, None)
     _pg_principal_cache[cache_key] = client
-    return client
+    return _fenced_pg_client(client)
 
 
 def public_pg_api_base() -> str:

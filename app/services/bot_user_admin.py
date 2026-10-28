@@ -17,6 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.service_ownership import canonical_legacy_owner_matches, legacy_service_clause, require_legacy_service
+from app.services.customer_identity import adapt_legacy_user, optional_legacy_customer
 from app.db.models import BotUser, Plan, Role, UserService, WalletTransaction
 from app.services.formatting import (
     expire_remaining_days,
@@ -149,12 +151,15 @@ def assert_staff_pg_user_action(staff: dict | None, action: str) -> None:
 
 
 async def _pg_client_for_bot_service(
-    session: AsyncSession, service: UserService
+    session: AsyncSession, service: UserService, *, for_mutation: bool = False
 ):
     """PG client for a shop service — reseller shop uses that shop's PG admin.
 
     Never fall through to the Owner env token for tenant services (isolation).
     """
+    require_legacy_service(service)
+    if for_mutation and not await canonical_legacy_owner_matches(session, service):
+        raise ValueError("مالکیت مشتری سرویس نیاز به بررسی دارد")
     rid = await service_shop_id(session, service)
     if rid:
         from app.services.pasarguard import get_pg_for_reseller
@@ -377,6 +382,8 @@ async def admin_create_bot_user(
         color_tag=normalize_color_tag(color_tag),
     )
     session.add(user)
+    await session.flush()
+    await adapt_legacy_user(session, user)
     await session.commit()
     await session.refresh(user)
     return user
@@ -510,6 +517,7 @@ async def admin_provision_service(
         sub_url = user_subscription_url(pg_user if isinstance(pg_user, dict) else None)
         service = UserService(
             bot_user_id=int(user.id),
+            customer_id=await optional_legacy_customer(session, user.id),
             plan_id=int(plan.id),
             pg_user_id=pg_uid,
             pg_username=(pg_user.get("username", username) if isinstance(pg_user, dict) else username),
@@ -657,11 +665,11 @@ async def get_owned_service(
     svc = (
         await session.execute(
             select(UserService)
-            .where(UserService.id == int(service_id))
+            .where(UserService.id == int(service_id), legacy_service_clause())
             .options(selectinload(UserService.plan))
         )
     ).scalar_one_or_none()
-    if svc is None or int(svc.bot_user_id) != int(bot_user_id):
+    if svc is None or svc.integration_id is not None or svc.bot_user_id != bot_user_id:
         raise ValueError("سرویس یافت نشد")
     await assert_service_in_shop(session, svc, shop_id)
     return svc
@@ -818,7 +826,7 @@ async def admin_set_service_quota(
     if not service.pg_user_id:
         raise ValueError("سرویس به پاسارگارد وصل نیست")
     assert_staff_pg_user_action(staff, "update")
-    pg = await _pg_client_for_bot_service(session, service)
+    pg = await _pg_client_for_bot_service(session, service, for_mutation=True)
     hold = await _hold_quota_change(session, service, data_limit_bytes)
     # Reset is a separate PG ACL (users.reset_usage). Without it, still allow
     # quota update — never use Owner token to bypass a missing reset right.
@@ -889,6 +897,7 @@ async def admin_renew_service(
     staff: dict | None = None,
 ) -> ServiceSnapshot:
     """Admin renew: set expire from now + days and optional data limit (from plan or args)."""
+    require_legacy_service(service)
     if plan is not None:
         if plan.is_trial:
             raise ValueError("پلن تست برای تمدید مجاز نیست")
@@ -944,7 +953,7 @@ async def admin_extend_service(
     if not service.pg_user_id:
         raise ValueError("سرویس به پاسارگارد وصل نیست")
 
-    pg = await _pg_client_for_bot_service(session, service)
+    pg = await _pg_client_for_bot_service(session, service, for_mutation=True)
     info = await pg.get_user_by_id(int(service.pg_user_id))
     if not isinstance(info, dict):
         raise ValueError("کاربر پاسارگارد یافت نشد")
@@ -1115,6 +1124,7 @@ async def admin_delete_service(
 
     from app.db.models import LuckyWheelSpin, Order, RewardRedemption
 
+    require_legacy_service(service)
     svc_id = int(service.id)
     bot_user_id = int(service.bot_user_id)
     pg_uid = int(service.pg_user_id) if service.pg_user_id else None
@@ -1127,7 +1137,7 @@ async def admin_delete_service(
         # ACL before any PG network call (fail closed on missing users.delete).
         assert_staff_pg_user_action(staff, "delete")
     if delete_pg and pg_uid:
-        pg = await _pg_client_for_bot_service(session, service)
+        pg = await _pg_client_for_bot_service(session, service, for_mutation=True)
         outcome = await ensure_pg_user_removed_or_absent(
             pg, pg_uid, staff=staff, allow_disable_fallback=True
         )
@@ -1183,7 +1193,7 @@ async def detach_local_services_for_pg_user(
     rows = list(
         (
             await session.execute(
-                select(UserService).where(UserService.pg_user_id == pg_uid)
+                select(UserService).where(UserService.pg_user_id == pg_uid, UserService.integration_id.is_(None))
             )
         ).scalars().all()
     )

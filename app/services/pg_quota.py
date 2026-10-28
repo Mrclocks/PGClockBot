@@ -14,6 +14,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from app.services.integration_capacity import durable_user_slots
+from app.services.integration_runtime import integration_capacity_retained
+from app.services.shop_scope import shop_owner_id
 from app.services.formatting import format_bytes
 
 
@@ -632,6 +635,12 @@ def staff_needs_quota_check(staff: dict) -> bool:
     return staff.get("pg_is_owner") is False
 
 
+async def _reserved_user_slots(session: Any | None, staff: dict) -> int:
+    if session is None or not integration_capacity_retained():
+        return 0
+    return await durable_user_slots(session, shop_id=shop_owner_id(staff), pg_username=staff.get("pg_admin_username"))
+
+
 async def assert_can_create_user(
     staff: dict,
     *,
@@ -650,7 +659,8 @@ async def assert_can_create_user(
     admin, role = await _load_admin_and_role(staff, session=session, client=client)
     assert_admin_can_write(admin, role)
     limits = merge_role_limits(admin, role)
-    _check_max_users(admin, limits, need=max(1, int(quantity or 1)))
+    reserved_slots = await _reserved_user_slots(session, staff)
+    _check_max_users(admin, limits, need=max(1, int(quantity or 1)) + reserved_slots)
 
     if from_template:
         # PasarGuard: template create only checks max_users (+ write gate).

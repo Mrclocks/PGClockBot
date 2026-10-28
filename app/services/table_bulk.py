@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Ticket
+from app.services.customer_identity import set_legacy_customer_blocked
 from app.services.shop_scope import platform_may_review_payment
 from app.services.ticket_scope import staff_ticket_in_scope
 
@@ -148,7 +149,7 @@ async def bulk_toggle_block(
         if not block and not user.is_blocked:
             fail += 1
             continue
-        user.is_blocked = block
+        await set_legacy_customer_blocked(session, user, blocked=block)
         await session.flush()
         try:
             await notify_account_edit(

@@ -81,6 +81,7 @@ class QuotaOwnClientTests(unittest.IsolatedAsyncioTestCase):
         }
         shop_client = _own_client(admin)
         session = MagicMock()
+        session.scalar = AsyncMock(return_value=0)
         with patch("app.services.pasarguard.get_pg") as get_pg:
             with patch(
                 "app.services.pasarguard.get_pg_for_reseller",

@@ -20,6 +20,7 @@ from app.db.models import (
     ServiceAddonPack,
     UserService,
 )
+from app.services.service_addon_targets import calculate_addon_target
 from app.services.plans_catalog import require_catalog_owner_id
 from app.services.provision_gate import ProvisionError, hold_limit_change, new_hold_key
 from app.services.volume_allocation import (
@@ -472,7 +473,7 @@ async def create_addon_order(
     shop_rid = _shop_reseller_id()
     if not pack_matches_shop(pack, shop_rid):
         raise ValueError("این بسته در این فروشگاه موجود نیست")
-    if int(service.bot_user_id) != int(user_id):
+    if service.integration_id is not None or service.bot_user_id != user_id:
         raise ValueError("سرویس متعلق به شما نیست")
     if not service.pg_user_id:
         raise ValueError("سرویس به پنل متصل نیست")
@@ -591,7 +592,7 @@ async def apply_service_addon(
             raise ValueError("بسته یا سرویس یافت نشد")
         if int(order.service_id or 0) != int(service.id):
             raise ValueError("سرویس سفارش با یادداشت همخوان نیست")
-        if int(service.bot_user_id) != int(order.user_id):
+        if service.integration_id is not None or service.bot_user_id != order.user_id:
             raise ValueError("سرویس متعلق به خریدار نیست")
         # Shop isolation: pack + order must match
         if order.reseller_id:
@@ -743,7 +744,7 @@ async def _apply_pack_to_service(
     Unlimited volume/time services are rejected (not converted to limited).
     """
     from app.services.bot_user_admin import sync_service_quota_cache
-    from app.services.formatting import is_on_hold_status, parse_expire
+    from app.services.formatting import is_on_hold_status
     from app.services.pasarguard import get_pg, get_pg_for_reseller
 
     if not service.pg_user_id:
@@ -762,57 +763,16 @@ async def _apply_pack_to_service(
     if not isinstance(info, dict):
         raise ValueError("کاربر پاسارگارد یافت نشد")
 
-    payload: dict[str, Any] = {"status": "active"}
-    expire_ts = None
-    data_limit_bytes = None
-
-    if kind == KIND_VOLUME:
-        add_bytes = pack_volume_bytes(amount)
-        if add_bytes <= 0:
-            raise ValueError("حجم نامعتبر است")
-        try:
-            current = int(info.get("data_limit") or 0)
-        except (TypeError, ValueError):
-            current = 0
-        if current <= 0:
-            raise ValueError("این سرویس حجم نامحدود دارد — بسته حجم قابل اعمال نیست")
-        data_limit_bytes = current + add_bytes
-        payload["data_limit"] = data_limit_bytes
-        if is_on_hold_status(info.get("status")):
-            # Switching to active does not start PG's pending expiration timer.
-            expire_ts = await _on_hold_activation_expire_ts(
-                session, service, info, now=int(time.time())
-            )
-            payload["expire"] = expire_ts
-    elif kind == KIND_DURATION:
-        days = int(float(amount))
-        if days <= 0:
-            raise ValueError("مدت نامعتبر است")
-        now = int(time.time())
-        cur = parse_expire(info.get("expire") or info.get("expire_date"))
-        if cur is None and is_on_hold_status(info.get("status")):
-            base = await _on_hold_activation_expire_ts(
-                session, service, info, now=now
-            )
-            expire_ts = base + days * 86400
-        elif cur is None:
-            raise ValueError("این سرویس زمان نامحدود دارد — بسته زمان قابل اعمال نیست")
-        else:
-            base = max(now, int(cur.timestamp()))
-            expire_ts = base + days * 86400
-        payload["expire"] = expire_ts
-        if "data_limit" in info:
-            # Preserve the live volume quota explicitly, and cache it alongside
-            # the new expiration so a time-only write cannot look unlimited.
-            try:
-                data_limit_bytes = int(info.get("data_limit") or 0)
-            except (TypeError, ValueError) as e:
-                raise ValueError("حجم سرویس نامعتبر است") from e
-            if data_limit_bytes < 0:
-                raise ValueError("حجم سرویس نامعتبر است")
-            payload["data_limit"] = data_limit_bytes
-    else:
-        raise ValueError("نوع بسته پشتیبانی نمی‌شود")
+    now = int(time.time())
+    on_hold_expire = None
+    if is_on_hold_status(info.get("status")):
+        on_hold_expire = await _on_hold_activation_expire_ts(session, service, info, now=now)
+    payload = calculate_addon_target(info, kind=kind,
+        amount_bytes=pack_volume_bytes(amount) if kind == KIND_VOLUME else None,
+        amount_seconds=int(float(amount))*86400 if kind == KIND_DURATION else None,
+        now=now, on_hold_expire_ts=on_hold_expire)
+    expire_ts = payload.get("expire")
+    data_limit_bytes = payload.get("data_limit")
 
     hold = await _hold_pack_volume(
         session, service, shop_id=order_reseller_id,

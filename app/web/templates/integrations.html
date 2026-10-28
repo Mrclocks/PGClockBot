@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}یکپارچه‌سازی‌ها{% endblock %}
+{% block content %}
+<div class="page-head"><h1>یکپارچه‌سازی‌ها</h1><a class="btn btn-ghost" href="/integrations/audit">تاریخچه مدیریت من</a></div>
+<p class="flash warn" role="note">رابط عمومی هنوز آماده استفاده نیست. این صفحه فقط مدیریت دسترسی‌هاست و رابط عمومی را فعال نمی‌کند.</p>
+<section class="card" aria-labelledby="create-title">
+  <h2 id="create-title">ایجاد یکپارچه‌سازی غیرفعال</h2>
+  <p class="muted">مالک و فروشگاه از حساب فعلی تعیین می‌شوند و قابل تغییر نیستند. دسترسی اولیه خالی است.</p>
+  <form method="post" action="/integrations" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="ticket" value="{{ ticket }}">
+    <button type="submit" class="btn">ایجاد یکپارچه‌سازی</button>
+  </form>
+</section>
+<section class="card" aria-labelledby="list-title">
+  <h2 id="list-title">یکپارچه‌سازی‌های من</h2>
+  {% for item in integrations %}
+  <p><a href="/integrations/{{ item.id }}"><bdi dir="ltr">{{ item.id }}</bdi></a> — {{ status_labels[item.status] }}</p>
+  {% else %}<p class="muted">هنوز یکپارچه‌سازی ثبت نشده است.</p>{% endfor %}
+  {% if next_after %}<a class="btn btn-ghost" href="/integrations?after={{ next_after }}">صفحه بعد</a>{% endif %}
+</section>
+{% endblock %}

@@ -15,6 +15,10 @@ from app.jobs import scheduler as jobs
 
 
 OPERATIONS = {
+    "integration_operations",
+    "integration_webhooks",
+    "integration_audit_retention",
+    "integration_security_retention",
     "billing_tick",
     "pg_admin_subscription",
     "pending_order_cleanup",
@@ -89,6 +93,22 @@ class BackgroundSchedulerTests(unittest.IsolatedAsyncioTestCase):
         jobs.start_background_scheduler()
         job = self.scheduler.get_job("connection_status")
         self.assertEqual(job.trigger.interval.total_seconds(), 60)
+        self.assertEqual(job.max_instances, 1)
+        self.assertTrue(job.coalesce)
+        self.assertFalse(job.args)
+
+    async def test_integration_audit_retention_is_bounded_by_hourly_nonoverlapping_schedule(self) -> None:
+        jobs.start_background_scheduler()
+        job = self.scheduler.get_job("integration_audit_retention")
+        self.assertEqual(job.trigger.interval.total_seconds(), 3600)
+        self.assertEqual(job.max_instances, 1)
+        self.assertTrue(job.coalesce)
+        self.assertFalse(job.args)
+
+    async def test_integration_security_retention_runs_every_five_minutes_without_overlap(self) -> None:
+        jobs.start_background_scheduler()
+        job = self.scheduler.get_job("integration_security_retention")
+        self.assertEqual(job.trigger.interval.total_seconds(), 300)
         self.assertEqual(job.max_instances, 1)
         self.assertTrue(job.coalesce)
         self.assertFalse(job.args)

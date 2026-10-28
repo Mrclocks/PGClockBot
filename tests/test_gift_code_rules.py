@@ -18,6 +18,7 @@ from app.db.models import (
     Plan,
     ServiceAddonPack,
 )
+from app.services.customer_backfill import backfill_legacy_customers, backfill_legacy_services
 from app.services.gift_codes import parse_expiry, expiry_input, validate_rules
 from app.services.orders import (
     apply_discount_to_order,
@@ -572,6 +573,21 @@ class GiftCodeValidationTests(unittest.TestCase):
                         "INSERT INTO wallet_transactions (user_id, amount, balance_after, reason) VALUES (1, 50000, 50000, 'کد هدیه OLD')"
                     )
                 )
+            command.upgrade(cfg, "0074_customer_identity")
+
+            async def backfill_fixture() -> None:
+                async_engine = create_async_engine(url.replace("sqlite:", "sqlite+aiosqlite:"))
+                try:
+                    sessions = async_sessionmaker(async_engine, expire_on_commit=False)
+                    async with sessions() as session:
+                        await backfill_legacy_customers(session)
+                        await session.commit()
+                        await backfill_legacy_services(session)
+                        await session.commit()
+                finally:
+                    await async_engine.dispose()
+
+            asyncio.run(backfill_fixture())
             command.upgrade(cfg, "head")
             with engine.connect() as conn:
                 row = conn.execute(

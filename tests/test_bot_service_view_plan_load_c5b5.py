@@ -63,7 +63,7 @@ class GetOwnedServiceEagerPlanTests(unittest.IsolatedAsyncioTestCase):
         from app.services.bot_user_admin import get_owned_service
 
         plan = SimpleNamespace(name="پلن")
-        svc = SimpleNamespace(id=9, bot_user_id=1, plan=plan)
+        svc = SimpleNamespace(id=9, bot_user_id=1, integration_id=None, plan=plan)
         result = MagicMock()
         result.scalar_one_or_none.return_value = svc
         session = AsyncMock()
