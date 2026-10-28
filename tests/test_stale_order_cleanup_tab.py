@@ -144,3 +144,17 @@ class CleanupTabRenderTests(unittest.TestCase):
         self.assertNotIn("s_pending_order_ttl_hours", html)
         self.assertNotIn("cancel-pending-orders", html)
         self.assertNotIn('data-modal-tab="cleanup"', html)
+
+    def test_cleanup_is_the_last_tab_after_payg(self) -> None:
+        from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS
+
+        html = self._render(
+            can_billing_settings=True,
+            billing_tab_groups=TAB_SETTING_GROUPS["billing"],
+            billing_groups={n: SETTING_GROUPS[n] for n in TAB_SETTING_GROUPS["billing"]},
+            billing_settings_action="/settings?tab=billing",
+        )
+        tabs = [html.index(f'data-modal-tab="{name}"') for name in ("payment", "billing", "cleanup")]
+        self.assertEqual(tabs, sorted(tabs))
+        panels = [html.index(f'data-modal-tab-panel="{name}"') for name in ("payment", "billing", "cleanup")]
+        self.assertEqual(panels, sorted(panels))
