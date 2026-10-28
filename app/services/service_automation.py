@@ -554,7 +554,7 @@ async def process_service_automation(
     try:
         row = await session.get(ServiceAutomation, service_id, populate_existing=True)
         service = await session.get(UserService, service_id)
-        user = await session.get(BotUser, service.bot_user_id) if service else None
+        user = await session.get(BotUser, service.bot_user_id) if service and service.bot_user_id is not None and service.integration_id is None else None
         if not row or not service or not user or user.is_blocked:
             return
         if not service.pg_user_id or (service.remark or "").strip() == "linked":

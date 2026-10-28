@@ -395,6 +395,7 @@
   "gateway_name": "درگاه پرداخت",
   "gateway_pay_text": "مبلغ قابل پرداخت: <b>{amount}</b>\nاز دکمه زیر وارد درگاه شوید و پرداخت را انجام دهید.\nسپس عکس رسید را در همین گفتگو بفرستید.",
   "guide_text": "۱) سرویس را بخرید و پرداخت را انجام دهید\n۲) لینک یا QR اشتراک را دریافت کنید\n۳) در کلاینت (v2rayNG / Streisand / …) لینک را Import کنید",
+  "integration_api_enabled": "0",
   "loyalty_enabled": "1",
   "loyalty_submenu_order": "loy_referral,loy_points,loy_rewards,loy_wheel,loy_history",
   "lucky_wheel_cooldown_seconds": "0",

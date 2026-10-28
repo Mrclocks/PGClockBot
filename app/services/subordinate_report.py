@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.demo_users import non_demo_customer
+
 from app.db.models import BotUser, OrgPrincipal, ResellerProfile, UserService
 from app.services.formatting import format_toman
 from app.services.service_scope import shop_services_clause
@@ -127,8 +129,7 @@ async def collect_subordinate_stats(
                 await session.execute(
                     select(func.count())
                     .select_from(UserService)
-                    .join(BotUser, BotUser.id == UserService.bot_user_id)
-                    .where(shop_services_clause(rid), BotUser.is_demo.is_(False))
+                                .where(shop_services_clause(rid), non_demo_customer(UserService.bot_user_id))
                 )
             ).scalar()
             or 0

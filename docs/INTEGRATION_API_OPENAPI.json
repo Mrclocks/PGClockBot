@@ -1,0 +1,7167 @@
+{
+  "components": {
+    "schemas": {
+      "AddonExecutionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_id": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "external_operation_ref": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "External Operation Ref",
+            "type": "string"
+          },
+          "pack_id": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Pack Id",
+            "type": "string"
+          },
+          "terms_revision": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Terms Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id",
+          "external_operation_ref",
+          "pack_id",
+          "terms_revision"
+        ],
+        "title": "AddonExecutionInput",
+        "type": "object"
+      },
+      "AddonPage": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AddonView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor",
+          "has_more"
+        ],
+        "title": "AddonPage",
+        "type": "object"
+      },
+      "AddonView": {
+        "properties": {
+          "amount_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Bytes"
+          },
+          "amount_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Seconds"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "terms_revision": {
+            "title": "Terms Revision",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "amount_bytes",
+          "amount_seconds",
+          "terms_revision",
+          "warnings"
+        ],
+        "title": "AddonView",
+        "type": "object"
+      },
+      "CapabilitiesView": {
+        "properties": {
+          "api_version": {
+            "title": "Api Version",
+            "type": "string"
+          },
+          "authorization_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Synced At"
+          },
+          "billing_mode": {
+            "title": "Billing Mode",
+            "type": "string"
+          },
+          "customer_entry_policy": {
+            "title": "Customer Entry Policy",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/CapabilityLimits"
+          },
+          "operations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "api_version",
+          "scopes",
+          "operations",
+          "customer_entry_policy",
+          "billing_mode",
+          "limits",
+          "authorization_synced_at"
+        ],
+        "title": "CapabilitiesView",
+        "type": "object"
+      },
+      "CapabilityLimits": {
+        "properties": {
+          "access_per_minute": {
+            "default": 10,
+            "title": "Access Per Minute",
+            "type": "integer"
+          },
+          "page_max": {
+            "default": 100,
+            "title": "Page Max",
+            "type": "integer"
+          },
+          "read_per_minute": {
+            "default": 120,
+            "title": "Read Per Minute",
+            "type": "integer"
+          },
+          "writes_per_minute": {
+            "default": 20,
+            "title": "Writes Per Minute",
+            "type": "integer"
+          }
+        },
+        "title": "CapabilityLimits",
+        "type": "object"
+      },
+      "CustomerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "external_customer_ref": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "External Customer Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "external_customer_ref"
+        ],
+        "title": "CustomerRequest",
+        "type": "object"
+      },
+      "CustomerView": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "external_customer_ref": {
+            "title": "External Customer Ref",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "telegram_linked": {
+            "title": "Telegram Linked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "external_customer_ref",
+          "display_name",
+          "state",
+          "telegram_linked",
+          "created_at"
+        ],
+        "title": "CustomerView",
+        "type": "object"
+      },
+      "EmptyRequest": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "EmptyRequest",
+        "type": "object"
+      },
+      "FreshnessView": {
+        "properties": {
+          "freshness": {
+            "title": "Freshness",
+            "type": "string"
+          },
+          "panel_available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Panel Available"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced At"
+          }
+        },
+        "required": [
+          "source",
+          "synced_at",
+          "freshness",
+          "panel_available"
+        ],
+        "title": "FreshnessView",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IntegrationError": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "access_not_ready",
+                  "addon_ineligible",
+                  "already_submitted",
+                  "api_disabled",
+                  "authorization_unavailable",
+                  "billing_blocked",
+                  "challenge_expired",
+                  "confirmation_required",
+                  "customer_blocked",
+                  "customer_reference_conflict",
+                  "external_reference_conflict",
+                  "idempotency_conflict",
+                  "idempotency_key_required",
+                  "integration_disabled",
+                  "internal_error",
+                  "invalid_credential",
+                  "invalid_cursor",
+                  "invalid_request",
+                  "link_conflict",
+                  "link_not_confirmed",
+                  "not_found",
+                  "operation_archived",
+                  "outcome_unknown",
+                  "panel_unavailable",
+                  "payload_too_large",
+                  "permission_denied",
+                  "plan_ineligible",
+                  "principal_inactive",
+                  "queue_expired",
+                  "queue_limit_reached",
+                  "quota_exceeded",
+                  "rate_limited",
+                  "secure_delivery_required",
+                  "security_unavailable",
+                  "service_busy",
+                  "service_identity_mismatch",
+                  "temporarily_unavailable",
+                  "terms_changed",
+                  "unsupported_authentication",
+                  "unsupported_media_type",
+                  "unsupported_terms",
+                  "website_entry_not_enabled"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "field": {
+                        "type": "string"
+                      },
+                      "operation_id": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "request_id",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "LinkConfirmation": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "title": "Confirm",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "confirm"
+        ],
+        "title": "LinkConfirmation",
+        "type": "object"
+      },
+      "LinkResult": {
+        "properties": {
+          "linked": {
+            "title": "Linked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "linked"
+        ],
+        "title": "LinkResult",
+        "type": "object"
+      },
+      "LinkStarted": {
+        "properties": {
+          "challenge_id": {
+            "title": "Challenge Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "start_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Token"
+          }
+        },
+        "required": [
+          "challenge_id",
+          "expires_at"
+        ],
+        "title": "LinkStarted",
+        "type": "object"
+      },
+      "LinkStatus": {
+        "properties": {
+          "challenge_id": {
+            "title": "Challenge Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "cancelled",
+              "linked",
+              "expired",
+              "awaiting_website",
+              "awaiting_telegram"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "challenge_id",
+          "expires_at",
+          "state"
+        ],
+        "title": "LinkStatus",
+        "type": "object"
+      },
+      "OperationFailure": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "OperationFailure",
+        "type": "object"
+      },
+      "OperationView": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "customer_id": {
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "external_operation_ref": {
+            "title": "External Operation Ref",
+            "type": "string"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OperationFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "next_poll_after_seconds": {
+            "title": "Next Poll After Seconds",
+            "type": "integer"
+          },
+          "resource_version": {
+            "title": "Resource Version",
+            "type": "integer"
+          },
+          "service_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Id"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "customer_id",
+          "external_operation_ref",
+          "kind",
+          "state",
+          "service_id",
+          "resource_version",
+          "created_at",
+          "updated_at",
+          "next_poll_after_seconds",
+          "failure"
+        ],
+        "title": "OperationView",
+        "type": "object"
+      },
+      "PlanExecutionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_id": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "external_operation_ref": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "External Operation Ref",
+            "type": "string"
+          },
+          "plan_id": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "terms_revision": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Terms Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id",
+          "external_operation_ref",
+          "plan_id",
+          "terms_revision"
+        ],
+        "title": "PlanExecutionInput",
+        "type": "object"
+      },
+      "PlanPage": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlanView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor",
+          "has_more"
+        ],
+        "title": "PlanPage",
+        "type": "object"
+      },
+      "PlanView": {
+        "properties": {
+          "can_provision": {
+            "title": "Can Provision",
+            "type": "boolean"
+          },
+          "can_renew": {
+            "title": "Can Renew",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "technical_terms": {
+            "$ref": "#/components/schemas/TechnicalTerms"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "technical_terms",
+          "can_provision",
+          "can_renew"
+        ],
+        "title": "PlanView",
+        "type": "object"
+      },
+      "PrivateAccess": {
+        "properties": {
+          "access_version": {
+            "title": "Access Version",
+            "type": "integer"
+          },
+          "customer_id": {
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "service_id": {
+            "title": "Service Id",
+            "type": "string"
+          },
+          "subscription_url": {
+            "title": "Subscription Url",
+            "type": "string"
+          },
+          "validated_at": {
+            "format": "date-time",
+            "title": "Validated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_id",
+          "customer_id",
+          "subscription_url",
+          "validated_at",
+          "access_version"
+        ],
+        "title": "PrivateAccess",
+        "type": "object"
+      },
+      "QuotaView": {
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "limit_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Bytes"
+          },
+          "on_hold_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Seconds"
+          },
+          "remaining_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Bytes"
+          },
+          "time_unlimited": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Unlimited"
+          },
+          "used_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used Bytes"
+          },
+          "volume_unlimited": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Unlimited"
+          }
+        },
+        "required": [
+          "limit_bytes",
+          "used_bytes",
+          "remaining_bytes",
+          "expires_at",
+          "on_hold_seconds",
+          "volume_unlimited",
+          "time_unlimited"
+        ],
+        "title": "QuotaView",
+        "type": "object"
+      },
+      "RenewalPreview": {
+        "properties": {
+          "calculated_at": {
+            "format": "date-time",
+            "title": "Calculated At",
+            "type": "string"
+          },
+          "current": {
+            "$ref": "#/components/schemas/QuotaView"
+          },
+          "customer_id": {
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "projected": {
+            "$ref": "#/components/schemas/QuotaView"
+          },
+          "service_id": {
+            "title": "Service Id",
+            "type": "string"
+          },
+          "terms_revision": {
+            "title": "Terms Revision",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "service_id",
+          "customer_id",
+          "plan_id",
+          "terms_revision",
+          "calculated_at",
+          "current",
+          "projected",
+          "warnings"
+        ],
+        "title": "RenewalPreview",
+        "type": "object"
+      },
+      "ServicePage": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor",
+          "has_more"
+        ],
+        "title": "ServicePage",
+        "type": "object"
+      },
+      "ServiceView": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "customer_id": {
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/FreshnessView"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "panel_status": {
+            "title": "Panel Status",
+            "type": "string"
+          },
+          "plan_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Id"
+          },
+          "quota": {
+            "$ref": "#/components/schemas/QuotaView"
+          },
+          "resource_version": {
+            "title": "Resource Version",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "customer_id",
+          "plan_id",
+          "state",
+          "panel_status",
+          "quota",
+          "freshness",
+          "resource_version",
+          "created_at"
+        ],
+        "title": "ServiceView",
+        "type": "object"
+      },
+      "TechnicalTerms": {
+        "properties": {
+          "activation": {
+            "title": "Activation",
+            "type": "string"
+          },
+          "data_limit_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Limit Bytes"
+          },
+          "device_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Limit"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "terms_revision": {
+            "title": "Terms Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data_limit_bytes",
+          "duration_seconds",
+          "activation",
+          "device_limit",
+          "terms_revision"
+        ],
+        "title": "TechnicalTerms",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "IntegrationBearer": {
+        "bearerFormat": "PGClockBot integration credential",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Backend-only technical service API; deployment gates apply.",
+    "title": "PGClockBot Integration API",
+    "version": "v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/capabilities": {
+      "get": {
+        "operationId": "capabilities_api_v1_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesView"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Capabilities",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/customers": {
+      "post": {
+        "operationId": "create_customer_api_v1_customers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerView"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Create Customer",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/customers/{customer_id}": {
+      "get": {
+        "operationId": "customer_api_v1_customers__customer_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "title": "Customer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerView"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Customer",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/customers/{customer_id}/telegram-link": {
+      "delete": {
+        "operationId": "link_delete_api_v1_customers__customer_id__telegram_link_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "title": "Customer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Link Delete",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/customers/{customer_id}/telegram-link-challenges": {
+      "post": {
+        "operationId": "link_start_api_v1_customers__customer_id__telegram_link_challenges_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "title": "Customer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkStarted"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Link Start",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/customers/{customer_id}/telegram-link-challenges/{challenge_id}": {
+      "get": {
+        "operationId": "link_status_api_v1_customers__customer_id__telegram_link_challenges__challenge_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "title": "Customer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "challenge_id",
+            "required": true,
+            "schema": {
+              "title": "Challenge Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkStatus"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Link Status",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/customers/{customer_id}/telegram-link-challenges/{challenge_id}/confirm": {
+      "post": {
+        "operationId": "link_confirm_api_v1_customers__customer_id__telegram_link_challenges__challenge_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "title": "Customer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "challenge_id",
+            "required": true,
+            "schema": {
+              "title": "Challenge Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkConfirmation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkResult"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Link Confirm",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/operations/{operation_id}": {
+      "get": {
+        "operationId": "operation_api_v1_operations__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "title": "Operation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "title": "Customer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Operation",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/plans": {
+      "get": {
+        "operationId": "plans_api_v1_plans_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 1024,
+              "title": "Cursor",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanPage"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Plans",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/provisioning-requests": {
+      "post": {
+        "operationId": "provision_api_v1_provisioning_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanExecutionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Provision",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/services": {
+      "get": {
+        "operationId": "services_api_v1_services_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "title": "Customer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 1024,
+              "title": "Cursor",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicePage"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Services",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/services/{service_id}": {
+      "get": {
+        "operationId": "service_api_v1_services__service_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "title": "Customer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceView"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Service",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/services/{service_id}/access": {
+      "get": {
+        "operationId": "access_api_v1_services__service_id__access_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "title": "Customer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateAccess"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Access",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/services/{service_id}/addons": {
+      "get": {
+        "operationId": "addons_api_v1_services__service_id__addons_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "title": "Customer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 1024,
+              "title": "Cursor",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddonPage"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Addons",
+        "tags": [
+          "Integration API v1"
+        ]
+      },
+      "post": {
+        "operationId": "addon_api_v1_services__service_id__addons_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddonExecutionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Addon",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/services/{service_id}/qr": {
+      "get": {
+        "operationId": "qr_api_v1_services__service_id__qr_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "title": "Customer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Access-Version": {
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Qr",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/services/{service_id}/renewal-preview": {
+      "get": {
+        "operationId": "preview_api_v1_services__service_id__renewal_preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "title": "Customer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewalPreview"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Preview",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    },
+    "/api/v1/services/{service_id}/renewals": {
+      "post": {
+        "operationId": "renew_api_v1_services__service_id__renewals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanExecutionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Invalid credential",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Access denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Resource not found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Conflict or resource not ready",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Expired or archived",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Request too large",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Ineligible technical terms",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Shared request budget exhausted",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Internal error",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationError"
+                }
+              }
+            },
+            "description": "Temporarily unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              },
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationBearer": []
+          }
+        ],
+        "summary": "Renew",
+        "tags": [
+          "Integration API v1"
+        ]
+      }
+    }
+  }
+}

@@ -12,6 +12,8 @@ from app.services.pasarguard import get_pg, get_pg_for_reseller
 from app.services.service_automation import service_shop_id
 from app.services.service_import import is_external_service
 from app.services.wallet import credit_wallet
+from app.services.service_ownership import legacy_service_clause
+from app.db.integration_operation_models import ServiceMutationGuard
 
 STATUS_LABELS = {"pending": "در انتظار بررسی", "processing": "در حال غیرفعال‌سازی", "review": "نیازمند بررسی و تلاش مجدد", "approved": "لغو شد؛ اعتبار به کیف پول همین فروشگاه برگشت", "rejected": "درخواست رد شد", "withdrawn": "درخواست پس گرفته شد"}
 # Operator-facing queue — badge + list filter for items needing human action.
@@ -21,7 +23,8 @@ OPEN_OPERATOR_STATUSES = ("pending", "review")
 async def lock_service_mutation(session, service_id):
     """Lock the service row in the caller's transaction before claiming an order."""
     result = await session.execute(update(UserService).where(
-        UserService.id == service_id, UserService.is_cancelled.is_(False),
+        UserService.id == service_id, legacy_service_clause(), UserService.is_cancelled.is_(False),
+        ~select(ServiceMutationGuard.service_id).where(ServiceMutationGuard.service_id == UserService.id).exists(),
         UserService.cancellation_pending.is_(False),
     ).values(is_cancelled=False).execution_options(synchronize_session=False))
     if result.rowcount != 1:

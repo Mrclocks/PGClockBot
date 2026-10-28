@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.customer_identity import optional_legacy_customer
 from app.services.catalog_pricing import PriceTarget, active_discounts, annotate_prices, assert_expected_price, displayed_quote, quote_price, quote_product, sale_price
 from app.db.models import (
     BotUser,
@@ -2100,6 +2101,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             await session.refresh(order)
             return order
         raise ValueError("سفارش قابل تحویل نیست")
+    legacy_customer_id = await optional_legacy_customer(session, order.user_id)
     await session.commit()
     order = (
         await session.execute(
@@ -2234,6 +2236,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             sub_url = user_subscription_url(pg_user if isinstance(pg_user, dict) else None)
             service = UserService(
                 bot_user_id=order.user_id,
+                customer_id=legacy_customer_id,
                 plan_id=plan.id,
                 pg_user_id=pg_uid,
                 pg_username=pg_user.get("username", username),

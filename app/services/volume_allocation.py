@@ -25,9 +25,11 @@ from sqlalchemy import Select, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.db.integration_operation_models import IntegrationCapacityCommitment
 from app.db.models import OrgPrincipal, PgAdminSubscription, ResellerProfile, UserService, VolumeHold
 from app.services.billing import BILLING_MODE_PAYG, GB, is_payg
 from app.services.formatting import format_bytes
+from app.services.integration_runtime import integration_capacity_retained
 from app.services.org_principals import DEPTH_TWO, STATUS_ACTIVE
 
 logger = logging.getLogger(__name__)
@@ -151,12 +153,18 @@ async def sum_service_bytes(session: AsyncSession, shop_id: int) -> int:
 
 
 async def sum_active_holds(session: AsyncSession, shop_id: int) -> int:
-    total = await session.scalar(
-        select(func.coalesce(func.sum(VolumeHold.bytes), 0)).where(
-            VolumeHold.shop_id == int(shop_id), VolumeHold.expires_at > _utcnow()
-        )
-    )
-    return int(total or 0)
+    if not integration_capacity_retained():
+        total = await session.scalar(select(func.coalesce(func.sum(VolumeHold.bytes), 0)).where(
+            VolumeHold.shop_id == int(shop_id), VolumeHold.expires_at > _utcnow(),
+        ))
+        return int(total or 0)
+    temporary = select(func.coalesce(func.sum(VolumeHold.bytes), 0)).where(
+        VolumeHold.shop_id == int(shop_id), VolumeHold.expires_at > _utcnow(),
+    ).scalar_subquery()
+    durable = select(func.coalesce(func.sum(IntegrationCapacityCommitment.bytes), 0)).where(
+        IntegrationCapacityCommitment.shop_id == int(shop_id), IntegrationCapacityCommitment.active.is_(True),
+    ).scalar_subquery()
+    return int(await session.scalar(select(temporary + durable)) or 0)
 
 
 async def sum_external_bytes(session: AsyncSession, shop_id: int) -> int:

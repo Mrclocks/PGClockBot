@@ -232,6 +232,11 @@
             <span class="nav-item-label"><span>پشتیبانی</span>{% if tickets_unread %}<i class="nav-dot" aria-label="پیام خوانده‌نشده"></i>{% endif %}</span>
           </a>
           {% endif %}
+          {% if is_owner or 'integrations_manage' in perms %}
+          <a href="/integrations" class="nav-item nav-item-bot {% if path.startswith('/integrations') %}active{% endif %}">
+            <span>یکپارچه‌سازی‌ها</span>
+          </a>
+          {% endif %}
           {% set mk_sections = marketing_sections if marketing_sections is defined else () %}
           {% if mk_sections %}
           {% set mk_active = namespace(on=false) %}

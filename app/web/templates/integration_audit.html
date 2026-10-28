@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% macro snapshot(value) %}
+{% if value.status is defined %}<p>وضعیت: {{ status_labels[value.status] }}؛ دسترسی‌ها: {% for scope in value.grants %}{{ scope_labels[scope] }}{% if not loop.last %}، {% endif %}{% else %}خالی{% endfor %}</p>{% endif %}
+{% if value.plan_ids is defined %}<p>پلن‌ها: {% for id in value.plan_ids %}<bdi dir="ltr">{{ id | num }}</bdi>{% if not loop.last %}، {% endif %}{% else %}خالی{% endfor %}</p>{% endif %}
+{% endmacro %}
+{% block title %}تاریخچه مدیریت یکپارچه‌سازی{% endblock %}
+{% block content %}
+<div class="page-head"><h1>تاریخچه مدیریت یکپارچه‌سازی</h1><a class="btn btn-ghost" href="{{ '/integrations/' + integration_id if integration_id else '/integrations' }}">بازگشت</a></div>
+<p class="muted">این تاریخچه فقط خواندنی است. رخدادها ۱۸۰ روز نگهداری می‌شوند؛ سوابق موردنیاز بررسی حل‌نشده نگهداری می‌شوند.</p>
+{% for event in events %}
+<article class="card">
+  <h2>{{ action_labels[event.action] }} — {{ 'انجام شد' if event.outcome == 'succeeded' else 'رد شد' }}</h2>
+  {% if event.integration_id %}<p>یکپارچه‌سازی: <a href="/integrations/{{ event.integration_id }}"><bdi dir="ltr">{{ event.integration_id }}</bdi></a></p>{% else %}<p>ایجاد یکپارچه‌سازی انجام نشد.</p>{% endif %}
+  <p>شناسه اقدام: <bdi dir="ltr">{{ event.action_id }}</bdi>؛ شناسه حساب اقدام‌کننده: <bdi dir="ltr">{{ event.actor_principal_id | num }}</bdi></p>
+  <p>زمان ثبت (تهران): <bdi dir="ltr">{{ audit_date(event.created_at).date }}</bdi></p>
+  {% if event.credential_selector %}<p>شناسه اعتبارنامه: <bdi dir="ltr">{{ event.credential_selector }}</bdi></p>{% endif %}
+  {% if event.error_code %}<p>درخواست با محدودیت دسترسی یا ورودی نامعتبر روبه‌رو شد.</p>{% endif %}
+  {% if event.before %}<h3>پیش از اقدام</h3>{{ snapshot(event.before) }}{% endif %}
+  {% if event.after %}<h3>پس از اقدام</h3>{{ snapshot(event.after) }}{% endif %}
+</article>
+{% else %}<section class="card"><p class="muted">رخدادی برای نمایش وجود ندارد.</p></section>{% endfor %}
+{% if next_before %}<a class="btn btn-ghost" href="{{ audit_path }}?before={{ next_before }}">رخدادهای قدیمی‌تر</a>{% endif %}
+{% endblock %}

@@ -30,7 +30,7 @@ async def list_services_under_review(session: AsyncSession, *, limit: int = REVI
     services = list(
         await session.scalars(
             select(UserService)
-            .where(UserService.shop_needs_review.is_(True))
+            .where(UserService.shop_needs_review.is_(True), UserService.integration_id.is_(None))
             .order_by(UserService.id)
             .limit(limit)
         )
@@ -66,7 +66,7 @@ async def assign_service_shop(session: AsyncSession, service_id: int, shop_id: i
             raise ValueError("فروشگاه یافت نشد")
     claimed = await session.execute(
         update(UserService)
-        .where(UserService.id == int(service_id), UserService.shop_needs_review.is_(True))
+        .where(UserService.id == int(service_id), UserService.shop_needs_review.is_(True), UserService.integration_id.is_(None))
         .values(shop_id=int(shop_id) if shop_id else None, shop_needs_review=False)
     )
     if claimed.rowcount != 1:
@@ -80,7 +80,7 @@ async def assign_service_shop(session: AsyncSession, service_id: int, shop_id: i
 
 async def count_services_under_review(session: AsyncSession) -> int:
     result = await session.execute(
-        select(func.count()).select_from(UserService).where(UserService.shop_needs_review.is_(True))
+        select(func.count()).select_from(UserService).where(UserService.shop_needs_review.is_(True), UserService.integration_id.is_(None))
     )
     return int(result.scalar() or 0)
 

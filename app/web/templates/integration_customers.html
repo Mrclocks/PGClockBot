@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}مشتریان وب‌سایت{% endblock %}
+{% block content %}
+<div class="page-head"><h1>مشتریان وب‌سایت</h1><a class="btn btn-ghost" href="/integrations/{{ integration_id }}">بازگشت</a></div>
+<p class="muted">این مشتریان از وب‌سایت ثبت شده‌اند. پیوند تلگرام، مالکیت سرویس یا اجازه ارسال پیام را تغییر نمی‌دهد.</p>
+<section class="card" aria-label="فهرست مشتریان وب‌سایت">
+{% for customer in customers %}
+<article class="card"><h2>{{ customer.display_name or 'مشتری وب‌سایت' }}</h2>
+<p>شناسه: <bdi dir="ltr">{{ customer.id }}</bdi></p>
+<p>وضعیت: {{ 'فعال' if customer.state == 'active' else 'مسدود' }}؛ تعداد سرویس: <bdi dir="ltr">{{ customer.service_count | num }}</bdi></p></article>
+{% else %}<p role="status">مشتری وب‌سایتی در این صفحه وجود ندارد.</p>{% endfor %}
+{% if next_after %}<a class="btn" href="/integrations/{{ integration_id }}/customers?after={{ next_after }}">صفحه بعد</a>{% endif %}
+</section>
+{% endblock %}

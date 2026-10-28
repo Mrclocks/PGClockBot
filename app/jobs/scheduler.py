@@ -12,6 +12,8 @@ from app.db.models import BotUser, ResellerProfile, UserService
 from app.db.session import SessionLocal
 from app.jobs.bot_profile_photo import run_bot_profile_photo_sync
 from app.jobs.cancellation_notifications import run_cancellation_notifications
+from app.jobs.integration_operations import run_integration_operations, run_integration_webhooks
+from app.jobs.integration_audit import run_integration_audit_retention, run_integration_security_retention
 from app.jobs.chat_message_purge import run_chat_message_purge
 from app.jobs.connection_status import run_connection_status
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
@@ -109,6 +111,8 @@ async def check_expiring_services(bot: Bot) -> None:
             svc_q = (
                 select(UserService)
                 .where(
+                    UserService.integration_id.is_(None),
+                    UserService.bot_user_id.is_not(None),
                     UserService.subscription_token.is_not(None),
                     or_(
                         UserService.notified_expire.is_(False),
@@ -816,6 +820,10 @@ def start_background_scheduler() -> None:
     jobs = (
         ("billing_tick", run_reseller_billing_tick, {"minutes": 1}, 120),
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
+        ("integration_operations", run_integration_operations, {"seconds": 10}, 30),
+        ("integration_webhooks", run_integration_webhooks, {"seconds": 10}, 30),
+        ("integration_security_retention", run_integration_security_retention, {"minutes": 5}, 300),
+        ("integration_audit_retention", run_integration_audit_retention, {"hours": 1}, 3600),
         ("pending_order_cleanup", cleanup_stale_pending_orders, {"hours": 1}, 3600),
         ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),
         ("connection_status", run_connection_status, {"seconds": 60}, 60),

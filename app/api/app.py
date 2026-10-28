@@ -28,7 +28,11 @@ from app.db.models import (
     ResellerProfile,
     Role,
 )
+from app.api.integration_api import register_integration_api
+from app.api.integration_customer_pages import register_integration_customer_pages
+from app.api.integration_management_pages import register_integration_management_pages
 from app.db.session import SessionLocal
+from app.services.customer_identity import set_legacy_customer_blocked
 from app.services.orders import (
     approve_payment,
     cancel_order,
@@ -1537,6 +1541,9 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
     register_connection_status_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_integration_customer_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_integration_api(app, get_db=get_db)
+    register_integration_management_pages(app, render=render, require_staff=require_staff, get_db=get_db, get_signer=get_signer)
 
     @app.get("/settings/ssl/progress")
     async def ssl_progress(staff: dict = Depends(require_admin)):
@@ -3861,7 +3868,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if is_protected_admin(user):
             return _redirect_msg("/users", err="مسدود کردن ادمین مجاز نیست")
         will_block = not user.is_blocked
-        user.is_blocked = will_block
+        await set_legacy_customer_blocked(session, user, blocked=will_block)
         await session.commit()
         await notify_account_edit(
             session,

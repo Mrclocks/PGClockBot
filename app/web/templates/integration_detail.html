@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% macro confirmation(message) %}
+<div class="checks"><label><input type="checkbox" name="confirm" value="yes" required> {{ message }}</label></div>
+{% endmacro %}
+{% macro fields(ticket) %}
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="ticket" value="{{ ticket }}">
+{% endmacro %}
+{% block title %}مدیریت یکپارچه‌سازی{% endblock %}
+{% block content %}
+{% set item = page.integration %}
+<div class="page-head"><h1>مدیریت یکپارچه‌سازی</h1><div class="actions"><a class="btn btn-ghost" href="/integrations">فهرست</a><a class="btn btn-ghost" href="/integrations/{{ item.id }}/audit">تاریخچه مدیریت</a></div></div>
+<p class="flash warn" role="note">رابط عمومی هنوز آماده استفاده نیست. فعال‌کردن این یکپارچه‌سازی به معنی فعال‌شدن رابط عمومی نیست.</p>
+<section class="card" aria-labelledby="identity-title">
+  <h2 id="identity-title">شناسه و مالکیت ثابت</h2>
+  <a class="btn btn-ghost" href="/integrations/{{ item.id }}/operations">عملیات و وب‌هوک</a>
+  <a class="btn btn-ghost" href="/integrations/{{ item.id }}/customers">مشتریان وب‌سایت</a>
+  <p><bdi dir="ltr">{{ item.id }}</bdi></p>
+  <p>شناسه مالک: <bdi dir="ltr">{{ item.owner_principal_id | num }}</bdi>؛ فروشگاه: {% if item.shop.shop_id %}<bdi dir="ltr">{{ item.shop.shop_id | num }}</bdi>{% else %}فروشگاه اصلی{% endif %}</p>
+</section>
+<section class="card" aria-labelledby="configure-title">
+  <h2 id="configure-title">وضعیت و دسترسی‌ها</h2>
+  <p class="muted">بازنشستگی دائمی است و امکان فعال‌سازی دوباره ندارد. حذف دسترسی، اعتبارنامه‌های قبلی را محدود می‌کند.</p>
+  <form method="post" action="/integrations/{{ item.id }}/configure" class="form-stack">
+    {{ fields(tickets.configure) }}
+    <label class="form-field" for="integration-status">وضعیت<select id="integration-status" name="status">{% for value in ['disabled', 'active', 'retired'] %}<option value="{{ value }}" {% if value == item.status %}selected{% endif %} {% if item.status == 'retired' and value != 'retired' %}disabled{% endif %}>{{ status_labels[value] }}</option>{% endfor %}</select></label>
+    <label class="form-field" for="customer-entry-policy">ثبت مشتری از وب‌سایت<select id="customer-entry-policy" name="customer_entry_policy"><option value="denied" {% if item.customer_entry_policy == 'denied' %}selected{% endif %}>غیرمجاز</option><option value="website" {% if item.customer_entry_policy == 'website' %}selected{% endif %}>تأیید ثبت از وب‌سایت</option></select></label>
+    <p class="muted">این تأیید فقط برای همین یکپارچه‌سازی و فروشگاه است؛ تأیید شماره تماس تلگرام محسوب نمی‌شود. وب‌سایت مسئول ورود و احراز هویت مشتری است.</p>
+    <label class="form-field" for="integration-scopes">دسترسی‌های مجاز<textarea id="integration-scopes" name="scopes" dir="ltr" maxlength="512" rows="4" aria-describedby="scope-help">{{ item.grants | sort | join(' ') }}</textarea></label>
+    <p id="scope-help" class="muted">شناسه دسترسی‌ها را با فاصله جدا کنید. خالی‌گذاشتن یعنی هیچ دسترسی تجاری مجاز نیست.</p>
+    <details><summary>دسترسی‌های قابل انتخاب برای حساب فعلی</summary><ul>{% for scope in grant_choices %}<li>{{ scope_labels[scope] }}: <bdi dir="ltr">{{ scope }}</bdi></li>{% endfor %}</ul></details>
+    {{ confirmation('تغییر وضعیت و جایگزینی کامل دسترسی‌ها را تأیید می‌کنم؛ انتخاب بازنشسته برگشت‌پذیر نیست.') }}
+    <button class="btn" type="submit">ذخیره وضعیت و دسترسی‌ها</button>
+  </form>
+</section>
+<section class="card" aria-labelledby="plans-title">
+  <h2 id="plans-title">پلن‌های مجاز</h2>
+  <form method="post" action="/integrations/{{ item.id }}/plans" class="form-stack">
+    {{ fields(tickets.plans) }}
+    <label class="form-field" for="integration-plans">شناسه همه پلن‌های انتخاب‌شده<textarea id="integration-plans" name="plan_ids" dir="ltr" maxlength="1100" rows="3" aria-describedby="plan-help">{{ page.selected_plan_ids | join(' ') }}</textarea></label>
+    <p id="plan-help" class="muted">حداکثر ۱۰۰ شناسه را با فاصله جدا کنید. ذخیره، فهرست قبلی را کامل جایگزین می‌کند؛ خالی یعنی هیچ پلنی مجاز نیست. پلن باید فعال، غیرآزمایشی و متعلق به همین فروشگاه باشد.</p>
+    {{ confirmation('جایگزینی کامل فهرست پلن‌های مجاز را تأیید می‌کنم.') }}
+    <button class="btn" type="submit">ذخیره پلن‌های مجاز</button>
+  </form>
+  <h3>پلن‌های قابل انتخاب</h3>
+  <ul>{% for plan in page.available_plans %}<li><bdi dir="ltr">{{ plan.id | num }}</bdi> — {{ plan.name }}</li>{% else %}<li>پلن مجازی در این صفحه وجود ندارد.</li>{% endfor %}</ul>
+  {% if page.available_plans | length == page_size %}<a class="btn btn-ghost" href="/integrations/{{ item.id }}?plan_after={{ page.available_plans[-1].id }}">صفحه بعد پلن‌ها</a>{% endif %}
+</section>
+{% if item.status != 'retired' %}
+<section class="card" aria-labelledby="issue-title">
+  <h2 id="issue-title">صدور اعتبارنامه جدید</h2>
+  <p class="muted">کلید فقط یک‌بار در پاسخ خصوصی نمایش داده می‌شود. ارسال مجدد همان فرم کلید دیگری نمی‌سازد. در صورت گم‌شدن پاسخ، شناسه را در فهرست بررسی و باطل کنید؛ سپس فرم تازه‌ای بگیرید.</p>
+  <form method="post" action="/integrations/{{ item.id }}/issue" class="form-stack">
+    {{ fields(tickets.issue) }}
+    <label class="form-field" for="credential-scopes">دسترسی‌های اعتبارنامه<textarea id="credential-scopes" name="scopes" dir="ltr" maxlength="512" rows="3" aria-describedby="credential-scope-help"></textarea></label>
+    <p id="credential-scope-help" class="muted">خالی، پیش‌فرض است. فقط زیرمجموعه دسترسی‌های یکپارچه‌سازی با شناسه‌های بالا مجاز است.</p>
+    <label class="form-field" for="credential-lifetime">اعتبار به روز<input id="credential-lifetime" name="lifetime_days" type="number" min="1" max="365" value="90" required dir="ltr"></label>
+    {{ confirmation('نمایش یک‌باره کلید و مسئولیت نگهداری خصوصی آن در سرور وب‌سایت را تأیید می‌کنم.') }}
+    <button class="btn" type="submit">صدور و نمایش خصوصی کلید</button>
+  </form>
+</section>
+{% endif %}
+<section class="card" aria-labelledby="credentials-title">
+  <h2 id="credentials-title">مشخصات غیرمحرمانه اعتبارنامه‌ها</h2>
+  {% for key in page.credentials %}
+  <article class="card">
+    <h3><bdi dir="ltr">{{ key.selector }}</bdi></h3>
+    <p>{{ status_labels[key.status] }}؛ پایان اعتبار: <bdi dir="ltr">{{ key.expires_at.isoformat() | expire }}</bdi>{% if key.rotated_at %}؛ جایگزین شده{% endif %}</p>
+    <p>دسترسی‌ها: {% for scope in key.scopes | sort %}{{ scope_labels[scope] }}{% if not loop.last %}، {% endif %}{% else %}فقط مشاهده قابلیت‌ها{% endfor %}</p>
+    {% if key.status == 'active' %}
+    {% if item.status != 'retired' and not key.rotated_at %}
+    <details><summary>جایگزینی این اعتبارنامه</summary>
+      <form method="post" action="/integrations/{{ item.id }}/credentials/{{ key.selector }}/rotate" class="form-stack">
+        {{ fields(credential_tickets[key.selector].rotate) }}
+        <label class="form-field" for="lifetime-{{ key.selector }}">اعتبار کلید جدید به روز<input id="lifetime-{{ key.selector }}" name="lifetime_days" type="number" min="1" max="365" value="90" required dir="ltr"></label>
+        <label class="form-field" for="overlap-{{ key.selector }}">هم‌پوشانی کلید قبلی به دقیقه<input id="overlap-{{ key.selector }}" name="overlap_minutes" type="number" min="0" max="1440" value="0" required dir="ltr"></label>
+        {{ confirmation('کلید قبلی پس از هم‌پوشانی (پیش‌فرض فوری، حداکثر ۲۴ ساعت) از کار می‌افتد و کلید جدید فقط یک‌بار نمایش داده می‌شود؛ تأیید می‌کنم.') }}
+        <button class="btn" type="submit">جایگزینی و نمایش خصوصی کلید</button>
+      </form>
+    </details>
+    {% endif %}
+    <form method="post" action="/integrations/{{ item.id }}/credentials/{{ key.selector }}/revoke" class="form-stack">
+      {{ fields(credential_tickets[key.selector].revoke) }}
+      {{ confirmation('ابطال فوری و دائمی همین اعتبارنامه را تأیید می‌کنم. کلید جایگزین مستقل است.') }}
+      <button class="btn btn-danger" type="submit">ابطال اعتبارنامه</button>
+    </form>
+    {% endif %}
+  </article>
+  {% else %}<p class="muted">اعتبارنامه‌ای در این صفحه وجود ندارد.</p>{% endfor %}
+  {% if page.credentials | length == page_size %}<a class="btn btn-ghost" href="/integrations/{{ item.id }}?credential_after={{ page.credentials[-1].selector }}">صفحه بعد اعتبارنامه‌ها</a>{% endif %}
+</section>
+{% endblock %}
