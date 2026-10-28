@@ -22,6 +22,7 @@ from app.db.models import (
     ResellerProfile,
     UserService,
 )
+from app.services.custom_plans import exclude_custom_order_plans
 from app.services.pasarguard import as_list, get_pg
 from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
 from app.services.shop_scope import ShopScopeError, is_platform_admin, shop_owner_id
@@ -302,7 +303,9 @@ async def list_catalog_plans(
     *,
     include_trial: bool = True,
 ) -> list[Plan]:
-    q = apply_catalog_owner_filter(select(Plan), staff).order_by(Plan.sort_order, Plan.id)
+    q = exclude_custom_order_plans(apply_catalog_owner_filter(select(Plan), staff)).order_by(
+        Plan.sort_order, Plan.id
+    )
     plans = list((await session.execute(q)).scalars().all())
     if not include_trial:
         plans = [p for p in plans if not p.is_trial]

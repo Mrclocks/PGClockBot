@@ -19,6 +19,7 @@ from app.bot.handlers.admin_settings import CUSTOM_PRICE
 from app.config import get_settings
 from app.db.models import BotUser, Plan, ResellerPlan
 from app.services.billing import PaygRateError, require_positive_payg_rate
+from app.services.custom_plans import exclude_custom_order_plans
 from app.services.orders import parse_wholesale_tiers, wholesale_description
 from app.services.pasarguard import get_pg
 from app.services.resellers import (
@@ -264,7 +265,7 @@ async def users_plans_overview_view(session: AsyncSession, page_index: int = 0) 
     from app.bot.nav_inline import admin_plans_audience_keyboard
 
     ui = await get_all_settings(session)
-    result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
+    result = await session.execute(exclude_custom_order_plans(select(Plan)).order_by(Plan.sort_order, Plan.id))
     plans = list(result.scalars().all())
     fixed = [p for p in plans if not p.is_trial]
     trial = [p for p in plans if p.is_trial][:1]
@@ -372,7 +373,9 @@ async def users_fixed_list_view(session: AsyncSession, page_index: int = 0) -> t
     from app.bot.handlers.admin import _plan_line  # admin imports this module
 
     ui = await get_all_settings(session)
-    result = await session.execute(select(Plan).where(Plan.is_trial.is_(False)).order_by(Plan.sort_order, Plan.id))
+    result = await session.execute(
+        exclude_custom_order_plans(select(Plan).where(Plan.is_trial.is_(False))).order_by(Plan.sort_order, Plan.id)
+    )
     page = page_of(list(result.scalars().all()), page_index, USER_PLANS_PAGE_SIZE)
     if not page.total:
         text = "📦 <b>پلن ثابت</b>\n\nهنوز پلن ثابتی ثبت نشده است."
