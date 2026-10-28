@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 from urllib.parse import quote
@@ -66,6 +67,8 @@ async def _miniapp_switch_context(session: AsyncSession, profile: ResellerProfil
         "miniapp_url": shop_miniapp_url(profile.miniapp_key or ""),
     }
 
+
+logger = logging.getLogger(__name__)
 
 def register_shop_settings(app, *, render, require_staff, get_db, require_shop_settings=None):
     allowed_tabs = {t[0] for t in RESELLER_SETTINGS_TABS}
@@ -570,22 +573,23 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         session: AsyncSession = Depends(get_db),
     ):
         if _is_owner_settings_actor(staff):
-            return RedirectResponse("/finance?tab=orders&settings=payment", status_code=303)
+            return RedirectResponse("/finance?tab=orders&settings=cleanup", status_code=303)
         rid = _rid(staff)
         if not rid:
             return _deny_scope()
         from app.services.orders import cancel_stale_pending_for_settings
 
-        fallback = "/finance?tab=orders&settings=payment"
+        fallback = "/finance?tab=orders&settings=cleanup"
         try:
             n = await cancel_stale_pending_for_settings(
                 session, reseller_id=int(rid), force=True
             )
-        except Exception as e:
+        except Exception:
+            logger.exception("manual pending order cancel failed shop=%s", rid)
             dest = _safe_next(request, fallback)
             sep = "&" if "?" in dest else "?"
             return RedirectResponse(
-                f"{dest}{sep}err={quote(str(e)[:200])}",
+                f"{dest}{sep}err={quote('لغو سفارش‌ها ناموفق بود. لاگ سرور را بررسی کنید.')}",
                 status_code=303,
             )
         msg = f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود"

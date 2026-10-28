@@ -71,6 +71,7 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
 # Legacy shop-settings tabs moved to page modals
 SHOP_SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
     "payment": "/finance?tab=orders&settings=payment",
+    "cleanup": "/finance?tab=orders&settings=cleanup",
     "supports": "/tickets?supports=1",
     "loyalty": "/loyalty?settings=referral",
     "forcejoin": "/shop-settings?tab=limits",

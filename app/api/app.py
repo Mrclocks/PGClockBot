@@ -4461,10 +4461,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             n = await cancel_stale_pending_for_settings(
                 session, reseller_id=None, force=True
             )
-        except Exception as e:
-            dest = _settings_next(request, "/finance?tab=orders&settings=payment")
-            return _redirect_msg(dest, err=f"لغو سفارش‌ها ناموفق: {e}")
-        dest = _settings_next(request, "/finance?tab=orders&settings=payment")
+        except Exception:
+            logging.getLogger(__name__).exception("manual pending order cancel failed")
+            dest = _settings_next(request, "/finance?tab=orders&settings=cleanup")
+            return _redirect_msg(dest, err="لغو سفارش‌ها ناموفق بود. لاگ سرور را بررسی کنید.")
+        dest = _settings_next(request, "/finance?tab=orders&settings=cleanup")
         return _redirect_msg(
             dest,
             ok=f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود",

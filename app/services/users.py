@@ -812,6 +812,9 @@ DEFAULT_SETTINGS = {
     "pending_order_cleanup_enabled": "0",
     "pending_order_ttl_hours": "48",
     "pending_order_cleanup_awaiting_approval": "0",
+    "pending_order_approval_ttl_hours": "72",
+    "pending_order_cleanup_last_run": "",
+    "pending_order_cleanup_last_count": "0",
     "card_pay_text": (
         "مبلغ قابل پرداخت: <b>{amount}</b>\n"
         "شماره کارت: <code>{card}</code>\n"
@@ -1181,6 +1184,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
 SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
     "payment": "/finance?tab=orders&settings=payment",
     "billing": "/finance?tab=orders&settings=billing",
+    "cleanup": "/finance?tab=orders&settings=cleanup",
     "finance": "/finance?tab=orders&settings=payment",
     "supports": "/tickets?supports=1",
     "loyalty": "/loyalty?settings=referral",
@@ -1606,21 +1610,27 @@ SETTING_GROUPS = {
     "پاکسازی سفارش‌های معلق": [
         (
             "pending_order_cleanup_enabled",
-            "حذف خودکار سفارش‌های معلق",
+            "لغو خودکار سفارش‌های معلق",
             "toggle",
-            "سفارش‌های پرداخت‌نشده قدیمی به‌صورت خودکار لغو شوند",
+            "هر ساعت سفارش‌های پرداخت‌نشده‌ای که از مهلت گذشته‌اند لغو می‌شوند",
         ),
         (
             "pending_order_ttl_hours",
-            "سن لغو (ساعت)",
+            "مهلت سفارش پرداخت‌نشده (ساعت)",
             "number",
-            "سفارش‌های قدیمی‌تر از این مقدار لغو می‌شوند (۱ تا ۷۲۰)",
+            "سفارش‌های در انتظار پرداخت یا رسید که قدیمی‌تر از این مقدار باشند لغو می‌شوند (۱ تا ۷۲۰)",
         ),
         (
             "pending_order_cleanup_awaiting_approval",
-            "شامل منتظر تأیید رسید",
+            "لغو سفارش‌های منتظر تأیید رسید",
             "toggle",
-            "اگر روشن باشد، سفارش‌های awaiting_approval هم بعد از TTL لغو می‌شوند",
+            "مشتری رسید فرستاده و منتظر تأیید ادمین است؛ فقط اگر بخواهید بعد از مهلت جداگانهٔ زیر لغو شود روشن کنید",
+        ),
+        (
+            "pending_order_approval_ttl_hours",
+            "مهلت سفارش منتظر تأیید (ساعت)",
+            "number",
+            "فقط وقتی گزینهٔ بالا روشن است اعمال می‌شود (۱ تا ۷۲۰)",
         ),
     ],
     "کارت به کارت": [
@@ -1906,7 +1916,6 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "استارز تلگرام",
         "متن دکمه‌های پرداخت",
         "حالت تعمیرات و رسید",
-        "پاکسازی سفارش‌های معلق",
     ],
     "supports": ["متن پشتیبانی ربات"],
     "loyalty": ["متن دعوت دوستان"],
@@ -1927,6 +1936,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "forcejoin": ["کانال اجباری"],
     "terms": ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"],
     "billing": ["مدیریت PAYG"],
+    "cleanup": ["پاکسازی سفارش‌های معلق"],
     "notifications": ["هشدار سرویس کاربر", "گزارش و عملیات"],
     "daily_report": ["گزارش روزانه"],
     "backup": ["بکاپ زمان‌بندی", "ارسال بکاپ به تلگرام"],

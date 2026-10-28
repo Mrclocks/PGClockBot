@@ -16,6 +16,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.services.custom_plans import discard_unsold_custom_plan
+from app.services.stale_order_cleanup import (
+    StaleOrderPolicy,
+    cancellable_statuses,
+    clamp_hours,
+    policy_from_settings,
+    record_cleanup_run,
+    scope_to_shop,
+    stale_orders_clause,
+)
 from app.services.catalog_pricing import PriceTarget, active_discounts, annotate_prices, assert_expected_price, displayed_quote, quote_price, quote_product, sale_price
 from app.db.models import (
     BotUser,
@@ -1429,49 +1438,35 @@ def stars_amount_for_toman(amount_toman: int, toman_per_star: int) -> int:
     return max(1, (int(amount_toman) + rate - 1) // rate)
 
 
-_STALE_PENDING_BASE = frozenset(
-    {
-        OrderStatus.PENDING.value,
-        OrderStatus.AWAITING_RECEIPT.value,
-        OrderStatus.REJECTED.value,
-    }
-)
-
-
 async def cancel_stale_pending_orders(
     session: AsyncSession,
     *,
     older_than_hours: int,
     reseller_id: int | None = None,
     include_awaiting_approval: bool = False,
+    approval_older_than_hours: int | None = None,
     limit: int = 500,
 ) -> int:
     """Cancel unpaid/abandoned orders older than TTL. Returns count cancelled.
 
     Uses CANCELLED (not REJECTED) so orders leave the payable set and cannot be
-    completed later. Concurrent approve/pay wins via conditional UPDATE.
+    completed later. Concurrent approve/pay wins via conditional UPDATE. Orders
+    waiting for receipt approval use ``approval_older_than_hours`` (default: the same TTL).
     """
-    from datetime import datetime, timedelta, timezone
-
-    hours = max(1, min(720, int(older_than_hours or 1)))
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-    statuses = set(_STALE_PENDING_BASE)
+    hours = clamp_hours(older_than_hours, 1)
+    approval_hours = None
     if include_awaiting_approval:
-        statuses.add(OrderStatus.AWAITING_APPROVAL.value)
+        approval_hours = clamp_hours(approval_older_than_hours or hours, hours)
+    policy = StaleOrderPolicy(hours=hours, approval_hours=approval_hours)
+    statuses = cancellable_statuses(policy)
 
     q = (
         select(Order)
-        .where(
-            Order.status.in_(tuple(statuses)),
-            Order.created_at < cutoff,
-        )
+        .where(stale_orders_clause(policy))
         .order_by(Order.id.asc())
         .limit(max(1, min(2000, int(limit or 500))))
     )
-    if reseller_id is None:
-        q = q.where(Order.reseller_id.is_(None))
-    else:
-        q = q.where(Order.reseller_id == int(reseller_id))
+    q = scope_to_shop(q, reseller_id)
 
     orders = list((await session.execute(q)).scalars().all())
     cancelled = 0
@@ -1532,23 +1527,23 @@ async def cancel_stale_pending_for_settings(
     reseller_id: int | None = None,
     force: bool = False,
 ) -> int:
-    """Read shop/platform settings and cancel stale pending orders."""
+    """Read shop/platform settings, cancel stale pending orders and record the run."""
     from app.services.users import get_all_settings, on
 
     ui = await get_all_settings(session, reseller_id=reseller_id)
     if not force and not on(ui.get("pending_order_cleanup_enabled", "0")):
         return 0
-    try:
-        hours = int(float(ui.get("pending_order_ttl_hours") or "48"))
-    except (TypeError, ValueError):
-        hours = 48
-    include_aa = on(ui.get("pending_order_cleanup_awaiting_approval", "0"))
-    return await cancel_stale_pending_orders(
+    policy = policy_from_settings(ui)
+    cancelled = await cancel_stale_pending_orders(
         session,
-        older_than_hours=hours,
+        older_than_hours=policy.hours,
         reseller_id=reseller_id,
-        include_awaiting_approval=include_aa,
+        include_awaiting_approval=policy.approval_hours is not None,
+        approval_older_than_hours=policy.approval_hours,
     )
+    await record_cleanup_run(session, cancelled=cancelled, reseller_id=reseller_id)
+    return cancelled
+
 
 async def attach_receipt(
     session: AsyncSession, payment: Payment, file_id: str, *, first_only: bool = False

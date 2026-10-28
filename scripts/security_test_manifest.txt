@@ -276,3 +276,4 @@ tests/test_user_card.py
 tests/test_user_photo.py
 tests/test_custom_plan_shop_limits.py
 tests/test_custom_plan_cleanup.py
+tests/test_stale_order_cleanup_tab.py
