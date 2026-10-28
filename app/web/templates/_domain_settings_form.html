@@ -1,6 +1,6 @@
 {# Shared settings groups inside a domain modal panel.
    Expects: settings_form_action, tab_groups, groups, values
-   Optional: show_pending_orders, pending_orders_action
+   Optional: show_pending_orders, pending_orders_action, show_cleanup_status (+ cleanup_status)
 #}
 {% set pay_settings_gate = {
   'کارت به کارت': 'pay_card_enabled',
@@ -13,6 +13,9 @@
 } %}
 {% set _pay_on = ['1', 'true', 'yes', 'on'] %}
 <div class="settings-domain-stack">
+{% if show_cleanup_status and cleanup_status %}
+  {% include "_settings_cleanup_status.html" %}
+{% endif %}
 <form method="post" action="{{ settings_form_action }}" enctype="multipart/form-data" class="settings-form">
   {% for group_name in tab_groups %}
   {% set fields = groups[group_name] %}

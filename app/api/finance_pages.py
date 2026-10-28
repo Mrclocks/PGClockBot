@@ -25,6 +25,7 @@ from app.services.list_query import (
 )
 from app.services.receipt_files import fetch_telegram_file, payment_bot_token
 from app.services.shop_scope import is_platform_admin, payment_shop_id, shop_owner_id
+from app.services.stale_order_cleanup import cleanup_status
 from app.services.stuck_order_resolution import describe_stuck_orders
 from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
 
@@ -144,11 +145,13 @@ def register_finance_pages(app, *, render, require_staff, get_db):
 
         search_q = normalize_search_q(request.query_params.get("q"))
         open_settings = (request.query_params.get("settings") or "").strip()
-        if open_settings not in {"payment", "billing"}:
+        if open_settings not in {"payment", "billing", "cleanup"}:
             open_settings = ""
         if open_settings == "billing" and not can_billing_settings:
             open_settings = "payment" if can_finance_settings else ""
         if open_settings and not can_finance_settings:
+            open_settings = ""
+        if open_settings == "cleanup" and staff.get("role") != "admin" and not can_shop(authz, "shop_settings"):
             open_settings = ""
 
         ctx: dict = {
@@ -185,6 +188,10 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "payment_settings_action": "",
             "billing_settings_action": "",
             "finance_pending_action": "",
+            "cleanup_tab_groups": [],
+            "cleanup_groups": {},
+            "cleanup_settings_action": "",
+            "cleanup_status": None,
             "receipt_matches": {},
             "report": {},
             "report_period": report_period,
@@ -204,6 +211,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             ctx["payment_groups"] = pay_groups
             ctx["billing_tab_groups"] = bill_groups_names
             ctx["billing_groups"] = bill_groups
+            clean_groups_names, clean_groups = _groups_for_tab("cleanup")
+            ctx["cleanup_tab_groups"] = clean_groups_names
+            ctx["cleanup_groups"] = clean_groups
             next_base = f"/finance?tab={tab}"
             if is_platform_admin(staff):
                 ctx["values"] = await get_all_settings(session)
@@ -213,10 +223,14 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 ctx["billing_settings_action"] = (
                     f"/settings?tab=billing&next={quote(next_base + '&settings=billing')}"
                 )
+                ctx["cleanup_settings_action"] = (
+                    f"/settings?tab=cleanup&next={quote(next_base + '&settings=cleanup')}"
+                )
                 ctx["finance_pending_action"] = (
                     "/settings/cancel-pending-orders?next="
-                    + quote(next_base + "&settings=payment")
+                    + quote(next_base + "&settings=cleanup")
                 )
+                ctx["cleanup_status"] = await cleanup_status(session, ctx["values"], reseller_id=None)
             else:
                 rid = shop_owner_id(staff)
                 if rid:
@@ -226,9 +240,15 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                     )
                     ctx["can_billing_settings"] = False
                     ctx["can_pending_orders"] = True
+                    ctx["cleanup_settings_action"] = (
+                        f"/shop-settings?tab=cleanup&next={quote(next_base + '&settings=cleanup')}"
+                    )
                     ctx["finance_pending_action"] = (
                         "/shop-settings/cancel-pending-orders?next="
-                        + quote(next_base + "&settings=payment")
+                        + quote(next_base + "&settings=cleanup")
+                    )
+                    ctx["cleanup_status"] = await cleanup_status(
+                        session, ctx["values"], reseller_id=int(rid)
                     )
                 # else: leave values={} — fail-closed / degraded, no Owner fallback
 
