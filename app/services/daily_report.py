@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.demo_users import non_demo_customer
+
 from app.db.models import BotUser, UserService
 from app.services.home_overview import bot_panel_summary, reseller_shop_summary
 from app.services.safe_format import safe_format
@@ -448,16 +450,14 @@ async def _today_activity(session: AsyncSession, *, reseller_id: int | None) -> 
         svc_q = (
             select(func.count())
             .select_from(UserService)
-            .join(BotUser, BotUser.id == UserService.bot_user_id)
-            .where(UserService.created_at >= since, shop_services_clause(None), BotUser.is_demo.is_(False))
+            .where(UserService.created_at >= since, shop_services_clause(None), non_demo_customer(UserService.bot_user_id))
         )
     else:
         rid = int(reseller_id)
         svc_q = (
             select(func.count())
             .select_from(UserService)
-            .join(BotUser, BotUser.id == UserService.bot_user_id)
-            .where(UserService.created_at >= since, shop_services_clause(rid), BotUser.is_demo.is_(False))
+            .where(UserService.created_at >= since, shop_services_clause(rid), non_demo_customer(UserService.bot_user_id))
         )
     services_new = int((await session.execute(svc_q)).scalar() or 0)
     return {

@@ -15,6 +15,7 @@ from app.jobs import scheduler as jobs
 
 
 OPERATIONS = {
+    "integration_operations",
     "billing_tick",
     "pg_admin_subscription",
     "pending_order_cleanup",

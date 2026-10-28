@@ -539,8 +539,7 @@ async def reseller_shop_summary(
     services_expr = (
         select(func.count())
         .select_from(UserService)
-        .join(BotUser, BotUser.id == UserService.bot_user_id)
-        .where(shop_services_clause(rid), BotUser.is_demo.is_(False))
+        .where(shop_services_clause(rid), non_demo_customer(UserService.bot_user_id))
         .scalar_subquery()
     )
     revenue_expr = (

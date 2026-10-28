@@ -12,6 +12,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.customer_retention import assert_legacy_user_deletable
+from app.services.customer_identity import adapt_legacy_user
+from app.services.integration_runtime import observe_committed_integration_settings, observe_execution_history
 from app.config import get_settings
 from app.db.models import BotUser, Order, Role, Setting, UserService
 from app.services.button_styles import default_settings as button_style_defaults
@@ -521,6 +524,7 @@ async def get_or_create_user(
     )
     session.add(user)
     try:
+        await adapt_legacy_user(session, user)
         await session.commit()
     except IntegrityError:
         await session.rollback()
@@ -643,6 +647,7 @@ async def set_setting(
     await session.commit()
     # Only invalidate platform cache — do not flush isolated shop caches
     clear_settings_cache(0)
+    observe_committed_integration_settings(writes)
 
 
 async def _keep_saved_psp_credentials(
@@ -731,9 +736,11 @@ async def set_settings_bulk(
             session.add(Setting(key=key, value=value))
     await session.commit()
     clear_settings_cache(0)
+    observe_committed_integration_settings(values)
 
 
 DEFAULT_SETTINGS = {
+    "integration_api_enabled": "0",
     "shop_title": "کلاک بات",
     "welcome_text": (
         "سلام {name} 👋\n\n"
@@ -2004,6 +2011,7 @@ async def ensure_default_settings(session: AsyncSession) -> None:
         return
     result = await session.execute(select(Setting.key))
     existing = {row[0] for row in result.all()}
+    observe_execution_history(existing)
     missing = False
     for key, value in DEFAULT_SETTINGS.items():
         if key not in existing:
@@ -2121,6 +2129,7 @@ async def delete_bot_user(
     if is_protected_admin(user):
         raise ValueError("حذف ادمین مجاز نیست")
 
+    await assert_legacy_user_deletable(session, user_id)
     telegram_id = user.telegram_id
     name = user.full_name or user.username or str(telegram_id)
 

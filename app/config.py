@@ -148,6 +148,11 @@ class Settings(BaseSettings):
     # reverse proxy (e.g. nginx) directly in front of the app.
     trust_proxy_hops: int = Field(default=1, alias="TRUST_PROXY_HOPS")
 
+    integration_webhooks_enabled: bool = Field(default=False, alias="INTEGRATION_WEBHOOKS_ENABLED")
+    integration_execution_enabled: bool = Field(default=False, alias="INTEGRATION_EXECUTION_ENABLED")
+    integration_api_routes_enabled: bool = Field(default=False, alias="INTEGRATION_API_ROUTES_ENABLED")
+    integration_trusted_proxies: str = Field(default="", alias="INTEGRATION_TRUSTED_PROXIES")
+
     currency: str = Field(default="تومان", alias="CURRENCY")
     default_locale: str = Field(default="fa", alias="DEFAULT_LOCALE")
     # Preferred update channel for checks/deploy (dropdown). Not the header badge.

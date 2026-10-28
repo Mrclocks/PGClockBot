@@ -34,6 +34,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.customer_identity import optional_legacy_customer
 from app.config import get_settings
 from app.db.models import BotUser, ResellerProfile, ServiceImportAttempt, UserService
 from app.py_compat import StrEnum
@@ -453,6 +454,7 @@ async def attach_verified(
     )
     service = UserService(
         bot_user_id=user.id,
+        customer_id=await optional_legacy_customer(session, user.id),
         pg_user_id=verified.panel_id,
         pg_username=str(verified.record.get("username") or "")[:128],
         subscription_url=sub_url,
