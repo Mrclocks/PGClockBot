@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.custom_plans import discard_unsold_custom_plan
 from app.services.catalog_pricing import PriceTarget, active_discounts, annotate_prices, assert_expected_price, displayed_quote, quote_price, quote_product, sale_price
 from app.db.models import (
     BotUser,
@@ -1944,6 +1945,7 @@ async def reject_payment(
         if rejected_order is not None:
             await _release_order_discount(session, rejected_order)
             await _release_trial_claim_for_order(session, rejected_order)
+            await discard_unsold_custom_plan(session, rejected_order)
     await session.commit()
     await _sync_payment_review_messages(session, payment_id, bot=bot)
 
@@ -2017,6 +2019,7 @@ async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -
         else:
             await _release_discount_code(session, order.discount_code, order=order)
     await _release_trial_claim_for_order(session, order)
+    await discard_unsold_custom_plan(session, order)
     if (order.note or "").startswith("reseller_app:"):
         from app.services.resellers import cancel_application_for_order
 
