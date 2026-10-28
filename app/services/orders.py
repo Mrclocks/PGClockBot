@@ -1508,6 +1508,7 @@ async def cancel_stale_pending_orders(
                 await _release_discount_code(session, order.discount_code, order=order)
         # Always attempt trial release (create_order never sets note="trial:…").
         await _release_trial_claim_for_order(session, order)
+        await discard_unsold_custom_plan(session, order)
         # Unblock reseller apply if this was an unpaid agency checkout.
         if (order.note or "").startswith("reseller_app:"):
             from app.services.resellers import cancel_application_for_order

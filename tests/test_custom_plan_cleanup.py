@@ -8,7 +8,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.models import Base, BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan
-from app.services.orders import cancel_order, reject_payment
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import update
+
+from app.services.orders import cancel_order, cancel_stale_pending_orders, reject_payment
 from app.services.plans_catalog import list_catalog_plans
 
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
@@ -60,6 +64,18 @@ class CustomPlanCleanupTests(unittest.IsolatedAsyncioTestCase):
         await reject_payment(self.session, payment, reviewer_tg=7)
         self.assertEqual(await self._plan_ids(), [1])
         self.assertEqual(await self.session.scalar(select(func.count(Order.id))), 1)
+
+    async def test_stale_pending_cleanup_drops_only_stale_unpaid_custom_plans(self) -> None:
+        stale = await self._custom_order(2, OrderStatus.PENDING.value)
+        fresh = await self._custom_order(3, OrderStatus.PENDING.value)
+        paid = await self._custom_order(4, OrderStatus.PAID.value)
+        old = datetime.now(timezone.utc) - timedelta(hours=100)
+        await self.session.execute(update(Order).where(Order.id.in_([stale.id, paid.id])).values(created_at=old))
+        await self.session.commit()
+        cancelled = await cancel_stale_pending_orders(self.session, older_than_hours=48)
+        self.assertEqual(cancelled, 1)
+        self.assertEqual(await self._plan_ids(), [1, 3, 4])
+        self.assertEqual(await self.session.scalar(select(Order.status).where(Order.id == fresh.id)), "pending")
 
     async def test_plan_shared_with_another_order_is_kept(self) -> None:
         order = await self._custom_order(2, OrderStatus.PENDING.value)
