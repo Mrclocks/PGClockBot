@@ -255,6 +255,7 @@ tests/test_volume_allocation.py
 tests/test_volume_allocation_external.py
 tests/test_volume_allocation_cascade.py
 tests/test_paid_order_undelivered.py
+tests/test_manual_approve_undelivered.py
 tests/test_reseller_package.py
 tests/test_reseller_provision_limits.py
 tests/test_reseller_subscription_pages.py
