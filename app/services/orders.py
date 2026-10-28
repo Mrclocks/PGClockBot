@@ -644,6 +644,34 @@ CUSTOM_ORDER_NOTE = "custom"
 CUSTOM_PLAN_UNCONFIGURED = "پلن دلخواه فعلاً در دسترس نیست؛ لطفاً یکی از پلن‌های آماده را انتخاب کنید"
 
 
+async def _assert_shop_can_deliver_custom(
+    session: AsyncSession,
+    *,
+    shop_rid: int,
+    data_limit_gb: float,
+    duration_days: int,
+    from_template: bool,
+) -> None:
+    """Refuse a custom size the shop's panel admin role cannot deliver, before payment.
+
+    The buyer picks volume and days freely; delivery runs the same quota gate, so
+    checking here avoids an approved payment that can never be fulfilled.
+    """
+    pg_owner, pg_role_id = await _reseller_pg_link(session, shop_rid)
+    try:
+        await assert_provision_create(
+            session,
+            reseller_user_id=shop_rid,
+            pg_admin_username=pg_owner,
+            pg_role_id=pg_role_id,
+            data_limit=int(data_limit_gb * (1024**3)),
+            expire_ts=int(time.time()) + int(duration_days) * 86400,
+            from_template=from_template,
+        )
+    except ProvisionError as exc:
+        raise ValueError(exc.message) from exc
+
+
 async def create_custom_order(
     session: AsyncSession,
     *,
@@ -725,6 +753,14 @@ async def create_custom_order(
     elif not tpl_id and not parse_group_ids(group_ids):
         # Delivery needs a template or groups; refuse before payment, not after it.
         raise ValueError(CUSTOM_PLAN_UNCONFIGURED)
+    if shop_rid:
+        await _assert_shop_can_deliver_custom(
+            session,
+            shop_rid=int(shop_rid),
+            data_limit_gb=gb,
+            duration_days=days,
+            from_template=bool(tpl_id),
+        )
 
     plan = Plan(
         name="پلن دلخواه",

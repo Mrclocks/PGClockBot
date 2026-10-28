@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.10": [
+        "رسید: دلیل ناموفق بودن تحویل بعد از تأیید دستی نمایش و ثبت می‌شود (#999)",
+        "سفارش: پلن سفارشی بزرگ‌تر از سقف نقش ادمین پنل قبل از پرداخت رد می‌شود (#1000)",
+        "ریستور: backup/dev-pre-v0.5.10 (commit 4feb37cb)",
+    ],
     "0.5.9": [
         "وب‌پنل: نام لاتین در کارت کاربر سمت راست می‌ماند (#995)",
         "وب‌پنل: عکس پروفایل تلگرام در کارت کاربر (#997)",
