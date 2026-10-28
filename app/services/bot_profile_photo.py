@@ -56,13 +56,13 @@ def uploads_dir() -> Path:
     return DATA_DIR / "uploads"
 
 
-def pick_photo_size(sizes: Sequence) -> object | None:
-    """The smallest size at least ``LOGO_MIN_SIDE`` wide, else the largest there is."""
+def pick_photo_size(sizes: Sequence, *, min_side: int = LOGO_MIN_SIDE) -> object | None:
+    """The smallest size at least ``min_side`` wide, else the largest there is."""
     if not sizes:
         return None
     ordered = sorted(sizes, key=lambda s: (int(getattr(s, "width", 0) or 0), int(getattr(s, "height", 0) or 0)))
     for size in ordered:
-        if min(int(size.width or 0), int(size.height or 0)) >= LOGO_MIN_SIDE:
+        if min(int(size.width or 0), int(size.height or 0)) >= min_side:
             return size
     return ordered[-1]
 

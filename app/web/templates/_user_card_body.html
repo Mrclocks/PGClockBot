@@ -1,11 +1,19 @@
 {# User card (modal fragment): one customer's account and services as the current shop sees them. #}
 {% set u = card.user %}
+{% set display_name = u.full_name or u.username or "—" %}
 <div class="user-card">
   <header class="user-card-head">
-    <strong><bdi>{{ u.full_name or u.username or "—" }}</bdi></strong>
-    <span class="muted">
-      {% if u.username %}<bdi dir="ltr">@{{ u.username }}</bdi> · {% endif %}آیدی <bdi dir="ltr">{{ u.telegram_id }}</bdi>
+    {# The initial shows until the Telegram photo loads, and stays when there is none. #}
+    <span class="user-card-photo" aria-hidden="true">
+      <span>{{ display_name[:1] }}</span>
+      <img src="/users/{{ u.id }}/photo" alt="" width="48" height="48" decoding="async" data-user-photo>
     </span>
+    <div class="user-card-who">
+      <strong><bdi>{{ display_name }}</bdi></strong>
+      <span class="muted">
+        {% if u.username %}<bdi dir="ltr">@{{ u.username }}</bdi> · {% endif %}آیدی <bdi dir="ltr">{{ u.telegram_id }}</bdi>
+      </span>
+    </div>
   </header>
 
   {% if can_edit or can_message %}

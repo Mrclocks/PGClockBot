@@ -26,6 +26,8 @@ OPERATIONS = {
     "chat_message_purge",
     # Copies each bot's Telegram profile photo for its Mini App logo; needs no running bot.
     "bot_profile_photo",
+    # Removes cached customer profile photos for the user card; needs no running bot.
+    "user_photo_prune",
 }
 NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "cancellation_notifications", "panel_alert_notifications"}
 

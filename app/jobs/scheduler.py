@@ -15,6 +15,7 @@ from app.jobs.cancellation_notifications import run_cancellation_notifications
 from app.jobs.chat_message_purge import run_chat_message_purge
 from app.jobs.connection_status import run_connection_status
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
+from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
@@ -840,6 +841,11 @@ def start_background_scheduler() -> None:
         scheduler.add_job(
             run_bot_profile_photo_sync, "interval", hours=6, id="bot_profile_photo",
             next_run_time=datetime.now(timezone.utc) + timedelta(minutes=BOT_PHOTO_FIRST_RUN_MINUTES),
+            max_instances=1, coalesce=True, misfire_grace_time=3600,
+        )
+    if scheduler.get_job("user_photo_prune") is None:
+        scheduler.add_job(
+            run_user_photo_prune, "interval", hours=24, id="user_photo_prune",
             max_instances=1, coalesce=True, misfire_grace_time=3600,
         )
     if not scheduler.running:

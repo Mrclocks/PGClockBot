@@ -7,7 +7,7 @@ import secrets
 from urllib.parse import quote
 
 from fastapi import Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,7 @@ from app.services.shop_scope import (
     resolve_shop_scope_id,
 )
 from app.services.user_card import build_user_card
+from app.services.user_photo import photo_bot, user_photo
 
 
 def _q(msg: str) -> str:
@@ -330,6 +331,32 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                 "can_edit": in_shop and any(pg_acts.get(k) for k in ("create", "update", "delete")),
                 "can_message": not loaded.is_blocked,
             },
+        )
+
+    @app.get("/users/{user_id}/photo")
+    async def user_card_photo(
+        user_id: int,
+        staff: dict = Depends(require_ops),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """The customer's Telegram photo as the viewer's own bot sees it; 404 shows the initial."""
+        loaded = await _require_scoped_user(session, staff, user_id, fragment=True)
+        if isinstance(loaded, (RedirectResponse, HTMLResponse)):
+            return Response(status_code=loaded.status_code)
+        try:
+            bot = await photo_bot(session, shop_id=resolve_shop_scope_id(staff))
+        except ShopScopeError:
+            return Response(status_code=403)
+        bot_user_id, telegram_id = int(loaded.id), int(loaded.telegram_id)
+        # End the read transaction: a cache miss waits on Telegram.
+        await session.rollback()
+        data = await user_photo(bot, bot_user_id=bot_user_id, telegram_id=telegram_id) if bot else None
+        if not data:
+            return Response(status_code=404, headers={"Cache-Control": "private, max-age=600"})
+        return Response(
+            content=data,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
         )
 
     @app.post("/users/{user_id}/wallet-credit")

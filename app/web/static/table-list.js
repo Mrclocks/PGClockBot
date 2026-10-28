@@ -112,6 +112,15 @@
     }
   });
 
+  /* The user card's photo fades in over the initial; a missing one (404) leaves the initial.
+     load/error do not bubble, so listen in the capture phase. */
+  document.addEventListener('load', function (e) {
+    if (e.target instanceof Element && e.target.matches('img[data-user-photo]')) e.target.classList.add('is-loaded');
+  }, true);
+  document.addEventListener('error', function (e) {
+    if (e.target instanceof Element && e.target.matches('img[data-user-photo]')) e.target.remove();
+  }, true);
+
   document.addEventListener('panel:modal-load', function (ev) {
     var d = ev.detail || {};
     var target = d.target && document.getElementById(d.target);
