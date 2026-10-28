@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.customer_identity import set_legacy_customer_blocked
+
 import html
 import secrets
 
@@ -3409,7 +3411,7 @@ async def adm_users_block(
     if user.is_blocked:
         from app.services.notifications import notify_account_edit
 
-        user.is_blocked = False
+        await set_legacy_customer_blocked(session, user, blocked=False)
         await session.commit()
         await notify_account_edit(
             session,
@@ -3484,7 +3486,7 @@ async def adm_users_block_reason(
             reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()),
         )
         return
-    user.is_blocked = True
+    await set_legacy_customer_blocked(session, user, blocked=True)
     await session.commit()
     await notify_account_edit(
         session,

@@ -196,13 +196,13 @@ class MiniAppOwnedServiceUnitTests(unittest.IsolatedAsyncioTestCase):
         from app.api.miniapp_pages import _owned_service_or_404
 
         user = SimpleNamespace(id=1)
-        foreign = SimpleNamespace(bot_user_id=2, id=9)
+        foreign = SimpleNamespace(bot_user_id=2, id=9, integration_id=None, customer_id=None)
         # The platform-shop rule has its own tests; here only the owner check matters.
         with patch("app.services.service_scope.service_shop_id", new=AsyncMock(return_value=None)):
             with self.assertRaises(HTTPException) as ctx:
                 await _owned_service_or_404(None, foreign, user)
             self.assertEqual(ctx.exception.status_code, 404)
-            own = SimpleNamespace(bot_user_id=1, id=3)
+            own = SimpleNamespace(bot_user_id=1, id=3, integration_id=None, customer_id=None)
             self.assertIs(await _owned_service_or_404(None, own, user), own)
 
     def test_commerce_matrix(self):

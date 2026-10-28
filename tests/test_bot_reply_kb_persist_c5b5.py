@@ -144,9 +144,10 @@ class AdminFsmFinishKeepsReplyKeyboardTests(unittest.IsolatedAsyncioTestCase):
         lasting = object()
         message, state, db_user, session = self._handler_context("spam account")
         state.get_data = AsyncMock(return_value={"block_user_id": 5})
-        user = MagicMock()
+        user = MagicMock(id=5)
         with ExitStack() as stack:
             self._patches(stack, lasting)
+            synchronize_customer = stack.enter_context(patch("app.bot.handlers.admin.set_legacy_customer_blocked", AsyncMock()))
             stack.enter_context(
                 patch(
                     "app.bot.handlers.admin._platform_shop_user",
@@ -164,6 +165,7 @@ class AdminFsmFinishKeepsReplyKeyboardTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertTrue(user.is_blocked)
+        synchronize_customer.assert_awaited_once_with(session, user, blocked=True)
         message.answer.assert_awaited_once()
         self.assertIs(message.answer.await_args.kwargs["reply_markup"], lasting)
 

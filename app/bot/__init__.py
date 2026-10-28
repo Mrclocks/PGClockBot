@@ -104,6 +104,7 @@ def bot_routers() -> list[Router]:
         admin_pg_users,
         admin_settings,
         button_colors,
+        customer_linking,
         connection_status_admin,
         connection_status_admin_input,
         connection_status,
@@ -145,6 +146,7 @@ def bot_routers() -> list[Router]:
         # A tap on a visible menu button is passed on (see screen_editor._is_menu_tap).
         screen_editor.owner_router,
         screen_editor.shop_router,
+        customer_linking.router,
         start.router,
         terms.router,
         connection_status.router,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.services.customer_identity import set_legacy_customer_blocked
+
 import logging
 from typing import Iterable
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
@@ -148,7 +150,7 @@ async def bulk_toggle_block(
         if not block and not user.is_blocked:
             fail += 1
             continue
-        user.is_blocked = block
+        await set_legacy_customer_blocked(session, user, blocked=block)
         await session.flush()
         try:
             await notify_account_edit(

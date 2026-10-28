@@ -40,7 +40,8 @@ class FailClosedWithoutPgLinkTests(unittest.IsolatedAsyncioTestCase):
 
 
 class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
-    async def test_set_owner_failure_deletes_pg_user(self):
+    @patch("app.services.orders.optional_legacy_customer", new_callable=AsyncMock, return_value=17)
+    async def test_set_owner_failure_deletes_pg_user(self, adapter: AsyncMock) -> None:
         """Legacy owner-token path: set_owner failure must roll back the PG user."""
         from app.services.orders import deliver_order
 
@@ -108,11 +109,13 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises((ValueError, RuntimeError)):
                 await deliver_order(session, order)
 
+        adapter.assert_awaited_once_with(session, order.user_id)
         pg.set_owner_by_id.assert_awaited_once_with(555, "res_admin")
         pg.delete_user_by_id.assert_awaited_once_with(555)
         self.assertGreaterEqual(session.commit.await_count, 1)
 
-    async def test_success_assigns_owner_before_commit(self):
+    @patch("app.services.orders.optional_legacy_customer", new_callable=AsyncMock, return_value=17)
+    async def test_success_assigns_owner_before_commit(self, adapter: AsyncMock) -> None:
         """Shop path authenticates as reseller — ownership is implicit (no set_owner)."""
         from app.services.orders import deliver_order
 
@@ -187,6 +190,7 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
         ):
             result = await deliver_order(session, order)
 
+        adapter.assert_awaited_once_with(session, order.user_id)
         pg.set_owner_by_id.assert_not_awaited()
         pg.delete_user_by_id.assert_not_awaited()
         self.assertEqual(result.status, OrderStatus.DELIVERED.value)

@@ -30,7 +30,8 @@ class AdminCreateBotUserTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "قبلاً"):
             await admin_create_bot_user(session, telegram_id=123456789)
 
-    async def test_creates_platform_user(self):
+    @patch("app.services.bot_user_admin.adapt_legacy_user", new_callable=AsyncMock, return_value=123)
+    async def test_creates_platform_user(self, adapter: AsyncMock) -> None:
         from app.db.models import BotUser, Role
         from app.services.bot_user_admin import admin_create_bot_user
 
@@ -49,6 +50,7 @@ class AdminCreateBotUserTests(unittest.IsolatedAsyncioTestCase):
             full_name="Alice",
             reseller_id=None,
         )
+        adapter.assert_awaited_once_with(session, user)
         self.assertEqual(user.telegram_id, 987654321)
         self.assertEqual(user.username, "alice")
         self.assertEqual(user.full_name, "Alice")
@@ -108,7 +110,8 @@ class AdminProvisionServiceTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(), user, plan, shop_id=None, staff=staff
             )
 
-    async def test_provisions_platform_user(self):
+    @patch("app.services.bot_user_admin.optional_legacy_customer", new_callable=AsyncMock, return_value=123)
+    async def test_provisions_platform_user(self, adapter: AsyncMock) -> None:
         from app.services.bot_user_admin import admin_provision_service
 
         user = self._user()
@@ -136,6 +139,8 @@ class AdminProvisionServiceTests(unittest.IsolatedAsyncioTestCase):
             svc = await admin_provision_service(
                 session, user, plan, shop_id=None, staff=None, actor="owner"
             )
+        adapter.assert_awaited_once_with(session, user.id)
+        self.assertEqual(svc.customer_id, 123)
         self.assertEqual(svc.pg_user_id, 42)
         self.assertEqual(svc.plan_id, 5)
         self.assertEqual(svc.bot_user_id, 10)
@@ -210,7 +215,8 @@ if __name__ == "__main__":
 
 
 class AdminCreateStaffScopeTests(unittest.IsolatedAsyncioTestCase):
-    async def test_reseller_staff_forces_own_shop(self):
+    @patch("app.services.bot_user_admin.adapt_legacy_user", new_callable=AsyncMock, return_value=123)
+    async def test_reseller_staff_forces_own_shop(self, adapter: AsyncMock) -> None:
         from app.services.bot_user_admin import admin_create_bot_user
 
         session = AsyncMock()
@@ -238,10 +244,12 @@ class AdminCreateStaffScopeTests(unittest.IsolatedAsyncioTestCase):
                 reseller_id=None,
                 staff=staff,
             )
+        adapter.assert_awaited_once_with(session, user)
         self.assertEqual(user.reseller_id, 77)
         self.assertEqual(user.role, "user")
 
-    async def test_owner_staff_forces_platform_shop(self):
+    @patch("app.services.bot_user_admin.adapt_legacy_user", new_callable=AsyncMock, return_value=123)
+    async def test_owner_staff_forces_platform_shop(self, adapter: AsyncMock) -> None:
         from app.services.bot_user_admin import admin_create_bot_user
 
         session = AsyncMock()
@@ -263,6 +271,7 @@ class AdminCreateStaffScopeTests(unittest.IsolatedAsyncioTestCase):
                 reseller_id=99,  # must be ignored for Owner
                 staff=staff,
             )
+        adapter.assert_awaited_once_with(session, user)
         self.assertIsNone(user.reseller_id)
 
 
@@ -299,7 +308,7 @@ class ShopPgAclGateTests(unittest.IsolatedAsyncioTestCase):
         from app.services.bot_user_admin import admin_delete_service
 
         svc = SimpleNamespace(
-            id=3, bot_user_id=10, pg_user_id=99, pg_username="u"
+            id=3, bot_user_id=10, pg_user_id=99, pg_username="u", integration_id=None, customer_id=None
         )
         staff = {"role": "reseller", "bot_user_id": 7}
         session = AsyncMock()

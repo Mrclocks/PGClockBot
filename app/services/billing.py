@@ -957,6 +957,7 @@ async def assert_billing_allows_provision(
     session: AsyncSession,
     *,
     reseller_user_id: int | None,
+    suspend: bool = True,
 ) -> None:
     """Block financially-committing ops when PAYG balance is empty.
 
@@ -974,6 +975,8 @@ async def assert_billing_allows_provision(
         # Future policies (e.g. block_new) hook here; default remains block_provision
         return
     bal = await payg_available_balance(session, profile)
+    if bal <= 0 and not suspend:
+        raise BillingError("موجودی حساب برای ایجاد تعهد کافی نیست")
     if bal <= 0:
         # Ensure hard suspend (admin + services) even if tick missed it
         try:

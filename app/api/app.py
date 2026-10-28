@@ -28,6 +28,7 @@ from app.db.models import (
     ResellerProfile,
     Role,
 )
+from app.api.integration_api import register_integration_api
 from app.db.session import SessionLocal
 from app.services.orders import (
     approve_payment,
@@ -1537,6 +1538,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
     register_connection_status_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_integration_api(app, get_db=get_db)
 
     @app.get("/settings/ssl/progress")
     async def ssl_progress(staff: dict = Depends(require_admin)):
