@@ -131,13 +131,13 @@
     <thead>
       <tr>
         {% if manage or ops %}{{ table_select_head() }}{% endif %}
-        <th class="col-id col-hide-sm" data-sort-type="num">#</th>
+        <th class="col-id col-hide-sm" data-sort-type="num" data-list-sort-label="جدیدترین" data-list-sort-dir="descending" data-list-sort-order="1">#</th>
         <th class="col-tg col-hide-sm" data-sort-type="num">تلگرام</th>
-        <th class="col-name" data-sort-type="text">نام</th>
+        <th class="col-name" data-sort-type="text" data-list-sort-label="نام" data-list-sort-dir="ascending" data-list-sort-order="4">نام</th>
         <th class="col-svc" data-sort-type="text">سرویس</th>
         <th class="col-vol" data-sort-type="text">حجم</th>
-        <th class="col-exp" data-sort-type="num">انقضا</th>
-        <th class="col-wallet" data-sort-type="num">کیف پول</th>
+        <th class="col-exp" data-sort-type="num" data-list-sort-label="زودترین انقضا" data-list-sort-dir="ascending" data-list-sort-order="2">انقضا</th>
+        <th class="col-wallet" data-sort-type="num" data-list-sort-label="بیشترین موجودی" data-list-sort-dir="descending" data-list-sort-order="3">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
         {% if ops or manage or provision or edit_svc %}<th class="col-actions"></th>{% endif %}
         <th class="li-head" scope="col">

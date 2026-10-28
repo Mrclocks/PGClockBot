@@ -131,7 +131,7 @@
     <div class="card-flush-head"><h2>آخرین تراکنش‌های امتیاز</h2></div>
     <div class="table-wrap">
     <table class="table-compact table-list-sm" data-sortable>
-      <thead><tr><th class="col-id" data-sort-type="num">#</th><th class="col-user" data-sort-type="num">کاربر</th><th class="col-amount" data-sort-type="num">مقدار</th><th class="col-amount" data-sort-type="num">مانده</th><th class="col-text" data-sort-type="text">شرح</th><th class="col-time" data-sort-type="text">زمان</th><th class="li-head" scope="col"><span class="li-count">تراکنش‌ها</span><select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select></th></tr></thead>
+      <thead><tr><th class="col-id" data-sort-type="num" data-list-sort-label="جدیدترین" data-list-sort-dir="descending" data-list-sort-order="1">#</th><th class="col-user" data-sort-type="num">کاربر</th><th class="col-amount" data-sort-type="num" data-list-sort-label="بیشترین مقدار" data-list-sort-dir="descending" data-list-sort-order="2">مقدار</th><th class="col-amount" data-sort-type="num">مانده</th><th class="col-text" data-sort-type="text">شرح</th><th class="col-time" data-sort-type="text">زمان</th><th class="li-head" scope="col"><span class="li-count">تراکنش‌ها</span><select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select></th></tr></thead>
       <tbody>
       {% for t in txs %}
         <tr>

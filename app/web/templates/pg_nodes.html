@@ -35,12 +35,12 @@
     <thead><tr>
       {% if can_reconnect or can_update or can_delete %}{{ table_select_head() }}{% endif %}
       <th class="col-id" data-sort-type="num">شناسه</th>
-      <th class="col-name" data-sort-type="text">نام</th>
+      <th class="col-name" data-sort-type="text" data-list-sort-label="نام" data-list-sort-dir="ascending" data-list-sort-order="3">نام</th>
       <th class="col-address" data-sort-type="text">آدرس</th>
-      <th class="col-status" data-sort-type="text">وضعیت</th>
+      <th class="col-status" data-sort-type="text" data-list-sort-label="وضعیت" data-list-sort-dir="ascending" data-list-sort-order="2">وضعیت</th>
       <th data-sort-type="num">آپلود</th>
       <th data-sort-type="num">دانلود</th>
-      <th data-sort-type="num">مجموع ترافیک</th>
+      <th data-sort-type="num" data-list-sort-label="بیشترین ترافیک" data-list-sort-dir="descending" data-list-sort-order="1">مجموع ترافیک</th>
       <th class="col-actions"></th>
       <th class="li-head" scope="col"><span class="li-count">{{ nodes | length | num }} نود</span><select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select></th>
     </tr></thead>

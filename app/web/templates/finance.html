@@ -60,11 +60,11 @@
     <thead>
       <tr>
         {{ table_select_head() }}
-        <th class="col-id" data-sort-type="num">#</th>
+        <th class="col-id" data-sort-type="num" data-list-sort-label="جدیدترین" data-list-sort-dir="descending" data-list-sort-order="1">#</th>
         <th data-sort-type="text">کاربر</th>
         <th class="col-hide-sm" data-sort-type="text">پلن</th>
-        <th data-sort-type="num">مبلغ</th>
-        <th data-sort-type="text">وضعیت</th>
+        <th data-sort-type="num" data-list-sort-label="بیشترین مبلغ" data-list-sort-dir="descending" data-list-sort-order="2">مبلغ</th>
+        <th data-sort-type="text" data-list-sort-label="وضعیت" data-list-sort-dir="ascending" data-list-sort-order="3">وضعیت</th>
         <th class="col-hide-sm" data-sort-type="text">روش</th>
         <th class="col-hide-sm" data-sort-type="text">زمان</th>
         <th class="col-actions"></th>
@@ -232,11 +232,11 @@
   <table class="table-compact table-list-sm" data-sortable data-bulk-select>
     <thead><tr>
       {{ table_select_head() }}
-      <th class="col-id" data-sort-type="num">#</th>
+      <th class="col-id" data-sort-type="num" data-list-sort-label="جدیدترین" data-list-sort-dir="descending" data-list-sort-order="1">#</th>
       <th data-sort-type="text">کاربر</th>
-      <th data-sort-type="num">مبلغ</th>
+      <th data-sort-type="num" data-list-sort-label="بیشترین مبلغ" data-list-sort-dir="descending" data-list-sort-order="2">مبلغ</th>
       <th class="col-hide-sm" data-sort-type="text">نوع</th>
-      <th data-sort-type="text">وضعیت</th>
+      <th data-sort-type="text" data-list-sort-label="وضعیت" data-list-sort-dir="ascending" data-list-sort-order="3">وضعیت</th>
       <th class="col-hide-sm" data-sort-type="num">سفارش</th>
       <th class="col-actions"></th>
       <th class="li-head" scope="col">
@@ -339,11 +339,11 @@
     <thead>
       <tr>
         {{ table_select_head() }}
-        <th data-sort-type="num">سفارش</th>
+        <th data-sort-type="num" data-list-sort-label="جدیدترین" data-list-sort-dir="descending" data-list-sort-order="1">سفارش</th>
         <th data-sort-type="text">کاربر</th>
         <th data-sort-type="text">تشخیص</th>
         <th class="col-hide-sm" data-sort-type="text">خطا</th>
-        <th data-sort-type="num">تلاش</th>
+        <th data-sort-type="num" data-list-sort-label="بیشترین تلاش" data-list-sort-dir="descending" data-list-sort-order="2">تلاش</th>
         <th class="col-actions"></th>
         <th class="li-head" scope="col">
           <span class="li-count">{{ ((stuck_only_order_ids or []) | length + delivery_failures | length) | num }} سفارش</span>
