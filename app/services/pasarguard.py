@@ -11,6 +11,7 @@ from typing import Any, Optional
 import httpx
 
 from app.config import get_settings, normalize_pg_subscription_path, pg_api_base_candidates
+from app.services.redact import redact
 from app.services.pg_read_resilience import DNS_CACHE_TTL_SEC, panel_read_request, reset_read_circuits, validate_panel_base
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 
@@ -109,10 +110,21 @@ def _pg_error_detail(body: Any) -> str | None:
             if joined:
                 return joined[:400]
         if isinstance(val, dict):
-            inner = _pg_error_detail(val)
+            inner = _pg_error_detail(val) or _field_errors_detail(val)
             if inner:
                 return inner
     return None
+
+
+def _field_errors_detail(fields: dict[str, Any]) -> str | None:
+    """Join a ``{field: message | [messages]}`` mapping into ``field: message`` parts."""
+    parts: list[str] = []
+    for name, msgs in fields.items():
+        items = msgs if isinstance(msgs, list) else [msgs]
+        text = " / ".join(str(m).strip() for m in items if isinstance(m, (str, int, float)) and str(m).strip())
+        if text:
+            parts.append(f"{name}: {text}")
+    return "؛ ".join(parts)[:400] or None
 
 
 def build_user_create_payload(
@@ -375,8 +387,6 @@ class PasarGuardClient:
                         return self._token
                     if last.status_code in (401, 403):
                         detail = (last.text or "")[:300]
-                        from app.services.redact import redact
-
                         raise PasarGuardError(
                             redact(
                                 f"PasarGuard login failed ({last.status_code}) at "
@@ -454,6 +464,10 @@ class PasarGuardClient:
                 headers.update(await self._headers())
                 resp = await send_request(self._client, method, path, headers=headers, **kwargs)
         if resp.status_code >= 400:
+            if resp.status_code == 422:
+                logger.warning(
+                    "PasarGuard rejected %s %s: %s", method, path, redact(resp.text, limit=600)
+                )
             raise PasarGuardError(
                 f"{method} {path} failed ({resp.status_code})",
                 resp.status_code,
