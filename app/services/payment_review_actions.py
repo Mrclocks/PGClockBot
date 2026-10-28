@@ -21,9 +21,14 @@ from app.services.payment_review_diag import (
     diagnose_payment_review,
     log_payment_review_diagnosis,
 )
-from app.services.redact import user_safe_error
+from app.services.redact import redact, user_safe_error
 
 logger = logging.getLogger(__name__)
+
+TELEGRAM_ALERT_LIMIT = 200
+FAILURE_DETAIL_LIMIT = 300
+DELIVERY_FAILED_ALERT = "پرداخت تأیید شد ولی ساخت سرویس ناموفق بود"
+DELIVERY_FAILED_HINT = "با «ادامه تحویل» دوباره تلاش کنید."
 
 
 @dataclass(frozen=True)
@@ -45,6 +50,51 @@ async def _load_diag(
     )
     diag = await diagnose_payment_review(session, payment, order=order)
     return diag, order
+
+
+def _failed_delivery_alert(detail: str) -> str:
+    """Reviewer alert: what failed and the next step, within Telegram's alert limit."""
+    tail = f"\n{DELIVERY_FAILED_HINT}"
+    room = TELEGRAM_ALERT_LIMIT - len(DELIVERY_FAILED_ALERT) - len(tail) - 2
+    if not detail:
+        return f"{DELIVERY_FAILED_ALERT}.{tail}"
+    short = detail if len(detail) <= room else detail[: room - 1] + "…"
+    return f"{DELIVERY_FAILED_ALERT}: {short}{tail}"
+
+
+async def _report_failed_delivery(
+    session: AsyncSession,
+    *,
+    bot: Any,
+    payment: Payment,
+    order: Order | None,
+    exc: Exception,
+) -> str:
+    """The payment is approved but the service was not created: keep the reason, alert staff
+    and tell the buyer, as the receipt and gateway paths do. Delivery is resumed by a person.
+    """
+    # Local imports: both modules import handler code that imports this one.
+    from app.services.notifications import notify_approved_delivery_stuck
+    from app.services.ux20 import note_delivery_send_failure
+
+    recorded = redact(str(exc), limit=FAILURE_DETAIL_LIMIT)
+    logger.warning("approved payment left undelivered payment=%s: %s", payment.id, recorded)
+    await note_delivery_send_failure(session, order=order, payment=payment, error=recorded)
+    buyer = await session.get(BotUser, int(payment.user_id)) if payment.user_id else None
+    buyer_tg = getattr(buyer, "telegram_id", None)
+    try:
+        await notify_approved_delivery_stuck(bot, session, payment, buyer_tg, error=recorded)
+    except Exception:
+        # The failed-delivery list still shows the order to staff.
+        logger.warning("undelivered staff notice failed payment=%s", payment.id, exc_info=True)
+    if buyer_tg is not None and order is not None:
+        try:
+            await send_delivery_to_user(bot, buyer_tg, session, payment, order)
+        except Exception:
+            logger.warning("undelivered buyer notice failed payment=%s", payment.id, exc_info=True)
+    return _failed_delivery_alert(
+        user_safe_error(exc, fallback="", limit=FAILURE_DETAIL_LIMIT)
+    )
 
 
 async def execute_payment_approve(
@@ -70,17 +120,23 @@ async def execute_payment_approve(
         order = await approve_payment(session, payment, reviewer_tg, bot=bot)
     except Exception as exc:
         fresh = await session.get(Payment, int(payment.id))
-        post, _ = await _load_diag(session, fresh) if fresh else (diag, None)
+        post, post_order = await _load_diag(session, fresh) if fresh else (diag, None)
         log_payment_review_diagnosis(
             post, actor_tg=reviewer_tg, source=f"{source}:error"
         )
+        if post.kind == "approved_fulfill" and fresh is not None:
+            alert_fa = await _report_failed_delivery(
+                session, bot=bot, payment=fresh, order=post_order, exc=exc
+            )
+        elif post.kind != "pending":
+            alert_fa = post.alert_fa
+        else:
+            alert_fa = f"خطا: {user_safe_error(exc)}"
         return PaymentActionResult(
             ok=False,
             action="approve",
             diag=post,
-            alert_fa=post.alert_fa
-            if post.kind != "pending"
-            else f"خطا: {user_safe_error(exc)}",
+            alert_fa=alert_fa,
             error=str(exc),
         )
     send_err = await _deliver_and_notify(
