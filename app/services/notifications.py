@@ -79,8 +79,8 @@ NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
     ),
     (
         "notify_new_subscription",
-        "اشتراک جدید",
-        "وقتی سرویس/اشتراک جدید تحویل شد (خرید کیف‌پول یا تأیید پرداخت)",
+        "اشتراک جدید / تمدید",
+        "وقتی اشتراک جدید یا تمدید سرویس تحویل شد (خرید کیف‌پول یا تأیید پرداخت)",
         "1",
     ),
     (
@@ -696,7 +696,13 @@ async def notify_new_subscription(
 
         lines.append(kv_line("💳", "پرداخت", payment_method_fa(order.payment_method)))
     lines.append(kv_line("📌", "وضعیت", "نیاز به تأیید" if needs_approval else "تحویل‌شده"))
-    title = f"➕ {addon_details[0]}" if addon_details else "🆕 اشتراک جدید"
+    note = (order.note or "").strip()
+    if addon_details:
+        title = f"➕ {addon_details[0]}"
+    elif note.startswith("renew:"):
+        title = "🔄 تمدید اشتراک"
+    else:
+        title = "🆕 اشتراک جدید"
     text = format_message(title, info_block(lines))
     markup = _approval_markup(order_id=order.id) if needs_approval else None
     await _dispatch_dual_notify(
