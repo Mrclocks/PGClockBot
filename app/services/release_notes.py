@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.12": [
+        "مالی: تب پاکسازی آخرِ مودال تنظیمات مالی است (#1005)",
+        "اعلان: گزارش تحویل تمدید با برچسب «تمدید» مشخص می‌شود (#1006)",
+        "ریستور: backup/dev-pre-v0.5.12 (commit 3886f165)",
+    ],
     "0.5.11": [
         "پنل پاسارگارد: فیلد ردشده در خطای ۴۲۲ در لاگ و پیام ادمین دیده می‌شود (#1001)",
         "پلن: پلن‌های سفارشی هر سفارش از لیست پنهان می‌شوند و در لغو بدون فروش حذف می‌گردند (#1002)",
