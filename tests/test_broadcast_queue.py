@@ -214,6 +214,18 @@ class QueueTests(QueueCase):
         self.assertEqual(self.bot.sent, [])
 
 
+class LegacyInlineSendTests(QueueCase):
+    async def test_an_inline_send_is_recorded_as_done_so_the_worker_never_sends_it_again(self):
+        from app.services.broadcast import send_broadcast
+
+        result = await send_broadcast(self.bot, self.session, text="hello", audience="users", delay=0)
+        row = await self.log(result["log_id"])
+        self.assertEqual(row.status, STATUS_DONE)
+        sent_once = list(self.bot.sent)
+        await run_broadcast_worker(self.Session, self.bot, budget_seconds=5)
+        self.assertEqual(self.bot.sent, sent_once)
+
+
 class HistoryTemplateTests(unittest.TestCase):
     def render(self, rows):
         from types import SimpleNamespace as NS
@@ -280,7 +292,7 @@ class BroadcastMigrationTests(unittest.TestCase):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
-        spec = importlib.util.spec_from_file_location("broadcast_migration", ROOT / "alembic/versions/0072_broadcast_queue.py")
+        spec = importlib.util.spec_from_file_location("broadcast_migration", ROOT / "alembic/versions/0073_broadcast_queue.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
         engine = sa.create_engine("sqlite:///:memory:")

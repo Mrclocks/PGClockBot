@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.17": [
+        "ربات: جستجوی مشتری با نام یا یوزرنیم برای ادمین و نماینده (#1017)",
+        "تست: CI اگر ماژولی کامپایل نشود fail می‌شود؛ مسیر migrationهای 0073/0074 اصلاح شد (#1021)",
+        "پیام همگانی: ارسال inline به‌عنوان done ثبت می‌شود تا worker دوباره نفرستد (#1022)",
+        "ریستور: backup/dev-pre-v0.5.17 (commit 7cd7e5d7)",
+    ],
     "0.5.16": [
         "آپدیت: قبل از sync سرویس متوقف می‌شود تا systemctl restart روی SIGTERM گیر نکند",
         "آپدیت: بعد از ریستارت منتظر باز شدن پورت پنل می‌ماند و در صورت شکست لاگ نشان می‌دهد",
