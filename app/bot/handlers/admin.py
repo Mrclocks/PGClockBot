@@ -27,8 +27,10 @@ from app.services.orders import (
     fulfill_paid_order,
     reject_payment,
 )
+from app.services.automation_review import count_review_queue
 from app.services.payment_voids import offers_void
 from app.services.redact import user_safe_error
+from app.services.subscription_lookup import link_token
 from app.services.reseller_wallet import load_reseller_profile
 from app.services.pasarguard import get_pg
 from app.services.tickets import get_ticket, reply_ticket
@@ -37,7 +39,10 @@ from app.services.user_search import clean_handle, find_bot_user
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.billing import is_payg
 from app.services.volume_allocation import set_shop_oversell
+from app.bot.handlers.automation_review import review_button
+from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
 from app.bot.handlers.payment_voids import void_button
+from app.bot.handlers.subscription_lookup import delete_typed_link, staff_lookup
 from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
@@ -638,6 +643,8 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         prefix = "⚠ " if int(o.id) in stuck_ids else ""
         label = f"{prefix}#{o.id} · {order_status_fa(o.status)} · {format_toman(o.amount, get_settings().currency)}"
         rows.append([InlineKeyboardButton(text=label[:64], callback_data=f"adm:order:{o.id}")])
+    if await count_review_queue(session, shop_id=None):
+        rows.append([review_button()])
     if callback.message:
         markup = InlineKeyboardMarkup(inline_keyboard=rows)
         markup = with_inline_back(markup, ui, "nv:adm:ops")
@@ -864,7 +871,7 @@ async def order_reject_cb(callback: CallbackQuery, session: AsyncSession, db_use
 @router.callback_query(F.data == "adm:cancellations")
 @require_bot_owner_handler
 async def adm_cancellations(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    """Platform cancel inbox — list open requests (approve/reject stays in web finance)."""
+    """Platform cancel inbox — list open requests; each card approves or rejects."""
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
@@ -900,7 +907,7 @@ async def adm_cancellations(callback: CallbackQuery, session: AsyncSession, db_u
                 )
             ]
         )
-    lines.append("\n<i>تأیید یا رد درخواست‌های بازپرداخت‌دار در وب‌پنل: /finance?tab=cancellations</i>")
+    lines.append("\n<i>یکی را برای تأیید یا رد انتخاب کنید.</i>")
     markup = with_inline_back(
         InlineKeyboardMarkup(inline_keyboard=kb_rows), ui, "nv:adm:home"
     )
@@ -916,32 +923,7 @@ async def adm_cancellation_view(
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
-    try:
-        rid = int((callback.data or "").rsplit(":", 1)[-1])
-    except ValueError:
-        await callback.answer(feedback.INVALID, show_alert=True)
-        return
-    from app.bot.nav_inline import with_inline_back
-    from app.db.models import ServiceCancellation
-    from app.services.service_cancellations import STATUS_LABELS
-
-    row = await session.get(ServiceCancellation, rid)
-    if not row or row.reseller_id is not None:
-        await callback.answer(feedback.NOT_FOUND, show_alert=True)
-        return
-    await callback.answer()
-    ui = await get_all_settings(session)
-    st = STATUS_LABELS.get(row.status, row.status)
-    text = (
-        f"📝 <b>درخواست لغو #{row.id}</b>\n"
-        f"سرویس: <code>{row.service_id}</code>\n"
-        f"وضعیت: {html.escape(st)}\n"
-        f"دلیل:\n{html.escape((row.reason or '')[:800])}\n\n"
-        f"<i>تأیید/رد در وب‌پنل /finance?tab=cancellations</i>"
-    )
-    markup = with_inline_back(None, ui, "adm:cancellations")
-    if callback.message:
-        await callback.message.edit_text(text, reply_markup=markup)
+    await show_cancellation_card(callback, session, db_user, int((callback.data or "").rsplit(":", 1)[-1]))
 
 
 @router.callback_query(F.data == "adm:payments")
@@ -2331,7 +2313,7 @@ async def adm_users_search_start(callback: CallbackQuery, state: FSMContext, db_
     await ask_text(
         callback,
         state,
-        prompt="آیدی عددی یا یوزرنیم تلگرام کاربر یا نماینده را بفرستید:\n<code>123456789</code> یا <code>@username</code>",
+        prompt="آیدی عددی، یوزرنیم تلگرام یا لینک اشتراک را بفرستید:\n<code>123456789</code> یا <code>@username</code>",
         cancel_code="adm_usr",
         return_to="adm:users",
         fsm_state=AdminStates.user_search,
@@ -2361,9 +2343,12 @@ async def adm_users_search(
             clear_state=True,
         )
         return
+    if link_token(message.text):
+        await _answer_link_search(message, state, session, db_user)
+        return
     query = clean_handle(message.text)
     if not query or " " in query:
-        await message.answer("آیدی عددی یا یوزرنیم تلگرام را بفرستید؛ مثلاً <code>123456789</code> یا <code>@username</code>.")
+        await message.answer("آیدی عددی، یوزرنیم تلگرام یا لینک اشتراک را بفرستید؛ مثلاً <code>123456789</code> یا <code>@username</code>.")
         return
     user = await find_bot_user(session, query, scope=BotUser.reseller_id.is_(None))
     await state.clear()
@@ -2378,6 +2363,14 @@ async def adm_users_search(
         return
     await message.answer("👤 نتیجه جستجو", reply_markup=users_kb)
     await _render_user_card(message, session, user)
+
+async def _answer_link_search(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser) -> None:
+    """Platform users search given a subscription link: owner summary, scoped to platform services."""
+    text, markup = await staff_lookup(session, message.text, shop_id=None)
+    await state.clear()
+    await message.answer("🔎 نتیجه جستجو", reply_markup=kb.admin_users_reply_keyboard())
+    await message.answer(text, reply_markup=markup)
+    await delete_typed_link(message)
 
 async def _render_user_card(
     message: Message,

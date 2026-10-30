@@ -1532,8 +1532,10 @@ def create_api_app(lifespan=None) -> FastAPI:
     from app.api.customer_features import register_customer_features
 
     register_customer_features(app, render=render, require_staff=require_staff, get_db=get_db)
+    from app.api.automation_review_pages import register_automation_review_pages
     from app.api.payment_void_pages import register_payment_void_pages
 
+    register_automation_review_pages(app, require_staff=require_staff, get_db=get_db)
     register_payment_void_pages(app, require_staff=require_staff, get_db=get_db)
     register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
