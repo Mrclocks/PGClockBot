@@ -277,3 +277,6 @@ tests/test_user_photo.py
 tests/test_custom_plan_shop_limits.py
 tests/test_custom_plan_cleanup.py
 tests/test_stale_order_cleanup_tab.py
+
+# Voiding approved payments: shop scope, refund idempotency, unknown panel outcome, permission.
+tests/test_payment_voids.py
