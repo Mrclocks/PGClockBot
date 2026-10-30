@@ -828,6 +828,9 @@ async def res_orders(
             f"{order_status_fa(o.status)}"
         )
     markup = _group_back("res_orders")
+    if has_bot_perm(profile, "payment_void"):
+        void_row = [InlineKeyboardButton(text="↩️ ابطال پرداخت تأییدشده", callback_data="payvoid:list")]
+        markup = InlineKeyboardMarkup(inline_keyboard=[void_row, *markup.inline_keyboard])
     if await count_review_queue(session, shop_id=int(owner_id)):
         markup = InlineKeyboardMarkup(inline_keyboard=[[review_button()], *markup.inline_keyboard])
     if callback.message:

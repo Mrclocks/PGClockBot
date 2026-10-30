@@ -249,6 +249,9 @@
     {% for p in payments %}
       {% set payer = (payers or {}).get(p.user_id) %}
       {% set uname = (payer.full_name or payer.username or p.user_id) if payer else p.user_id %}
+      {% set pv = (payment_voids or {}).get(p.id) %}
+      {% set can_void_row = can_void_payment and p.status == 'approved' and p.method in ['card', 'crypto'] %}
+      {% set can_retry_void = can_void_payment and p.status == 'voided' and pv and pv.status == 'review' %}
       <tr data-bulk-ops="{% if p.status == 'pending' %}approve,reject{% endif %}">
         {{ table_select_cell(p.id) }}
         <td class="mono" data-sort-value="{{ p.id }}">{{ p.id }}</td>
@@ -272,10 +275,11 @@
           <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">
             {{ pay_status(p.status) }}
           </span>
+          {% if pv and pv.status == 'review' %}<span class="badge pending" title="پنل تأیید نکرد؛ دوباره تلاش کنید">ابطال ناتمام</span>{% endif %}
         </td>
         <td class="col-hide-sm" data-sort-value="{{ p.order_id or 0 }}">{{ p.order_id or "—" }}</td>
         <td class="col-actions">
-          {% if p.status == 'pending' or (p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:')) %}
+          {% if p.status == 'pending' or can_void_row or can_retry_void or (p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:')) %}
           {% call row_actions() %}
             {% if p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:') %}
             <button type="button" class="btn btn-ghost btn-sm" data-receipt-open="/payments/{{ p.id }}/receipt">مشاهده رسید</button>
@@ -283,6 +287,19 @@
             {% if p.status == 'pending' %}
             <form method="post" action="/payments/{{ p.id }}/approve" data-confirm="این پرداخت تأیید شود؟ در صورت خرید، محصول هم ارسال می‌شود." data-confirm-title="تأیید پرداخت" data-confirm-label="تأیید"><button class="btn btn-ok btn-sm" type="submit">تأیید</button></form>
             <form method="post" action="/payments/{{ p.id }}/reject" data-confirm="این پرداخت رد شود؟" data-confirm-title="رد پرداخت" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-danger btn-sm" type="submit">رد</button></form>
+            {% endif %}
+            {% if can_void_row %}
+            <button type="button" class="btn btn-danger btn-sm" data-payment-void-open="{{ p.id }}"
+                    data-void-topup="{{ '1' if p.is_wallet_topup else '' }}"
+                    data-void-amount="{{ p.amount | money }}">ابطال</button>
+            {% endif %}
+            {% if can_retry_void %}
+            <form method="post" action="/payments/{{ p.id }}/void" data-confirm="بررسی پنل و ادامهٔ ابطال انجام شود؟" data-confirm-title="ادامهٔ ابطال" data-confirm-label="ادامه">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="reason" value="{{ pv.reason }}">
+              {% if pv.refund_amount %}<input type="hidden" name="refund_to_wallet" value="1">{% endif %}
+              <button class="btn btn-sm" type="submit">ادامهٔ ابطال</button>
+            </form>
             {% endif %}
           {% endcall %}
           {% if p.status == 'pending' and (receipt_matches or {}).get(p.id) %}
@@ -502,4 +519,28 @@
   }
 })();
 </script>
+{% if finance_tab == 'payments' and can_void_payment %}
+<div class="ui-modal" id="modal-payment-void" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="payment-void-title">
+    <div class="ui-modal-head">
+      {{ modal_title('payments', 'ابطال پرداخت تأییدشده', caption='سرویس مربوط به این پرداخت غیرفعال می‌شود', tone='brand', heading_id='payment-void-title') }}
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" id="payment-void-form" class="form-stack" action="">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <p class="muted" id="payment-void-summary"></p>
+      <label class="form-field">دلیل ابطال
+        <textarea name="reason" maxlength="500" required></textarea>
+      </label>
+      <label class="form-field" id="payment-void-refund-field">
+        <span><input type="checkbox" name="refund_to_wallet" value="1"> مبلغ پرداخت به کیف پول مشتری برگردد</span>
+      </label>
+      <p class="muted" id="payment-void-topup-note" hidden>مبلغ شارژ از کیف پول مشتری کم می‌شود؛ اگر مشتری آن را خرج کرده باشد ابطال انجام نمی‌شود.</p>
+      <button class="btn btn-danger" type="submit">ابطال پرداخت</button>
+    </form>
+  </div>
+</div>
+<script src="/static/payment-void.js?v={{ app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+{% endif %}
 {% endblock %}

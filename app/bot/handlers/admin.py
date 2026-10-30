@@ -28,6 +28,7 @@ from app.services.orders import (
     reject_payment,
 )
 from app.services.automation_review import count_review_queue
+from app.services.payment_voids import offers_void
 from app.services.redact import user_safe_error
 from app.services.subscription_lookup import link_token
 from app.services.reseller_wallet import load_reseller_profile
@@ -40,6 +41,7 @@ from app.services.billing import is_payg
 from app.services.volume_allocation import set_shop_oversell
 from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
+from app.bot.handlers.payment_voids import void_button
 from app.bot.handlers.subscription_lookup import delete_typed_link, staff_lookup
 from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import form_origin
@@ -691,6 +693,8 @@ async def adm_order_view(callback: CallbackQuery, session: AsyncSession, db_user
         text += f"پرداخت: #{pay.id} ({pay.status})\n"
     ui = await get_all_settings(session)
     rows = _order_actions(order, pay, ui)
+    if pay is not None and offers_void(pay, order):
+        rows.append([void_button(pay.id)])
     rows.append([kb.back_button(ui, "adm:orders")])
     if callback.message:
         await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))

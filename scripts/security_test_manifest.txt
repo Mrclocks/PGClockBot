@@ -287,3 +287,6 @@ tests/test_funnel_events.py
 tests/test_cancellation_review_bot.py
 # Automation review queue: shop scope, safe release, permission, bot and template.
 tests/test_automation_review.py
+# Voiding approved payments: shop scope, refund idempotency, unknown panel outcome, permission.
+tests/test_payment_voids.py
+tests/test_payment_void_bot.py

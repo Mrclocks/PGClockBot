@@ -23,6 +23,7 @@ from app.services.list_query import (
     normalize_search_q,
     parse_list_page,
 )
+from app.services.payment_voids import list_voids
 from app.services.receipt_files import fetch_telegram_file, payment_bot_token
 from app.services.shop_scope import is_platform_admin, payment_shop_id, shop_owner_id
 from app.services.stale_order_cleanup import cleanup_status
@@ -201,6 +202,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "cancel_next_before": None,
             "cancel_labels": {},
             "can_approve_cancel": False,
+            "can_void_payment": False,
+            "payment_voids": {},
             "automation_items": [],
             "automation_next": None,
             "automation_labels": {},
@@ -454,6 +457,10 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             ctx["payments"] = payments
             ctx["payers"] = payers
             ctx["pager"] = pager
+            ctx["can_void_payment"] = can_shop(authz, "payment_void") and (
+                is_platform_admin(staff) or bool(shop_owner_id(staff))
+            )
+            ctx["payment_voids"] = await list_voids(session, [int(p.id) for p in payments])
             # Soft receipt match suggestions for pending payments
             from app.services.users import on as _on
             from app.services.ux20 import suggest_receipt_matches
