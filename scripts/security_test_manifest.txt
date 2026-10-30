@@ -300,3 +300,5 @@ tests/test_app_compiles.py
 tests/test_staff_user_search.py
 # Free trial: an unknown panel outcome keeps the claim spent (no repeated trials).
 tests/test_trial_claim_unknown_delivery.py
+# Trial notice: shop trials reach only that shop's staff; customer text escaped.
+tests/test_trial_claimed_notice.py

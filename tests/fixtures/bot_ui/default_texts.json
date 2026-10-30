@@ -416,6 +416,7 @@
   "notify_pending_approval": "1",
   "notify_service_cancellation": "1",
   "notify_service_import_request": "1",
+  "notify_trial_claimed": "1",
   "notify_wallet_topup": "1",
   "one_tap_renew_enabled": "1",
   "pay_bbc_enabled": "0",

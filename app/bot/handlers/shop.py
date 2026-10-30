@@ -25,6 +25,7 @@ from app.db.models import BotUser, Order, Payment, PaymentMethod
 from app.services.bbc_settlement import CUSTOMER_UNAVAILABLE, BbcNotReady, ensure_gateway_ready, start_bbc_checkout
 from app.services.db_safe import rollback_quiet
 from app.services.redact import user_safe_error
+from app.services.trial_notify import notify_trial_claimed
 from app.services.checkout_summary import checkout_summary
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import (
@@ -94,11 +95,14 @@ async def _deliver_free_order(
     await mark_order_free_paid(session, order, db_user.id)
     attempt = DeliveryAttempt()
     try:
-        return await deliver_order(session, order, attempt=attempt), ""
+        delivered = await deliver_order(session, order, attempt=attempt)
     except Exception as exc:
         logger.warning("free delivery failed order=%s", order.id, exc_info=True)
         error = str(exc)
         failure = format_message("❌ خطا در تحویل", user_safe_error(exc))
+    else:
+        await notify_trial_claimed(bot, session, order=delivered, user=db_user)
+        return delivered, ""
     try:
         payment = await settle_failed_free_delivery(session, order, attempt=attempt, error=error)
     except SQLAlchemyError:
