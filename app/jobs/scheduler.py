@@ -19,6 +19,7 @@ from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
+from app.services.usage_alerts import alert_extras, time_alert_markup, traffic_alert_markup
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -162,6 +163,10 @@ async def check_expiring_services(bot: Bot) -> None:
                     break
                 continue
 
+            extras_by_shop = {
+                shop: await alert_extras(session, [item[0] for item in eligible if item[5] == shop], shop_id=shop)
+                for shop in {item[5] for item in eligible}
+            }
             sem = asyncio.Semaphore(_PG_FETCH_CONCURRENCY)
 
             async def _fetch_info(token: str):
@@ -188,6 +193,7 @@ async def check_expiring_services(bot: Bot) -> None:
                 send_bot = _resolve_send_bot(bot, shop_rid, profile_by_user)
                 if send_bot is None:
                     continue  # the shop's own bot is not running: never alert its customers from the platform bot
+                extras = extras_by_shop[shop_rid]
 
                 # --- remaining TIME percent ---
                 if not svc.notified_expire:
@@ -202,36 +208,20 @@ async def check_expiring_services(bot: Bot) -> None:
                             rem_pct = (remaining / total) * 100
                             if rem_pct <= time_pct:
                                 try:
-                                    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
-                                    renew_kb = None
-                                    if on(_ui.get("one_tap_renew_enabled", "1")):
-                                        from app.services.button_styles import style_kwargs
-
-                                        renew_kb = InlineKeyboardMarkup(
-                                            inline_keyboard=[
-                                                [
-                                                    InlineKeyboardButton(
-                                                        text="🔄 تمدید یک‌ضربی",
-                                                        callback_data=f"svc:renew:{svc.id}",
-                                                        **style_kwargs(
-                                                            _ui, "one_tap_renew", fallback="primary"
-                                                        ),
-                                                    )
-                                                ]
-                                            ]
-                                        )
+                                    one_tap = on(_ui.get("one_tap_renew_enabled", "1"))
+                                    markup = time_alert_markup(_ui, svc.id, extras)
                                     await send_bot.send_message(
                                         user.telegram_id,
                                         f"⏰ زمان سرویس <b>{svc.pg_username}</b> به کمتر از "
                                         f"<b>{time_pct}٪</b> رسیده است.\n"
                                         "از بخش سرویس‌ها تمدید کنید."
-                                        + ("\nیا دکمه زیر را بزنید:" if renew_kb else ""),
+                                        + ("\nیا دکمه زیر را بزنید:" if one_tap else "")
+                                        + extras.note_for(svc.id),
                                         parse_mode="HTML",
-                                        reply_markup=renew_kb,
+                                        reply_markup=markup,
                                     )
                                     svc.notified_expire = True
-                                    if renew_kb is not None:
+                                    if one_tap:
                                         svc.renew_nudge_sent_at = now
                                 except Exception:
                                     logger.debug(
@@ -255,8 +245,10 @@ async def check_expiring_services(bot: Bot) -> None:
                                         user.telegram_id,
                                         f"📉 حجم باقی‌مانده سرویس <b>{svc.pg_username}</b> کمتر از "
                                         f"<b>{traffic_pct}٪</b> است "
-                                        f"({format_bytes_ratio(used, limit_f, joiner=' از ')}).",
+                                        f"({format_bytes_ratio(used, limit_f, joiner=' از ')})."
+                                        + extras.note_for(svc.id),
                                         parse_mode="HTML",
+                                        reply_markup=traffic_alert_markup(_ui, svc.id, extras),
                                     )
                                     svc.notified_traffic = True
                                 except Exception:
