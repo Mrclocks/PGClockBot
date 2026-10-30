@@ -290,3 +290,5 @@ tests/test_automation_review.py
 # Voiding approved payments: shop scope, refund idempotency, unknown panel outcome, permission.
 tests/test_payment_voids.py
 tests/test_payment_void_bot.py
+# Durable broadcast queue: platform audience only, no double send, cancel, admin-only.
+tests/test_broadcast_queue.py

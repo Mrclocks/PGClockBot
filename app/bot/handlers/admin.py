@@ -4939,25 +4939,15 @@ async def adm_broadcast_send(message: Message, state: FSMContext, session: Async
     data = await state.get_data()
     audience = data.get("broadcast_audience") or "all"
     await state.clear()
-    from app.services.broadcast import send_broadcast
+    from app.services.broadcast_queue import queue_broadcast
 
-    await message.answer("در حال ارسال…")
     try:
-        result = await send_broadcast(
-            message.bot,
-            session,
-            text=message.text or "",
-            audience=audience,
-            created_by=str(db_user.telegram_id),
-        )
+        log = await queue_broadcast(session, text=message.text or "", audience=audience, created_by=str(db_user.telegram_id))
     except ValueError as e:
         await message.answer(user_safe_error(e), reply_markup=await _admin_hub_kb(session, db_user))
         return
-    except Exception as e:
-        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=await _admin_hub_kb(session, db_user))
-        return
     await message.answer(
-        f"✅ ارسال شد\nموفق: {result['ok']} / {result['total']}\nناموفق: {result['fail']}",
+        f"✅ در صف ارسال قرار گرفت\nمخاطبان: {log.total}\nارسال به‌تدریج انجام می‌شود؛ پیشرفت در پنل وب (پیام گروهی) دیده می‌شود.",
         reply_markup=await _admin_hub_kb(session, db_user),
     )
 

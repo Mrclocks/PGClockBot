@@ -767,6 +767,13 @@ async def run_targeted_campaigns_tick(bot: Bot) -> None:
                         await send_bot.session.close()
 
 
+async def run_broadcast_tick(bot: Bot) -> None:
+    """Send owner broadcasts a step at a time; the platform bot only reaches platform customers."""
+    from app.services.broadcast_queue import run_broadcast_worker
+
+    await run_broadcast_worker(SessionLocal, bot)
+
+
 async def run_bbc_settlement_poll() -> None:
     """Re-read open «بزن به کارت» orders: the callback's backup and the late-payment check."""
     from app.services.bbc_settlement import poll_bbc_settlements
@@ -862,6 +869,10 @@ def start_scheduler(bot: Bot) -> None:
     )
     scheduler.add_job(
         run_targeted_campaigns_tick, "interval", minutes=1, args=[bot], id="targeted_campaigns",
+        max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,
+    )
+    scheduler.add_job(
+        run_broadcast_tick, "interval", minutes=1, args=[bot], id="broadcast",
         max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,
     )
     scheduler.add_job(

@@ -66,10 +66,19 @@
           <span class="li-only">· <bdi dir="ltr">{{ (row.created_at|string)[:16] }}</bdi>{% if row.created_by %} · {{ row.created_by }}{% endif %}</span>
         </td>
         <td class="broadcast-snippet li-title"><span dir="auto">{{ row.text[:120] }}{% if row.text|length > 120 %}…{% endif %}</span></td>
-        <td class="mono cell-tight li-value"><bdi dir="ltr">{{ row.ok_count }}/{{ row.total }}</bdi><span class="li-hide">{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}</span></td>
+        <td class="mono cell-tight li-value"><bdi dir="ltr">{{ row.ok_count }}/{{ row.total }}</bdi><span class="li-hide">{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}{% if row.review_count %} · نامشخص {{ row.review_count }}{% endif %}</span>{% if row.status in ['queued', 'running', 'cancelled'] %}<small class="muted" style="display:block">{{ status_labels.get(row.status, row.status) }}</small>{% endif %}</td>
         <td class="muted col-hide-sm">{{ row.created_by or '—' }}</td>
         <td class="col-actions">
           {% call row_actions() %}
+          {% if row.status in ['queued', 'running'] %}
+          <form method="post" action="/broadcast/history/{{ row.id }}/cancel"
+                data-confirm="ارسال متوقف شود؟ پیام‌های فرستاده‌شده برنمی‌گردند."
+                data-confirm-title="توقف ارسال"
+                data-confirm-danger="1"
+                data-confirm-label="توقف">
+            <button class="btn btn-danger btn-sm" type="submit">توقف</button>
+          </form>
+          {% else %}
           <form method="post" action="/broadcast/history/{{ row.id }}/delete"
                 data-confirm="این رکورد حذف شود؟"
                 data-confirm-title="تأیید حذف"
@@ -77,9 +86,10 @@
                 data-confirm-label="حذف">
             <button class="btn btn-danger btn-sm" type="submit">حذف</button>
           </form>
+          {% endif %}
           {% endcall %}
         </td>
-        <td class="li-only-cell li-badge">{% if row.fail_count %}<span class="badge rejected">{{ row.fail_count }} ناموفق</span>{% else %}<span class="badge ok">موفق</span>{% endif %}</td>
+        <td class="li-only-cell li-badge">{% if row.status in ['queued', 'running'] %}<span class="badge pending">{{ status_labels.get(row.status, row.status) }}</span>{% elif row.fail_count %}<span class="badge rejected">{{ row.fail_count }} ناموفق</span>{% else %}<span class="badge ok">موفق</span>{% endif %}</td>
       </tr>
     {% else %}
       <tr><td colspan="8" class="muted">هنوز پیامی ارسال نشده</td></tr>
