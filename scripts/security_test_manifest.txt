@@ -277,3 +277,6 @@ tests/test_user_photo.py
 tests/test_custom_plan_shop_limits.py
 tests/test_custom_plan_cleanup.py
 tests/test_stale_order_cleanup_tab.py
+
+# First-use nudge: once per service, per-shop switch, shop bot only.
+tests/test_first_use_nudge.py

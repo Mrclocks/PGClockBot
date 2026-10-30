@@ -391,6 +391,12 @@ class UserService(Base):
             sqlite_where=text("remark = 'imported'"),
             postgresql_where=text("remark = 'imported'"),
         ),
+        # New services waiting for the first-use check; the check stamps the row, so it leaves the index.
+        Index(
+            "ix_user_services_first_use_pending", "created_at",
+            sqlite_where=text("first_use_checked_at IS NULL"),
+            postgresql_where=text("first_use_checked_at IS NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -421,6 +427,10 @@ class UserService(Base):
     )
     quota_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     renew_nudge_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Set when the first-use check ran for this service, whether or not a message was sent.
+    first_use_checked_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     # Shop that sold the service (NULL = platform), written when the service is created.
