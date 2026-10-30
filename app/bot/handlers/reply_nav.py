@@ -572,6 +572,7 @@ async def open_wallet_topup(
     return
 
 async def open_wallet_tx(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+    from app.bot.handlers.customer_orders import with_orders_button
     from app.bot.nav_inline import present_inline_only, wallet_hub_keyboard
     from app.config import get_settings
     from app.services.formatting import format_toman
@@ -582,7 +583,7 @@ async def open_wallet_tx(message: Message, session: AsyncSession, db_user: BotUs
     if not txs:
         body = "تراکنشی ثبت نشده."
         await present_inline_only(
-            message, text=body, inline=wallet_hub_keyboard(ui)
+            message, text=body, inline=with_orders_button(wallet_hub_keyboard(ui))
         )
         return
     lines = []
@@ -593,7 +594,7 @@ async def open_wallet_tx(message: Message, session: AsyncSession, db_user: BotUs
         )
     body = format_message("📜 تراکنش‌ها", "\n".join(lines))
     await present_inline_only(
-        message, text=body, inline=wallet_hub_keyboard(ui)
+        message, text=body, inline=with_orders_button(wallet_hub_keyboard(ui))
     )
 
 async def open_support_home(
