@@ -29,7 +29,7 @@ OPERATIONS = {
     # Removes cached customer profile photos for the user card; needs no running bot.
     "user_photo_prune",
 }
-NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "cancellation_notifications", "panel_alert_notifications"}
+NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "broadcast", "cancellation_notifications", "panel_alert_notifications"}
 
 
 class BackgroundSchedulerTests(unittest.IsolatedAsyncioTestCase):
