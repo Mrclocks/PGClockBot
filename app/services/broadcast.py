@@ -136,6 +136,8 @@ async def send_broadcast(
         ok_count=ok,
         fail_count=fail,
         created_by=(created_by or "")[:128] or None,
+        # Already sent here; a queued row would make the background worker send it again.
+        status="done",
     )
     session.add(log)
     await session.commit()
