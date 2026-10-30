@@ -893,6 +893,8 @@ def start_scheduler(bot: Bot) -> None:
     scheduler.add_job(
         run_broadcast_tick, "interval", minutes=1, args=[bot], id="broadcast",
         max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,
+    )
+    scheduler.add_job(
         run_first_use_nudge_tick, "interval", minutes=30, args=[bot], id="first_use_nudge",
         max_instances=1, coalesce=True, misfire_grace_time=1800, replace_existing=True,
     )
