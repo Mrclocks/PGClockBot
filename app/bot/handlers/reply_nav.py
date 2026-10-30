@@ -8,6 +8,7 @@ Inline under messages: plans, services/user/reseller names, approve/reject, URL 
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
@@ -22,7 +23,7 @@ from app.bot import menu_nav as nav
 from app.bot.menu_nav import restore_main_reply
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.reply_keyboards import _reply_admin_marketing_entries
-from app.db.models import BotUser, Order, Role
+from app.db.models import BotUser, Order, ResellerProfile, Role
 from app.services.formatting import format_message
 from app.services.home_overview import admin_customer_counts
 from app.services.service_scope import list_customer_services
@@ -41,6 +42,24 @@ logger = logging.getLogger(__name__)
 router = Router(name="reply_nav")
 
 _RESELLER_HUB_BACK = "nv:res:home"
+
+# Prompts whose answer is a free-form message: only labels of the visible main keyboard
+# (plus home / back) may interrupt them; hidden submenu labels are delivered as text.
+FREE_TEXT_INPUT_STATES: frozenset[str] = frozenset(
+    {
+        "AdminStates:user_message",
+        "AdminStates:ticket_reply",
+        "AdminStates:broadcast_text",
+        "AdminStates:revoke_reseller_reason",
+        "AdminStates:block_user_reason",
+        "AdminStates:delete_user_reason",
+        "ResellerStates:user_message",
+        "SupportStates:subject",
+        "SupportStates:body",
+        "SupportStates:reply",
+        "TicketActionStates:reply",
+    }
+)
 
 
 class _SoftCallback:
@@ -88,6 +107,86 @@ async def _live_bubble(message: Message) -> Message:
         return message
     return await message.answer("⏳")
 
+# Entries owning shared / colliding labels at a nav level: (ui, is_reseller_bot) -> entries.
+_NAV_LEVEL_ENTRIES: dict[str, Callable[[dict, bool], list[tuple[str, str]]]] = {
+    nav.NAV_TOPUP_PAY: lambda ui, _rb: kb._topup_method_entries(ui),
+    nav.NAV_PAY: lambda ui, _rb: kb._pay_method_entries(ui),
+    nav.NAV_SERVICE: lambda ui, _rb: kb._service_action_entries(ui),
+    nav.NAV_REVIEW: lambda ui, _rb: kb._review_submenu_entries(ui),
+    nav.NAV_ADMIN_BROADCAST: lambda ui, _rb: kb._admin_broadcast_submenu_entries(ui),
+    nav.NAV_ADMIN_PLANS_AUDIENCE: lambda ui, _rb: kb._admin_plans_audience_entries(ui),
+    nav.NAV_ADMIN_PLANS_KIND: lambda ui, _rb: kb._admin_plans_list_entries(ui),
+    nav.NAV_SHOP: lambda ui, _rb: kb._shop_submenu_entries(
+        ui, custom_enabled=True, wholesale_enabled=True
+    ),
+    # «👥 کاربران» on PG keyboard must not resolve to admin hub users
+    nav.NAV_ADMIN_PG: lambda ui, _rb: kb._pg_submenu_entries(ui),
+    nav.NAV_ADMIN_OPS: lambda ui, _rb: kb._reply_admin_ops_entries(ui),
+    nav.NAV_ADMIN_PEOPLE: lambda ui, _rb: kb._reply_admin_people_entries(ui),
+    nav.NAV_ADMIN_PRODUCT: lambda ui, _rb: kb._reply_admin_product_entries(ui),
+    nav.NAV_ADMIN_MARKETING: lambda ui, _rb: _reply_admin_marketing_entries(ui),
+    nav.NAV_ADMIN_SYSTEM: lambda ui, _rb: kb._reply_admin_system_entries(ui),
+    nav.NAV_LOYALTY: lambda ui, _rb: kb._loyalty_submenu_entries(ui),
+    nav.NAV_ADMIN_LOYALTY: lambda ui, rb: kb._admin_loyalty_submenu_entries(
+        ui, include_tiers=not rb
+    ),
+}
+
+
+async def _apply_nav_level_labels(
+    mapping: dict[str, str],
+    state: FSMContext,
+    *,
+    ui: dict,
+    role: str,
+    is_reseller_bot: bool,
+) -> None:
+    """Resolve shared / colliding labels by the current nav level."""
+    level = await nav.get_nav_level(state)
+    entries_for = _NAV_LEVEL_ENTRIES.get(level)
+    if entries_for is not None:
+        entries = entries_for(ui, is_reseller_bot)
+    elif level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
+        aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
+        entries = kb._admin_plans_add_type_entries(aud, ui)
+    elif role == "admin" and not is_reseller_bot:
+        # Prefer 4-group hub labels on MAIN / NAV_ADMIN (avoid leaf collisions)
+        entries = kb._reply_admin_hub_entries(ui)
+    else:
+        return
+    for key, label in entries:
+        mapping[(label or "").strip()] = key
+
+
+async def _menu_profile(
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    role: str,
+    show_creds: bool,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+) -> ResellerProfile | None:
+    """Reseller profile whose panel labels this actor may press, or None."""
+    profile = None
+    if is_reseller_bot and role == Role.RESELLER.value:
+        from app.services.reseller_access import load_reseller_actor
+
+        _, profile = await load_reseller_actor(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+    elif show_creds and not is_reseller_bot:
+        from app.services.resellers import get_reseller_profile
+
+        profile = await get_reseller_profile(session, int(db_user.id))
+        if profile is not None and not profile.is_active:
+            profile = None
+    return profile
+
+
 class ReplyMenuTextFilter(BaseFilter):
     """Match known reply-menu / submenu labels (works even during FSM — clears it)."""
 
@@ -103,28 +202,21 @@ class ReplyMenuTextFilter(BaseFilter):
         text = (message.text or "").strip()
         if not text or kb.is_cancel_text(text):
             return False
+        free_text = await state.get_state() in FREE_TEXT_INPUT_STATES
         ui, role, has, show_creds = await _nav_context(
             session,
             db_user,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
-        profile = None
-        if is_reseller_bot and role == Role.RESELLER.value:
-            from app.services.reseller_access import load_reseller_actor
-
-            _, profile = await load_reseller_actor(
-                session,
-                db_user,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            )
-        elif show_creds and not is_reseller_bot:
-            from app.services.resellers import get_reseller_profile
-
-            profile = await get_reseller_profile(session, int(db_user.id))
-            if profile is not None and not profile.is_active:
-                profile = None
+        profile = await _menu_profile(
+            session,
+            db_user,
+            role=role,
+            show_creds=show_creds,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         can_add = False
         if profile is not None and is_reseller_bot:
             from app.services.representative_unification import (
@@ -143,7 +235,7 @@ class ReplyMenuTextFilter(BaseFilter):
             has_services=has,
             ui=ui,
             show_reseller_creds=show_creds,
-            include_submenus=True,
+            include_submenus=not free_text,
             is_reseller_bot=is_reseller_bot,
             profile=profile,
             can_add_representative=can_add,
@@ -155,7 +247,7 @@ class ReplyMenuTextFilter(BaseFilter):
                 has_services=has,
                 ui=ui,
                 as_user=True,
-                include_submenus=True,
+                include_submenus=not free_text,
                 is_reseller_bot=False,
             ).items():
                 mapping.setdefault(k, v)
@@ -173,7 +265,7 @@ class ReplyMenuTextFilter(BaseFilter):
                 has_services=has,
                 ui=ui,
                 as_user=True,
-                include_submenus=True,
+                include_submenus=not free_text,
                 is_reseller_bot=True,
                 profile=None,
             ).items():
@@ -188,81 +280,12 @@ class ReplyMenuTextFilter(BaseFilter):
             if preview_label:
                 mapping[preview_label] = kb.REPLY_ACTION_RES_PREVIEW
             mapping.setdefault("👁 پیش‌نمایش منوی کاربر", kb.REPLY_ACTION_RES_PREVIEW)
-        # Shared / colliding labels — resolve by current nav level
-        level = await nav.get_nav_level(state)
-        if level == nav.NAV_TOPUP_PAY:
-            for key, label in kb._topup_method_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_PAY:
-            for key, label in kb._pay_method_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_SERVICE:
-            for key, label in kb._service_action_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_REVIEW:
-            for key, label in kb._review_submenu_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_ADMIN_BROADCAST:
-            for key, label in kb._admin_broadcast_submenu_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_ADMIN_PLANS_AUDIENCE:
-            for key, label in kb._admin_plans_audience_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_ADMIN_PLANS_KIND:
-            aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
-            for key, label in kb._admin_plans_list_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
-            aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
-            for key, label in kb._admin_plans_add_type_entries(aud, ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_SHOP:
-            for key, label in kb._shop_submenu_entries(
-                ui, custom_enabled=True, wholesale_enabled=True
-            ):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_ADMIN_PG:
-            # «👥 کاربران» on PG keyboard must not resolve to admin hub users
-            for key, label in kb._pg_submenu_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_ADMIN_OPS:
-            for key, label in kb._reply_admin_ops_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_ADMIN_PEOPLE:
-            for key, label in kb._reply_admin_people_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_ADMIN_PRODUCT:
-            for key, label in kb._reply_admin_product_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_ADMIN_MARKETING:
-            for key, label in _reply_admin_marketing_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_ADMIN_SYSTEM:
-            for key, label in kb._reply_admin_system_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_LOYALTY:
-            for key, label in kb._loyalty_submenu_entries(ui):
-                mapping[(label or "").strip()] = key
-        elif level == nav.NAV_ADMIN_LOYALTY:
-            include_tiers = not bool(is_reseller_bot)
-            for key, label in kb._admin_loyalty_submenu_entries(ui, include_tiers=include_tiers):
-                mapping[(label or "").strip()] = key
-        elif role == "admin" and not is_reseller_bot and level not in {
-            nav.NAV_ADMIN_PLANS_AUDIENCE,
-            nav.NAV_ADMIN_PLANS_KIND,
-            nav.NAV_ADMIN_PLANS_ADD_TYPE,
-            nav.NAV_ADMIN_PG,
-            nav.NAV_ADMIN_OPS,
-            nav.NAV_ADMIN_PEOPLE,
-            nav.NAV_ADMIN_PRODUCT,
-            nav.NAV_ADMIN_MARKETING,
-            nav.NAV_ADMIN_SYSTEM,
-            nav.NAV_LOYALTY,
-            nav.NAV_ADMIN_LOYALTY,
-        }:
-            # Prefer 4-group hub labels on MAIN / NAV_ADMIN (avoid leaf collisions)
-            for key, label in kb._reply_admin_hub_entries(ui):
-                mapping[(label or "").strip()] = key
+        # Free-text prompts keep only the labels of the visible main keyboard, so a
+        # message like «تست» is sent instead of opening a hidden submenu.
+        if not free_text:
+            await _apply_nav_level_labels(
+                mapping, state, ui=ui, role=role, is_reseller_bot=is_reseller_bot
+            )
         if kb.is_home_text(text, ui):
             action = kb.REPLY_ACTION_HOME
         elif text in {kb._back_label(ui), kb.BTN_BACK} or (
