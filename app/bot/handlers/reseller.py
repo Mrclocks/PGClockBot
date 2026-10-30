@@ -403,7 +403,7 @@ async def res_users_list(
         nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"res:users:{page + 1}"))
     if nav:
         rows.append(nav)
-    rows.append([InlineKeyboardButton(text="🔎 جستجو با لینک اشتراک", callback_data=ASK_CALLBACK)])
+    rows.append([InlineKeyboardButton(text="🔎 جستجو", callback_data=ASK_CALLBACK)])
     rows.extend(_group_back("res_users").inline_keyboard)
     text = (
         f"👥 <b>مشتریان من</b>\n"

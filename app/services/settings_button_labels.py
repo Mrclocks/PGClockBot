@@ -148,7 +148,7 @@ BTN_ADMIN_PG: list[Field] = [
 
 BTN_ADMIN_PEOPLE_SUB: list[Field] = [
     ("btn_adm_users_list", "لیست کاربران", "text"),
-    ("btn_adm_users_search", "جستجو با آیدی تلگرام", "text"),
+    ("btn_adm_users_search", "جستجو", "text"),
     ("btn_adm_users_web", "مدیریت کاربران در وب‌پنل", "text"),
     ("btn_adm_res_list", "لیست نمایندگان", "text"),
     ("btn_adm_res_apps", "درخواست‌های نمایندگی", "text"),

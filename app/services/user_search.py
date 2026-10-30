@@ -15,6 +15,8 @@ from app.db.models import BotUser
 from app.services.list_query import ilike_pattern, normalize_search_q
 
 SEARCH_LIMIT = 500
+RESULT_LIMIT = 10
+MIN_QUERY_LENGTH = 2
 _LINK_PREFIX = re.compile(r"^(?:https?://)?(?:t\.me|telegram\.me)/", re.IGNORECASE)
 _ID_MAX = 2**63 - 1
 
@@ -79,3 +81,18 @@ async def with_search_matches(
     for user in matches:
         by_id.setdefault(int(user.id), user)
     return sorted(by_id.values(), key=lambda u: int(u.id), reverse=True)
+
+
+async def search_bot_users(
+    session: AsyncSession, raw: str | None, *, scope: ColumnElement[bool], limit: int = RESULT_LIMIT
+) -> tuple[list[BotUser], bool]:
+    """Newest users in ``scope`` whose name, @username or id match; True when more exist.
+
+    A text query needs at least two characters, so a single letter cannot list the whole shop.
+    """
+    text = clean_handle(raw)
+    clause = bot_user_search_clause(raw)
+    if clause is None or (_numeric(text) is None and len(text) < MIN_QUERY_LENGTH):
+        return [], False
+    rows = list(await session.scalars(select(BotUser).where(scope, clause).order_by(BotUser.id.desc()).limit(limit + 1)))
+    return rows[:limit], len(rows) > limit

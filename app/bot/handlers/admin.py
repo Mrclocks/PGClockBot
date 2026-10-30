@@ -42,7 +42,7 @@ from app.services.volume_allocation import set_shop_oversell
 from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
 from app.bot.handlers.payment_voids import void_button
-from app.bot.handlers.subscription_lookup import delete_typed_link, staff_lookup
+from app.bot.handlers.subscription_lookup import SEARCH_PROMPT, delete_typed_link, staff_lookup, staff_user_search
 from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
@@ -2210,6 +2210,7 @@ async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         )
 
 USERS_PAGE_SIZE = 10
+MAX_SEARCH_LENGTH = 64
 
 def _deny_if_outside_platform_shop(user: BotUser | None) -> str | None:
     """Owner admin tools are platform-shop only (reseller_id IS NULL)."""
@@ -2313,7 +2314,7 @@ async def adm_users_search_start(callback: CallbackQuery, state: FSMContext, db_
     await ask_text(
         callback,
         state,
-        prompt="آیدی عددی، یوزرنیم تلگرام یا لینک اشتراک را بفرستید:\n<code>123456789</code> یا <code>@username</code>",
+        prompt=SEARCH_PROMPT,
         cancel_code="adm_usr",
         return_to="adm:users",
         fsm_state=AdminStates.user_search,
@@ -2347,8 +2348,8 @@ async def adm_users_search(
         await _answer_link_search(message, state, session, db_user)
         return
     query = clean_handle(message.text)
-    if not query or " " in query:
-        await message.answer("آیدی عددی، یوزرنیم تلگرام یا لینک اشتراک را بفرستید؛ مثلاً <code>123456789</code> یا <code>@username</code>.")
+    if not query or len(query) > MAX_SEARCH_LENGTH:
+        await message.answer("نام، آیدی عددی، یوزرنیم تلگرام یا لینک اشتراک را بفرستید؛ مثلاً <code>123456789</code> یا <code>@username</code>.")
         return
     user = await find_bot_user(session, query, scope=BotUser.reseller_id.is_(None))
     await state.clear()
@@ -2356,10 +2357,10 @@ async def adm_users_search(
     # Tip-delete seeding drops the custom keyboard on many mobile clients.
     users_kb = kb.admin_users_reply_keyboard()
     if not user:
-        await message.answer(
-            "کاربری با این آیدی یا یوزرنیم در فروشگاه پلتفرم یافت نشد.",
-            reply_markup=users_kb,
-        )
+        # No exact id or @username: search names and usernames by part.
+        text, markup = await staff_user_search(session, query, shop_id=None)
+        await message.answer("🔎 نتیجه جستجو", reply_markup=users_kb)
+        await message.answer(text, reply_markup=markup)
         return
     await message.answer("👤 نتیجه جستجو", reply_markup=users_kb)
     await _render_user_card(message, session, user)

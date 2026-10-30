@@ -181,7 +181,7 @@
     "🌐 مدیریت کامل در وب‌پنل": "adm_users_web",
     "🏠 منوی اصلی": "home",
     "📋 لیست کاربران": "adm_users_list",
-    "🔎 جستجو با آیدی تلگرام": "adm_users_search"
+    "🔎 جستجو": "adm_users_search"
   },
   "reseller.hub": {
     "👁 پیش‌نمایش منوی کاربر": "res_preview",
