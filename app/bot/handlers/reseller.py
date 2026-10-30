@@ -822,12 +822,12 @@ async def res_orders(
             f"#{o.id} — {format_toman(o.amount, get_settings().currency)} — "
             f"{order_status_fa(o.status)}"
         )
+    markup = _group_back("res_orders")
+    if has_bot_perm(profile, "payment_void"):
+        void_row = [InlineKeyboardButton(text="↩️ ابطال پرداخت تأییدشده", callback_data="payvoid:list")]
+        markup = InlineKeyboardMarkup(inline_keyboard=[void_row, *markup.inline_keyboard])
     if callback.message:
-        await safe_edit_text(
-            callback.message,
-            "\n".join(lines),
-            reply_markup=_group_back("res_orders"),
-        )
+        await safe_edit_text(callback.message, "\n".join(lines), reply_markup=markup)
 
 
 async def present_reseller_tickets_list(

@@ -280,3 +280,4 @@ tests/test_stale_order_cleanup_tab.py
 
 # Voiding approved payments: shop scope, refund idempotency, unknown panel outcome, permission.
 tests/test_payment_voids.py
+tests/test_payment_void_bot.py

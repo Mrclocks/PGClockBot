@@ -289,7 +289,7 @@ class PaymentVoidRouteTests(VoidCase):
 
     async def test_reseller_with_permission_voids_only_own_shop(self):
         staff = {"role": "reseller", "bot_user_id": 2, "permissions": ["payment_void"]}
-        with patch("app.api.payment_void_pages.notify_payer", AsyncMock(return_value=True)) as notify:
+        with patch("app.services.payment_voids.notify_payer", AsyncMock(return_value=True)) as notify:
             denied = await self.post(staff, 100, reason="x")
             self.assertIn("err=", denied.headers["location"])
             self.assertEqual((await self.session.get(Payment, 100)).status, "approved")
@@ -301,7 +301,7 @@ class PaymentVoidRouteTests(VoidCase):
         self.assertEqual(notify.await_args.kwargs["shop_id"], 2)
 
     async def test_owner_voids_platform_payment(self):
-        with patch("app.api.payment_void_pages.notify_payer", AsyncMock(return_value=True)):
+        with patch("app.services.payment_voids.notify_payer", AsyncMock(return_value=True)):
             response = await self.post(OWNER, 100, reason="اشتباه")
         self.assertIn("ok=", response.headers["location"])
         self.assertEqual((await self.session.get(Payment, 100)).status, "voided")

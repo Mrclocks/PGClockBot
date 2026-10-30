@@ -28,9 +28,11 @@ from app.db.models import (
     ServiceAutomation,
     UserService,
 )
+from app.services.formatting import format_toman
 from app.services.loyalty import reverse_order_points
 from app.services.orders import _order_note, _wallet_topup_already_credited, is_mutation_order_note
 from app.services.pasarguard import get_pg, get_pg_for_reseller, is_pg_not_found
+from app.services.payer_notify import notify_payer
 from app.services.shop_scope import payment_shop_id
 from app.services.wallet import credit_wallet, debit_wallet
 
@@ -51,6 +53,14 @@ STATUS_LABELS = {
     STATUS_DONE: "ابطال شد",
 }
 NOT_FOUND = "پرداخت یافت نشد"
+# Fixed reasons for the bot, which has no free-text step here; the key fits a callback payload.
+BOT_REASONS = {
+    "1": "رسید جعلی یا نامعتبر",
+    "2": "مبلغ پرداخت اشتباه بود",
+    "3": "پرداخت تکراری",
+    "4": "پرداخت به‌اشتباه تأیید شد",
+}
+CANDIDATE_LIMIT = 10
 
 
 @dataclass(slots=True)
@@ -350,3 +360,81 @@ async def list_voids(session: AsyncSession, payment_ids: list[int]) -> dict[int,
         return {}
     rows = await session.scalars(select(PaymentVoid).where(PaymentVoid.payment_id.in_(payment_ids)))
     return {int(row.payment_id): row for row in rows}
+
+
+def offers_void(payment: Payment, order: Order | None) -> bool:
+    """True when the bot should offer «ابطال» for this payment (the service re-checks on submit)."""
+    if payment.status != PaymentStatus.APPROVED.value or payment.method not in VOIDABLE_METHODS:
+        return False
+    if payment.is_wallet_topup or order is None:
+        return False
+    return not is_mutation_order_note(_order_note(order)) and order.status in VOIDABLE_ORDER_STATUSES
+
+
+async def list_void_candidates(
+    session: AsyncSession, *, shop_id: int | None, limit: int = CANDIDATE_LIMIT
+) -> list[tuple[Payment, Order, BotUser | None, PaymentVoid | None]]:
+    """Recent voidable purchase payments of one shop, plus voids waiting for a retry."""
+    shop_clause = Order.reseller_id.is_(None) if shop_id is None else Order.reseller_id == int(shop_id)
+    rows = await session.execute(
+        select(Payment, Order, BotUser, PaymentVoid)
+        .join(Order, Order.id == Payment.order_id)
+        .outerjoin(BotUser, BotUser.id == Payment.user_id)
+        .outerjoin(PaymentVoid, PaymentVoid.payment_id == Payment.id)
+        .where(
+            shop_clause,
+            Payment.is_wallet_topup.is_(False),
+            Payment.method.in_(sorted(VOIDABLE_METHODS)),
+            or_(
+                Payment.status == PaymentStatus.APPROVED.value,
+                PaymentVoid.status.in_(OPEN_VOID_STATUSES),
+            ),
+        )
+        .order_by(Payment.id.desc())
+        .limit(max(1, min(int(limit), 50)))
+    )
+    return [
+        (payment, order, user, void)
+        for payment, order, user, void in rows.all()
+        if void is not None or offers_void(payment, order)
+    ]
+
+
+def void_customer_notice(payment: Payment, refund_amount: int) -> str:
+    if payment.is_wallet_topup:
+        return f"شارژ کیف پول #{payment.id} ابطال شد و مبلغ آن از کیف پول شما کم شد. اگر اشتباهی رخ داده با پشتیبانی تماس بگیرید."
+    text = f"پرداخت #{payment.id} ابطال و سرویس مربوط به آن غیرفعال شد."
+    if refund_amount:
+        text += f" مبلغ {format_toman(refund_amount)} به کیف پول شما برگشت."
+    return text + " اگر اشتباهی رخ داده با پشتیبانی تماس بگیرید."
+
+
+async def void_and_notify(
+    session: AsyncSession,
+    payment_id: int,
+    *,
+    shop_id: int | None,
+    actor: str,
+    reason: str,
+    refund_to_wallet: bool = False,
+) -> PaymentVoid:
+    """Void the payment, then tell the customer once (not again when the void was already done)."""
+    previous = (await list_voids(session, [int(payment_id)])).get(int(payment_id))
+    void = await void_approved_payment(
+        session, payment_id, shop_id=shop_id, actor=actor, reason=reason, refund_to_wallet=refund_to_wallet
+    )
+    if previous is None or previous.status != STATUS_DONE:
+        payment = await session.get(Payment, int(payment_id))
+        await notify_payer(
+            session, payment.user_id, title="⚠️ پرداخت ابطال شد",
+            body=void_customer_notice(payment, int(void.refund_amount)), shop_id=void.shop_id,
+        )
+    return void
+
+
+async def load_void_candidate(
+    session: AsyncSession, payment_id: int, *, shop_id: int | None
+) -> tuple[Payment, Order | None, PaymentVoid | None]:
+    """One payment of ``shop_id`` with its void row; a payment of another shop reads as missing."""
+    payment, order = await _load_payment(session, payment_id, shop_id)
+    return payment, order, await _find_void(session, payment.id)

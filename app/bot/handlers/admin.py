@@ -27,6 +27,7 @@ from app.services.orders import (
     fulfill_paid_order,
     reject_payment,
 )
+from app.services.payment_voids import offers_void
 from app.services.redact import user_safe_error
 from app.services.reseller_wallet import load_reseller_profile
 from app.services.pasarguard import get_pg
@@ -36,6 +37,7 @@ from app.services.user_search import clean_handle, find_bot_user
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.billing import is_payg
 from app.services.volume_allocation import set_shop_oversell
+from app.bot.handlers.payment_voids import void_button
 from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
@@ -684,6 +686,8 @@ async def adm_order_view(callback: CallbackQuery, session: AsyncSession, db_user
         text += f"پرداخت: #{pay.id} ({pay.status})\n"
     ui = await get_all_settings(session)
     rows = _order_actions(order, pay, ui)
+    if pay is not None and offers_void(pay, order):
+        rows.append([void_button(pay.id)])
     rows.append([kb.back_button(ui, "adm:orders")])
     if callback.message:
         await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
