@@ -63,12 +63,24 @@ class InstallMenuChannelTests(unittest.TestCase):
         self.assertIn("sync_code_to_channel", update)
         self.assertNotIn("syncing hard to origin/main", update)
 
+    def test_sync_uses_explicit_channel_refspec(self):
+        src = SH.read_text(encoding="utf-8")
+        sync = src.split("sync_code_to_channel() {", 1)[1].split("panel_is_installed() {", 1)[0]
+        self.assertIn("+refs/heads/${ch}:refs/remotes/origin/${ch}", sync)
+        self.assertIn("+refs/heads/*:refs/remotes/origin/*", sync)
+        self.assertIn("git remote set-url origin", sync)
+        self.assertIn('dispatch "$@"', src)
+        channel = src.split("set_install_channel() {", 1)[1].split("persist_channel_env() {", 1)[0]
+        self.assertIn("env_get DEPLOYED_CHANNEL", channel)
+
     def test_get_sh_clones_selected_branch(self):
         src = GET.read_text(encoding="utf-8")
         self.assertIn('git clone -b "$REMOTE_BRANCH" --single-branch', src)
         self.assertIn("PGCLOCK_CHANNEL", src)
         self.assertIn('REMOTE_BRANCH="dev"', src)
         self.assertIn("CHANNEL_FROM_ENV", src)
+        self.assertIn("+refs/heads/${REMOTE_BRANCH}:refs/remotes/origin/${REMOTE_BRANCH}", src)
+        self.assertIn('update-${REMOTE_BRANCH}', src)
 
 
 class WriteEnvChannelTests(unittest.TestCase):

@@ -1297,11 +1297,18 @@ normalize_channel() {
   esac
 }
 
-# INSTALL_CHANNEL is set by menu (install-main/install-dev) or env.
+# INSTALL_CHANNEL is set by menu (install-main/install-dev), CLI arg, or env/.env.
 set_install_channel() {
   local raw="${1:-}"
   if [[ -z "$raw" ]]; then
-    raw="${PGCLOCK_CHANNEL:-${PGCLOCK_BRANCH:-main}}"
+    raw="${PGCLOCK_CHANNEL:-${PGCLOCK_BRANCH:-}}"
+  fi
+  # Prefer the channel already saved on this install (dev servers stay on dev).
+  if [[ -z "$raw" && -f .env ]]; then
+    raw="$(env_get DEPLOYED_CHANNEL "$(env_get UPDATE_CHANNEL "")")"
+  fi
+  if [[ -z "$raw" ]]; then
+    raw="main"
   fi
   INSTALL_CHANNEL="$(normalize_channel "$raw")"
   ok "Channel: ${INSTALL_CHANNEL}"
@@ -1316,7 +1323,7 @@ persist_channel_env() {
 }
 
 sync_code_to_channel() {
-  local ch
+  local ch fetch_err
   ch="$(normalize_channel "${1:-${INSTALL_CHANNEL:-main}}")"
   if [[ ! -d .git ]]; then
     warn "Not a git repo — skipped channel sync (using files on disk)."
@@ -1325,16 +1332,33 @@ sync_code_to_channel() {
   info "Syncing code to origin/${ch}…"
   git remote get-url origin >/dev/null 2>&1 || \
     git remote add origin "https://github.com/Mrclocks/PGClockBot.git" 2>/dev/null || true
-  # Force the channel tip into refs/remotes/origin/<ch>. A narrow
-  # remote.origin.fetch (e.g. +refs/heads/main:…) otherwise leaves
-  # origin/dev missing after a "successful" fetch of only main.
-  if ! timeout 120 git fetch --no-tags --prune origin \
-      "+refs/heads/${ch}:refs/remotes/origin/${ch}" 2>/dev/null; then
-    err "Could not fetch origin/${ch}. Check network / GitHub access."
-    return 1
+  # Prefer the public repo URL (drop stale mirrors / dead remotes).
+  git remote set-url origin "https://github.com/Mrclocks/PGClockBot.git" 2>/dev/null || true
+  # A single-branch clone only has +refs/heads/main:… in remote.origin.fetch.
+  # Plain `git fetch origin dev` then lands on FETCH_HEAD and never creates
+  # refs/remotes/origin/dev — Update then dies with "origin/dev not found".
+  # Keep channel tips permanently so later fetches stay reliable.
+  if ! git config --get-all remote.origin.fetch 2>/dev/null \
+      | grep -qx "+refs/heads/${ch}:refs/remotes/origin/${ch}"; then
+    git config --add remote.origin.fetch \
+      "+refs/heads/${ch}:refs/remotes/origin/${ch}" 2>/dev/null || true
   fi
+  fetch_err="$(mktemp)"
+  if ! timeout 120 git fetch --no-tags origin \
+      "+refs/heads/${ch}:refs/remotes/origin/${ch}" 2>"$fetch_err"; then
+    # Last resort: full heads fetch (still no tags).
+    if ! timeout 180 git fetch --no-tags origin \
+        '+refs/heads/*:refs/remotes/origin/*' 2>>"$fetch_err"; then
+      err "Could not fetch origin/${ch}. Check network / GitHub access."
+      [[ -s "$fetch_err" ]] && warn "git: $(tr '\n' ' ' <"$fetch_err" | head -c 300)"
+      rm -f "$fetch_err"
+      return 1
+    fi
+  fi
+  rm -f "$fetch_err"
   if ! git rev-parse --verify "origin/${ch}" >/dev/null 2>&1; then
-    err "Remote branch origin/${ch} not found."
+    err "Remote branch origin/${ch} not found after fetch."
+    warn "Try: git fetch origin '+refs/heads/${ch}:refs/remotes/origin/${ch}'"
     return 1
   fi
   # Keep runtime files; hard-sync tree to the channel tip.
@@ -2362,9 +2386,9 @@ run_menu() {
       9|doctor)    cmd_doctor ; pause ;;
       10|uninstall) cmd_uninstall ; pause ;;
       11|xray) cmd_xray ; pause ;;
-      # Back-compat shortcuts
-      install|i) cmd_install main ; pause ;;
-      update|u)  cmd_update main  ; pause ;;
+      # Back-compat shortcuts — honor .env / PGCLOCK_CHANNEL when set
+      install|i) cmd_install "" ; pause ;;
+      update|u)  cmd_update ""  ; pause ;;
       0|exit|q|quit)
         echo ""
         ok "Bye."
@@ -2385,10 +2409,10 @@ dispatch() {
   local arg="${2:-}"
   case "${cmd}" in
     ""|menu)       run_menu ;;
-    install|i)     cmd_install "${arg:-main}" ;;
+    install|i)     cmd_install "${arg}" ;;
     install-main|install_main) cmd_install main ;;
     install-dev|install_dev)   cmd_install dev ;;
-    update|u)      cmd_update "${arg:-main}" ;;
+    update|u)      cmd_update "${arg}" ;;
     update-main|update_main)   cmd_update main ;;
     update-dev|update_dev)     cmd_update dev ;;
     env|edit|edit-env|dotenv) cmd_edit_env ;;
@@ -2407,4 +2431,4 @@ dispatch() {
   esac
 }
 
-dispatch "${1:-}"
+dispatch "$@"

@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.15": [
+        "آپدیت: اگر کلون فقط main را track کند، origin/dev با refspec صریح ساخته می‌شود و در صورت شکست، fallback به fetch همهٔ شاخه‌ها",
+        "آپدیت: remote origin به ریپوی عمومی Mrclocks/PGClockBot تنظیم می‌شود؛ خطای git نمایش داده می‌شود",
+        "آپدیت: دستور update بدون آرگومان کانال ذخیره‌شده در .env را نگه می‌دارد (دیگر به main برنمی‌گردد)",
+        "get.sh: با PGCLOCK_CHANNEL=dev دستور update به update-dev ترجمه می‌شود",
+        "ریستور: backup/dev-pre-v0.5.15 (commit 25b9b9c4)",
+    ],
     "0.5.14": [
         "رفع فوری: جدا کردن jobهای broadcast و first-use در scheduler تا پنل دوباره بالا بیاید",
         "نصب/آپدیت: fetch کانال، شاخهٔ origin/dev را حتی با fetch محدود remote هم می‌آورد",
