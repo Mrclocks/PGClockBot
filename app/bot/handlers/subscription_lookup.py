@@ -41,7 +41,15 @@ SHOP_BACK = "res:users:0"
 ASK_CALLBACK = "sublk:ask"
 PLATFORM_ASK = "adm:users:search"
 NOT_FOUND_TEXT = "اشتراکی با این لینک در فروشگاه شما پیدا نشد."
-PROMPT = "🔎 نام، یوزرنیم یا آیدی تلگرام مشتری، یا لینک اشتراک را بفرستید. اگر لینک بفرستید، پیام شما پس از جستجو پاک می‌شود."
+SEARCH_PROMPT = (
+    "🔎 <b>جستجوی کاربر</b>\n"
+    "می‌توانید با این‌ها جستجو کنید:\n"
+    "• نام یا بخشی از نام\n"
+    "• یوزرنیم تلگرام، مثلاً <code>@username</code>\n"
+    "• آیدی عددی تلگرام، مثلاً <code>123456789</code>\n"
+    "• لینک اشتراک یا توکن آن (پیام شما پس از جستجو پاک می‌شود)\n\n"
+    "متن جستجو را بفرستید:"
+)
 USER_NOT_FOUND_TEXT = "مشتری‌ای با این نام، یوزرنیم یا آیدی پیدا نشد."
 SHORT_QUERY_TEXT = "حداقل دو نویسه از نام یا یوزرنیم را بفرستید."
 MORE_RESULTS_NOTE = "\n<i>نتایج بیشتری هست؛ جستجو را دقیق‌تر کنید.</i>"
@@ -187,7 +195,7 @@ async def ask_link(
         return
     await callback.answer()
     await ask_text(
-        callback, state, prompt=PROMPT, cancel_code=CANCEL_CODE, fsm_state=LookupStates.link,
+        callback, state, prompt=SEARCH_PROMPT, cancel_code=CANCEL_CODE, fsm_state=LookupStates.link,
         return_to=SHOP_BACK, edit=True,
     )
 

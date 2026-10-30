@@ -42,7 +42,7 @@ from app.services.volume_allocation import set_shop_oversell
 from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
 from app.bot.handlers.payment_voids import void_button
-from app.bot.handlers.subscription_lookup import delete_typed_link, staff_lookup, staff_user_search
+from app.bot.handlers.subscription_lookup import SEARCH_PROMPT, delete_typed_link, staff_lookup, staff_user_search
 from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
@@ -2314,7 +2314,7 @@ async def adm_users_search_start(callback: CallbackQuery, state: FSMContext, db_
     await ask_text(
         callback,
         state,
-        prompt="نام، آیدی عددی، یوزرنیم تلگرام یا لینک اشتراک را بفرستید:\n<code>123456789</code> یا <code>@username</code>",
+        prompt=SEARCH_PROMPT,
         cancel_code="adm_usr",
         return_to="adm:users",
         fsm_state=AdminStates.user_search,

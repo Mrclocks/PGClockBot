@@ -902,7 +902,7 @@ DEFAULT_SETTINGS = {
     "btn_pg_group": "📁 ساخت گروه",
     "btn_pg_template": "📋 ساخت تمپلیت",
     "btn_adm_users_list": "📋 لیست کاربران",
-    "btn_adm_users_search": "🔎 جستجو با آیدی تلگرام",
+    "btn_adm_users_search": "🔎 جستجو",
     "btn_adm_users_web": "🌐 مدیریت کامل در وب‌پنل",
     "btn_adm_res_list": "📋 لیست نمایندگان",
     "btn_adm_res_apps": "📋 درخواست‌های در انتظار",
