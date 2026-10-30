@@ -40,7 +40,6 @@ tests/test_update_migration_metadata.py
 # --- Setup wizard / secrets-at-rest / infra hardening ---
 # starting with # are comments; blank lines are ignored.
 # --- Tenant / shop isolation & IDOR ---
-
 # Bot settings button colors: owner/shop permissions and per-shop writes.
 tests/test_button_color_editor.py
 # In-menu screen editor: owner/shop permissions, per-shop writes, edit-mode switch.
@@ -208,7 +207,6 @@ tests/test_reseller_capacity_view.py
 tests/test_random_payment_card.py
 tests/test_panel_alert_notifications.py
 tests/test_stuck_order_resolution.py
-
 tests/test_connection_status_web.py
 tests/test_shop_isolation_owner_routes.py
 tests/test_shop_isolation_tickets.py
@@ -277,7 +275,8 @@ tests/test_user_photo.py
 tests/test_custom_plan_shop_limits.py
 tests/test_custom_plan_cleanup.py
 tests/test_stale_order_cleanup_tab.py
-
+# Subscription link search: shop scope, no secret leak, permission.
+tests/test_subscription_link_search.py
 # Alert offers: shop purse and shop catalog only, no cross-tenant wallet use.
 tests/test_usage_alerts.py
 # Customer orders list: own orders of the current shop only.
