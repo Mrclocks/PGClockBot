@@ -37,6 +37,7 @@ from app.services.users import (
 )
 
 log = logging.getLogger(__name__)
+TOPUP_CALLBACK = "nv:w:topup"
 ACTIONS = ("renew", "duration", "volume")
 LABELS = {
     "renew": "تمدید خودکار",
@@ -299,12 +300,13 @@ async def notify_once(
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
+                    *([[InlineKeyboardButton(text="➕ شارژ کیف پول", callback_data=TOPUP_CALLBACK)]] if code == "low_wallet" else []),
                     [
                         InlineKeyboardButton(
                             text="⚙️ تنظیمات خودکار سرویس",
                             callback_data=f"svc:auto:{service.id}",
                         ),
-                    ]
+                    ],
                 ]
             ),
         )

@@ -277,4 +277,12 @@ tests/test_user_photo.py
 tests/test_custom_plan_shop_limits.py
 tests/test_custom_plan_cleanup.py
 tests/test_stale_order_cleanup_tab.py
+
+# Alert offers: shop purse and shop catalog only, no cross-tenant wallet use.
+tests/test_usage_alerts.py
+# Customer orders list: own orders of the current shop only.
+tests/test_customer_orders.py
+# Funnel steps from the order flow: shop scope, idempotency, failure isolation.
+tests/test_funnel_events.py
+# Cancellation approve/reject from the bot: shop scope and staff authz.
 tests/test_cancellation_review_bot.py
