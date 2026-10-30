@@ -19,6 +19,7 @@ from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
+from app.services.usage_alerts import alert_extras, time_alert_markup, traffic_alert_markup
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -162,6 +163,10 @@ async def check_expiring_services(bot: Bot) -> None:
                     break
                 continue
 
+            extras_by_shop = {
+                shop: await alert_extras(session, [item[0] for item in eligible if item[5] == shop], shop_id=shop)
+                for shop in {item[5] for item in eligible}
+            }
             sem = asyncio.Semaphore(_PG_FETCH_CONCURRENCY)
 
             async def _fetch_info(token: str):
@@ -188,6 +193,7 @@ async def check_expiring_services(bot: Bot) -> None:
                 send_bot = _resolve_send_bot(bot, shop_rid, profile_by_user)
                 if send_bot is None:
                     continue  # the shop's own bot is not running: never alert its customers from the platform bot
+                extras = extras_by_shop[shop_rid]
 
                 # --- remaining TIME percent ---
                 if not svc.notified_expire:
@@ -202,36 +208,20 @@ async def check_expiring_services(bot: Bot) -> None:
                             rem_pct = (remaining / total) * 100
                             if rem_pct <= time_pct:
                                 try:
-                                    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
-                                    renew_kb = None
-                                    if on(_ui.get("one_tap_renew_enabled", "1")):
-                                        from app.services.button_styles import style_kwargs
-
-                                        renew_kb = InlineKeyboardMarkup(
-                                            inline_keyboard=[
-                                                [
-                                                    InlineKeyboardButton(
-                                                        text="🔄 تمدید یک‌ضربی",
-                                                        callback_data=f"svc:renew:{svc.id}",
-                                                        **style_kwargs(
-                                                            _ui, "one_tap_renew", fallback="primary"
-                                                        ),
-                                                    )
-                                                ]
-                                            ]
-                                        )
+                                    one_tap = on(_ui.get("one_tap_renew_enabled", "1"))
+                                    markup = time_alert_markup(_ui, svc.id, extras)
                                     await send_bot.send_message(
                                         user.telegram_id,
                                         f"⏰ زمان سرویس <b>{svc.pg_username}</b> به کمتر از "
                                         f"<b>{time_pct}٪</b> رسیده است.\n"
                                         "از بخش سرویس‌ها تمدید کنید."
-                                        + ("\nیا دکمه زیر را بزنید:" if renew_kb else ""),
+                                        + ("\nیا دکمه زیر را بزنید:" if one_tap else "")
+                                        + extras.note_for(svc.id),
                                         parse_mode="HTML",
-                                        reply_markup=renew_kb,
+                                        reply_markup=markup,
                                     )
                                     svc.notified_expire = True
-                                    if renew_kb is not None:
+                                    if one_tap:
                                         svc.renew_nudge_sent_at = now
                                 except Exception:
                                     logger.debug(
@@ -255,8 +245,10 @@ async def check_expiring_services(bot: Bot) -> None:
                                         user.telegram_id,
                                         f"📉 حجم باقی‌مانده سرویس <b>{svc.pg_username}</b> کمتر از "
                                         f"<b>{traffic_pct}٪</b> است "
-                                        f"({format_bytes_ratio(used, limit_f, joiner=' از ')}).",
+                                        f"({format_bytes_ratio(used, limit_f, joiner=' از ')})."
+                                        + extras.note_for(svc.id),
                                         parse_mode="HTML",
+                                        reply_markup=traffic_alert_markup(_ui, svc.id, extras),
                                     )
                                     svc.notified_traffic = True
                                 except Exception:
@@ -705,6 +697,7 @@ async def run_service_automation_tick(bot: Bot) -> None:
     from app.services.service_automation import process_service_automation
 
     last_id = 0
+    unreachable_shops: set[int] = set()
     while True:
         async with SessionLocal() as session:
             rows = (await session.execute(
@@ -729,6 +722,9 @@ async def run_service_automation_tick(bot: Bot) -> None:
                     if shop_id:
                         send_bot, should_close = await open_notify_bot_for_reseller(session, shop_id)
                         if send_bot is None:
+                            if shop_id not in unreachable_shops:
+                                unreachable_shops.add(shop_id)
+                                logger.warning("service automation skipped: shop %s has no bot token", shop_id)
                             continue
                     await process_service_automation(session, service_id, send_bot)
                 except Exception:
@@ -769,6 +765,32 @@ async def run_targeted_campaigns_tick(bot: Bot) -> None:
                 finally:
                     if should_close and send_bot is not None:
                         await send_bot.session.close()
+
+
+async def run_broadcast_tick(bot: Bot) -> None:
+    """Send owner broadcasts a step at a time; the platform bot only reaches platform customers."""
+    from app.services.broadcast_queue import run_broadcast_worker
+
+    await run_broadcast_worker(SessionLocal, bot)
+async def run_first_use_nudge_tick(bot: Bot) -> None:
+    """Message customers whose new service has not carried any traffic after a day."""
+    from app.services.first_use_nudge import run_first_use_check
+
+    async with SessionLocal() as session:
+        profiles = (
+            await session.execute(
+                select(ResellerProfile.user_id, ResellerProfile.id).where(
+                    ResellerProfile.is_active.is_(True), ResellerProfile.bot_token.is_not(None)
+                )
+            )
+        ).all()
+        profile_by_user = {int(user_id): int(profile_id) for user_id, profile_id in profiles if user_id is not None}
+        try:
+            await run_first_use_check(
+                session, get_pg(), lambda shop_id: _resolve_send_bot(bot, shop_id, profile_by_user)
+            )
+        except Exception:
+            logger.exception("first-use nudge tick failed")
 
 
 async def run_bbc_settlement_poll() -> None:
@@ -867,6 +889,14 @@ def start_scheduler(bot: Bot) -> None:
     scheduler.add_job(
         run_targeted_campaigns_tick, "interval", minutes=1, args=[bot], id="targeted_campaigns",
         max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,
+    )
+    scheduler.add_job(
+        run_broadcast_tick, "interval", minutes=1, args=[bot], id="broadcast",
+        max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,
+    )
+    scheduler.add_job(
+        run_first_use_nudge_tick, "interval", minutes=30, args=[bot], id="first_use_nudge",
+        max_instances=1, coalesce=True, misfire_grace_time=1800, replace_existing=True,
     )
     scheduler.add_job(
         run_service_automation_tick,

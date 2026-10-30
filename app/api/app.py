@@ -1532,7 +1532,13 @@ def create_api_app(lifespan=None) -> FastAPI:
     from app.api.customer_features import register_customer_features
 
     register_customer_features(app, render=render, require_staff=require_staff, get_db=get_db)
-    register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
+    from app.api.automation_review_pages import register_automation_review_pages
+    from app.api.broadcast_queue_pages import register_broadcast_queue_pages
+    from app.api.payment_void_pages import register_payment_void_pages
+
+    register_automation_review_pages(app, require_staff=require_staff, get_db=get_db)
+    register_payment_void_pages(app, require_staff=require_staff, get_db=get_db)
+    register_broadcast_queue_pages(app, require_admin=require_admin, get_db=get_db)
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
@@ -5113,6 +5119,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.broadcast import AUDIENCE_LABELS, list_broadcast_history
+        from app.services.broadcast_queue import STATUS_LABELS
 
         history = await list_broadcast_history(session, limit=40)
         return render(
@@ -5122,6 +5129,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "staff": staff,
                 "history": history,
                 "audience_labels": AUDIENCE_LABELS,
+                "status_labels": STATUS_LABELS,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -5135,29 +5143,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         text: str = Form(...),
         audience: str = Form("all"),
     ):
-        from app.bot import create_bot
-        from app.services.broadcast import send_broadcast
+        from app.services.broadcast_queue import queue_broadcast
 
         audience = (audience or "all").strip()
         if audience not in {"all", "users", "resellers", "admins"}:
             audience = "all"
-        bot = create_bot()
         try:
-            result = await send_broadcast(
-                bot,
-                session,
-                text=text,
-                audience=audience,
-                created_by=str(staff.get("username") or "admin"),
+            log = await queue_broadcast(
+                session, text=text, audience=audience, created_by=str(staff.get("username") or "admin")
             )
         except ValueError as e:
             return _redirect_msg("/broadcast", err=str(e))
-        except Exception as e:
-            return _redirect_msg("/broadcast", err=f"خطا در ارسال: {e}")
-        finally:
-            await bot.session.close()
-        msg = f"ارسال شد: {result['ok']} موفق از {result['total']} (ناموفق: {result['fail']})"
-        return _redirect_msg("/broadcast", ok=msg)
+        return _redirect_msg("/broadcast", ok=f"در صف ارسال قرار گرفت: {log.total} مخاطب. پیشرفت را در تاریخچه ببینید.")
 
     @app.post("/broadcast/history/clear")
     async def broadcast_history_clear(
