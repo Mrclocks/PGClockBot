@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.14": [
+        "رفع فوری: جدا کردن jobهای broadcast و first-use در scheduler تا پنل دوباره بالا بیاید",
+        "نصب/آپدیت: fetch کانال، شاخهٔ origin/dev را حتی با fetch محدود remote هم می‌آورد",
+        "ریستور: backup/dev-pre-v0.5.14 (commit a9576efc)",
+    ],
     "0.5.13": [
         "وب‌پنل: صفحهٔ پلن‌ها به تب کاربر و نماینده تقسیم شد (#1016)",
         "قیف فروش: ثبت گام‌های رسید، تحویل و مینی‌اپ (#1011)",

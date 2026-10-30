@@ -1325,7 +1325,11 @@ sync_code_to_channel() {
   info "Syncing code to origin/${ch}…"
   git remote get-url origin >/dev/null 2>&1 || \
     git remote add origin "https://github.com/Mrclocks/PGClockBot.git" 2>/dev/null || true
-  if ! timeout 120 git fetch --no-tags --prune origin "$ch" 2>/dev/null; then
+  # Force the channel tip into refs/remotes/origin/<ch>. A narrow
+  # remote.origin.fetch (e.g. +refs/heads/main:…) otherwise leaves
+  # origin/dev missing after a "successful" fetch of only main.
+  if ! timeout 120 git fetch --no-tags --prune origin \
+      "+refs/heads/${ch}:refs/remotes/origin/${ch}" 2>/dev/null; then
     err "Could not fetch origin/${ch}. Check network / GitHub access."
     return 1
   fi
