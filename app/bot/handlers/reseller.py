@@ -20,6 +20,7 @@ from app.db.models import (
     Ticket,
     TicketStatus,
 )
+from app.services.automation_review import count_review_queue
 from app.services.color_tags import risk_mark
 from app.services.home_overview import reseller_shop_summary
 from app.services.formatting import format_message, format_toman, order_status_fa
@@ -34,7 +35,10 @@ from app.services.resellers import (
     reseller_billing_mode_label,
     reseller_plan_mode_of,
 )
+from app.bot.handlers.automation_review import review_button
+from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
 from app.bot.handlers.reseller_package import change_button, renew_button
+from app.bot.handlers.subscription_lookup import ASK_CALLBACK
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
@@ -399,6 +403,7 @@ async def res_users_list(
         nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"res:users:{page + 1}"))
     if nav:
         rows.append(nav)
+    rows.append([InlineKeyboardButton(text="🔎 جستجو با لینک اشتراک", callback_data=ASK_CALLBACK)])
     rows.extend(_group_back("res_users").inline_keyboard)
     text = (
         f"👥 <b>مشتریان من</b>\n"
@@ -822,12 +827,14 @@ async def res_orders(
             f"#{o.id} — {format_toman(o.amount, get_settings().currency)} — "
             f"{order_status_fa(o.status)}"
         )
+    markup = _group_back("res_orders")
+    if has_bot_perm(profile, "payment_void"):
+        void_row = [InlineKeyboardButton(text="↩️ ابطال پرداخت تأییدشده", callback_data="payvoid:list")]
+        markup = InlineKeyboardMarkup(inline_keyboard=[void_row, *markup.inline_keyboard])
+    if await count_review_queue(session, shop_id=int(owner_id)):
+        markup = InlineKeyboardMarkup(inline_keyboard=[[review_button()], *markup.inline_keyboard])
     if callback.message:
-        await safe_edit_text(
-            callback.message,
-            "\n".join(lines),
-            reply_markup=_group_back("res_orders"),
-        )
+        await safe_edit_text(callback.message, "\n".join(lines), reply_markup=markup)
 
 
 async def present_reseller_tickets_list(
@@ -943,6 +950,9 @@ async def res_cancellations(
     if not owner_id or not profile:
         await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
+    if not has_bot_perm(profile, "orders"):
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
+        return
     await callback.answer()
     from app.bot.nav_inline import with_inline_back
     from app.services.service_cancellations import (
@@ -975,7 +985,7 @@ async def res_cancellations(
                 )
             ]
         )
-    lines.append("\n<i>تأیید/رد در وب‌پنل: /finance?tab=cancellations</i>")
+    lines.append("\n<i>یکی را برای تأیید یا رد انتخاب کنید.</i>")
     markup = with_inline_back(
         InlineKeyboardMarkup(inline_keyboard=kb_rows), ui, back_callback_for("res_cancellations")
     )
@@ -991,38 +1001,10 @@ async def res_cancellation_view(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    owner_id, profile = await _actor(
-        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    await show_cancellation_card(
+        callback, session, db_user, int((callback.data or "").rsplit(":", 1)[-1]),
+        is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id,
     )
-    if not owner_id or not profile:
-        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
-        return
-    try:
-        rid = int((callback.data or "").rsplit(":", 1)[-1])
-    except ValueError:
-        await callback.answer(feedback.INVALID, show_alert=True)
-        return
-    from app.bot.nav_inline import with_inline_back
-    from app.db.models import ServiceCancellation
-    from app.services.service_cancellations import STATUS_LABELS
-
-    row = await session.get(ServiceCancellation, rid)
-    if not row or int(row.reseller_id or -1) != int(owner_id):
-        await callback.answer(feedback.NOT_FOUND, show_alert=True)
-        return
-    await callback.answer()
-    ui = await get_all_settings(session)
-    st = STATUS_LABELS.get(row.status, row.status)
-    text = (
-        f"📝 <b>درخواست لغو #{row.id}</b>\n"
-        f"سرویس: <code>{row.service_id}</code>\n"
-        f"وضعیت: {html.escape(st)}\n"
-        f"دلیل:\n{html.escape((row.reason or '')[:800])}\n\n"
-        f"<i>تأیید/رد در وب‌پنل /finance?tab=cancellations</i>"
-    )
-    markup = with_inline_back(None, ui, "res:cancellations")
-    if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=markup)
 
 
 @router.callback_query(F.data == "res:payments")

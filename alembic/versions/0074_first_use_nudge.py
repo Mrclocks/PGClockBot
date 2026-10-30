@@ -1,7 +1,7 @@
 """First-use check of new services.
 
-Revision ID: 0072_first_use_nudge
-Revises: 0071_settlement_psp_gateway
+Revision ID: 0074_first_use_nudge
+Revises: 0073_broadcast_queue
 
 ``user_services.first_use_checked_at`` records that the first-use check ran for a service, so the
 check and its message happen once. A partial index keeps the lookup of unchecked services cheap.
@@ -16,8 +16,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0072_first_use_nudge"
-down_revision: Union[str, None] = "0071_settlement_psp_gateway"
+revision: str = "0074_first_use_nudge"
+down_revision: Union[str, None] = "0073_broadcast_queue"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

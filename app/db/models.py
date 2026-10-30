@@ -55,6 +55,7 @@ class PaymentStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+    VOIDED = "voided"
 
 
 class TicketStatus(str, Enum):
@@ -738,6 +739,15 @@ class BroadcastLog(Base):
     fail_count: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Durable send state: rows written before the queue existed keep status "done".
+    status: Mapped[str] = mapped_column(String(16), default="queued", server_default="done", index=True)
+    cursor_id: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # The user a message is being sent to; left set after a crash, the outcome is then unknown.
+    inflight_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    review_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ResellerProfile(Base):
@@ -1643,6 +1653,33 @@ class TermsAcceptance(Base):
     accepted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class PaymentVoid(Base):
+    """Audit and retry state of one approved payment that an operator voided.
+
+    ``service_ids`` is the target saved before the panel is touched, so a retry after an
+    unknown outcome disables exactly the same services.
+    """
+
+    __tablename__ = "payment_voids"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    payment_id: Mapped[int] = mapped_column(
+        ForeignKey("payments.id", ondelete="CASCADE"), unique=True
+    )
+    shop_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    actor: Mapped[str] = mapped_column(String(128))
+    reason: Mapped[str] = mapped_column(Text)
+    refund_amount: Mapped[int] = mapped_column(BigInteger, default=0, server_default=text("0"))
+    status: Mapped[str] = mapped_column(String(16), default="processing", index=True)
+    service_ids: Mapped[str] = mapped_column(Text, default="[]", server_default=text("'[]'"))
+    lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ServiceCancellation(Base):

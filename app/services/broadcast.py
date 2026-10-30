@@ -53,7 +53,8 @@ async def list_broadcast_history(session: AsyncSession, *, limit: int = 50) -> l
 
 async def delete_broadcast_log(session: AsyncSession, log_id: int) -> bool:
     row = await session.get(BroadcastLog, int(log_id))
-    if not row:
+    # A queued or running broadcast is stopped first; deleting it would hide a send in progress.
+    if not row or row.status in ("queued", "running"):
         return False
     await session.delete(row)
     await session.commit()
@@ -63,9 +64,10 @@ async def delete_broadcast_log(session: AsyncSession, log_id: int) -> bool:
 async def clear_broadcast_history(session: AsyncSession) -> int:
     from sqlalchemy import delete, func, select
 
-    count = await session.scalar(select(func.count()).select_from(BroadcastLog)) or 0
+    finished = BroadcastLog.status.not_in(("queued", "running"))
+    count = await session.scalar(select(func.count()).select_from(BroadcastLog).where(finished)) or 0
     if count:
-        await session.execute(delete(BroadcastLog))
+        await session.execute(delete(BroadcastLog).where(finished))
         await session.commit()
     return int(count)
 

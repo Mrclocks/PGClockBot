@@ -23,6 +23,7 @@ from app.services.list_query import (
     normalize_search_q,
     parse_list_page,
 )
+from app.services.payment_voids import list_voids
 from app.services.receipt_files import fetch_telegram_file, payment_bot_token
 from app.services.shop_scope import is_platform_admin, payment_shop_id, shop_owner_id
 from app.services.stale_order_cleanup import cleanup_status
@@ -126,7 +127,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         if tab == "behavior":
             # The customer-behaviour panel moved to the marketing section.
             return RedirectResponse("/funnel", status_code=303)
-        if tab not in {"reports", "orders", "payments", "delivery", "cancellations"}:
+        if tab not in {"reports", "orders", "payments", "delivery", "cancellations", "automation"}:
             tab = "reports" if (can_orders or can_payments) else "payments"
         if tab == "reports" and not (can_orders or can_payments):
             tab = "payments"
@@ -137,6 +138,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         if tab == "delivery" and not can_orders:
             tab = "reports" if (can_orders or can_payments) else "payments"
         if tab == "cancellations" and not can_orders:
+            tab = "reports" if (can_orders or can_payments) else "payments"
+        if tab == "automation" and not can_orders:
             tab = "reports" if (can_orders or can_payments) else "payments"
 
         report_period = (request.query_params.get("period") or "week").strip().lower()
@@ -199,6 +202,14 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "cancel_next_before": None,
             "cancel_labels": {},
             "can_approve_cancel": False,
+            "can_void_payment": False,
+            "payment_voids": {},
+            "automation_items": [],
+            "automation_next": None,
+            "automation_labels": {},
+            "automation_actions": {},
+            "automation_missing_bots": [],
+            "automation_flash_err": request.query_params.get("error"),
             "cancel_flash_err": request.query_params.get("error"),
         }
 
@@ -446,6 +457,10 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             ctx["payments"] = payments
             ctx["payers"] = payers
             ctx["pager"] = pager
+            ctx["can_void_payment"] = can_shop(authz, "payment_void") and (
+                is_platform_admin(staff) or bool(shop_owner_id(staff))
+            )
+            ctx["payment_voids"] = await list_voids(session, [int(p.id) for p in payments])
             # Soft receipt match suggestions for pending payments
             from app.services.users import on as _on
             from app.services.ux20 import suggest_receipt_matches
@@ -575,6 +590,31 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             ctx["cancel_next_before"] = next_before
             ctx["cancel_labels"] = STATUS_LABELS
             ctx["can_approve_cancel"] = can_payments
+
+        elif tab == "automation" and can_orders:
+            from app.services.automation_review import (
+                STATE_LABELS,
+                list_review_queue,
+                shops_without_bot_token,
+            )
+            from app.services.service_automation import LABELS
+            from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
+
+            try:
+                scope = resolve_shop_scope_id(staff)
+            except ShopScopeError:
+                ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
+                return render(request, "finance.html", ctx)
+            after_raw = (request.query_params.get("after") or "").strip()
+            items, next_cursor = await list_review_queue(
+                session, shop_id=scope, after_service_id=int(after_raw) if after_raw.isdigit() else 0
+            )
+            ctx["automation_items"] = items
+            ctx["automation_next"] = next_cursor
+            ctx["automation_labels"] = STATE_LABELS
+            ctx["automation_actions"] = LABELS
+            if scope is None:
+                ctx["automation_missing_bots"] = await shops_without_bot_token(session)
 
         return render(request, "finance.html", ctx)
 
