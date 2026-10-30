@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import bbc_checkout_view as bbc_view
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
+from app.bot.handlers.customer_orders import with_orders_button
 from app.bot.handlers.psp_check import PICK_GATEWAY_TEXT, psp_check_button, psp_gateway_picker
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
@@ -229,7 +230,7 @@ async def wallet_tx(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         await safe_edit_text(
             callback.message,
             format_message("📜 تراکنش‌ها", body),
-            reply_markup=wallet_hub_keyboard(ui),
+            reply_markup=with_orders_button(wallet_hub_keyboard(ui)),
         )
 
 @router.callback_query(F.data == "wallet:topup")
