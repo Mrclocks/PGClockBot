@@ -849,6 +849,7 @@ DEFAULT_SETTINGS = {
     "user_alert_low_enabled": "0",
     "user_alert_low_traffic_pct": "20",
     "user_alert_low_time_pct": "20",
+    "first_use_nudge_enabled": "0",
     # Reseller panel URLs (setup links + messages). Empty = system defaults
     "reseller_panel_base_url": "",
     "reseller_pg_panel_base_url": "",
@@ -1442,6 +1443,12 @@ SETTING_GROUPS = {
             "کمتر از چند درصد زمان؟",
             "number",
             "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام برود",
+        ),
+        (
+            "first_use_nudge_enabled",
+            "پیام کمکی برای سرویس بدون مصرف",
+            "toggle",
+            "اگر ۲۴ ساعت پس از تحویل سرویس هنوز هیچ ترافیکی مصرف نشده باشد، یک بار پیام کمکی با دکمهٔ آموزش اتصال و پشتیبانی برای کاربر می‌رود.",
         ),
     ],
     "گزارش روزانه": [

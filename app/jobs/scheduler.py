@@ -772,6 +772,25 @@ async def run_broadcast_tick(bot: Bot) -> None:
     from app.services.broadcast_queue import run_broadcast_worker
 
     await run_broadcast_worker(SessionLocal, bot)
+async def run_first_use_nudge_tick(bot: Bot) -> None:
+    """Message customers whose new service has not carried any traffic after a day."""
+    from app.services.first_use_nudge import run_first_use_check
+
+    async with SessionLocal() as session:
+        profiles = (
+            await session.execute(
+                select(ResellerProfile.user_id, ResellerProfile.id).where(
+                    ResellerProfile.is_active.is_(True), ResellerProfile.bot_token.is_not(None)
+                )
+            )
+        ).all()
+        profile_by_user = {int(user_id): int(profile_id) for user_id, profile_id in profiles if user_id is not None}
+        try:
+            await run_first_use_check(
+                session, get_pg(), lambda shop_id: _resolve_send_bot(bot, shop_id, profile_by_user)
+            )
+        except Exception:
+            logger.exception("first-use nudge tick failed")
 
 
 async def run_bbc_settlement_poll() -> None:
@@ -874,6 +893,8 @@ def start_scheduler(bot: Bot) -> None:
     scheduler.add_job(
         run_broadcast_tick, "interval", minutes=1, args=[bot], id="broadcast",
         max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,
+        run_first_use_nudge_tick, "interval", minutes=30, args=[bot], id="first_use_nudge",
+        max_instances=1, coalesce=True, misfire_grace_time=1800, replace_existing=True,
     )
     scheduler.add_job(
         run_service_automation_tick,
