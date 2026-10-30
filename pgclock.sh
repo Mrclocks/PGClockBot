@@ -1493,7 +1493,10 @@ EOF
 }
 
 install_systemd() {
+  # $1 = service user, $2 = start now (1/0, default 1).
+  # Update passes 0 so we can stop → sync → migrate → start once (avoid hang).
   local service_user="${1:-$(whoami)}"
+  local start_now="${2:-1}"
   local content
   content="[Unit]
 Description=PGClockBot — PasarGuard Telegram shop
@@ -1509,6 +1512,8 @@ Environment=PATH=${SCRIPT_DIR}/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbi
 Environment=PGCLOCKBOT_SERVICE_USER=${service_user}
 # Fail fast in journal if boot/init_db hangs (uvicorn binds only after lifespan).
 TimeoutStartSec=180
+# A hung Python stop must not block Update for minutes.
+TimeoutStopSec=45
 ExecStart=${SCRIPT_DIR}/.venv/bin/python run.py
 Restart=always
 RestartSec=5
@@ -1522,7 +1527,11 @@ WantedBy=multi-user.target
   sudo_wrap cp "$tmp" "$SERVICE_PATH"
   rm -f "$tmp"
   sudo_wrap systemctl daemon-reload
-  sudo_wrap systemctl enable --now "$SERVICE_NAME"
+  sudo_wrap systemctl enable "$SERVICE_NAME"
+  if [[ "$start_now" == "1" ]]; then
+    sudo_wrap systemctl restart "$SERVICE_NAME" 2>/dev/null \
+      || sudo_wrap systemctl start "$SERVICE_NAME"
+  fi
   install_restart_helper "$service_user" || true
   # Ensure global CLI points at this install
   if [[ -f "${SCRIPT_DIR}/scripts/install_global_cli.sh" ]]; then
@@ -1531,14 +1540,65 @@ WantedBy=multi-user.target
   ok "systemd service enabled: ${SERVICE_NAME}"
 }
 
+_systemctl_cmd() {
+  # Run systemctl with an outer timeout so a stuck unit cannot freeze the menu.
+  local seconds="${1:-60}"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    if [[ "$(id -u)" -eq 0 ]]; then
+      timeout "$seconds" systemctl "$@"
+    else
+      timeout "$seconds" sudo systemctl "$@"
+    fi
+  else
+    sudo_wrap systemctl "$@"
+  fi
+}
+
+stop_service_if_any() {
+  # Stop before git reset/clean so Update does not rewrite files under a live process
+  # (that is what makes systemctl restart hang on SIGTERM).
+  if ! service_installed; then
+    return 0
+  fi
+  local state
+  state="$(systemctl is-active "$SERVICE_NAME" 2>/dev/null || echo unknown)"
+  case "$state" in
+    active|activating|deactivating|reloading)
+      info "Stopping ${SERVICE_NAME} before code sync (was ${state})…"
+      if ! _systemctl_cmd 50 stop "$SERVICE_NAME"; then
+        warn "Graceful stop timed out — sending SIGKILL"
+        sudo_wrap systemctl kill -s SIGKILL "$SERVICE_NAME" 2>/dev/null || true
+        sleep 1
+      fi
+      ;;
+  esac
+  return 0
+}
+
 restart_service_if_any() {
   if service_installed; then
     info "Restarting ${SERVICE_NAME}..."
-    sudo_wrap systemctl restart "$SERVICE_NAME"
-    ok "Service restarted"
+    if ! _systemctl_cmd 60 restart "$SERVICE_NAME"; then
+      warn "systemctl restart timed out — trying start"
+      _systemctl_cmd 30 start "$SERVICE_NAME" || true
+    fi
+    local port
+    port="$(env_get WEB_PORT 9000)"
+    [[ -z "$port" ]] && port=9000
+    info "Waiting for panel on :${port}…"
+    if wait_port_listen "$port" 90; then
+      ok "Service restarted — panel listening on :${port}"
+      return 0
+    fi
+    err "Panel did not open port ${port} after restart"
+    warn "Recent logs:"
+    sudo_wrap journalctl -u "$SERVICE_NAME" -n 40 --no-pager 2>/dev/null || true
+    return 1
   else
     warn "systemd service not installed. Start manually:"
     echo -e "    ${C}source .venv/bin/activate && python run.py${N}"
+    return 0
   fi
 }
 
@@ -1821,6 +1881,10 @@ cmd_update() {
   cp -a .env ".env.bak.$(date +%Y%m%d%H%M%S)"
   ok ".env backup created"
 
+  # Stop first: syncing under a live process leaves Python stuck on SIGTERM and
+  # makes "Restarting…" hang until TimeoutStopSec.
+  stop_service_if_any
+
   sync_code_to_channel "$INSTALL_CHANNEL" || return 1
   persist_channel_env "$INSTALL_CHANNEL"
 
@@ -1847,9 +1911,7 @@ PY
 
   ensure_public_web_host
 
-  ensure_monitor_xray
-
-  # Migrate before restart so the new process does not hang with no listener.
+  # Migrate while the service is still stopped so the new process does not race init_db.
   ensure_db_schema || {
     err "Schema migration failed — not restarting a broken panel."
     return 1
@@ -1858,17 +1920,25 @@ PY
   # Backup tools + systemd PATH (pg_dump must be visible to the service).
   ensure_pg_client_tools || true
 
-  # Ensure passwordless restart helper exists for in-panel SSL/updates
+  # Rewrite unit (PATH / TimeoutStopSec) without starting yet — one clean start below.
   if service_installed; then
     local svc_user
     svc_user="$(systemctl show -p User --value "$SERVICE_NAME" 2>/dev/null || whoami)"
     [[ -z "$svc_user" || "$svc_user" == "-" ]] && svc_user="$(whoami)"
-    # Rewrite unit so PATH includes /usr/bin (fixes "pg_dump not found" under systemd).
-    install_systemd "$svc_user" || true
+    install_systemd "$svc_user" 0 || true
     install_restart_helper "$svc_user" || true
   fi
 
-  restart_service_if_any
+  restart_service_if_any || {
+    err "Update finished code sync but the web panel did not come up."
+    warn "Fix: journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
+    warn "Then: sudo systemctl restart ${SERVICE_NAME}"
+    return 1
+  }
+
+  # Xray is optional for the panel — run after the port is open so Update is not blocked.
+  ensure_monitor_xray || true
+
   print_success "Update complete" \
     "Config:     .env kept (WEB_HOST forced public if it was loopback)" \
     "Schema:     migrated before restart" \
