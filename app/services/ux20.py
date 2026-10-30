@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import quote
 
 from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -740,9 +741,11 @@ async def record_funnel_event(
         )
     )
     try:
-        await session.flush()
-    except Exception:
-        await session.rollback()
+        # A savepoint, so a lost race on the unique key leaves the caller's transaction alone.
+        async with session.begin_nested():
+            await session.flush()
+    except IntegrityError:
+        logger.debug("funnel event %s already recorded", key, exc_info=True)
 
 
 async def funnel_summary(

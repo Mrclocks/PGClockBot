@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.services.custom_plans import discard_unsold_custom_plan
+from app.services.funnel_events import STEP_DELIVERED, STEP_RECEIPT, record_order_funnel
 from app.services.stale_order_cleanup import (
     StaleOrderPolicy,
     cancellable_statuses,
@@ -1584,6 +1585,10 @@ async def attach_receipt(
         )
     await session.commit()
     await session.refresh(payment)
+    if payment.order_id:
+        order = await session.get(Order, payment.order_id)
+        if order is not None and not is_mutation_order_note(_order_note(order)):
+            await record_order_funnel(session, order, STEP_RECEIPT, key=f"receipt:payment:{payment_id}")
     return payment
 
 
@@ -2336,6 +2341,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             await on_order_delivered(session, order)
         except Exception:
             logger.warning("loyalty on_order_delivered failed order=%s", order.id, exc_info=True)
+        await record_order_funnel(session, order, STEP_DELIVERED, key=f"delivered:order:{order.id}")
         return order
     except Exception:
         try:
