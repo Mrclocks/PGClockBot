@@ -12,11 +12,20 @@
   </div>
 </div>
 
+{% set plans_tab = 'resellers' if (is_platform_admin and request.query_params.get('tab') == 'resellers') else 'users' %}
+{% if is_platform_admin %}
+<nav class="section-tabs" role="tablist" aria-label="نوع پلن" data-plans-tabs>
+  <a href="/plans" role="tab" data-plans-tab="users" class="{% if plans_tab == 'users' %}active{% endif %}" aria-selected="{{ 'true' if plans_tab == 'users' else 'false' }}">پلن کاربر</a>
+  <a href="/plans?tab=resellers" role="tab" data-plans-tab="resellers" class="{% if plans_tab == 'resellers' %}active{% endif %}" aria-selected="{{ 'true' if plans_tab == 'resellers' else 'false' }}">پلن نماینده</a>
+</nav>
+{% endif %}
+
 {# flash_ok / flash_err rendered once in base.html #}
 {% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }} — پلن‌ها را می‌توانید ذخیره کنید ولی تحویل نیاز به اتصال دارد.</div>{% endif %}
 {% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}
 {{ pg_snapshot_limit_board(pg_limit_cards, heading='سقف حساب پاسارگارد', caption='', box_captions=false) }}
 
+<div data-plans-panel="users" role="tabpanel"{% if plans_tab != 'users' %} hidden{% endif %}>
 {% set trial_on = values.get('trial_enabled') in ['1','true','yes','on'] %}
 {% set custom_on = values.get('custom_plan_enabled') in ['1','true','yes','on'] %}
 {% set wholesale_on = values.get('wholesale_enabled') in ['1','true','yes','on'] %}
@@ -243,7 +252,10 @@
   </div>
 </div>
 
+</div>
+
 {% if is_platform_admin %}
+<div data-plans-panel="resellers" role="tabpanel"{% if plans_tab != 'resellers' %} hidden{% endif %}>
 {% set addon_reseller_plans = reseller_plans | selectattr('plan_kind', 'in', ['addon_volume', 'addon_users']) | list %}
 {% set subscription_reseller_plans = reseller_plans | rejectattr('plan_kind', 'in', ['addon_volume', 'addon_users']) | list %}
 {% set payg_reseller_plans = subscription_reseller_plans | selectattr('billing_mode', 'equalto', 'payg') | list %}
@@ -414,7 +426,10 @@
   </table>
   </div>
 </div>
+</div>
 {% endif %}
+
+<script src="/static/plans-tabs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 
 {# —— Unified plan modal —— #}
 <div class="ui-modal" id="modal-plan-unified" hidden>
