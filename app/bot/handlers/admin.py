@@ -22,6 +22,7 @@ from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, P
 from app.services.color_tags import risk_mark
 from app.services.home_overview import bot_dashboard_summary
 from app.services.formatting import (
+    bot_user_panel_label,
     format_system_stats,
     format_toman,
     order_status_fa,
@@ -2550,7 +2551,7 @@ async def adm_users_message_send(
             user,
             message.text or "",
             shop_id=None,
-            actor=str(db_user.telegram_id or db_user.id),
+            actor=bot_user_panel_label(db_user),
         )
         await session.commit()
         await message.answer(feedback.MESSAGE_SENT, reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
