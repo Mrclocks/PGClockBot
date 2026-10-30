@@ -1,4 +1,4 @@
-"""Staff search by subscription link: shows the owner and buttons into the existing cards.
+"""Staff search by subscription link, name, @username or id: buttons into the existing cards.
 
 The platform Owner reaches it from the users search (see ``adm_users_search``); a shop operator
 with ``dashboard`` from the customers list. Both are scoped to the shop that sold the service, and
@@ -25,7 +25,9 @@ from app.services import bot_feedback_texts as feedback
 from app.services.formatting import format_bytes, format_expire_short, format_toman
 from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import has_bot_perm
-from app.services.subscription_lookup import SubscriptionMatch, find_service_by_link
+from app.services.subscription_lookup import SubscriptionMatch, find_service_by_link, link_token
+from app.services.user_search import MIN_QUERY_LENGTH, clean_handle, search_bot_users
+from app.services.users_ops import scoped_users_where
 from app.services.users import get_all_settings
 from app.services.wallet import get_wallet_balance
 
@@ -39,7 +41,10 @@ SHOP_BACK = "res:users:0"
 ASK_CALLBACK = "sublk:ask"
 PLATFORM_ASK = "adm:users:search"
 NOT_FOUND_TEXT = "اشتراکی با این لینک در فروشگاه شما پیدا نشد."
-PROMPT = "🔗 لینک اشتراک (یا توکن آن) را بفرستید. پیام شما پس از جستجو پاک می‌شود."
+PROMPT = "🔎 نام، یوزرنیم یا آیدی تلگرام مشتری، یا لینک اشتراک را بفرستید. اگر لینک بفرستید، پیام شما پس از جستجو پاک می‌شود."
+USER_NOT_FOUND_TEXT = "مشتری‌ای با این نام، یوزرنیم یا آیدی پیدا نشد."
+SHORT_QUERY_TEXT = "حداقل دو نویسه از نام یا یوزرنیم را بفرستید."
+MORE_RESULTS_NOTE = "\n<i>نتایج بیشتری هست؛ جستجو را دقیق‌تر کنید.</i>"
 STATUS_LABELS = {
     "active": "فعال",
     "disabled": "غیرفعال",
@@ -120,6 +125,38 @@ async def staff_lookup(
     return NOT_FOUND_TEXT, with_inline_back(InlineKeyboardMarkup(inline_keyboard=rows), await get_all_settings(session), back)
 
 
+def _user_label(user: BotUser) -> str:
+    name = user.full_name or ""
+    handle = f"@{user.username}" if user.username else ""
+    return " · ".join(part for part in (name, handle, str(user.telegram_id)) if part)[:64]
+
+
+async def staff_user_search(
+    session: AsyncSession, raw: str | None, *, shop_id: int | None
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Customers of the shop whose name, @username or id match; each result opens the existing card."""
+    scope = BotUser.reseller_id.is_(None) if shop_id is None else scoped_users_where(shop_id)
+    users, more = await search_bot_users(session, raw, scope=scope)
+    again, back = (PLATFORM_ASK, PLATFORM_BACK) if shop_id is None else (ASK_CALLBACK, SHOP_BACK)
+    card = "adm:users:view:{}" if shop_id is None else "res:user:{}"
+    rows = [[InlineKeyboardButton(text=_user_label(user), callback_data=card.format(user.id))] for user in users]
+    rows.append([InlineKeyboardButton(text="🔎 جستجوی دوباره", callback_data=again)])
+    markup = with_inline_back(InlineKeyboardMarkup(inline_keyboard=rows), await get_all_settings(session), back)
+    if users:
+        return "🔎 <b>نتیجهٔ جستجو</b>" + (MORE_RESULTS_NOTE if more else ""), markup
+    short = len(clean_handle(raw)) < MIN_QUERY_LENGTH and not clean_handle(raw).isdigit()
+    return (SHORT_QUERY_TEXT if short else USER_NOT_FOUND_TEXT), markup
+
+
+async def staff_search(
+    session: AsyncSession, raw: str | None, *, shop_id: int | None
+) -> tuple[str, InlineKeyboardMarkup]:
+    """A subscription link finds its owner; anything else searches the shop's customers."""
+    if link_token(raw):
+        return await staff_lookup(session, raw, shop_id=shop_id)
+    return await staff_user_search(session, raw, shop_id=shop_id)
+
+
 async def delete_typed_link(message: Message) -> None:
     """The link is a bearer secret; remove the staff member's message once it has been used."""
     try:
@@ -169,10 +206,11 @@ async def receive_link(
         await state.clear()
         await message.answer(feedback.NO_ACCESS_REPLY)
         return
-    text, markup = await staff_lookup(session, message.text, shop_id=shop_id)
+    text, markup = await staff_search(session, message.text, shop_id=shop_id)
     await state.set_state(None)
     await finish_text_step(message, state, text=text, inline=markup)
-    await delete_typed_link(message)
+    if link_token(message.text):
+        await delete_typed_link(message)
 
 
 async def _reopen_after_cancel(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext, **_kw) -> None:
