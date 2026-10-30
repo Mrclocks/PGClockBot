@@ -29,6 +29,7 @@ from app.services.catalog_pricing import displayed_quote, quote_product, sale_pr
 from app.config import get_settings
 from app.db.models import BotUser, Order, ResellerProfile, UserService
 from app.services.db_safe import rollback_quiet
+from app.services.funnel_events import STEP_PAY_START, record_order_funnel
 from app.services.service_scope import customer_may_use_service
 from app.services.formatting import (
     expire_remaining_days,
@@ -772,6 +773,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
             order = await create_order(session, user_id=user.id, plan_id=plan_id, expected_price=body.get("price"))
+            await record_order_funnel(session, order, STEP_PAY_START, key=f"pay_start:order:{order.id}")
             await session.refresh(user)
             order = await pay_with_wallet(session, order, user)
             await session.refresh(user)
