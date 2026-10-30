@@ -20,6 +20,7 @@ from app.db.models import (
     Ticket,
     TicketStatus,
 )
+from app.services.automation_review import count_review_queue
 from app.services.color_tags import risk_mark
 from app.services.home_overview import reseller_shop_summary
 from app.services.formatting import format_message, format_toman, order_status_fa
@@ -34,6 +35,7 @@ from app.services.resellers import (
     reseller_billing_mode_label,
     reseller_plan_mode_of,
 )
+from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.reseller_package import change_button, renew_button
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.tg_utils import safe_edit_text
@@ -822,12 +824,11 @@ async def res_orders(
             f"#{o.id} — {format_toman(o.amount, get_settings().currency)} — "
             f"{order_status_fa(o.status)}"
         )
+    markup = _group_back("res_orders")
+    if await count_review_queue(session, shop_id=int(owner_id)):
+        markup = InlineKeyboardMarkup(inline_keyboard=[[review_button()], *markup.inline_keyboard])
     if callback.message:
-        await safe_edit_text(
-            callback.message,
-            "\n".join(lines),
-            reply_markup=_group_back("res_orders"),
-        )
+        await safe_edit_text(callback.message, "\n".join(lines), reply_markup=markup)
 
 
 async def present_reseller_tickets_list(

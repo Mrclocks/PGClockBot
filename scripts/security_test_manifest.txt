@@ -277,3 +277,6 @@ tests/test_user_photo.py
 tests/test_custom_plan_shop_limits.py
 tests/test_custom_plan_cleanup.py
 tests/test_stale_order_cleanup_tab.py
+
+# Automation review queue: shop scope, safe release, permission, bot and template.
+tests/test_automation_review.py

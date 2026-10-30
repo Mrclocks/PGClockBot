@@ -705,6 +705,7 @@ async def run_service_automation_tick(bot: Bot) -> None:
     from app.services.service_automation import process_service_automation
 
     last_id = 0
+    unreachable_shops: set[int] = set()
     while True:
         async with SessionLocal() as session:
             rows = (await session.execute(
@@ -729,6 +730,9 @@ async def run_service_automation_tick(bot: Bot) -> None:
                     if shop_id:
                         send_bot, should_close = await open_notify_bot_for_reseller(session, shop_id)
                         if send_bot is None:
+                            if shop_id not in unreachable_shops:
+                                unreachable_shops.add(shop_id)
+                                logger.warning("service automation skipped: shop %s has no bot token", shop_id)
                             continue
                     await process_service_automation(session, service_id, send_bot)
                 except Exception:
