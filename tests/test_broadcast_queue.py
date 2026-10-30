@@ -280,7 +280,7 @@ class BroadcastMigrationTests(unittest.TestCase):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
-        spec = importlib.util.spec_from_file_location("broadcast_migration", ROOT / "alembic/versions/0072_broadcast_queue.py")
+        spec = importlib.util.spec_from_file_location("broadcast_migration", ROOT / "alembic/versions/0073_broadcast_queue.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
         engine = sa.create_engine("sqlite:///:memory:")

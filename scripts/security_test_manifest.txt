@@ -294,3 +294,6 @@ tests/test_payment_void_bot.py
 tests/test_broadcast_queue.py
 # First-use nudge: once per service, per-shop switch, shop bot only.
 tests/test_first_use_nudge.py
+
+# The app must compile and import (guards a broken merge).
+tests/test_app_compiles.py

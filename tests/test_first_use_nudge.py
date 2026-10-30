@@ -191,7 +191,7 @@ class FirstUseMigrationTests(unittest.TestCase):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
-        spec = importlib.util.spec_from_file_location("first_use_migration", ROOT / "alembic/versions/0072_first_use_nudge.py")
+        spec = importlib.util.spec_from_file_location("first_use_migration", ROOT / "alembic/versions/0074_first_use_nudge.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
         engine = sa.create_engine("sqlite:///:memory:")
