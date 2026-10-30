@@ -1,7 +1,7 @@
 """Durable broadcast queue.
 
-Revision ID: 0072_broadcast_queue
-Revises: 0071_settlement_psp_gateway
+Revision ID: 0073_broadcast_queue
+Revises: 0072_payment_voids
 
 A broadcast is queued and sent by a background worker that keeps a cursor, a lease and the user
 currently being sent to. Existing history rows are marked ``done``. Idempotent; the downgrade drops
@@ -15,8 +15,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0072_broadcast_queue"
-down_revision: Union[str, None] = "0071_settlement_psp_gateway"
+revision: str = "0073_broadcast_queue"
+down_revision: Union[str, None] = "0072_payment_voids"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
