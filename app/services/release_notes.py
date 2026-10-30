@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.16": [
+        "آپدیت: قبل از sync سرویس متوقف می‌شود تا systemctl restart روی SIGTERM گیر نکند",
+        "آپدیت: بعد از ریستارت منتظر باز شدن پورت پنل می‌ماند و در صورت شکست لاگ نشان می‌دهد",
+        "آپدیت: نصب Xray بعد از بالا آمدن پنل انجام می‌شود تا Update روی آن گیر نکند",
+        "استارت: getMe/webhook و ربات‌های نماینده با timeout تا تلگرام کند bind پنل را عقب نیندازد",
+        "ریستور: backup/dev-pre-v0.5.16 (commit 8edee099)",
+    ],
     "0.5.15": [
         "آپدیت: اگر کلون فقط main را track کند، origin/dev با refspec صریح ساخته می‌شود و در صورت شکست، fallback به fetch همهٔ شاخه‌ها",
         "آپدیت: remote origin به ریپوی عمومی Mrclocks/PGClockBot تنظیم می‌شود؛ خطای git نمایش داده می‌شود",

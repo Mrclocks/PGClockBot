@@ -67,14 +67,19 @@ class ResellerBotManager:
             bot = install_notice_watch(install_menu_keyboard_watch(install_replay_guard(bot)))
             registered = False
             try:
-                me = await bot.get_me()
+                me = await asyncio.wait_for(bot.get_me(request_timeout=12), timeout=15)
                 tg_id = int(me.id)
                 uname = me.username or ""
                 from app.bot.chat_menu import sync_telegram_menu_button
 
                 # A shop bot's «Open» is its own Mini App, and only while the shop has it on.
                 menu_url = await _shop_menu_url(reseller_profile_id)
-                await sync_telegram_menu_button(bot, allow_miniapp=bool(menu_url), url=menu_url or None)
+                await asyncio.wait_for(
+                    sync_telegram_menu_button(
+                        bot, allow_miniapp=bool(menu_url), url=menu_url or None
+                    ),
+                    timeout=20,
+                )
 
                 async with SessionLocal() as session:
                     row = await session.get(ResellerProfile, reseller_profile_id)

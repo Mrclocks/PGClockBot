@@ -147,7 +147,8 @@ def main() -> None:
             )
         else:
             try:
-                me = await bot.get_me()
+                # Bound Telegram I/O: a hung getMe used to delay uvicorn bind forever.
+                me = await asyncio.wait_for(bot.get_me(request_timeout=12), timeout=15)
                 logger.info(
                     "Bot online as @%s (id=%s) · admins=%s",
                     me.username,
@@ -157,7 +158,10 @@ def main() -> None:
                 try:
                     from app.bot.chat_menu import sync_telegram_menu_button
 
-                    await sync_telegram_menu_button(bot, allow_miniapp=True)
+                    await asyncio.wait_for(
+                        sync_telegram_menu_button(bot, allow_miniapp=True),
+                        timeout=20,
+                    )
                 except Exception:
                     logger.debug("sync telegram menu button failed", exc_info=True)
             except Exception:
@@ -215,10 +219,14 @@ def main() -> None:
 
                         secret = ensure_webhook_secret()
                     try:
-                        await bot.set_webhook(
-                            wh_full,
-                            drop_pending_updates=True,
-                            secret_token=secret,
+                        await asyncio.wait_for(
+                            bot.set_webhook(
+                                wh_full,
+                                drop_pending_updates=True,
+                                secret_token=secret,
+                                request_timeout=20,
+                            ),
+                            timeout=25,
                         )
                         webhook_ok = True
                         logger.info("Webhook set: %s (secret token enabled)", wh_full)
@@ -229,14 +237,24 @@ def main() -> None:
                             wh_full,
                         )
                         try:
-                            await bot.delete_webhook(drop_pending_updates=True)
+                            await asyncio.wait_for(
+                                bot.delete_webhook(
+                                    drop_pending_updates=True, request_timeout=12
+                                ),
+                                timeout=15,
+                            )
                         except Exception:
                             logger.exception("delete_webhook after set_webhook failure failed")
 
                 if not webhook_ok:
                     if not use_webhook:
                         try:
-                            await bot.delete_webhook(drop_pending_updates=True)
+                            await asyncio.wait_for(
+                                bot.delete_webhook(
+                                    drop_pending_updates=True, request_timeout=12
+                                ),
+                                timeout=15,
+                            )
                         except Exception:
                             logger.exception("delete_webhook failed")
 
@@ -259,12 +277,17 @@ def main() -> None:
 
                     poll_task.add_done_callback(_on_done)
 
-                # Reseller-owned bots always use getUpdates (independent of main webhook)
+                # Reseller-owned bots always use getUpdates (independent of main webhook).
+                # Bound total startup so many shops / slow Telegram cannot delay the panel bind.
                 try:
                     from app.services.reseller_bots import init_reseller_bot_manager
 
                     reseller_mgr = init_reseller_bot_manager(dp)
-                    await reseller_mgr.start_all()
+                    await asyncio.wait_for(reseller_mgr.start_all(), timeout=90)
+                except TimeoutError:
+                    logger.error(
+                        "Reseller bots startup timed out after 90s — web panel continues"
+                    )
                 except Exception:
                     logger.exception("Reseller bots failed to start")
 
