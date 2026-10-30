@@ -37,11 +37,8 @@ from app.services.user_search import clean_handle, find_bot_user
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.billing import is_payg
 from app.services.volume_allocation import set_shop_oversell
-<<<<<<< HEAD
-from app.bot.handlers.subscription_lookup import delete_typed_link, staff_lookup
-=======
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
->>>>>>> origin/dev
+from app.bot.handlers.subscription_lookup import delete_typed_link, staff_lookup
 from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
