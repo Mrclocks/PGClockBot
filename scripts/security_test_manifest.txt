@@ -277,3 +277,6 @@ tests/test_user_photo.py
 tests/test_custom_plan_shop_limits.py
 tests/test_custom_plan_cleanup.py
 tests/test_stale_order_cleanup_tab.py
+
+# Subscription link search: shop scope, no secret leak, permission.
+tests/test_subscription_link_search.py

@@ -28,6 +28,7 @@ from app.services.orders import (
     reject_payment,
 )
 from app.services.redact import user_safe_error
+from app.services.subscription_lookup import link_token
 from app.services.reseller_wallet import load_reseller_profile
 from app.services.pasarguard import get_pg
 from app.services.tickets import get_ticket, reply_ticket
@@ -36,6 +37,7 @@ from app.services.user_search import clean_handle, find_bot_user
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.billing import is_payg
 from app.services.volume_allocation import set_shop_oversell
+from app.bot.handlers.subscription_lookup import delete_typed_link, staff_lookup
 from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
@@ -2327,7 +2329,7 @@ async def adm_users_search_start(callback: CallbackQuery, state: FSMContext, db_
     await ask_text(
         callback,
         state,
-        prompt="آیدی عددی یا یوزرنیم تلگرام کاربر یا نماینده را بفرستید:\n<code>123456789</code> یا <code>@username</code>",
+        prompt="آیدی عددی، یوزرنیم تلگرام یا لینک اشتراک را بفرستید:\n<code>123456789</code> یا <code>@username</code>",
         cancel_code="adm_usr",
         return_to="adm:users",
         fsm_state=AdminStates.user_search,
@@ -2357,9 +2359,12 @@ async def adm_users_search(
             clear_state=True,
         )
         return
+    if link_token(message.text):
+        await _answer_link_search(message, state, session, db_user)
+        return
     query = clean_handle(message.text)
     if not query or " " in query:
-        await message.answer("آیدی عددی یا یوزرنیم تلگرام را بفرستید؛ مثلاً <code>123456789</code> یا <code>@username</code>.")
+        await message.answer("آیدی عددی، یوزرنیم تلگرام یا لینک اشتراک را بفرستید؛ مثلاً <code>123456789</code> یا <code>@username</code>.")
         return
     user = await find_bot_user(session, query, scope=BotUser.reseller_id.is_(None))
     await state.clear()
@@ -2374,6 +2379,14 @@ async def adm_users_search(
         return
     await message.answer("👤 نتیجه جستجو", reply_markup=users_kb)
     await _render_user_card(message, session, user)
+
+async def _answer_link_search(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser) -> None:
+    """Platform users search given a subscription link: owner summary, scoped to platform services."""
+    text, markup = await staff_lookup(session, message.text, shop_id=None)
+    await state.clear()
+    await message.answer("🔎 نتیجه جستجو", reply_markup=kb.admin_users_reply_keyboard())
+    await message.answer(text, reply_markup=markup)
+    await delete_typed_link(message)
 
 async def _render_user_card(
     message: Message,

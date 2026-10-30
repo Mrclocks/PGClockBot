@@ -35,6 +35,7 @@ from app.services.resellers import (
     reseller_plan_mode_of,
 )
 from app.bot.handlers.reseller_package import change_button, renew_button
+from app.bot.handlers.subscription_lookup import ASK_CALLBACK
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
@@ -399,6 +400,7 @@ async def res_users_list(
         nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"res:users:{page + 1}"))
     if nav:
         rows.append(nav)
+    rows.append([InlineKeyboardButton(text="🔎 جستجو با لینک اشتراک", callback_data=ASK_CALLBACK)])
     rows.extend(_group_back("res_users").inline_keyboard)
     text = (
         f"👥 <b>مشتریان من</b>\n"
