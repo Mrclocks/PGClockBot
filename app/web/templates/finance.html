@@ -35,6 +35,7 @@
   <a class="finance-tab-cancel {% if finance_tab=='cancellations' %}active{% endif %}" href="/finance?tab=cancellations">
     <span class="nav-item-label"><span>درخواست‌های لغو</span>{% if cancel_alert %}<i class="nav-dot" aria-label="درخواست لغو در انتظار"></i>{% endif %}</span>
   </a>
+  <a class="{% if finance_tab=='automation' %}active{% endif %}" href="/finance?tab=automation">تمدید خودکار</a>
   {% endif %}
 </nav>
 
@@ -445,6 +446,10 @@
 
 {% if finance_tab == 'cancellations' and can_orders %}
 {% include "_finance_cancellations.html" %}
+{% endif %}
+
+{% if finance_tab == 'automation' and can_orders %}
+{% include "_finance_automation.html" %}
 {% endif %}
 
 {% if can_finance_settings %}

@@ -27,6 +27,7 @@ from app.services.orders import (
     fulfill_paid_order,
     reject_payment,
 )
+from app.services.automation_review import count_review_queue
 from app.services.redact import user_safe_error
 from app.services.subscription_lookup import link_token
 from app.services.reseller_wallet import load_reseller_profile
@@ -37,6 +38,7 @@ from app.services.user_search import clean_handle, find_bot_user
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.billing import is_payg
 from app.services.volume_allocation import set_shop_oversell
+from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
 from app.bot.handlers.subscription_lookup import delete_typed_link, staff_lookup
 from app.bot.nav_inline import with_inline_back
@@ -639,6 +641,8 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         prefix = "⚠ " if int(o.id) in stuck_ids else ""
         label = f"{prefix}#{o.id} · {order_status_fa(o.status)} · {format_toman(o.amount, get_settings().currency)}"
         rows.append([InlineKeyboardButton(text=label[:64], callback_data=f"adm:order:{o.id}")])
+    if await count_review_queue(session, shop_id=None):
+        rows.append([review_button()])
     if callback.message:
         markup = InlineKeyboardMarkup(inline_keyboard=rows)
         markup = with_inline_back(markup, ui, "nv:adm:ops")

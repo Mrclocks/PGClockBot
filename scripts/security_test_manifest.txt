@@ -285,3 +285,5 @@ tests/test_customer_orders.py
 tests/test_funnel_events.py
 # Cancellation approve/reject from the bot: shop scope and staff authz.
 tests/test_cancellation_review_bot.py
+# Automation review queue: shop scope, safe release, permission, bot and template.
+tests/test_automation_review.py
