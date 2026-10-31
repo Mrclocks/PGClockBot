@@ -113,6 +113,7 @@ class AdminExtendCachesQuotaTests(unittest.IsolatedAsyncioTestCase):
             quota_data_limit_bytes=None,
             quota_synced_at=None,
             plan=None,
+            shop_id=None,  # a platform service: no shop volume hold
         )
         cur_exp = int((now + timedelta(days=2)).timestamp())
         new_exp = cur_exp + 3 * 86400
@@ -188,6 +189,7 @@ class AdminExtendCachesQuotaTests(unittest.IsolatedAsyncioTestCase):
             quota_data_limit_bytes=None,
             quota_synced_at=None,
             plan=None,
+            shop_id=None,  # a platform service: no shop volume hold
         )
         exp = int((now + timedelta(days=9)).timestamp())
         lim = 4 * (1024**3)
