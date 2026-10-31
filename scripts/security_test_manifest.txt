@@ -310,3 +310,5 @@ tests/test_bot_chat_tidy.py
 tests/test_ticket_notices.py
 # Owner reseller search: resellers only, owner and representative-management gate.
 tests/test_reseller_search.py
+# Trial account age: a young account is refused before its one trial is claimed.
+tests/test_trial_account_age.py
