@@ -2939,8 +2939,9 @@ async def adm_users_services(
         return
     from app.services.bot_user_admin import list_service_snapshots, snapshot_telegram_lines
 
-    snaps = await list_service_snapshots(session, user_id, shop_id=None)
+    # Answer before the panel reads so the button stops spinning at once.
     await callback.answer()
+    snaps = await list_service_snapshots(session, user_id, shop_id=None)
     if not snaps:
         if callback.message:
             await safe_edit_text(
@@ -2989,12 +2990,13 @@ async def adm_users_service_one(
         svc = await get_owned_service(
             session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
-        snap = await service_snapshot(session, svc)
-        await session.commit()
     except ValueError as e:
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
+    # Answer before the panel read so the button stops spinning at once.
     await callback.answer()
+    snap = await service_snapshot(session, svc)
+    await session.commit()
     if callback.message:
         await safe_edit_text(
             callback.message,
