@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.22": [
+        "ربات: خانه شروع تازه، سوییچ «کیبورد همیشه باز»، بازگشت در سرویس‌های خالی (#1039)",
+        "ربات: پیام بررسی کارکنان در چت خود Owner می‌ماند و تأیید می‌شود (#1040)",
+        "ریستور: backup/dev-pre-v0.5.22 (commit 65ffea5a)",
+    ],
     "0.5.21": [
         "ربات: «شروع مجدد» «سرویس‌های من» را برای کارکنان هم نگه می‌دارد (#1038)",
         "ریستور: backup/dev-pre-v0.5.21 (commit 5affb81b)",
