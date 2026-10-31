@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.20": [
+        "ربات: یک کیبورد منو و یک صفحه در هر چت خصوصی؛ جلوگیری از کیبورد زیرمنو و پیام اضافه «منوی اصلی» (#1037)",
+        "ریستور: backup/dev-pre-v0.5.20 (commit 2965c2c1)",
+    ],
     "0.5.19": [
         "ربات: جستجوی نماینده برای مالک (#1027)",
         "ربات: پاک‌سازی چت، کیبورد منو بعد از جستجو، وضعیت سرویس سریع‌تر (#1028)",
