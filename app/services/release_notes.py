@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.18": [
+        "ربات: پیام به نماینده، متن آزاد در FSM حتی اگر شبیه دکمه منو باشد، و نام فرستنده در DM (#1024)",
+        "تست رایگان: اگر ساخت پنل timeout بخورد claim آزاد نمی‌شود تا دوباره claim نشود (#1025)",
+        "اعلان: وقتی مشتری تست رایگان گرفت به کارکنان همان فروشگاه خبر می‌دهد (#1026)",
+        "ریستور: backup/dev-pre-v0.5.18 (commit 3f322b01)",
+    ],
     "0.5.17": [
         "ربات: جستجوی مشتری با نام یا یوزرنیم برای ادمین و نماینده (#1017)",
         "تست: CI اگر ماژولی کامپایل نشود fail می‌شود؛ مسیر migrationهای 0073/0074 اصلاح شد (#1021)",
