@@ -157,6 +157,15 @@ class ShortNoticeTests(_CleanupOn):
         await nav_inline.present_inline_only(chat.message(from_bot=False), text="hub", inline=PANEL)
         self.assertEqual(chat.deleted(), [cancelled, waiting])
 
+    async def test_refusals_and_not_found_notices_go_with_the_next_panel(self) -> None:
+        chat = _Chat()
+        notices = [await self._send(chat, text) for text in (
+            feedback.NO_ACCESS_REPLY, feedback.ACTION_NOT_ALLOWED_REPLY, feedback.TICKET_ALREADY_CLOSED,
+            feedback.NO_PENDING_RECEIPT,
+        )]
+        await nav_inline.present_inline_only(chat.message(from_bot=False), text="hub", inline=PANEL)
+        self.assertEqual(chat.deleted(), notices)
+
     async def test_other_messages_and_the_menu_keyboard_stay(self) -> None:
         chat = _Chat()
         await self._send(chat, "سرویس شما آماده است: vless://…")
