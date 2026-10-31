@@ -32,6 +32,8 @@ class MiddlewareTests(unittest.IsolatedAsyncioTestCase):
                 raise RuntimeError("boom")
             return "ok"
 
+        # Alembic's fileConfig (run by earlier migration tests) disables loggers that already exist.
+        logging.getLogger("app.bot.slow_updates").disabled = False
         with self.assertLogs("app.bot.slow_updates", "WARNING") as logs:
             call = SlowUpdateMiddleware(threshold=0.05)(handler, event, {})
             if fail:

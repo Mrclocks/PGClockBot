@@ -44,14 +44,16 @@ class CancelReopenTests(unittest.IsolatedAsyncioTestCase):
         message.edit_text.assert_awaited_once()
         self.assertIn("#7", message.edit_text.await_args.args[0])
 
-    async def test_typed_capacity_cancel_still_heals_main_keyboard(self):
+    async def test_typed_capacity_cancel_shows_only_the_adjuster(self):
         message = _panel_message(from_bot=False)
         state = await _state(capadj_uid=7)
         with patch("app.bot.nav_chrome.heal_main_reply", AsyncMock()) as heal:
             await staff_cancel.reopen_reseller_cap_adjust(
                 message, MagicMock(), MagicMock(), state
             )
-        heal.assert_awaited_once()
+        heal.assert_not_awaited()  # the menu keyboard was never replaced
+        message.answer.assert_awaited_once()
+        self.assertIn("تغییر ظرفیت نماینده #7", message.answer.await_args.args[0])
 
     async def test_user_message_cancel_edits_instead_of_sending(self):
         message = _panel_message(from_bot=True)

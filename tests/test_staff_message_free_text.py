@@ -90,8 +90,9 @@ async def _send_dm_as_owner(target: BotUser, card: str, *, can_manage_reps: bool
     message.text = "تست"
     message.answer = AsyncMock()
     send_dm = AsyncMock()
-    reseller_card = AsyncMock()
-    user_card = AsyncMock()
+    reseller_card = AsyncMock(return_value=("reseller card", None))
+    user_card = AsyncMock(return_value=("user card", None))
+    finish = AsyncMock()
     with ExitStack() as stack:
         stack.enter_context(patch("app.bot.auth.require_bot_owner", AsyncMock(return_value=True)))
         stack.enter_context(patch.object(admin, "_is_admin", return_value=True))
@@ -102,13 +103,15 @@ async def _send_dm_as_owner(target: BotUser, card: str, *, can_manage_reps: bool
                 AsyncMock(return_value=can_manage_reps),
             )
         )
-        stack.enter_context(patch.object(admin, "_staff_reply", AsyncMock(return_value=None)))
-        stack.enter_context(patch.object(admin, "_render_reseller_card", reseller_card))
-        stack.enter_context(patch.object(admin, "_render_user_card", user_card))
+        stack.enter_context(patch.object(admin, "_reseller_card", reseller_card))
+        stack.enter_context(patch.object(admin, "_user_card", user_card))
+        stack.enter_context(patch.object(admin, "finish_text_step", finish))
+        stack.enter_context(patch.object(admin, "get_all_settings", AsyncMock(return_value={})))
         stack.enter_context(patch("app.services.users_quick.send_staff_dm", send_dm))
         await admin.adm_users_message_send(
             message, state=state, session=session, db_user=_owner()
         )
+    message.finish = finish  # the one in-place outcome
     return send_dm, reseller_card, user_card, message
 
 
@@ -120,7 +123,7 @@ class ResellerMessageTests(unittest.TestCase):
 
     def test_owner_message_reaches_reseller_and_returns_to_reseller_card(self) -> None:
         target = _reseller()
-        send_dm, reseller_card, user_card, _ = asyncio.run(
+        send_dm, reseller_card, user_card, message = asyncio.run(
             _send_dm_as_owner(target, admin.MSG_CARD_RESELLER)
         )
         send_dm.assert_awaited_once()
@@ -130,6 +133,8 @@ class ResellerMessageTests(unittest.TestCase):
         self.assertEqual(send_dm.await_args.kwargs["actor"], "Support Team (@pg_support)")
         reseller_card.assert_awaited_once()
         user_card.assert_not_awaited()
+        self.assertIn("reseller card", message.finish.await_args.kwargs["text"])
+        message.answer.assert_not_awaited()
 
     def test_reseller_message_target_rejects_non_reseller(self) -> None:
         target = _reseller(role=Role.USER.value)
@@ -138,7 +143,8 @@ class ResellerMessageTests(unittest.TestCase):
         )
         send_dm.assert_not_awaited()
         reseller_card.assert_not_awaited()
-        self.assertEqual(message.answer.await_args.args[0], "نماینده یافت نشد")
+        self.assertEqual(message.finish.await_args.kwargs["text"], "نماینده یافت نشد")
+        message.answer.assert_not_awaited()
 
     def test_reseller_message_denied_when_representative_management_is_off(self) -> None:
         send_dm, reseller_card, _, _ = asyncio.run(

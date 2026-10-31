@@ -209,7 +209,6 @@ class WizardAndKeyboardSurfaceTests(unittest.TestCase):
         nav = (ROOT / "app/bot/menu_nav.py").read_text(encoding="utf-8")
         self.assertIn("async def admin_hub_reply_keyboard", nav)
         admin = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        self.assertIn("_admin_hub_kb", admin)
         self.assertNotIn("kb.admin_reply_keyboard()", admin)
 
     def test_plans_use_live_quota_validation(self) -> None:

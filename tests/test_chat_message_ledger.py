@@ -71,11 +71,12 @@ class RestartTests(LedgerCase):
     async def test_after_a_restart_the_next_home_deletes_the_old_home_and_panels(self) -> None:
         chat = _Chat()
         old_home = chat.message()
-        await chat_cleanup.replace_home(old_home, sweep=True)
+        await chat_cleanup.replace_carrier(old_home)
         panel = await nav_inline.present_inline_only(chat.message(from_bot=False), text="a", inline=PANEL)
         await self.writer.flush()
         self.restart()
         new_home = chat.message()
+        await chat_cleanup.replace_carrier(new_home)
         await chat_cleanup.replace_home(new_home, sweep=True)
         self.assertIn(old_home.message_id, chat.deleted())
         self.assertIn(panel.message_id, chat.deleted())

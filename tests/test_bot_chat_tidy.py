@@ -1,4 +1,4 @@
-"""The bot chat stays tidy: tapped panels are swept and daily reports replace each other."""
+"""Each update tracks its own private chat, and daily reports replace each other."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.exceptions import TelegramForbiddenError
-from aiogram.methods import EditMessageCaption, EditMessageText
 from aiogram.types import (
     CallbackQuery,
     Chat,
@@ -18,8 +17,8 @@ from aiogram.types import (
     User,
 )
 
-from app.bot import chat_cleanup, nav_inline
-from app.bot.chat_cleanup import ChatCleanupMiddleware, ThrowawayLog
+from app.bot import chat_screen
+from app.bot.chat_screen import ChatScreenMiddleware
 from app.db.models import Setting
 from app.services.replaceable_notices import (
     DAILY_REPORT_KEY,
@@ -27,89 +26,9 @@ from app.services.replaceable_notices import (
     SUBORDINATE_REPORT_KEY,
     send_replacing_report,
 )
-from tests.test_chat_cleanup import PANEL, _Chat
 from tests.test_replaceable_notices import NoticeCase, fake_bot
 
 BUTTONS = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:users")]])
-
-
-class _CleanupOn(unittest.IsolatedAsyncioTestCase):
-    def setUp(self) -> None:
-        patcher = patch.object(chat_cleanup, "_log", ThrowawayLog())
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        token = chat_cleanup._cleanup_on.set(True)
-        self.addCleanup(chat_cleanup._cleanup_on.reset, token)
-
-    def tap_on(self, message_id: int, chat_id: int = 100) -> None:
-        token = chat_cleanup._tapped.set((chat_id, message_id))
-        self.addCleanup(chat_cleanup._tapped.reset, token)
-
-    async def edit(self, chat: _Chat, message_id: int, markup=BUTTONS, *, caption: bool = False) -> None:
-        if caption:
-            method = EditMessageCaption(chat_id=100, message_id=message_id, caption="c", reply_markup=markup)
-        else:
-            method = EditMessageText(chat_id=100, message_id=message_id, text="t", reply_markup=markup)
-        await chat_cleanup._note_throwaway_requests(AsyncMock(return_value=True), chat.bot, method)
-
-    async def next_panel(self, chat: _Chat) -> None:
-        await nav_inline.present_inline_only(chat.message(from_bot=False), text="hub", inline=PANEL)
-
-
-class TappedPanelTests(_CleanupOn):
-    async def test_a_message_sent_outside_the_panel_helpers_goes_once_a_tap_edits_it_into_a_panel(self) -> None:
-        chat = _Chat()
-        result = chat.message()  # e.g. a search result sent with a plain answer
-        self.tap_on(result.message_id)
-        await self.edit(chat, result.message_id)
-        await self.next_panel(chat)
-        self.assertEqual(chat.deleted(), [result.message_id])
-
-    async def test_a_photo_panel_edited_by_caption_is_swept_too(self) -> None:
-        chat = _Chat()
-        card = chat.message()
-        self.tap_on(card.message_id)
-        await self.edit(chat, card.message_id, caption=True)
-        await self.next_panel(chat)
-        self.assertEqual(chat.deleted(), [card.message_id])
-
-    async def test_an_edit_that_removes_the_buttons_leaves_a_record_that_stays(self) -> None:
-        chat = _Chat()
-        review = chat.message()
-        self.tap_on(review.message_id)
-        await self.edit(chat, review.message_id)  # «are you sure?» step
-        await self.edit(chat, review.message_id, markup=None)  # «✅ approved», no buttons
-        await self.next_panel(chat)
-        chat.bot.delete_messages.assert_not_awaited()
-
-    async def test_a_panel_kept_after_the_edit_stays(self) -> None:
-        chat = _Chat()
-        checkout = chat.message()
-        self.tap_on(checkout.message_id)
-        await self.edit(chat, checkout.message_id)
-        chat_cleanup.keep_message(checkout)
-        await self.next_panel(chat)
-        chat.bot.delete_messages.assert_not_awaited()
-
-    async def test_edits_of_other_messages_and_edits_outside_a_tap_are_ignored(self) -> None:
-        chat = _Chat()
-        notice = chat.message()
-        other = chat.message()
-        await self.edit(chat, notice.message_id)  # a job editing a message: no tap
-        self.tap_on(other.message_id)
-        await self.edit(chat, notice.message_id)  # a sync edit of another staff message
-        await self.next_panel(chat)
-        chat.bot.delete_messages.assert_not_awaited()
-
-    async def test_switched_off_a_tapped_panel_is_not_noted(self) -> None:
-        chat = _Chat()
-        result = chat.message()
-        self.tap_on(result.message_id)
-        chat_cleanup._cleanup_on.set(False)
-        await self.edit(chat, result.message_id)
-        chat_cleanup._cleanup_on.set(True)
-        await self.next_panel(chat)
-        chat.bot.delete_messages.assert_not_awaited()
 
 
 class TapContextTests(unittest.IsolatedAsyncioTestCase):
@@ -120,21 +39,22 @@ class TapContextTests(unittest.IsolatedAsyncioTestCase):
         )
         return SimpleNamespace(callback_query=tap, message=None)
 
-    async def _seen(self, event) -> tuple[int, int] | None:
+    async def _seen(self, event) -> chat_screen.Turn | None:
         seen = []
 
         async def handler(_event, _data):
-            seen.append(chat_cleanup._tapped.get())
+            seen.append(chat_screen.current_turn())
 
-        with patch.object(chat_cleanup, "get_all_settings", AsyncMock(return_value={})):
-            await ChatCleanupMiddleware()(handler, event, {"session": MagicMock()})
-        self.assertIsNone(chat_cleanup._tapped.get())
+        with patch.object(chat_screen, "get_all_settings", AsyncMock(return_value={})):
+            await ChatScreenMiddleware()(handler, event, {"session": MagicMock(), "bot": MagicMock(id=1)})
+        self.assertIsNone(chat_screen.current_turn())
         return seen[0]
 
-    async def test_a_tap_in_a_private_chat_names_the_tapped_message(self) -> None:
-        self.assertEqual(await self._seen(self._callback("private")), (100, 42))
+    async def test_a_tap_in_a_private_chat_tracks_that_chat(self) -> None:
+        active = await self._seen(self._callback("private"))
+        self.assertEqual(active.key, (1, 100))
 
-    async def test_group_taps_and_typed_messages_name_nothing(self) -> None:
+    async def test_group_taps_and_updates_without_a_chat_are_not_tracked(self) -> None:
         self.assertIsNone(await self._seen(self._callback("group")))
         self.assertIsNone(await self._seen(SimpleNamespace(callback_query=None, message=None)))
 
