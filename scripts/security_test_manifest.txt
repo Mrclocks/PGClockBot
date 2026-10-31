@@ -298,3 +298,5 @@ tests/test_first_use_nudge.py
 tests/test_app_compiles.py
 # Staff customer search: shop scope, bounds and wildcard safety.
 tests/test_staff_user_search.py
+# Staff DMs: reseller target check and free-text prompts not hijacked by menu labels.
+tests/test_staff_message_free_text.py

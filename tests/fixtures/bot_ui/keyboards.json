@@ -1600,31 +1600,35 @@
           "text": "📦 سرویس‌های پاسارگارد"
         },
         {
-          "callback_data": "adm:resellers:capadj:6",
-          "text": "⏱ تغییر ظرفیت"
+          "callback_data": "adm:resellers:msg:6",
+          "text": "✉️ پیام"
         }
       ],
       [
+        {
+          "callback_data": "adm:resellers:capadj:6",
+          "text": "⏱ تغییر ظرفیت"
+        },
         {
           "callback_data": "adm:resellers:wcredit:6",
           "text": "➕ افزایش کیف"
-        },
+        }
+      ],
+      [
         {
           "callback_data": "adm:resellers:wdebit:6",
           "text": "➖ کاهش کیف"
-        }
-      ],
-      [
+        },
         {
           "callback_data": "adm:resellers:tag:6",
           "text": "🏷 تگ: 🟢 مطمئن"
-        },
-        {
-          "callback_data": "adm:users:svcs:6",
-          "text": "🛒 سرویس‌های فروشگاه"
         }
       ],
       [
+        {
+          "callback_data": "adm:users:svcs:6",
+          "text": "🛒 سرویس‌های فروشگاه"
+        },
         {
           "callback_data": "adm:users:unres:6",
           "text": "🤝 حذف نمایندگی"

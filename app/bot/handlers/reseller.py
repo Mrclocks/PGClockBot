@@ -23,7 +23,12 @@ from app.db.models import (
 from app.services.automation_review import count_review_queue
 from app.services.color_tags import risk_mark
 from app.services.home_overview import reseller_shop_summary
-from app.services.formatting import format_message, format_toman, order_status_fa
+from app.services.formatting import (
+    bot_user_panel_label,
+    format_message,
+    format_toman,
+    order_status_fa,
+)
 from app.services.reseller_access import load_reseller_actor
 from app.services.shop_membership import is_shop_customer
 from app.services.resellers import (
@@ -593,7 +598,7 @@ async def res_user_message_send(
             user,
             message.text or "",
             shop_id=int(owner_id),
-            actor=str(db_user.telegram_id or owner_id),
+            actor=bot_user_panel_label(db_user),
         )
         await session.commit()
         await message.answer(feedback.MESSAGE_SENT, reply_markup=_user_card_back(uid))

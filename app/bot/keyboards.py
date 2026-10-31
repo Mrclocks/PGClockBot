@@ -2024,6 +2024,12 @@ def admin_reseller_actions(
         ],
         [
             InlineKeyboardButton(
+                text="✉️ پیام",
+                callback_data=f"adm:resellers:msg:{user_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 text="⏱ تغییر ظرفیت",
                 callback_data=f"adm:resellers:capadj:{user_id}",
             )
