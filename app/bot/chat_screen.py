@@ -12,7 +12,9 @@ The person sees one bottom keyboard, one live panel and the messages worth keepi
   something, the temporary messages from earlier updates are deleted.
 - **Records stay.** Deliveries, configs, credentials, payment results and backups are sent
   inside ``chat_records.keep_sent()``; ``chat_cleanup.keep_message`` keeps a panel that turned
-  into one (a payment confirmation).
+  into one (a payment confirmation). Staff notices and review items (a receipt waiting for
+  approval) are records too, because they land in the update's own chat when the Owner buys
+  for themself.
 
 Messages sent to other chats (staff notices, a customer's delivery approved by staff) are left
 alone. The «پاک‌سازی خودکار صفحهٔ ربات» switch turns deleting off; the keyboard rule stays.
