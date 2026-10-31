@@ -265,3 +265,55 @@ class CustomerFlowTests(_Flow):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RestartKeepsMyServicesTests(unittest.IsolatedAsyncioTestCase):
+    """«شروع مجدد» rebuilds the same menu the person had, «سرویس‌های من» included."""
+
+    async def _chat_with_a_service(self, *, owner: bool) -> ChatSim:
+        from sqlalchemy import select
+
+        from app.db.models import UserService
+
+        sim = ChatSim(5001 if owner else 6001)
+        await sim.start(owner=owner)
+        self.addAsyncCleanup(sim.stop)
+        patcher = patch("app.bot.middlewares._rate_limited", MagicMock(return_value=False))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        await sim.type("/start")
+        async with sim.Session() as session:
+            user = (await session.execute(select(BotUser).where(BotUser.telegram_id == sim.telegram_id))).scalar_one()
+            session.add(UserService(id=1, bot_user_id=user.id, pg_username="u1", pg_user_id=1))
+            await session.commit()
+        return sim
+
+    def labels(self, sim: ChatSim) -> list[str]:
+        return [label for row in sim.telegram.keyboard for label in row]
+
+    async def test_a_customer_keeps_my_services_after_a_restart(self) -> None:
+        sim = await self._chat_with_a_service(owner=False)
+        await sim.type("/start")
+        await sim.type("🔄 شروع مجدد")
+        self.assertTrue(any("سرویس" in label and "من" in label for label in self.labels(sim)), self.labels(sim))
+
+    async def test_an_owner_with_a_service_sees_my_services_and_keeps_the_admin_entry(self) -> None:
+        sim = await self._chat_with_a_service(owner=True)
+        await sim.type("/start")
+        before = self.labels(sim)
+        await sim.type("🔄 شروع مجدد")
+        self.assertEqual(self.labels(sim), before)
+        self.assertTrue(any("سرویس" in label and "من" in label for label in before), before)
+        self.assertIn(ADMIN_PANEL, before)
+
+    async def test_the_menu_after_a_purchase_is_the_menu_a_restart_builds(self) -> None:
+        from sqlalchemy import select
+
+        from app.bot.menu_nav import build_main_reply_keyboard, buyer_main_reply_keyboard
+
+        sim = await self._chat_with_a_service(owner=True)
+        async with sim.Session() as session:
+            user = (await session.execute(select(BotUser).where(BotUser.telegram_id == sim.telegram_id))).scalar_one()
+            after_purchase, _ = await buyer_main_reply_keyboard(session, user, is_reseller_bot=False, reseller_owner_id=None)
+            restart, _, _ = await build_main_reply_keyboard(session, user, is_reseller_bot=False, reseller_owner_id=None)
+        self.assertEqual(after_purchase.keyboard, restart.keyboard)
