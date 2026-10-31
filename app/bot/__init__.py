@@ -4,14 +4,13 @@ from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware, Bot, Dispatcher, Router
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.base import BaseSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import TelegramObject
 
-from app.bot.chat_cleanup import ChatCleanupMiddleware, install_notice_watch
+from app.bot.chat_screen import ChatScreenMiddleware, install_screen_rules
 from app.bot.edit_mode import EditModeMiddleware
-from app.bot.menu_keyboard_reopen import MenuKeyboardReopenMiddleware, install_menu_keyboard_watch
-from app.bot.reply_keyboard_state import ReplyKeyboardStateMiddleware
 from app.bot.screen_replay import install_replay_guard, set_dispatcher
 from app.bot.slow_updates import SlowUpdateMiddleware
 from app.bot.middlewares import (
@@ -91,10 +90,15 @@ class _RequireBotOwnerPrincipal(BaseMiddleware):
         return await handler(event, data)
 
 
-def create_bot(token: str | None = None) -> Bot:
+def create_bot(token: str | None = None, *, session: BaseSession | None = None) -> Bot:
+    """The platform bot with its request rules; ``session`` replaces Telegram in tests."""
     settings = get_settings()
-    bot = Bot(token=(token or settings.bot_token).strip(), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    return install_notice_watch(install_menu_keyboard_watch(install_replay_guard(bot)))
+    bot = Bot(
+        token=(token or settings.bot_token).strip(),
+        session=session,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    return install_screen_rules(install_replay_guard(bot))
 
 
 def bot_routers() -> list[Router]:
@@ -210,13 +214,11 @@ def create_dispatcher() -> Dispatcher:
     dp.update.middleware(RateLimitMiddleware())
     dp.update.middleware(DbSessionMiddleware())
     dp.update.middleware(UserMiddleware())
+    # Before the join and terms gates, so their prompts are tidied like any other screen.
+    dp.update.middleware(ChatScreenMiddleware())
     dp.update.middleware(ForceJoinMiddleware())
     dp.update.middleware(TermsEntryMiddleware())
     dp.update.middleware(EditModeMiddleware())
-    dp.update.middleware(ChatCleanupMiddleware())
-    # Notes typed text so the next main menu unfolds the reply keyboard again.
-    dp.message.outer_middleware(ReplyKeyboardStateMiddleware())
-    dp.message.outer_middleware(MenuKeyboardReopenMiddleware())
 
     for router in bot_routers():
         dp.include_router(router)

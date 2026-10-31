@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.formatting import format_message
 from app.services.guide_media import KIND_VIDEO, MediaToSend, load_file_id_cache, media_to_send, remember_file_ids
 from app.services.rich_text import visible_text
+from app.services.chat_records import keeps_sent
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ def _sent_file_id(message: Message) -> str | None:
     return message.photo[-1].file_id if message.photo else None
 
 
+@keeps_sent
 async def send_guide_album(bot: Bot, chat_id: int, album: list[MediaToSend]) -> dict[str, str]:
     """Send the guide's photos and videos; returns the file ids learned for uploaded files."""
     try:
@@ -96,6 +98,7 @@ def claim_guide_send_slot(user_id: int) -> bool:
     return True
 
 
+@keeps_sent
 async def send_guide_to_chat(
     session: AsyncSession,
     bot: Bot,

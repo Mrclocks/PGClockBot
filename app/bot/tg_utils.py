@@ -8,6 +8,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardMarkup, Message, ReplyKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.chat_cleanup import replace_home
+from app.bot.chat_screen import shows_keyboard
 from app.services import bot_feedback_texts as feedback
 
 logger = logging.getLogger("pgclock.bot")
@@ -80,6 +81,8 @@ async def attach_reply_keyboard(
     must type (``cancel_reply`` / ``ForceReply``) or when a new lasting
     ``ReplyKeyboardMarkup`` is sent.
     """
+    if shows_keyboard(message.bot, message.chat.id, reply_markup):
+        return None  # already on screen: a message just to attach it again is clutter
     try:
         return await message.answer(text or "⌨️", reply_markup=reply_markup)
     except Exception:
@@ -158,6 +161,8 @@ async def seed_reply_keyboard(
     chrome, or home — tip-delete hides the custom keyboard and menu icon.
     Prefer ``attach_reply_keyboard`` / ``send_reply_keyboard_last``.
     """
+    if shows_keyboard(message.bot, message.chat.id, reply_markup):
+        return
     try:
         tip_msg = await message.answer(tip or "·", reply_markup=reply_markup)
     except Exception:

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import replace_home
+from app.bot.chat_screen import fresh_keyboard
 from app.db.models import BotUser, UserService
 from app.services.service_scope import shop_services_clause
 from app.services.users import current_shop_reseller_id, get_all_settings
@@ -434,8 +435,10 @@ async def restore_main_reply(
         reseller_owner_id=reseller_owner_id,
         as_user=as_user,
     )
-    # The main menu is the whole screen: everything throwaway above it goes too.
-    await replace_home(await message.answer(text, reply_markup=markup), sweep=True)
+    # The main menu is the whole screen: a fresh home at the bottom, everything temporary goes.
+    with fresh_keyboard():
+        home = await message.answer(text, reply_markup=markup)
+    await replace_home(home, sweep=True)
     return ui
 
 
@@ -524,14 +527,11 @@ async def present_order_pay(
     summary: str | None = None,
     is_reseller_bot: bool,
     reseller_owner_id: int | None,
-    heal_main: bool = False,
 ) -> None:
     """Show order summary + payment methods in one inline panel (Option B).
 
     Pass ``summary`` (HTML order id / plan / amount). The panel text is
     ``summary + prompt`` so a prior edit of the same message is never needed.
-    ``heal_main`` restores the stable main ReplyKeyboard after a free-text
-    step (e.g. discount code) that left ``cancel_reply`` attached.
     """
     from app.bot.nav_inline import present_inline_only
 
@@ -550,17 +550,3 @@ async def present_order_pay(
         text=body,
         inline=kb.pay_methods(int(order_id), ui),
     )
-    if heal_main:
-        from app.bot.tg_utils import attach_reply_keyboard
-
-        main_kb, _, _ = await build_main_reply_keyboard(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-        )
-        await attach_reply_keyboard(
-            message,
-            main_kb,
-            text="·",
-        )

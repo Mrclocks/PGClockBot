@@ -8,10 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser
 from app.services.reseller_bots import ATTRIBUTED_SHOP
+from app.services.chat_records import keeps_sent
 
 log = logging.getLogger(__name__)
 
 
+@keeps_sent
 async def notify_payer(
     session: AsyncSession,
     user_id: int | None,
