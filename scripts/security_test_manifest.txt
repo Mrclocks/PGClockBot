@@ -318,3 +318,5 @@ tests/test_trial_phone_lock.py
 tests/test_trial_users.py
 # Trial user actions: only own trial takers, message honours opt-out, blocking stays with the Owner.
 tests/test_trial_user_actions.py
+# Auto-approval notice: receipt photo and customer/service buttons reach only the payment's own staff chat.
+tests/test_auto_approve_notice.py
