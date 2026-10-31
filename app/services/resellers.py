@@ -23,6 +23,7 @@ from app.db.models import (
     UserService,
 )
 from app.services.db_safe import rollback_quiet
+from app.services.chat_records import keeps_sent
 
 logger = logging.getLogger(__name__)
 
@@ -2251,6 +2252,7 @@ def format_revoke_message(reason: str) -> str:
     return format_account_edit_subject(event="reseller_revoke", reason=reason)
 
 
+@keeps_sent
 async def notify_reseller_revoked(
     telegram_id: int,
     reason: str,

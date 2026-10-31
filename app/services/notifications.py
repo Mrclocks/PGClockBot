@@ -26,6 +26,7 @@ from app.services.formatting import (
 from app.services.replaceable_notices import replace_notices
 from app.services.ticket_notices import ticket_notice_key
 from app.services.users import get_all_settings, on, set_settings_bulk
+from app.services.chat_records import keeps_sent
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +261,7 @@ async def notify_enabled(
     return bool(prefs.get(key, False))
 
 
+@keeps_sent
 async def _send_to_chats(
     bot: Bot,
     chat_ids: list[int],
@@ -1056,6 +1058,7 @@ async def notify_new_ticket(
     )
 
 
+@keeps_sent
 async def notify_ticket_message(
     bot: Bot,
     session: AsyncSession,
@@ -1502,6 +1505,7 @@ def format_account_edit_admin(
     return format_message(title, info_block(lines))
 
 
+@keeps_sent
 async def _send_via_shop_bot(session: AsyncSession, shop_id: int, chat_id: int, text: str) -> bool:
     from app.services.reseller_bots import open_notify_bot_for_reseller
 
@@ -1519,6 +1523,7 @@ async def _send_via_shop_bot(session: AsyncSession, shop_id: int, chat_id: int, 
             await shop_bot.session.close()
 
 
+@keeps_sent
 async def _send_to_user_chat(
     session: AsyncSession,
     user: BotUser,

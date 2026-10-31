@@ -16,6 +16,7 @@ from app.services.users_ops import (
     approx_expire_at,
     load_services_by_user_ids,
 )
+from app.services.chat_records import keeps_sent
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ def wrap_staff_dm(body_html: str, *, actor: str | None = None) -> str:
     return f"{head}\n\n{body_html}"
 
 
+@keeps_sent
 async def send_staff_dm(
     session: AsyncSession,
     user: BotUser,
@@ -131,6 +133,7 @@ async def quick_renew_user(
     return svc, label
 
 
+@keeps_sent
 async def bulk_staff_dm(
     session: AsyncSession,
     users: Iterable[BotUser],

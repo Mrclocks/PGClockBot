@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.chat_records import keep_sent
 from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id
 from app.services.catalog_pricing import PriceTarget, active_discounts, displayed_quote, price_html, quote_price, sale_price
@@ -1884,19 +1885,21 @@ async def pay_wallet_cb(
         for aid in get_settings().admin_ids:
             try:
                 if approved:
-                    await callback.bot.send_message(
-                        aid,
-                        f"✅ نمایندگی فعال شد — سفارش #{order.id}\n"
-                        f"کاربر: {db_user.full_name or db_user.telegram_id}\n"
-                        f"(تأیید خودکار پس از پرداخت)",
-                    )
+                    with keep_sent():  # a notice or review item, never a temporary panel
+                        await callback.bot.send_message(
+                            aid,
+                            f"✅ نمایندگی فعال شد — سفارش #{order.id}\n"
+                            f"کاربر: {db_user.full_name or db_user.telegram_id}\n"
+                            f"(تأیید خودکار پس از پرداخت)",
+                        )
                 else:
-                    await callback.bot.send_message(
-                        aid,
-                        f"🤝 درخواست نمایندگی پرداخت‌شده — سفارش #{order.id}\n"
-                        f"کاربر: {db_user.full_name or db_user.telegram_id}",
-                        reply_markup=kb.reseller_app_review(app_id) if app_id else None,
-                    )
+                    with keep_sent():  # a notice or review item, never a temporary panel
+                        await callback.bot.send_message(
+                            aid,
+                            f"🤝 درخواست نمایندگی پرداخت‌شده — سفارش #{order.id}\n"
+                            f"کاربر: {db_user.full_name or db_user.telegram_id}",
+                            reply_markup=kb.reseller_app_review(app_id) if app_id else None,
+                        )
             except Exception:
                 logger.debug("pay_wallet_cb: ignored failure", exc_info=True)
         return
