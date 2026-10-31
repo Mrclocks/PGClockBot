@@ -836,6 +836,7 @@ DEFAULT_SETTINGS = {
     "notify_new_subscription": "1",
     "notify_pending_approval": "1",
     "notify_new_order": "0",
+    "notify_trial_claimed": "1",
     "notify_wallet_topup": "1",
     "notify_new_ticket": "1",
     "notify_service_cancellation": "1",

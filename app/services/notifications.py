@@ -84,6 +84,12 @@ NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
         "1",
     ),
     (
+        "notify_trial_claimed",
+        "دریافت اکانت تست",
+        "وقتی کاربری اکانت تست رایگان می‌گیرد — با نام، یوزرنیم و آیدی تلگرام او",
+        "1",
+    ),
+    (
         "notify_pending_approval",
         "نیاز به تأیید",
         "رسید کارت‌به‌کارت یا شارژ کیف که باید تأیید/رد شود — با دکمه تأیید و رد",
@@ -147,6 +153,7 @@ SHOP_NOTIFY_PERM_MAP: dict[str, frozenset[str]] = {
     "notify_new_subscription": frozenset({"orders", "payments"}),
     "notify_pending_approval": frozenset({"payments"}),
     "notify_new_order": frozenset({"orders"}),
+    "notify_trial_claimed": frozenset({"orders"}),
     "notify_new_ticket": frozenset({"tickets"}),
     "notify_auto_approve": frozenset({"payments"}),
 }

@@ -31,6 +31,7 @@ from app.db.models import BotUser, Order, ResellerProfile, UserService
 from app.services.db_safe import rollback_quiet
 from app.services.funnel_events import STEP_PAY_START, record_order_funnel
 from app.services.service_scope import customer_may_use_service
+from app.services.trial_notify import notify_trial_claimed_outside_bot
 from app.services.formatting import (
     expire_remaining_days,
     format_bytes_left,
@@ -786,6 +787,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             await rollback_quiet(session)
             log.exception("mini buy failed user=%s plan=%s", user.id, plan_id)
             raise HTTPException(500, "خرید ناموفق")
+        if plan.is_trial:
+            await notify_trial_claimed_outside_bot(session, order=order, user=user)
         return _no_store(
             {
                 "ok": True,
