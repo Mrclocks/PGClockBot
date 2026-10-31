@@ -312,6 +312,8 @@ tests/test_ticket_notices.py
 tests/test_reseller_search.py
 # Trial account age: a young account is refused before its one trial is claimed.
 tests/test_trial_account_age.py
+# Trial phone lock: number formats collapse to one hash; a verified purchase number is reused.
+tests/test_trial_phone_lock.py
 # Trial users page: shop-scoped list, buyer tag, permission gate, escaped customer text.
 tests/test_trial_users.py
 # Trial user actions: only own trial takers, message honours opt-out, blocking stays with the Owner.
