@@ -19,8 +19,17 @@ from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
-from app.services.usage_alerts import alert_extras, time_alert_markup, traffic_alert_markup
 from app.services.replaceable_notices import DAILY_REPORT_KEY, SUBORDINATE_REPORT_KEY, send_replacing_report
+from app.services.usage_alerts import (
+    ALERT_TIME,
+    ALERT_TRAFFIC,
+    SentAlert,
+    alert_extras,
+    replace_previous_alerts,
+    time_alert_markup,
+    traffic_alert_markup,
+    usage_alert_key,
+)
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -169,6 +178,7 @@ async def check_expiring_services(bot: Bot) -> None:
                 for shop in {item[5] for item in eligible}
             }
             sem = asyncio.Semaphore(_PG_FETCH_CONCURRENCY)
+            sent_alerts: list[SentAlert] = []
 
             async def _fetch_info(token: str):
                 async with sem:
@@ -211,7 +221,7 @@ async def check_expiring_services(bot: Bot) -> None:
                                 try:
                                     one_tap = on(_ui.get("one_tap_renew_enabled", "1"))
                                     markup = time_alert_markup(_ui, svc.id, extras)
-                                    await send_bot.send_message(
+                                    alert = await send_bot.send_message(
                                         user.telegram_id,
                                         f"⏰ زمان سرویس <b>{svc.pg_username}</b> به کمتر از "
                                         f"<b>{time_pct}٪</b> رسیده است.\n"
@@ -222,6 +232,7 @@ async def check_expiring_services(bot: Bot) -> None:
                                         reply_markup=markup,
                                     )
                                     svc.notified_expire = True
+                                    sent_alerts.append((send_bot, usage_alert_key(ALERT_TIME, svc.id), alert))
                                     if one_tap:
                                         svc.renew_nudge_sent_at = now
                                 except Exception:
@@ -242,7 +253,7 @@ async def check_expiring_services(bot: Bot) -> None:
                             rem_pct = max(0.0, (1.0 - (used / limit_f)) * 100)
                             if rem_pct <= traffic_pct:
                                 try:
-                                    await send_bot.send_message(
+                                    alert = await send_bot.send_message(
                                         user.telegram_id,
                                         f"📉 حجم باقی‌مانده سرویس <b>{svc.pg_username}</b> کمتر از "
                                         f"<b>{traffic_pct}٪</b> است "
@@ -252,12 +263,14 @@ async def check_expiring_services(bot: Bot) -> None:
                                         reply_markup=traffic_alert_markup(_ui, svc.id, extras),
                                     )
                                     svc.notified_traffic = True
+                                    sent_alerts.append((send_bot, usage_alert_key(ALERT_TRAFFIC, svc.id), alert))
                                 except Exception:
                                     logger.debug(
                                         "traffic alert send failed tg=%s", user.telegram_id, exc_info=True
                                     )
 
             await session.commit()
+            await replace_previous_alerts(session, sent_alerts)
             if len(services) < batch_size:
                 break
 

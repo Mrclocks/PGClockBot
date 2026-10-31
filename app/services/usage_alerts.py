@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram import Bot
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,10 +18,29 @@ from app.db.models import Plan, ServiceAddonPack, ServiceAutomation, UserService
 from app.services.button_styles import style_kwargs
 from app.services.catalog_pricing import annotate_prices, sale_price
 from app.services.formatting import format_toman
+from app.services.replaceable_notices import replace_notices
 from app.services.service_automation import TOPUP_CALLBACK
 from app.services.users import on
 from app.services.wallet import wallet_balances_for_scope
 
+ALERT_TIME = "time"
+ALERT_TRAFFIC = "traffic"
+# (bot that sent it, replace key, the alert message)
+SentAlert = tuple[Bot, str, Message]
+
+
+def usage_alert_key(kind: str, service_id: int) -> str:
+    """One low-time and one low-volume alert per service: the next one of a kind replaces the last."""
+    return f"usage:{kind}:{int(service_id)}"
+
+
+async def replace_previous_alerts(session: AsyncSession, sent: list[SentAlert]) -> None:
+    """Retire the earlier alert of the same kind and service in each customer's chat.
+
+    Called after the batch is committed, so a rolled-back batch never deletes an alert.
+    """
+    for bot, key, message in sent:
+        await replace_notices(session, bot, key, [message])
 
 
 @dataclass(slots=True)
