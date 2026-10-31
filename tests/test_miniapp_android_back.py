@@ -23,12 +23,10 @@ class ReplyKeyboardAndroidBackTests(unittest.TestCase):
         ui = {"btn_menu_home": "🏠 منوی اصلی", "btn_back": "⬅️ بازگشت", "btn_shop": "خرید"}
         main = main_reply_keyboard("user", ui=ui)
         shop = shop_reply_keyboard(ui)
+        # Off by default; «کیبورد همیشه باز» turns it on per bot after an Android check.
         self.assertFalse(main.is_persistent)
         self.assertFalse(shop.is_persistent)
-        src = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
-        block = src.split("def _reply_markup(")[1].split("def _reply_user_entries(")[0]
-        self.assertIn("is_persistent=False", block)
-        self.assertIn("Android", block)
+        self.assertTrue(main_reply_keyboard("user", ui={**ui, "menu_keyboard_persistent": "1"}).is_persistent)
 
 
 if __name__ == "__main__":

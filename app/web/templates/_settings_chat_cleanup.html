@@ -1,4 +1,4 @@
-{# «پاک‌سازی خودکار صفحهٔ ربات»; posts with the menu form it sits beside. #}
+{# «پاک‌سازی خودکار صفحهٔ ربات» and «کیبورد همیشه باز»; post with the menu form they sit beside. #}
 <div class="setting-item full">
   <label class="toggle-row ui-switch-row">
     <span class="ui-switch-copy">
@@ -7,6 +7,18 @@
     </span>
     <span class="ui-switch">
       <input type="checkbox" name="chat_cleanup_enabled" value="1" form="menu-form" {% if values.get('chat_cleanup_enabled', '1') in ['1','true','yes','on'] %}checked{% endif %} />
+      <span class="ui-switch-track" aria-hidden="true"></span>
+    </span>
+  </label>
+</div>
+<div class="setting-item full">
+  <label class="toggle-row ui-switch-row">
+    <span class="ui-switch-copy">
+      <strong>کیبورد همیشه باز</strong>
+      <small class="muted">بعد از تایپ و بستن کیبورد گوشی، منوی ربات خودش دوباره ظاهر می‌شود و لازم نیست آیکون چهارمربع را بزنید. روی چند نسخهٔ اندروید ممکن است دکمهٔ برگشت گوشی از گفتگو خارج نشود؛ بعد از روشن کردن روی یک گوشی اندروید امتحان کنید. تغییر با «شروع مجدد» یا بازگشت به منوی اصلی اعمال می‌شود.</small>
+    </span>
+    <span class="ui-switch">
+      <input type="checkbox" name="menu_keyboard_persistent" value="1" form="menu-form" {% if values.get('menu_keyboard_persistent', '0') in ['1','true','yes','on'] %}checked{% endif %} />
       <span class="ui-switch-track" aria-hidden="true"></span>
     </span>
   </label>

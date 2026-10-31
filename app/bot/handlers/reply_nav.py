@@ -408,17 +408,10 @@ async def open_services_list(
     reseller_owner_id: int | None = None,
 ) -> None:
     from app.bot.handlers.services import _reseller_capacity_list_label
-    from app.bot.menu_nav import build_main_reply_keyboard
     from app.bot.nav_inline import present_inline_only
     ui = await get_all_settings(session)
     services = await list_customer_services(session, db_user.id, current_shop_reseller_id())
     reseller_label = await _reseller_capacity_list_label(
-        session,
-        db_user,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-    )
-    main_kb, _, _ = await build_main_reply_keyboard(
         session,
         db_user,
         is_reseller_bot=is_reseller_bot,
@@ -441,7 +434,9 @@ async def open_services_list(
                 message, text=f"{text}\n\n{EMPTY_LIST_HINT}", inline=empty_services_keyboard(ui), **send_kw
             )
             return
-        await message.answer(text, reply_markup=main_kb, **send_kw)
+        await present_inline_only(
+            message, text=text, inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(ui, "menu:home")]]), **send_kw
+        )
         return
     # Exactly one customer service and no reseller capacity → open card (Wave B).
     # With «افزودن سرویس قبلی» on, the list stays so the add button is reachable.
