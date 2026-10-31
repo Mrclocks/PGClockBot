@@ -1,7 +1,9 @@
 """Keep the private chat tidy: a new panel deletes the throwaway messages above it.
 
 Only messages noted here as throwaway are ever deleted: panels, prompts and fixed one-line
-notices the bot sends, and the person's menu-button taps and typed form replies. Everything else stays: deliveries, configs,
+notices the bot sends, and the person's menu-button taps and typed form replies. A message
+the person taps a button on and the bot edits into another screen with buttons is a panel
+too, however it was first sent. Everything else stays: deliveries, configs,
 receipts, ticket replies, staff notices, and the message carrying the menu keyboard
 (deleting that one drops the menu on iOS). A panel that turns into something worth
 keeping, such as a payment confirmation, is taken off the list with ``keep_message``.
@@ -29,8 +31,8 @@ from typing import Any
 from aiogram import BaseMiddleware, Bot
 from aiogram.client.session.middlewares.base import NextRequestMiddlewareType
 from aiogram.exceptions import TelegramAPIError
-from aiogram.methods import SendMessage, TelegramMethod
-from aiogram.types import Message, ReplyKeyboardMarkup, TelegramObject
+from aiogram.methods import EditMessageCaption, EditMessageText, SendMessage, TelegramMethod
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, ReplyKeyboardMarkup, TelegramObject
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.bot.reply_keyboard_state import is_menu_tap
@@ -78,8 +80,12 @@ SHORT_NOTICES = frozenset(
 )
 
 _cleanup_on: ContextVar[bool] = ContextVar("chat_cleanup_on", default=False)
+# (chat id, message id) of the bot message whose inline button started this update.
+_tapped: ContextVar[tuple[int, int] | None] = ContextVar("chat_cleanup_tapped", default=None)
 
 ChatKey = tuple[int, int]
+EDIT_PANEL = "panel"
+EDIT_RECORD = "record"
 
 
 class ThrowawayLog:
@@ -176,16 +182,24 @@ def note_throwaway(message: Message | None, *, reply_markup: Any = None, bot: Bo
         return
     key = chat_key(message, bot)
     if key is not None and getattr(message, "message_id", None) is not None:
-        _log.add(key, int(message.message_id), time.monotonic())
-        writer.add(key, int(message.message_id), KIND_THROWAWAY)
+        _note_id(key, int(message.message_id))
+
+
+def _note_id(key: ChatKey, message_id: int) -> None:
+    _log.add(key, message_id, time.monotonic())
+    writer.add(key, message_id, KIND_THROWAWAY)
 
 
 def keep_message(message: Message | None) -> None:
     """A panel now shows something the person should keep; never delete it."""
     key = chat_key(message) if message is not None else None
     if key is not None and getattr(message, "message_id", None) is not None:
-        _log.forget(key, int(message.message_id))
-        writer.remove(key, [int(message.message_id)])
+        _forget_id(key, int(message.message_id))
+
+
+def _forget_id(key: ChatKey, message_id: int) -> None:
+    _log.forget(key, message_id)
+    writer.remove(key, [message_id])
 
 
 async def sweep_above(message: Message | None, *, panel_id: int | None = None) -> None:
@@ -238,12 +252,14 @@ async def delete_messages(bot: Bot, chat_id: int, message_ids: list[int]) -> Non
             logger.debug("chat cleanup could not delete %s messages", len(message_ids), exc_info=True)
 
 
-async def _note_short_notices(
+async def _note_throwaway_requests(
     make_request: NextRequestMiddlewareType[Any], bot: Bot, method: TelegramMethod[Any]
 ) -> Any:
     result = await make_request(bot, method)
     if isinstance(method, SendMessage) and isinstance(result, Message) and is_short_notice(method.text):
         note_throwaway(result, reply_markup=method.reply_markup, bot=bot)
+    elif isinstance(method, (EditMessageText, EditMessageCaption)):
+        _note_tapped_edit(bot, method)
     return result
 
 
@@ -251,10 +267,50 @@ def is_short_notice(text: str | None) -> bool:
     return (text or "").strip() in SHORT_NOTICES
 
 
+def tapped_edit_kind(method: EditMessageText | EditMessageCaption) -> str | None:
+    """How an edit changes the tapped message: ``panel``, ``record`` or None (not the tapped one).
+
+    Edited into another screen with buttons it is a panel, however it was first sent. Edited
+    to have no buttons (a reviewed payment, a finished step) it is a record and stays.
+    """
+    tapped = _tapped.get()
+    if tapped is None or method.inline_message_id:
+        return None
+    try:
+        target = (int(method.chat_id), int(method.message_id))
+    except (TypeError, ValueError):
+        return None
+    if target != tapped:
+        return None
+    markup = method.reply_markup
+    has_buttons = isinstance(markup, InlineKeyboardMarkup) and any(markup.inline_keyboard)
+    return EDIT_PANEL if has_buttons else EDIT_RECORD
+
+
+def _note_tapped_edit(bot: Bot, method: EditMessageText | EditMessageCaption) -> None:
+    kind = tapped_edit_kind(method)
+    if kind is None or not is_cleanup_on():
+        return
+    key, message_id = (int(bot.id), int(method.chat_id)), int(method.message_id)
+    if kind == EDIT_PANEL:
+        _note_id(key, message_id)
+    else:
+        _forget_id(key, message_id)
+
+
 def install_notice_watch(bot: Bot) -> Bot:
-    """Treat the bot's fixed one-line notices («لغو شد.»، «⏳» …) as throwaway."""
-    bot.session.middleware(_note_short_notices)
+    """Treat the bot's fixed one-line notices («لغو شد.»، «⏳» …) and tapped panels as throwaway."""
+    bot.session.middleware(_note_throwaway_requests)
     return bot
+
+
+def _tapped_panel(event: TelegramObject) -> tuple[int, int] | None:
+    """The bot's own message in a private chat whose button this update is a tap on."""
+    callback = getattr(event, "callback_query", None)
+    message = callback.message if isinstance(callback, CallbackQuery) else None
+    if not isinstance(message, Message) or message.chat.type != "private":
+        return None
+    return int(message.chat.id), int(message.message_id)
 
 
 class ChatCleanupMiddleware(BaseMiddleware):
@@ -271,11 +327,13 @@ class ChatCleanupMiddleware(BaseMiddleware):
             return await handler(event, data)
         ui = await get_all_settings(session)
         token = _cleanup_on.set(is_chat_cleanup_on(ui))
+        tapped_token = _tapped.set(_tapped_panel(event))
         try:
             message = getattr(event, "message", None)
             if isinstance(message, Message) and is_menu_tap(message, ui):
                 note_throwaway(message)
             return await handler(event, data)
         finally:
+            _tapped.reset(tapped_token)
             _cleanup_on.reset(token)
 

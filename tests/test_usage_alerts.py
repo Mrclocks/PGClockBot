@@ -238,6 +238,38 @@ class AlertJobTests(AlertCase):
         traffic = next(c for c in shop_bot.send_message.await_args_list if "حجم باقی‌مانده" in c.args[1])
         self.assertEqual(buttons(traffic.kwargs["reply_markup"]), ["svc:addon:11:volume", "svc:renew:11", TOPUP_CALLBACK])
 
+    def numbered_bot(self) -> AsyncMock:
+        bot = AsyncMock()
+        bot.id = 1
+        ids = iter(range(100, 200))
+        bot.send_message.side_effect = lambda chat_id, *a, **k: SimpleNamespace(
+            chat=SimpleNamespace(id=chat_id), message_id=next(ids)
+        )
+        return bot
+
+    async def run_with(self, bot):
+        pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=lambda token: self.info(traffic_low=True)))
+        with patch.object(jobs, "SessionLocal", self.Session), patch.object(jobs, "get_pg", return_value=pg):
+            await jobs.check_expiring_services(bot)
+
+    async def test_after_a_renewal_the_next_alert_replaces_the_previous_one(self):
+        async with self.Session() as session:
+            await set_setting(session, "user_alert_low_enabled", "1")
+            await session.commit()
+        clear_settings_cache()
+        bot = self.numbered_bot()
+        await self.run_with(bot)
+        self.assertEqual(bot.send_message.await_count, 2)
+        bot.delete_message.assert_not_awaited()
+        async with self.Session() as session:  # a renewal re-arms both alerts
+            await session.execute(UserService.__table__.update().where(UserService.id == 10).values(
+                notified_expire=False, notified_traffic=False))
+            await session.commit()
+        await self.run_with(bot)
+        deleted = sorted(c.kwargs["message_id"] for c in bot.delete_message.await_args_list)
+        self.assertEqual(deleted, [100, 101])
+        self.assertTrue(all(c.kwargs["chat_id"] == 1001 for c in bot.delete_message.await_args_list))
+
 
 if __name__ == "__main__":
     unittest.main()
