@@ -12,6 +12,9 @@ import time
 from typing import Any, Mapping
 
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Our panel feature keys (shown in sidebar under «پاسارگارد»)
 PG_FEATURE_KEYS = (
@@ -258,7 +261,7 @@ async def resolve_platform_pg_capabilities(
                 try:
                     await old.aclose()
                 except Exception:
-                    pass
+                    logger.debug("resolve_platform_pg_capabilities: ignored failure", exc_info=True)
         else:
             from app.services.pasarguard import get_pg
 
@@ -348,7 +351,7 @@ async def resolve_platform_pg_capabilities(
             try:
                 await client.close()
             except Exception:
-                pass
+                logger.debug("resolve_platform_pg_capabilities: ignored failure", exc_info=True)
 
 
 async def enrich_platform_admin_staff(user: dict) -> dict:

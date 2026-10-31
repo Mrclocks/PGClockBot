@@ -28,6 +28,9 @@ from app.services.web_auth import (
     validate_web_username,
     verify_password_hash,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Shown on login / session kick when PG admin is disabled or removed.
 PG_ACCESS_DENIED_MSG = (
@@ -122,7 +125,7 @@ async def enforce_pg_admin_web_gate(
             try:
                 await revoke_web_access(session, pg_username)
             except Exception:
-                pass
+                logger.debug("enforce_pg_admin_web_gate: ignored failure", exc_info=True)
         result = (False, PG_ACCESS_DENIED_MSG)
 
     if uname:
@@ -800,7 +803,7 @@ def store_staff_pg_api_key(
         try:
             invalidate_pg_staff_cache(staff_id=int(row.id))
         except Exception:
-            pass
+            logger.debug("store_staff_pg_api_key: ignored failure", exc_info=True)
         return None
     raw = (api_key or "").replace("\r", "").strip()
     if not raw:
@@ -818,7 +821,7 @@ def store_staff_pg_api_key(
     try:
         invalidate_pg_staff_cache(staff_id=int(row.id))
     except Exception:
-        pass
+        logger.debug("store_staff_pg_api_key: ignored failure", exc_info=True)
     return None
 
 
@@ -911,7 +914,7 @@ async def revoke_web_access(
 
         reset_pg()
     except Exception:
-        pass
+        logger.debug("revoke_web_access: ignored failure", exc_info=True)
     return True
 
 

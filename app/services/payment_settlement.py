@@ -1516,7 +1516,7 @@ async def notify_after_settlement(
                         session, order=order, payment=payment, error=str(send_exc)
                     )
                 except Exception:
-                    pass
+                    logger.debug("notify_after_settlement: ignored failure", exc_info=True)
             # Do not re-raise into callers that might confuse with payment failure —
             # financial approve already committed.
             logger.exception("settlement notify delivery failed payment=%s", payment.id)
@@ -1539,7 +1539,7 @@ async def notify_after_settlement(
             try:
                 await bot.session.close()
             except Exception:
-                pass
+                logger.debug("notify_after_settlement: ignored failure", exc_info=True)
 
 
 class PspCheckOutcome(str, Enum):

@@ -548,7 +548,7 @@ async def get_or_create_user(
 
             await on_user_referred(session, referred=user, source="telegram")
         except Exception:
-            pass
+            logger.debug("get_or_create_user: ignored failure", exc_info=True)
     return user
 
 

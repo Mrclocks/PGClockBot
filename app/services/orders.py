@@ -2347,14 +2347,14 @@ async def deliver_order(
                 try:
                     await pg.delete_user_by_id(int(pg_uid))
                 except Exception:
-                    pass
+                    logger.debug("deliver_order: ignored failure", exc_info=True)
             # Drop flushed UserService rows so _release_delivery_claim() commit
             # cannot leave orphans pointing at deleted PG users.
             for svc in list(services):
                 try:
                     await session.delete(svc)
                 except Exception:
-                    pass
+                    logger.debug("deliver_order: ignored failure", exc_info=True)
             services.clear()
             # After the deletes, so this commit cannot persist services of deleted panel users.
             await settle_failed_hold(session, volume_hold, exc, panel_touched=panel["touched"])
@@ -2369,7 +2369,7 @@ async def deliver_order(
         try:
             await _maybe_pay_referral_bonus(session, order)
         except Exception:
-            pass
+            logger.debug("deliver_order: ignored failure", exc_info=True)
         try:
             from app.services.loyalty import consume_loyalty_discount_for_order, on_order_delivered
 
@@ -2387,7 +2387,7 @@ async def deliver_order(
         try:
             await _release_delivery_claim()
         except Exception:
-            pass
+            logger.debug("deliver_order: ignored failure", exc_info=True)
         raise
 
 

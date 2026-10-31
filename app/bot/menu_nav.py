@@ -12,6 +12,9 @@ from app.bot.chat_cleanup import replace_home
 from app.db.models import BotUser, UserService
 from app.services.service_scope import shop_services_clause
 from app.services.users import current_shop_reseller_id, get_all_settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 # FSM data keys (do not collide with shop/wallet payload keys)
 NAV_LEVEL = "_kb_nav"
@@ -327,11 +330,11 @@ async def clear_fsm_keep_nav(state: FSMContext | None) -> None:
     try:
         await state.clear()
     except Exception:
-        pass
+        logger.debug("clear_fsm_keep_nav: ignored failure", exc_info=True)
     try:
         await state.set_state(None)
     except Exception:
-        pass
+        logger.debug("clear_fsm_keep_nav: ignored failure", exc_info=True)
     if keep:
         await state.update_data(**keep)
 
@@ -397,11 +400,11 @@ async def clear_checkout_nav(state: FSMContext | None) -> None:
     try:
         await state.clear()
     except Exception:
-        pass
+        logger.debug("clear_checkout_nav: ignored failure", exc_info=True)
     try:
         await state.update_data(**{NAV_LEVEL: NAV_MAIN, NAV_STACK: []})
     except Exception:
-        pass
+        logger.debug("clear_checkout_nav: ignored failure", exc_info=True)
 
 
 async def restore_main_reply(
@@ -419,11 +422,11 @@ async def restore_main_reply(
         try:
             await state.clear()
         except Exception:
-            pass
+            logger.debug("restore_main_reply: ignored failure", exc_info=True)
         try:
             await state.update_data(**{NAV_LEVEL: NAV_MAIN, NAV_STACK: []})
         except Exception:
-            pass
+            logger.debug("restore_main_reply: ignored failure", exc_info=True)
     markup, ui, _role = await build_main_reply_keyboard(
         session,
         db_user,

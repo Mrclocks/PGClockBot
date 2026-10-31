@@ -176,7 +176,7 @@ async def bulk_delete_reseller_users(
             try:
                 await session.rollback()
             except Exception:
-                pass
+                logger.debug("bulk_delete_reseller_users: ignored failure", exc_info=True)
     return ok, fail
 
 

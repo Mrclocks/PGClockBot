@@ -420,7 +420,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             try:
                 await session.rollback()
             except Exception:
-                pass
+                log.debug("principal_disable: ignored failure", exc_info=True)
             return RedirectResponse(
                 f"/resellers?detail={int(principal_id)}&err={_q('غیرفعال‌سازی ناموفق بود')}",
                 status_code=303,
@@ -450,7 +450,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             try:
                 await session.rollback()
             except Exception:
-                pass
+                log.debug("principal_enable: ignored failure", exc_info=True)
             return RedirectResponse(
                 f"/resellers?detail={int(principal_id)}&err={_q('فعال‌سازی ناموفق بود')}",
                 status_code=303,
@@ -500,7 +500,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             try:
                 await session.rollback()
             except Exception:
-                pass
+                log.debug("principal_create: ignored failure", exc_info=True)
             return RedirectResponse(
                 f"/resellers?err={_q('ساخت نماینده ناموفق بود')}",
                 status_code=303,
@@ -566,7 +566,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             try:
                 await session.rollback()
             except Exception:
-                pass
+                log.debug("principal_create_l2: ignored failure", exc_info=True)
             return RedirectResponse(
                 f"/resellers?err={_q('ساخت نماینده ناموفق بود')}",
                 status_code=303,
@@ -662,7 +662,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             try:
                 await session.rollback()
             except Exception:
-                pass
+                log.debug("principal_attach_l2_web: ignored failure", exc_info=True)
             return RedirectResponse(
                 f"/resellers?detail={int(principal_id)}&err={_q('فعال‌سازی ورود وب ناموفق بود')}",
                 status_code=303,
@@ -722,7 +722,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             try:
                 await session.rollback()
             except Exception:
-                pass
+                log.debug("principal_bind_l2_telegram: ignored failure", exc_info=True)
             return RedirectResponse(
                 f"/resellers?detail={int(principal_id)}&err={_q('اتصال تلگرام ناموفق بود')}",
                 status_code=303,
@@ -767,7 +767,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             try:
                 await session.rollback()
             except Exception:
-                pass
+                log.debug("principal_unbind_l2_telegram: ignored failure", exc_info=True)
             return RedirectResponse(
                 f"/resellers?detail={int(principal_id)}&err={_q('قطع اتصال تلگرام ناموفق بود')}",
                 status_code=303,

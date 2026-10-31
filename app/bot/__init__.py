@@ -23,6 +23,9 @@ from app.bot.middlewares import (
 )
 from app.config import get_settings
 from app.services import bot_feedback_texts as feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class _BlockPlatformAdminOnResellerBot(BaseMiddleware):
@@ -75,13 +78,13 @@ class _RequireBotOwnerPrincipal(BaseMiddleware):
                 try:
                     await event.answer(feedback.SYSTEM_OWNER_REQUIRED, show_alert=True)
                 except Exception:
-                    pass
+                    logger.debug("__call__: ignored failure", exc_info=True)
                 return None
             if isinstance(event, Message):
                 try:
                     await event.answer("دسترسی مالک سیستم لازم است.")
                 except Exception:
-                    pass
+                    logger.debug("__call__: ignored failure", exc_info=True)
                 return None
             return None
         return await handler(event, data)

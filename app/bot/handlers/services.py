@@ -30,6 +30,9 @@ from app.services.wireguard_delivery import REASON_DISABLED, REASON_UNAVAILABLE,
 from app.services.wireguard_send import send_wireguard_files
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = Router(name="services")
 
@@ -874,7 +877,7 @@ async def svc_addon_pay(
             try:
                 await revert_failed_free_delivery(session, order)
             except Exception:
-                pass
+                logger.debug("svc_addon_pay: ignored failure", exc_info=True)
             if callback.message:
                 await safe_edit_text(
                     callback.message,

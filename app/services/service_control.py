@@ -303,7 +303,7 @@ def _schedule_self_restart(*, delay_sec: float, reason: str) -> tuple[bool, str]
             try:
                 os._exit(1)
             except Exception:
-                pass
+                logger.debug("_worker: ignored failure", exc_info=True)
 
     # Non-daemon so the process stays alive until restart fires
     threading.Thread(target=_worker, name="pgclock-self-restart", daemon=False).start()
@@ -343,7 +343,7 @@ def restart_panel_service(*, reason: str = "manual", delay_sec: float = 0.0) -> 
             if hasattr(os, "geteuid") and os.geteuid() == 0:
                 candidates.append(["systemctl", "restart", SERVICE_NAME])
         except Exception:
-            pass
+            logger.debug("restart_panel_service: ignored failure", exc_info=True)
 
         for cmd in candidates:
             if cmd[:2] == ["sudo", "-n"] and not (

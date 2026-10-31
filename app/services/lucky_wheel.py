@@ -372,7 +372,7 @@ async def _get_or_create_state(
         try:
             q = q.with_for_update()
         except Exception:
-            pass
+            logger.debug("_get_or_create_state: ignored failure", exc_info=True)
     state = (await session.execute(q)).scalar_one_or_none()
     if state:
         return state
@@ -405,7 +405,7 @@ async def _get_or_create_state(
                     )
                 ).scalar_one()
             except Exception:
-                pass
+                logger.debug("_get_or_create_state: ignored failure", exc_info=True)
     return state
 
 

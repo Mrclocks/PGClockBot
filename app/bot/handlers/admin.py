@@ -52,6 +52,9 @@ from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services import bot_feedback_texts as feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 async def _admin_hub_kb(session: AsyncSession, db_user: BotUser) -> ReplyKeyboardMarkup:
     from app.bot.menu_nav import admin_hub_reply_keyboard
@@ -142,7 +145,7 @@ async def _present_admin_tickets_list(
             await message.edit_text(text, reply_markup=markup)
             return
         except Exception:
-            pass
+            logger.debug("_present_admin_tickets_list: ignored failure", exc_info=True)
     await present_inline_only(message, text=text, inline=markup)
 
 
@@ -736,7 +739,7 @@ async def _approve_order_bot(
                     error=str(send_exc),
                 )
             except Exception:
-                pass
+                logger.debug("_approve_order_bot: ignored failure", exc_info=True)
         msg = "سفارش تأیید و تحویل شد"
     elif order.status == OrderStatus.PAID.value or (
         pay and pay.status == PaymentStatus.APPROVED.value and order.status != OrderStatus.DELIVERED.value
@@ -762,7 +765,7 @@ async def _approve_order_bot(
                         error=str(send_exc),
                     )
                 except Exception:
-                    pass
+                    logger.debug("_approve_order_bot: ignored failure", exc_info=True)
         msg = "سفارش تحویل شد"
     else:
         raise ValueError("این سفارش هنوز رسید پرداخت ندارد و قابل تأیید نیست")
@@ -783,7 +786,7 @@ async def _approve_order_bot(
             needs_approval=False,
         )
     except Exception:
-        pass
+        logger.debug("_approve_order_bot: ignored failure", exc_info=True)
     return msg
 
 @router.callback_query(F.data.startswith("ordrev:ok:"))
@@ -818,7 +821,7 @@ async def order_approve_cb(callback: CallbackQuery, session: AsyncSession, db_us
             review = kb.order_review(order.id) if order.status != OrderStatus.DELIVERED.value else None
             await callback.message.edit_text(text, reply_markup=with_inline_back(review, None, "adm:orders"))
         except Exception:
-            pass
+            logger.debug("order_approve_cb: ignored failure", exc_info=True)
 
 @router.callback_query(F.data.startswith("ordrev:no:"))
 @require_bot_owner_handler
@@ -857,7 +860,7 @@ async def order_reject_cb(callback: CallbackQuery, session: AsyncSession, db_use
                     parse_mode="HTML",
                 )
             except Exception:
-                pass
+                logger.debug("order_reject_cb: ignored failure", exc_info=True)
     else:
         order.status = OrderStatus.REJECTED.value
         await session.commit()
@@ -871,7 +874,7 @@ async def order_reject_cb(callback: CallbackQuery, session: AsyncSession, db_use
                 ),
             )
         except Exception:
-            pass
+            logger.debug("order_reject_cb: ignored failure", exc_info=True)
 
 @router.callback_query(F.data == "adm:cancellations")
 @require_bot_owner_handler
@@ -1950,7 +1953,7 @@ async def plan_toggle(callback: CallbackQuery, session: AsyncSession, db_user: B
             )
             return
         except Exception:
-            pass
+            logger.debug("plan_toggle: ignored failure", exc_info=True)
     await _render_plans_list(callback, session)
 
 @router.callback_query(F.data.startswith("adm:plan:delask:"))
@@ -2002,7 +2005,7 @@ async def adm_plan_del(callback: CallbackQuery, session: AsyncSession, db_user: 
         try:
             await session.rollback()
         except Exception:
-            pass
+            logger.debug("adm_plan_del: ignored failure", exc_info=True)
         msg = e.message if len(e.message) <= 180 else e.message[:177] + "…"
         await callback.answer(msg, show_alert=True)
         return
@@ -2443,7 +2446,7 @@ async def _render_user_card(
             await message.edit_text(text, reply_markup=markup)
             return
         except Exception:
-            pass
+            logger.debug("_render_user_card: ignored failure", exc_info=True)
     await message.answer(text, reply_markup=markup)
 
 async def _ask_staff_message(
@@ -3930,7 +3933,7 @@ async def _render_reseller_card(
             await message.edit_text(text, reply_markup=markup)
             return
         except Exception:
-            pass
+            logger.debug("_render_reseller_card: ignored failure", exc_info=True)
     await message.answer(text, reply_markup=markup)
 
 @router.callback_query(F.data.startswith("adm:resellers:view:"))
@@ -4596,7 +4599,7 @@ async def adm_resapp_ok(callback: CallbackQuery, session: AsyncSession, db_user:
                 parse_mode="HTML",
             )
         except Exception:
-            pass
+            logger.debug("adm_resapp_ok: ignored failure", exc_info=True)
     await callback.answer("تأیید شد ✅", show_alert=True)
     if callback.message:
         await callback.message.edit_text(
@@ -4630,7 +4633,7 @@ async def adm_resapp_no(callback: CallbackQuery, session: AsyncSession, db_user:
                 "❌ درخواست نمایندگی شما رد شد.\nدر صورت نیاز با پشتیبانی در ارتباط باشید.",
             )
         except Exception:
-            pass
+            logger.debug("adm_resapp_no: ignored failure", exc_info=True)
     await callback.answer(feedback.REJECTED, show_alert=True)
     if callback.message:
         await callback.message.edit_text(
@@ -4713,7 +4716,7 @@ async def make_res(
             parse_mode="HTML",
         )
     except Exception:
-        pass
+        logger.debug("make_res: ignored failure", exc_info=True)
     await message.answer(
         f"کاربر {tg_id} نماینده شد ✅ — اطلاعات ورود ارسال شد",
         reply_markup=await _admin_hub_kb(session, db_user),
@@ -4894,7 +4897,7 @@ async def adm_ticket_reply(
             ticket_reseller_id=ticket.reseller_id,
         )
     except Exception:
-        pass
+        logger.debug("adm_ticket_reply: ignored failure", exc_info=True)
     await _answer_tickets_nav(
         message,
         session,

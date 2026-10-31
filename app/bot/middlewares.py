@@ -40,7 +40,7 @@ def _extract_from_user(event: TelegramObject):
         if isinstance(event, PreCheckoutQuery) and event.from_user:
             return event.from_user
     except Exception:
-        pass
+        logger.debug("_extract_from_user: ignored failure", exc_info=True)
     if isinstance(event, Update):
         if event.message and event.message.from_user:
             return event.message.from_user
@@ -408,14 +408,14 @@ class RateLimitMiddleware(BaseMiddleware):
                 try:
                     await event.answer("لطفاً کمی صبر کنید", show_alert=False)
                 except Exception:
-                    pass
+                    logger.debug("__call__: ignored failure", exc_info=True)
             else:
                 msg = _reply_message(event)
                 if msg:
                     try:
                         await msg.answer("تعداد درخواست‌ها زیاد است — چند ثانیه صبر کنید.")
                     except Exception:
-                        pass
+                        logger.debug("__call__: ignored failure", exc_info=True)
             return None
         return await handler(event, data)
 
@@ -560,7 +560,7 @@ class UserMiddleware(BaseMiddleware):
                             "user_id": reseller_owner_id,
                         })
                     except Exception:
-                        pass
+                        logger.debug("__call__: ignored failure", exc_info=True)
             else:
                 logger.error(
                     "Rejecting update: bot token is not main and not a known reseller shop"
@@ -572,7 +572,7 @@ class UserMiddleware(BaseMiddleware):
                             "ربات فروشگاه شناسایی نشد. با پشتیبانی تماس بگیرید."
                         )
                     except Exception:
-                        pass
+                        logger.debug("__call__: ignored failure", exc_info=True)
                 return None
 
         data["reseller_owner_id"] = reseller_owner_id
@@ -625,7 +625,7 @@ class UserMiddleware(BaseMiddleware):
                         try:
                             await msg.answer("خطای موقت. چند ثانیه بعد دوباره /start بزنید.")
                         except Exception:
-                            pass
+                            logger.debug("__call__: ignored failure", exc_info=True)
                     return None
                 data["db_user"] = user
                 if user.is_blocked:
@@ -634,7 +634,7 @@ class UserMiddleware(BaseMiddleware):
                         try:
                             await msg.answer("دسترسی شما مسدود شده است.")
                         except Exception:
-                            pass
+                            logger.debug("__call__: ignored failure", exc_info=True)
                     cq = event.callback_query if isinstance(event, Update) else (
                         event if isinstance(event, CallbackQuery) else None
                     )
@@ -642,7 +642,7 @@ class UserMiddleware(BaseMiddleware):
                         try:
                             await cq.answer("دسترسی شما مسدود شده است.", show_alert=True)
                         except Exception:
-                            pass
+                            logger.debug("__call__: ignored failure", exc_info=True)
                     return None
                 if typed_code and user.referred_by_id:
                     from aiogram.filters.command import CommandObject
@@ -728,7 +728,7 @@ class ForceJoinMiddleware(BaseMiddleware):
                 try:
                     await msg.answer(text, reply_markup=markup, **fj_kw)
                 except Exception:
-                    pass
+                    logger.debug("__call__: ignored failure", exc_info=True)
             cq = event.callback_query if isinstance(event, Update) else (
                 event if isinstance(event, CallbackQuery) else None
             )
@@ -741,7 +741,7 @@ class ForceJoinMiddleware(BaseMiddleware):
                 try:
                     await cq.answer(alert, show_alert=True)
                 except Exception:
-                    pass
+                    logger.debug("__call__: ignored failure", exc_info=True)
             return None
 
         return await handler(event, data)
@@ -820,7 +820,7 @@ class TermsEntryMiddleware(BaseMiddleware):
             try:
                 await msg.answer(prompt.text, reply_markup=markup, **kwargs)
             except Exception:
-                pass
+                logger.debug("__call__: ignored failure", exc_info=True)
         cq = event.callback_query if isinstance(event, Update) else (
             event if isinstance(event, CallbackQuery) else None
         )
@@ -828,7 +828,7 @@ class TermsEntryMiddleware(BaseMiddleware):
             try:
                 await cq.answer("ابتدا قوانین را بپذیرید", show_alert=True)
             except Exception:
-                pass
+                logger.debug("__call__: ignored failure", exc_info=True)
         return None
 
 
@@ -856,6 +856,6 @@ class ErrorLogMiddleware(BaseMiddleware):
                 try:
                     await msg.answer("خطایی رخ داد. لطفاً دوباره /start را بزنید.")
                 except Exception:
-                    pass
+                    logger.debug("__call__: ignored failure", exc_info=True)
             # do not re-raise so polling keeps running
             return None

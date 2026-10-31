@@ -15,6 +15,9 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from app.services.formatting import format_bytes
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PgQuotaError(Exception):
@@ -400,7 +403,7 @@ async def _load_admin_and_role(
             if isinstance(fetched, dict):
                 role = fetched
         except Exception:
-            pass
+            logger.debug("_load_admin_and_role: ignored failure", exc_info=True)
     return admin, role
 
 

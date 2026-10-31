@@ -354,7 +354,7 @@ async def _create_web_identity_row(
     except PrincipalWebIdentityError:
         raise
     except Exception:
-        pass
+        log.debug("_create_web_identity_row: ignored failure", exc_info=True)
 
     existing_for_principal = await get_web_identity_for_principal(
         session, int(principal.id)

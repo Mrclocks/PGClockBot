@@ -276,7 +276,7 @@ async def execute_payment_resend(
                 session, order=order, payment=payment, error=str(send_exc)
             )
         except Exception:
-            pass
+            logger.debug("execute_payment_resend: ignored failure", exc_info=True)
         return PaymentActionResult(
             ok=False,
             action="resend",
@@ -355,7 +355,7 @@ async def _deliver_and_notify(
                     session, order=order, payment=payment, error=str(send_exc)
                 )
             except Exception:
-                pass
+                logger.debug("_deliver_and_notify: ignored failure", exc_info=True)
         return str(send_exc)
     try:
         from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok

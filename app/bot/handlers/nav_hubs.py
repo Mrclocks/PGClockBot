@@ -16,6 +16,9 @@ from app.db.models import BotUser
 from app.services.users import get_all_settings
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_title_html
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = Router(name="nav_hubs")
 
@@ -23,7 +26,7 @@ async def _answer_gone(callback: CallbackQuery) -> None:
     try:
         await callback.answer("این پیام دیگر معتبر نیست. از منوی پایین دوباره وارد شوید.")
     except Exception:
-        pass
+        logger.debug("_answer_gone: ignored failure", exc_info=True)
 
 @router.callback_query(F.data == "nv:w:topup")
 async def nv_wallet_topup(

@@ -1875,7 +1875,7 @@ async def _soft_admin(
         try:
             await bubble.edit_text(f"خطا: {user_safe_error(e)}", reply_markup=_admin_back("nv:adm:home"))
         except Exception:
-            pass
+            logger.debug("_soft_admin: ignored failure", exc_info=True)
 
 async def handle_back(
     message: Message,
@@ -2424,7 +2424,7 @@ async def _soft_reseller(
                     f"خطا: {user_safe_error(e)}", reply_markup=_hub_back_markup()
                 )
             except Exception:
-                pass
+                logger.debug("_soft_reseller: ignored failure", exc_info=True)
         return
     if action == kb.REPLY_ACTION_RES_PLAN_CATEGORIES:
         from app.bot.handlers.plan_catalog_manage import open_categories_manage
@@ -2481,7 +2481,7 @@ async def _soft_reseller(
                     f"خطا: {user_safe_error(e)}", reply_markup=_hub_back_markup()
                 )
             except Exception:
-                pass
+                logger.debug("_soft_reseller: ignored failure", exc_info=True)
         return
 
     mapping = {

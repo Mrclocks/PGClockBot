@@ -536,7 +536,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         try:
             resp.headers["Cache-Control"] = "no-store"
         except Exception:
-            pass
+            log.debug("miniapp_index: ignored failure", exc_info=True)
         return resp
 
     @app.get("/miniapp/s/{shop_key}/", response_class=HTMLResponse)

@@ -168,7 +168,7 @@ async def seed_reply_keyboard(
     try:
         await tip_msg.delete()
     except Exception:
-        pass
+        logger.debug("seed_reply_keyboard: ignored failure", exc_info=True)
 
 
 async def seed_persistent_reply_kb(message: Message) -> None:

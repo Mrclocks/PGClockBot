@@ -9,6 +9,9 @@ from typing import Any
 
 from app.config import DATA_DIR, ROOT_DIR, get_settings, normalize_pg_base_url
 from app.services.web_auth import load_web_admin
+import logging
+
+logger = logging.getLogger(__name__)
 
 SETUP_FLAG = DATA_DIR / "setup_complete.flag"
 SETUP_IN_PROGRESS = DATA_DIR / "setup_in_progress.flag"
@@ -96,7 +99,7 @@ def _read_gate_meta() -> dict[str, Any] | None:
             if isinstance(data, dict) and (data.get("token") or "").strip():
                 return data
         except Exception:
-            pass
+            logger.debug("_read_gate_meta: ignored failure", exc_info=True)
     if SETUP_GATE_FILE.is_file():
         token = SETUP_GATE_FILE.read_text(encoding="utf-8").strip()
         if token:
@@ -465,16 +468,16 @@ def _existing_valid_web_secret() -> str:
     try:
         candidates.append(os.environ.get("WEB_SECRET") or "")
     except Exception:
-        pass
+        logger.debug("_existing_valid_web_secret: ignored failure", exc_info=True)
     try:
         candidates.append(_read_env_file().get("WEB_SECRET") or "")
     except Exception:
-        pass
+        logger.debug("_existing_valid_web_secret: ignored failure", exc_info=True)
     try:
         get_settings.cache_clear()
         candidates.append(get_settings().web_secret or "")
     except Exception:
-        pass
+        logger.debug("_existing_valid_web_secret: ignored failure", exc_info=True)
     for raw in candidates:
         if _is_usable_web_secret(raw):
             return raw.strip()
@@ -632,7 +635,7 @@ def detect_server_ip() -> str:
         if ip and not ip.startswith("127."):
             return ip
     except Exception:
-        pass
+        logger.debug("detect_server_ip: ignored failure", exc_info=True)
     try:
         # Outbound UDP trick — no packets sent; reveals preferred local IP
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -641,7 +644,7 @@ def detect_server_ip() -> str:
             if ip:
                 return ip
     except Exception:
-        pass
+        logger.debug("detect_server_ip: ignored failure", exc_info=True)
     return "127.0.0.1"
 
 
@@ -655,7 +658,7 @@ def default_panel_base_url(*, public_base: str | None = None, web_port: int | st
                 return str(public_base).strip().rstrip("/")
             return public_panel_base_url()
     except Exception:
-        pass
+        logger.debug("default_panel_base_url: ignored failure", exc_info=True)
     return default_http_panel_url(web_port=web_port)
 
 
@@ -686,7 +689,7 @@ def setup_finish_login_url() -> str:
             if base.lower().startswith("https://"):
                 return base + "/login?restarting=1"
     except Exception:
-        pass
+        logger.debug("setup_finish_login_url: ignored failure", exc_info=True)
     return default_http_panel_url().rstrip("/") + "/login?restarting=1"
 
 
@@ -746,7 +749,7 @@ def wizard_panel_url_hint(web_port: str = "9000") -> str:
             if base.lower().startswith("https://"):
                 return base + "/"
     except Exception:
-        pass
+        logger.debug("wizard_panel_url_hint: ignored failure", exc_info=True)
     return default_http_panel_url(web_port=web_port).rstrip("/") + "/"
 
 

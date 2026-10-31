@@ -72,7 +72,7 @@ async def seed_demo_plan() -> None:
             try:
                 await session.rollback()
             except Exception:
-                pass
+                logger.debug("seed_demo_plan: ignored failure", exc_info=True)
 
 
 def main() -> None:
@@ -316,16 +316,16 @@ def main() -> None:
                 try:
                     await bot.delete_webhook(drop_pending_updates=False)
                 except Exception:
-                    pass
+                    logger.debug("lifespan: ignored failure", exc_info=True)
             try:
                 await get_pg().close()
             except Exception:
-                pass
+                logger.debug("lifespan: ignored failure", exc_info=True)
             if bot is not None:
                 try:
                     await bot.session.close()
                 except Exception:
-                    pass
+                    logger.debug("lifespan: ignored failure", exc_info=True)
 
     api = create_api_app(lifespan=lifespan)
 

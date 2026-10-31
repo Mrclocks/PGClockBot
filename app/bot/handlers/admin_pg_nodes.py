@@ -20,6 +20,9 @@ from app.services.formatting import node_status_fa
 from app.services.redact import user_safe_error
 from app.services.pasarguard import get_pg
 from app.services import bot_feedback_texts as feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 async def _lasting_kb(session, db_user, classic):
@@ -443,7 +446,7 @@ async def pg_node_reset(
                 reply_markup=_node_detail_kb(node_id),
             )
         except Exception:
-            pass
+            logger.debug("pg_node_reset: ignored failure", exc_info=True)
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:ntog:\d+$"))

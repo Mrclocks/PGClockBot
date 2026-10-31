@@ -30,7 +30,7 @@ def _install_progress(message: str) -> None:
 
         print(f"  [ssl] {message}", file=sys.stderr, flush=True)
     except Exception:
-        pass
+        logger.debug("_install_progress: ignored failure", exc_info=True)
 
 
 CERT_DIR = DATA_DIR / "certs"
@@ -300,7 +300,7 @@ def _port_in_use(port: int = 80) -> bool:
         try:
             sock.close()
         except Exception:
-            pass
+            logger.debug("_port_in_use: ignored failure", exc_info=True)
 
 
 def install_certbot() -> dict[str, Any]:
@@ -569,7 +569,7 @@ def _stop_acme_http(proc: subprocess.Popen | None) -> None:
                 except Exception:
                     proc.kill()
     except Exception:
-        pass
+        logger.debug("_stop_acme_http: ignored failure", exc_info=True)
     # Also kill helper by pattern if sudo spawned a child
     _run(_with_sudo(["pkill", "-f", str(ACME_HELPER)]), timeout=10)
 

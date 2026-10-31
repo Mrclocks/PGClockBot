@@ -158,7 +158,7 @@ async def build_referral_text(
     try:
         await ensure_loyalty_defaults(session, reseller_id=current_shop_reseller_id())
     except Exception:
-        pass
+        logger.debug("build_referral_text: ignored failure", exc_info=True)
     stats = await referral_stats(session, db_user.id)
     _, packed_ents = unpack_rich_text(ui.get("referral_text"))
     if packed_ents:
@@ -202,7 +202,7 @@ async def build_loyalty_text(session: AsyncSession, db_user: BotUser) -> str:
     try:
         await ensure_loyalty_defaults(session, reseller_id=current_shop_reseller_id())
     except Exception:
-        pass
+        logger.debug("build_loyalty_text: ignored failure", exc_info=True)
     tier = await get_tier_for_points(session, await _points(session, db_user))
     stats = await referral_stats(session, db_user.id)
     month = await month_earned_points(session, db_user.id, shop_id=current_shop_reseller_id())

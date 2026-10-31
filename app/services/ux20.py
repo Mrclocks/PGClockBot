@@ -554,7 +554,7 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
                 try:
                     await bot.session.close()
                 except Exception:
-                    pass
+                    logger.debug("_resend: ignored failure", exc_info=True)
 
     try:
         if order.status == OrderStatus.DELIVERED.value and order.service_id:

@@ -30,7 +30,7 @@ def _plan_name(order) -> str:
         if plan is not None:
             return getattr(plan, "name", "") or ""
     except Exception:
-        pass
+        logger.debug("_plan_name: ignored failure", exc_info=True)
     return ""
 
 
@@ -61,7 +61,7 @@ def _plan_type_label(order) -> str:
         if pk == "subscription" or bm == "fixed":
             return "اشتراک ثابت"
     except Exception:
-        pass
+        logger.debug("_plan_type_label: ignored failure", exc_info=True)
     return "ثابت"
 
 

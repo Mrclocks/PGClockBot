@@ -18,6 +18,9 @@ from app.services.service_scope import customer_may_use_service, list_customer_s
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
 from app.services import bot_feedback_texts as feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = Router(name="start")
 
@@ -131,13 +134,13 @@ async def render_home(
             if "message is not modified" in str(e).lower():
                 return
         except Exception:
-            pass
+            logger.debug("render_home: ignored failure", exc_info=True)
         # Edit failed (e.g. can't edit) — one fallback message, never silent.
         if getattr(message, "photo", None):
             try:
                 await message.delete()
             except Exception:
-                pass
+                logger.debug("render_home: ignored failure", exc_info=True)
 
     home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
     await replace_home(home, sweep=True)
@@ -610,7 +613,7 @@ async def cb_force_join_check(
                 try:
                     await callback.message.answer(text, reply_markup=markup, **fj_kw)
                 except Exception:
-                    pass
+                    logger.debug("cb_force_join_check: ignored failure", exc_info=True)
         return
 
     await callback.answer("عضویت تأیید شد ✅")
@@ -689,7 +692,7 @@ async def cb_home_as_user(
         try:
             await callback.message.edit_text(text)
         except Exception:
-            pass
+            logger.debug("cb_home_as_user: ignored failure", exc_info=True)
         markup, _, _ = await build_main_reply_keyboard(
             session,
             db_user,

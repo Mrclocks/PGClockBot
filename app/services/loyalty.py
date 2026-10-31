@@ -798,7 +798,7 @@ async def on_user_referred(
     try:
         await ensure_loyalty_defaults(session, reseller_id=referred.reseller_id)
     except Exception:
-        pass
+        logger.debug("on_user_referred: ignored failure", exc_info=True)
     await record_referral_event(
         session,
         referrer_id=int(referred.referred_by_id),
@@ -1585,7 +1585,7 @@ async def apply_service_reward(
                     parsed = dt.fromisoformat(str(expire).replace("Z", "+00:00"))
                     base = max(base, int(parsed.timestamp()))
             except Exception:
-                pass
+                logger.debug("apply_service_reward: ignored failure", exc_info=True)
         payload["expire"] = base + add_sec
     await pg.modify_user_by_id(int(service.pg_user_id), payload)
     if "data_limit" in payload:

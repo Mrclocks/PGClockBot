@@ -24,6 +24,9 @@ from app.services.receipt_fingerprints import (
     store_receipt_fingerprint,
 )
 from app.services.users import get_setting, on
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 async def submit_receipt(
@@ -177,7 +180,7 @@ async def process_receipt(
             try:
                 await session.refresh(payment)
             except Exception:
-                pass
+                logger.debug("process_receipt: ignored failure", exc_info=True)
             from app.db.models import PaymentStatus
 
             if payment.status == PaymentStatus.APPROVED.value:
@@ -197,7 +200,7 @@ async def process_receipt(
                             error=str(e),
                         )
                     except Exception:
-                        pass
+                        logger.debug("process_receipt: ignored failure", exc_info=True)
                 await notify_approved_delivery_stuck(
                     bot, session, payment, user_tg_id, error=str(e)
                 )
