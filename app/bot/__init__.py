@@ -13,6 +13,7 @@ from app.bot.edit_mode import EditModeMiddleware
 from app.bot.menu_keyboard_reopen import MenuKeyboardReopenMiddleware, install_menu_keyboard_watch
 from app.bot.reply_keyboard_state import ReplyKeyboardStateMiddleware
 from app.bot.screen_replay import install_replay_guard, set_dispatcher
+from app.bot.slow_updates import SlowUpdateMiddleware
 from app.bot.middlewares import (
     DbSessionMiddleware,
     ErrorLogMiddleware,
@@ -204,6 +205,7 @@ def bot_routers() -> list[Router]:
 
 def create_dispatcher() -> Dispatcher:
     dp = Dispatcher(storage=MemoryStorage())
+    dp.update.middleware(SlowUpdateMiddleware())
     dp.update.middleware(ErrorLogMiddleware())
     dp.update.middleware(RateLimitMiddleware())
     dp.update.middleware(DbSessionMiddleware())

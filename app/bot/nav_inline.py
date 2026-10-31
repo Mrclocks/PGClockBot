@@ -1088,11 +1088,13 @@ def admin_resellers_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
         REPLY_ACTION_ADM_RES_ADD,
         REPLY_ACTION_ADM_RES_APPS,
         REPLY_ACTION_ADM_RES_LIST,
+        REPLY_ACTION_ADM_RES_SEARCH,
         _admin_resellers_submenu_entries,
     )
 
     cb_map = {
         REPLY_ACTION_ADM_RES_LIST: "adm:resellers:list:0",
+        REPLY_ACTION_ADM_RES_SEARCH: "adm:resellers:search",
         REPLY_ACTION_ADM_RES_APPS: "adm:resapp:list",
         REPLY_ACTION_ADM_RES_ADD: "adm:resellers:add",
     }

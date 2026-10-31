@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import html
+import logging
 import secrets
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, ReplyKeyboardMarkup
@@ -47,12 +49,21 @@ from app.services.volume_allocation import set_shop_oversell
 from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
 from app.bot.handlers.payment_voids import void_button
-from app.bot.handlers.subscription_lookup import SEARCH_PROMPT, delete_typed_link, staff_lookup, staff_user_search
+from app.bot.handlers.subscription_lookup import (
+    RESELLER_SEARCH_PROMPT,
+    SEARCH_PROMPT,
+    delete_typed_link,
+    staff_lookup,
+    staff_reseller_search,
+    staff_user_search,
+)
 from app.bot.nav_inline import with_inline_back
-from app.bot.nav_input import form_origin
+from app.bot.nav_input import finish_text_step, form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services import bot_feedback_texts as feedback
 import logging
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -466,6 +477,7 @@ class AdminStates(StatesGroup):
     make_reseller = State()
     ticket_reply = State()
     user_search = State()
+    reseller_search = State()
     user_wallet_credit = State()
     user_message = State()
     revoke_reseller_reason = State()
@@ -2357,32 +2369,29 @@ async def adm_users_search(
         )
         return
     if link_token(message.text):
-        await _answer_link_search(message, state, session, db_user)
+        await _answer_link_search(message, state, session)
         return
     query = clean_handle(message.text)
     if not query or len(query) > MAX_SEARCH_LENGTH:
         await message.answer("نام، آیدی عددی، یوزرنیم تلگرام یا لینک اشتراک را بفرستید؛ مثلاً <code>123456789</code> یا <code>@username</code>.")
         return
     user = await find_bot_user(session, query, scope=BotUser.reseller_id.is_(None))
-    await state.clear()
-    # cancel_reply() replaced the submenu — restore on a *lasting* message.
-    # Tip-delete seeding drops the custom keyboard on many mobile clients.
-    users_kb = kb.admin_users_reply_keyboard()
-    if not user:
+    if user is None:
         # No exact id or @username: search names and usernames by part.
         text, markup = await staff_user_search(session, query, shop_id=None)
-        await message.answer("🔎 نتیجه جستجو", reply_markup=users_kb)
-        await message.answer(text, reply_markup=markup)
-        return
-    await message.answer("👤 نتیجه جستجو", reply_markup=users_kb)
-    await _render_user_card(message, session, user)
+    else:
+        text, markup = await _user_card(session, user)
+    await _show_search_result(message, state, text, markup)
 
-async def _answer_link_search(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser) -> None:
+async def _show_search_result(message: Message, state: FSMContext, text: str, markup: InlineKeyboardMarkup) -> None:
+    """The search prompt turns into the result, like every other inline step; the main keyboard stays."""
+    await state.set_state(None)
+    await finish_text_step(message, state, text=text, inline=markup)
+
+async def _answer_link_search(message: Message, state: FSMContext, session: AsyncSession) -> None:
     """Platform users search given a subscription link: owner summary, scoped to platform services."""
     text, markup = await staff_lookup(session, message.text, shop_id=None)
-    await state.clear()
-    await message.answer("🔎 نتیجه جستجو", reply_markup=kb.admin_users_reply_keyboard())
-    await message.answer(text, reply_markup=markup)
+    await _show_search_result(message, state, text, markup)
     await delete_typed_link(message)
 
 async def _render_user_card(
@@ -2393,6 +2402,20 @@ async def _render_user_card(
     confirm_delete: bool = False,
     edit: bool = False,
 ) -> None:
+    text, markup = await _user_card(session, user, confirm_delete=confirm_delete)
+    if edit:
+        try:
+            await message.edit_text(text, reply_markup=markup)
+            return
+        except TelegramAPIError:
+            # Too old or already gone: show the card as a new message instead.
+            logger.debug("user card edit failed; sending it anew", exc_info=True)
+    await message.answer(text, reply_markup=markup)
+
+async def _user_card(
+    session: AsyncSession, user: BotUser, *, confirm_delete: bool = False
+) -> tuple[str, InlineKeyboardMarkup]:
+    """The platform customer card from stored data only (no panel call) and its actions."""
     from app.services.users_ops import (
         bot_user_alert_flags,
         build_user_ops_row,
@@ -2441,13 +2464,7 @@ async def _render_user_card(
         has_services=ops.service_count > 0,
         color_tag=effective_color_tag(user),
     )
-    if edit:
-        try:
-            await message.edit_text(text, reply_markup=markup)
-            return
-        except Exception:
-            logger.debug("_render_user_card: ignored failure", exc_info=True)
-    await message.answer(text, reply_markup=markup)
+    return text, markup
 
 async def _ask_staff_message(
     callback: CallbackQuery,
@@ -2933,8 +2950,9 @@ async def adm_users_services(
         return
     from app.services.bot_user_admin import list_service_snapshots, snapshot_telegram_lines
 
-    snaps = await list_service_snapshots(session, user_id, shop_id=None)
+    # Answer before the panel reads so the button stops spinning at once.
     await callback.answer()
+    snaps = await list_service_snapshots(session, user_id, shop_id=None)
     if not snaps:
         if callback.message:
             await safe_edit_text(
@@ -2983,12 +3001,13 @@ async def adm_users_service_one(
         svc = await get_owned_service(
             session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
-        snap = await service_snapshot(session, svc)
-        await session.commit()
     except ValueError as e:
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
+    # Answer before the panel read so the button stops spinning at once.
     await callback.answer()
+    snap = await service_snapshot(session, svc)
+    await session.commit()
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -3872,6 +3891,61 @@ async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_
         )
         markup = with_inline_back(markup, ui, "nv:adm:resellers")
         await callback.message.edit_text(text, reply_markup=markup)
+
+@router.callback_query(F.data == "adm:resellers:search")
+@require_bot_owner_handler
+@require_platform_rep_mgmt
+async def adm_resellers_search_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
+        return
+    await callback.answer()
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=RESELLER_SEARCH_PROMPT,
+        cancel_code="adm_res",
+        return_to="nv:adm:resellers",
+        fsm_state=AdminStates.reseller_search,
+        edit=True,
+    )
+
+
+@router.message(AdminStates.reseller_search)
+@require_bot_owner_handler
+@require_platform_rep_mgmt
+async def adm_resellers_search(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer(feedback.NOT_ADMIN)
+        return
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
+        await state.clear()
+        await message.answer(feedback.CANCELLED)
+        return
+    query = clean_handle(message.text)
+    if not query or len(query) > MAX_SEARCH_LENGTH:
+        await message.answer("نام، آیدی عددی یا یوزرنیم تلگرام نماینده را بفرستید؛ مثلاً <code>123456789</code> یا <code>@username</code>.")
+        return
+    reseller = await find_bot_user(session, query, scope=BotUser.role == Role.RESELLER.value)
+    await state.clear()
+    # The typed step replaced the submenu — restore it on a lasting message, as the users search does.
+    await message.answer("🔎 نتیجه جستجو", reply_markup=kb.admin_resellers_reply_keyboard())
+    if reseller is not None:
+        await _render_reseller_card(message, session, reseller)
+        return
+    # No exact id or @username: search names and usernames by part.
+    text, markup = await staff_reseller_search(session, query)
+    await message.answer(text, reply_markup=markup)
+
 
 RESELLER_SVCS_PAGE_SIZE = 10
 

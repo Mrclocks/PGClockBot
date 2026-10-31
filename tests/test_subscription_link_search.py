@@ -158,20 +158,22 @@ class TypedStepTests(LookupCase):
 
 
 class PlatformSearchTests(LookupCase):
-    async def test_platform_link_search_answers_with_the_platform_card_and_deletes_the_link(self):
+    async def search(self, token: str) -> tuple[AsyncMock, AsyncMock]:
         message = AsyncMock()
-        message.text = URL.format(PLATFORM_TOKEN)
-        state = AsyncMock()
-        await admin._answer_link_search(message, state, self.session, SimpleNamespace(id=9))
-        state.clear.assert_awaited()
-        self.assertIn("plat-svc", message.answer.await_args_list[-1].args[0])
+        message.text = URL.format(token)
+        with patch.object(admin, "finish_text_step", AsyncMock()) as finish:
+            await admin._answer_link_search(message, AsyncMock(), self.session)
+        return message, finish
+
+    async def test_platform_link_search_answers_with_the_platform_card_and_deletes_the_link(self):
+        message, finish = await self.search(PLATFORM_TOKEN)
+        self.assertIn("plat-svc", finish.await_args.kwargs["text"])
+        message.answer.assert_not_awaited()
         message.delete.assert_awaited_once()
 
     async def test_platform_search_cannot_see_a_shop_link(self):
-        message = AsyncMock()
-        message.text = URL.format(SHOP_TOKEN)
-        await admin._answer_link_search(message, AsyncMock(), self.session, SimpleNamespace(id=9))
-        self.assertEqual(message.answer.await_args_list[-1].args[0], bot.NOT_FOUND_TEXT)
+        _, finish = await self.search(SHOP_TOKEN)
+        self.assertEqual(finish.await_args.kwargs["text"], bot.NOT_FOUND_TEXT)
 
 
 if __name__ == "__main__":

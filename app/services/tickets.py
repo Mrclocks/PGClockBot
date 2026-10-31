@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import Ticket, TicketMessage, TicketStatus
+from app.services.ticket_notices import retire_ticket_notices
 from app.services.ticket_scope import ticket_shop_clause
 from app.services.users import current_shop_reseller_id
 
@@ -66,9 +67,11 @@ async def reply_ticket(
 
 
 async def close_ticket(session: AsyncSession, ticket: Ticket) -> Ticket:
+    """Close the ticket, then remove its staff notices (after the commit, never inside it)."""
     ticket.status = TicketStatus.CLOSED.value
     await session.commit()
     await session.refresh(ticket)
+    await retire_ticket_notices(session, ticket)
     return ticket
 
 
