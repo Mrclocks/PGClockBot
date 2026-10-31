@@ -385,6 +385,7 @@ async def run_admin_daily_report(bot: Bot) -> None:
                 ACTOR_OWNER,
                 ACTOR_SHOP,
                 DEFAULT_REPORT_TEMPLATE,
+                is_report_due,
                 shop_daily_report_chat_ids,
             )
             from app.services.org_principals import DEPTH_ONE, STATUS_ACTIVE
@@ -455,11 +456,7 @@ async def run_admin_daily_report(bot: Bot) -> None:
                 return out
 
             # —— Platform Owner report ——
-            try:
-                hour = int(await get_setting(session, "admin_daily_report_hour", "0") or 0)
-            except Exception:
-                hour = 0
-            owner_hour_ok = now.hour == max(0, min(23, hour))
+            owner_hour_ok = is_report_due(now, await get_setting(session, "admin_daily_report_hour", "0"))
 
             if owner_hour_ok and on(
                 await get_setting(session, "admin_daily_report_enabled", "1")
@@ -542,12 +539,7 @@ async def run_admin_daily_report(bot: Bot) -> None:
             for profile in profiles:
                 rid = int(profile.user_id)
                 ui = await get_all_settings(session, reseller_id=rid)
-                try:
-                    hour = int(ui.get("admin_daily_report_hour") or 0)
-                except Exception:
-                    hour = 0
-                hour_ok = now.hour == max(0, min(23, hour))
-                if not hour_ok:
+                if not is_report_due(now, ui.get("admin_daily_report_hour")):
                     continue
 
                 if on(ui.get("admin_daily_report_enabled")) and (
