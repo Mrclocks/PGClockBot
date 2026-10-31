@@ -310,3 +310,5 @@ tests/test_bot_chat_tidy.py
 tests/test_ticket_notices.py
 # Owner reseller search: resellers only, owner and representative-management gate.
 tests/test_reseller_search.py
+# Trial users page: shop-scoped list, buyer tag, permission gate, escaped customer text.
+tests/test_trial_users.py
