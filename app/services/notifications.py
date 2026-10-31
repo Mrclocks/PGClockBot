@@ -1152,26 +1152,38 @@ def _receipt_photo(payment: Payment) -> str | None:
     return file_id if file_id and ":" not in file_id else None
 
 
+VOID_CALLBACK_PREFIX = "payvoid:v:"
+
+
 def _customer_markup(
-    *, user_id: int | None, service_id: int | None, shop_id: int | None
+    *,
+    user_id: int | None,
+    service_id: int | None,
+    shop_id: int | None,
+    void_payment_id: int | None = None,
 ) -> InlineKeyboardMarkup | None:
-    """Buttons from a staff notice to the customer and their service, in the bot that holds the notice.
+    """Buttons from a staff notice to the customer, their service and the payment's void flow.
 
     The platform bot opens the platform customer card and the service card; a shop bot only has the
-    shop's customer card (``res:user``), so it never offers a service screen it cannot open.
+    shop's customer card (``res:user``), so it never offers a service screen it cannot open. «رد درخواست»
+    opens the existing void card (reason, confirmation, then the order is cancelled and the service
+    disabled); that flow re-checks the staff member's permission on every step.
     """
-    if not user_id:
-        return None
-    if shop_id:
-        return InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="👤 کاربر", callback_data=f"res:user:{int(user_id)}")]]
+    rows: list[list[InlineKeyboardButton]] = []
+    if user_id and shop_id:
+        rows.append([InlineKeyboardButton(text="👤 کاربر", callback_data=f"res:user:{int(user_id)}")])
+    elif user_id:
+        row = [InlineKeyboardButton(text="👤 کاربر", callback_data=f"adm:users:view:{int(user_id)}")]
+        if service_id:
+            row.append(
+                InlineKeyboardButton(text="📦 سرویس", callback_data=f"adm:users:svc:{int(user_id)}:{int(service_id)}")
+            )
+        rows.append(row)
+    if void_payment_id:
+        rows.append(
+            [InlineKeyboardButton(text="↩️ رد درخواست", callback_data=f"{VOID_CALLBACK_PREFIX}{int(void_payment_id)}")]
         )
-    row = [InlineKeyboardButton(text="👤 کاربر", callback_data=f"adm:users:view:{int(user_id)}")]
-    if service_id:
-        row.append(
-            InlineKeyboardButton(text="📦 سرویس", callback_data=f"adm:users:svc:{int(user_id)}:{int(service_id)}")
-        )
-    return InlineKeyboardMarkup(inline_keyboard=[row])
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
 async def notify_auto_approve(
@@ -1199,6 +1211,9 @@ async def notify_auto_approve(
     lines.append(kv_line("✅", "نتیجه", "خودکار تأیید شد"))
     shop_id = payment.wallet_shop_id if payment.is_wallet_topup else (order.reseller_id if order else None)
     is_agency_fee = bool(order and (order.note or "").startswith("reseller_app:"))
+    # Local import: payment_voids imports services that import this module.
+    from app.services.payment_voids import offers_void
+
     await _dispatch_dual_notify(
         bot,
         session,
@@ -1208,6 +1223,7 @@ async def notify_auto_approve(
             user_id=payment.user_id,
             service_id=None if is_agency_fee or order is None else order.service_id,
             shop_id=shop_id,
+            void_payment_id=payment.id if offers_void(payment, order) else None,
         ),
         photo=_receipt_photo(payment),
         payment=payment,

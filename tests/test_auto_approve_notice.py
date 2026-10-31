@@ -11,11 +11,14 @@ from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db import Base
 from app.db.models import BotUser, Order, Payment, Plan, Role, UserService
+from app.bot.handlers.payment_voids import ID as VOID_ID
 from app.services import notifications
+from app.services.payment_voids import load_void_candidate
 from app.services.notifications import _customer_markup, _receipt_photo, notify_auto_approve
 
 FILE_ID = "AgACAgQAAxkBAAIBQ2Z-receiptphotofileid"
@@ -75,12 +78,18 @@ class CustomerMarkupTests(unittest.TestCase):
         markup = _customer_markup(user_id=7, service_id=9, shop_id=3)
         self.assertEqual(_callbacks(markup), ["res:user:7"])
 
+    def test_the_void_button_opens_the_existing_void_card_of_that_payment(self) -> None:
+        markup = _customer_markup(user_id=7, service_id=9, shop_id=None, void_payment_id=31)
+        self.assertEqual(_callbacks(markup), ["adm:users:view:7", "adm:users:svc:7:9", "payvoid:v:31"])
+        self.assertEqual(_callbacks(_customer_markup(user_id=7, service_id=9, shop_id=3, void_payment_id=31)), ["res:user:7", "payvoid:v:31"])
+        self.assertEqual(_callbacks(_customer_markup(user_id=None, service_id=None, shop_id=None, void_payment_id=31)), ["payvoid:v:31"])
+
     def test_no_service_button_without_a_service_and_nothing_without_a_user(self) -> None:
         self.assertEqual(_callbacks(_customer_markup(user_id=7, service_id=None, shop_id=None)), ["adm:users:view:7"])
         self.assertIsNone(_customer_markup(user_id=None, service_id=9, shop_id=None))
 
     def test_callback_data_fits_telegrams_limit_for_large_ids(self) -> None:
-        markup = _customer_markup(user_id=2**31 - 1, service_id=2**31 - 1, shop_id=None)
+        markup = _customer_markup(user_id=2**31 - 1, service_id=2**31 - 1, shop_id=None, void_payment_id=2**31 - 1)
         for data in _callbacks(markup):
             self.assertLessEqual(len(data.encode()), CALLBACK_LIMIT)
 
@@ -109,7 +118,7 @@ class AutoApproveNoticeTests(NoticeTestCase):
                 (await other.get(Order, order.id)).service_id = service.id
                 await other.commit()
             dispatch = await self._notify(session, payment)
-        self.assertEqual(_callbacks(dispatch.await_args.kwargs["markup"]), [f"adm:users:view:{user.id}", f"adm:users:svc:{user.id}:{service.id}"])
+        self.assertEqual(_callbacks(dispatch.await_args.kwargs["markup"]), [f"adm:users:view:{user.id}", f"adm:users:svc:{user.id}:{service.id}", f"payvoid:v:{payment.id}"])
 
     async def test_a_shop_payment_is_routed_to_the_shop_with_the_shop_buttons(self) -> None:
         async with self.Session() as session:
@@ -118,7 +127,7 @@ class AutoApproveNoticeTests(NoticeTestCase):
             await session.flush()
             user, order, payment = await self._seed(session, shop=shop.id)
             dispatch = await self._notify(session, payment)
-        self.assertEqual(_callbacks(dispatch.await_args.kwargs["markup"]), [f"res:user:{user.id}"])
+        self.assertEqual(_callbacks(dispatch.await_args.kwargs["markup"]), [f"res:user:{user.id}", f"payvoid:v:{payment.id}"])
 
     async def test_a_wallet_top_up_has_no_service_button(self) -> None:
         async with self.Session() as session:
@@ -137,6 +146,38 @@ class AutoApproveNoticeTests(NoticeTestCase):
             await session.commit()
             dispatch = await self._notify(session, payment)
         self.assertEqual(_callbacks(dispatch.await_args.kwargs["markup"]), [f"adm:users:view:{user.id}"])
+
+    async def test_the_void_button_is_offered_only_where_a_void_is_possible(self) -> None:
+        cases = {
+            "gateway payment": {"method": "psp"},
+            "renewal": {"note": "renew:5"},
+            "order not delivered": {"order_status": "pending"},
+            "payment not approved": {"status": "pending"},
+        }
+        for label, change in cases.items():
+            with self.subTest(label):
+                async with self.Session() as session:
+                    user, order, payment = await self._seed(session, note=change.get("note"))
+                    order.status = change.get("order_status", order.status)
+                    payment.method = change.get("method", payment.method)
+                    payment.status = change.get("status", payment.status)
+                    await session.commit()
+                    dispatch = await self._notify(session, payment)
+                self.assertFalse(any(c.startswith("payvoid:") for c in _callbacks(dispatch.await_args.kwargs["markup"])))
+                async with self.Session() as session:
+                    for model in (Payment, Order, BotUser):
+                        for row in (await session.scalars(select(model))).all():
+                            await session.delete(row)
+                    await session.commit()
+
+    async def test_the_void_button_leads_to_a_card_the_void_flow_can_open(self) -> None:
+        async with self.Session() as session:
+            user, order, payment = await self._seed(session)
+            dispatch = await self._notify(session, payment)
+            data = next(c for c in _callbacks(dispatch.await_args.kwargs["markup"]) if c.startswith("payvoid:"))
+            self.assertRegex(data, rf"^payvoid:v:{VOID_ID}$")
+            loaded, loaded_order, void = await load_void_candidate(session, int(data.rsplit(":", 1)[1]), shop_id=None)
+        self.assertEqual((loaded.id, loaded_order.id, void), (payment.id, order.id, None))
 
     async def test_a_hostile_customer_name_cannot_break_the_staff_message(self) -> None:
         async with self.Session() as session:
@@ -176,7 +217,7 @@ class DeliveryToStaffTests(NoticeTestCase):
             user, order, payment = await self._seed(session)
             with patch.object(notifications, "get_settings", return_value=settings):
                 await notify_auto_approve(bot, session, payment)
-        self.user_id = user.id
+        self.user_id, self.payment_id = user.id, payment.id
 
     async def test_the_admin_gets_one_photo_message_with_caption_and_buttons(self) -> None:
         bot = self._bot()
@@ -185,14 +226,14 @@ class DeliveryToStaffTests(NoticeTestCase):
         kwargs = bot.send_photo.await_args.kwargs
         self.assertEqual((bot.send_photo.await_args.args[0], kwargs["photo"]), (self.ADMIN_CHAT, FILE_ID))
         self.assertIn("خودکار تأیید شد", kwargs["caption"])
-        self.assertEqual(_callbacks(kwargs["reply_markup"]), [f"adm:users:view:{self.user_id}"])
+        self.assertEqual(_callbacks(kwargs["reply_markup"]), [f"adm:users:view:{self.user_id}", f"payvoid:v:{self.payment_id}"])
         bot.send_message.assert_not_awaited()
 
     async def test_when_telegram_rejects_the_photo_the_text_notice_still_arrives_with_buttons(self) -> None:
         bot = self._bot(photo_works=False)
         await self._deliver(bot)
         bot.send_message.assert_awaited_once()
-        self.assertEqual(_callbacks(bot.send_message.await_args.kwargs["reply_markup"]), [f"adm:users:view:{self.user_id}"])
+        self.assertEqual(_callbacks(bot.send_message.await_args.kwargs["reply_markup"]), [f"adm:users:view:{self.user_id}", f"payvoid:v:{self.payment_id}"])
 
 
 if __name__ == "__main__":
