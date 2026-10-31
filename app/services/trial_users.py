@@ -100,7 +100,7 @@ def _escape_like(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _trial_orders_subquery(shop_id: int | None):
+def trial_orders_subquery(shop_id: int | None):
     """The first delivered trial order of every customer of this shop."""
     return (
         select(Order.user_id.label("user_id"), func.min(Order.id).label("order_id"))
@@ -136,7 +136,7 @@ def trial_state(service: UserService | None, *, now: datetime) -> tuple[TrialSta
 
 async def trial_summary(session: AsyncSession, *, shop_id: int | None) -> TrialSummary:
     """Trial takers and how many of them bought, in two aggregate queries."""
-    trials = _trial_orders_subquery(shop_id)
+    trials = trial_orders_subquery(shop_id)
     total = await session.scalar(select(func.count()).select_from(trials)) or 0
     buyers = (
         await session.scalar(
@@ -203,7 +203,7 @@ async def list_trial_users(
     """One newest-first page of trial takers; ``before`` is the last trial order id seen."""
     now = now or datetime.now(timezone.utc)
     limit = max(1, min(int(limit), PAGE_SIZE))
-    trials = _trial_orders_subquery(shop_id)
+    trials = trial_orders_subquery(shop_id)
     query = (
         select(Order, BotUser, UserService)
         .select_from(trials)

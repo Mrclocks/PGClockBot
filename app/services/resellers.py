@@ -40,7 +40,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("shop_settings", "تنظیمات ربات فروشگاه"),
     ("campaigns", "کمپین‌های هدفمند فروشگاه"),
     ("trial_users", "مشاهدهٔ کاربران تست و خریداران"),
-    ("trial_users_manage", "مسدود کردن و پیام به کاربران تست"),
+    ("trial_users_manage", "پیام به کاربران تست"),
     ("catalog_discounts", "تخفیف و کاهش قیمت فروشگاه"),
     ("loyalty", "باشگاه مشتریان"),
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),

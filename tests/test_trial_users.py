@@ -3,94 +3,20 @@
 from __future__ import annotations
 
 import os
-import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import timedelta
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import FastAPI
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from trial_users_support import NOW, OWNER, TrialUsersTestCase, shop_staff
 
 from app.api.trial_users_pages import register_trial_users_pages
-from app.db import Base
-from app.db.models import BotUser, MarketingPreference, Order, Plan, Role, UserService
+from app.db.models import MarketingPreference, UserService
 from app.services.marketing_nav import TRIAL_USERS, marketing_sections
-from app.services.trial_users import (
-    list_trial_users,
-    normalize_filter,
-    trial_state,
-    trial_summary,
-)
-
-OWNER = {
-    "role": "admin",
-    "permissions": [],
-    "org_principal_id": 1,
-    "org_depth": 0,
-    "org_parent_id": None,
-    "org_status": "active",
-}
-NOW = datetime(2026, 10, 31, 12, 0, tzinfo=timezone.utc)
-
-
-def _shop_staff(shop_id: int, permissions: list[str]) -> dict:
-    return {"role": "reseller", "permissions": permissions, "bot_user_id": shop_id}
-
-
-class TrialUsersTestCase(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self) -> None:
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 't.db'}")
-        async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
-        async with self.Session() as session:
-            self.shop_a = await self._user(session, 9001, role=Role.RESELLER.value)
-            self.shop_b = await self._user(session, 9002, role=Role.RESELLER.value)
-            self.trial_plan = Plan(name="trial", price=0, is_trial=True)
-            self.paid_plan = Plan(name="paid", price=50000)
-            session.add_all([self.trial_plan, self.paid_plan])
-            await session.commit()
-
-    async def asyncTearDown(self) -> None:
-        await self.engine.dispose()
-        self._tmpdir.cleanup()
-
-    async def _user(self, session, telegram_id: int, *, name: str | None = None, shop: int | None = None, role: str = Role.USER.value) -> BotUser:
-        user = BotUser(
-            telegram_id=telegram_id,
-            username=f"u{telegram_id}",
-            full_name=name or f"user {telegram_id}",
-            role=role,
-            referral_code=f"R{telegram_id}",
-            reseller_id=shop,
-        )
-        session.add(user)
-        await session.flush()
-        return user
-
-    async def _order(self, session, user, plan, *, shop=None, amount=0, status="delivered", note=None, service_id=None) -> Order:
-        order = Order(
-            user_id=user.id, plan_id=plan.id, reseller_id=shop, amount=amount,
-            status=status, note=note, service_id=service_id,
-        )
-        session.add(order)
-        await session.flush()
-        return order
-
-    async def _take_trial(self, session, user, *, shop=None, service=None) -> Order:
-        order = await self._order(session, user, self.trial_plan, shop=shop, service_id=service.id if service else None)
-        return order
-
-    async def _buy(self, session, user, *, shop=None, amount=50000, **kwargs) -> Order:
-        return await self._order(session, user, self.paid_plan, shop=shop, amount=amount, **kwargs)
-
-    async def _list(self, session, staff, shop_id, **kwargs):
-        return await list_trial_users(session, staff=staff, shop_id=shop_id, now=NOW, **kwargs)
+from app.services.trial_users import normalize_filter, trial_state, trial_summary
 
 
 class BuyerTagTests(TrialUsersTestCase):
@@ -160,7 +86,7 @@ class ShopIsolationTests(TrialUsersTestCase):
             await session.commit()
 
             platform = await self._list(session, OWNER, None)
-            shop_a = await self._list(session, _shop_staff(self.shop_a.id, ["trial_users"]), self.shop_a.id)
+            shop_a = await self._list(session, shop_staff(self.shop_a.id, ["trial_users"]), self.shop_a.id)
             summary_a = await trial_summary(session, shop_id=self.shop_a.id)
 
         self.assertEqual([r.user_id for r in platform.rows], [platform_user.id])
@@ -173,7 +99,7 @@ class ShopIsolationTests(TrialUsersTestCase):
             await self._take_trial(session, user, shop=self.shop_a.id)
             await self._buy(session, user, shop=self.shop_b.id)
             await session.commit()
-            page = await self._list(session, _shop_staff(self.shop_a.id, ["trial_users"]), self.shop_a.id)
+            page = await self._list(session, shop_staff(self.shop_a.id, ["trial_users"]), self.shop_a.id)
         self.assertFalse(page.rows[0].is_buyer)
 
     async def test_a_shop_manages_only_customers_attributed_to_it(self) -> None:
@@ -183,7 +109,7 @@ class ShopIsolationTests(TrialUsersTestCase):
             await self._take_trial(session, own, shop=self.shop_a.id)
             await self._take_trial(session, foreign, shop=self.shop_a.id)
             await session.commit()
-            page = await self._list(session, _shop_staff(self.shop_a.id, ["trial_users"]), self.shop_a.id)
+            page = await self._list(session, shop_staff(self.shop_a.id, ["trial_users"]), self.shop_a.id)
         manageable = {row.user_id: row.can_manage for row in page.rows}
         self.assertEqual(manageable, {own.id: True, foreign.id: False})
 
@@ -296,8 +222,8 @@ class TrialUsersPageTests(TrialUsersTestCase):
 
     async def test_staff_without_the_permission_get_nothing(self) -> None:
         for staff in (
-            _shop_staff(self.shop_a.id, ["orders", "campaigns"]),
-            _shop_staff(self.shop_a.id, ["trial_users_manage"]),
+            shop_staff(self.shop_a.id, ["orders", "campaigns"]),
+            shop_staff(self.shop_a.id, ["trial_users_manage"]),
             {"role": "pg_staff", "permissions": ["trial_users"]},
             {"role": "reseller", "permissions": ["trial_users"], "bot_user_id": None},
         ):
@@ -322,7 +248,7 @@ class TrialUsersPageTests(TrialUsersTestCase):
             await self._take_trial(session, theirs, shop=self.shop_b.id)
             await session.commit()
         response = await self._get(
-            _shop_staff(self.shop_a.id, ["trial_users"]),
+            shop_staff(self.shop_a.id, ["trial_users"]),
             f"/trial-users?shop_id={self.shop_b.id}&reseller_id={self.shop_b.id}",
         )
         self.assertEqual(response.status_code, 200)
@@ -336,8 +262,8 @@ class TrialUsersPageTests(TrialUsersTestCase):
     async def test_the_tab_is_offered_only_with_the_permission(self) -> None:
         keys = lambda staff: [s.key for s in marketing_sections(staff)]  # noqa: E731 - test shorthand
         self.assertIn(TRIAL_USERS, keys(OWNER))
-        self.assertIn(TRIAL_USERS, keys(_shop_staff(5, ["trial_users"])))
-        self.assertNotIn(TRIAL_USERS, keys(_shop_staff(5, ["campaigns", "trial_users_manage"])))
+        self.assertIn(TRIAL_USERS, keys(shop_staff(5, ["trial_users"])))
+        self.assertNotIn(TRIAL_USERS, keys(shop_staff(5, ["campaigns", "trial_users_manage"])))
 
 
 if __name__ == "__main__":

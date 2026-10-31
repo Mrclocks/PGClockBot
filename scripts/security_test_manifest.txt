@@ -312,3 +312,5 @@ tests/test_ticket_notices.py
 tests/test_reseller_search.py
 # Trial users page: shop-scoped list, buyer tag, permission gate, escaped customer text.
 tests/test_trial_users.py
+# Trial user actions: only own trial takers, message honours opt-out, blocking stays with the Owner.
+tests/test_trial_user_actions.py
