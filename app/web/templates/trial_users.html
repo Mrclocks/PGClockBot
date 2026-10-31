@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_title, row_actions, table_select_head, table_select_cell, table_bulk_bar %}
 {% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}کاربران تست{% endblock %}
 {% block content %}
@@ -54,6 +54,7 @@
   {% endfor %}
 </nav>
 
+{% set selectable = can_message or can_block %}
 <div class="card card-flush">
   <form method="get" action="/trial-users" class="search-bar">
     {% if active_filter != 'all' %}<input type="hidden" name="filter" value="{{ active_filter }}" />{% endif %}
@@ -62,10 +63,22 @@
     </label>
     <button class="btn btn-ghost" type="submit">جستجو</button>
   </form>
+  {% if can_block %}
+  {{ table_bulk_bar('/trial-users/bulk-action', [
+    {'key': 'message', 'label': 'پیام', 'confirm': 'پیام برای {n} کاربر ارسال شود؟ کاربرانی که پیام بازاریابی را قطع کرده‌اند حذف می‌شوند.', 'confirm_title': 'پیام به کاربران تست', 'confirm_label': 'ارسال', 'reason': true, 'reason_label': 'متن پیام'},
+    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر در کل سیستم مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true},
+    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
+  ]) }}
+  {% elif can_message %}
+  {{ table_bulk_bar('/trial-users/bulk-action', [
+    {'key': 'message', 'label': 'پیام', 'confirm': 'پیام برای {n} کاربر ارسال شود؟ کاربرانی که پیام بازاریابی را قطع کرده‌اند حذف می‌شوند.', 'confirm_title': 'پیام به کاربران تست', 'confirm_label': 'ارسال', 'reason': true, 'reason_label': 'متن پیام'},
+  ]) }}
+  {% endif %}
   <div class="table-wrap">
-  <table class="table-compact table-list-sm" data-sortable>
+  <table class="table-compact table-list-sm" data-sortable{% if selectable %} data-bulk-select{% endif %}>
     <thead>
       <tr>
+        {% if selectable %}{{ table_select_head() }}{% endif %}
         <th class="col-id col-hide-sm" data-sort-type="num" data-list-sort-label="جدیدترین" data-list-sort-dir="descending" data-list-sort-order="1">#</th>
         <th data-sort-type="text" data-list-sort-label="نام" data-list-sort-dir="ascending" data-list-sort-order="3">کاربر</th>
         <th class="col-tg col-hide-sm" data-sort-type="num">تلگرام</th>
@@ -75,6 +88,7 @@
         <th data-sort-type="text">خرید</th>
         <th class="col-hide-sm" data-sort-type="text">اولین خرید</th>
         <th class="col-hide-sm" data-sort-type="text">حساب</th>
+        {% if selectable %}<th class="col-actions"></th>{% endif %}
         <th class="li-head" scope="col">
           <span class="li-count">{{ rows | length | num }} کاربر</span>
           <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
@@ -83,7 +97,11 @@
     </thead>
     <tbody>
     {% for row in rows %}
-      <tr data-uid="{{ row.user_id }}">
+      {% set ops = [] %}
+      {% if can_message and not row.is_blocked and not row.is_opted_out %}{% set _ = ops.append('message') %}{% endif %}
+      {% if can_block and row.can_manage %}{% set _ = ops.append('unblock' if row.is_blocked else 'block') %}{% endif %}
+      <tr data-uid="{{ row.user_id }}"{% if selectable %} data-bulk-ops="{{ ops | join(',') }}"{% endif %}>
+        {% if selectable %}{{ table_select_cell(row.user_id) }}{% endif %}
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ row.trial_order_id }}">{{ row.trial_order_id }}</td>
         <td class="li-title" data-sort-value="{{ row.name }}">
           <a class="cell-user-link" href="/users?uid={{ row.user_id }}" dir="auto">{{ row.name }}</a>
@@ -111,9 +129,44 @@
           {% if row.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
           {% if row.is_opted_out %}<span class="badge neutral" title="پیام بازاریابی دریافت نمی‌کند">انصراف از پیام</span>{% endif %}
         </td>
+        {% if selectable %}
+        <td class="col-actions">
+          {% if ops %}
+          {% call row_actions() %}
+            {% if 'message' in ops %}
+            <form method="post" action="/trial-users/bulk-action"
+                  data-confirm="پیام برای این کاربر ارسال شود؟"
+                  data-confirm-title="پیام به کاربر"
+                  data-confirm-label="ارسال"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="متن پیام"
+                  data-confirm-reason-name="reason">
+              <input type="hidden" name="action" value="message" />
+              <input type="hidden" name="ids" value="{{ row.user_id }}" />
+              <input type="hidden" name="return_to" value="{{ return_to }}" />
+              <input type="hidden" name="reason" value="" />
+              <button class="btn btn-ghost btn-sm" type="submit">پیام</button>
+            </form>
+            {% endif %}
+            {% if 'block' in ops or 'unblock' in ops %}
+            <form method="post" action="/trial-users/bulk-action"
+                  data-confirm="{% if row.is_blocked %}مسدودیت این کاربر برداشته شود؟{% else %}این کاربر در کل سیستم مسدود شود؟ پیام برای کاربر ارسال می‌شود.{% endif %}"
+                  data-confirm-title="{% if row.is_blocked %}رفع مسدودی{% else %}تأیید مسدودسازی{% endif %}"
+                  {% if not row.is_blocked %}data-confirm-warn="1"{% endif %}
+                  data-confirm-label="{% if row.is_blocked %}رفع مسدودی{% else %}مسدود کردن{% endif %}">
+              <input type="hidden" name="action" value="{{ 'unblock' if row.is_blocked else 'block' }}" />
+              <input type="hidden" name="ids" value="{{ row.user_id }}" />
+              <input type="hidden" name="return_to" value="{{ return_to }}" />
+              <button class="btn btn-sm {% if not row.is_blocked %}btn-warn{% endif %}" type="submit">{% if row.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}</button>
+            </form>
+            {% endif %}
+          {% endcall %}
+          {% endif %}
+        </td>
+        {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="10" class="muted">{% if q or active_filter != 'all' %}موردی با این فیلتر پیدا نشد.{% else %}هنوز کسی تست رایگان نگرفته است.{% endif %}</td></tr>
+      <tr><td colspan="12" class="muted">{% if q or active_filter != 'all' %}موردی با این فیلتر پیدا نشد.{% else %}هنوز کسی تست رایگان نگرفته است.{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>
