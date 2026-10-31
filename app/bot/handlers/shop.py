@@ -3,11 +3,12 @@ from __future__ import annotations
 import html
 import logging
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.service_scope import list_customer_services
@@ -20,8 +21,9 @@ from app.bot.handlers.purchase_contact import prompt_purchase_contact_if_needed
 from app.bot.handlers.psp_check import PICK_GATEWAY_TEXT, psp_check_button, psp_gateway_picker
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
-from app.db.models import BotUser, Order, PaymentMethod
+from app.db.models import BotUser, Order, Payment, PaymentMethod
 from app.services.bbc_settlement import CUSTOMER_UNAVAILABLE, BbcNotReady, ensure_gateway_ready, start_bbc_checkout
+from app.services.db_safe import rollback_quiet
 from app.services.redact import user_safe_error
 from app.services.checkout_summary import checkout_summary
 from app.services.delivery import send_delivery_to_user
@@ -41,12 +43,15 @@ from app.services.orders import (
     create_custom_order,
     create_order,
     create_wholesale_order,
+    DeliveryAttempt,
+    deliver_order,
     get_catalog_plan,
     get_plan,
     list_active_plans,
     mark_order_free_paid,
     parse_wholesale_tiers,
     pay_with_wallet,
+    settle_failed_free_delivery,
     stars_amount_for_toman,
     start_card_payment,
     start_method_payment,
@@ -62,6 +67,49 @@ DISCOUNT_APPLIED = "✅ تخفیف اعمال شد"
 
 router = Router(name="shop")
 logger = logging.getLogger(__name__)
+
+FREE_DELIVERY_UNDER_REVIEW = (
+    "پنل به ساخت سرویس پاسخ نداد. پشتیبانی وضعیت را بررسی می‌کند و سرویس را تحویل می‌دهد؛"
+    " نیازی به درخواست دوباره نیست."
+)
+
+
+async def _notify_free_delivery_stuck(
+    bot: Bot, session: AsyncSession, payment: Payment, db_user: BotUser, error: str
+) -> None:
+    # Local import: notifications pulls in handler modules.
+    from app.services.notifications import notify_approved_delivery_stuck
+
+    try:
+        await notify_approved_delivery_stuck(bot, session, payment, db_user.telegram_id, error=error)
+    except Exception:
+        # The failed-delivery queue still lists the order for staff.
+        logger.warning("free delivery stuck notice failed payment=%s", payment.id, exc_info=True)
+
+
+async def _deliver_free_order(
+    bot: Bot, session: AsyncSession, db_user: BotUser, order: Order
+) -> tuple[Order | None, str]:
+    """Deliver a zero-amount order now; on failure return ``(None, text for the buyer)``."""
+    await mark_order_free_paid(session, order, db_user.id)
+    attempt = DeliveryAttempt()
+    try:
+        return await deliver_order(session, order, attempt=attempt), ""
+    except Exception as exc:
+        logger.warning("free delivery failed order=%s", order.id, exc_info=True)
+        error = str(exc)
+        failure = format_message("❌ خطا در تحویل", user_safe_error(exc))
+    try:
+        payment = await settle_failed_free_delivery(session, order, attempt=attempt, error=error)
+    except SQLAlchemyError:
+        # Nothing was released: the order stays paid and its trial claim stays spent.
+        logger.warning("free delivery settle failed order=%s", order.id, exc_info=True)
+        await rollback_quiet(session)
+        return None, failure
+    if payment is None:
+        return None, failure
+    await _notify_free_delivery_stuck(bot, session, payment, db_user, error)
+    return None, format_message("⏳ تحویل در حال بررسی", FREE_DELIVERY_UNDER_REVIEW)
 
 async def _show_order_pay(
     message,
@@ -839,22 +887,12 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     await _record_shop_funnel(session, db_user, "pay_start", ui=ui, order_id=order.id)
 
     if order.amount <= 0:
-        from app.services.orders import deliver_order, revert_failed_free_delivery
-
-        await mark_order_free_paid(session, order, db_user.id)
-        try:
-            order = await deliver_order(session, order)
-        except Exception as e:
-            try:
-                await revert_failed_free_delivery(session, order)
-            except Exception:
-                pass
+        delivered, failure = await _deliver_free_order(callback.bot, session, db_user, order)
+        if delivered is None:
             if callback.message:
-                await safe_edit_text(callback.message, 
-                    format_message("❌ خطا در تحویل", user_safe_error(e)),
-                    reply_markup=kb.back_home(ui),
-                )
+                await safe_edit_text(callback.message, failure, reply_markup=kb.back_home(ui))
             return
+        order = delivered
         if callback.message:
             await safe_edit_text(callback.message, 
                 format_message("✅ فعال شد", f"سفارش #{order.id} تحویل شد."),
@@ -1244,29 +1282,21 @@ async def _complete_shop_buy(
 
     # Free / trial: deliver immediately
     if order.amount <= 0:
-        from app.services.orders import deliver_order, revert_failed_free_delivery
-
-        await mark_order_free_paid(session, order, db_user.id)
-        try:
-            order = await deliver_order(session, order)
-        except Exception as e:
-            try:
-                await revert_failed_free_delivery(session, order)
-            except Exception:
-                pass
-            err = format_message("❌ خطا در تحویل", user_safe_error(e))
+        bot = callback.bot if callback is not None else message.bot
+        delivered, failure = await _deliver_free_order(bot, session, db_user, order)
+        if delivered is None:
             if callback is not None and callback.message:
-                await safe_edit_text(callback.message, err, reply_markup=kb.back_home(ui))
+                await safe_edit_text(callback.message, failure, reply_markup=kb.back_home(ui))
             elif message is not None:
-                await message.answer(err, reply_markup=kb.back_home(ui))
+                await message.answer(failure, reply_markup=kb.back_home(ui))
             return
+        order = delivered
         ok = format_message("✅ فعال شد", f"سفارش #{order.id} تحویل شد.")
         if callback is not None and callback.message:
             await safe_edit_text(callback.message, ok, reply_markup=kb.back_home(ui))
         elif message is not None:
             await message.answer(ok, reply_markup=kb.back_home(ui))
         try:
-            bot = callback.bot if callback is not None else message.bot
             await send_delivery_to_user(bot, db_user.telegram_id, session, None, order)
         except Exception:
             pass

@@ -104,10 +104,22 @@ class FreeDeliveryRevertTests(unittest.TestCase):
 
         self.assertTrue(callable(revert_failed_free_delivery))
 
-    def test_shop_calls_revert_on_deliver_failure(self):
-        src = Path("app/bot/handlers/shop.py").read_text(encoding="utf-8")
-        self.assertIn("revert_failed_free_delivery", src)
-        self.assertGreaterEqual(src.count("revert_failed_free_delivery"), 2)
+    def test_shop_reverts_free_order_when_delivery_fails_before_the_panel(self):
+        import asyncio
+
+        from app.bot.handlers import shop
+
+        order = SimpleNamespace(id=7)
+        revert = AsyncMock()
+        with patch.object(shop, "mark_order_free_paid", AsyncMock()), patch.object(
+            shop, "deliver_order", AsyncMock(side_effect=RuntimeError("panel not configured"))
+        ), patch("app.services.orders.revert_failed_free_delivery", revert):
+            delivered, text = asyncio.run(
+                shop._deliver_free_order(MagicMock(), MagicMock(), SimpleNamespace(id=1), order)
+            )
+        self.assertIsNone(delivered)
+        self.assertIn("خطا در تحویل", text)
+        revert.assert_awaited_once()
 
 
 class DeliveryResellerSettingsTests(unittest.TestCase):

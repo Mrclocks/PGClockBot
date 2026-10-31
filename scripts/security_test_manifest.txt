@@ -300,3 +300,5 @@ tests/test_app_compiles.py
 tests/test_staff_user_search.py
 # Staff DMs: reseller target check and free-text prompts not hijacked by menu labels.
 tests/test_staff_message_free_text.py
+# Free trial: an unknown panel outcome keeps the claim spent (no repeated trials).
+tests/test_trial_claim_unknown_delivery.py

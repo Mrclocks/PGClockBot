@@ -59,6 +59,7 @@ from app.services.volume_allocation import (
     HeldVolume,
     VolumeAllocationError,
     assert_volume_delta_allowed,
+    is_hard_panel_rejection,
     release_volume_hold,
 )
 from app.services.wallet import credit_wallet, debit_wallet
@@ -1276,6 +1277,39 @@ async def mark_order_free_paid(session: AsyncSession, order: Order, user_id: int
     return order
 
 
+@dataclass(slots=True)
+class DeliveryAttempt:
+    """What a failed ``deliver_order`` may have left on the panel."""
+
+    panel_may_hold_account: bool = False
+
+
+async def settle_failed_free_delivery(
+    session: AsyncSession, order: Order, *, attempt: DeliveryAttempt, error: str
+) -> Payment | None:
+    """After a free order's delivery failed: revert it for a retry, or keep it for staff.
+
+    When the panel may already hold the account (no answer to the create call), a retry
+    would mint another one, so the order stays paid, its trial claim stays spent, and it is
+    listed under failed deliveries. Returns its approved payment for the staff notice then;
+    None when the order was reverted and the buyer may try again.
+    """
+    if not attempt.panel_may_hold_account:
+        await revert_failed_free_delivery(session, order)
+        return None
+    payment = await session.scalar(
+        select(Payment)
+        .where(Payment.order_id == int(order.id), Payment.status == PaymentStatus.APPROVED.value)
+        .order_by(Payment.id.desc())
+        .limit(1)
+    )
+    # Local import: ux20 imports this module.
+    from app.services.ux20 import note_delivery_send_failure
+
+    await note_delivery_send_failure(session, order=order, payment=payment, error=error)
+    return payment
+
+
 async def revert_failed_free_delivery(session: AsyncSession, order: Order) -> None:
     """Undo mark_order_free_paid so the user can retry after a delivery failure."""
     if getattr(order, "service_mutation_pending", False):
@@ -2077,7 +2111,10 @@ async def reject_order(session: AsyncSession, order: Order, *, note: str = "") -
     return order
 
 
-async def deliver_order(session: AsyncSession, order: Order) -> Order:
+async def deliver_order(
+    session: AsyncSession, order: Order, *, attempt: DeliveryAttempt | None = None
+) -> Order:
+    """Create the panel user(s) of a paid order; ``attempt`` learns what a failure left behind."""
     order_id = int(order.id)
     note = _order_note(order)
     # Defense-in-depth: mutation orders must never be sealed by mint-delivery.
@@ -2166,6 +2203,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         )
         await session.commit()
 
+    panel = {"touched": False}
     try:
         # Shop deliveries authenticate as the reseller's PG admin (role limits apply).
         # Platform orders use the owner client.
@@ -2215,7 +2253,6 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         volume_hold = await _hold_delivery_volume(session, order, plan, pg, data_limit=data_limit, quantity=qty)
         created_pg_ids: list[int] = []
         services: list[UserService] = []
-        panel = {"touched": False}
 
         async def _create_one(index: int) -> UserService:
             # ``{id}`` = order id (catalog); ``buyer_id`` resolves ``{username}``.
@@ -2343,7 +2380,10 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             logger.warning("loyalty on_order_delivered failed order=%s", order.id, exc_info=True)
         await record_order_funnel(session, order, STEP_DELIVERED, key=f"delivered:order:{order.id}")
         return order
-    except Exception:
+    except Exception as exc:
+        if attempt is not None:
+            # Fail closed: only a definite refusal proves the panel created nothing.
+            attempt.panel_may_hold_account = panel["touched"] and not is_hard_panel_rejection(exc)
         try:
             await _release_delivery_claim()
         except Exception:
