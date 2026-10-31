@@ -45,6 +45,7 @@ from app.db.models import (
 from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
 from app.services.pasarguard import extract_sub_token, get_pg, parse_group_ids, user_subscription_url
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
+from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
 from app.services.provision_gate import (
     ProvisionError,
@@ -591,6 +592,8 @@ async def create_order(
             raise ValueError("برای دریافت تست باید شماره تماس خود را تأیید کنید")
         if on(ui.get("trial_require_iran_phone")) and not phone_hash:
             raise ValueError("برای دریافت تست باید شماره موبایل ایران را تأیید کنید")
+        # Before the claim: a refused young account must not burn its one trial.
+        await assert_trial_account_age(session, user_id, settings=ui)
         claim = TrialClaim(
             user_id=user_id,
             shop_key=shop_key,

@@ -772,6 +772,7 @@ DEFAULT_SETTINGS = {
     "trial_require_contact": "0",
     "purchase_require_contact": "0",
     "trial_require_iran_phone": "0",
+    "trial_min_account_minutes": "0",
     "receipt_dup_policy": "warn",
     "connection_guides": "[]",
     "btn_guides": "📘 آموزش اتصال",
@@ -1272,6 +1273,12 @@ SETTING_GROUPS = {
             "فقط شماره ایران برای تست",
             "toggle",
             "همراه با تأیید شماره: فقط موبایل ایران (+۹۸) پذیرفته می‌شود. شمارهٔ کامل ذخیره یا لاگ نمی‌شود.",
+        ),
+        (
+            "trial_min_account_minutes",
+            "حداقل سن حساب برای تست (دقیقه)",
+            "number",
+            "کاربری که تازه وارد ربات شده باید این‌قدر صبر کند تا بتواند تست بگیرد. ۰ یعنی خاموش. جلوی ساخت حساب و گرفتن تست در همان لحظه را می‌گیرد؛ تستی که رد شود مصرف نمی‌شود.",
         ),
     ],
     "شماره تماس خرید": [
