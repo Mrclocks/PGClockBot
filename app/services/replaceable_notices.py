@@ -109,7 +109,9 @@ async def replace_notices(session: AsyncSession, bot: Bot, replace_key: str, sen
         await rollback_quiet(session)
 
 
-async def clear_notices(session: AsyncSession, bot: Bot, replace_key: str) -> int:
+async def clear_notices(
+    session: AsyncSession, bot: Bot, replace_key: str, *, resolved_text: str = RESOLVED_TEXT
+) -> int:
     """The alert is over: retire its last message in every chat of this bot; return how many."""
     try:
         stored = await _stored(session, int(bot.id), replace_key, None)
@@ -119,7 +121,7 @@ async def clear_notices(session: AsyncSession, bot: Bot, replace_key: str) -> in
         return 0
     now = datetime.now(timezone.utc)
     for item in stored:
-        await _retire(bot, item, RESOLVED_TEXT, now)
+        await _retire(bot, item, resolved_text, now)
     try:
         await _forget(session, [s.row_id for s in stored])
         await session.commit()
