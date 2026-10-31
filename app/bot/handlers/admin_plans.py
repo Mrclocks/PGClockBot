@@ -8,7 +8,7 @@ import json
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, ReplyKeyboardMarkup
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -65,17 +65,6 @@ class AdminPlansStates(StatesGroup):
     trial_gb = State()
     wholesale_tier_min = State()
     wholesale_tier_pct = State()
-
-async def _plans_reply_markup(
-    session: AsyncSession,
-    state: FSMContext,
-) -> ReplyKeyboardMarkup:
-    data = await state.get_data()
-    aud = data.get("_adm_plans_aud")
-    ui = await get_all_settings(session)
-    if aud in {"users", "resellers"}:
-        return kb.admin_plans_kind_reply_keyboard(aud, ui)
-    return kb.admin_plans_audience_reply_keyboard(ui)
 
 async def sync_plans_reply_keyboard(
     message: Message,
@@ -156,7 +145,7 @@ async def _answer_plans_cancel(
         )
     await sync_plans_reply_keyboard(message, session, db_user, state)
 
-async def _answer_plans_saved(message: Message, state: FSMContext, session: AsyncSession, text: str) -> None:
+async def _answer_plans_saved(message: Message, session: AsyncSession, text: str) -> None:
     from app.bot.menu_nav import build_main_reply_keyboard
     from app.db.models import BotUser
     from sqlalchemy import select
@@ -180,8 +169,8 @@ async def _answer_plans_saved(message: Message, state: FSMContext, session: Asyn
         )
         await message.answer(text, reply_markup=main_kb)
         return
-    markup = await _plans_reply_markup(session, state)
-    await message.answer(text, reply_markup=markup)
+    # No account to build the main keyboard for: never fall back to a submenu keyboard.
+    await message.answer(text)
 
 def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -344,29 +333,6 @@ async def send_resellers_plans_overview(
 ) -> None:
     await present_plans_overview(message, session, state, "resellers")
 
-
-async def send_add_plan_type_picker(
-    message: Message,
-    session: AsyncSession,
-    db_user: BotUser,
-    state: FSMContext,
-    audience: str,
-) -> None:
-    """Step after «افزودن پلن» — type picker like web modal kind step."""
-    title = "کاربران" if audience == "users" else "نمایندگان"
-    ui = await get_all_settings(session)
-    await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=None)
-    await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_ADD_TYPE, push=True)
-    markup = kb.admin_plans_add_type_reply_keyboard(audience, ui)
-    await message.answer(
-        f"➕ <b>افزودن پلن — {title}</b>\n"
-        "نوع پلن را از دکمه‌های زیر انتخاب کنید:",
-        reply_markup=markup,
-    )
-    await message.answer(
-        "نوع پلن:",
-        reply_markup=kb.admin_plans_add_type_keyboard(audience, ui),
-    )
 
 async def users_fixed_list_view(session: AsyncSession, page_index: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     """One page of the platform's fixed plans: cards in the text, a button per plan."""
@@ -884,7 +850,7 @@ async def plans_edit_save(
     await state.set_state(None)
     aud = data.get("_adm_plans_aud") or "users"
     kind = data.get("_adm_plans_kind") or "custom"
-    await _answer_plans_saved(message, state, session, feedback.SAVED_CHECK)
+    await _answer_plans_saved(message, session, feedback.SAVED_CHECK)
     bubble = await message.answer("⏳")
     await open_kind_screen(bubble, session, aud, kind)
 
@@ -972,7 +938,7 @@ async def wholesale_tier_pct_entered(
     tiers.sort(key=lambda t: t["min"])
     await set_setting(session, "wholesale_tiers", json.dumps(tiers, ensure_ascii=False))
     await state.set_state(None)
-    await _answer_plans_saved(message, state, session, "پله ذخیره شد ✅")
+    await _answer_plans_saved(message, session, "پله ذخیره شد ✅")
     bubble = await message.answer("⏳")
     await send_users_wholesale(bubble, session)
 
@@ -1035,7 +1001,7 @@ async def trial_save_name(message: Message, state: FSMContext, session: AsyncSes
     trial.name = (message.text or "").strip()[:128]
     await _persist(session)
     await state.set_state(None)
-    await _answer_plans_saved(message, state, session, feedback.SAVED_CHECK)
+    await _answer_plans_saved(message, session, feedback.SAVED_CHECK)
     bubble = await message.answer("⏳")
     await send_users_trial(bubble, session)
 
@@ -1083,7 +1049,7 @@ async def trial_save_days(message: Message, state: FSMContext, session: AsyncSes
     trial.duration_days = days
     await _persist(session)
     await state.set_state(None)
-    await _answer_plans_saved(message, state, session, feedback.SAVED_CHECK)
+    await _answer_plans_saved(message, session, feedback.SAVED_CHECK)
     bubble = await message.answer("⏳")
     await send_users_trial(bubble, session)
 
@@ -1131,7 +1097,7 @@ async def trial_save_gb(message: Message, state: FSMContext, session: AsyncSessi
     trial.data_limit_gb = None if gb <= 0 else gb
     await _persist(session)
     await state.set_state(None)
-    await _answer_plans_saved(message, state, session, feedback.SAVED_CHECK)
+    await _answer_plans_saved(message, session, feedback.SAVED_CHECK)
     bubble = await message.answer("⏳")
     await send_users_trial(bubble, session)
 
@@ -2112,7 +2078,7 @@ async def resplan_edit_save(
     await sync_plan_billing_rate(session, plan)
     await _persist(session)
     await state.set_state(None)
-    await _answer_plans_saved(message, state, session, feedback.SAVED_CHECK)
+    await _answer_plans_saved(message, session, feedback.SAVED_CHECK)
     bubble = await message.answer(
         _resplan_detail_text(plan),
         reply_markup=_resplan_detail_keyboard(plan),

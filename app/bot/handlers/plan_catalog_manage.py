@@ -101,39 +101,6 @@ async def _lasting_reply_kb(
     )
 
 
-# Back-compat name used by staff_cancel / older call sites.
-async def _hub_reply_kb(
-    session: AsyncSession,
-    state: FSMContext,
-    *,
-    is_reseller_bot: bool,
-    db_user: BotUser | None = None,
-    reseller_owner_id: int | None = None,
-) -> object:
-    if db_user is None:
-        # Legacy callers without db_user — fall back to classic (should be rare).
-        from app.services.users import get_all_settings
-
-        data = await state.get_data()
-        rid = data.get("_pcm_reseller_id")
-        ui = await get_all_settings(
-            session, reseller_id=int(rid) if rid else None
-        )
-        if is_reseller_bot or data.get("_pcm_surface") == "reseller":
-            return kb.reseller_plans_reply_keyboard(ui)
-        aud = data.get("_adm_plans_aud")
-        if aud in {"users", "resellers"}:
-            return kb.admin_plans_kind_reply_keyboard(aud, ui)
-        return kb.admin_plans_audience_reply_keyboard(ui)
-    return await _lasting_reply_kb(
-        session,
-        db_user,
-        state,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-    )
-
-
 async def _remember_surface(
     state: FSMContext,
     *,
