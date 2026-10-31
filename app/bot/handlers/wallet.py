@@ -873,7 +873,6 @@ async def generic_receipt(
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
-            as_user=True,
         )
     else:
         from app.bot.menu_nav import clear_checkout_nav

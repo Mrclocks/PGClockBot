@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import html
+import re
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
@@ -37,7 +40,7 @@ async def render_home(
     session: AsyncSession,
     db_user: BotUser,
     *,
-    edit: bool = False,
+    notice: str | None = None,
     seed_reply_kb: bool = False,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
@@ -121,32 +124,22 @@ async def render_home(
             ui=ui,
         )
 
-    # Welcome always carries the lasting main ReplyKeyboard (four-square menu).
-    # Mini App opens only via Telegram MenuButton «Open» (chat_menu) — never
-    # inline on welcome and never as a ReplyKeyboard web_app row.
-    if edit:
-        from aiogram.exceptions import TelegramBadRequest
-
-        try:
-            await message.edit_text(text, reply_markup=None, **home_send_kw)
-            return
-        except TelegramBadRequest as e:
-            if "message is not modified" in str(e).lower():
-                return
-        except Exception:
-            logger.debug("render_home: ignored failure", exc_info=True)
-        # Edit failed (e.g. can't edit) — one fallback message, never silent.
-        if getattr(message, "photo", None):
-            try:
-                await message.delete()
-            except Exception:
-                logger.debug("render_home: ignored failure", exc_info=True)
-
-    # A home always re-attaches the menu: the person may have cleared the chat.
+    # Home is a fresh start: a new welcome with the menu at the bottom; the older welcome and
+    # every temporary message go, records (deliveries, receipts, configs) stay. A notice (a
+    # cancel or an outcome) rides at the end of the welcome instead of being its own message.
+    if notice:
+        text = f"{text}\n\n{_notice_for(notice, home_send_kw)}"
     with fresh_keyboard():
         home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
     await replace_home(home, sweep=True)
     _ = seed_reply_kb
+
+
+def _notice_for(notice: str, send_kw: dict) -> str:
+    """The notice as the welcome expects it: HTML, or plain text when the welcome uses entities."""
+    if send_kw.get("parse_mode", "HTML") is None:
+        return html.unescape(re.sub(r"<[^>]+>", "", notice))
+    return notice
 
 
 async def seed_main_reply_kb(message: Message, reply_kb, *, tip: str = "·") -> None:
@@ -658,12 +651,10 @@ async def cb_home(
     await callback.answer()
     await state.clear()
     if callback.message:
-        # The menu keyboard stays shown (it is persistent), so the panel just becomes home.
         await render_home(
             callback.message,
             session,
             db_user,
-            edit=True,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )

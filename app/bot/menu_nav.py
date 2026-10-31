@@ -8,8 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
-from app.bot.chat_cleanup import replace_home
-from app.bot.chat_screen import fresh_keyboard
 from app.db.models import BotUser, UserService
 from app.services.service_scope import shop_services_clause
 from app.services.users import current_shop_reseller_id, get_all_settings
@@ -62,6 +60,9 @@ NAV_TOPUP_PAY = "topup_pay"
 NAV_USER_PREVIEW = "user_preview"
 NAV_SERVICE = "service"
 NAV_REVIEW = "review"
+
+# Home notes that add nothing to the welcome itself.
+_PLAIN_HOME_NOTES = frozenset({"🏠 منوی اصلی", "منوی اصلی", "لغو شد.", "لغو شد", "انصراف."})
 
 # FSM payload keys for selected entities
 SERVICE_ID = "_svc_id"
@@ -418,8 +419,14 @@ async def restore_main_reply(
     state: FSMContext | None = None,
     is_reseller_bot: bool,
     reseller_owner_id: int | None,
-    as_user: bool = False,
 ) -> dict:
+    """Back to step zero: the same fresh home as «شروع مجدد», with ``text`` as its notice.
+
+    A plain «منوی اصلی» or «لغو شد» adds nothing to the welcome, so it is left out.
+    """
+    # start imports this module; import here to break the cycle.
+    from app.bot.handlers.start import render_home
+
     if state is not None:
         try:
             await state.clear()
@@ -429,17 +436,12 @@ async def restore_main_reply(
             await state.update_data(**{NAV_LEVEL: NAV_MAIN, NAV_STACK: []})
         except Exception:
             logger.debug("restore_main_reply: ignored failure", exc_info=True)
-    markup, ui, _role = await build_main_reply_keyboard(
-        session,
-        db_user,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-        as_user=as_user,
+    ui = await get_all_settings(session)
+    notice = None if (text or "").strip() in _PLAIN_HOME_NOTES else text
+    await render_home(
+        message, session, db_user, notice=notice,
+        is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id, ui=ui,
     )
-    # The main menu is the whole screen: a fresh home at the bottom, everything temporary goes.
-    with fresh_keyboard():
-        home = await message.answer(text, reply_markup=markup)
-    await replace_home(home, sweep=True)
     return ui
 
 
