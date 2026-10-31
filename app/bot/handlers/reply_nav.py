@@ -1838,6 +1838,8 @@ async def _soft_admin(
             await admin_h.adm_users_webhint(cb, db_user, session=session)
         elif data == "adm:resellers:list:0":
             await admin_h.adm_resellers_list(cb, session, db_user)
+        elif data == "adm:resellers:search":
+            await admin_h.adm_resellers_search_start(cb, state, db_user, session=session)
         elif data == "adm:resapp:list":
             await admin_h.adm_resapp_list(cb, session, db_user)
         elif data == "adm:resellers:add":
@@ -2659,6 +2661,7 @@ async def reply_main_nav(
         kb.REPLY_ACTION_ADM_USERS_SEARCH,
         kb.REPLY_ACTION_ADM_USERS_WEB,
         kb.REPLY_ACTION_ADM_RES_LIST,
+        kb.REPLY_ACTION_ADM_RES_SEARCH,
         kb.REPLY_ACTION_ADM_RES_APPS,
         kb.REPLY_ACTION_ADM_RES_ADD,
         kb.REPLY_ACTION_LOYALTY,
@@ -3306,6 +3309,10 @@ async def reply_main_nav(
     elif action == kb.REPLY_ACTION_ADM_RES_LIST:
         await _soft_admin(
             message, session, db_user, "adm:resellers:list:0", state, is_reseller_bot=is_reseller_bot
+        )
+    elif action == kb.REPLY_ACTION_ADM_RES_SEARCH:
+        await _soft_admin(
+            message, session, db_user, "adm:resellers:search", state, is_reseller_bot=is_reseller_bot
         )
     elif action == kb.REPLY_ACTION_ADM_RES_APPS:
         await _soft_admin(

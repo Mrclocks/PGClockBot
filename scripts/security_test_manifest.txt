@@ -304,3 +304,6 @@ tests/test_staff_message_free_text.py
 tests/test_trial_claim_unknown_delivery.py
 # Trial notice: shop trials reach only that shop's staff; customer text escaped.
 tests/test_trial_claimed_notice.py
+
+# Owner reseller search: resellers only, owner and representative-management gate.
+tests/test_reseller_search.py

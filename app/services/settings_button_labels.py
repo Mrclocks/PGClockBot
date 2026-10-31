@@ -151,6 +151,7 @@ BTN_ADMIN_PEOPLE_SUB: list[Field] = [
     ("btn_adm_users_search", "جستجو", "text"),
     ("btn_adm_users_web", "مدیریت کاربران در وب‌پنل", "text"),
     ("btn_adm_res_list", "لیست نمایندگان", "text"),
+    ("btn_adm_res_search", "جستجوی نماینده", "text"),
     ("btn_adm_res_apps", "درخواست‌های نمایندگی", "text"),
     ("btn_adm_res_add", "افزودن نماینده", "text"),
 ]

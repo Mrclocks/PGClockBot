@@ -667,11 +667,15 @@
           "text": "📋 لیست نمایندگان"
         },
         {
-          "callback_data": "adm:resapp:list",
-          "text": "📋 درخواست‌های در انتظار"
+          "callback_data": "adm:resellers:search",
+          "text": "🔎 جستجوی نماینده"
         }
       ],
       [
+        {
+          "callback_data": "adm:resapp:list",
+          "text": "📋 درخواست‌های در انتظار"
+        },
         {
           "callback_data": "adm:resellers:add",
           "style": "primary",
@@ -3656,10 +3660,13 @@
           "text": "📋 لیست نمایندگان"
         },
         {
-          "text": "📋 درخواست‌های در انتظار"
+          "text": "🔎 جستجوی نماینده"
         }
       ],
       [
+        {
+          "text": "📋 درخواست‌های در انتظار"
+        },
         {
           "style": "primary",
           "text": "➕ افزودن نماینده"

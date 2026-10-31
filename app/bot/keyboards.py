@@ -538,6 +538,7 @@ REPLY_ACTION_ADM_USERS_LIST = "adm_users_list"
 REPLY_ACTION_ADM_USERS_SEARCH = "adm_users_search"
 REPLY_ACTION_ADM_USERS_WEB = "adm_users_web"
 REPLY_ACTION_ADM_RES_LIST = "adm_res_list"
+REPLY_ACTION_ADM_RES_SEARCH = "adm_res_search"
 REPLY_ACTION_ADM_RES_APPS = "adm_res_apps"
 REPLY_ACTION_ADM_RES_ADD = "adm_res_add"
 

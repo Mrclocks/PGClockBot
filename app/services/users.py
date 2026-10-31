@@ -906,6 +906,7 @@ DEFAULT_SETTINGS = {
     "btn_adm_users_search": "🔎 جستجو",
     "btn_adm_users_web": "🌐 مدیریت کامل در وب‌پنل",
     "btn_adm_res_list": "📋 لیست نمایندگان",
+    "btn_adm_res_search": "🔎 جستجوی نماینده",
     "btn_adm_res_apps": "📋 درخواست‌های در انتظار",
     "btn_adm_res_add": "➕ افزودن نماینده",
     "btn_adm_st_shop": "نام و متن‌ها",
