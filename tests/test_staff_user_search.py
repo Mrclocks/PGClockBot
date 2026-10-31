@@ -129,22 +129,24 @@ class PlatformStepTests(SearchCase):
         message = AsyncMock()
         message.text = text
         state = AsyncMock()
-        with patch("app.bot.auth.is_bot_owner_principal", AsyncMock(return_value=True)), patch.object(admin, "_is_admin", return_value=True):
+        with patch("app.bot.auth.is_bot_owner_principal", AsyncMock(return_value=True)), \
+                patch.object(admin, "_is_admin", return_value=True), \
+                patch.object(admin, "finish_text_step", AsyncMock()) as finish:
             await admin.adm_users_search(message, state, self.session, SimpleNamespace(id=1, telegram_id=1, role="admin", is_blocked=False), is_reseller_bot=False)
-        return message
+        return message, finish
 
     async def test_a_partial_name_lists_matches_and_an_exact_handle_still_opens_the_card(self):
-        message = await self.search("ali")
-        self.assertIn("adm:users:view:10", buttons(message.answer.await_args_list[-1].kwargs["reply_markup"]))
-        with patch.object(admin, "_render_user_card", AsyncMock()) as card:
-            await self.search("@sara")
-        card.assert_awaited_once()
-        self.assertEqual(card.await_args.args[2].id, 11)
+        _, finish = await self.search("ali")
+        self.assertIn("adm:users:view:10", buttons(finish.await_args.kwargs["inline"]))
+        _, finish = await self.search("@sara")
+        self.assertIn("adm:users:svcs:11", buttons(finish.await_args.kwargs["inline"]))
+        self.assertIn("5011", finish.await_args.kwargs["text"])
 
     async def test_a_name_with_spaces_is_accepted_and_too_long_text_is_refused(self):
-        message = await self.search("sara alinejad")
-        self.assertIn("adm:users:view:11", buttons(message.answer.await_args_list[-1].kwargs["reply_markup"]))
-        message = await self.search("x " * 33)
+        _, finish = await self.search("sara alinejad")
+        self.assertIn("adm:users:view:11", buttons(finish.await_args.kwargs["inline"]))
+        message, finish = await self.search("x " * 33)
+        finish.assert_not_awaited()
         self.assertEqual(len(message.answer.await_args_list), 1)
 
 

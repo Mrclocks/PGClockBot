@@ -20,6 +20,7 @@ from app.jobs.volume_external_sync import run_volume_external_sync
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
 from app.services.usage_alerts import alert_extras, time_alert_markup, traffic_alert_markup
+from app.services.replaceable_notices import DAILY_REPORT_KEY, SUBORDINATE_REPORT_KEY, send_replacing_report
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -481,17 +482,10 @@ async def run_admin_daily_report(bot: Bot) -> None:
                             session, "admin_daily_report_metrics", ""
                         ),
                     )
-                    for aid in get_settings().admin_ids or []:
-                        try:
-                            await bot.send_message(
-                                int(aid),
-                                text,
-                                **{"parse_mode": "HTML", **report_kw},
-                            )
-                        except Exception:
-                            logger.debug(
-                                "daily report send failed admin=%s", aid, exc_info=True
-                            )
+                    await send_replacing_report(
+                        session, bot, list(get_settings().admin_ids or []), text,
+                        replace_key=DAILY_REPORT_KEY, **{"parse_mode": "HTML", **report_kw},
+                    )
                     await set_setting(session, "admin_daily_report_last", day_key)
                     await session.commit()
 
@@ -516,17 +510,10 @@ async def run_admin_daily_report(bot: Bot) -> None:
                                 session, parent=owner, traffic_by_user_id=traffic
                             )
                             if text:
-                                for aid in get_settings().admin_ids or []:
-                                    try:
-                                        await bot.send_message(
-                                            int(aid), text, parse_mode="HTML"
-                                        )
-                                    except Exception:
-                                        logger.debug(
-                                            "subordinate report send failed admin=%s",
-                                            aid,
-                                            exc_info=True,
-                                        )
+                                await send_replacing_report(
+                                    session, bot, list(get_settings().admin_ids or []), text,
+                                    replace_key=SUBORDINATE_REPORT_KEY, parse_mode="HTML",
+                                )
                         await set_setting(session, SUB_REPORT_LAST, day_key)
                         await session.commit()
 
@@ -575,22 +562,10 @@ async def run_admin_daily_report(bot: Bot) -> None:
                     )
                     if shop_bot is not None:
                         try:
-                            for chat_id in await shop_daily_report_chat_ids(
-                                session, rid
-                            ):
-                                try:
-                                    await shop_bot.send_message(
-                                        int(chat_id),
-                                        text,
-                                        **{"parse_mode": "HTML", **report_kw},
-                                    )
-                                except Exception:
-                                    logger.debug(
-                                        "daily report shop send failed rid=%s chat=%s",
-                                        rid,
-                                        chat_id,
-                                        exc_info=True,
-                                    )
+                            await send_replacing_report(
+                                session, shop_bot, await shop_daily_report_chat_ids(session, rid), text,
+                                replace_key=DAILY_REPORT_KEY, **{"parse_mode": "HTML", **report_kw},
+                            )
                             await set_setting(
                                 session,
                                 "admin_daily_report_last",
@@ -646,20 +621,10 @@ async def run_admin_daily_report(bot: Bot) -> None:
                             )
                             if shop_bot is not None:
                                 try:
-                                    for chat_id in await shop_daily_report_chat_ids(
-                                        session, rid
-                                    ):
-                                        try:
-                                            await shop_bot.send_message(
-                                                int(chat_id), text, parse_mode="HTML"
-                                            )
-                                        except Exception:
-                                            logger.debug(
-                                                "subordinate report shop send failed rid=%s chat=%s",
-                                                rid,
-                                                chat_id,
-                                                exc_info=True,
-                                            )
+                                    await send_replacing_report(
+                                        session, shop_bot, await shop_daily_report_chat_ids(session, rid), text,
+                                        replace_key=SUBORDINATE_REPORT_KEY, parse_mode="HTML",
+                                    )
                                 finally:
                                     if should_close:
                                         try:

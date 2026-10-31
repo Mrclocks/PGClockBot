@@ -61,15 +61,6 @@ class SeedReplyKeyboardSafetyTests(unittest.IsolatedAsyncioTestCase):
         sent.delete.assert_not_awaited()
 
 
-class AdminSearchRestoresUsersKeyboardTests(unittest.TestCase):
-    def test_search_success_attaches_users_reply_kb(self):
-        src = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        fn = src.split("async def adm_users_search(", 1)[1].split("\nasync def ", 1)[0]
-        self.assertIn("admin_users_reply_keyboard()", fn)
-        self.assertIn("نتیجه جستجو", fn)
-        self.assertNotIn("seed_persistent_reply_kb", fn)
-        self.assertLess(fn.index("نتیجه جستجو"), fn.index("_render_user_card"))
-
 class AdminFsmFinishKeepsReplyKeyboardTests(unittest.IsolatedAsyncioTestCase):
     """Finishing an admin FSM text step re-attaches the lasting reply keyboard."""
 

@@ -147,7 +147,7 @@ class ShortNoticeTests(_CleanupOn):
         sent = chat.message()
         method = SendMessage(chat_id=100, text=text, reply_markup=markup)
         with patch.object(chat_cleanup, "Message", MagicMock):
-            await chat_cleanup._note_short_notices(AsyncMock(return_value=sent), chat.bot, method)
+            await chat_cleanup._note_throwaway_requests(AsyncMock(return_value=sent), chat.bot, method)
         return sent.message_id
 
     async def test_a_fixed_notice_goes_with_the_next_panel(self) -> None:
