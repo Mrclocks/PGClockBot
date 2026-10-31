@@ -165,13 +165,8 @@ async def reopen_pg_users(
     reseller_owner_id: int | None = None,
     **_kw,
 ) -> None:
-    from app.bot.auth import filtered_pg_reply_keyboard
     from app.bot.handlers.reply_nav import open_pg_home
     from app.bot.nav_chrome import answer_staff_nav
-
-    classic = await filtered_pg_reply_keyboard(
-        db_user, session=session, is_reseller_bot=is_reseller_bot
-    )
 
     async def _panel(msg, sess, user, st, **_pkw):
         await open_pg_home(
@@ -189,7 +184,6 @@ async def reopen_pg_users(
         session,
         db_user,
         text=feedback.CANCELLED,
-        classic=classic,
         state=state,
         reopen_panel=_panel,
         clear_state=True,
@@ -372,7 +366,6 @@ async def reopen_loyalty_staff(
         can_tiers=can_tiers,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
-        heal_reply=True,
     )
     _ = scope
 
@@ -385,22 +378,13 @@ async def reopen_reseller_cap_adjust(
     **_kw,
 ) -> None:
     from app.bot import keyboards as kb
-    from app.bot.nav_chrome import heal_main_reply
-    from app.bot.nav_inline import is_bot_panel_message, present_nav_panel
+    from app.bot.nav_inline import present_nav_panel
 
     data = await state.get_data()
     user_id = int(data.get("capadj_uid") or 0)
     await state.set_state(None)
-    if not is_bot_panel_message(message):
-        await heal_main_reply(
-            message,
-            session,
-            db_user,
-            text=feedback.CANCELLED,
-            is_reseller_bot=False,
-            reseller_owner_id=None,
-        )
     if not user_id:
+        await message.answer(feedback.CANCELLED)
         return
     adj_key = f"capadj:{user_id}"
     stored = data.get(adj_key) if isinstance(data.get(adj_key), dict) else {}

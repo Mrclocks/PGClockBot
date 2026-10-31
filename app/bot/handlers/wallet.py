@@ -25,6 +25,7 @@ from app.services.redact import user_safe_error
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import create_wallet_topup
 from app.services.psp_gateways import gateway_choices
+from app.bot.nav_input import retire_prompt_buttons
 from app.services.receipts import submit_receipt
 from app.services.ux20 import payment_shop_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
@@ -274,14 +275,8 @@ async def present_topup_methods(
     *,
     is_reseller_bot: bool,
     reseller_owner_id: int | None,
-    heal_main: bool = False,
 ) -> None:
-    """After amount is known — show pay methods on the inline panel.
-
-    When ``heal_main`` is set (free-text amount left ``cancel_reply`` on the
-    ReplyKeyboard), restore the stable main keyboard *after* the inline methods
-    bubble so iOS keeps the custom menu.
-    """
+    """After amount is known — show pay methods on the inline panel."""
     ui = await get_all_settings(session)
     await state.set_state(WalletStates.choose_method)
     await state.update_data(topup_amount=amount)
@@ -297,21 +292,6 @@ async def present_topup_methods(
     await present_inline_only(
         message, text=body, inline=topup_methods_keyboard(ui)
     )
-    if heal_main:
-        from app.bot.menu_nav import build_main_reply_keyboard
-        from app.bot.tg_utils import attach_reply_keyboard
-
-        main_kb, _, _ = await build_main_reply_keyboard(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-        )
-        await attach_reply_keyboard(
-            message,
-            main_kb,
-            text="مبلغ ثبت شد — روش واریز را انتخاب کنید.",
-        )
     return
 
 @router.message(WalletStates.topup_amount)
@@ -781,6 +761,7 @@ async def wallet_receipt_photo(
         )
         return
     photo = message.photo[-1]
+    await retire_prompt_buttons(message, state)
     await state.clear()
     text = await submit_receipt(
         session,
@@ -873,6 +854,7 @@ async def generic_receipt(
     if not payment:
         return
     photo = message.photo[-1]
+    await retire_prompt_buttons(message, state)
     text = await submit_receipt(
         session,
         payment,

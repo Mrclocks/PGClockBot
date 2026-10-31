@@ -15,6 +15,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.nav_input import finish_text_step
 from app.bot import keyboards as kb
 from app.bot.auth import resolve_bot_principal_bridge
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
@@ -77,28 +78,6 @@ async def resolve_catalog_staff(
     if not bridge or not bridge.staff or not staff_is_platform_admin(bridge.staff):
         return None
     return bridge.staff
-
-
-async def _lasting_reply_kb(
-    session: AsyncSession,
-    db_user: BotUser,
-    state: FSMContext,
-    *,
-    is_reseller_bot: bool,
-    reseller_owner_id: int | None = None,
-) -> object:
-    """Option B: always the stable main ReplyKeyboard — never classic plan submenus."""
-    from app.bot.nav_chrome import lasting_staff_reply
-
-    data = await state.get_data()
-    rid = reseller_owner_id if reseller_owner_id is not None else data.get("_pcm_reseller_id")
-    surface_reseller = bool(is_reseller_bot or data.get("_pcm_surface") == "reseller")
-    return await lasting_staff_reply(
-        session,
-        db_user,
-        is_reseller_bot=surface_reseller,
-        reseller_owner_id=int(rid) if rid else None,
-    )
 
 
 async def _remember_surface(
@@ -470,7 +449,6 @@ async def pcm_cat_name_save(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    from app.bot.nav_inline import present_inline_only
     from app.services.plan_categories import (
         create_category,
         list_categories,
@@ -493,11 +471,6 @@ async def pcm_cat_name_save(
         await state.set_state(None)
         await message.answer(
             feedback.CANCELLED,
-            reply_markup=await _lasting_reply_kb(
-                session, db_user, state,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            ),
         )
         return
     staff = await resolve_catalog_staff(
@@ -566,17 +539,10 @@ async def pcm_cat_name_save(
     ui = await get_all_settings(
         session, reseller_id=int(reseller_owner_id) if reseller_owner_id else None
     )
-    await message.answer(
-        f"✅ دسته «{html.escape(cat.name)}» ذخیره شد.",
-        reply_markup=await _lasting_reply_kb(
-            session, db_user, state,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-        ),
-    )
-    await present_inline_only(
+    await finish_text_step(
         message,
-        text="دسته‌ها:",
+        state,
+        text=f"✅ دسته «{html.escape(cat.name)}» ذخیره شد." + "\n\nدسته‌ها:",
         inline=_cat_list_markup(cats, ui=ui),
     )
 
@@ -781,7 +747,6 @@ async def pcm_cat_edit_save(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    from app.bot.nav_inline import present_inline_only
     from app.services.plan_categories import (
         list_categories,
         split_category_label_from_message,
@@ -803,11 +768,6 @@ async def pcm_cat_edit_save(
         await state.set_state(None)
         await message.answer(
             feedback.CANCELLED,
-            reply_markup=await _lasting_reply_kb(
-                session, db_user, state,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            ),
         )
         return
     staff = await resolve_catalog_staff(
@@ -844,17 +804,10 @@ async def pcm_cat_edit_save(
         return
     await state.set_state(None)
     cats = await list_categories(session, staff, active_only=False)
-    await message.answer(
-        feedback.SAVED_CHECK,
-        reply_markup=await _lasting_reply_kb(
-            session, db_user, state,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-        ),
-    )
-    await present_inline_only(
+    await finish_text_step(
         message,
-        text="دسته‌ها:",
+        state,
+        text=feedback.SAVED_CHECK + "\n\nدسته‌ها:",
         inline=_cat_list_markup(
             cats,
             ui=await _pcm_ui(
@@ -953,11 +906,6 @@ async def pcm_addon_name(
         await state.set_state(None)
         await message.answer(
             feedback.CANCELLED,
-            reply_markup=await _lasting_reply_kb(
-                session, db_user, state,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            ),
         )
         return
     name = (message.text or "").strip()
@@ -1035,11 +983,6 @@ async def pcm_addon_amount(
         await state.set_state(None)
         await message.answer(
             feedback.CANCELLED,
-            reply_markup=await _lasting_reply_kb(
-                session, db_user, state,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            ),
         )
         return
     data = await state.get_data()
@@ -1093,11 +1036,6 @@ async def pcm_addon_price_save(
         await state.set_state(None)
         await message.answer(
             feedback.CANCELLED,
-            reply_markup=await _lasting_reply_kb(
-                session, db_user, state,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            ),
         )
         return
     try:
@@ -1133,15 +1071,7 @@ async def pcm_addon_price_save(
         return
     await state.set_state(None)
     packs = await list_packs(session, staff, active_only=False)
-    await message.answer(
-        f"✅ بسته «{html.escape(pack.name)}» ذخیره شد.",
-        reply_markup=await _lasting_reply_kb(
-                session, db_user, state,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            ),
-    )
-    await message.answer("بسته‌ها:", reply_markup=_addon_list_markup(packs, ui=await _pcm_ui(session, reseller_owner_id=reseller_owner_id, state=state)))
+    await finish_text_step(message, state, text=f"✅ بسته «{html.escape(pack.name)}» ذخیره شد." + "\n\nبسته‌ها:", inline=_addon_list_markup(packs, ui=await _pcm_ui(session, reseller_owner_id=reseller_owner_id, state=state)))
 
 
 @router.callback_query(F.data.startswith("pcm:addon:tog:"))
@@ -1307,11 +1237,6 @@ async def pcm_addon_edit_save(
         await state.set_state(None)
         await message.answer(
             feedback.CANCELLED,
-            reply_markup=await _lasting_reply_kb(
-                session, db_user, state,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            ),
         )
         return
     staff = await resolve_catalog_staff(
@@ -1398,12 +1323,4 @@ async def pcm_addon_edit_save(
         return
     await state.set_state(None)
     packs = await list_packs(session, staff, active_only=False)
-    await message.answer(
-        feedback.SAVED_CHECK,
-        reply_markup=await _lasting_reply_kb(
-                session, db_user, state,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            ),
-    )
-    await message.answer("بسته‌ها:", reply_markup=_addon_list_markup(packs, ui=await _pcm_ui(session, reseller_owner_id=reseller_owner_id, state=state)))
+    await finish_text_step(message, state, text=feedback.SAVED_CHECK + "\n\nبسته‌ها:", inline=_addon_list_markup(packs, ui=await _pcm_ui(session, reseller_owner_id=reseller_owner_id, state=state)))

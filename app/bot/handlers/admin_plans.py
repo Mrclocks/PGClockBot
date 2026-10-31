@@ -8,7 +8,9 @@ import json
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from datetime import datetime, timezone
+
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, User
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +34,8 @@ from app.services.resellers import (
 )
 from app.bot import menu_nav as nav
 from app.bot.list_pages import page_line, page_number, page_of, pager_row
-from app.bot.nav_input import form_origin
+from app.bot.nav_inline import present_inline_only
+from app.bot.nav_input import PROMPT_MSG_ID, form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services import bot_feedback_texts as feedback
@@ -121,10 +124,7 @@ async def _answer_plans_cancel(
     session: AsyncSession,
     db_user: BotUser | None = None,
 ) -> None:
-    """Cancel free-text plans FSM: reopen the plans hub (heal the main KB for typed cancels)."""
-    from app.bot.nav_chrome import heal_main_reply
-    from app.bot.nav_inline import is_bot_panel_message
-
+    """Cancel free-text plans FSM: reopen the plans hub in place of the prompt."""
     await state.set_state(None)
     if db_user is None:
         tg_id = getattr(getattr(message, "from_user", None), "id", None)
@@ -137,43 +137,20 @@ async def _answer_plans_cancel(
     if db_user is None:
         await message.answer(feedback.CANCELLED)
         return
-    if not is_bot_panel_message(message):
-        await heal_main_reply(
-            message,
-            session,
-            db_user,
-            text=feedback.MAIN_KEYBOARD_RESTORED,
-            is_reseller_bot=False,
-            reseller_owner_id=None,
-        )
     await sync_plans_reply_keyboard(message, session, db_user, state)
 
-async def _answer_plans_saved(message: Message, session: AsyncSession, text: str) -> None:
-    from app.bot.menu_nav import build_main_reply_keyboard
-    from app.db.models import BotUser
-    from sqlalchemy import select
-
-    ui = await get_all_settings(session)
-    tg_id = getattr(getattr(message, "from_user", None), "id", None)
-    db_user = None
-    if tg_id is not None:
-        db_user = (
-            await session.execute(
-                select(BotUser).where(BotUser.telegram_id == int(tg_id))
-            )
-        ).scalar_one_or_none()
-    if db_user is not None:
-        main_kb, _, _ = await build_main_reply_keyboard(
-            session,
-            db_user,
-            is_reseller_bot=False,
-            reseller_owner_id=None,
-            ui=ui,
-        )
-        await message.answer(text, reply_markup=main_kb)
-        return
-    # No account to build the main keyboard for: never fall back to a submenu keyboard.
-    await message.answer(text)
+async def _prompt_panel(message: Message, state: FSMContext) -> Message:
+    """The step's prompt, to redraw the screen in its place; a new bubble when it is unknown."""
+    prompt_id = (await state.get_data()).get(PROMPT_MSG_ID)
+    if not prompt_id:
+        return await message.answer("⏳")
+    prompt = Message(
+        message_id=int(prompt_id),
+        date=datetime.now(timezone.utc),
+        chat=message.chat,
+        from_user=User(id=message.bot.id, is_bot=True, first_name="bot"),
+    )
+    return prompt.as_(message.bot)
 
 def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -742,12 +719,8 @@ async def plans_kind_cb(
     await state.update_data(_adm_plans_aud=aud, _adm_plans_kind=kind)
     await callback.answer()
     if callback.message:
-        await callback.message.edit_text("⏳")
+        # The kind screen replaces this panel in place.
         await open_kind_screen(callback.message, session, aud, kind, page_number(callback.data))
-        try:
-            await callback.message.delete()
-        except Exception:
-            logger.debug("plans_kind_cb: ignored failure", exc_info=True)
 
 @router.callback_query(F.data.startswith("adm:plans:tog:"))
 @require_bot_owner_handler
@@ -853,8 +826,7 @@ async def plans_edit_save(
     await state.set_state(None)
     aud = data.get("_adm_plans_aud") or "users"
     kind = data.get("_adm_plans_kind") or "custom"
-    await _answer_plans_saved(message, session, feedback.SAVED_CHECK)
-    bubble = await message.answer("⏳")
+    bubble = await _prompt_panel(message, state)
     await open_kind_screen(bubble, session, aud, kind)
 
 @router.callback_query(F.data == "adm:plans:wholesale:add_tier")
@@ -941,8 +913,7 @@ async def wholesale_tier_pct_entered(
     tiers.sort(key=lambda t: t["min"])
     await set_setting(session, "wholesale_tiers", json.dumps(tiers, ensure_ascii=False))
     await state.set_state(None)
-    await _answer_plans_saved(message, session, "پله ذخیره شد ✅")
-    bubble = await message.answer("⏳")
+    bubble = await _prompt_panel(message, state)
     await send_users_wholesale(bubble, session)
 
 @router.callback_query(F.data.startswith("adm:plans:wholesale:del:"))
@@ -1004,8 +975,7 @@ async def trial_save_name(message: Message, state: FSMContext, session: AsyncSes
     trial.name = (message.text or "").strip()[:128]
     await _persist(session)
     await state.set_state(None)
-    await _answer_plans_saved(message, session, feedback.SAVED_CHECK)
-    bubble = await message.answer("⏳")
+    bubble = await _prompt_panel(message, state)
     await send_users_trial(bubble, session)
 
 @router.callback_query(F.data == "adm:plans:trial:days")
@@ -1052,8 +1022,7 @@ async def trial_save_days(message: Message, state: FSMContext, session: AsyncSes
     trial.duration_days = days
     await _persist(session)
     await state.set_state(None)
-    await _answer_plans_saved(message, session, feedback.SAVED_CHECK)
-    bubble = await message.answer("⏳")
+    bubble = await _prompt_panel(message, state)
     await send_users_trial(bubble, session)
 
 @router.callback_query(F.data == "adm:plans:trial:gb")
@@ -1100,8 +1069,7 @@ async def trial_save_gb(message: Message, state: FSMContext, session: AsyncSessi
     trial.data_limit_gb = None if gb <= 0 else gb
     await _persist(session)
     await state.set_state(None)
-    await _answer_plans_saved(message, session, feedback.SAVED_CHECK)
-    bubble = await message.answer("⏳")
+    bubble = await _prompt_panel(message, state)
     await send_users_trial(bubble, session)
 
 @router.callback_query(F.data == "adm:plans:trial:tpl")
@@ -2081,11 +2049,8 @@ async def resplan_edit_save(
     await sync_plan_billing_rate(session, plan)
     await _persist(session)
     await state.set_state(None)
-    await _answer_plans_saved(message, session, feedback.SAVED_CHECK)
-    bubble = await message.answer(
-        _resplan_detail_text(plan),
-        reply_markup=_resplan_detail_keyboard(plan),
-    )
+    bubble = await _prompt_panel(message, state)
+    await present_inline_only(bubble, text=_resplan_detail_text(plan), inline=_resplan_detail_keyboard(plan))
     _ = bubble
 
 

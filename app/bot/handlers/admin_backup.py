@@ -25,6 +25,7 @@ from app.bot.auth import require_bot_owner_handler
 from app.bot.nav_inline import admin_backup_hub_keyboard, with_inline_back
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
+from app.services.chat_records import keep_sent
 from app.services.redact import user_safe_error
 from app.services.backup import (
     create_backup,
@@ -39,13 +40,6 @@ from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading
 from app.services.users import get_all_settings
 
-
-async def _lasting_kb(session, db_user, classic):
-    from app.bot.nav_chrome import lasting_staff_reply
-    return await lasting_staff_reply(
-        session, db_user, classic=classic,
-        is_reseller_bot=False, reseller_owner_id=None,
-    )
 
 router = Router(name="admin_backup")
 
@@ -204,10 +198,11 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser, session: Asyn
     )
     if callback.message:
         try:
-            await callback.message.answer_document(
-                FSInputFile(path, filename=path.name),
-                caption=caption,
-            )
+            with keep_sent():  # a backup file must stay downloadable
+                await callback.message.answer_document(
+                    FSInputFile(path, filename=path.name),
+                    caption=caption,
+                )
         except Exception:
             await callback.message.answer(
                 caption + f"\n\nدانلود از وب‌پنل: تنظیمات ← بکاپ\nمسیر: <code>{path}</code>"
@@ -260,10 +255,11 @@ async def backup_download(callback: CallbackQuery, db_user: BotUser):
     await callback.answer("ارسال فایل…")
     if callback.message:
         try:
-            await callback.message.answer_document(
-                FSInputFile(path, filename=path.name),
-                caption=f"⬇️ {path.name}",
-            )
+            with keep_sent():  # a backup file must stay downloadable
+                await callback.message.answer_document(
+                    FSInputFile(path, filename=path.name),
+                    caption=f"⬇️ {path.name}",
+                )
         except Exception as e:
             await callback.message.answer(
                 f"❌ ارسال ممکن نشد (حجم زیاد؟):\n{user_safe_error(e)}"
@@ -337,7 +333,7 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
         if await try_legacy_cancel(message, state, session, db_user):
             return
         await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
+        await message.answer(feedback.CANCELLED)
         return
     if text != "RESTORE":
         await message.answer(
@@ -458,6 +454,6 @@ async def backup_upload_cancel(message: Message, session, db_user: BotUser, stat
         if await try_legacy_cancel(message, state, session, db_user):
             return
         await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
+        await message.answer(feedback.CANCELLED)
         return
     await message.answer("یک فایل ZIP بفرستید یا انصراف.")

@@ -17,12 +17,12 @@ from app.bot import keyboards as kb
 from app.bot.auth import (
     can_platform_pg_action,
     can_platform_pg_page,
-    filtered_pg_reply_keyboard,
 )
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
+from app.services.chat_records import keep_sent
 from app.services.formatting import format_message, service_card
 from app.services.pasarguard import (
     as_list,
@@ -633,7 +633,7 @@ async def pg_search_query(
         ):
             return
         await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED)
         return
     q = (message.text or "").strip()
     if not q:
@@ -704,13 +704,14 @@ async def pg_user_link(
         return
     await callback.answer()
     uname = user.get("username") if isinstance(user, dict) else ""
-    await callback.message.answer(
-        format_message(
-            "🔗 لینک اشتراک",
-            f"کاربر: <code>{html.escape(str(uname or uid))}</code>\n\n<code>{html.escape(url)}</code>",
-        ),
-        reply_markup=_user_actions_kb(uid),
-    )
+    with keep_sent():  # the link is copied from here later
+        await callback.message.answer(
+            format_message(
+                "🔗 لینک اشتراک",
+                f"کاربر: <code>{html.escape(str(uname or uid))}</code>\n\n<code>{html.escape(url)}</code>",
+            ),
+            reply_markup=_user_actions_kb(uid),
+        )
 
 @router.callback_query(F.data.startswith("adm:pg:reset:"))
 async def pg_reset(
@@ -1297,7 +1298,7 @@ async def pg_create_username(
         ):
             return
         await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED)
         return
     uname = (message.text or "").strip()
     if not _USERNAME_RE.fullmatch(uname):
@@ -1324,9 +1325,6 @@ async def pg_create_username(
         await state.clear()
         await message.answer(
             "اطلاعات ساخت ناقص است. دوباره از «ساخت کاربر» شروع کنید.",
-            reply_markup=await filtered_pg_reply_keyboard(
-                db_user, session=session, is_reseller_bot=is_reseller_bot
-            ),
         )
         return
     tid = data.get("pg_template_id")
@@ -1334,9 +1332,6 @@ async def pg_create_username(
         await state.clear()
         await message.answer(
             "تمپلیت انتخاب نشده. از منوی ساخت کاربر دوباره یک تمپلیت انتخاب کنید.",
-            reply_markup=await filtered_pg_reply_keyboard(
-                db_user, session=session, is_reseller_bot=is_reseller_bot
-            ),
         )
         return
     from app.services.bot_pg_catalog_authz import catalog_template_allowed
@@ -1345,9 +1340,6 @@ async def pg_create_username(
         await state.clear()
         await message.answer(
             feedback.ACTION_NOT_ALLOWED,
-            reply_markup=await filtered_pg_reply_keyboard(
-                db_user, session=session, is_reseller_bot=is_reseller_bot
-            ),
         )
         return
     try:
@@ -1392,9 +1384,6 @@ async def pg_create_username(
     else:
         await message.answer(
             "✅ کاربر ساخته شد.",
-            reply_markup=await filtered_pg_reply_keyboard(
-                db_user, session=session, is_reseller_bot=is_reseller_bot
-            ),
         )
 
 @router.message(PgUserStates.create_gb)
@@ -1432,7 +1421,7 @@ async def pg_create_gb(
         ):
             return
         await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED)
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:
@@ -1493,7 +1482,7 @@ async def pg_create_days(
         ):
             return
         await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED)
         return
     raw = (message.text or "").strip()
     try:
@@ -1509,13 +1498,13 @@ async def pg_create_days(
     gb = float(data.get("pg_create_gb") or 0)
     if not uname or not groups:
         await state.clear()
-        await message.answer("اطلاعات این مرحله کامل نیست. دوباره شروع کنید.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer("اطلاعات این مرحله کامل نیست. دوباره شروع کنید.")
         return
     from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
     if not catalog_groups_allowed(gate.staff, groups):
         await state.clear()
-        await message.answer(feedback.ACTION_NOT_ALLOWED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.ACTION_NOT_ALLOWED)
         return
     data_limit = int(gb * (1024**3)) if gb > 0 else 0
     expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
@@ -1580,7 +1569,7 @@ async def pg_create_days(
             pg=gate.pg_client,
         )
     else:
-        await message.answer("✅ کاربر ساخته شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer("✅ کاربر ساخته شد.")
 
 # ----- edit -----
 
@@ -1677,7 +1666,7 @@ async def pg_edit_name_save(
         ):
             return
         await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED)
         return
     uname = (message.text or "").strip()
     if not _USERNAME_RE.fullmatch(uname):
@@ -1780,7 +1769,7 @@ async def pg_edit_gb_save(
         ):
             return
         await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED)
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:
@@ -1898,7 +1887,7 @@ async def pg_edit_days_save(
         ):
             return
         await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED)
         return
     raw = (message.text or "").strip()
     try:
