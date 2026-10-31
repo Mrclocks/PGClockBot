@@ -39,6 +39,19 @@ async def reopen_admin_users(
     )
 
 
+async def reopen_admin_resellers(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    **_kw,
+) -> None:
+    from app.bot.nav_inline import present_nav_panel
+
+    await state.clear()
+    await present_nav_panel(message, text=feedback.CANCELLED, inline=None, state=state)
+
+
 async def reopen_admin_tickets(
     message: Message,
     session: AsyncSession,
@@ -409,6 +422,7 @@ def register_staff_cancel_codes() -> None:
 
     register_cancel_code("adm_pln", CancelEntry(reopen=reopen_admin_plans))
     register_cancel_code("adm_usr", CancelEntry(reopen=reopen_admin_users))
+    register_cancel_code("adm_res", CancelEntry(reopen=reopen_admin_resellers))
     register_cancel_code("adm_tkt", CancelEntry(reopen=reopen_admin_tickets))
     register_cancel_code("adm_home", CancelEntry(reopen=reopen_admin_home))
     register_cancel_code("adm_bc", CancelEntry(reopen=reopen_admin_broadcast))

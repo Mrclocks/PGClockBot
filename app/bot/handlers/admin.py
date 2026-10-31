@@ -49,7 +49,14 @@ from app.services.volume_allocation import set_shop_oversell
 from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
 from app.bot.handlers.payment_voids import void_button
-from app.bot.handlers.subscription_lookup import SEARCH_PROMPT, delete_typed_link, staff_lookup, staff_user_search
+from app.bot.handlers.subscription_lookup import (
+    RESELLER_SEARCH_PROMPT,
+    SEARCH_PROMPT,
+    delete_typed_link,
+    staff_lookup,
+    staff_reseller_search,
+    staff_user_search,
+)
 from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import finish_text_step, form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
@@ -467,6 +474,7 @@ class AdminStates(StatesGroup):
     make_reseller = State()
     ticket_reply = State()
     user_search = State()
+    reseller_search = State()
     user_wallet_credit = State()
     user_message = State()
     revoke_reseller_reason = State()
@@ -3880,6 +3888,61 @@ async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_
         )
         markup = with_inline_back(markup, ui, "nv:adm:resellers")
         await callback.message.edit_text(text, reply_markup=markup)
+
+@router.callback_query(F.data == "adm:resellers:search")
+@require_bot_owner_handler
+@require_platform_rep_mgmt
+async def adm_resellers_search_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
+        return
+    await callback.answer()
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt=RESELLER_SEARCH_PROMPT,
+        cancel_code="adm_res",
+        return_to="nv:adm:resellers",
+        fsm_state=AdminStates.reseller_search,
+        edit=True,
+    )
+
+
+@router.message(AdminStates.reseller_search)
+@require_bot_owner_handler
+@require_platform_rep_mgmt
+async def adm_resellers_search(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer(feedback.NOT_ADMIN)
+        return
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
+        await state.clear()
+        await message.answer(feedback.CANCELLED)
+        return
+    query = clean_handle(message.text)
+    if not query or len(query) > MAX_SEARCH_LENGTH:
+        await message.answer("نام، آیدی عددی یا یوزرنیم تلگرام نماینده را بفرستید؛ مثلاً <code>123456789</code> یا <code>@username</code>.")
+        return
+    reseller = await find_bot_user(session, query, scope=BotUser.role == Role.RESELLER.value)
+    await state.clear()
+    # The typed step replaced the submenu — restore it on a lasting message, as the users search does.
+    await message.answer("🔎 نتیجه جستجو", reply_markup=kb.admin_resellers_reply_keyboard())
+    if reseller is not None:
+        await _render_reseller_card(message, session, reseller)
+        return
+    # No exact id or @username: search names and usernames by part.
+    text, markup = await staff_reseller_search(session, query)
+    await message.answer(text, reply_markup=markup)
+
 
 RESELLER_SVCS_PAGE_SIZE = 10
 

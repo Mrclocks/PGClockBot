@@ -20,7 +20,7 @@ from app.bot import keyboards as kb
 from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import CancelEntry, ask_text, finish_text_step, register_cancel_code, try_legacy_cancel
 from app.config import get_settings
-from app.db.models import BotUser
+from app.db.models import BotUser, Role
 from app.services import bot_feedback_texts as feedback
 from app.services.formatting import format_bytes, format_expire_short, format_toman
 from app.services.reseller_access import load_reseller_actor
@@ -51,6 +51,17 @@ SEARCH_PROMPT = (
     "متن جستجو را بفرستید:"
 )
 USER_NOT_FOUND_TEXT = "مشتری‌ای با این نام، یوزرنیم یا آیدی پیدا نشد."
+RESELLER_NOT_FOUND_TEXT = "نماینده‌ای با این نام، یوزرنیم یا آیدی پیدا نشد."
+RESELLER_ASK = "adm:resellers:search"
+RESELLER_BACK = "nv:adm:resellers"
+RESELLER_SEARCH_PROMPT = (
+    "🔎 <b>جستجوی نماینده</b>\n"
+    "می‌توانید با این‌ها جستجو کنید:\n"
+    "• نام یا بخشی از نام\n"
+    "• یوزرنیم تلگرام، مثلاً <code>@username</code>\n"
+    "• آیدی عددی تلگرام، مثلاً <code>123456789</code>\n\n"
+    "متن جستجو را بفرستید:"
+)
 SHORT_QUERY_TEXT = "حداقل دو نویسه از نام یا یوزرنیم را بفرستید."
 MORE_RESULTS_NOTE = "\n<i>نتایج بیشتری هست؛ جستجو را دقیق‌تر کنید.</i>"
 STATUS_LABELS = {
@@ -139,21 +150,36 @@ def _user_label(user: BotUser) -> str:
     return " · ".join(part for part in (name, handle, str(user.telegram_id)) if part)[:64]
 
 
-async def staff_user_search(
-    session: AsyncSession, raw: str | None, *, shop_id: int | None
+async def _search_results(
+    session: AsyncSession, raw: str | None, *, scope, card: str, again: str, back: str, not_found: str
 ) -> tuple[str, InlineKeyboardMarkup]:
-    """Customers of the shop whose name, @username or id match; each result opens the existing card."""
-    scope = BotUser.reseller_id.is_(None) if shop_id is None else scoped_users_where(shop_id)
+    """Up to ten matches of ``raw`` in ``scope`` as buttons into ``card``, with search-again and back rows."""
     users, more = await search_bot_users(session, raw, scope=scope)
-    again, back = (PLATFORM_ASK, PLATFORM_BACK) if shop_id is None else (ASK_CALLBACK, SHOP_BACK)
-    card = "adm:users:view:{}" if shop_id is None else "res:user:{}"
     rows = [[InlineKeyboardButton(text=_user_label(user), callback_data=card.format(user.id))] for user in users]
     rows.append([InlineKeyboardButton(text="🔎 جستجوی دوباره", callback_data=again)])
     markup = with_inline_back(InlineKeyboardMarkup(inline_keyboard=rows), await get_all_settings(session), back)
     if users:
         return "🔎 <b>نتیجهٔ جستجو</b>" + (MORE_RESULTS_NOTE if more else ""), markup
     short = len(clean_handle(raw)) < MIN_QUERY_LENGTH and not clean_handle(raw).isdigit()
-    return (SHORT_QUERY_TEXT if short else USER_NOT_FOUND_TEXT), markup
+    return (SHORT_QUERY_TEXT if short else not_found), markup
+
+
+async def staff_user_search(
+    session: AsyncSession, raw: str | None, *, shop_id: int | None
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Customers of the shop whose name, @username or id match; each result opens the existing card."""
+    scope = BotUser.reseller_id.is_(None) if shop_id is None else scoped_users_where(shop_id)
+    again, back = (PLATFORM_ASK, PLATFORM_BACK) if shop_id is None else (ASK_CALLBACK, SHOP_BACK)
+    card = "adm:users:view:{}" if shop_id is None else "res:user:{}"
+    return await _search_results(session, raw, scope=scope, card=card, again=again, back=back, not_found=USER_NOT_FOUND_TEXT)
+
+
+async def staff_reseller_search(session: AsyncSession, raw: str | None) -> tuple[str, InlineKeyboardMarkup]:
+    """Resellers whose name, @username or id match, for the platform Owner; each opens the reseller card."""
+    return await _search_results(
+        session, raw, scope=BotUser.role == Role.RESELLER.value, card="adm:resellers:view:{}",
+        again=RESELLER_ASK, back=RESELLER_BACK, not_found=RESELLER_NOT_FOUND_TEXT,
+    )
 
 
 async def staff_search(

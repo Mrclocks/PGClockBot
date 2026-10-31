@@ -65,6 +65,7 @@ REPLY_ACTION_ADM_LOY_TIERS = _k.REPLY_ACTION_ADM_LOY_TIERS
 REPLY_ACTION_ADM_RES_ADD = _k.REPLY_ACTION_ADM_RES_ADD
 REPLY_ACTION_ADM_RES_APPS = _k.REPLY_ACTION_ADM_RES_APPS
 REPLY_ACTION_ADM_RES_LIST = _k.REPLY_ACTION_ADM_RES_LIST
+REPLY_ACTION_ADM_RES_SEARCH = _k.REPLY_ACTION_ADM_RES_SEARCH
 REPLY_ACTION_ADM_ST_PANEL = _k.REPLY_ACTION_ADM_ST_PANEL
 REPLY_ACTION_ADM_USERS_LIST = _k.REPLY_ACTION_ADM_USERS_LIST
 REPLY_ACTION_ADM_USERS_SEARCH = _k.REPLY_ACTION_ADM_USERS_SEARCH
@@ -336,6 +337,7 @@ def _admin_users_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]
 def _admin_resellers_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
         (REPLY_ACTION_ADM_RES_LIST, _t(ui, "btn_adm_res_list")),
+        (REPLY_ACTION_ADM_RES_SEARCH, _t(ui, "btn_adm_res_search")),
         (REPLY_ACTION_ADM_RES_APPS, _t(ui, "btn_adm_res_apps")),
         (REPLY_ACTION_ADM_RES_ADD, _t(ui, "btn_adm_res_add")),
     ]

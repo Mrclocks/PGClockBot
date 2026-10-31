@@ -201,6 +201,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_users_search", "label": "جستجوی کاربر", "group": "منوی ادمین", "default": ""},
     {"id": "adm_users_web", "label": "مدیریت کاربران در وب", "group": "منوی ادمین", "default": ""},
     {"id": "adm_res_list", "label": "لیست نمایندگان", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_res_search", "label": "جستجوی نماینده", "group": "منوی ادمین", "default": ""},
     {"id": "adm_res_apps", "label": "درخواست‌های نمایندگی", "group": "منوی ادمین", "default": ""},
     {"id": "adm_res_add", "label": "افزودن نماینده", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_plans_aud_users", "label": "پلن‌های کاربران", "group": "منوی ادمین", "default": "primary"},

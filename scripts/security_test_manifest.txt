@@ -308,3 +308,5 @@ tests/test_trial_claimed_notice.py
 tests/test_bot_chat_tidy.py
 # Ticket notices: closing one ticket removes only its notices, through that shop's bot.
 tests/test_ticket_notices.py
+# Owner reseller search: resellers only, owner and representative-management gate.
+tests/test_reseller_search.py
