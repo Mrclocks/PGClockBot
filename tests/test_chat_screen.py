@@ -1,0 +1,267 @@
+"""One keyboard, one screen: the rules every message the bot sends in a private chat follows.
+
+The flow tests drive the real bot through ``tests.chat_sim`` and check what the person sees.
+"""
+
+from __future__ import annotations
+
+import unittest
+from collections import OrderedDict
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from aiogram.methods import SendMessage
+from aiogram.types import ReplyKeyboardMarkup
+
+from app.bot import chat_cleanup, chat_screen
+from app.bot import keyboards as kb
+from app.bot.chat_cleanup import ThrowawayLog
+from app.db.models import BotUser, Plan
+from app.services.chat_records import keep_sent
+from app.services.users import clear_settings_cache
+from tests.chat_sim import ChatSim
+from tests.test_chat_cleanup import _Chat
+
+ADMIN_PANEL = "🛠 پنل ادمین"
+
+
+def _main_keyboard() -> ReplyKeyboardMarkup:
+    return kb.main_reply_keyboard("user", ui={})
+
+
+class _Rules(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        for name, value in (("_log", ThrowawayLog()), ("_homes", ThrowawayLog())):
+            patcher = patch.object(chat_cleanup, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = patch.object(chat_screen, "_shown_keyboard", OrderedDict())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        token = chat_cleanup._cleanup_on.set(True)
+        self.addCleanup(chat_cleanup._cleanup_on.reset, token)
+        self.chat = _Chat(chat_id=100)
+
+    async def send(self, text: str, markup=None, *, chat_id: int = 100):
+        sent = self.chat.message()
+        sent.chat = SimpleNamespace(id=chat_id, type="private")
+        make_request = AsyncMock(return_value=sent)
+        method = SendMessage(chat_id=chat_id, text=text, reply_markup=markup)
+        with patch.object(chat_screen, "Message", MagicMock):
+            await chat_screen.screen_requests(make_request, self.chat.bot, method)
+        return sent, make_request.await_args.args[1]
+
+
+class KeyboardRuleTests(_Rules):
+    async def test_a_submenu_keyboard_never_reaches_the_chat(self) -> None:
+        _, sent = await self.send("🔎 نتیجه جستجو", kb.admin_resellers_reply_keyboard())
+        self.assertIsNone(sent.reply_markup)
+
+    async def test_the_menu_keyboard_is_not_sent_again_while_it_is_shown(self) -> None:
+        _, first = await self.send("home", _main_keyboard())
+        _, again = await self.send("لغو شد.", _main_keyboard())
+        self.assertIsNotNone(first.reply_markup)
+        self.assertIsNone(again.reply_markup)
+
+    async def test_a_home_re_attaches_it_and_replaces_the_older_keyboard_message(self) -> None:
+        old, _ = await self.send("home", _main_keyboard())
+        with chat_screen.fresh_keyboard():
+            new, sent = await self.send("home", _main_keyboard())
+        self.assertIsNotNone(sent.reply_markup)
+        self.assertEqual(self.chat.deleted(), [old.message_id])
+        self.assertNotIn(new.message_id, self.chat.deleted())
+
+    async def test_a_changed_menu_keyboard_is_sent_and_becomes_the_only_one(self) -> None:
+        old, _ = await self.send("home", _main_keyboard())
+        preview = kb.main_reply_keyboard("user", ui={}, as_user=True, preview_exit_action=kb.REPLY_ACTION_ADMIN)
+        _, sent = await self.send("پیش‌نمایش", preview)
+        self.assertIsNotNone(sent.reply_markup)
+        self.assertEqual(self.chat.deleted(), [old.message_id])
+
+    async def test_the_phone_number_step_may_show_its_contact_button(self) -> None:
+        from aiogram.types import KeyboardButton
+
+        contact = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 ارسال شماره تماس", request_contact=True)]])
+        _, sent = await self.send("شماره را بفرستید", contact)
+        self.assertIs(sent.reply_markup, contact)
+        _, back = await self.send("✅ شماره تأیید شد", _main_keyboard())
+        self.assertIsNotNone(back.reply_markup)  # the menu returns after the step
+
+    async def test_the_keyboard_rule_holds_while_cleanup_is_off(self) -> None:
+        chat_cleanup._cleanup_on.set(False)
+        _, sent = await self.send("x", kb.admin_resellers_reply_keyboard())
+        self.assertIsNone(sent.reply_markup)
+
+
+class TemporaryByDefaultTests(_Rules):
+    async def test_the_next_update_that_shows_something_deletes_earlier_messages(self) -> None:
+        with chat_screen.turn((1, 100)):
+            notice, _ = await self.send("لغو شد.")
+        with chat_screen.turn((1, 100)) as active:
+            panel, _ = await self.send("panel")
+            await chat_screen.end_turn(self.chat.bot, active)
+        self.assertEqual(self.chat.deleted(), [notice.message_id])
+        self.assertNotIn(panel.message_id, self.chat.deleted())
+
+    async def test_records_and_messages_to_other_chats_stay(self) -> None:
+        with chat_screen.turn((1, 100)):
+            with keep_sent():
+                delivery, _ = await self.send("vless://…")
+            await self.send("سفارش جدید", chat_id=200)
+        with chat_screen.turn((1, 100)) as active:
+            await self.send("panel")
+            await chat_screen.end_turn(self.chat.bot, active)
+        self.assertEqual(self.chat.deleted(), [])
+        self.assertIsNotNone(delivery)
+
+    async def test_an_update_that_shows_nothing_leaves_the_screen_alone(self) -> None:
+        with chat_screen.turn((1, 100)):
+            await self.send("panel")
+        with chat_screen.turn((1, 100)) as active:
+            await chat_screen.end_turn(self.chat.bot, active)
+        self.chat.bot.delete_messages.assert_not_awaited()
+
+
+class PhoneStepCancelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancel_during_the_purchase_phone_step_brings_the_menu_back(self) -> None:
+        from app.bot.handlers import purchase_contact
+
+        message = MagicMock(text="❌ انصراف", answer=AsyncMock())
+        with patch.object(purchase_contact, "restore_main_reply", AsyncMock()) as restore:
+            await purchase_contact.purchase_contact_hint(message, MagicMock(), MagicMock(), AsyncMock())
+        restore.assert_awaited_once()
+        message.answer.assert_not_awaited()
+
+
+class _Flow(unittest.IsolatedAsyncioTestCase):
+    owner = True
+
+    async def asyncSetUp(self) -> None:
+        self.sim = ChatSim(5001 if self.owner else 6001)
+        await self.sim.start(owner=self.owner)
+        self.addAsyncCleanup(self.sim.stop)
+        for target, value in (
+            ("app.bot.middlewares._rate_limited", MagicMock(return_value=False)),
+            ("app.bot.auth.platform_can_manage_representatives", AsyncMock(return_value=True)),
+        ):
+            patcher = patch(target, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        async with self.sim.Session() as session:
+            session.add_all([
+                BotUser(id=50, telegram_id=6495996073, referral_code="u1", full_name="SID", username="sid_official"),
+                BotUser(id=51, telegram_id=7000000001, referral_code="r1", full_name="Sid Reseller",
+                        username="sid_res", role="reseller"),
+                Plan(id=1, name="بسته اقتصادی", price=100000, duration_days=30, data_limit_gb=10, is_active=True),
+            ])
+            await session.commit()
+        await self.sim.type("/start")
+        self.menu = self.sim.telegram.keyboard
+
+    def assert_one_screen(self) -> None:
+        """Exactly one keyboard message, the menu unchanged, and only what the last update showed."""
+        tel = self.sim.telegram
+        visible = tel.visible()
+        self.assertEqual(len(tel.keyboard_carriers()), 1, self.sim.screen())
+        self.assertEqual(tel.keyboard, self.menu, self.sim.screen())
+        others = [m for m in visible if m.keyboard is None]
+        self.assertTrue(all(m.from_bot for m in others), self.sim.screen())
+        self.assertLessEqual(len(others), 1, self.sim.screen())
+
+    def panel_text(self) -> str:
+        return [m for m in self.sim.telegram.visible() if m.keyboard is None][-1].text
+
+
+class OwnerSearchFlowTests(_Flow):
+    async def test_searching_a_customer_keeps_the_menu_and_one_result(self) -> None:
+        await self.sim.type(ADMIN_PANEL)
+        await self.sim.tap("افراد")
+        await self.sim.tap("کاربران")
+        await self.sim.tap("جستجو")
+        await self.sim.type("Sid")
+        self.assert_one_screen()
+        self.assertIn("نتیجهٔ جستجو", self.panel_text())
+        sent = [m.text for m in self.sim.telegram.visible()]
+        self.assertNotIn("منوی اصلی", sent)
+
+    async def test_searching_a_reseller_keeps_the_menu_and_one_result(self) -> None:
+        await self.sim.type(ADMIN_PANEL)
+        await self.sim.tap("افراد")
+        await self.sim.tap("نمایندگان")
+        await self.sim.tap("جستجوی نماینده")
+        await self.sim.type("Sid")
+        self.assert_one_screen()
+        self.assertIn("نتیجهٔ جستجو", self.panel_text())
+
+    async def test_opening_the_admin_panel_again_clears_the_old_screen(self) -> None:
+        await self.sim.type(ADMIN_PANEL)
+        await self.sim.tap("افراد")
+        await self.sim.tap("کاربران")
+        await self.sim.type(ADMIN_PANEL)
+        self.assert_one_screen()
+        self.assertIn("پنل ادمین", self.panel_text())
+
+    async def test_every_plan_kind_opens_a_screen(self) -> None:
+        for kind in ("تست", "دلخواه", "فروش عمده"):
+            await self.sim.type(ADMIN_PANEL)
+            await self.sim.tap("محصول")
+            await self.sim.tap("پلن‌ها")
+            await self.sim.tap("پلن‌های کاربران")
+            await self.sim.tap(kind)
+            self.assert_one_screen()
+
+
+class PlanEditFlowTests(_Flow):
+    async def test_saving_a_trial_field_redraws_the_trial_screen_in_place(self) -> None:
+        await self.sim.type(ADMIN_PANEL)
+        await self.sim.tap("محصول")
+        await self.sim.tap("پلن‌ها")
+        await self.sim.tap("پلن‌های کاربران")
+        await self.sim.tap("تست")
+        await self.sim.tap("نام")
+        await self.sim.type("تست سه روزه")
+        self.assert_one_screen()
+        self.assertIn("تست سه روزه", self.panel_text())
+
+
+class CustomerFlowTests(_Flow):
+    owner = False
+
+    async def test_typing_a_custom_top_up_shows_only_the_payment_methods(self) -> None:
+        await self.sim.type("🟡👛 کیف پول")
+        await self.sim.tap("شارژ کیف پول")
+        await self.sim.tap("مبلغ دیگر")
+        await self.sim.type("150000")
+        self.assert_one_screen()
+        self.assertIn("روش واریز", self.panel_text())
+
+    async def test_card_payment_details_and_the_receipt_stay_and_lose_stale_buttons(self) -> None:
+        from app.db.models import Setting
+
+        async with self.sim.Session() as session:
+            session.add_all([Setting(key="pay_card_enabled", value="1"),
+                             Setting(key="card_number", value="6037991122334455"), Setting(key="card_holder", value="Ali")])
+            await session.commit()
+        clear_settings_cache()
+        await self.sim.type("🟢🛒 خرید سرویس")
+        await self.sim.tap("ثابت")
+        await self.sim.tap("اقتصادی")
+        await self.sim.tap("کارت به کارت")
+        await self.sim.send_photo()
+        await self.sim.type("🟡👛 کیف پول")
+        texts = [m.text for m in self.sim.telegram.visible()]
+        details = next((m for m in self.sim.telegram.visible() if "کارت به کارت" in m.text), None)
+        self.assertIsNotNone(details, self.sim.screen())
+        self.assertEqual(details.inline, [])  # its «انصراف» no longer applies
+        self.assertTrue(any("رسید دریافت شد" in t for t in texts), texts)
+        self.assertTrue(any("کیف پول" in t for t in texts), texts)
+        self.assertEqual(len(self.sim.telegram.keyboard_carriers()), 1)
+
+    async def test_moving_between_menus_never_piles_up_messages(self) -> None:
+        for label in ("🟢🛒 خرید سرویس", "🟡👛 کیف پول", "🟣🎧 پشتیبانی", "⭐ باشگاه مشتریان"):
+            await self.sim.type(label)
+            self.assert_one_screen()
+
+
+if __name__ == "__main__":
+    unittest.main()
