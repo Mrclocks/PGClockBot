@@ -76,6 +76,15 @@ SHORT_NOTICES = frozenset(
         feedback.PICK_SECTION_BELOW,
         feedback.PICK_OPTION_BELOW,
         feedback.PICK_CATEGORY_BELOW,
+        feedback.NOT_ADMIN_REPLY,
+        feedback.NO_ACCESS_REPLY,
+        feedback.ACTION_NOT_ALLOWED_REPLY,
+        feedback.NO_SHOP_SETTINGS_ACCESS,
+        feedback.CATEGORY_NOT_FOUND,
+        feedback.CATEGORY_INVALID,
+        feedback.TICKET_ALREADY_CLOSED,
+        feedback.NO_PENDING_RECEIPT,
+        feedback.NO_PENDING_CANCELLATION,
     }
 )
 
