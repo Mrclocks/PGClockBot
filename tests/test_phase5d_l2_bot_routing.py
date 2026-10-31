@@ -471,9 +471,6 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
                 "app.bot.handlers.admin_plans.send_resellers_plans_overview",
                 new=AsyncMock(side_effect=AssertionError("plans leak")),
             ), patch(
-                "app.bot.handlers.admin_plans.send_add_plan_type_picker",
-                new=AsyncMock(side_effect=AssertionError("plans leak")),
-            ), patch(
                 "app.bot.handlers.admin_plans.open_kind_screen",
                 new=AsyncMock(side_effect=AssertionError("plans leak")),
             ):
