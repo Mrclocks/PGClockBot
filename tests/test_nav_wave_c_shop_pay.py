@@ -326,8 +326,8 @@ class ShowNavKeyboardCustomerLevelsTests(unittest.IsolatedAsyncioTestCase):
         )
 
 
-class PresentTopupMethodsHealTests(unittest.IsolatedAsyncioTestCase):
-    async def test_heal_main_sends_methods_then_main_kb(self):
+class PresentTopupMethodsOneMessageTests(unittest.IsolatedAsyncioTestCase):
+    async def test_amount_typed_shows_only_the_methods_panel(self):
         from app.bot.handlers.wallet import present_topup_methods
 
         message = AsyncMock()
@@ -364,15 +364,14 @@ class PresentTopupMethodsHealTests(unittest.IsolatedAsyncioTestCase):
             ),
         ):
             await present_topup_methods(
-                message, session, db_user, state, 50_000, heal_main=True,
+                message, session, db_user, state, 50_000,
                 is_reseller_bot=False,
                 reseller_owner_id=None,
             )
 
-        # methods bubble + heal main KB
-        self.assertGreaterEqual(message.answer.await_count, 2)
-        last = message.answer.await_args_list[-1]
-        self.assertIs(last.kwargs.get("reply_markup"), main_kb)
+        # One methods panel; the menu keyboard is never sent again.
+        self.assertEqual(message.answer.await_count, 1)
+        self.assertIsNot(message.answer.await_args.kwargs.get("reply_markup"), main_kb)
 
 
 if __name__ == "__main__":

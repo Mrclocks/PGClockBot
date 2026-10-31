@@ -35,6 +35,7 @@ from app.services.users import (
     reset_shop_reseller_id,
     set_shop_reseller_id,
 )
+from app.services.chat_records import keeps_sent
 
 log = logging.getLogger(__name__)
 TOPUP_CALLBACK = "nv:w:topup"
@@ -281,6 +282,7 @@ def actions_for_exhaustion(
     ]
 
 
+@keeps_sent
 async def notify_once(
     session: AsyncSession,
     row: ServiceAutomation,

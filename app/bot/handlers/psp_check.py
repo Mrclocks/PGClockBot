@@ -15,6 +15,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser
+from app.services.chat_records import keep_sent
 from app.services.payment_settlement import PspCheckOutcome, check_psp_payment, claim_psp_check_slot
 from app.services.psp_gateways import PspGateway
 from app.services.redact import user_safe_error
@@ -84,4 +85,5 @@ async def psp_check_cb(callback: CallbackQuery, session: AsyncSession, db_user: 
             await callback.message.edit_reply_markup(reply_markup=None)
         except TelegramBadRequest:
             logger.debug("psp check: checkout buttons already gone", exc_info=True)
-    await callback.message.answer(OUTCOME_TEXT[outcome])
+    with keep_sent():  # the payment outcome stays with the checkout it belongs to
+        await callback.message.answer(OUTCOME_TEXT[outcome])

@@ -540,18 +540,11 @@ async def _staff_loyalty_answer(
     content_inline: InlineKeyboardMarkup | None = None,
     content_caption: str | None = None,
     state: FSMContext | None = None,
-    heal_reply: bool = False,
 ) -> None:
-    """Staff loyalty leaf/hub — one inline panel (edit-in-place on callbacks).
-
-    Never sends the filler «از منوی پایین…» chrome message. Pass
-    ``heal_reply=True`` only after ``cancel_reply`` displaced the main KB.
-    """
+    """Staff loyalty leaf/hub — one inline panel (edit-in-place on callbacks)."""
     _ = content_caption
-    from app.bot.nav_chrome import heal_main_reply
     from app.bot.nav_inline import (
         admin_loyalty_manage_hub_keyboard,
-        is_bot_panel_message,
         present_inline_only,
         with_inline_back,
     )
@@ -565,17 +558,6 @@ async def _staff_loyalty_answer(
     else:
         inline = admin_loyalty_manage_hub_keyboard(
             ui, include_tiers=can_tiers, back_callback=hub_back
-        )
-    # After cancel_reply the main KB must be restored once (user message).
-    if heal_reply and not is_bot_panel_message(message):
-        await heal_main_reply(
-            message,
-            session,
-            db_user,
-            text=feedback.MAIN_KEYBOARD_RESTORED,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-            ui=ui,
         )
     await present_inline_only(message, text=text, inline=inline)
     _ = db_user
@@ -1717,7 +1699,6 @@ async def staff_save_wallet_rate(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
             content_inline=_staff_settings_markup(enabled=enabled),
-            heal_reply=True,
         )
         return
     raw = text.replace(",", "").replace("٬", "").strip()
@@ -1745,7 +1726,6 @@ async def staff_save_wallet_rate(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
         content_inline=_staff_settings_markup(enabled=enabled),
-        heal_reply=True,
     )
 
 @router.message(LoyaltyManageStates.edit_referral_text)
@@ -1812,7 +1792,6 @@ async def staff_save_referral_text(
             can_tiers=can_tiers,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
-            heal_reply=True,
         )
         return
     if not text:
@@ -1831,5 +1810,4 @@ async def staff_save_referral_text(
         can_tiers=can_tiers,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
-        heal_reply=True,
     )

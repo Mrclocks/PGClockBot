@@ -5,6 +5,7 @@ import logging
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware, Bot
+from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove, TelegramObject, Update
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -393,6 +394,9 @@ def _rate_limited(telegram_id: int) -> bool:
     return False
 
 
+RATE_LIMIT_TOAST = "لطفاً کمی صبر کنید"
+
+
 class RateLimitMiddleware(BaseMiddleware):
     """Soft flood protection for message/callback spam."""
 
@@ -404,18 +408,13 @@ class RateLimitMiddleware(BaseMiddleware):
     ) -> Any:
         tg_user = _extract_from_user(event)
         if tg_user and not is_replayed(event) and _rate_limited(int(tg_user.id)):
-            if isinstance(event, CallbackQuery):
+            # A tap gets a short toast; flooding text is dropped without adding a chat message.
+            callback = event.callback_query if isinstance(event, Update) else event
+            if isinstance(callback, CallbackQuery):
                 try:
-                    await event.answer("لطفاً کمی صبر کنید", show_alert=False)
-                except Exception:
-                    logger.debug("__call__: ignored failure", exc_info=True)
-            else:
-                msg = _reply_message(event)
-                if msg:
-                    try:
-                        await msg.answer("تعداد درخواست‌ها زیاد است — چند ثانیه صبر کنید.")
-                    except Exception:
-                        logger.debug("__call__: ignored failure", exc_info=True)
+                    await callback.answer(RATE_LIMIT_TOAST, show_alert=False)
+                except TelegramAPIError:
+                    logger.debug("rate limit toast failed", exc_info=True)
             return None
         return await handler(event, data)
 

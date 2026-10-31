@@ -84,36 +84,38 @@ class OwnerStepTests(ResellerSearchCase):
         message = AsyncMock()
         message.text = text
         state = AsyncMock()
-        with patch.object(admin, "_render_reseller_card", AsyncMock()) as card:
+        with patch.object(admin, "_reseller_card", AsyncMock(return_value=("card", None))) as card, \
+                patch.object(admin, "finish_text_step", AsyncMock()) as finish:
             await self.run_handler(admin.adm_resellers_search, message, state, self.session, SimpleNamespace(id=1, telegram_id=1, role="admin", is_blocked=False), **kw)
-        return message, state, card
+        return message, finish, card
 
     async def test_an_exact_handle_opens_the_card_and_a_part_lists_matches(self):
-        _, _, card = await self.search("@sarashop")
+        _, finish, card = await self.search("@sarashop")
         card.assert_awaited_once()
-        self.assertEqual(card.await_args.args[2].id, 3)
-        message, state, card = await self.search("ali")
+        self.assertEqual(card.await_args.args[1].id, 3)
+        self.assertEqual(finish.await_args.kwargs["text"], "card")
+        message, finish, card = await self.search("ali")
         card.assert_not_awaited()
-        state.clear.assert_awaited()
-        self.assertIn("adm:resellers:view:2", buttons(message.answer.await_args_list[-1].kwargs["reply_markup"]))
+        message.answer.assert_not_awaited()  # the prompt becomes the result; no extra message
+        self.assertIn("adm:resellers:view:2", buttons(finish.await_args.kwargs["inline"]))
 
     async def test_an_exact_customer_id_is_not_opened_as_a_reseller(self):
-        message, _, card = await self.search("alicust")
+        _, finish, card = await self.search("alicust")
         card.assert_not_awaited()
-        self.assertEqual(message.answer.await_args_list[-1].args[0], bot.RESELLER_NOT_FOUND_TEXT)
+        self.assertEqual(finish.await_args.kwargs["text"], bot.RESELLER_NOT_FOUND_TEXT)
 
     async def test_overlong_text_is_refused_and_a_name_with_spaces_works(self):
-        message, state, _ = await self.search("x " * 33)
+        message, finish, _ = await self.search("x " * 33)
         self.assertEqual(len(message.answer.await_args_list), 1)
-        state.clear.assert_not_awaited()
-        message, _, _ = await self.search("sara shop")
-        self.assertIn("adm:resellers:view:3", buttons(message.answer.await_args_list[-1].kwargs["reply_markup"]))
+        finish.assert_not_awaited()
+        _, finish, _ = await self.search("sara shop")
+        self.assertIn("adm:resellers:view:3", buttons(finish.await_args.kwargs["inline"]))
 
     async def test_a_non_owner_or_disabled_representative_management_searches_nothing(self):
         for kwargs in ({"owner": False}, {"manage": False}):
             message = AsyncMock()
             message.text = "ali"
-            with patch.object(admin, "_render_reseller_card", AsyncMock()) as card, \
+            with patch.object(admin, "_reseller_card", AsyncMock()) as card, \
                     patch.object(admin, "staff_reseller_search", AsyncMock()) as search:
                 await self.run_handler(admin.adm_resellers_search, message, AsyncMock(), self.session, SimpleNamespace(id=1, telegram_id=1, role="admin", is_blocked=False), **kwargs)
             card.assert_not_awaited()

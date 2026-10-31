@@ -60,14 +60,6 @@ logger = logging.getLogger(__name__)
 
 
 
-async def _lasting_kb(session, db_user, classic, *, is_reseller_bot=False, reseller_owner_id=None):
-    from app.bot.nav_chrome import lasting_staff_reply
-    return await lasting_staff_reply(
-        session, db_user, classic=classic,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-    )
-
 router = Router(name="reseller_settings")
 
 Field = tuple[str, str, str]
@@ -442,26 +434,11 @@ async def _render_hub(
     *,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
-    refresh_keyboard: bool = False,
 ):
-    """Hub tip under the message; lasting reply chrome healed on cancel/save."""
+    """The shop settings hub, edited in place."""
     text, markup = await _hub_panel(session, profile)
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=markup)
-        if refresh_keyboard and db_user is not None:
-            try:
-                await callback.message.answer(
-                    "کیبورد اصلی:",
-                    reply_markup=await _lasting_kb(
-                        session,
-                        db_user,
-                        kb.reseller_settings_reply_keyboard(),
-                        is_reseller_bot=is_reseller_bot,
-                        reseller_owner_id=reseller_owner_id,
-                    ),
-                )
-            except Exception:
-                logger.debug("_render_hub: ignored failure", exc_info=True)
 
 
 async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id: str, reseller_id: int):

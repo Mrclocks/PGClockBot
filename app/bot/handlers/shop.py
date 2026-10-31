@@ -1723,7 +1723,6 @@ async def apply_loyalty_discount_btn(
             summary=summary,
             is_reseller_bot=False,
             reseller_owner_id=None,
-            heal_main=True,
         )
 
 @router.message(ShopStates.discount)
@@ -1792,7 +1791,6 @@ async def apply_discount_msg(
             summary=summary,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
-            heal_main=True,
         )
         return
     summary = await checkout_summary(session, order, currency=get_settings().currency, notice=DISCOUNT_APPLIED)
@@ -1805,7 +1803,6 @@ async def apply_discount_msg(
         summary=summary,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
-        heal_main=True,
     )
 
 @router.callback_query(F.data.startswith("pay:wallet:"))

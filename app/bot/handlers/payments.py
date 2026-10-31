@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
+from app.services.chat_records import keep_sent
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
 from app.services.notifications import notify_stars_delivery_failed
@@ -175,13 +176,14 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
             logging.getLogger(__name__).exception(
                 "stars post-failure payment update failed id=%s", payment.id
             )
-        if refunded:
-            await message.answer("پرداخت استارز دریافت شد ولی تحویل ناموفق بود و استارز بازگردانده شد.")
-        else:
-            await message.answer(
-                "پرداخت استارز دریافت شد ولی تحویل ناموفق بود.\n"
-                "بازگشت خودکار ناموفق بود — با پشتیبانی تماس بگیرید؛ شناسه پرداخت ثبت شد."
-            )
+        with keep_sent():  # a payment outcome the buyer must be able to find again
+            if refunded:
+                await message.answer("پرداخت استارز دریافت شد ولی تحویل ناموفق بود و استارز بازگردانده شد.")
+            else:
+                await message.answer(
+                    "پرداخت استارز دریافت شد ولی تحویل ناموفق بود.\n"
+                    "بازگشت خودکار ناموفق بود — با پشتیبانی تماس بگیرید؛ شناسه پرداخت ثبت شد."
+                )
         try:
             await notify_stars_delivery_failed(
                 message.bot, session, payment, telegram_id=int(db_user.telegram_id),
@@ -202,10 +204,11 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
         is_reseller_bot=False,
         reseller_owner_id=None,
     )
-    await message.answer(
-        format_message("✅ پرداخت استارز", "پرداخت با موفقیت انجام شد."),
-        reply_markup=main_kb,
-    )
+    with keep_sent():
+        await message.answer(
+            format_message("✅ پرداخت استارز", "پرداخت با موفقیت انجام شد."),
+            reply_markup=main_kb,
+        )
     try:
         await send_delivery_to_user(message.bot, db_user.telegram_id, session, payment, order)
     except Exception as send_exc:
@@ -219,7 +222,8 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
             except Exception:
                 logger.debug("stars_successful_payment: ignored failure", exc_info=True)
         try:
-            await message.answer("پرداخت شد ولی ارسال جزئیات سرویس ناموفق بود — از «سرویس‌های من» بررسی کنید.")
+            with keep_sent():
+                await message.answer("پرداخت شد ولی ارسال جزئیات سرویس ناموفق بود — از «سرویس‌های من» بررسی کنید.")
         except Exception:
             logger.debug("stars_successful_payment: ignored failure", exc_info=True)
     try:

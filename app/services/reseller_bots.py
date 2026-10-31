@@ -59,12 +59,11 @@ class ResellerBotManager:
         async with self._lock:
             await self._stop_locked(reseller_profile_id)
             # app.bot imports this module; import here, like chat_menu below, to avoid a cycle.
-            from app.bot.chat_cleanup import install_notice_watch
-            from app.bot.menu_keyboard_reopen import install_menu_keyboard_watch
+            from app.bot.chat_screen import install_screen_rules
             from app.bot.screen_replay import install_replay_guard
 
             bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-            bot = install_notice_watch(install_menu_keyboard_watch(install_replay_guard(bot)))
+            bot = install_screen_rules(install_replay_guard(bot))
             registered = False
             try:
                 me = await asyncio.wait_for(bot.get_me(request_timeout=12), timeout=15)

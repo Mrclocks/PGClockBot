@@ -22,6 +22,7 @@ from app.services.wireguard_delivery import (
     WireGuardFile,
     fetch_wireguard,
 )
+from app.services.chat_records import keeps_sent
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ def wireguard_button_label(ui: dict[str, str] | None) -> str:
     return rich_plain_text((ui or {}).get(WIREGUARD_BUTTON_KEY)) or WIREGUARD_BUTTON_DEFAULT
 
 
+@keeps_sent
 async def send_wireguard_files(bot: Bot, chat_id: int, fetched: WireGuardFetch) -> int:
     """Send the files as one document or one album; returns how many reached the chat."""
     files = fetched.files
@@ -78,6 +80,7 @@ async def send_wireguard_files(bot: Bot, chat_id: int, fetched: WireGuardFetch) 
     return len(files)
 
 
+@keeps_sent
 async def deliver_wireguard(
     bot: Bot,
     chat_id: int,

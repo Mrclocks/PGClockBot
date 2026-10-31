@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import note_throwaway, replace_home
+from app.bot.chat_screen import fresh_keyboard
 from app.bot.nav_input import delete_user_message
-from app.bot.reply_keyboard_state import take_keyboard_folded
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
@@ -142,7 +142,9 @@ async def render_home(
             except Exception:
                 logger.debug("render_home: ignored failure", exc_info=True)
 
-    home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
+    # A home always re-attaches the menu: the person may have cleared the chat.
+    with fresh_keyboard():
+        home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
     await replace_home(home, sweep=True)
     _ = seed_reply_kb
 
@@ -654,18 +656,14 @@ async def cb_home(
     reseller_owner_id: int | None = None,
 ):
     await callback.answer()
-    # Editing cannot unfold a folded reply keyboard; a new menu message does.
-    keyboard_folded = await take_keyboard_folded(state)
     await state.clear()
     if callback.message:
-        if keyboard_folded:
-            # The old panel goes, so the new menu message is the only one.
-            await delete_user_message(callback.message)
+        # The menu keyboard stays shown (it is persistent), so the panel just becomes home.
         await render_home(
             callback.message,
             session,
             db_user,
-            edit=not keyboard_folded,
+            edit=True,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )

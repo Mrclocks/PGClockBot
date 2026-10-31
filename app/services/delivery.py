@@ -20,6 +20,7 @@ from app.services.message_variables import DOMAIN_ORDER, DOMAIN_WALLET, render_m
 from app.services.users import get_all_settings, on
 from app.services.wireguard_delivery import has_wireguard
 from app.services.wireguard_send import deliver_wireguard
+from app.services.chat_records import keeps_sent
 
 logger = logging.getLogger(__name__)
 
@@ -696,6 +697,7 @@ async def _deliver_subscription_order(
     return text
 
 
+@keeps_sent
 async def send_delivery_to_user(
     bot: Bot,
     chat_id: int,
@@ -734,6 +736,7 @@ async def send_delivery_to_user(
     )
 
 
+@keeps_sent
 async def send_subscription_qr_photo(
     bot: Bot,
     chat_id: int,

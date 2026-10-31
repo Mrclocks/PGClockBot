@@ -406,11 +406,9 @@ async def open_services_list(
     push: bool = True,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
-    heal_reply: bool = False,
 ) -> None:
     from app.bot.handlers.services import _reseller_capacity_list_label
     from app.bot.menu_nav import build_main_reply_keyboard
-    from app.bot.nav_chrome import heal_main_reply
     from app.bot.nav_inline import present_inline_only
     ui = await get_all_settings(session)
     services = await list_customer_services(session, db_user.id, current_shop_reseller_id())
@@ -456,16 +454,6 @@ async def open_services_list(
             await svc_view(cb, session, db_user, state)
         except TypeError:
             await svc_view(cb, session, db_user)
-        if heal_reply:
-            await heal_main_reply(
-                message,
-                session,
-                db_user,
-                text="سرویس شما — از دکمه‌های پیام بالا ادامه دهید.",
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-                ui=ui,
-            )
         return
     # Only reseller capacity → open that card directly.
     if not services and reseller_label:
@@ -480,16 +468,6 @@ async def open_services_list(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
-        if heal_reply:
-            await heal_main_reply(
-                message,
-                session,
-                db_user,
-                text="سرویس نمایندگی — از دکمه‌های پیام بالا ادامه دهید.",
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-                ui=ui,
-            )
         return
     from app.bot.list_pages import page_line
     from app.bot.nav_inline import services_list_keyboard, services_page
@@ -505,16 +483,6 @@ async def open_services_list(
             services, ui, reseller_capacity_label=reseller_label, allow_import=allow_import
         ),
     )
-    if heal_reply:
-        await heal_main_reply(
-            message,
-            session,
-            db_user,
-            text="از لیست بالا یک سرویس را انتخاب کنید.",
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-            ui=ui,
-        )
     return
 
 async def open_wallet_home(
@@ -3414,7 +3382,6 @@ async def reply_main_nav(
                 push=False,
                 is_reseller_bot=is_reseller_bot,
                 reseller_owner_id=reseller_owner_id,
-                heal_reply=True,
             )
             return
         from app.bot.handlers import services as svc_h

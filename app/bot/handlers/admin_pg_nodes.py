@@ -10,6 +10,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.nav_input import finish_text_step
 from app.bot import keyboards as kb
 from app.bot.auth import can_platform_pg_action, can_platform_pg_page
 from app.bot.auth import is_platform_admin as _is_admin
@@ -24,13 +25,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
-async def _lasting_kb(session, db_user, classic):
-    from app.bot.nav_chrome import lasting_staff_reply
-    return await lasting_staff_reply(
-        session, db_user, classic=classic,
-        is_reseller_bot=False, reseller_owner_id=None,
-    )
 
 router = Router(name="admin_pg_nodes")
 
@@ -118,6 +112,10 @@ class PgNodeStates(StatesGroup):
 def _err_msg(exc: Exception) -> str:
     return user_safe_error(exc, fallback="خطا در ارتباط با پاسارگارد")
 
+
+
+def _nodes_back_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "adm:pg:nodes")]])
 
 
 def _nodes_list_kb(items: list) -> InlineKeyboardMarkup:
@@ -637,7 +635,7 @@ async def pg_node_create_name(
 
         if await try_legacy_cancel(message, state, session, db_user):
             return
-        await message.answer("انصراف.", reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()))
+        await message.answer(feedback.CANCELLED)
         await state.clear()
         return
     gate = await _pg_object_gate(
@@ -688,7 +686,7 @@ async def pg_node_create_address(
 
         if await try_legacy_cancel(message, state, session, db_user):
             return
-        await message.answer("انصراف.", reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()))
+        await message.answer(feedback.CANCELLED)
         await state.clear()
         return
     gate = await _pg_object_gate(
@@ -739,7 +737,7 @@ async def pg_node_create_port(
 
         if await try_legacy_cancel(message, state, session, db_user):
             return
-        await message.answer("انصراف.", reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()))
+        await message.answer(feedback.CANCELLED)
         await state.clear()
         return
     gate = await _pg_object_gate(
@@ -848,7 +846,7 @@ async def pg_node_create_core(
 
         if await try_legacy_cancel(message, state, session, db_user):
             return
-        await message.answer("انصراف.", reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()))
+        await message.answer(feedback.CANCELLED)
         await state.clear()
         return
     gate = await _pg_object_gate(
@@ -901,7 +899,7 @@ async def pg_node_create_api_key(
 
         if await try_legacy_cancel(message, state, session, db_user):
             return
-        await message.answer("انصراف.", reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()))
+        await message.answer(feedback.CANCELLED)
         await state.clear()
         return
     gate = await _pg_object_gate(
@@ -955,7 +953,7 @@ async def pg_node_create_server_ca(
 
         if await try_legacy_cancel(message, state, session, db_user):
             return
-        await message.answer("انصراف.", reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()))
+        await message.answer(feedback.CANCELLED)
         await state.clear()
         return
     gate = await _pg_object_gate(
@@ -978,7 +976,7 @@ async def pg_node_create_server_ca(
     address = str(data.get("address") or "").strip()
     if not name or not address:
         await state.set_state(None)
-        await message.answer("اطلاعات این مرحله کامل نیست. از ابتدا شروع کنید.", reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()))
+        await finish_text_step(message, state, text="اطلاعات این مرحله کامل نیست. از ابتدا شروع کنید.", inline=_nodes_back_kb())
         return
     payload: dict = {
         "name": name,
@@ -998,18 +996,21 @@ async def pg_node_create_server_ca(
     try:
         await gate.pg_client.create_node(payload)
     except Exception as e:
-        await message.answer(
-            f"ساخت نود ناموفق: {_err_msg(e)}\n"
-            "علت محتمل: فیلدهای الزامی ناقص (api_key/گواهی).",
-            reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()),
+        logger.warning("pg node create failed", exc_info=True)
+        await finish_text_step(
+            message,
+            state,
+            text=f"ساخت نود ناموفق: {_err_msg(e)}\nعلت محتمل: فیلدهای الزامی ناقص (api_key/گواهی).",
+            inline=_nodes_back_kb(),
         )
         return
-    await message.answer("نود ساخته شد ✅", reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()))
     try:
         items = await list_scoped_pg_objects(gate, kind="nodes")
-        await message.answer(
-            "🕸 <b>نودهای پاسارگارد</b>\n\nلیست به‌روز شد.",
-            reply_markup=_nodes_list_kb(items),
-        )
     except Exception as e:
-        await message.answer(f"نود ساخته شد — لیست: {_err_msg(e)}")
+        logger.warning("pg node list after create failed", exc_info=True)
+        await finish_text_step(message, state, text=f"✅ نود ساخته شد — لیست: {_err_msg(e)}", inline=_nodes_back_kb())
+        return
+    # The node list, with the outcome on top, replaces the last prompt.
+    await finish_text_step(
+        message, state, text="✅ نود ساخته شد.\n\n🕸 <b>نودهای پاسارگارد</b>", inline=_nodes_list_kb(items)
+    )
