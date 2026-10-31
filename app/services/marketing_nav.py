@@ -24,6 +24,7 @@ DISCOUNTS = "discounts"
 GIFT_CODES = "gift_codes"
 FUNNEL = "funnel"
 CAMPAIGNS = "campaigns"
+TRIAL_USERS = "trial_users"
 BROADCAST = "broadcast"
 
 
@@ -42,6 +43,7 @@ _DISCOUNT_SECTION = MarketingSection(DISCOUNTS, "تخفیف‌ها", "/catalog-d
 _GIFT_CODE_SECTION = MarketingSection(GIFT_CODES, "کد هدیه", "/gift-codes")
 _FUNNEL_SECTION = MarketingSection(FUNNEL, "رفتار کاربر", "/funnel")
 _CAMPAIGN_SECTION = MarketingSection(CAMPAIGNS, "کمپین هدفمند", "/campaigns")
+_TRIAL_USERS_SECTION = MarketingSection(TRIAL_USERS, "کاربران تست", "/trial-users")
 _BROADCAST_SECTION = MarketingSection(BROADCAST, "پیام گروهی", "/broadcast")
 
 
@@ -95,6 +97,8 @@ def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSectio
         sections.append(_GIFT_CODE_SECTION)
     if _can_open_feature(staff, "campaigns"):
         sections.append(_CAMPAIGN_SECTION)
+    if _can_open_feature(staff, "trial_users"):
+        sections.append(_TRIAL_USERS_SECTION)
     if _can_open_funnel(staff):
         sections.append(_FUNNEL_SECTION)
     if _can_open_broadcast(staff):
