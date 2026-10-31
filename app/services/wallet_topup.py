@@ -49,6 +49,7 @@ from app.services.psp_gateways import enabled_psp_gateways
 from app.services.receipts import submit_receipt
 from app.services.rich_text import visible_text
 from app.services.users import on
+from app.services.chat_records import keeps_sent
 
 logger = logging.getLogger(__name__)
 
@@ -376,6 +377,7 @@ class ReceiptResult:
     message: str
 
 
+@keeps_sent
 async def submit_topup_receipt(
     session: AsyncSession,
     *,

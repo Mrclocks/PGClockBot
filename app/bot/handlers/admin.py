@@ -830,11 +830,12 @@ async def order_reject_cb(callback: CallbackQuery, session: AsyncSession, db_use
             try:
                 from app.services.formatting import format_message
 
-                await callback.bot.send_message(
-                    user.telegram_id,
-                    format_message("❌ سفارش رد شد", f"سفارش #{order_id} رد شد."),
-                    parse_mode="HTML",
-                )
+                with keep_sent():  # a notice or review item, never a temporary panel
+                    await callback.bot.send_message(
+                        user.telegram_id,
+                        format_message("❌ سفارش رد شد", f"سفارش #{order_id} رد شد."),
+                        parse_mode="HTML",
+                    )
             except Exception:
                 logger.debug("order_reject_cb: ignored failure", exc_info=True)
     else:
@@ -942,16 +943,18 @@ async def adm_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
     for p in payments:
         caption = f"پرداخت #{p.id} — {format_toman(p.amount, get_settings().currency)}"
         try:
-            await callback.bot.send_photo(
-                db_user.telegram_id,
-                photo=p.receipt_file_id,
-                caption=caption,
-                reply_markup=kb.payment_review(p.id),
-            )
+            with keep_sent():  # a notice or review item, never a temporary panel
+                await callback.bot.send_photo(
+                    db_user.telegram_id,
+                    photo=p.receipt_file_id,
+                    caption=caption,
+                    reply_markup=kb.payment_review(p.id),
+                )
         except Exception:
-            await callback.bot.send_message(
-                db_user.telegram_id, caption, reply_markup=kb.payment_review(p.id)
-            )
+            with keep_sent():  # a notice or review item, never a temporary panel
+                await callback.bot.send_message(
+                    db_user.telegram_id, caption, reply_markup=kb.payment_review(p.id)
+                )
     if callback.message:
         await callback.message.edit_text("رسیدها ارسال شد.", reply_markup=back)
 
@@ -4612,11 +4615,12 @@ async def adm_resapp_ok(callback: CallbackQuery, session: AsyncSession, db_user:
     user = await session.get(BotUser, app.user_id)
     if user:
         try:
-            await callback.bot.send_message(
-                user.telegram_id,
-                format_credentials_message(creds),
-                parse_mode="HTML",
-            )
+            with keep_sent():  # a notice or review item, never a temporary panel
+                await callback.bot.send_message(
+                    user.telegram_id,
+                    format_credentials_message(creds),
+                    parse_mode="HTML",
+                )
         except Exception:
             logger.debug("adm_resapp_ok: ignored failure", exc_info=True)
     await callback.answer("تأیید شد ✅", show_alert=True)
@@ -4647,10 +4651,11 @@ async def adm_resapp_no(callback: CallbackQuery, session: AsyncSession, db_user:
     user = await session.get(BotUser, app.user_id)
     if user:
         try:
-            await callback.bot.send_message(
-                user.telegram_id,
-                "❌ درخواست نمایندگی شما رد شد.\nدر صورت نیاز با پشتیبانی در ارتباط باشید.",
-            )
+            with keep_sent():  # a notice or review item, never a temporary panel
+                await callback.bot.send_message(
+                    user.telegram_id,
+                    "❌ درخواست نمایندگی شما رد شد.\nدر صورت نیاز با پشتیبانی در ارتباط باشید.",
+                )
         except Exception:
             logger.debug("adm_resapp_no: ignored failure", exc_info=True)
     await callback.answer(feedback.REJECTED, show_alert=True)
@@ -4729,11 +4734,12 @@ async def make_res(
         return
     await state.clear()
     try:
-        await message.bot.send_message(
-            user.telegram_id,
-            format_credentials_message(creds),
-            parse_mode="HTML",
-        )
+        with keep_sent():  # a notice or review item, never a temporary panel
+            await message.bot.send_message(
+                user.telegram_id,
+                format_credentials_message(creds),
+                parse_mode="HTML",
+            )
     except Exception:
         logger.debug("make_res: ignored failure", exc_info=True)
     await message.answer(f"کاربر {tg_id} نماینده شد ✅ — اطلاعات ورود ارسال شد")

@@ -20,6 +20,7 @@ from app.db.models import (
     Ticket,
     TicketStatus,
 )
+from app.services.chat_records import keep_sent
 from app.services.automation_review import count_review_queue
 from app.services.color_tags import risk_mark
 from app.services.home_overview import reseller_shop_summary
@@ -1061,18 +1062,20 @@ async def res_payments(
         )
         try:
             if payment.receipt_file_id:
-                await callback.bot.send_photo(
-                    db_user.telegram_id,
-                    photo=payment.receipt_file_id,
-                    caption=caption,
-                    reply_markup=kb.payment_review(payment.id),
-                )
+                with keep_sent():  # a notice or review item, never a temporary panel
+                    await callback.bot.send_photo(
+                        db_user.telegram_id,
+                        photo=payment.receipt_file_id,
+                        caption=caption,
+                        reply_markup=kb.payment_review(payment.id),
+                    )
             else:
-                await callback.bot.send_message(
-                    db_user.telegram_id,
-                    caption,
-                    reply_markup=kb.payment_review(payment.id),
-                )
+                with keep_sent():  # a notice or review item, never a temporary panel
+                    await callback.bot.send_message(
+                        db_user.telegram_id,
+                        caption,
+                        reply_markup=kb.payment_review(payment.id),
+                    )
         except Exception:
             logger.debug("res_payments: ignored failure", exc_info=True)
     if callback.message:
@@ -1387,11 +1390,12 @@ async def resapply_buy(
         )
         for aid in get_settings().admin_ids:
             try:
-                await callback.bot.send_message(
-                    aid,
-                    notify,
-                    reply_markup=kb.reseller_app_review(app.id),
-                )
+                with keep_sent():  # a notice or review item, never a temporary panel
+                    await callback.bot.send_message(
+                        aid,
+                        notify,
+                        reply_markup=kb.reseller_app_review(app.id),
+                    )
             except Exception:
                 logger.debug("resapply_buy: ignored failure", exc_info=True)
         return

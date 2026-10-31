@@ -376,11 +376,12 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
                 is_reseller_bot=False,
                 reseller_owner_id=None,
             )
-            await callback.bot.send_message(
-                user.telegram_id,
-                text,
-                reply_markup=main_kb,
-                **{"parse_mode": "HTML", **send_kw},
-            )
+            with keep_sent():  # a notice or review item, never a temporary panel
+                await callback.bot.send_message(
+                    user.telegram_id,
+                    text,
+                    reply_markup=main_kb,
+                    **{"parse_mode": "HTML", **send_kw},
+                )
         except Exception:
             logger.debug("pay_reject: ignored failure", exc_info=True)

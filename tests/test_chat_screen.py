@@ -264,6 +264,68 @@ class CustomerFlowTests(_Flow):
             self.assert_one_screen()
 
 
+class OwnerOwnPurchaseTests(_Flow):
+    """The Owner buying for themself gets the payment review in their own chat; it must stay."""
+
+    async def _buy_with_card(self) -> None:
+        from app.db.models import Setting
+
+        async with self.sim.Session() as session:
+            session.add_all([Setting(key="pay_card_enabled", value="1"),
+                             Setting(key="card_number", value="6037991122334455"), Setting(key="card_holder", value="Ali")])
+            await session.commit()
+        clear_settings_cache()
+        await self.sim.type("🟢🛒 خرید سرویس")
+        await self.sim.tap("ثابت")
+        await self.sim.tap("اقتصادی")
+        await self.sim.tap("کارت به کارت")
+        await self.sim.send_photo()
+
+    def _review(self):
+        return next((m for m in self.sim.telegram.visible() if "تأیید" in " ".join(m.buttons())), None)
+
+    async def test_the_review_with_approve_and_reject_stays_after_the_receipt(self) -> None:
+        await self._buy_with_card()
+        review = self._review()
+        self.assertIsNotNone(review, self.sim.screen())
+        self.assertTrue(any("رد" in b for b in review.buttons()), review.buttons())
+
+    async def test_the_review_survives_moving_to_another_menu(self) -> None:
+        await self._buy_with_card()
+        await self.sim.type("🟡👛 کیف پول")
+        await self.sim.type("🟣🎧 پشتیبانی")
+        self.assertIsNotNone(self._review(), self.sim.screen())
+
+    async def test_approving_from_the_kept_review_settles_the_payment(self) -> None:
+        from sqlalchemy import select
+
+        from app.db.models import Payment
+
+        await self._buy_with_card()
+        await self.sim.type("🟡👛 کیف پول")
+        await self.sim.tap("تأیید")
+        async with self.sim.Session() as session:
+            statuses = list(await session.scalars(select(Payment.status)))
+        self.assertTrue(statuses, "no payment recorded")
+        self.assertTrue(all(status != "pending" for status in statuses), statuses)
+
+    async def test_approving_one_listed_receipt_keeps_the_others(self) -> None:
+        from app.db.models import Payment
+
+        async with self.sim.Session() as session:
+            session.add_all([Payment(id=71, user_id=50, amount=100000, receipt_file_id="r71"),
+                             Payment(id=72, user_id=50, amount=200000, receipt_file_id="r72", is_wallet_topup=True)])
+            await session.commit()
+        await self.sim.type(ADMIN_PANEL)
+        panel = self.sim.telegram.visible()[-1]
+        await self.sim._tap(panel, "adm:payments")
+        listed = [m for m in self.sim.telegram.visible() if m.text.startswith("پرداخت #")]
+        self.assertEqual(len(listed), 2, self.sim.screen())
+        approve = next(data for text, data in listed[0].inline[0] if "تأیید" in text)
+        await self.sim._tap(listed[0], approve)
+        self.assertFalse(listed[1].deleted, self.sim.screen())
+
+
 if __name__ == "__main__":
     unittest.main()
 
