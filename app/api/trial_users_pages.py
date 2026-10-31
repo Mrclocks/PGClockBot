@@ -24,6 +24,9 @@ from app.services.trial_users import (
 TRIAL_USERS_PATH = "/trial-users"
 VIEW_PERMISSION = "trial_users"
 MANAGE_PERMISSION = "trial_users_manage"
+SETTINGS_PERMISSION = "shop_settings"
+OWNER_SETTINGS_HREF = "/settings?tab=limits"
+SHOP_SETTINGS_HREF = "/shop-settings?tab=limits"
 
 
 def trial_users_scope(staff: dict, permission: str = VIEW_PERMISSION) -> int | None:
@@ -38,6 +41,13 @@ def trial_users_scope(staff: dict, permission: str = VIEW_PERMISSION) -> int | N
 
 BULK_ACTIONS = frozenset({"block", "unblock", "message"})
 NO_SELECTION = "هیچ کاربری انتخاب نشده"
+
+
+def trial_settings_href(staff: dict) -> str | None:
+    """Where the trial settings (the «اکانت تست» group of «محدودیت») live for this staff member."""
+    if staff.get("role") == "admin":
+        return OWNER_SETTINGS_HREF
+    return SHOP_SETTINGS_HREF if can_shop(authz_from_staff(staff), SETTINGS_PERMISSION) else None
 
 
 def _parse_cursor(raw: str | None) -> int | None:
@@ -82,6 +92,7 @@ def register_trial_users_pages(
                 "can_message": can_shop(authz_from_staff(staff), MANAGE_PERMISSION),
                 "can_block": can_shop(authz_from_staff(staff), MANAGE_PERMISSION) and is_explicit_owner_staff(staff),
                 "return_to": request.url.path + (f"?{request.url.query}" if request.url.query else ""),
+                "settings_href": trial_settings_href(staff),
                 "flash_ok": params.get("ok"),
                 "flash_err": params.get("err"),
             },
