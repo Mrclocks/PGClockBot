@@ -306,3 +306,5 @@ tests/test_trial_claim_unknown_delivery.py
 tests/test_trial_claimed_notice.py
 # Chat tidy: only tapped panels are swept, records stay; a shop bot's report never replaces another bot's.
 tests/test_bot_chat_tidy.py
+# Ticket notices: closing one ticket removes only its notices, through that shop's bot.
+tests/test_ticket_notices.py
