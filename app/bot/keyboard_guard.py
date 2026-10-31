@@ -20,9 +20,9 @@ _main: OrderedDict[str, None] = OrderedDict()
 
 
 def keyboard_fingerprint(markup: ReplyKeyboardMarkup) -> str:
-    """The buttons as the person sees them; the input placeholder does not matter."""
+    """The buttons as the person sees them, and whether the menu stays open; not the placeholder."""
     rows = [[button.text for button in row] for row in markup.keyboard]
-    return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
+    return json.dumps([rows, bool(markup.is_persistent)], ensure_ascii=False, separators=(",", ":"))
 
 
 def register_main_keyboard(markup: ReplyKeyboardMarkup) -> ReplyKeyboardMarkup:

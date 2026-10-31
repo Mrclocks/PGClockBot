@@ -10,6 +10,7 @@ from __future__ import annotations
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 from app.db.models import Role
+from app.services.chat_cleanup_config import is_menu_keyboard_persistent
 from app.services.users import on
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 
@@ -129,13 +130,14 @@ def _reply_markup(
     rows: list[list[KeyboardButton]],
     *,
     placeholder: str = "از منوی پایین انتخاب کنید…",
+    persistent: bool = False,
 ) -> ReplyKeyboardMarkup:
     """Standard reply keyboard for bot menus.
 
-    ``is_persistent=False`` (Telegram default): on Android the system back key can hide the
-    custom keyboard first, then leave the chat; a persistent keyboard keeps back from ever
-    reaching the dialog list. After typing, the person reopens the menu with the four-square
-    icon; the bot never sends a message just to unfold it.
+    ``persistent`` (the bot's «کیبورد همیشه باز» setting, off by default): Telegram shows the
+    menu again as soon as the person closes the phone keyboard after typing. Off, they reopen it
+    with the four-square icon; it was off because on some Android versions the back key then
+    never leaves the chat. The bot never sends a message just to unfold the menu.
 
     The message carrying the keyboard is never deleted while it is the newest one; deleting it
     drops the menu on iOS (see ``app.bot.chat_screen``).
@@ -144,7 +146,7 @@ def _reply_markup(
         keyboard=rows or [[_kb(_home_label(), action=REPLY_ACTION_HOME)]],
         resize_keyboard=True,
         one_time_keyboard=False,
-        is_persistent=False,
+        is_persistent=persistent,
         input_field_placeholder=placeholder,
     )
 
@@ -625,6 +627,7 @@ def reseller_hub_main_keyboard(
         _reply_markup(
             rows or [[_kb(_home_label(ui), action=REPLY_ACTION_HOME, ui=ui)]],
             placeholder="از منوی پایین انتخاب کنید…",
+            persistent=is_menu_keyboard_persistent(ui),
         )
     )
 
@@ -779,7 +782,9 @@ def main_reply_keyboard(
     rows = _pack_reply_rows(
         entries, ui, footer=[] if preview_exit_action else _restart_footer(ui)
     )
-    return register_main_keyboard(_reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…"))
+    return register_main_keyboard(
+        _reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…", persistent=is_menu_keyboard_persistent(ui))
+    )
 
 
 def admin_reply_keyboard(
@@ -1337,4 +1342,6 @@ def cancel_reply(ui: dict | None = None) -> ReplyKeyboardMarkup:
 def persistent_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
     """Fallback reply keyboard (home only) when role context is unavailable."""
     home = _home_label(ui)
-    return register_main_keyboard(_reply_markup([[_kb(home, action=REPLY_ACTION_HOME, ui=ui)]]))
+    return register_main_keyboard(
+        _reply_markup([[_kb(home, action=REPLY_ACTION_HOME, ui=ui)]], persistent=is_menu_keyboard_persistent(ui))
+    )
