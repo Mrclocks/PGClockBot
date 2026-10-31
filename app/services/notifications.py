@@ -1146,20 +1146,70 @@ async def notify_ticket_message(
     )
 
 
+def _receipt_photo(payment: Payment) -> str | None:
+    """The receipt as a Telegram file id; internal markers («stars:…», «card_auto:…») are not photos."""
+    file_id = (payment.receipt_file_id or "").strip()
+    return file_id if file_id and ":" not in file_id else None
+
+
+def _customer_markup(
+    *, user_id: int | None, service_id: int | None, shop_id: int | None
+) -> InlineKeyboardMarkup | None:
+    """Buttons from a staff notice to the customer and their service, in the bot that holds the notice.
+
+    The platform bot opens the platform customer card and the service card; a shop bot only has the
+    shop's customer card (``res:user``), so it never offers a service screen it cannot open.
+    """
+    if not user_id:
+        return None
+    if shop_id:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="👤 کاربر", callback_data=f"res:user:{int(user_id)}")]]
+        )
+    row = [InlineKeyboardButton(text="👤 کاربر", callback_data=f"adm:users:view:{int(user_id)}")]
+    if service_id:
+        row.append(
+            InlineKeyboardButton(text="📦 سرویس", callback_data=f"adm:users:svc:{int(user_id)}:{int(service_id)}")
+        )
+    return InlineKeyboardMarkup(inline_keyboard=[row])
+
+
 async def notify_auto_approve(
     bot: Bot,
     session: AsyncSession,
     payment: Payment,
 ) -> None:
-    text = format_message(
-        "⚡ تأیید خودکار",
-        info_block([kv_line("🧾", "پرداخت", f"#{payment.id}"), kv_line("✅", "نتیجه", "خودکار تأیید شد")]),
-    )
+    """Tell the payment's staff an automatic approval happened, with the receipt and the customer's service."""
+    user = await session.get(BotUser, payment.user_id) if payment.user_id else None
+    order = await session.get(Order, payment.order_id) if payment.order_id else None
+    if order is not None:
+        # Delivery set the service id after this session first loaded the order.
+        await session.refresh(order)
+    lines = [
+        kv_line("🧾", "پرداخت", f"#{payment.id}"),
+        kv_line("💰", "مبلغ", format_toman(payment.amount, get_settings().currency)),
+        *_buyer_lines(user),
+    ]
+    if payment.is_wallet_topup:
+        lines.append(kv_line("📦", "نوع", "شارژ کیف پول"))
+    else:
+        kind, detail_lines = await _pending_order_detail_lines(session, order, payment)
+        lines.append(kv_line("📦", "نوع", kind))
+        lines.extend(detail_lines)
+    lines.append(kv_line("✅", "نتیجه", "خودکار تأیید شد"))
+    shop_id = payment.wallet_shop_id if payment.is_wallet_topup else (order.reseller_id if order else None)
+    is_agency_fee = bool(order and (order.note or "").startswith("reseller_app:"))
     await _dispatch_dual_notify(
         bot,
         session,
         "notify_auto_approve",
-        text,
+        format_message("⚡ تأیید خودکار", info_block(lines)),
+        markup=_customer_markup(
+            user_id=payment.user_id,
+            service_id=None if is_agency_fee or order is None else order.service_id,
+            shop_id=shop_id,
+        ),
+        photo=_receipt_photo(payment),
         payment=payment,
         shop=not payment.is_wallet_topup or payment.wallet_shop_id is not None,
     )
