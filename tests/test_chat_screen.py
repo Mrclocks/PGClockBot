@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.methods import SendMessage
 from aiogram.types import ReplyKeyboardMarkup
+from sqlalchemy import select
 
 from app.bot import chat_cleanup, chat_screen
 from app.bot import keyboards as kb
@@ -317,3 +318,71 @@ class RestartKeepsMyServicesTests(unittest.IsolatedAsyncioTestCase):
             after_purchase, _ = await buyer_main_reply_keyboard(session, user, is_reseller_bot=False, reseller_owner_id=None)
             restart, _, _ = await build_main_reply_keyboard(session, user, is_reseller_bot=False, reseller_owner_id=None)
         self.assertEqual(after_purchase.keyboard, restart.keyboard)
+
+
+class HomeIsAFreshStartTests(_Flow):
+    owner = False
+
+    async def test_back_to_home_leaves_one_welcome_and_nothing_else(self) -> None:
+        await self.sim.type("🟡👛 کیف پول")
+        await self.sim.tap("بازگشت")
+        visible = self.sim.telegram.visible()
+        self.assertEqual(len(visible), 1, self.sim.screen())
+        self.assertIsNotNone(visible[0].keyboard)
+
+    async def test_restart_after_several_menus_leaves_one_welcome(self) -> None:
+        for label in ("🟡👛 کیف پول", "🟣🎧 پشتیبانی", "⭐ باشگاه مشتریان"):
+            await self.sim.type(label)
+        await self.sim.type("🔄 شروع مجدد")
+        self.assertEqual(len(self.sim.telegram.visible()), 1, self.sim.screen())
+
+    async def test_a_notice_rides_on_the_welcome_instead_of_its_own_message(self) -> None:
+        from app.bot.menu_nav import restore_main_reply
+
+        tapped = self.sim.telegram.visible()[-1]
+        message = self.sim.telegram._message(tapped, user=self.sim.person, bot=self.sim.bot)
+        async with self.sim.Session() as session:
+            user = (await session.execute(select(BotUser).where(BotUser.telegram_id == self.sim.telegram_id))).scalar_one()
+            with chat_cleanup.cleanup_switch(True):  # as inside a real update
+                await restore_main_reply(message, session, user, text="✅ تیکت ثبت شد", is_reseller_bot=False, reseller_owner_id=None)
+        visible = self.sim.telegram.visible()
+        self.assertEqual(len(visible), 1, self.sim.screen())
+        self.assertIn("✅ تیکت ثبت شد", visible[0].text)
+
+
+class MyServicesBackTests(_Flow):
+    owner = False
+
+    async def test_my_services_without_services_has_a_way_back(self) -> None:
+        from app.db.models import Setting
+
+        async with self.sim.Session() as session:
+            session.add(Setting(key="service_import_enabled", value="1"))
+            await session.commit()
+        clear_settings_cache()
+        await self.sim.type("/start")
+        label = next(text for row in self.sim.telegram.keyboard for text in row if "سرویس" in text and "من" in text)
+        await self.sim.type(label)
+        await self.sim.tap("بازگشت")
+        self.assertEqual(len(self.sim.telegram.visible()), 1, self.sim.screen())
+
+
+class AlwaysOpenMenuSettingTests(unittest.TestCase):
+    def test_off_by_default_and_on_when_switched(self) -> None:
+        self.assertFalse(kb.main_reply_keyboard("user", ui={}).is_persistent)
+        self.assertTrue(kb.main_reply_keyboard("user", ui={"menu_keyboard_persistent": "1"}).is_persistent)
+        self.assertTrue(kb.persistent_reply_keyboard({"menu_keyboard_persistent": "1"}).is_persistent)
+
+    def test_switching_it_counts_as_a_new_keyboard(self) -> None:
+        from app.bot.keyboard_guard import keyboard_fingerprint
+
+        closed = kb.main_reply_keyboard("user", ui={})
+        open_ = kb.main_reply_keyboard("user", ui={"menu_keyboard_persistent": "1"})
+        self.assertNotEqual(keyboard_fingerprint(closed), keyboard_fingerprint(open_))
+
+    def test_the_menu_form_saves_both_switches(self) -> None:
+        from app.services.chat_cleanup_config import chat_cleanup_payload
+
+        self.assertEqual(chat_cleanup_payload({"menu_keyboard_persistent": "1"}),
+                         {"chat_cleanup_enabled": "0", "menu_keyboard_persistent": "1"})
+        self.assertEqual(chat_cleanup_payload({}), {"chat_cleanup_enabled": "0", "menu_keyboard_persistent": "0"})
