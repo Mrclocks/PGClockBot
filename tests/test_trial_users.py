@@ -329,6 +329,15 @@ class TrialUsersPageTests(TrialUsersTestCase):
         self.assertIn("mine", response.text)
         self.assertNotIn("theirs", response.text)
 
+    async def test_the_settings_shortcut_points_each_role_to_its_own_settings(self) -> None:
+        owner = await self._get(OWNER)
+        self.assertIn('href="/settings?tab=limits"', owner.text)
+        with_settings = await self._get(_shop_staff(self.shop_a.id, ["trial_users", "shop_settings"]))
+        self.assertIn('href="/shop-settings?tab=limits"', with_settings.text)
+        self.assertNotIn("/settings?tab=limits", with_settings.text.replace("/shop-settings?tab=limits", ""))
+        without = await self._get(_shop_staff(self.shop_a.id, ["trial_users"]))
+        self.assertNotIn("tab=limits", without.text)
+
     async def test_a_malformed_cursor_or_filter_is_ignored(self) -> None:
         response = await self._get(OWNER, "/trial-users?before=abc&filter=%27%3B--&q=" + "x" * 500)
         self.assertEqual(response.status_code, 200)

@@ -7,6 +7,9 @@
   <div>
     {{ page_title('users', 'کاربران تست') }}
   </div>
+  {% if settings_href %}
+  <a class="btn btn-ghost" href="{{ settings_href }}" aria-label="تنظیمات و محدودیت اکانت تست">تنظیمات و محدودیت تست</a>
+  {% endif %}
 </div>
 
 {{ marketing_tabs(marketing_sections|default(()), 'trial_users') }}
