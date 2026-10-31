@@ -1219,11 +1219,21 @@ async def get_pg_for_staff(
     return client
 
 
+def _principal_client_reusable(client: PasarGuardClient | None, *, authenticate: bool) -> bool:
+    return client is not None and (not authenticate or _cached_client_ready(client))
+
+
+async def _authenticate_principal_client(client: PasarGuardClient, *, authenticate: bool) -> None:
+    if authenticate:
+        await client.ensure_token()
+
+
 async def get_pg_for_principal(
     session,
     *,
     principal_id: int | None = None,
     pg_username: str | None = None,
+    authenticate: bool = True,
 ) -> PasarGuardClient:
     """PasarGuard client for a Level-1 or Level-2 OrgPrincipal — never Owner env token.
 
@@ -1287,13 +1297,13 @@ async def get_pg_for_principal(
     pid = int(row.id)
     cache_key = (pid, uname.lower())
     cached = _pg_principal_cache.get(cache_key)
-    if _cached_client_ready(cached):
+    if _principal_client_reusable(cached, authenticate=authenticate):
         return cached
     api_key = decrypt_secret(getattr(row, "pg_api_key_enc", None))
     if api_key:
         client = PasarGuardClient(username=uname, api_key=api_key)
         api_key = ""
-        await client.ensure_token()
+        await _authenticate_principal_client(client, authenticate=authenticate)
         for stale_key in [k for k in _pg_principal_cache if k[0] == pid and k != cache_key]:
             _pg_principal_cache.pop(stale_key, None)
         _pg_principal_cache[cache_key] = client
@@ -1308,7 +1318,7 @@ async def get_pg_for_principal(
     client = PasarGuardClient(username=uname, password=password)
     # Local plaintext reference must not outlive token acquisition.
     password = ""
-    await client.ensure_token()
+    await _authenticate_principal_client(client, authenticate=authenticate)
     for stale_key in [k for k in _pg_principal_cache if k[0] == pid and k != cache_key]:
         _pg_principal_cache.pop(stale_key, None)
     _pg_principal_cache[cache_key] = client

@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Base
 from app.db.models import BotUser
+from app.services.customer_retention import assert_legacy_user_deletable
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,10 @@ async def _purge_children(
             continue
         column = child.c[column_name]
         child_where = column.in_(parent_ids)
-        if column.nullable and child.name not in SHOP_OWNED_TABLES:
+        # A nullable channel adapter still owns legacy services. Clearing it
+        # would violate canonical origin constraints and orphan the service.
+        owns_legacy_service = key == ("user_services", "bot_user_id")
+        if column.nullable and child.name not in SHOP_OWNED_TABLES and not owns_legacy_service:
             await session.execute(update(child).where(child_where).values({column_name: None}))
             continue
         await _purge_children(session, child, child_where, stack=stack | {key})
@@ -89,6 +93,7 @@ async def purge_user_references(session: AsyncSession, user_id: int) -> None:
     The ``bot_users`` row itself is left for the caller to delete. The caller owns
     the transaction; nothing is committed here.
     """
+    await assert_legacy_user_deletable(session, user_id)
     await _purge_children(
         session,
         BotUser.__table__,

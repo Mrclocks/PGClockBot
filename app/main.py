@@ -10,6 +10,7 @@ from aiogram.types import Update
 from fastapi import Request
 from sqlalchemy import select
 
+from app.api.integration_transport import IntegrationPeerCapture
 from app.api.app import create_api_app
 from app.bot import create_bot, create_dispatcher
 from app.config import get_settings
@@ -433,7 +434,8 @@ def main() -> None:
         )
 
     uvicorn.run(
-        api,
+        IntegrationPeerCapture(api),
+        proxy_headers=False,
         host=settings.web_host,
         port=settings.web_port,
         log_level="info",

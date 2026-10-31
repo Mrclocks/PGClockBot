@@ -24,10 +24,13 @@ from app.db.models import (
 )
 from app.services.db_safe import rollback_quiet
 
+from app.services.integration_policy import INTEGRATION_FEATURE_PERMS
+
 logger = logging.getLogger(__name__)
 
 # Single permission set for BOTH web panel and bot (must stay identical).
 FEATURE_PERMS: list[tuple[str, str]] = [
+    *INTEGRATION_FEATURE_PERMS,
     ("dashboard", "خانه / داشبورد"),
     ("plans", "پلن‌های فروش"),
     ("orders", "سفارش‌ها"),
