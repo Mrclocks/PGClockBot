@@ -198,15 +198,13 @@ async def build_main_reply_keyboard(
             profile, ui, can_add_representative=can_add
         )
         return markup, ui, role
-    if role == "admin" and not as_user:
-        has = False
-    else:
-        has = await user_sees_my_services(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-        )
+    # Staff who own services see «سرویس‌های من» too, so every path builds the same menu.
+    has = await user_sees_my_services(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
     show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
     owner_profile = None
     if show_creds and not as_user:
@@ -376,7 +374,11 @@ async def buyer_main_reply_keyboard(
     is_reseller_bot: bool,
     reseller_owner_id: int | None,
 ) -> tuple[ReplyKeyboardMarkup, dict]:
-    """Customer main menu after checkout/delivery (always shows «سرویس‌های من» when owned)."""
+    """The buyer's own main menu after checkout/delivery («سرویس‌های من» shows once a service is owned).
+
+    It is the same menu «شروع مجدد» builds: a staff buyer keeps «پنل ادمین», so nothing changes
+    or disappears on the next restart.
+    """
     rid = reseller_owner_id
     shop_bot = is_reseller_bot
     if order is not None:
@@ -389,7 +391,6 @@ async def buyer_main_reply_keyboard(
         db_user,
         is_reseller_bot=shop_bot,
         reseller_owner_id=rid,
-        as_user=True,
     )
     return markup, ui
 

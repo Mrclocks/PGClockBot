@@ -170,7 +170,7 @@ class ListActivityMergeTests(unittest.IsolatedAsyncioTestCase):
 
 
 class BuyerMainKeyboardTests(unittest.IsolatedAsyncioTestCase):
-    async def test_uses_as_user_true(self):
+    async def test_builds_the_buyers_own_menu_for_the_order_shop(self):
         from app.bot.menu_nav import buyer_main_reply_keyboard
 
         session = MagicMock()
@@ -187,7 +187,8 @@ class BuyerMainKeyboardTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(markup, "KB")
         self.assertEqual(ui, {"x": 1})
         kwargs = build.await_args.kwargs
-        self.assertTrue(kwargs["as_user"])
+        # The same menu «شروع مجدد» builds, not the customer preview.
+        self.assertFalse(kwargs.get("as_user", False))
         self.assertTrue(kwargs["is_reseller_bot"])
         self.assertEqual(kwargs["reseller_owner_id"], 55)
 
