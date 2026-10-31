@@ -310,3 +310,5 @@ tests/test_bot_chat_tidy.py
 tests/test_ticket_notices.py
 # Owner reseller search: resellers only, owner and representative-management gate.
 tests/test_reseller_search.py
+# Trial phone lock: number formats collapse to one hash; a verified purchase number is reused.
+tests/test_trial_phone_lock.py
