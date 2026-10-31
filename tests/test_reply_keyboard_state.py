@@ -1,4 +1,4 @@
-"""A menu tap is told apart from typed text, and «منوی اصلی» on a panel just turns it into home."""
+"""A menu tap is told apart from typed text, and «منوی اصلی» on a panel starts home afresh."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ class MenuTapTests(unittest.TestCase):
 
 
 class HomeButtonTests(unittest.IsolatedAsyncioTestCase):
-    async def test_the_home_button_edits_the_panel_into_home_and_sends_nothing_extra(self) -> None:
+    async def test_the_home_button_starts_home_afresh(self) -> None:
         from app.bot.handlers import start
 
         state = FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=7, user_id=7))
@@ -45,7 +45,8 @@ class HomeButtonTests(unittest.IsolatedAsyncioTestCase):
         callback.answer = AsyncMock()
         with patch.object(start, "render_home", AsyncMock()) as render:
             await start.cb_home(callback, MagicMock(), MagicMock(), state)
-        self.assertTrue(render.await_args.kwargs["edit"])
+        render.assert_awaited_once()
+        self.assertNotIn("edit", render.await_args.kwargs)
         callback.message.answer.assert_not_called()
 
 

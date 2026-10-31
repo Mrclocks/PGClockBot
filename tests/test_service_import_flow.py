@@ -159,7 +159,7 @@ class EntryPointTests(unittest.TestCase):
 
     def test_the_empty_list_offers_buying_and_connecting(self):
         data = [b.callback_data for row in ui_mod.empty_services_keyboard({}).inline_keyboard for b in row]
-        self.assertEqual(data, ["shop:list", ui_mod.ADD_CALLBACK])
+        self.assertEqual(data, ["shop:list", ui_mod.ADD_CALLBACK, "menu:home"])
 
     def test_callback_data_fits_telegram_limit(self):
         self.assertLessEqual(len(ui_mod.ADD_CALLBACK.encode()), 64)

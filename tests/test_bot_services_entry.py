@@ -143,7 +143,7 @@ class ScreenTests(unittest.TestCase):
     def test_the_empty_list_offers_buying_and_connecting(self):
         markup = empty_services_keyboard({})
         flat = [b.callback_data for row in markup.inline_keyboard for b in row]
-        self.assertEqual(flat, ["shop:list", ADD_CALLBACK])
+        self.assertEqual(flat, ["shop:list", ADD_CALLBACK, "menu:home"])
 
     def test_the_support_hub_has_no_reseller_apply_entry(self):
         data = [b.callback_data for row in support_hub_keyboard({}).inline_keyboard for b in row]
