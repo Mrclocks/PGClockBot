@@ -37,6 +37,9 @@ from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = Router(name="admin_plans")
 
@@ -224,7 +227,7 @@ async def send_audience_hub(
             await message.edit_text(text, reply_markup=None)
             return
         except Exception:
-            pass
+            logger.debug("send_audience_hub: ignored failure", exc_info=True)
     await message.answer(text)
 
 async def send_kind_hub(
@@ -241,7 +244,7 @@ async def send_kind_hub(
             await message.edit_text(text, reply_markup=None)
             return
         except Exception:
-            pass
+            logger.debug("send_kind_hub: ignored failure", exc_info=True)
     await message.answer(text)
 
 def _audience_heading(ui: dict, audience: str) -> str:
@@ -672,7 +675,7 @@ async def plans_add_kind_cb(
         try:
             await callback.message.delete()
         except Exception:
-            pass
+            logger.debug("plans_add_kind_cb: ignored failure", exc_info=True)
         await open_add_kind_action(callback.message, session, db_user, state, aud, kind)
 
 @router.callback_query(F.data == "adm:plans")
@@ -691,7 +694,7 @@ async def plans_hub(callback: CallbackQuery, session: AsyncSession, db_user: Bot
                 reply_markup=None,
             )
         except Exception:
-            pass
+            logger.debug("plans_hub: ignored failure", exc_info=True)
         await sync_plans_reply_keyboard(callback.message, session, db_user, state)
 
 @router.callback_query(F.data.startswith("adm:plans:aud:"))
@@ -744,7 +747,7 @@ async def plans_kind_cb(
         try:
             await callback.message.delete()
         except Exception:
-            pass
+            logger.debug("plans_kind_cb: ignored failure", exc_info=True)
 
 @router.callback_query(F.data.startswith("adm:plans:tog:"))
 @require_bot_owner_handler
@@ -1727,7 +1730,7 @@ async def resplan_del(callback: CallbackQuery, session: AsyncSession, db_user: B
         try:
             await session.rollback()
         except Exception:
-            pass
+            logger.debug("resplan_del: ignored failure", exc_info=True)
         msg = e.message if len(e.message) <= 180 else e.message[:177] + "…"
         await callback.answer(msg, show_alert=True)
         return

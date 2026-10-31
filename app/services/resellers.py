@@ -113,7 +113,7 @@ def parse_perms(raw: str | None) -> list[str]:
             if isinstance(data, list):
                 return [str(x).strip() for x in data if str(x).strip()]
         except Exception:
-            pass
+            logger.debug("parse_perms: ignored failure", exc_info=True)
     allowed = {k for k, _ in FEATURE_PERMS}
     # Map legacy bot-only keys
     legacy = {"approve_receipts": "payments"}
@@ -295,7 +295,7 @@ async def apply_reseller_panel_password(
         try:
             invalidate_pg_principal_cache(int(linked.id))
         except Exception:
-            pass
+            logger.debug("apply_reseller_panel_password: ignored failure", exc_info=True)
         return
     if (profile.pg_admin_password_enc or "").strip() or (
         getattr(profile, "pg_api_key_enc", None) or ""
@@ -311,7 +311,7 @@ async def apply_reseller_panel_password(
         try:
             invalidate_pg_reseller_cache(int(profile.user_id))
         except Exception:
-            pass
+            logger.debug("apply_reseller_panel_password: ignored failure", exc_info=True)
         return
     # Owner-panel shop with no stored tenant secret — Owner provisioning only.
     profile.pg_admin_password_enc = enc
@@ -323,7 +323,7 @@ async def apply_reseller_panel_password(
     try:
         reset_pg()
     except Exception:
-        pass
+        logger.debug("apply_reseller_panel_password: ignored failure", exc_info=True)
 
 
 async def apply_reseller_pg_api_key(
@@ -353,12 +353,12 @@ async def apply_reseller_pg_api_key(
             try:
                 invalidate_pg_principal_cache(int(linked.id))
             except Exception:
-                pass
+                logger.debug("apply_reseller_pg_api_key: ignored failure", exc_info=True)
         profile.pg_api_key_enc = None
         try:
             invalidate_pg_reseller_cache(int(profile.user_id))
         except Exception:
-            pass
+            logger.debug("apply_reseller_pg_api_key: ignored failure", exc_info=True)
         return
 
     raw = (api_key or "").replace("\r", "").strip()
@@ -384,17 +384,17 @@ async def apply_reseller_pg_api_key(
         try:
             invalidate_pg_principal_cache(int(linked.id))
         except Exception:
-            pass
+            logger.debug("apply_reseller_pg_api_key: ignored failure", exc_info=True)
         try:
             invalidate_pg_reseller_cache(int(profile.user_id))
         except Exception:
-            pass
+            logger.debug("apply_reseller_pg_api_key: ignored failure", exc_info=True)
         return
     profile.pg_api_key_enc = enc
     try:
         invalidate_pg_reseller_cache(int(profile.user_id))
     except Exception:
-        pass
+        logger.debug("apply_reseller_pg_api_key: ignored failure", exc_info=True)
 
 
 def _rand_username(prefix: str = "res") -> str:
@@ -1527,13 +1527,13 @@ async def complete_reseller_setup(
     try:
         await seed_reseller_shop_settings(session, int(profile.user_id))
     except Exception:
-        pass
+        logger.debug("complete_reseller_setup: ignored failure", exc_info=True)
     try:
         from app.services.reseller_bots import clear_reseller_token_cache
 
         clear_reseller_token_cache()
     except Exception:
-        pass
+        logger.debug("complete_reseller_setup: ignored failure", exc_info=True)
     return profile
 
 
@@ -1640,7 +1640,7 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
 
             clear_settings_cache(rid)
         except Exception:
-            pass
+            logger.debug("seed_reseller_shop_settings: ignored failure", exc_info=True)
 
 
 def _synthetic_telegram_id(pg_username: str, *, salt: int = 0) -> int:
@@ -2040,7 +2040,7 @@ async def convert_staff_to_reseller(
 
             invalidate_pg_reseller_cache(int(profile.user_id))
         except Exception:
-            pass
+            logger.debug("convert_staff_to_reseller: ignored failure", exc_info=True)
         await session.commit()
     return profile, hint, err
 
@@ -2233,7 +2233,7 @@ async def revoke_reseller(
         if mgr:
             await mgr.stop_reseller(profile_id)
     except Exception:
-        pass
+        logger.debug("revoke_reseller: ignored failure", exc_info=True)
 
     return {
         "user_id": user_id,

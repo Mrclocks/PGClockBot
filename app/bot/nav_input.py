@@ -109,7 +109,7 @@ async def ask_text(
         try:
             import app.bot.staff_cancel  # noqa: F401
         except Exception:
-            pass
+            logger.debug("ask_text: ignored failure", exc_info=True)
     if cancel_code not in CANCEL_REGISTRY:
         raise KeyError(f"cancel code not registered: {cancel_code!r}")
     await state.set_state(fsm_state)
@@ -285,7 +285,7 @@ async def try_legacy_cancel(
     try:
         await state.set_state(None)
     except Exception:
-        pass
+        logger.debug("try_legacy_cancel: ignored failure", exc_info=True)
     await state.update_data(
         **{PROMPT_MSG_ID: None, PROMPT_CHAT_ID: None, CANCEL_CODE_KEY: None}
     )
@@ -354,7 +354,7 @@ async def nv_cancel_input(
     try:
         await state.set_state(None)
     except Exception:
-        pass
+        logger.debug("nv_cancel_input: ignored failure", exc_info=True)
     data = await state.get_data()
     await state.update_data(
         **{PROMPT_MSG_ID: None, PROMPT_CHAT_ID: None, CANCEL_CODE_KEY: None}

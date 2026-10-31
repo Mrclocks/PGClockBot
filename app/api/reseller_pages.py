@@ -43,6 +43,8 @@ from app.services.resellers import (
     with_shop_settings,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _q(msg: str) -> str:
     return quote(str(msg), safe="")
@@ -310,7 +312,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             try:
                 await session.rollback()
             except Exception:
-                pass
+                logger.debug("resellers_page: ignored failure", exc_info=True)
         roles = []
         reseller_usage: dict = {}
         if owner_view:
@@ -507,7 +509,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             finally:
                 await bot.session.close()
         except Exception:
-            pass
+            logger.debug("reseller_create: ignored failure", exc_info=True)
         return RedirectResponse(
             f"/resellers?ok={_q('نماینده فعال شد — اطلاعات ورود (پاسارگارد + وب‌پنل) ارسال شد')}",
             status_code=303,
@@ -1777,7 +1779,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             try:
                 await session.rollback()
             except Exception:
-                pass
+                logger.debug("reseller_plan_delete: ignored failure", exc_info=True)
             return RedirectResponse(
                 f"/plans?err={_q(e.message)}#reseller-plans", status_code=303
             )

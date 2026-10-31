@@ -432,7 +432,7 @@ async def _topup_instructions(
                     html=False,
                 )
             except Exception:
-                pass
+                logger.debug("_topup_instructions: ignored failure", exc_info=True)
         raw = ui.get("gateway_pay_text") or ""
         title = f"🌐 {name}"
         kwargs.update(order_id=0, gateway_name=name)

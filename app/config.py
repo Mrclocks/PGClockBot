@@ -6,6 +6,9 @@ from typing import Annotated, List
 
 from pydantic import BeforeValidator, Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+import logging
+
+logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data"
@@ -236,7 +239,7 @@ class Settings(BaseSettings):
                 if live.startswith("https://"):
                     return live
         except Exception:
-            pass
+            logger.debug("_miniapp_https_base: ignored failure", exc_info=True)
         configured = (self.public_base_url or "").strip().rstrip("/")
         if configured.startswith("https://"):
             return configured

@@ -1825,12 +1825,12 @@ def register_pg_pages(
                 try:
                     await session.rollback()
                 except Exception:
-                    pass
+                    logger.debug("pg_admins: ignored failure", exc_info=True)
             # Drop web rows for PG admins that no longer exist in PasarGuard
             try:
                 await purge_orphaned_staff_access(session)
             except Exception:
-                pass
+                logger.debug("pg_admins: ignored failure", exc_info=True)
             pg = get_pg()
             admins = await pg.get_admins()
             if not admins:
@@ -1874,7 +1874,7 @@ def register_pg_pages(
                         if isinstance(full, dict):
                             payload = full
                     except Exception:
-                        pass
+                        logger.debug("pg_admins: ignored failure", exc_info=True)
                 role = payload.get("role") if isinstance(payload.get("role"), dict) else None
                 if role is None:
                     rid = payload.get("role_id") or a.get("role_id")
@@ -2473,7 +2473,7 @@ def register_pg_pages(
                     try:
                         await notify_reseller_revoked(int(tg), reason)
                     except Exception:
-                        pass
+                        logger.debug("pg_admins_delete: ignored failure", exc_info=True)
             except Exception as e:
                 return RedirectResponse(f"/pg/admins?err={_pg_err(e)}", status_code=303)
         else:
@@ -2488,7 +2488,7 @@ def register_pg_pages(
                 await revoke_web_access(session, pg_u)
                 notes.append("دسترسی ادمین فرعی وب حذف شد")
             except Exception:
-                pass
+                logger.debug("pg_admins_delete: ignored failure", exc_info=True)
 
         msg = "حذف شد"
         if notes:

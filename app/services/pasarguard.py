@@ -301,7 +301,7 @@ class PasarGuardClient:
         try:
             await old.aclose()
         except Exception:
-            pass
+            logger.debug("_rebind_base: ignored failure", exc_info=True)
 
     async def _ensure_api_base(self) -> None:
         """If PG_BASE_URL includes a dashboard path, switch to the real API root."""
@@ -731,7 +731,7 @@ class PasarGuardClient:
             if roles:
                 return roles
         except Exception:
-            pass
+            logger.debug("get_admin_roles: ignored failure", exc_info=True)
         try:
             data = await self.request("GET", "/api/admin-roles")
             return as_list(data, "roles", "items")

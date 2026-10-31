@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 import html as html_mod
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def copyable(value: Any, *, empty: str = "—") -> str:
@@ -268,7 +271,7 @@ def format_number(num: int | float | None) -> str:
         if isinstance(num, Undefined):
             return "—"
     except Exception:
-        pass
+        logger.debug("format_number: ignored failure", exc_info=True)
     try:
         if isinstance(num, float) and not num.is_integer():
             return f"{num:,.2f}".replace(",", "٬")

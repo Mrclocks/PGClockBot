@@ -27,6 +27,8 @@ from app.services.replaceable_notices import replace_notices
 from app.services.ticket_notices import ticket_notice_key
 from app.services.users import get_all_settings, on, set_settings_bulk
 
+logger = logging.getLogger(__name__)
+
 
 def ticket_action_markup(ticket_id: int) -> InlineKeyboardMarkup:
     """Reply / close buttons under ticket notification messages."""
@@ -320,7 +322,7 @@ async def _send_to_chats(
                         if sent_messages is not None:
                             sent_messages.append(message)
                 except Exception:
-                    pass
+                    logger.debug("_one: ignored failure", exc_info=True)
 
     await asyncio.gather(
         *(_one(admin_id) for admin_id in targets),
@@ -550,7 +552,7 @@ async def _dispatch_dual_notify(
                 try:
                     await shop_bot.session.close()
                 except Exception:
-                    pass
+                    logger.debug("_dispatch_dual_notify: ignored failure", exc_info=True)
 
     # --- Platform-only customers / wallet / account edits ---
     if platform and await notify_enabled(session, key):
@@ -1109,13 +1111,13 @@ async def notify_ticket_message(
                 int(user.telegram_id), text, reply_markup=markup, parse_mode="HTML"
             )
         except Exception:
-            pass
+            logger.debug("notify_ticket_message: ignored failure", exc_info=True)
         finally:
             if close_bot:
                 try:
                     await send_bot.session.close()
                 except Exception:
-                    pass
+                    logger.debug("notify_ticket_message: ignored failure", exc_info=True)
         return
 
     text = format_message(
@@ -1553,7 +1555,7 @@ async def _send_to_user_chat(
         finally:
             await bot.session.close()
     except Exception:
-        pass
+        logger.debug("_send_to_user_chat: ignored failure", exc_info=True)
 
     # 2) Also shop bot: customer of a shop, or own reseller dedicated bot
     shop_targets: list[int] = []
@@ -1578,13 +1580,13 @@ async def _send_to_user_chat(
             if tok:
                 tokens_used.add(tok)
         except Exception:
-            pass
+            logger.debug("_send_to_user_chat: ignored failure", exc_info=True)
         finally:
             if should_close and shop_bot is not None:
                 try:
                     await shop_bot.session.close()
                 except Exception:
-                    pass
+                    logger.debug("_send_to_user_chat: ignored failure", exc_info=True)
 
     return sent
 

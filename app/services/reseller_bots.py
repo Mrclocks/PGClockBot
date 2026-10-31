@@ -99,7 +99,7 @@ class ResellerBotManager:
                                 },
                             )
                         except Exception:
-                            pass
+                            log.debug("start_reseller: ignored failure", exc_info=True)
 
                 self._bots[reseller_profile_id] = bot
                 registered = True
@@ -118,7 +118,7 @@ class ResellerBotManager:
                     try:
                         await bot.session.close()
                     except Exception:
-                        pass
+                        log.debug("start_reseller: ignored failure", exc_info=True)
 
     async def stop_reseller(self, reseller_profile_id: int) -> None:
         async with self._lock:
@@ -152,12 +152,12 @@ class ResellerBotManager:
             except asyncio.CancelledError:
                 pass
             except Exception:
-                pass
+                log.debug("_stop_locked: ignored failure", exc_info=True)
         if bot:
             try:
                 await bot.session.close()
             except Exception:
-                pass
+                log.debug("_stop_locked: ignored failure", exc_info=True)
 
     async def stop_all(self) -> None:
         async with self._lock:
@@ -171,7 +171,7 @@ class ResellerBotManager:
             try:
                 await bot.delete_webhook(drop_pending_updates=True)
             except Exception:
-                pass
+                log.debug("_poll_loop: ignored failure", exc_info=True)
             while True:
                 try:
                     updates = await bot.get_updates(
@@ -202,7 +202,7 @@ class ResellerBotManager:
             try:
                 await bot.session.close()
             except Exception:
-                pass
+                log.debug("_poll_loop: ignored failure", exc_info=True)
 
     def bot_for_token(self, token: str) -> Bot | None:
         token = (token or "").strip()
@@ -369,7 +369,7 @@ async def lookup_reseller_by_bot_token(session, token: str) -> dict[str, Any] | 
                     row.bot_token_hash = token_hash
                     await session.commit()
             except Exception:
-                pass
+                log.debug("lookup_reseller_by_bot_token: ignored failure", exc_info=True)
     if not row:
         _TOKEN_LOOKUP_CACHE[token] = (now, None)
         return None

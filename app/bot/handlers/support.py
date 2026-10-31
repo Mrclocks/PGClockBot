@@ -21,6 +21,9 @@ from app.services.tickets import create_ticket, get_ticket, list_user_tickets, r
 from app.services.users import get_all_settings
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_title_raw
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = Router(name="support")
 
@@ -391,7 +394,7 @@ async def support_reply(
             ticket_reseller_id=ticket.reseller_id,
         )
     except Exception:
-        pass
+        logger.debug("support_reply: ignored failure", exc_info=True)
     await finish_text_step(
         message,
         state,

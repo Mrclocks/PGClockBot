@@ -27,6 +27,9 @@ from app.cli.context import (
 from app.cli.install_root import MARKER_PATH
 from app.cli.output import header, ok, warn
 from app.cli.service_cmds import _probe_health
+import logging
+
+logger = logging.getLogger(__name__)
 
 Check = dict[str, Any]
 
@@ -66,7 +69,7 @@ def _cert_expiry_days(port: int) -> int | None:
         # Prefer cryptography-free parse via ssl._ssl if available — fall back to openssl file.
         _ = cert
     except Exception:
-        pass
+        logger.debug("_cert_expiry_days: ignored failure", exc_info=True)
     try:
         context = ssl.create_default_context()
         context.check_hostname = False

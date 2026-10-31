@@ -16,6 +16,9 @@ from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 # Bind helpers/constants from keyboards after that module has defined them
 # (keyboards imports this module mid-file, once primitives exist).
 from app.bot import keyboards as _k
+import logging
+
+logger = logging.getLogger(__name__)
 
 BTN_CANCEL = "انصراف"
 BTN_RESTART = "🏠 شروع مجدد"  # legacy alias only
@@ -578,7 +581,7 @@ def _reseller_submenu_entries(
         if is_payg(profile):
             entries.append(("res_billing", _t(ui, "btn_res_billing")))
     except Exception:
-        pass
+        logger.debug("_reseller_submenu_entries: ignored failure", exc_info=True)
     entries.extend(_reseller_capacity_entries(profile, ui))
     if shop_feature_allowed(key="orders", profile=profile) or shop_feature_allowed(
         key="payments", profile=profile

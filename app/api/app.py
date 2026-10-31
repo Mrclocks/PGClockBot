@@ -124,6 +124,8 @@ from app.api.login_guard import (
     login_success as _login_success,
 )
 
+logger = logging.getLogger(__name__)
+
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
@@ -343,7 +345,7 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             )
             request.state.csrf_token_set = False
     except Exception:
-        pass
+        logger.debug("render: ignored failure", exc_info=True)
     return response
 
 
@@ -386,7 +388,7 @@ def _cookie_secure(request: Request) -> bool:
             if fwd == "https":
                 return True
     except Exception:
-        pass
+        logger.debug("_cookie_secure: ignored failure", exc_info=True)
     return request.url.scheme == "https"
 
 
@@ -478,7 +480,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             name="acme_challenge",
         )
     except Exception:
-        pass
+        logger.debug("create_api_app: ignored failure", exc_info=True)
 
     def get_signer() -> URLSafeTimedSerializer:
         # Never fall back to a hardcoded or process-only secret.
@@ -1055,7 +1057,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         ):
                             allowed = True
                     except Exception:
-                        pass
+                        logger.debug("csrf_origin_guard: ignored failure", exc_info=True)
                 if not allowed:
                     return _csrf_reject(
                         "درخواست امنیتی رد شد؛ صفحه را تازه کنید و دوباره تلاش کنید."
@@ -2520,7 +2522,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 try:
                     await session.rollback()
                 except Exception:
-                    pass
+                    logger.debug("plans_page: ignored failure", exc_info=True)
             try:
                 reseller_plans = await list_reseller_plans(session)
             except Exception:
@@ -3242,7 +3244,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             try:
                 await session.rollback()
             except Exception:
-                pass
+                logger.debug("plans_delete: ignored failure", exc_info=True)
             return _redirect_msg("/plans", err=e.message)
         return _redirect_msg("/plans", ok="پلن حذف شد")
 
@@ -3253,7 +3255,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
             await notify_after_settlement(session, payment, order)
         except Exception:
-            pass
+            logger.debug("_notify_order_user: ignored failure", exc_info=True)
 
     @app.post("/orders/{order_id}/approve")
     async def order_approve(
@@ -3512,7 +3514,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     if should_close:
                         await bot.session.close()
             except Exception:
-                pass
+                logger.debug("payment_approve: ignored failure", exc_info=True)
         return _redirect_msg("/finance?tab=payments", ok="پرداخت تأیید شد")
 
     @app.post("/payments/{payment_id}/reject")
@@ -3565,7 +3567,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 ui = await get_all_settings(session, reseller_id=shop_rid)
                 body = ui.get("payment_reject_text") or body
             except Exception:
-                pass
+                logger.debug("payment_reject: ignored failure", exc_info=True)
         # Packed reject text keeps premium emoji via notify_payer unpack.
         await notify_payer(
             session,
@@ -3770,7 +3772,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 finally:
                     await bot.session.close()
             except Exception:
-                pass
+                logger.debug("users_set_role: ignored failure", exc_info=True)
             # Admin mirror + short role notice (credentials already sent to subject)
             await notify_account_edit(
                 session,
@@ -4909,7 +4911,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 if public_base.startswith("https://") and not https_is_active():
                     public_base = "http://" + public_base[len("https://") :]
             except Exception:
-                pass
+                logger.debug("settings_save: ignored failure", exc_info=True)
             try:
                 port_n = int(web_port)
                 if port_n < 1 or port_n > 65535:

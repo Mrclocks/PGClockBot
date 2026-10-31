@@ -49,6 +49,9 @@ from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
 from app.services.redact import user_safe_error
 from app.services import bot_feedback_texts as feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 def _user_card_back(user_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, f"res:user:{int(user_id)}")]])
@@ -1071,7 +1074,7 @@ async def res_payments(
                     reply_markup=kb.payment_review(payment.id),
                 )
         except Exception:
-            pass
+            logger.debug("res_payments: ignored failure", exc_info=True)
     if callback.message:
         await safe_edit_text(callback.message, "✅ رسیدهای در انتظار برایتان فرستاده شد. هر کدام را تأیید یا رد کنید.", reply_markup=_group_back("res_payments"))
 
@@ -1390,7 +1393,7 @@ async def resapply_buy(
                     reply_markup=kb.reseller_app_review(app.id),
                 )
             except Exception:
-                pass
+                logger.debug("resapply_buy: ignored failure", exc_info=True)
         return
 
     if not kb.any_checkout_method_enabled(ui):

@@ -15,6 +15,8 @@ from app.services.resellers import reseller_can_review_payment
 from app.services.users import get_all_settings, get_setting
 from app.services import bot_feedback_texts as feedback
 
+logger = logging.getLogger(__name__)
+
 router = Router(name="payments")
 
 
@@ -215,11 +217,11 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
                     session, order=order, payment=payment, error=str(send_exc)
                 )
             except Exception:
-                pass
+                logger.debug("stars_successful_payment: ignored failure", exc_info=True)
         try:
             await message.answer("پرداخت شد ولی ارسال جزئیات سرویس ناموفق بود — از «سرویس‌های من» بررسی کنید.")
         except Exception:
-            pass
+            logger.debug("stars_successful_payment: ignored failure", exc_info=True)
     try:
         from app.db.models import Plan
         from app.services.notifications import notify_new_subscription
@@ -236,7 +238,7 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
                 needs_approval=False,
             )
     except Exception:
-        pass
+        logger.debug("stars_successful_payment: ignored failure", exc_info=True)
 
 
 async def _payrev_load(
@@ -281,7 +283,7 @@ async def _payrev_finish(callback: CallbackQuery, result) -> None:
                 reply_markup=None,
             )
     except Exception:
-        pass
+        logger.debug("_payrev_finish: ignored failure", exc_info=True)
 
 
 @router.callback_query(F.data.startswith("payrev:ok:"))
@@ -377,4 +379,4 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
                 **{"parse_mode": "HTML", **send_kw},
             )
         except Exception:
-            pass
+            logger.debug("pay_reject: ignored failure", exc_info=True)

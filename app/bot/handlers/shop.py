@@ -169,7 +169,7 @@ async def _answer_shop_maintenance(callback: CallbackQuery, session: AsyncSessio
             text, send_kw = outbound_setting_text(msg, title="🛠 فروشگاه")
             await callback.message.answer(text, **send_kw)
         except Exception:
-            pass
+            logger.debug("_answer_shop_maintenance: ignored failure", exc_info=True)
     return True
 
 async def _record_shop_funnel(
@@ -197,7 +197,7 @@ async def _record_shop_funnel(
             order_id=int(order_id) if order_id else None,
         )
     except Exception:
-        pass
+        logger.debug("_record_shop_funnel: ignored failure", exc_info=True)
 
 class ShopStates(StatesGroup):
     discount = State()
@@ -905,7 +905,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         try:
             await send_delivery_to_user(callback.bot, db_user.telegram_id, session, None, order)
         except Exception:
-            pass
+            logger.debug("custom_buy: ignored failure", exc_info=True)
         return
 
     text = await checkout_summary(session, order, currency=get_settings().currency)
@@ -1303,7 +1303,7 @@ async def _complete_shop_buy(
         try:
             await send_delivery_to_user(bot, db_user.telegram_id, session, None, order)
         except Exception:
-            pass
+            logger.debug("_complete_shop_buy: ignored failure", exc_info=True)
         return
 
     text = await checkout_summary(session, order, currency=get_settings().currency)
@@ -1901,7 +1901,7 @@ async def pay_wallet_cb(
                         reply_markup=kb.reseller_app_review(app_id) if app_id else None,
                     )
             except Exception:
-                pass
+                logger.debug("pay_wallet_cb: ignored failure", exc_info=True)
         return
 
     # Clear pay buttons on the checkout bubble; delivery carries the full success card.
@@ -1984,7 +1984,7 @@ async def _await_order_receipt(
         try:
             await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
         except Exception:
-            pass
+            logger.debug("_await_order_receipt: ignored failure", exc_info=True)
 
 @router.callback_query(F.data.regexp(r"^pay:card:\d+(?::\w+)?$"))
 async def pay_card_cb(
@@ -2152,7 +2152,7 @@ async def pay_gateway_cb(
                 html=False,
             )
         except Exception:
-            pass
+            logger.debug("pay_gateway_cb: ignored failure", exc_info=True)
     from app.services.rich_text import outbound_setting_text, rich_plain_text
 
     append = f"\n\n(پرداخت #{payment.id})"
@@ -2336,7 +2336,7 @@ async def pay_stars_cb(
             try:
                 await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
             except Exception:
-                pass
+                logger.debug("pay_stars_cb: ignored failure", exc_info=True)
     except Exception as e:
         if callback.message:
             await callback.message.answer(f"خطا در ساخت فاکتور استارز: {user_safe_error(e)}")
@@ -2447,7 +2447,7 @@ async def pay_psp_cb(
         try:
             await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
         except Exception:
-            pass
+            logger.debug("pay_psp_cb: ignored failure", exc_info=True)
 
 
 @router.callback_query(F.data.regexp(r"^pay:bbc:\d+$"))

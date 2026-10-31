@@ -20,6 +20,8 @@ from fastapi import Request
 
 from app.config import DATA_DIR, get_settings
 
+logger = logging.getLogger(__name__)
+
 # ip -> recent failure timestamps (local cache; disk is source of truth)
 _LOGIN_FAILURES: dict[str, list[float]] = defaultdict(list)
 _LOGIN_WINDOW_SEC = 15 * 60
@@ -117,7 +119,7 @@ def _lock_file() -> Iterator[None]:
 
             fcntl.flock(fd, fcntl.LOCK_UN)
         except Exception:
-            pass
+            logger.debug("_lock_file: ignored failure", exc_info=True)
         os.close(fd)
 
 
@@ -166,7 +168,7 @@ def client_ip(request: Request) -> str:
                 if candidate:
                     return candidate
     except Exception:
-        pass
+        logger.debug("client_ip: ignored failure", exc_info=True)
     if request.client and request.client.host:
         return request.client.host
     return "unknown"

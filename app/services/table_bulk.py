@@ -221,7 +221,7 @@ async def bulk_delete_users(
             try:
                 await session.rollback()
             except Exception:
-                pass
+                logger.debug("bulk_delete_users: ignored failure", exc_info=True)
     if ok:
         try:
             await session.commit()

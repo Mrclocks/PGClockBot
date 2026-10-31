@@ -53,6 +53,9 @@ from app.bot.handlers.settings_labels import (
 from app.bot.handlers.guide_editor import entry_button as guides_entry_button
 from app.bot.handlers.screen_editor import entry_button as editor_entry_button
 from app.services.screen_editor import is_editor_enabled
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -458,7 +461,7 @@ async def _render_hub(
                     ),
                 )
             except Exception:
-                pass
+                logger.debug("_render_hub: ignored failure", exc_info=True)
 
 
 async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id: str, reseller_id: int):

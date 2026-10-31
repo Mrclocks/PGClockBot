@@ -221,7 +221,7 @@ def _pip_install() -> tuple[int, str]:
             hash_file.parent.mkdir(parents=True, exist_ok=True)
             hash_file.write_text(digest + "\n", encoding="utf-8")
         except Exception:
-            pass
+            logger.debug("_pip_install: ignored failure", exc_info=True)
     return code, out
 
 
@@ -292,7 +292,7 @@ def _restart_service() -> tuple[bool, str]:
                 try:
                     os.kill(os.getpid(), signal.SIGTERM)
                 except Exception:
-                    pass
+                    logger.debug("_die: ignored failure", exc_info=True)
                 os._exit(0)
 
             threading.Thread(target=_die, name="panel-update-die", daemon=False).start()

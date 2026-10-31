@@ -81,7 +81,7 @@ def sqlite_db_path() -> Path:
             if info.sqlite_path:
                 return info.sqlite_path
         except Exception:
-            pass
+            log.debug("sqlite_db_path: ignored failure", exc_info=True)
         m = re.search(r":///(.+)$", url)
         if m:
             raw = m.group(1)
@@ -613,7 +613,7 @@ def _set_restore_status(payload: dict[str, Any]) -> None:
                 if isinstance(existing, dict):
                     cur.update(existing)
             except Exception:
-                pass
+                log.debug("_set_restore_status: ignored failure", exc_info=True)
         cur.update(payload)
         tmp = RESTORE_STATUS_FILE.with_suffix(".tmp")
         tmp.write_text(json.dumps(cur, ensure_ascii=False, indent=2), encoding="utf-8")
