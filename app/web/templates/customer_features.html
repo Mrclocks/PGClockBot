@@ -14,7 +14,7 @@
 <label class="form-field">متن سادهٔ پیام<textarea name="text" rows="6" required maxlength="3500"></textarea></label><button class="btn" type="submit">ساخت پیش‌نویس و تثبیت مخاطبان</button></form></div>
 {% set campaign_labels = {'draft':'پیش‌نویس', 'running':'در حال ارسال', 'paused':'متوقف', 'completed':'تکمیل‌شده', 'review':'تکمیل با موارد نیازمند بررسی'} %}
 {% set recipient_labels = {'pending':'در صف', 'sending':'در حال ارسال', 'sent':'ارسال‌شده', 'failed':'ناموفق', 'skipped':'حذف‌شده از ارسال', 'review':'نتیجه نامشخص'} %}
-{% for row, progress in campaigns %}<div class="card" id="campaign-{{ row.id }}"><h2>کمپین #{{ row.id }} — {{ "اطلاع‌رسانی تغییر قیمت" if row.audience == "catalog_discount" else audiences[row.audience] }}</h2><p>{{ campaign_labels[row.status] }}</p><p style="white-space:pre-wrap">{{ row.text }}</p>
+{% for row, progress in campaigns %}<div class="card" id="campaign-{{ row.id }}"><h2>کمپین #{{ row.id }} — {{ "اطلاع‌رسانی تغییر قیمت" if row.audience == "catalog_discount" else ("پیام به کاربران تست" if row.audience == "selected" else audiences[row.audience]) }}</h2><p>{{ campaign_labels[row.status] }}</p><p style="white-space:pre-wrap">{{ row.text }}</p>
 <p>{% for status, count in progress.items() %}{{ recipient_labels[status] }}: {{ count }} {% endfor %}</p>
 {% if progress.get('review') %}<p class="muted">پیام‌هایی که نتیجهٔ ارسالشان نامشخص است خودکار دوباره ارسال نمی‌شوند.</p>{% endif %}
 {% if row.status in ['draft', 'paused', 'running'] %}<form method="post" action="/campaigns/{{ row.id }}/{% if row.status == 'running' %}pause{% else %}start{% endif %}" {% if row.status != 'running' %}data-confirm="ارسال این متن به مخاطبان پیش‌نمایش‌شده آغاز شود؟"{% endif %}>
