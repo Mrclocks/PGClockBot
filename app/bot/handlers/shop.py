@@ -27,6 +27,7 @@ from app.services.bbc_settlement import CUSTOMER_UNAVAILABLE, BbcNotReady, ensur
 from app.services.db_safe import rollback_quiet
 from app.services.redact import user_safe_error
 from app.services.trial_notify import notify_trial_claimed
+from app.services.purchase_contact import verified_contact_phone_hash
 from app.services.checkout_summary import checkout_summary
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import (
@@ -1372,6 +1373,20 @@ async def _begin_plan_purchase(
         return
 
     if plan.is_trial and on(ui.get("trial_require_contact")):
+        # A number verified for purchases is the same proof; only the Iran-only gate cannot
+        # reuse it, because the stored hash does not say which country the number is from.
+        verified_hash = (
+            None
+            if on(ui.get("trial_require_iran_phone"))
+            else await verified_contact_phone_hash(session, db_user.id)
+        )
+        if verified_hash:
+            await _complete_shop_buy(
+                callback=callback, message=None, session=session, db_user=db_user, state=state,
+                ui=ui, plan=plan, plan_id=plan_id,
+                trial_phone_hash=verified_hash, trial_telegram_id=int(db_user.telegram_id),
+            )
+            return
         from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
         await callback.answer()

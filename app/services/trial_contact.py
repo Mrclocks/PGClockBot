@@ -66,4 +66,7 @@ def hash_trial_phone(raw_phone: str, *, secret: str, require_iran: bool) -> str:
         digits = canonical_iran_phone(digits)
     elif len(digits) < 8:
         raise ValueError("شماره تماس نامعتبر است")
+    elif is_iran_mobile(digits):
+        # One person, one hash: 0912…, 98912… and 0098912… must not look like three phones.
+        digits = canonical_iran_phone(digits)
     return phone_hmac_sha256(digits, secret=secret)
