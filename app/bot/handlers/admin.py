@@ -12,12 +12,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
-from app.bot.auth import require_bot_owner_handler, require_platform_rep_mgmt
+from app.bot.auth import (
+    platform_can_manage_representatives,
+    require_bot_owner_handler,
+    require_platform_rep_mgmt,
+)
 from app.config import get_settings
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan, Role, Ticket, UserService
 from app.services.color_tags import risk_mark
 from app.services.home_overview import bot_dashboard_summary
 from app.services.formatting import (
+    bot_user_panel_label,
     format_system_stats,
     format_toman,
     order_status_fa,
@@ -2212,6 +2217,10 @@ async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 USERS_PAGE_SIZE = 10
 MAX_SEARCH_LENGTH = 64
 
+# Which card the staff DM prompt returns to (also the callback-data namespace).
+MSG_CARD_USER = "users"
+MSG_CARD_RESELLER = "resellers"
+
 def _deny_if_outside_platform_shop(user: BotUser | None) -> str | None:
     """Owner admin tools are platform-shop only (reseller_id IS NULL)."""
     if user is None:
@@ -2437,6 +2446,41 @@ async def _render_user_card(
             pass
     await message.answer(text, reply_markup=markup)
 
+async def _ask_staff_message(
+    callback: CallbackQuery,
+    state: FSMContext,
+    user: BotUser,
+    *,
+    card: str,
+) -> None:
+    """Prompt for a DM to ``user``; ``card`` picks the screen shown afterwards."""
+    from app.bot.nav_input import ask_text
+
+    await state.update_data(msg_user_id=int(user.id), msg_card=card)
+    await ask_text(
+        callback,
+        state,
+        prompt=(
+            f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b> را بفرستید:"
+        ),
+        cancel_code="adm_usr",
+        return_to=f"adm:{card}:view:{user.id}",
+        fsm_state=AdminStates.user_message,
+        edit=True,
+    )
+
+async def _staff_message_target(
+    session: AsyncSession, user_id: int, card: str
+) -> tuple[BotUser | None, str | None]:
+    if card == MSG_CARD_RESELLER:
+        if not await platform_can_manage_representatives():
+            return None, feedback.REPRESENTATIVES_DISABLED
+        user = await session.get(BotUser, int(user_id))
+        if user is None or user.role != Role.RESELLER.value:
+            return user, "نماینده یافت نشد"
+        return user, None
+    return await _platform_shop_user(session, user_id)
+
 @router.callback_query(F.data.startswith("adm:users:msg:"))
 @require_bot_owner_handler
 async def adm_users_message_start(
@@ -2450,20 +2494,24 @@ async def adm_users_message_start(
         await callback.answer(deny, show_alert=True)
         return
     await callback.answer()
-    await state.update_data(msg_user_id=int(user.id))
-    from app.bot.nav_input import ask_text
+    await _ask_staff_message(callback, state, user, card=MSG_CARD_USER)
 
-    await ask_text(
-        callback,
-        state,
-        prompt=(
-            f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b> را بفرستید:"
-        ),
-        cancel_code="adm_usr",
-        return_to=f"adm:users:view:{user.id}",
-        fsm_state=AdminStates.user_message,
-        edit=True,
-    )
+@router.callback_query(F.data.regexp(r"^adm:resellers:msg:\d+$"))
+@require_bot_owner_handler
+@require_platform_rep_mgmt
+async def adm_resellers_message_start(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
+        return
+    user_id = int((callback.data or "").rsplit(":", 1)[-1])
+    user, deny = await _staff_message_target(session, user_id, MSG_CARD_RESELLER)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
+    await callback.answer()
+    await _ask_staff_message(callback, state, user, card=MSG_CARD_RESELLER)
 
 @router.message(AdminStates.user_message)
 @require_bot_owner_handler
@@ -2489,7 +2537,8 @@ async def adm_users_message_send(
         return
     data = await state.get_data()
     uid = int(data.get("msg_user_id") or 0)
-    user, deny = await _platform_shop_user(session, uid) if uid else (None, feedback.NOT_FOUND)
+    card = str(data.get("msg_card") or MSG_CARD_USER)
+    user, deny = await _staff_message_target(session, uid, card) if uid else (None, feedback.NOT_FOUND)
     await state.clear()
     if deny:
         await message.answer(deny, reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
@@ -2502,7 +2551,7 @@ async def adm_users_message_send(
             user,
             message.text or "",
             shop_id=None,
-            actor=str(db_user.telegram_id or db_user.id),
+            actor=bot_user_panel_label(db_user),
         )
         await session.commit()
         await message.answer(feedback.MESSAGE_SENT, reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
@@ -2510,7 +2559,10 @@ async def adm_users_message_send(
         await message.answer(user_safe_error(e), reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
     except Exception as e:
         await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
-    await _render_user_card(message, session, user)
+    if card == MSG_CARD_RESELLER:
+        await _render_reseller_card(message, session, user)
+    else:
+        await _render_user_card(message, session, user)
 
 @router.callback_query(F.data.startswith("adm:users:view:"))
 @require_bot_owner_handler
