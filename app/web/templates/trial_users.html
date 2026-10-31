@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title %}
+{% from "_marketing_tabs.html" import marketing_tabs %}
+{% block title %}کاربران تست{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    {{ page_title('users', 'کاربران تست') }}
+  </div>
+</div>
+
+{{ marketing_tabs(marketing_sections|default(()), 'trial_users') }}
+
+<div class="home-panels users-ops-overview">
+  <section class="home-panel home-panel-neutral">
+    <div class="home-panel-grid users-ops-stats">
+      <a class="stat{% if active_filter=='all' %} is-active{% endif %}" href="/trial-users{% if q %}?q={{ q|urlencode }}{% endif %}">
+        <div class="stat-top">
+          <span class="stat-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
+          </span>
+          <span>تست گرفته‌اند</span>
+        </div>
+        <strong>{{ summary.trials | num }}</strong>
+      </a>
+      <a class="stat{% if active_filter=='non_buyers' %} is-active{% endif %}" href="/trial-users?filter=non_buyers{% if q %}&amp;q={{ q|urlencode }}{% endif %}">
+        <div class="stat-top">
+          <span class="stat-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 1.5"/></svg>
+          </span>
+          <span>بدون خرید</span>
+        </div>
+        <strong>{{ (summary.trials - summary.buyers) | num }}</strong>
+      </a>
+      <a class="stat{% if active_filter=='buyers' %} is-active{% endif %}" href="/trial-users?filter=buyers{% if q %}&amp;q={{ q|urlencode }}{% endif %}">
+        <div class="stat-top">
+          <span class="stat-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
+          </span>
+          <span>خریدار ({{ summary.conversion_percent | num }}٪)</span>
+        </div>
+        <strong>{{ summary.buyers | num }}</strong>
+      </a>
+    </div>
+  </section>
+</div>
+
+<nav class="section-tabs" role="tablist" aria-label="فیلتر کاربران تست">
+  {% for key, label in filters.items() %}
+  <a class="{% if active_filter==key %}active{% endif %}" href="/trial-users{% if key != 'all' %}?filter={{ key }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% elif q %}?q={{ q|urlencode }}{% endif %}"{% if active_filter==key %} aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
+
+<div class="card card-flush">
+  <form method="get" action="/trial-users" class="search-bar">
+    {% if active_filter != 'all' %}<input type="hidden" name="filter" value="{{ active_filter }}" />{% endif %}
+    <label class="search-bar-field">
+      <input name="q" value="{{ q or '' }}" placeholder="نام، یوزرنیم یا شناسهٔ تلگرام…" maxlength="64" autocomplete="off" aria-label="جستجوی کاربران تست" />
+    </label>
+    <button class="btn btn-ghost" type="submit">جستجو</button>
+  </form>
+  <div class="table-wrap">
+  <table class="table-compact table-list-sm" data-sortable>
+    <thead>
+      <tr>
+        <th class="col-id col-hide-sm" data-sort-type="num" data-list-sort-label="جدیدترین" data-list-sort-dir="descending" data-list-sort-order="1">#</th>
+        <th data-sort-type="text" data-list-sort-label="نام" data-list-sort-dir="ascending" data-list-sort-order="3">کاربر</th>
+        <th class="col-tg col-hide-sm" data-sort-type="num">تلگرام</th>
+        <th data-sort-type="text">وضعیت تست</th>
+        <th class="col-hide-sm" data-sort-type="text">زمان تست</th>
+        <th data-sort-type="num" data-list-sort-label="بیشترین خرید" data-list-sort-dir="descending" data-list-sort-order="2">مجموع خرید</th>
+        <th data-sort-type="text">خرید</th>
+        <th class="col-hide-sm" data-sort-type="text">اولین خرید</th>
+        <th class="col-hide-sm" data-sort-type="text">حساب</th>
+        <th class="li-head" scope="col">
+          <span class="li-count">{{ rows | length | num }} کاربر</span>
+          <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in rows %}
+      <tr data-uid="{{ row.user_id }}">
+        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ row.trial_order_id }}">{{ row.trial_order_id }}</td>
+        <td class="li-title" data-sort-value="{{ row.name }}">
+          <a class="cell-user-link" href="/users?uid={{ row.user_id }}" dir="auto">{{ row.name }}</a>
+          <span class="li-only li-id" dir="ltr">({{ row.telegram_id }})</span>
+        </td>
+        <td class="mono col-tg col-hide-sm" dir="ltr" data-sort-value="{{ row.telegram_id }}">{{ row.telegram_id }}</td>
+        <td class="li-sub" data-sort-value="{{ row.trial_state }}">
+          {#- On phones line two: the tags that matter, then trial state · trial time. -#}
+          {% if row.is_blocked %}<span class="li-only badge blocked">مسدود</span>{% endif %}
+          {% if row.is_opted_out %}<span class="li-only badge neutral">انصراف از پیام</span>{% endif %}
+          <span>{{ row.trial_state_label }}</span>
+          <span class="li-only">· <bdi dir="ltr">{{ (row.trial_at|string)[:10] }}</bdi></span>
+        </td>
+        <td class="muted col-hide-sm" dir="ltr" data-sort-value="{{ row.trial_at }}">{{ (row.trial_at|string)[:16] }}</td>
+        <td class="mono li-value" dir="ltr" data-sort-value="{{ row.total_spent }}">{% if row.is_buyer %}{{ row.total_spent | money }}{% else %}—{% endif %}</td>
+        <td class="li-badge" data-sort-value="{{ '1' if row.is_buyer else '0' }}">
+          {% if row.is_buyer %}
+          <span class="badge delivered" title="{{ row.purchase_count | num }} خرید">خریدار</span>
+          {% else %}
+          <span class="badge neutral">بدون خرید</span>
+          {% endif %}
+        </td>
+        <td class="muted col-hide-sm" dir="ltr" data-sort-value="{{ row.first_purchase_at or '' }}">{% if row.first_purchase_at %}{{ (row.first_purchase_at|string)[:16] }}{% else %}—{% endif %}</td>
+        <td class="col-hide-sm" data-sort-value="{{ '1' if row.is_blocked else '0' }}">
+          {% if row.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
+          {% if row.is_opted_out %}<span class="badge neutral" title="پیام بازاریابی دریافت نمی‌کند">انصراف از پیام</span>{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="10" class="muted">{% if q or active_filter != 'all' %}موردی با این فیلتر پیدا نشد.{% else %}هنوز کسی تست رایگان نگرفته است.{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if next_before or request.query_params.get('before') %}
+  <nav class="list-pager" aria-label="صفحه‌بندی کاربران تست">
+    <div class="list-pager-actions">
+      {% if request.query_params.get('before') %}
+      <a class="btn btn-ghost btn-sm" href="/trial-users{% if active_filter != 'all' or q %}?{% if active_filter != 'all' %}filter={{ active_filter }}{% endif %}{% if q %}{% if active_filter != 'all' %}&amp;{% endif %}q={{ q|urlencode }}{% endif %}{% endif %}">از ابتدا</a>
+      {% endif %}
+      {% if next_before %}
+      <a class="btn btn-ghost btn-sm" href="/trial-users?before={{ next_before }}{% if active_filter != 'all' %}&amp;filter={{ active_filter }}{% endif %}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">بعدی</a>
+      {% else %}
+      <span class="btn btn-ghost btn-sm" aria-disabled="true">بعدی</span>
+      {% endif %}
+    </div>
+  </nav>
+  {% endif %}
+</div>
+{% endblock %}
