@@ -31,6 +31,24 @@ ACTOR_OWNER = "owner"
 ACTOR_SHOP = "shop"  # reseller L1 or principal with shop_settings on that shop
 
 
+def report_hour(raw: object) -> int:
+    """The configured send hour (UTC, 0–23); anything unreadable means midnight UTC."""
+    try:
+        hour = int(str(raw if raw is not None else "0").strip() or "0")
+    except ValueError:
+        return 0
+    return max(0, min(23, hour))
+
+
+def is_report_due(now: datetime, hour_raw: object) -> bool:
+    """From the configured UTC hour to the end of that UTC day.
+
+    The caller still checks the day's «already sent» marker, so the report goes out once a day
+    even when the bot was down or restarting during the configured hour.
+    """
+    return now.hour >= report_hour(hour_raw)
+
+
 @dataclass(frozen=True)
 class DailyMetric:
     key: str

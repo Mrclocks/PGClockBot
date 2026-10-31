@@ -24,6 +24,7 @@ from app.services.formatting import (
     kv_line,
 )
 from app.services.replaceable_notices import replace_notices
+from app.services.ticket_notices import ticket_notice_key
 from app.services.users import get_all_settings, on, set_settings_bulk
 
 
@@ -1049,6 +1050,7 @@ async def notify_new_ticket(
         markup=ticket_action_markup(ticket_id),
         ticket_user_id=ticket_user_id,
         ticket_reseller_id=ticket_reseller_id,
+        replace_key=ticket_notice_key(ticket_id),
     )
 
 
@@ -1135,6 +1137,7 @@ async def notify_ticket_message(
         markup=markup,
         ticket_user_id=ticket_user_id,
         ticket_reseller_id=ticket_reseller_id,
+        replace_key=ticket_notice_key(ticket_id),
     )
 
 

@@ -1,6 +1,6 @@
-"""System alerts that replace each other instead of piling up in a staff chat.
+"""System alerts and daily reports that replace each other instead of piling up in a staff chat.
 
-Each alert kind has a ``replace_key`` (for example ``alert:update``). When the next alert of that
+Each alert kind has a ``replace_key`` (for example ``alert:update``, ``report:daily``). When the next alert of that
 kind reaches a chat, the previous one in the same chat is deleted; one older than Telegram's
 48-hour delete window is edited into a one-line «old alert» note instead, since a bot may edit its
 own messages at any time. When the alert clears (the panel was updated, the failures were handled)
@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
@@ -29,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 KIND_NOTICE = "notice"
 REPLACED_TEXT = "🔕 این اعلان قدیمی است؛ اعلان جدیدتر پایین‌تر آمده است."
+REPORT_REPLACED_TEXT = "🗂 این گزارش قدیمی است؛ گزارش جدیدتر پایین‌تر آمده است."
+DAILY_REPORT_KEY = "report:daily"
+SUBORDINATE_REPORT_KEY = "report:subordinate"
 RESOLVED_TEXT = "✅ این هشدار برطرف شده است."
 # Bounds one clear of an alert for a bot (one row per staff chat).
 CLEAR_LIMIT = 500
@@ -78,7 +82,9 @@ async def _forget(session: AsyncSession, row_ids: list[int]) -> None:
         await session.execute(delete(BotChatMessage).where(BotChatMessage.id.in_(row_ids)))
 
 
-async def replace_notices(session: AsyncSession, bot: Bot, replace_key: str, sent: list[Message]) -> None:
+async def replace_notices(
+    session: AsyncSession, bot: Bot, replace_key: str, sent: list[Message], *, replaced_text: str = REPLACED_TEXT
+) -> None:
     """``sent`` just reached their chats: retire the previous alert of this kind in each of them."""
     chats = {int(m.chat.id): m for m in sent if getattr(m, "chat", None) is not None}
     if not chats:
@@ -92,7 +98,7 @@ async def replace_notices(session: AsyncSession, bot: Bot, replace_key: str, sen
     now = datetime.now(timezone.utc)
     for stored in previous:
         if stored.message_id != chats[stored.chat_id].message_id:
-            await _retire(bot, stored, REPLACED_TEXT, now)
+            await _retire(bot, stored, replaced_text, now)
     try:
         await _forget(session, [s.row_id for s in previous])
         session.add_all(
@@ -109,7 +115,9 @@ async def replace_notices(session: AsyncSession, bot: Bot, replace_key: str, sen
         await rollback_quiet(session)
 
 
-async def clear_notices(session: AsyncSession, bot: Bot, replace_key: str) -> int:
+async def clear_notices(
+    session: AsyncSession, bot: Bot, replace_key: str, *, resolved_text: str = RESOLVED_TEXT
+) -> int:
     """The alert is over: retire its last message in every chat of this bot; return how many."""
     try:
         stored = await _stored(session, int(bot.id), replace_key, None)
@@ -119,7 +127,7 @@ async def clear_notices(session: AsyncSession, bot: Bot, replace_key: str) -> in
         return 0
     now = datetime.now(timezone.utc)
     for item in stored:
-        await _retire(bot, item, RESOLVED_TEXT, now)
+        await _retire(bot, item, resolved_text, now)
     try:
         await _forget(session, [s.row_id for s in stored])
         await session.commit()
@@ -127,3 +135,20 @@ async def clear_notices(session: AsyncSession, bot: Bot, replace_key: str) -> in
         logger.warning("alert clear: write failed key=%s", replace_key, exc_info=True)
         await rollback_quiet(session)
     return len(stored)
+
+
+async def send_replacing_report(
+    session: AsyncSession, bot: Bot, chat_ids: list[int], text: str, *, replace_key: str, **send_kw: Any
+) -> int:
+    """Send a report to each chat and retire that chat's previous report of the same kind.
+
+    Returns how many chats received it; a chat that cannot be reached is skipped and logged.
+    """
+    sent: list[Message] = []
+    for chat_id in chat_ids:
+        try:
+            sent.append(await bot.send_message(int(chat_id), text, **send_kw))
+        except TelegramAPIError:
+            logger.warning("report send failed key=%s chat=%s", replace_key, chat_id, exc_info=True)
+    await replace_notices(session, bot, replace_key, sent, replaced_text=REPORT_REPLACED_TEXT)
+    return len(sent)
