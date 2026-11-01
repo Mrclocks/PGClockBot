@@ -134,7 +134,7 @@ class PurgeTests(PurgeDbHarness):
             ])
             await session.commit()
         done = await self._run(SHOP_A, {"order:delivered"})
-        self.assertEqual((done.orders, done.payments), (1, 0))
+        self.assertEqual((done.orders, done.payments), (1, 1))
         for model in (Order, Payment, PaymentSettlement, PaymentReviewMessage, PaymentReceiptFingerprint, DeliveryFailure):
             with self.subTest(model=model.__name__):
                 self.assertEqual(await self._count(model), 0)
@@ -235,7 +235,8 @@ class PurgeTests(PurgeDbHarness):
         async with self.Session() as session:
             preview = await count_purgeable(session, shop_id=SHOP_A, tags=frozenset({"order:cancelled", "order:rejected"}), days=30)
         done = await self._run(SHOP_A, {"order:cancelled", "order:rejected"})
-        self.assertEqual((preview.orders, preview.total), (done.orders, done.total))
+        self.assertEqual((preview.orders, preview.payments), (done.orders, done.payments))
+        self.assertEqual((done.orders, done.payments), (2, 2))
 
     async def test_automatic_pass_runs_only_where_it_is_switched_on(self):
         from app.db.models import Order
@@ -245,7 +246,7 @@ class PurgeTests(PurgeDbHarness):
         async with self.Session() as session:
             await save_rules(session, shop_id=SHOP_A, rules=PurgeRules(tags=frozenset({"order:cancelled"}), auto=True, days=30))
             await save_rules(session, shop_id=SHOP_B, rules=PurgeRules(tags=frozenset({"order:cancelled"}), auto=False, days=30))
-            self.assertEqual(await auto_purge_all_shops(session), 1)
+            self.assertEqual(await auto_purge_all_shops(session), 2)  # the order and its payment
         self.assertEqual(await self._count(Order, Order.reseller_id == SHOP_A), 0)
         self.assertEqual(await self._count(Order, Order.reseller_id == SHOP_B), 1)
 

@@ -223,18 +223,29 @@ def _cutoff(days: int, now: datetime | None) -> datetime:
     return (now or datetime.now(timezone.utc)) - timedelta(days=days)
 
 
+async def _count(session: AsyncSession, query) -> int:
+    return int(await session.scalar(select(func.count()).select_from(query.subquery())) or 0)
+
+
 async def count_purgeable(
     session: AsyncSession, *, shop_id: int | None, tags: frozenset[str], days: int, now: datetime | None = None
 ) -> PurgeCounts:
-    """How many rows a run with these tags would delete right now."""
+    """How many rows a run with these tags would delete right now (an order's payments included)."""
     cutoff = _cutoff(days, now)
-    counts = [0, 0]
-    for index, (table, build) in enumerate(((ORDER, _order_query), (PAYMENT, _payment_query))):
-        statuses = _statuses(tags, table)
-        if statuses:
-            query = build(shop_id, statuses, cutoff).subquery()
-            counts[index] = int(await session.scalar(select(func.count()).select_from(query)) or 0)
-    return PurgeCounts(orders=counts[0], payments=counts[1])
+    orders = payments = 0
+    order_statuses = _statuses(tags, ORDER)
+    payment_statuses = _statuses(tags, PAYMENT)
+    if order_statuses:
+        order_ids = _order_query(shop_id, order_statuses, cutoff)
+        orders = await _count(session, order_ids)
+        payments += await _count(session, select(Payment.id).where(Payment.order_id.in_(order_ids)))
+    if payment_statuses:
+        standalone = _payment_query(shop_id, payment_statuses, cutoff)
+        if order_statuses:
+            # Already counted with their order.
+            standalone = standalone.where(~Payment.order_id.in_(_order_query(shop_id, order_statuses, cutoff)) | Payment.order_id.is_(None))
+        payments += await _count(session, standalone)
+    return PurgeCounts(orders=orders, payments=payments)
 
 
 async def _delete_payments(session: AsyncSession, where: ColumnElement[bool]) -> int:
@@ -242,12 +253,12 @@ async def _delete_payments(session: AsyncSession, where: ColumnElement[bool]) ->
     return int((await session.execute(delete(Payment).where(where))).rowcount or 0)
 
 
-async def _purge_one_order(session: AsyncSession, order_id: int, *, shop_id: int | None, statuses: list[str]) -> bool:
-    """Delete one order with its payments; False when it changed meanwhile and was kept."""
+async def _purge_one_order(session: AsyncSession, order_id: int, *, shop_id: int | None, statuses: list[str]) -> int | None:
+    """Delete one order with its payments; the number of payments deleted, or None when it was kept."""
     still = and_(Order.id == order_id, _order_shop(shop_id), Order.status.in_(statuses))
     order = (await session.execute(select(Order).where(still))).scalar_one_or_none()
     if order is None:
-        return False
+        return None
     if order.status in UNPAID_ORDER_STATUSES:
         # Same claim as a cancel: only the run that moves it to cancelled releases its holds.
         claimed = await session.execute(
@@ -255,7 +266,7 @@ async def _purge_one_order(session: AsyncSession, order_id: int, *, shop_id: int
         )
         if claimed.rowcount != 1:
             await rollback_quiet(session)
-            return False
+            return None
         await release_unpaid_order_holds(session, order, reason="deleted by cleanup")
         statuses = [*statuses, OrderStatus.CANCELLED.value]
     busy = await session.scalar(
@@ -263,17 +274,17 @@ async def _purge_one_order(session: AsyncSession, order_id: int, *, shop_id: int
     )
     if busy is not None:
         await rollback_quiet(session)
-        return False
-    await _delete_payments(session, Payment.order_id == order_id)
+        return None
+    payments = await _delete_payments(session, Payment.order_id == order_id)
     await purge_row_references(session, Order.__table__, Order.id == order_id)
     deleted = await session.execute(
         delete(Order).where(Order.id == order_id, _order_shop(shop_id), Order.status.in_(statuses))
     )
     if deleted.rowcount != 1:
         await rollback_quiet(session)
-        return False
+        return None
     await session.commit()
-    return True
+    return payments
 
 
 async def _purge_one_payment(session: AsyncSession, payment_id: int, *, shop_id: int | None, statuses: list[str], cutoff: datetime) -> bool:
@@ -298,7 +309,10 @@ async def run_purge(
         ids = list((await session.scalars(_order_query(shop_id, order_statuses, cutoff).order_by(Order.id).limit(BATCH))).all())
         for order_id in ids:
             try:
-                orders += int(await _purge_one_order(session, int(order_id), shop_id=shop_id, statuses=order_statuses))
+                with_order = await _purge_one_order(session, int(order_id), shop_id=shop_id, statuses=order_statuses)
+                if with_order is not None:
+                    orders += 1
+                    payments += with_order
             except Exception:
                 logger.exception("order purge failed order=%s shop=%s", order_id, shop_id)
                 await rollback_quiet(session)
