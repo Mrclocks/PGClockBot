@@ -418,7 +418,7 @@ async def admin_create_bot_user(
     session.add(user)
     if assign_reseller is not None:
         await session.flush()
-        session.add(BotUserShop(bot_user_id=int(user.id), shop_id=assign_reseller, color_tag=normalize_color_tag(color_tag)))
+        session.add(BotUserShop(bot_user_id=user.id, shop_id=assign_reseller, color_tag=normalize_color_tag(color_tag)))
     await session.commit()
     await session.refresh(user)
     return user
