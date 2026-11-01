@@ -82,6 +82,9 @@
         {{ switch('perm_' ~ key, label, checked=(key in selected_perms)) }}
         {% endfor %}
       </div>
+      {% if miniapp_status %}
+      <p class="ui-switch-section-hint" role="status">وضعیت مینی‌اپ فروشگاه: {{ miniapp_status }}</p>
+      {% endif %}
     </div>
 
     <p class="muted">
