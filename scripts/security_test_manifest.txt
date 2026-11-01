@@ -341,3 +341,5 @@ tests/test_gift_codes_permission.py
 tests/test_staff_audit.py
 # Manual shop wallet changes by shop staff: own shop purse only, capped, once per request.
 tests/test_shop_wallet_adjust.py
+# Manual loyalty-point changes by shop staff: own shop only, capped, once per request.
+tests/test_shop_points_adjust.py

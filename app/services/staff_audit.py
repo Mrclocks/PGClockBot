@@ -42,6 +42,8 @@ ACTION_LABELS = {
     "gift_code_toggle": "روشن یا خاموش کردن کد هدیه",
     "wallet_credit": "افزایش دستی کیف پول",
     "wallet_debit": "کاهش دستی کیف پول",
+    "points_credit": "افزایش دستی امتیاز",
+    "points_debit": "کسر دستی امتیاز",
 }
 
 TARGET_LABELS = {
