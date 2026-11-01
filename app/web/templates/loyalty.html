@@ -115,10 +115,12 @@
 
 {% if tab == 'transactions' %}
 <div class="loyalty-stack">
+  {% if can_adjust_platform_points|default(false) %}
   <div class="card settings-card">
     <h2>تعدیل دستی امتیاز</h2>
     <p class="muted update-card-caption">فقط ادمین — دلیل الزامی است و در دفترکل ثبت می‌شود.</p>
     <form method="post" action="/loyalty/adjust" class="form-stack">
+      <input type="hidden" name="nonce" value="{{ owner_points_nonce }}" />
       <div class="form-row">
         <label class="form-field">شناسه کاربر<input name="user_id" type="number" min="1" required dir="ltr" /></label>
         <label class="form-field">تغییر امتیاز (+/-)<input name="delta" type="number" required dir="ltr" /></label>
@@ -127,6 +129,27 @@
       <div class="actions"><button class="btn" type="submit">ثبت تعدیل</button></div>
     </form>
   </div>
+  {% endif %}
+  {% if can_adjust_shop_points|default(false) %}
+  <div class="card settings-card">
+    <h2>تغییر دستی امتیاز مشتری</h2>
+    <p class="muted update-card-caption">فقط امتیاز همین فروشگاه تغییر می‌کند. هر بار حداکثر {{ shop_points_max | num }} امتیاز و روزانه برای کل فروشگاه {{ shop_points_daily | num }} امتیاز. علت در گزارش کارکنان ثبت می‌شود.</p>
+    <form method="post" action="/loyalty/shop-adjust" class="form-stack"
+          data-confirm="امتیاز این مشتری در فروشگاه شما تغییر کند؟ این کار در گزارش کارکنان ثبت می‌شود."
+          data-confirm-title="تأیید تغییر امتیاز" data-confirm-label="اعمال">
+      <input type="hidden" name="nonce" value="{{ shop_points_nonce }}" />
+      <div class="form-row">
+        <label class="form-field">شناسه کاربر<input name="user_id" type="number" min="1" required dir="ltr" /></label>
+        <label class="form-field">امتیاز<input name="points" type="number" min="1" max="{{ shop_points_max }}" required dir="ltr" /></label>
+      </div>
+      <label class="form-field">علت<input name="reason" type="text" required minlength="3" maxlength="200" /></label>
+      <div class="actions">
+        <button class="btn btn-ghost" type="submit" name="mode" value="debit">کسر امتیاز</button>
+        <button class="btn" type="submit" name="mode" value="credit">افزودن امتیاز</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
   <div class="card card-flush">
     <div class="card-flush-head"><h2>آخرین تراکنش‌های امتیاز</h2></div>
     <div class="table-wrap">

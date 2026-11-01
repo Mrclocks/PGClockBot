@@ -1927,3 +1927,15 @@ class ShopWalletAdjustDay(Base):
     shop_id: Mapped[int] = mapped_column(Integer)
     day: Mapped[str] = mapped_column(String(10))
     used: Mapped[int] = mapped_column(BigInteger, server_default="0")
+
+
+class ShopPointsAdjustDay(Base):
+    """How many loyalty points one shop's staff changed by hand on one UTC day (daily cap)."""
+
+    __tablename__ = "shop_points_adjust_days"
+    __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_points_adjust_days_shop_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    day: Mapped[str] = mapped_column(String(10))
+    used: Mapped[int] = mapped_column(BigInteger, server_default="0")
