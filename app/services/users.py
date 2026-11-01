@@ -1226,6 +1226,18 @@ ALL_SETTINGS_TABS: list[tuple[str, str]] = [*SETTINGS_TABS, *PANEL_SETTINGS_TABS
 
 BUTTON_LABELS_GROUP = "متن دکمه‌های منو"
 
+# Settings fields shown only while another select field has one of the listed values:
+# key -> (controlling key, values that show it). The form hides the rest and keeps their saved values.
+SETTING_VISIBILITY: dict[str, tuple[str, tuple[str, ...]]] = {
+    "crypto_rate_asset": ("crypto_rate_mode", ("manual", "api")),
+    "crypto_rate_manual": ("crypto_rate_mode", ("manual", "api")),
+    "crypto_rate_margin_percent": ("crypto_rate_mode", ("manual", "api")),
+    "crypto_quote_minutes": ("crypto_rate_mode", ("manual", "api")),
+    "crypto_rate_api_url": ("crypto_rate_mode", ("api",)),
+    "crypto_rate_api_path": ("crypto_rate_mode", ("api",)),
+    "crypto_rate_api_divisor": ("crypto_rate_mode", ("api",)),
+}
+
 SETTING_GROUPS = {
     "خوش‌آمد و هویت": [
         ("shop_title", "نام فروشگاه", "text", "بالای منوی اصلی ربات دیده می‌شود"),

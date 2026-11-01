@@ -402,6 +402,50 @@ class CryptoPayHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("USDT (معادل", shown.await_args.kwargs["body"])
 
 
+class VisibilityTests(unittest.TestCase):
+    """The settings form shows only the fields the chosen conversion mode uses, and keeps the rest's values."""
+
+    def _hidden_fields(self, mode: str) -> dict[str, bool]:
+        import re
+
+        from app.api.app import templates
+
+        values = {**DEFAULT_SETTINGS, "pay_crypto_enabled": "1", "crypto_rate_mode": mode, "crypto_rate_manual": "98500"}
+        html = templates.get_template("_domain_settings_form.html").render(
+            settings_form_action="/x", tab_groups=["رمزارز"], groups={"رمزارز": SETTING_GROUPS["رمزارز"]}, values=values,
+            app_version="t", csrf_token="t",
+        )
+        found = re.findall(r'<div class="setting-item[^>]*data-setting="([a-z_]+)"[^>]*?(\shidden)?>', html)
+        self.html = html
+        return {key: bool(hidden) for key, hidden in found}
+
+    def test_each_mode_shows_only_its_own_fields(self) -> None:
+        always = {"crypto_rate_asset", "crypto_rate_manual", "crypto_rate_margin_percent", "crypto_quote_minutes"}
+        api_only = {"crypto_rate_api_url", "crypto_rate_api_path", "crypto_rate_api_divisor"}
+        off = self._hidden_fields("off")
+        self.assertEqual({key for key, hidden in off.items() if not hidden}, set())
+        manual = self._hidden_fields("manual")
+        self.assertEqual({key for key, hidden in manual.items() if not hidden}, always)
+        api = self._hidden_fields("api")
+        self.assertEqual({key for key, hidden in api.items() if not hidden}, always | api_only)
+
+    def test_the_mode_select_itself_is_never_hidden_and_hidden_values_are_still_submitted(self) -> None:
+        self._hidden_fields("off")
+        self.assertNotIn('data-setting="crypto_rate_mode"', self.html)
+        self.assertIn('name="s_crypto_rate_manual"', self.html)
+        self.assertIn('value="98500"', self.html)
+        self.assertNotIn("disabled", self.html.split('name="s_crypto_rate_manual"', 1)[1][:120])
+
+    def test_a_field_without_a_rule_is_untouched(self) -> None:
+        from app.api.app import templates
+
+        html = templates.get_template("_settings_field.html").render(
+            field=("referral_bonus", "پاداش دعوت", "number", ""), values={"referral_bonus": "5"},
+        )
+        self.assertNotIn("data-show-when", html)
+        self.assertNotIn("hidden", html)
+
+
 class MigrationTests(unittest.TestCase):
     def test_upgrade_twice_and_downgrade_keep_payments(self) -> None:
         import sqlalchemy as sa

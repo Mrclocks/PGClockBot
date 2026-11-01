@@ -86,6 +86,7 @@ from app.services.panel_assets import get_panel_asset_cache_key
 from app.services.shop_scope import is_platform_admin, payment_shop_id
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
+    SETTING_VISIBILITY,
     SETTINGS_DOMAIN_REDIRECTS,
     SETTING_GROUPS,
     SETTINGS_TABS,
@@ -143,6 +144,7 @@ templates.env.filters["ticket_status"] = ticket_status_fa
 templates.env.globals["app_version"] = local_version()
 templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
+templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
 templates.env.globals["panel_script_cache_key"] = get_panel_asset_cache_key("panel.js")
 templates.env.globals["panel_widget_cache_key"] = get_panel_asset_cache_key("panel_widget_request.js")
 templates.env.globals["money_inputs_cache_key"] = get_panel_asset_cache_key("money-inputs.js")
