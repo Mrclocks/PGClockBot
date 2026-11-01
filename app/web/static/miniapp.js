@@ -319,13 +319,13 @@
     if (!links || !links.length) {
       return '<p class="hint">آدرس پنل در دسترس نیست.</p>';
     }
-    return links
+    const tiles = links
       .map(
         (l) =>
-          `<div class="link-row"><div><strong>${esc(l.label)}</strong></div>
-          <button type="button" class="btn ghost sm" data-path="${esc(l.path)}">باز کردن</button></div>`
+          `<button type="button" class="link-tile" data-path="${esc(l.path)}">${esc(l.label)}</button>`
       )
       .join("");
+    return `<div class="link-grid">${tiles}</div>`;
   }
 
   function serviceInfoErrorHtml(s) {
