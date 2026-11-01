@@ -26,6 +26,8 @@ OPERATIONS = {
     "chat_message_purge",
     # Approves card receipts nobody reviewed in time; opens the bot it needs only when a receipt is due.
     "scheduled_receipt_approval",
+    # Reads each converting shop's API rate into memory; needs no running bot.
+    "crypto_rate_refresh",
     # Copies each bot's Telegram profile photo for its Mini App logo; needs no running bot.
     "bot_profile_photo",
     # Removes cached customer profile photos for the user card; needs no running bot.

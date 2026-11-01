@@ -322,3 +322,5 @@ tests/test_trial_user_actions.py
 tests/test_auto_approve_notice.py
 # Scheduled receipt approval: per-shop rule, safe selection, no retries, duplicates stay manual.
 tests/test_scheduled_approval.py
+# Crypto rates: SSRF-safe fetch, exact integer quotes locked on the payment, per-shop isolation, no claim without a rate.
+tests/test_crypto_rates.py
