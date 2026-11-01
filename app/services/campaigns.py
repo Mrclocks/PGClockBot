@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.models import BotUser, CampaignRecipient, MarketingPreference, Order, Plan, TargetedCampaign, UserService
 from app.services.service_scope import shop_services_clause
+from app.services.shop_customer_block import not_blocked_in_shop_clause
 from app.services.shop_membership import shop_member_clause
 
 AUDIENCES = {"trial": "کاربران تست بدون خرید", "expiring": "سرویس‌های نزدیک انقضا", "inactive": "مشتریان بدون خرید در بازهٔ انتخابی"}
@@ -34,7 +35,9 @@ def audience_query(*, shop_id, audience, days, now=None):
     member = _member_clause(shop_id)
     opted_out = exists(select(MarketingPreference.user_id).where(
         MarketingPreference.user_id == BotUser.id, MarketingPreference.shop_key == (shop_id or 0), MarketingPreference.enabled.is_(False)))
-    query = select(BotUser.id).where(member, BotUser.is_blocked.is_(False), BotUser.role.in_(["user", "reseller"]), ~opted_out)
+    query = select(BotUser.id).where(
+        member, BotUser.is_blocked.is_(False), not_blocked_in_shop_clause(shop_id), BotUser.role.in_(["user", "reseller"]), ~opted_out
+    )
     if audience == "trial":
         query = query.where(~bought, exists(select(Order.id).join(Plan, Plan.id == Order.plan_id).where(
             shop_order, Order.status == "delivered", Plan.is_trial.is_(True))))

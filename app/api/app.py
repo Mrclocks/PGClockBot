@@ -121,6 +121,7 @@ from app.api.funnel_pages import register_funnel_pages
 from app.api.staff_audit_pages import register_staff_audit_pages
 from app.api.shop_wallet_pages import register_shop_wallet_pages
 from app.api.shop_points_pages import register_shop_points_pages
+from app.api.shop_customer_block_pages import register_shop_customer_block_pages
 from app.api.panel_brand_pages import register_panel_brand_pages
 from app.api.trial_users_pages import register_trial_users_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
@@ -1572,6 +1573,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_staff_audit_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_shop_wallet_pages(app, require_staff=require_staff, get_db=get_db)
     register_shop_points_pages(app, require_staff=require_staff, get_db=get_db)
+    register_shop_customer_block_pages(app, require_staff=require_staff, get_db=get_db)
     register_trial_users_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_panel_brand_pages(app, require_staff=require_staff, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)

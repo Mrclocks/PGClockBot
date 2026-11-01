@@ -493,6 +493,10 @@ class BotUserShop(Base):
     bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
     shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Blocked in this shop only; the account-wide ``BotUser.is_blocked`` stays the owner's.
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    blocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    blocked_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
 
 class ServiceImportAttempt(Base):

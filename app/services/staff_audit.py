@@ -44,6 +44,8 @@ ACTION_LABELS = {
     "wallet_debit": "کاهش دستی کیف پول",
     "points_credit": "افزایش دستی امتیاز",
     "points_debit": "کسر دستی امتیاز",
+    "customer_block": "مسدود کردن مشتری در فروشگاه",
+    "customer_unblock": "رفع مسدودی مشتری در فروشگاه",
 }
 
 TARGET_LABELS = {

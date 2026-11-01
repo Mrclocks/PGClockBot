@@ -23,6 +23,7 @@ from app.services.miniapp_shop import (
     is_shop_staff,
     request_scope,
 )
+from app.services.shop_customer_block import BLOCKED_MESSAGE as SHOP_BLOCKED_MESSAGE, is_blocked_in_shop
 from app.services.platform_identity import is_bot_platform_admin
 from app.services.users import set_shop_reseller_id
 
@@ -104,6 +105,8 @@ async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
     if bool(getattr(user, "is_blocked", False)):
         raise HTTPException(403, "دسترسی شما مسدود شده است")
     await assert_shop_member(session, scope, user)
+    if scope.is_shop and not is_shop_staff(scope, user) and await is_blocked_in_shop(session, int(user.id), scope.shop_id):
+        raise HTTPException(403, SHOP_BLOCKED_MESSAGE)
     assert_shop_route(scope, request)
     # Parity with bot: users cannot use the app until channel membership is confirmed.
     await assert_mini_force_join(session, user, scope=scope)
