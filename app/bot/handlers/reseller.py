@@ -22,7 +22,8 @@ from app.db.models import (
 )
 from app.services.chat_records import keep_sent
 from app.services.automation_review import count_review_queue
-from app.services.color_tags import risk_mark
+from app.services.color_tags import tag_mark
+from app.services.customer_marks import marks_for, marks_of
 from app.services.customer_service_lines import service_lines
 from app.services.home_overview import reseller_shop_summary
 from app.services.formatting import (
@@ -394,11 +395,12 @@ async def res_users_list(
     )
     users = list(result.scalars().all())
     by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users], shop_id=int(owner_id))
+    marks = await marks_for(session, int(owner_id), [int(u.id) for u in users])
     buttons: list[InlineKeyboardButton] = []
     for u in users:
         ops = build_user_ops_row(u, by_svc.get(int(u.id), []))
         name = (u.full_name or u.username or str(u.telegram_id))[:16]
-        flag = risk_mark(u, shop_id=int(owner_id)) + bot_user_alert_flags(ops)
+        flag = tag_mark(marks[int(u.id)].tag) + bot_user_alert_flags(ops)
         buttons.append(
             InlineKeyboardButton(
                 text=f"{flag} {name}",
@@ -469,7 +471,7 @@ async def res_user_view(
 
     by = await load_services_by_user_ids(session, [int(user.id)], shop_id=int(owner_id))
     ops = build_user_ops_row(user, by.get(int(user.id), []))
-    flags = risk_mark(user, shop_id=int(owner_id)) + bot_user_alert_flags(ops)
+    flags = tag_mark((await marks_of(session, int(owner_id), user)).tag) + bot_user_alert_flags(ops)
     blocked = "بله" if user.is_blocked else "خیر"
     display = html.escape(user.full_name or user.username or "—")
     alert_line = ""

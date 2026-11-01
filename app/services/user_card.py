@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, Order, OrderStatus
 from app.services.bot_user_admin import load_user_services
 from app.services.color_tags import ColorTag, color_tag_meta
+from app.services.customer_marks import marks_of
 from app.services.daily_report import format_jalali_parts
 from app.services.users_ops import ServiceSummary, build_user_ops_row
 from app.services.wallet import get_wallet_balance
@@ -79,6 +80,6 @@ async def build_user_card(
         paid_total=paid_total,
         paid_count=paid_count,
         joined=_joined_text(user.created_at),
-        risk_tag=color_tag_meta(user.color_tag) if show_private_marks else None,
+        risk_tag=color_tag_meta((await marks_of(session, shop_id, user)).tag) if show_private_marks else None,
         services=row.services,
     )

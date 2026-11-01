@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, Plan, Role, UserService, WalletTransaction
+from app.db.models import BotUser, BotUserShop, Plan, Role, UserService, WalletTransaction
 from app.services.formatting import (
     expire_remaining_days,
     format_bytes,
@@ -412,9 +412,13 @@ async def admin_create_bot_user(
         role=Role.USER.value,
         referral_code=referral_code,
         reseller_id=assign_reseller,
-        color_tag=normalize_color_tag(color_tag),
+        # A shop's tag lives on its membership row; only the platform's lives on the person.
+        color_tag=normalize_color_tag(color_tag if assign_reseller is None else None),
     )
     session.add(user)
+    if assign_reseller is not None:
+        await session.flush()
+        session.add(BotUserShop(bot_user_id=user.id, shop_id=assign_reseller, color_tag=normalize_color_tag(color_tag)))
     await session.commit()
     await session.refresh(user)
     return user
