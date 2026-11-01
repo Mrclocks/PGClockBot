@@ -20,8 +20,8 @@ from app.db import Base
 from app.db.models import BotUser, Order, Payment, PaymentReceiptFingerprint, Role
 from app.services import scheduled_approval as sa_mod
 from app.services.orders import attach_receipt
+from app.services.approval_rule import MAX_MINUTES
 from app.services.scheduled_approval import (
-    MAX_MINUTES,
     ApprovalRule,
     approve_due_receipts,
     due_payments,
@@ -40,15 +40,19 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(DEFAULT_SETTINGS["auto_approve_after_minutes"], "0")
         for raw in (None, "", "0", "abc", "-5", "1.5", "٥", True):
             with self.subTest(raw=raw):
-                self.assertIsNone(rule_from_settings({"auto_approve_after_minutes": raw}))
+                self.assertIsNone(rule_from_settings({"auto_approve_payments": "1", "auto_approve_after_minutes": raw}))
         self.assertIsNone(rule_from_settings({}))
 
+    def test_a_wait_without_the_switch_is_not_a_rule(self) -> None:
+        self.assertIsNone(rule_from_settings({"auto_approve_after_minutes": "5"}))
+        self.assertIsNone(rule_from_settings({"auto_approve_payments": "0", "auto_approve_after_minutes": "5"}))
+
     def test_the_rule_reads_the_minutes_cap_and_the_returning_only_switch(self) -> None:
-        rule = rule_from_settings({"auto_approve_after_minutes": "7", "auto_approve_after_max_amount": "250000"})
+        rule = rule_from_settings({"auto_approve_payments": "1", "auto_approve_after_minutes": "7", "auto_approve_after_max_amount": "250000"})
         self.assertEqual((rule.minutes, rule.max_amount, rule.returning_only), (7, 250000, True))
-        off = rule_from_settings({"auto_approve_after_minutes": "7", "auto_approve_after_returning_only": "0"})
+        off = rule_from_settings({"auto_approve_payments": "1", "auto_approve_after_minutes": "7", "auto_approve_after_returning_only": "0"})
         self.assertFalse(off.returning_only)
-        self.assertEqual(rule_from_settings({"auto_approve_after_minutes": "999999"}).minutes, MAX_MINUTES)
+        self.assertEqual(rule_from_settings({"auto_approve_payments": "1", "auto_approve_after_minutes": "999999"}).minutes, MAX_MINUTES)
         self.assertIn("7", rule.reason)
 
     def test_the_settings_are_offered_in_the_payment_settings_group(self) -> None:
@@ -233,7 +237,7 @@ class RunnerTests(ApprovalTestCase):
             await session.commit()
             bot, opened, closed, open_bot = self._bots()
             approve = AsyncMock(side_effect=self._decide(session))
-            settings = {self.shop_a.id: {"auto_approve_after_minutes": "5", "auto_approve_after_returning_only": "0"}}
+            settings = {self.shop_a.id: {"auto_approve_payments": "1", "auto_approve_after_minutes": "5", "auto_approve_after_returning_only": "0"}}
             with patch.object(sa_mod, "auto_approve_receipt", approve), patch.object(sa_mod, "datetime", wraps=datetime) as clock:
                 clock.now.return_value = NOW
                 total = await approve_due_receipts(session, settings_for=self._settings(settings), open_bot=open_bot, now=NOW)
@@ -262,7 +266,7 @@ class RunnerTests(ApprovalTestCase):
             approve = AsyncMock()
             with patch.object(sa_mod, "auto_approve_receipt", approve), patch.object(sa_mod, "due_payments", AsyncMock(return_value=[payment])):
                 total = await approve_due_receipts(
-                    session, settings_for=self._settings({None: {"auto_approve_after_minutes": "5"}}), open_bot=open_bot, now=NOW
+                    session, settings_for=self._settings({None: {"auto_approve_payments": "1", "auto_approve_after_minutes": "5"}}), open_bot=open_bot, now=NOW
                 )
         self.assertEqual(total, 0)
         approve.assert_not_awaited()
@@ -284,7 +288,7 @@ class RunnerTests(ApprovalTestCase):
                 payment.status = "approved"
                 await sess.commit()
 
-            settings = {None: {"auto_approve_after_minutes": "5", "auto_approve_after_returning_only": "0"}}
+            settings = {None: {"auto_approve_payments": "1", "auto_approve_after_minutes": "5", "auto_approve_after_returning_only": "0"}}
             with patch.object(sa_mod, "auto_approve_receipt", AsyncMock(side_effect=decide)):
                 first = await approve_due_receipts(session, settings_for=self._settings(settings), open_bot=open_bot, now=NOW)
                 second = await approve_due_receipts(session, settings_for=self._settings(settings), open_bot=open_bot, now=NOW)
@@ -303,7 +307,7 @@ class RunnerTests(ApprovalTestCase):
             approve = AsyncMock()
             with patch.object(sa_mod, "auto_approve_receipt", approve):
                 total = await approve_due_receipts(
-                    session, settings_for=self._settings({None: {"auto_approve_after_minutes": "5", "auto_approve_after_returning_only": "0"}}),
+                    session, settings_for=self._settings({None: {"auto_approve_payments": "1", "auto_approve_after_minutes": "5", "auto_approve_after_returning_only": "0"}}),
                     open_bot=open_bot, now=NOW,
                 )
             self.assertEqual((total, opened), (0, [None]))
@@ -320,7 +324,7 @@ class RunnerTests(ApprovalTestCase):
             async def settings_for(shop_id):
                 if shop_id == self.shop_a.id:
                     raise RuntimeError("settings unreadable")
-                return {"auto_approve_after_minutes": "5", "auto_approve_after_returning_only": "0"}
+                return {"auto_approve_payments": "1", "auto_approve_after_minutes": "5", "auto_approve_after_returning_only": "0"}
 
             approve = AsyncMock(side_effect=self._decide(session))
             with patch.object(sa_mod, "auto_approve_receipt", approve):
@@ -345,6 +349,40 @@ class InstantPathStaysTests(ApprovalTestCase):
         self.assertIsNone(result)
         shared.assert_awaited_once()
 
+    async def _process(self, *, wait: str, note: str | None = None) -> tuple[AsyncMock, AsyncMock]:
+        from app.services import receipts
+
+        async with self.Session() as session:
+            payment = await self._receipt(session, shop=None)
+            if note:
+                order = await session.get(Order, payment.order_id)
+                order.note = note
+            await session.commit()
+            shared, notice = AsyncMock(return_value=None), AsyncMock()
+            settings = {"auto_approve_payments": "1", "auto_approve_after_minutes": wait}
+            with (
+                patch.object(receipts, "get_setting", AsyncMock(return_value="1")),
+                patch.object(receipts, "get_all_settings", AsyncMock(return_value=settings)),
+                patch.object(receipts, "auto_approve_receipt", shared),
+                patch.object(receipts, "notify_pending_approval", notice),
+            ):
+                await receipts.process_receipt(session, payment, bot=AsyncMock(), user_tg_id=11)
+        return shared, notice
+
+    async def test_a_new_purchase_waits_for_the_schedule_when_a_wait_is_set(self) -> None:
+        shared, notice = await self._process(wait="5")
+        shared.assert_not_awaited()
+        notice.assert_awaited_once()
+
+    async def test_a_renewal_is_still_approved_at_once_when_a_wait_is_set(self) -> None:
+        shared, notice = await self._process(wait="5", note="renew:1")
+        shared.assert_awaited_once()
+        notice.assert_not_awaited()
+
+    async def test_no_wait_means_immediate_approval(self) -> None:
+        shared, _ = await self._process(wait="0")
+        shared.assert_awaited_once()
+
     async def test_the_staff_notice_says_why_it_was_automatic(self) -> None:
         from app.services import notifications
 
@@ -355,6 +393,36 @@ class InstantPathStaysTests(ApprovalTestCase):
             with patch.object(notifications, "_dispatch_dual_notify", dispatch):
                 await notifications.notify_auto_approve(AsyncMock(), session, payment, reason="بدون بررسی ادمین تا ۵ دقیقه")
         self.assertIn("بدون بررسی ادمین تا ۵ دقیقه", dispatch.await_args.args[3])
+
+
+class SettingsLayoutTests(unittest.TestCase):
+    def test_wait_settings_follow_the_switch_and_sit_under_card_to_card(self) -> None:
+        from app.services.users import SETTING_GROUPS, SETTING_VISIBILITY
+
+        for key in ("auto_approve_after_minutes", "auto_approve_after_max_amount", "auto_approve_after_returning_only"):
+            self.assertEqual(SETTING_VISIBILITY[key], ("auto_approve_payments", ("1",)))
+        order = [row[0] for row in SETTING_GROUPS["روش‌های پرداخت"]]
+        card = order.index("pay_card_enabled")
+        self.assertEqual(
+            order[card : card + 7],
+            [
+                "pay_card_enabled",
+                "auto_approve_payments",
+                "auto_approve_after_minutes",
+                "auto_approve_after_max_amount",
+                "auto_approve_after_returning_only",
+                "pay_card_auto_enabled",
+                "pay_bbc_enabled",
+            ],
+        )
+
+    def test_the_settings_tab_for_the_web_app_is_named_after_the_brand(self) -> None:
+        from jinja2 import Environment, FileSystemLoader
+
+        env = Environment(loader=FileSystemLoader(ROOT / "app/web/templates"), autoescape=True)
+        html = env.from_string("{% from '_panel_settings_tabs.html' import panel_settings_tabs %}{{ panel_settings_tabs('pwa') }}").render()
+        self.assertIn("ظاهر و برند", html)
+        self.assertNotIn("وب‌اپ", html)
 
 
 class MigrationTests(unittest.TestCase):

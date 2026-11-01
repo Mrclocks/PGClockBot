@@ -14,8 +14,14 @@
     return String(rule || '').split(':')[0];
   }
 
+  // An unchecked switch submits nothing, so it reads as "0".
+  function controlValue(control) {
+    if (control.type === 'checkbox') return control.checked ? control.value : '0';
+    return control.value;
+  }
+
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { isShown: isShown, controllerName: controllerName };
+    module.exports = { isShown: isShown, controllerName: controllerName, controlValue: controlValue };
   }
   if (typeof document === 'undefined') return;
 
@@ -23,7 +29,7 @@
     form.querySelectorAll('[data-show-when]').forEach(function (field) {
       var rule = field.getAttribute('data-show-when');
       var control = form.querySelector('[name="' + controllerName(rule) + '"]');
-      if (control) field.hidden = !isShown(rule, control.value);
+      if (control) field.hidden = !isShown(rule, controlValue(control));
     });
   }
 

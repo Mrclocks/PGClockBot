@@ -1229,6 +1229,9 @@ BUTTON_LABELS_GROUP = "متن دکمه‌های منو"
 # Settings fields shown only while another select field has one of the listed values:
 # key -> (controlling key, values that show it). The form hides the rest and keeps their saved values.
 SETTING_VISIBILITY: dict[str, tuple[str, tuple[str, ...]]] = {
+    "auto_approve_after_minutes": ("auto_approve_payments", ("1",)),
+    "auto_approve_after_max_amount": ("auto_approve_payments", ("1",)),
+    "auto_approve_after_returning_only": ("auto_approve_payments", ("1",)),
     "crypto_rate_asset": ("crypto_rate_mode", ("manual", "api")),
     "crypto_rate_manual": ("crypto_rate_mode", ("manual", "api")),
     "crypto_rate_margin_percent": ("crypto_rate_mode", ("manual", "api")),
@@ -1625,30 +1628,12 @@ SETTING_GROUPS = {
     "روش‌های پرداخت": [
         ("pay_wallet_enabled", "کیف پول داخلی", "toggle", "پرداخت از موجودی کیف پول کاربر"),
         ("pay_card_enabled", "کارت به کارت", "toggle", ""),
-        ("pay_gateway_enabled", "درگاه پرداخت (لینک + رسید)", "toggle", "لینک درگاه خارجی + ارسال رسید — روش قبلی حفظ می‌شود"),
-        (
-            "pay_psp_enabled",
-            "درگاه آنلاین API",
-            "toggle",
-            "درگاه واقعی request→verify (زرین‌پال / سان‌پی / Mock فقط با ALLOW_SETTLEMENT_MOCK)",
-        ),
-        (
-            "pay_bbc_enabled",
-            "بزن به کارت",
-            "toggle",
-            "کارت‌به‌کارت خودکار با bezanbecard.ir و کلید API خود فروشگاه: مشتری مبلغ یکتا را "
-            "واریز می‌کند و ربات بعد از تأیید بزن به کارت، خودکار تحویل می‌دهد. نیاز به آدرس https دارد.",
-        ),
-        ("pay_card_auto_enabled", "تأیید خودکار کارت به کارت", "toggle", "وب‌هوک امضادار از سرویس تأیید کارت — کنار رسید دستی"),
-        ("pay_crypto_enabled", "رمزارز", "toggle", ""),
-        ("pay_stars_enabled", "استارز تلگرام", "toggle", "پرداخت درون‌برنامه‌ای با ⭐"),
-        ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),
-        ("auto_approve_payments", "تأیید خودکار رسید", "toggle", "اگر روشن باشد، سرویس بلافاصله بعد از ارسال رسید خرید تحویل می‌شود. شارژ کیف پول هرگز خودکار تأیید نمی‌شود."),
+        ("auto_approve_payments", "تأیید خودکار رسید", "toggle", "اگر روشن باشد، سرویس بلافاصله بعد از ارسال رسید خرید تحویل می‌شود؛ یا بعد از مدتی که پایین‌تر تعیین می‌کنید. شارژ کیف پول هرگز خودکار تأیید نمی‌شود."),
         (
             "auto_approve_after_minutes",
             "تأیید خودکار رسید بعد از مدت (دقیقه)",
             "number",
-            "رسید کارت‌به‌کارتِ خرید سرویس که این‌قدر دقیقه بی‌پاسخ بماند خودکار تأیید می‌شود. ۰ = خاموش. شارژ کیف پول، تمدید، افزونه و رسید تکراری شامل نمی‌شوند. ادمین دکمهٔ «رد درخواست» را دارد.",
+            "رسید کارت‌به‌کارتِ خرید سرویس که این‌قدر دقیقه بی‌پاسخ بماند خودکار تأیید می‌شود. ۰ = فوری. شارژ کیف پول، تمدید، افزونه و رسید تکراری شامل نمی‌شوند. ادمین دکمهٔ «رد درخواست» را دارد.",
         ),
         (
             "auto_approve_after_max_amount",
@@ -1662,6 +1647,24 @@ SETTING_GROUPS = {
             "toggle",
             "روشن (پیشنهادی): فقط مشتریانی که قبلاً از همین فروشگاه خرید پولی تحویل‌شده دارند خودکار تأیید می‌شوند؛ مشتری جدید دستی می‌ماند.",
         ),
+        ("pay_card_auto_enabled", "تأیید خودکار کارت به کارت", "toggle", "وب‌هوک امضادار از سرویس تأیید کارت — کنار رسید دستی"),
+        (
+            "pay_bbc_enabled",
+            "بزن به کارت",
+            "toggle",
+            "کارت‌به‌کارت خودکار با bezanbecard.ir و کلید API خود فروشگاه: مشتری مبلغ یکتا را "
+            "واریز می‌کند و ربات بعد از تأیید بزن به کارت، خودکار تحویل می‌دهد. نیاز به آدرس https دارد.",
+        ),
+        ("pay_gateway_enabled", "درگاه پرداخت (لینک + رسید)", "toggle", "لینک درگاه خارجی + ارسال رسید — روش قبلی حفظ می‌شود"),
+        (
+            "pay_psp_enabled",
+            "درگاه آنلاین API",
+            "toggle",
+            "درگاه واقعی request→verify (زرین‌پال / سان‌پی / Mock فقط با ALLOW_SETTLEMENT_MOCK)",
+        ),
+        ("pay_crypto_enabled", "رمزارز", "toggle", ""),
+        ("pay_stars_enabled", "استارز تلگرام", "toggle", "پرداخت درون‌برنامه‌ای با ⭐"),
+        ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),
         ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
         ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
     ],

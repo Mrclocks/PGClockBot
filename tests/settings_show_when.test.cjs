@@ -11,4 +11,7 @@ assert.equal(isShown("s_crypto_rate_mode:api", ""), false);
 // A malformed rule never hides a field.
 assert.equal(isShown("", "off"), true);
 assert.equal(isShown("nocolon", "off"), true);
+// A switch: checked sends "1", unchecked reads "0".
+assert.equal(isShown("s_auto_approve_payments:1", "1"), true);
+assert.equal(isShown("s_auto_approve_payments:1", "0"), false);
 console.log("settings show-when: ok");

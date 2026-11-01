@@ -5,7 +5,7 @@ from __future__ import annotations
 from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Payment
+from app.db.models import Order, Payment
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
 from app.services.notifications import (
@@ -23,7 +23,8 @@ from app.services.receipt_fingerprints import (
     get_receipt_dup_policy,
     store_receipt_fingerprint,
 )
-from app.services.users import get_setting, on
+from app.services.approval_rule import is_delayed_purchase, rule_from_settings
+from app.services.users import get_all_settings, get_setting, on
 import logging
 
 logger = logging.getLogger(__name__)
@@ -190,6 +191,14 @@ async def auto_approve_receipt(
         )
 
 
+async def _waits_for_schedule(session: AsyncSession, payment: Payment, shop_rid: int | None) -> bool:
+    """True when the shop approves this receipt after a wait instead of at once (see approval_rule)."""
+    order = await session.get(Order, payment.order_id) if payment.order_id else None
+    if not is_delayed_purchase(payment, order):
+        return False
+    return rule_from_settings(await get_all_settings(session, reseller_id=shop_rid)) is not None
+
+
 async def process_receipt(
     session: AsyncSession,
     payment: Payment,
@@ -232,6 +241,8 @@ async def process_receipt(
         )
         if topup_shop != shop_rid:
             auto = False
+    if auto and await _waits_for_schedule(session, payment, shop_rid):
+        auto = False
     if auto:
         return await auto_approve_receipt(
             session, payment, bot=bot, user_tg_id=user_tg_id, reviewer_note=reviewer_note
