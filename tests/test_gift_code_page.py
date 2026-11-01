@@ -34,9 +34,14 @@ class GiftCodeScopeTests(unittest.TestCase):
     def test_owner_manages_the_platform_shop(self):
         self.assertIsNone(gift_code_scope(OWNER))
 
-    def test_shop_staff_with_orders_or_plans_get_their_own_shop(self):
-        self.assertEqual(gift_code_scope(_reseller(["plans"])), 5)
-        self.assertEqual(gift_code_scope(_reseller(["orders"], shop_id=9)), 9)
+    def test_shop_staff_with_gift_codes_get_their_own_shop(self):
+        self.assertEqual(gift_code_scope(_reseller(["gift_codes"])), 5)
+        self.assertEqual(gift_code_scope(_reseller(["gift_codes"], shop_id=9)), 9)
+
+    def test_orders_or_plans_alone_no_longer_reach_gift_codes(self):
+        for perms in (["plans"], ["orders"], ["plans", "orders"]):
+            with self.subTest(perms=perms), self.assertRaises(PermissionError):
+                gift_code_scope(_reseller(perms))
 
     def test_missing_permission_is_refused(self):
         with self.assertRaises(PermissionError):
@@ -44,10 +49,10 @@ class GiftCodeScopeTests(unittest.TestCase):
 
     def test_staff_without_a_shop_never_reaches_any_codes(self):
         for staff in (
-            _reseller(["plans"], shop_id=None),
-            _reseller(["plans"], shop_id=0),
+            _reseller(["gift_codes"], shop_id=None),
+            _reseller(["gift_codes"], shop_id=0),
             {"role": "admin", "permissions": []},
-            {"role": "pg_staff", "permissions": ["plans", "orders"]},
+            {"role": "pg_staff", "permissions": ["gift_codes", "plans", "orders"]},
         ):
             with self.subTest(staff=staff), self.assertRaises(PermissionError):
                 gift_code_scope(staff)
@@ -141,19 +146,19 @@ class GiftCodePageTests(GiftCodeHarness):
         self.assertNotIn("page-sub", response.text)
 
     async def test_shop_staff_see_only_their_own_shop(self):
-        response = await self._get(_reseller(["plans"], shop_id=5))
+        response = await self._get(_reseller(["gift_codes"], shop_id=5))
         self.assertIn("SHOPFIVECODE", response.text)
         self.assertNotIn("SHOPSIXCODE", response.text)
         self.assertNotIn("PLATFORMCODE", response.text)
-        other = await self._get(_reseller(["orders"], shop_id=6))
+        other = await self._get(_reseller(["gift_codes"], shop_id=6))
         self.assertIn("SHOPSIXCODE", other.text)
         self.assertNotIn("SHOPFIVECODE", other.text)
 
     async def test_staff_without_permission_or_shop_are_sent_home(self):
         for staff in (
             _reseller(["tickets"]),
-            _reseller(["plans"], shop_id=None),
-            {"role": "pg_staff", "permissions": ["plans"]},
+            _reseller(["gift_codes"], shop_id=None),
+            {"role": "pg_staff", "permissions": ["gift_codes"]},
             {"role": "admin", "permissions": []},
         ):
             with self.subTest(staff=staff):
@@ -162,7 +167,7 @@ class GiftCodePageTests(GiftCodeHarness):
                 self.assertEqual(response.headers["location"], "/home")
 
     async def test_forms_carry_a_csrf_token_and_post_to_the_existing_routes(self):
-        response = await self._get(_reseller(["plans"], shop_id=5))
+        response = await self._get(_reseller(["gift_codes"], shop_id=5))
         self.assertIn('name="csrf_token"', response.text)
         self.assertIn('action="/plans/gift-codes"', response.text)
         self.assertIn('/plans/gift-codes/', response.text)
@@ -175,12 +180,12 @@ class GiftCodePageTests(GiftCodeHarness):
         self.assertNotIn("<b>bad</b>", failed.text)
 
     async def test_sidebar_entry_is_active_on_the_page(self):
-        response = await self._get(_reseller(["plans"], shop_id=5))
+        response = await self._get(_reseller(["gift_codes"], shop_id=5))
         entry = response.text.split("بازاریابی و وفاداری</span>", 1)[0].rsplit("<a ", 1)[1]
         self.assertIn("active", entry)
 
     async def test_tab_strip_marks_gift_codes_active(self):
-        response = await self._get(_reseller(["plans", "loyalty"], shop_id=5))
+        response = await self._get(_reseller(["gift_codes", "loyalty"], shop_id=5))
         self.assertIn('href="/gift-codes" class="active" aria-current="page"', response.text)
 
 

@@ -7,6 +7,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ChargeCode, ResellerPlan
+from app.services.gift_codes import gift_code_scope
 from app.services.table_bulk import parse_bulk_ids
 
 logger = logging.getLogger(__name__)
@@ -271,18 +272,9 @@ async def bulk_gift_code_toggle(
     staff: dict,
     code_ids: list[int],
 ) -> tuple[int, int]:
-    from app.services.authz import authz_from_staff, can_shop
-    from app.services.shop_scope import is_platform_admin, shop_owner_id
-
-    admin_scope = is_platform_admin(staff)
-    if not (
-        admin_scope
-        or can_shop(authz_from_staff(staff), "orders")
-        or can_shop(authz_from_staff(staff), "plans")
-    ):
-        return 0, len(parse_bulk_ids(code_ids))
-    rid = None if admin_scope else shop_owner_id(staff)
-    if not admin_scope and rid is None:
+    try:
+        rid = gift_code_scope(staff)
+    except PermissionError:
         return 0, len(parse_bulk_ids(code_ids))
 
     ids = parse_bulk_ids(code_ids)

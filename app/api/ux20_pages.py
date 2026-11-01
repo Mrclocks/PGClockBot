@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ChargeCode, Order
 from app.services.authz import authz_from_staff, can_shop
+from app.services.gift_codes import gift_code_scope
 from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope, assert_bot_user_in_scope
 from app.services.users import set_setting
 from app.services.ux20 import (
@@ -186,16 +187,9 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        authz = authz_from_staff(staff)
-        if not (
-            is_platform_admin(staff)
-            or can_shop(authz, "orders")
-            or can_shop(authz, "plans")
-        ):
-            return RedirectResponse("/home", status_code=303)
-        rid = None if is_platform_admin(staff) else shop_owner_id(staff)
-        # Non-owner staff without a shop scope must never mint platform gift codes.
-        if not is_platform_admin(staff) and rid is None:
+        try:
+            rid = gift_code_scope(staff)
+        except PermissionError:
             return RedirectResponse("/home", status_code=303)
         try:
             form = await request.form()
@@ -221,12 +215,9 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
     ):
         from app.services.gift_codes import validate_rules
 
-        admin_scope = is_platform_admin(staff)
-        authz = authz_from_staff(staff)
-        if not (admin_scope or can_shop(authz, "plans") or can_shop(authz, "orders")):
-            return RedirectResponse("/home", status_code=303)
-        rid = None if admin_scope else shop_owner_id(staff)
-        if not admin_scope and rid is None:
+        try:
+            rid = gift_code_scope(staff)
+        except PermissionError:
             return RedirectResponse("/home", status_code=303)
         try:
             # Serialize edits with usage claims; never reset the usage history.
@@ -255,16 +246,9 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        authz = authz_from_staff(staff)
-        admin_scope = is_platform_admin(staff)
-        if not (
-            admin_scope or can_shop(authz, "orders") or can_shop(authz, "plans")
-        ):
-            return RedirectResponse("/home", status_code=303)
-        rid = None if admin_scope else shop_owner_id(staff)
-        if not admin_scope and rid is None:
-            # No shop context (e.g. pg_staff) — must never toggle platform or
-            # any other shop's gift/charge codes.
+        try:
+            rid = gift_code_scope(staff)
+        except PermissionError:
             return RedirectResponse("/home", status_code=303)
         row = (
             await session.execute(select(ChargeCode).where(ChargeCode.id == int(code_id)))

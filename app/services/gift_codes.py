@@ -33,6 +33,8 @@ PURCHASE_TYPES = {
 MAX_AMOUNT = 50_000_000
 MAX_USES = 1000
 GIFT_CODE_LIST_LIMIT = 200
+# Gift codes mint wallet credit in the shop, so they have their own key, apart from orders or plans.
+GIFT_CODES_PERMISSION = "gift_codes"
 
 
 def utc(value: datetime) -> datetime:
@@ -441,14 +443,13 @@ def describe_code(row: ChargeCode) -> dict:
 def gift_code_scope(staff: Mapping[str, Any]) -> int | None:
     """Shop whose gift codes ``staff`` may manage (``None`` = the platform shop).
 
-    Same rule as the create, edit and toggle routes: an explicit Owner manages the
-    platform codes, anyone else needs the orders or plans permission *and* a shop.
+    The one rule for the page and every POST route: an explicit Owner manages the
+    platform codes, anyone else needs the ``gift_codes`` permission *and* a shop.
     Staff without a shop (for example PG staff) never reach another tenant's codes.
     """
     if is_platform_admin(dict(staff)):
         return None
-    authz = authz_from_staff(staff)
-    if not (can_shop(authz, "orders") or can_shop(authz, "plans")):
+    if not can_shop(authz_from_staff(staff), GIFT_CODES_PERMISSION):
         raise PermissionError("دسترسی مدیریت کد هدیه ندارید")
     shop_id = shop_owner_id(dict(staff))
     if shop_id is None:
