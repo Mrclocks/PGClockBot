@@ -795,6 +795,9 @@ DEFAULT_SETTINGS = {
     "lucky_wheel_free_spins_daily": "0",
     "loyalty_submenu_order": "loy_referral,loy_points,loy_rewards,loy_wheel,loy_history",
     "auto_approve_payments": "0",
+    "auto_approve_after_minutes": "0",
+    "auto_approve_after_max_amount": "0",
+    "auto_approve_after_returning_only": "1",
     "faq_text": (
         "❓ حجم تمام شد چه کنم؟\nاز بخش سرویس‌ها → تمدید.\n\n"
         "❓ لینک کار نمی‌کند؟\nQR یا لینک را دوباره از سرویس‌های من بگیرید."
@@ -1621,6 +1624,24 @@ SETTING_GROUPS = {
         ("pay_stars_enabled", "استارز تلگرام", "toggle", "پرداخت درون‌برنامه‌ای با ⭐"),
         ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),
         ("auto_approve_payments", "تأیید خودکار رسید", "toggle", "اگر روشن باشد، سرویس بلافاصله بعد از ارسال رسید خرید تحویل می‌شود. شارژ کیف پول هرگز خودکار تأیید نمی‌شود."),
+        (
+            "auto_approve_after_minutes",
+            "تأیید خودکار رسید بعد از مدت (دقیقه)",
+            "number",
+            "رسید کارت‌به‌کارتِ خرید سرویس که این‌قدر دقیقه بی‌پاسخ بماند خودکار تأیید می‌شود. ۰ = خاموش. شارژ کیف پول، تمدید، افزونه و رسید تکراری شامل نمی‌شوند. ادمین دکمهٔ «رد درخواست» را دارد.",
+        ),
+        (
+            "auto_approve_after_max_amount",
+            "سقف مبلغ تأیید خودکار زمان‌بندی‌شده (تومان)",
+            "number",
+            "رسید بالاتر از این مبلغ دستی می‌ماند. ۰ = بدون سقف.",
+        ),
+        (
+            "auto_approve_after_returning_only",
+            "فقط مشتریان با خرید قبلی",
+            "toggle",
+            "روشن (پیشنهادی): فقط مشتریانی که قبلاً از همین فروشگاه خرید پولی تحویل‌شده دارند خودکار تأیید می‌شوند؛ مشتری جدید دستی می‌ماند.",
+        ),
         ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
         ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
     ],

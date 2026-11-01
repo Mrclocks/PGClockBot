@@ -260,6 +260,14 @@ class Order(Base):
 
 class Payment(Base):
     __tablename__ = "payments"
+    __table_args__ = (
+        # Receipts waiting for a decision, oldest first: what the scheduled approval scans.
+        Index(
+            "ix_payments_pending_receipt", "receipt_at",
+            sqlite_where=text("status = 'pending' AND receipt_at IS NOT NULL"),
+            postgresql_where=text("status = 'pending' AND receipt_at IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True, index=True)
@@ -268,6 +276,8 @@ class Payment(Base):
     method: Mapped[str] = mapped_column(String(32), default=PaymentMethod.CARD.value)
     status: Mapped[str] = mapped_column(String(32), default=PaymentStatus.PENDING.value, index=True)
     receipt_file_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # When the latest receipt arrived; NULL for payments from before this was recorded (never auto-approved).
+    receipt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_wallet_topup: Mapped[bool] = mapped_column(Boolean, default=False)

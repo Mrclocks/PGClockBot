@@ -333,6 +333,30 @@ async def cleanup_stale_pending_orders() -> None:
             logger.exception("pending order cleanup failed")
 
 
+async def run_scheduled_receipt_approvals() -> None:
+    """Every minute: approve card receipts nobody reviewed within their shop's chosen time."""
+    async with SessionLocal() as session:
+        try:
+            from app.bot import create_bot
+            from app.services.reseller_bots import open_notify_bot_for_reseller
+            from app.services.scheduled_approval import approve_due_receipts
+            from app.services.users import get_all_settings
+
+            async def settings_for(shop_id: int | None) -> dict[str, str]:
+                return await get_all_settings(session, reseller_id=shop_id)
+
+            async def open_bot(shop_id: int | None):
+                if shop_id is None:
+                    return create_bot(), True
+                return await open_notify_bot_for_reseller(session, shop_id)
+
+            approved = await approve_due_receipts(session, settings_for=settings_for, open_bot=open_bot)
+            if approved:
+                logger.info("scheduled receipt approval approved=%s", approved)
+        except Exception:
+            logger.exception("scheduled receipt approval failed")
+
+
 async def run_scheduled_backup() -> None:
     """Nightly backup + archive validation when enabled."""
     async with SessionLocal() as session:
@@ -809,6 +833,7 @@ def start_background_scheduler() -> None:
         ("billing_tick", run_reseller_billing_tick, {"minutes": 1}, 120),
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
         ("pending_order_cleanup", cleanup_stale_pending_orders, {"hours": 1}, 3600),
+        ("scheduled_receipt_approval", run_scheduled_receipt_approvals, {"seconds": 60}, 90),
         ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),
         ("connection_status", run_connection_status, {"seconds": 60}, 60),
         ("bbc_settlement_poll", run_bbc_settlement_poll, {"seconds": 45}, 90),
