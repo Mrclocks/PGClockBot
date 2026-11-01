@@ -46,6 +46,9 @@ class MiniAppFrontendTests(unittest.TestCase):
     def test_pull_to_refresh_and_badges_behavior(self) -> None:
         self.run_node("miniapp_pull_badges.test.cjs")
 
+    def test_launch_without_the_telegram_sdk(self) -> None:
+        self.run_node("miniapp_launch.test.cjs")
+
 
 if __name__ == "__main__":
     unittest.main()
