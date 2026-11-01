@@ -25,11 +25,11 @@ from app.services.order_purge import (
 )
 from app.services.users import get_all_settings
 
-CLEANUP_TAB = "/finance?tab=orders&settings=cleanup"
+PURGE_TAB = "/finance?tab=orders&settings=purge"
 
 
 def _back(request: Request, **flash: str) -> RedirectResponse:
-    target = safe_internal_next(request.query_params.get("next"), CLEANUP_TAB)
+    target = safe_internal_next(request.query_params.get("next"), PURGE_TAB)
     key, value = next(iter(flash.items()))
     joiner = "&" if "?" in target else "?"
     return RedirectResponse(f"{target}{joiner}{key}={quote(value)}", status_code=303)

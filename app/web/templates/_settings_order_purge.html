@@ -3,6 +3,34 @@
   'awaiting_receipt': 'pending', 'awaiting_approval': 'pending',
   'delivering': 'info', 'voided': 'cancelled',
 } %}
+<form method="post" action="{{ purge.run_action }}" class="settings-form"
+      data-confirm="{{ purge.ready.orders | num }} سفارش و {{ purge.ready.payments | num }} پرداخت برای همیشه پاک شوند؟"
+      data-confirm-title="حذف کامل" data-confirm-label="حذف کامل" data-confirm-danger="1">
+  <div class="card settings-card">
+    <h2>حذف دستی</h2>
+    <p class="muted update-card-caption">بر اساس تنظیمات ذخیره‌شدهٔ پایین.</p>
+    <div class="home-panel-grid">
+      <div class="stat">
+        <div class="stat-top"><span>آمادهٔ حذف</span></div>
+        <strong>{{ purge.ready.total | num }}</strong>
+        <span>{{ purge.ready.orders | num }} سفارش · {{ purge.ready.payments | num }} پرداخت</span>
+      </div>
+      <div class="stat">
+        <div class="stat-top"><span>آخرین حذف</span></div>
+        {% if purge.last_run %}
+        <strong><bdi dir="ltr">{{ purge.last_run.at }}</bdi></strong>
+        <span>{{ purge.last_run.kind }} · {{ purge.last_run.orders | num }} سفارش · {{ purge.last_run.payments | num }} پرداخت</span>
+        {% else %}
+        <strong>—</strong>
+        {% endif %}
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-danger" type="submit"{% if not purge.ready.total %} disabled{% endif %}>حذف کامل الان</button>
+    </div>
+  </div>
+</form>
+
 <form method="post" action="{{ purge.rules_action }}" class="settings-form">
   <div class="card settings-card">
     <h2>حذف کامل از پایگاه داده</h2>
@@ -36,34 +64,7 @@
       </label>
     </div>
   </div>
-  <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیره</button>
-  </div>
-</form>
-
-<form method="post" action="{{ purge.run_action }}" class="settings-form"
-      data-confirm="{{ purge.ready.orders | num }} سفارش و {{ purge.ready.payments | num }} پرداخت برای همیشه پاک شوند؟"
-      data-confirm-title="حذف کامل" data-confirm-label="حذف کامل" data-confirm-danger="1">
-  <div class="card settings-card">
-    <h2>حذف دستی</h2>
-    <div class="home-panel-grid">
-      <div class="stat">
-        <div class="stat-top"><span>آمادهٔ حذف</span></div>
-        <strong>{{ purge.ready.total | num }}</strong>
-        <span>{{ purge.ready.orders | num }} سفارش · {{ purge.ready.payments | num }} پرداخت</span>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>آخرین حذف</span></div>
-        {% if purge.last_run %}
-        <strong><bdi dir="ltr">{{ purge.last_run.at }}</bdi></strong>
-        <span>{{ purge.last_run.kind }} · {{ purge.last_run.orders | num }} سفارش · {{ purge.last_run.payments | num }} پرداخت</span>
-        {% else %}
-        <strong>—</strong>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-  <div class="actions sticky-actions">
-    <button class="btn btn-danger" type="submit"{% if not purge.ready.total %} disabled{% endif %}>حذف کامل الان</button>
+  <div class="actions sticky-actions ui-modal-sticky-save">
+    <button class="btn" type="submit">ذخیره تنظیمات</button>
   </div>
 </form>
