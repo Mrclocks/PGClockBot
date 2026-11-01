@@ -269,7 +269,7 @@ svg { flex-shrink: 0; }
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 5px 14px var(--glow, transparent);
 }
-.shortcut-icon.tone-brand { background: var(--accent); color: var(--accent-fg); --tone-line: color-mix(in srgb, var(--accent) 65%, #000); }
+.shortcut-icon.tone-brand { --tone-line: var(--accent); }
 .shortcut-icon { position: relative; border: 2px solid var(--tone-line, currentColor); }
 /* A count in the tile's corner: answered tickets, rewards ready to take, receipts to review. */
 .shortcut-badge {
