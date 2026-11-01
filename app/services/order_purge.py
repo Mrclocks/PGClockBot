@@ -1,8 +1,8 @@
 """Delete old orders and payments from the database by status, by hand or on a schedule.
 
-Each shop (``None`` = the platform) picks, per status tag, whether its manual run and its
-hourly run delete that tag. A deleted order takes its payments and every row that depends
-on them; references from history and configuration (code usage, trial claims, automations,
+Each shop (``None`` = the platform) picks the status tags to delete; the same tags apply to
+the manual run and, when switched on, to the hourly run. A deleted order takes its payments
+and every row that depends on them; references from history and configuration (code usage, trial claims, automations,
 funnel events) are cleared instead, so a used code or a taken trial stays used. Customers'
 services are never touched.
 
@@ -48,7 +48,7 @@ from app.services.ux20 import payment_shop_clause
 logger = logging.getLogger(__name__)
 
 PURGE_PERMISSION = "orders_purge"
-KEY_MANUAL = "cleanup_purge_manual"
+KEY_TAGS = "cleanup_purge_tags"
 KEY_AUTO = "cleanup_purge_auto"
 KEY_DAYS = "cleanup_purge_after_days"
 KEY_LAST_RUN = "cleanup_purge_last_run"
@@ -79,7 +79,6 @@ class PurgeTag:
     status: str
     label: str
     locked: bool = False
-    note: str = ""
 
     @property
     def token(self) -> str:
@@ -87,18 +86,18 @@ class PurgeTag:
 
 
 ORDER_TAGS: tuple[PurgeTag, ...] = (
-    PurgeTag(ORDER, OrderStatus.PENDING.value, "در انتظار", note="سفارش اول لغو و کد تخفیف و تست آن آزاد می‌شود"),
-    PurgeTag(ORDER, OrderStatus.AWAITING_RECEIPT.value, "منتظر رسید", note="سفارش اول لغو و کد تخفیف و تست آن آزاد می‌شود"),
-    PurgeTag(ORDER, OrderStatus.AWAITING_APPROVAL.value, "منتظر تأیید", note="رسیدی که بررسی نشده هم حذف می‌شود"),
-    PurgeTag(ORDER, OrderStatus.PAID.value, "پرداخت‌شده", locked=True, note="در حال تحویل است؛ هیچ‌وقت حذف نمی‌شود"),
-    PurgeTag(ORDER, OrderStatus.DELIVERING.value, "در حال تحویل", locked=True, note="در حال تحویل است؛ هیچ‌وقت حذف نمی‌شود"),
-    PurgeTag(ORDER, OrderStatus.DELIVERED.value, "تحویل‌شده", note="سابقهٔ فروش و آمار درآمد آن هم پاک می‌شود؛ سرویس مشتری می‌ماند"),
+    PurgeTag(ORDER, OrderStatus.PENDING.value, "در انتظار"),
+    PurgeTag(ORDER, OrderStatus.AWAITING_RECEIPT.value, "منتظر رسید"),
+    PurgeTag(ORDER, OrderStatus.AWAITING_APPROVAL.value, "منتظر تأیید"),
+    PurgeTag(ORDER, OrderStatus.PAID.value, "پرداخت‌شده", locked=True),
+    PurgeTag(ORDER, OrderStatus.DELIVERING.value, "در حال تحویل", locked=True),
+    PurgeTag(ORDER, OrderStatus.DELIVERED.value, "تحویل‌شده"),
     PurgeTag(ORDER, OrderStatus.REJECTED.value, "ردشده"),
     PurgeTag(ORDER, OrderStatus.CANCELLED.value, "لغوشده"),
 )
 PAYMENT_TAGS: tuple[PurgeTag, ...] = (
-    PurgeTag(PAYMENT, PaymentStatus.PENDING.value, "در انتظار", note="فقط شارژ کیف پول یا پرداخت سفارشِ بسته‌شده"),
-    PurgeTag(PAYMENT, PaymentStatus.APPROVED.value, "تأییدشده", note="سابقهٔ دریافت پول پاک می‌شود"),
+    PurgeTag(PAYMENT, PaymentStatus.PENDING.value, "در انتظار"),
+    PurgeTag(PAYMENT, PaymentStatus.APPROVED.value, "تأییدشده"),
     PurgeTag(PAYMENT, PaymentStatus.REJECTED.value, "ردشده"),
     PurgeTag(PAYMENT, PaymentStatus.VOIDED.value, "باطل‌شده"),
 )
@@ -107,8 +106,8 @@ TAGS: dict[str, PurgeTag] = {tag.token: tag for tag in (*ORDER_TAGS, *PAYMENT_TA
 
 @dataclass(frozen=True, slots=True)
 class PurgeRules:
-    manual: frozenset[str]
-    auto: frozenset[str]
+    tags: frozenset[str]
+    auto: bool
     days: int
 
 
@@ -148,7 +147,8 @@ def rules_from_settings(settings: Mapping[str, str]) -> PurgeRules:
         days = parse_days(settings.get(KEY_DAYS, DEFAULT_DAYS))
     except ValueError:
         days = DEFAULT_DAYS
-    return PurgeRules(manual=parse_tags(settings.get(KEY_MANUAL)), auto=parse_tags(settings.get(KEY_AUTO)), days=days)
+    auto = str(settings.get(KEY_AUTO) or "").strip().lower() in {"1", "true", "yes", "on"}
+    return PurgeRules(tags=parse_tags(settings.get(KEY_TAGS)), auto=auto, days=days)
 
 
 def purge_scope(staff: dict) -> int | None:
@@ -166,7 +166,7 @@ def purge_scope(staff: dict) -> int | None:
 async def save_rules(session: AsyncSession, *, shop_id: int | None, rules: PurgeRules) -> None:
     await set_settings_bulk(
         session,
-        {KEY_MANUAL: join_tags(rules.manual), KEY_AUTO: join_tags(rules.auto), KEY_DAYS: str(rules.days)},
+        {KEY_TAGS: join_tags(rules.tags), KEY_AUTO: "1" if rules.auto else "0", KEY_DAYS: str(rules.days)},
         reseller_id=shop_id,
     )
 
@@ -329,11 +329,10 @@ async def record_purge_run(session: AsyncSession, *, shop_id: int | None, kind: 
 
 @dataclass(frozen=True, slots=True)
 class PurgeRow:
-    """One status tag in the switch grid: its manual and automatic switches."""
+    """One status tag and whether it is switched on for deletion."""
 
     tag: PurgeTag
-    manual: bool
-    auto: bool
+    on: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,7 +343,7 @@ class PurgeSection:
 
 def purge_sections(rules: PurgeRules) -> tuple[PurgeSection, ...]:
     def rows(tags: tuple[PurgeTag, ...]) -> tuple[PurgeRow, ...]:
-        return tuple(PurgeRow(tag=t, manual=t.token in rules.manual, auto=t.token in rules.auto) for t in tags)
+        return tuple(PurgeRow(tag=t, on=t.token in rules.tags) for t in tags)
 
     return (PurgeSection("سفارش‌ها", rows(ORDER_TAGS)), PurgeSection("پرداخت‌ها", rows(PAYMENT_TAGS)))
 
@@ -377,8 +376,8 @@ async def purge_panel_context(
         "days": rules.days,
         "min_days": MIN_DAYS,
         "max_days": MAX_DAYS,
-        "manual_ready": await count_purgeable(session, shop_id=shop_id, tags=rules.manual, days=rules.days),
-        "auto_on": bool(rules.auto),
+        "ready": await count_purgeable(session, shop_id=shop_id, tags=rules.tags, days=rules.days),
+        "auto_on": rules.auto,
         "last_run": _last_run_view(settings),
         "rules_action": f"{RULES_PATH}?next={quote(return_to)}",
         "run_action": f"{RUN_PATH}?next={quote(return_to)}",
@@ -391,7 +390,7 @@ SHOP_SCAN_LIMIT = 2000
 async def _shops_with_auto_rules(session: AsyncSession) -> list[int]:
     rows = await session.scalars(
         select(ResellerSetting.reseller_user_id)
-        .where(ResellerSetting.key == KEY_AUTO, ResellerSetting.value != "")
+        .where(ResellerSetting.key == KEY_AUTO, ResellerSetting.value == "1")
         .order_by(ResellerSetting.reseller_user_id)
         .limit(SHOP_SCAN_LIMIT)
     )
@@ -399,14 +398,14 @@ async def _shops_with_auto_rules(session: AsyncSession) -> list[int]:
 
 
 async def auto_purge_all_shops(session: AsyncSession) -> int:
-    """One automatic pass over the platform and every shop with automatic tags; one failure does not stop the rest."""
+    """One automatic pass over the platform and every shop that switched it on; one failure does not stop the rest."""
     total = 0
     for shop_id in [None, *await _shops_with_auto_rules(session)]:
         try:
             rules = rules_from_settings(await get_all_settings(session, reseller_id=shop_id))
-            if not rules.auto:
+            if not rules.auto or not rules.tags:
                 continue
-            done = await run_purge(session, shop_id=shop_id, tags=rules.auto, days=rules.days)
+            done = await run_purge(session, shop_id=shop_id, tags=rules.tags, days=rules.days)
             if done.total:
                 await record_purge_run(session, shop_id=shop_id, kind="auto", counts=done)
             total += done.total

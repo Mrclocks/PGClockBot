@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.services.order_purge import (
     KEY_AUTO,
     KEY_DAYS,
-    KEY_MANUAL,
+    KEY_TAGS,
     PurgeRules,
     auto_purge_all_shops,
     count_purgeable,
@@ -237,14 +237,14 @@ class PurgeTests(PurgeDbHarness):
         done = await self._run(SHOP_A, {"order:cancelled", "order:rejected"})
         self.assertEqual((preview.orders, preview.total), (done.orders, done.total))
 
-    async def test_automatic_pass_follows_each_shops_own_column(self):
+    async def test_automatic_pass_runs_only_where_it_is_switched_on(self):
         from app.db.models import Order
 
         await self._order("cancelled", shop=SHOP_A)
         await self._order("cancelled", shop=SHOP_B)
         async with self.Session() as session:
-            await save_rules(session, shop_id=SHOP_A, rules=PurgeRules(manual=frozenset(), auto=frozenset({"order:cancelled"}), days=30))
-            await save_rules(session, shop_id=SHOP_B, rules=PurgeRules(manual=frozenset({"order:cancelled"}), auto=frozenset(), days=30))
+            await save_rules(session, shop_id=SHOP_A, rules=PurgeRules(tags=frozenset({"order:cancelled"}), auto=True, days=30))
+            await save_rules(session, shop_id=SHOP_B, rules=PurgeRules(tags=frozenset({"order:cancelled"}), auto=False, days=30))
             self.assertEqual(await auto_purge_all_shops(session), 1)
         self.assertEqual(await self._count(Order, Order.reseller_id == SHOP_A), 0)
         self.assertEqual(await self._count(Order, Order.reseller_id == SHOP_B), 1)
@@ -277,15 +277,17 @@ class PurgeRouteTests(PurgeDbHarness):
 
     async def test_save_rules_ignores_locked_tags_and_validates_days(self):
         response = await self.client.post("/finance/cleanup/purge-rules", data={
-            "days": "10", "m_order:cancelled": "1", "m_order:paid": "1", "a_payment:rejected": "1",
+            "days": "10", "t_order:cancelled": "1", "t_order:paid": "1", "t_payment:rejected": "1", "auto": "1",
         })
         self.assertIn("ok=", response.headers["location"])
         values = await self._settings(SHOP_A)
-        self.assertEqual((values[KEY_MANUAL], values[KEY_AUTO], values[KEY_DAYS]), ("order:cancelled", "payment:rejected", "10"))
+        self.assertEqual(
+            (values[KEY_TAGS], values[KEY_AUTO], values[KEY_DAYS]), ("order:cancelled,payment:rejected", "1", "10")
+        )
         bad = await self.client.post("/finance/cleanup/purge-rules", data={"days": "0"})
         self.assertIn("err=", bad.headers["location"])
         platform = await self._settings(None)
-        self.assertNotEqual(platform.get(KEY_MANUAL), "order:cancelled")
+        self.assertNotEqual(platform.get(KEY_TAGS), "order:cancelled,payment:rejected")
 
     async def test_run_now(self):
         from app.db.models import Order
@@ -294,7 +296,7 @@ class PurgeRouteTests(PurgeDbHarness):
         self.assertIn("err=", none_on.headers["location"])
         await self._order("cancelled")
         await self._order("cancelled", shop=SHOP_B)
-        await self.client.post("/finance/cleanup/purge-rules", data={"days": "30", "m_order:cancelled": "1"})
+        await self.client.post("/finance/cleanup/purge-rules", data={"days": "30", "t_order:cancelled": "1"})
         done = await self.client.post("/finance/cleanup/purge-run?next=/evil.example")
         self.assertTrue(done.headers["location"].startswith("/finance?"))
         self.assertEqual(await self._count(Order, Order.reseller_id == SHOP_A), 0)
@@ -306,24 +308,23 @@ class PurgeRouteTests(PurgeDbHarness):
         await self._order("cancelled")
         self.staff = _reseller(SHOP_A, ["orders", "shop_settings"])
         for path in ("/finance/cleanup/purge-rules", "/finance/cleanup/purge-run"):
-            response = await self.client.post(path, data={"days": "30", "m_order:cancelled": "1"})
+            response = await self.client.post(path, data={"days": "30", "t_order:cancelled": "1"})
             self.assertEqual(response.headers["location"], "/home")
         self.assertEqual(await self._count(Order), 1)
 
 
 class PurgePanelTemplateTests(PurgeDbHarness):
-    async def test_grid_has_every_tag_in_two_columns_and_locks_in_flight_orders(self):
+    async def test_one_switch_per_tag_shared_by_manual_and_automatic_and_locks_in_flight_orders(self):
         from app.api.app import templates
 
         async with self.Session() as session:
-            ctx = await purge_panel_context(session, OWNER, {KEY_MANUAL: "order:cancelled"}, return_to="/finance?tab=orders")
+            ctx = await purge_panel_context(session, OWNER, {KEY_TAGS: "order:cancelled", KEY_AUTO: "1"}, return_to="/finance?tab=orders")
             self.assertIsNone(await purge_panel_context(session, _reseller(SHOP_A, ["orders"]), {}, return_to="/x"))
         html = templates.env.get_template("_settings_order_purge.html").render(purge=ctx)
-        self.assertEqual(html.count('name="m_'), 12)
-        self.assertEqual(html.count('name="a_'), 12)
-        self.assertIn('name="m_order:cancelled" value="1"\n                       aria-label="حذف دستی سفارش‌ها لغوشده"\n                       checked', html)
-        self.assertEqual(html.count(" disabled />"), 4)
-
+        self.assertEqual(html.count('name="t_'), 12)
+        self.assertIn('name="t_order:cancelled" value="1" aria-label="حذف سفارش‌ها لغوشده"\n                 checked', html)
+        self.assertEqual(html.count(" disabled />"), 2)
+        self.assertIn('name="auto" value="1" checked', html)
 
 if __name__ == "__main__":
     unittest.main()
