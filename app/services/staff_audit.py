@@ -40,10 +40,13 @@ ACTION_LABELS = {
     "gift_code_create": "ساخت کد هدیه",
     "gift_code_edit": "ویرایش کد هدیه",
     "gift_code_toggle": "روشن یا خاموش کردن کد هدیه",
+    "wallet_credit": "افزایش دستی کیف پول",
+    "wallet_debit": "کاهش دستی کیف پول",
 }
 
 TARGET_LABELS = {
     "gift_code": "کد هدیه",
+    "customer": "مشتری",
 }
 
 

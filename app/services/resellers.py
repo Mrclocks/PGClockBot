@@ -44,6 +44,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("trial_users_manage", "پیام به کاربران تست"),
     ("catalog_discounts", "تخفیف و کاهش قیمت فروشگاه"),
     ("gift_codes", "کد هدیه و کد تخفیف فروشگاه"),
+    ("wallet_adjust", "تنظیم دستی کیف پول مشتری"),
     ("loyalty", "باشگاه مشتریان"),
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),
     ("connection_status_manage", "مدیریت تست اتصال"),

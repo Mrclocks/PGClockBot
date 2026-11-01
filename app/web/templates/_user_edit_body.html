@@ -111,6 +111,16 @@
 </section>
 
 {% endif %}
+{% if can_adjust_shop_wallet|default(false) %}
+<section class="edit-section" id="user-shop-wallet">
+  <header class="edit-section-head">
+    <h3>تنظیم کیف پول در این فروشگاه</h3>
+    <p class="muted">فقط کیف پول همین فروشگاه تغییر می‌کند. هر بار حداکثر {{ shop_wallet_max | money }} تومان و روزانه برای کل فروشگاه {{ shop_wallet_daily | money }} تومان. علت در گزارش کارکنان ثبت می‌شود.</p>
+  </header>
+  {% from "_wallet_adjust_form.html" import wallet_adjust_form %}
+  {{ wallet_adjust_form('/users/' ~ user.id ~ '/shop-wallet', 'کیف پول این مشتری در فروشگاه شما مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟ این کار در گزارش کارکنان ثبت می‌شود.', nonce=shop_wallet_nonce, note_label='علت', note_required=true) }}
+</section>
+{% endif %}
 
 {% if can_pg_create %}
 <section class="edit-section">

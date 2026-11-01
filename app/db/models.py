@@ -1911,3 +1911,19 @@ class ShopStaffAction(Base):
     reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     request_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ShopWalletAdjustDay(Base):
+    """How much one shop's staff changed customer wallets by hand on one UTC day.
+
+    The daily cap is enforced with a conditional UPDATE on this row, so two requests at the
+    same moment cannot both pass it.
+    """
+
+    __tablename__ = "shop_wallet_adjust_days"
+    __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_wallet_adjust_days_shop_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    day: Mapped[str] = mapped_column(String(10))
+    used: Mapped[int] = mapped_column(BigInteger, server_default="0")
