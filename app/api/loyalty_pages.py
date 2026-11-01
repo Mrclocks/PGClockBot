@@ -44,7 +44,10 @@ from app.services.lucky_wheel import (
     prize_in_scope,
     upsert_prize,
 )
+from app.services.platform_identity import is_explicit_owner_staff
+from app.services.shop_manual_adjust import ManualAdjustError, new_request_key, parse_request_key
 from app.services.shop_membership import assert_customer_in_staff_scope
+from app.services.shop_points_adjust import shop_points_form_context
 from app.services.shop_scope import (
     ShopScopeError,
     resolve_shop_scope_id,
@@ -313,6 +316,9 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 "loyalty_enabled": loyalty_enabled,
                 "wallet_rate": wallet_rate,
                 "is_platform_admin": staff.get("role") == "admin",
+                "can_adjust_platform_points": is_explicit_owner_staff(staff),
+                "owner_points_nonce": new_request_key(),
+                **shop_points_form_context(staff),
                 "flash_ok": flash_ok,
                 "flash_err": request.query_params.get("err"),
                 "flash_msg": request.query_params.get("msg"),
@@ -563,7 +569,12 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         user_id: int = Form(...),
         delta: int = Form(...),
         reason: str = Form(...),
+        nonce: str = Form(""),
     ):
+        try:
+            request_key = parse_request_key(nonce)
+        except ManualAdjustError as e:
+            return RedirectResponse(f"/loyalty?tab=transactions&err={quote(str(e))}", status_code=303)
         user = await session.get(BotUser, int(user_id))
         if not user:
             return RedirectResponse(
@@ -584,6 +595,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 reason=reason,
                 admin_identity=admin_id,
                 shop_id=_shop_scope(staff),
+                request_key=request_key,
             )
         except ValueError as e:
             return RedirectResponse(

@@ -493,6 +493,13 @@ class BotUserShop(Base):
     bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
     shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Blocked in this shop only; the account-wide ``BotUser.is_blocked`` stays the owner's.
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    blocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    blocked_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # This shop's private note and risk tag; the platform's own stay on ``BotUser``.
+    staff_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    color_tag: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
 
 class ServiceImportAttempt(Base):
@@ -1878,3 +1885,76 @@ class ConnectionMonitorSnapshot(Base):
     has_observation: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     recovery_required: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     samples_json: Mapped[str] = mapped_column(Text, server_default="[]")
+
+
+class ShopStaffAction(Base):
+    """Who on a shop's staff did what, written in the same transaction as the change itself.
+
+    ``shop_id`` is NULL for the platform shop. Ids are plain integers on purpose: the record
+    outlives a deleted customer, staff member or shop.
+    """
+
+    __tablename__ = "shop_staff_actions"
+    __table_args__ = (
+        Index("ix_shop_staff_actions_shop_id_id", "shop_id", "id"),
+        Index(
+            "uq_shop_staff_actions_request_key",
+            "request_key",
+            unique=True,
+            sqlite_where=text("request_key IS NOT NULL"),
+            postgresql_where=text("request_key IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    actor_kind: Mapped[str] = mapped_column(String(16))
+    actor_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    actor_label: Mapped[str] = mapped_column(String(128))
+    action: Mapped[str] = mapped_column(String(48))
+    target_type: Mapped[str] = mapped_column(String(32))
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    amount: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    request_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ShopWalletAdjustDay(Base):
+    """How much one shop's staff changed customer wallets by hand on one UTC day.
+
+    The daily cap is enforced with a conditional UPDATE on this row, so two requests at the
+    same moment cannot both pass it.
+    """
+
+    __tablename__ = "shop_wallet_adjust_days"
+    __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_wallet_adjust_days_shop_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    day: Mapped[str] = mapped_column(String(10))
+    used: Mapped[int] = mapped_column(BigInteger, server_default="0")
+
+
+class ShopPointsAdjustDay(Base):
+    """How many loyalty points one shop's staff changed by hand on one UTC day (daily cap)."""
+
+    __tablename__ = "shop_points_adjust_days"
+    __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_points_adjust_days_shop_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    day: Mapped[str] = mapped_column(String(10))
+    used: Mapped[int] = mapped_column(BigInteger, server_default="0")
+
+
+class ShopBroadCampaignDay(Base):
+    """How many campaigns to a shop's whole audience it created on one UTC day (daily cap)."""
+
+    __tablename__ = "shop_broad_campaign_days"
+    __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_broad_campaign_days_shop_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    day: Mapped[str] = mapped_column(String(10))
+    used: Mapped[int] = mapped_column(BigInteger, server_default="0")

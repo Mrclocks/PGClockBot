@@ -15,7 +15,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api.user_pages import register_user_pages
-from app.db.models import Base, BotUser, Order, Plan, ShopWallet, UserService
+from app.db.models import Base, BotUser, BotUserShop, Order, Plan, ShopWallet, UserService
 from app.services.formatting import format_money, format_number
 from app.services.user_card import build_user_card
 from app.services.users_ops import expire_tone
@@ -46,13 +46,15 @@ class UserCardTests(unittest.IsolatedAsyncioTestCase):
         self.session.add_all([
             # A customer of shop A who also bought from the platform.
             BotUser(id=11, telegram_id=9011, referral_code="c11", full_name=HOSTILE_NAME,
-                    reseller_id=SHOP_A, wallet_balance=50, color_tag="red", created_at=now),
+                    reseller_id=SHOP_A, wallet_balance=50, created_at=now),
             BotUser(id=1, telegram_id=9001, referral_code="c1", full_name="Platform customer",
                     wallet_balance=70, color_tag="red", created_at=now),
         ])
         await self.session.flush()
         self.session.add_all([
             ShopWallet(user_id=11, reseller_id=SHOP_A, balance=80),
+            # Shop A's own risk tag lives on its membership row.
+            BotUserShop(bot_user_id=11, shop_id=SHOP_A, color_tag="red"),
             UserService(id=1, bot_user_id=11, plan_id=1, pg_username="shop_a_service", shop_id=SHOP_A,
                         quota_synced_at=now, quota_expire_at=now + timedelta(days=2),
                         quota_data_limit_bytes=50 * 1024**3),

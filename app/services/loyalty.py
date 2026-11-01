@@ -554,12 +554,14 @@ async def admin_adjust_points(
     reason: str,
     admin_identity: str,
     shop_id: int | None,
+    request_key: str,
 ) -> PointsTransaction:
+    """Owner adjust; ``request_key`` comes from the form, so a repeated submit is applied once."""
     if not reason or not str(reason).strip():
         raise ValueError("دلیل الزامی است")
     if delta == 0:
         raise ValueError("مقدار نمی‌تواند صفر باشد")
-    key = f"admin_adjust:{user.id}:{admin_identity}:{int(datetime.now(timezone.utc).timestamp())}:{delta}:{reason.strip()[:40]}"
+    key = f"admin_adjust:{request_key}"
     prev = await points_balance(session, user, shop_id)
     if delta > 0:
         tx = await credit_points(

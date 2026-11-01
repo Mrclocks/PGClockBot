@@ -125,7 +125,7 @@ class ShopPointsTests(unittest.IsolatedAsyncioTestCase):
     async def test_admin_adjustment_targets_one_purse(self):
         async with self.Session() as session:
             customer = await session.get(BotUser, CUSTOMER)
-            await admin_adjust_points(session, customer, 25, reason="gift", admin_identity="a", shop_id=SHOP_ID)
+            await admin_adjust_points(session, customer, 25, reason="gift", admin_identity="a", shop_id=SHOP_ID, request_key="k1")
         self.assertEqual(await self.balances(), (0, 25))
 
     async def test_an_earn_rule_credits_the_shop_it_belongs_to(self):

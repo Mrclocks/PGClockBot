@@ -436,6 +436,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                     "/shop-settings?tab=appearance&err=" + quote(msg),
                     status_code=303,
                 )
+            # The shop bot's «Open» button follows its own Mini App, never the platform's.
+            schedule_shop_menu_sync([int(profile.id)])
             return RedirectResponse(
                 "/shop-settings?tab=appearance&saved=1&msg=" + quote(msg),
                 status_code=303,

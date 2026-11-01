@@ -83,6 +83,34 @@ class MiniAppSourceTests(unittest.TestCase):
         for name in ("core.js", "render.js", "app.js"):
             self.assertTrue((ROOT / "app/web/static/miniapp" / name).is_file())
 
+    def test_a_blocked_telegram_sdk_cannot_hold_the_page(self):
+        from html.parser import HTMLParser
+
+        from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+        class Scripts(HTMLParser):
+            def __init__(self) -> None:
+                super().__init__()
+                self.tags: list[dict] = []
+
+            def handle_starttag(self, tag, attrs):
+                if tag == "script":
+                    self.tags.append(dict(attrs))
+
+        env = Environment(loader=FileSystemLoader(ROOT / "app/web/templates"), autoescape=select_autoescape())
+        parser = Scripts()
+        parser.feed(env.get_template("miniapp.html").render(app_version="t"))
+        srcs = [t.get("src", "") for t in parser.tags]
+        sdk = next(t for t in parser.tags if "telegram-web-app.js" in t.get("src", ""))
+        self.assertIn("async", sdk)
+        self.assertEqual(sdk.get("id"), "tg-sdk")
+        launch = next(i for i, s in enumerate(srcs) if "/static/miniapp/launch.js" in s)
+        # Right after the SDK tag and before every app script, so it reads the address first.
+        self.assertEqual(launch, srcs.index(sdk["src"]) + 1)
+        self.assertTrue(all(launch < i for i, s in enumerate(srcs) if "/static/miniapp/" in s and i != launch))
+        self.assertNotIn("defer", parser.tags[launch])
+        self.assertNotIn("async", parser.tags[launch])
+
     def test_css_matches_panel_brand_tokens(self):
         css = (ROOT / "app/web/static/miniapp.css").read_text(encoding="utf-8")
         self.assertIn("--brand: #f97316", css)

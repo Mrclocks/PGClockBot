@@ -144,6 +144,7 @@
   </form>
   {% if owner_view %}
   {{ table_bulk_bar('/resellers/bulk-action', [
+    {'key': 'grant_miniapp', 'label': 'دادن دسترسی مینی‌اپ', 'confirm': 'به {n} نماینده دسترسی «مینی‌اپ فروشگاه برای مشتریان» داده شود؟ نماینده‌ای که دسترسی‌هایش عمداً خالی است تغییر نمی‌کند و مینی‌اپ تا وقتی خود نماینده روشنش نکند باز نمی‌شود.', 'confirm_title': 'دادن دسترسی مینی‌اپ', 'confirm_label': 'دادن دسترسی'},
     {'key': 'delete_reseller', 'label': 'حذف نمایندگی', 'class': 'btn-danger', 'confirm': '{n} نمایندگی حذف شوند؟ ادمین پاسارگارد متصل هم حذف می‌شود.', 'confirm_title': 'حذف نمایندگی گروهی', 'confirm_label': 'حذف نمایندگی', 'danger': true, 'reason': true, 'reason_label': 'علت حذف نمایندگی'},
     {'key': 'delete_user', 'label': 'حذف کاربر', 'class': 'btn-danger', 'confirm': '{n} کاربر کامل حذف شوند؟ برگشت‌ناپذیر است.', 'confirm_title': 'حذف کامل گروهی', 'confirm_label': 'حذف کامل', 'danger': true, 'reason': true, 'reason_label': 'علت حذف کامل'},
   ]) }}
@@ -173,7 +174,7 @@
     <tbody>
     {% for u, p in rows %}
       {% set usage = (reseller_usage or {}).get(u.id) or {} %}
-      <tr{% if owner_view %} data-bulk-ops="delete_reseller,delete_user"{% endif %}>
+      <tr{% if owner_view %} data-bulk-ops="grant_miniapp,delete_reseller,delete_user"{% endif %}>
         {% if owner_view %}{{ table_select_cell(u.id) }}{% endif %}
         <td class="li-title" data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">

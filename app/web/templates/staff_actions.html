@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title %}
+{% block title %}گزارش کارکنان{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    {{ page_title('users', 'گزارش کارکنان', 'neutral') }}
+    <p class="muted">کارهای مهم کارکنان همین فروشگاه، تازه‌ترین در بالا. این فهرست قابل ویرایش یا حذف نیست.</p>
+  </div>
+</div>
+
+<div class="card card-flush">
+  {% if not actions %}
+  <p class="muted empty-state">هنوز کاری ثبت نشده است.</p>
+  {% else %}
+  <div class="table-wrap">
+    <table class="table-compact table-list-sm">
+      <thead>
+        <tr>
+          <th>زمان</th>
+          <th>انجام‌دهنده</th>
+          <th>کار</th>
+          <th>روی</th>
+          <th>مبلغ</th>
+          <th class="col-hide-sm">علت</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for a in actions %}
+        <tr>
+          <td><bdi dir="ltr" class="mono">{{ a.when }}</bdi></td>
+          <td><span dir="auto">{{ a.actor }}</span><div class="muted li-hide">{{ a.actor_kind }}</div></td>
+          <td>{{ a.action }}</td>
+          <td><bdi dir="ltr">{{ a.target }}</bdi></td>
+          <td>{% if a.amount is not none %}<span class="mono" dir="ltr">{{ a.amount | money }}</span>{% else %}—{% endif %}</td>
+          <td class="col-hide-sm"><span dir="auto">{{ a.reason or '—' }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% if next_before %}
+<div class="actions">
+  <a class="btn btn-ghost" href="/staff-actions?before={{ next_before }}">موارد قدیمی‌تر</a>
+</div>
+{% endif %}
+{% endblock %}

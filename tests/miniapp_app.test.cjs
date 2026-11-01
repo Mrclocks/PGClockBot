@@ -351,6 +351,50 @@ test("launch outside Telegram explains how to open the app", async () => {
   assert.ok(env.element("root").innerHTML.includes("Open"));
 });
 
+const EXPIRED_TEXT = "نشست مینی‌اپ منقضی شده؛ مینی‌اپ را ببندید و دوباره باز کنید";
+
+function expired() {
+  return { status: 401, body: { detail: EXPIRED_TEXT }, headers: { "X-Mini-Error": "expired" } };
+}
+
+test("an expired session at launch offers closing the app, not a retry that cannot work", async () => {
+  const env = await boot({ routes: router([[/GET \/api\/mini\/me$/, expired]]) });
+  const html = env.element("root").innerHTML;
+  assert.ok(html.includes(EXPIRED_TEXT));
+  assert.ok(html.includes('data-action="close-app"'));
+  assert.ok(!html.includes('data-action="reload"'));
+  assert.ok(html.includes(">expired<"));
+  env.mini.app.ACTIONS["close-app"](trigger({}));
+  assert.ok(env.calls.some((c) => c.method === "CLOSE"));
+});
+
+test("a session that expires under an open screen replaces it with the reopen notice", async () => {
+  const env = await boot({ routes: router([[/GET \/api\/mini\/plans/, expired]]) });
+  assert.ok(env.element("nav").innerHTML.length > 0);
+  env.mini.app.go("shop");
+  await settle();
+  assert.ok(env.element("root").innerHTML.includes('data-action="close-app"'));
+  assert.equal(env.element("nav").innerHTML, "");
+});
+
+test("a refusal the server explains in Persian is shown as is, with a retry", async () => {
+  const off = "مینی‌اپ این فروشگاه فعال نیست";
+  const env = await boot({ routes: router([[/GET \/api\/mini\/me$/, () => ({ status: 404, body: { detail: off } })]]) });
+  const html = env.element("root").innerHTML;
+  assert.ok(html.includes(off));
+  assert.ok(!html.includes("/start"));
+  assert.ok(html.includes('data-action="reload"'));
+});
+
+test("a reason header that is not a short code is never rendered", async () => {
+  const env = await boot({ routes: router([[/GET \/api\/mini\/me$/, () => ({
+    status: 401, body: { detail: EXPIRED_TEXT }, headers: { "X-Mini-Error": HOSTILE },
+  })]]) });
+  const html = env.element("root").innerHTML;
+  assert.ok(!html.includes("<img"));
+  assert.ok(html.includes('data-action="close-app"'));
+});
+
 (async () => {
   for (const [name, fn] of tests) {
     try {

@@ -12,7 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ChargeCode, Order
 from app.services.authz import authz_from_staff, can_shop
-from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope, assert_bot_user_in_scope
+from app.services.customer_marks import has_customer_notes_permission, save_marks
+from app.services.gift_codes import gift_code_scope
+from app.services.staff_audit import actor_from_staff, add_staff_action
+from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope
 from app.services.users import set_setting
 from app.services.ux20 import (
     create_charge_code,
@@ -131,7 +134,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
     ):
         from app.services.ux20 import parse_risk_flags, refresh_user_risk, serialize_risk_flags
 
-        if not is_platform_admin(staff) and not can_shop(authz_from_staff(staff), "users"):
+        if not has_customer_notes_permission(staff):
             return RedirectResponse("/home", status_code=303)
         user = (
             await session.execute(select(BotUser).where(BotUser.id == int(user_id)))
@@ -139,10 +142,9 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         if not user:
             return RedirectResponse("/users", status_code=303)
         try:
-            assert_bot_user_in_scope(staff, user)
-        except ShopScopeError:
+            await save_marks(session, staff=staff, user=user, note=note or "")
+        except PermissionError:
             return RedirectResponse("/home", status_code=303)
-        user.staff_note = (note or "").strip()[:2000] or None
         # Manual risk checkbox removed — staff risk level lives on color_tag.
         # Keep automatic risk_flags refresh; strip stale "manual" markers.
         flags = [f for f in parse_risk_flags(user.risk_flags) if f != "manual"]
@@ -161,9 +163,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.color_tags import apply_color_tag
-
-        if not is_platform_admin(staff) and not can_shop(authz_from_staff(staff), "users"):
+        if not has_customer_notes_permission(staff):
             return RedirectResponse("/home", status_code=303)
         user = (
             await session.execute(select(BotUser).where(BotUser.id == int(user_id)))
@@ -171,10 +171,9 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         if not user:
             return RedirectResponse("/users", status_code=303)
         try:
-            assert_bot_user_in_scope(staff, user)
-        except ShopScopeError:
+            await save_marks(session, staff=staff, user=user, tag=color_tag)
+        except PermissionError:
             return RedirectResponse("/home", status_code=303)
-        apply_color_tag(user, color_tag)
         await session.commit()
         from app.api.user_pages import _redirect_user
 
@@ -186,22 +185,16 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        authz = authz_from_staff(staff)
-        if not (
-            is_platform_admin(staff)
-            or can_shop(authz, "orders")
-            or can_shop(authz, "plans")
-        ):
-            return RedirectResponse("/home", status_code=303)
-        rid = None if is_platform_admin(staff) else shop_owner_id(staff)
-        # Non-owner staff without a shop scope must never mint platform gift codes.
-        if not is_platform_admin(staff) and rid is None:
+        try:
+            rid = gift_code_scope(staff)
+        except PermissionError:
             return RedirectResponse("/home", status_code=303)
         try:
             form = await request.form()
             row = await create_charge_code(
                 session, reseller_id=rid, note=str(form.get("note") or ""),
-                code=str(form.get("code") or "") or None, **_gift_rules(form),
+                code=str(form.get("code") or "") or None,
+                audit=actor_from_staff(staff, shop_id=rid), **_gift_rules(form),
             )
             return RedirectResponse(
                 f"/gift-codes?ok={quote('کد ساخته شد: ' + row.code)}",
@@ -221,12 +214,9 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
     ):
         from app.services.gift_codes import validate_rules
 
-        admin_scope = is_platform_admin(staff)
-        authz = authz_from_staff(staff)
-        if not (admin_scope or can_shop(authz, "plans") or can_shop(authz, "orders")):
-            return RedirectResponse("/home", status_code=303)
-        rid = None if admin_scope else shop_owner_id(staff)
-        if not admin_scope and rid is None:
+        try:
+            rid = gift_code_scope(staff)
+        except PermissionError:
             return RedirectResponse("/home", status_code=303)
         try:
             # Serialize edits with usage claims; never reset the usage history.
@@ -243,6 +233,10 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             for name, value in rules.items():
                 setattr(row, name, value)
             row.note = str(form.get("note") or "").strip()[:255] or None
+            add_staff_action(
+                session, actor_from_staff(staff, shop_id=rid), action="gift_code_edit",
+                target_type="gift_code", target_id=int(row.id),
+            )
             await session.commit()
             return RedirectResponse(f"/gift-codes?ok={quote('تنظیمات کد ذخیره شد')}", status_code=303)
         except Exception as exc:
@@ -255,16 +249,9 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        authz = authz_from_staff(staff)
-        admin_scope = is_platform_admin(staff)
-        if not (
-            admin_scope or can_shop(authz, "orders") or can_shop(authz, "plans")
-        ):
-            return RedirectResponse("/home", status_code=303)
-        rid = None if admin_scope else shop_owner_id(staff)
-        if not admin_scope and rid is None:
-            # No shop context (e.g. pg_staff) — must never toggle platform or
-            # any other shop's gift/charge codes.
+        try:
+            rid = gift_code_scope(staff)
+        except PermissionError:
             return RedirectResponse("/home", status_code=303)
         row = (
             await session.execute(select(ChargeCode).where(ChargeCode.id == int(code_id)))
@@ -276,6 +263,10 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         if rid is not None and int(row.reseller_id or 0) != int(rid):
             return RedirectResponse("/gift-codes", status_code=303)
         row.is_active = not bool(row.is_active)
+        add_staff_action(
+            session, actor_from_staff(staff, shop_id=rid), action="gift_code_toggle",
+            target_type="gift_code", target_id=int(row.id),
+        )
         await session.commit()
         return RedirectResponse("/gift-codes?ok=1", status_code=303)
 

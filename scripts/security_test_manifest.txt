@@ -79,6 +79,7 @@ tests/test_hybrid_quota_boxes.py
 tests/test_inbox_platform_scope_leak.py
 tests/test_live_pg_menus.py
 tests/test_miniapp_security_audit.py
+tests/test_miniapp_init_data_window.py
 tests/test_miniapp_service_addons.py
 tests/test_miniapp_feeds.py
 tests/test_miniapp_frontend.py
@@ -92,6 +93,7 @@ tests/test_miniapp_review.py
 tests/test_miniapp_branding.py
 tests/test_miniapp_badges.py
 tests/test_bot_profile_photo.py
+tests/test_bot_appearance_menu_button.py
 tests/test_renewal_preview.py
 tests/test_on_hold_addon_quotas.py
 tests/test_on_hold_service_display.py
@@ -262,6 +264,7 @@ tests/test_reseller_extra_purchase.py
 tests/test_bbc_refusal_reason.py
 tests/test_finance_daily_charts.py
 tests/test_miniapp_shop_scope.py
+tests/test_miniapp_shop_admin_persona.py
 tests/test_miniapp_shop_readonly.py
 tests/test_miniapp_shop_purchase.py
 tests/test_miniapp_shop_topup.py
@@ -335,3 +338,21 @@ tests/test_shop_customer_card.py
 tests/test_shop_miniapp_defaults.py
 # Cleanup tab deletion: own shop only, chosen tags only, never money in flight, from the root.
 tests/test_order_purge.py
+# Owner bulk grant of the shop Mini App permission: owner only, never widens an explicit empty list.
+tests/test_bulk_grant_miniapp.py
+# Customer staff note and risk tag: customer_notes key, own shop only.
+tests/test_customer_notes_permission.py
+# Gift codes: own gift_codes key, own shop only; migration 0077 keeps current access.
+tests/test_gift_codes_permission.py
+# Shop staff action log: written with the change, read only by the shop it belongs to.
+tests/test_staff_audit.py
+# Manual shop wallet changes by shop staff: own shop purse only, capped, once per request.
+tests/test_shop_wallet_adjust.py
+# Manual loyalty-point changes by shop staff: own shop only, capped, once per request.
+tests/test_shop_points_adjust.py
+# Per-shop customer block: that shop's bot, Mini App and campaigns only; never account-wide.
+tests/test_shop_customer_block.py
+# Campaigns to a shop's whole audience: own reachable customers only, one per shop per day.
+tests/test_campaign_broad_audiences.py
+# Shop bot customer card tools: same keys and checks as the web, own shop only, once per flow.
+tests/test_shop_bot_customer_tools.py

@@ -215,15 +215,37 @@ async def shop_miniapp_available(session: AsyncSession, profile: ResellerProfile
     )
 
 
+# Where a shop's Mini App stands, from the first missing condition to open.
+STATE_SETUP = "setup"
+STATE_PLATFORM_OFF = "platform_off"
+STATE_NO_PERMISSION = "no_permission"
+STATE_SHOP_OFF = "shop_off"
+STATE_OPEN = "open"
+
+# What the shop owner reads in their own settings: what to do next.
+_SHOP_BLOCKER_TEXT = {
+    STATE_SETUP: "ابتدا راه‌اندازی ربات فروشگاه را کامل کنید",
+    STATE_PLATFORM_OFF: "مینی‌اپ فروشگاه‌ها هنوز از طرف مدیریت پلتفرم روشن نشده است؛ با مدیریت هماهنگ کنید",
+    STATE_NO_PERMISSION: "دسترسی «مینی‌اپ» برای فروشگاه شما داده نشده است؛ از مدیریت بخواهید آن را فعال کند",
+}
+
+
+async def shop_miniapp_state(session: AsyncSession, profile: ResellerProfile) -> str:
+    """The first condition that keeps the shop's Mini App closed, or ``STATE_OPEN``."""
+    if not (profile.is_active and profile.setup_completed_at is not None and profile.bot_token):
+        return STATE_SETUP
+    if not on(await get_setting(session, PLATFORM_SWITCH, "0")):
+        return STATE_PLATFORM_OFF
+    if not has_perm(profile, PERMISSION):
+        return STATE_NO_PERMISSION
+    if not on(await get_setting(session, SHOP_SWITCH, "0", reseller_id=int(profile.user_id))):
+        return STATE_SHOP_OFF
+    return STATE_OPEN
+
+
 async def shop_miniapp_blocker(session: AsyncSession, profile: ResellerProfile) -> str:
     """Why the shop cannot turn its Mini App on, in words it can act on; "" when it can."""
-    if not (profile.is_active and profile.setup_completed_at is not None and profile.bot_token):
-        return "ابتدا راه‌اندازی ربات فروشگاه را کامل کنید"
-    if not on(await get_setting(session, PLATFORM_SWITCH, "0")):
-        return "مینی‌اپ فروشگاه‌ها هنوز از طرف مدیریت پلتفرم روشن نشده است؛ با مدیریت هماهنگ کنید"
-    if not has_perm(profile, PERMISSION):
-        return "دسترسی «مینی‌اپ» برای فروشگاه شما داده نشده است؛ از مدیریت بخواهید آن را فعال کند"
-    return ""
+    return _SHOP_BLOCKER_TEXT.get(await shop_miniapp_state(session, profile), "")
 
 
 async def set_shop_miniapp(session: AsyncSession, profile: ResellerProfile, *, enabled: bool) -> None:

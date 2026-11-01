@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.api.miniapp_pages import register_miniapp_pages
 from app.db.models import Base, BotUser, BotUserShop, ResellerProfile
 from app.services import miniapp_shop
-from app.services.miniapp_auth import load_mini_user
+from app.services.miniapp_auth import INIT_DATA_MAX_AGE_SEC, load_mini_user
 from app.services.miniapp_shop import (
     NOT_A_CUSTOMER,
     PLATFORM_SWITCH,
@@ -148,7 +148,7 @@ class ShopScopeTests(unittest.IsolatedAsyncioTestCase):
                 (signed(OTHER_SHOP_TOKEN, CUSTOMER), KEY),
                 (signed(SHOP_TOKEN, CUSTOMER), OTHER_KEY),
                 (signed(SHOP_TOKEN, CUSTOMER), None),
-                (signed(SHOP_TOKEN, CUSTOMER, age=3600), KEY),
+                (signed(SHOP_TOKEN, CUSTOMER, age=INIT_DATA_MAX_AGE_SEC + 60), KEY),
             )
             for init_data, key in cases:
                 with self.subTest(key=key):

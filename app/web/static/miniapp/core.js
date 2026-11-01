@@ -2,13 +2,59 @@
 (function (root) {
   "use strict";
 
-  const tg = (root.Telegram && root.Telegram.WebApp) || null;
   const settings = { currency: "تومان" };
 
-  /** Live read — some clients inject initData slightly after first paint. */
+  /** The Telegram WebApp object, read live: the SDK loads async and may arrive late or never. */
+  function webApp() {
+    return (root.Telegram && root.Telegram.WebApp) || null;
+  }
+
+  function launch() {
+    return root.PGMiniLaunch || null;
+  }
+
+  // Read before the page rewrites the address (launch.js does the same even earlier).
+  const hashInitData = (() => {
+    const l = launch();
+    if (l && l.initData) return l.initData;
+    const raw = String((root.location && root.location.hash) || "").replace(/^#/, "");
+    const at = raw.indexOf("tgWebAppData=");
+    if (at < 0) return "";
+    try {
+      return new URLSearchParams(raw.slice(at)).get("tgWebAppData") || "";
+    } catch (_) {
+      return "";
+    }
+  })();
+
+  // "pending" until the SDK script loads or fails; without launch.js its fate is unknown.
+  let sdkState = launch() ? "pending" : (webApp() ? "ready" : "unknown");
+  if (launch()) {
+    Promise.resolve(launch().sdk).then((ok) => { sdkState = ok ? "ready" : "failed"; }, () => { sdkState = "failed"; });
+  }
+
+  function sdkPending() {
+    return sdkState === "pending";
+  }
+
+  function sdkFailed() {
+    return sdkState === "failed" && !webApp();
+  }
+
+  /** Resolves when the SDK has loaded or failed, or after ``ms``, whichever is first. */
+  function whenTelegram(ms) {
+    const l = launch();
+    if (!l || !sdkPending()) return Promise.resolve(!!webApp());
+    return Promise.race([
+      Promise.resolve(l.sdk).then((ok) => !!ok, () => false),
+      new Promise((resolve) => root.setTimeout(() => resolve(!!webApp()), ms)),
+    ]);
+  }
+
+  /** The SDK's initData, else the one Telegram put in the address. */
   function getInitData() {
-    const w = root.Telegram && root.Telegram.WebApp;
-    return (w && w.initData) || "";
+    const w = webApp();
+    return (w && w.initData) || hashInitData;
   }
 
   // A shop's Mini App lives at /miniapp/s/<key>/; the key names the shop, and the server
@@ -114,6 +160,7 @@
   }
 
   function haptic(kind) {
+    const tg = webApp();
     if (!tg || !tg.HapticFeedback) return;
     try {
       if (kind === "select") tg.HapticFeedback.selectionChanged();
@@ -134,6 +181,7 @@
   }
 
   function confirmAction(message) {
+    const tg = webApp();
     if (tg && typeof tg.showConfirm === "function") {
       return new Promise((resolve) => {
         try {
@@ -149,6 +197,7 @@
   function openExternal(url) {
     const safe = safeUrl(url);
     if (!safe) return false;
+    const tg = webApp();
     if (tg && typeof tg.openLink === "function") tg.openLink(safe);
     else root.open(safe, "_blank", "noopener");
     return true;
@@ -157,6 +206,7 @@
   /** t.me links open inside Telegram; anything else goes through openExternal. */
   function openTelegramLink(url) {
     const safe = safeUrl(url);
+    const tg = webApp();
     if (tg && typeof tg.openTelegramLink === "function" && /^https:\/\/t\.me\//i.test(safe)) {
       tg.openTelegramLink(safe);
       return true;
@@ -165,10 +215,28 @@
   }
 
   class ApiError extends Error {
-    constructor(message, status) {
+    constructor(message, status, code) {
       super(message);
       this.status = status;
+      // Why the server turned the request away (``X-Mini-Error``), e.g. "expired"; "" if unsaid.
+      this.code = code || "";
     }
+  }
+
+  const ERROR_CODE = /^[a-z_]{1,32}$/;
+
+  /** The server's reason header, only when it is one of its short lowercase codes. */
+  function errorCode(res) {
+    const raw = res && res.headers && typeof res.headers.get === "function" ? res.headers.get("X-Mini-Error") : "";
+    const code = String(raw || "");
+    return ERROR_CODE.test(code) ? code : "";
+  }
+
+  // Called once when the server says this page's Telegram sign-in no longer works.
+  let authLostHandler = null;
+
+  function onAuthLost(handler) {
+    authLostHandler = typeof handler === "function" ? handler : null;
   }
 
   const FALLBACK_ERROR = "ارتباط با سرور برقرار نشد؛ دوباره تلاش کنید.";
@@ -219,7 +287,11 @@
     } catch (_) {
       data = null;
     }
-    if (!res.ok) throw new ApiError(errorText(data, res.status), res.status);
+    if (!res.ok) {
+      const err = new ApiError(errorText(data, res.status), res.status, errorCode(res));
+      if (res.status === 401 && authLostHandler) authLostHandler(err);
+      throw err;
+    }
     return data;
   }
 
@@ -265,6 +337,7 @@
   function applyTheme() {
     const doc = root.document;
     if (!doc || !doc.documentElement) return;
+    const tg = webApp();
     const scheme = tg && tg.colorScheme === "light" ? "light" : "dark";
     doc.documentElement.setAttribute("data-theme", scheme);
     if (!tg) return;
@@ -314,11 +387,29 @@
   function applyFullscreen() {
     const doc = root.document;
     if (!doc || !doc.documentElement) return;
+    const tg = webApp();
     doc.documentElement.setAttribute("data-fullscreen", tg && tg.isFullscreen ? "1" : "0");
   }
 
+  /** Close the Mini App so Telegram signs a fresh session on the next open. */
+  function closeApp() {
+    const tg = webApp();
+    if (tg && typeof tg.close === "function") {
+      try {
+        tg.close();
+        return true;
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  let telegramInitialized = false;
+
+  /** Once, as soon as the SDK is there (it may arrive after the first screen). */
   function initTelegram() {
-    if (!tg) return;
+    const tg = webApp();
+    if (!tg || telegramInitialized) return;
+    telegramInitialized = true;
     try {
       tg.ready();
       tg.expand();
@@ -337,8 +428,8 @@
   }
 
   const core = Object.freeze({
-    tg, getInitData, shopKey, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, formatRelative, faDigits,
-    haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, copyText, markCopied,
+    webApp, getInitData, whenTelegram, sdkPending, sdkFailed, shopKey, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, formatRelative, faDigits,
+    haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, onAuthLost, closeApp, copyText, markCopied,
     applyTheme, applyBrand, inkFor, initTelegram,
   });
   root.PGMini = Object.assign(root.PGMini || {}, { core });
