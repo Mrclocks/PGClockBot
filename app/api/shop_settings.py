@@ -36,6 +36,7 @@ from app.services.miniapp_shop import (
 )
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
+from app.services.panel_brand import load_own_values
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.rich_text import merge_rich_settings_on_save, prepare_settings_values_for_web
 from app.services.screen_titles import SCREEN_TEXT_TAB, platform_only_screen_text_keys, validate_screen_text_settings
@@ -285,6 +286,9 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             ctx["bot_status"] = await _bot_token_status(token)
             ctx["bot_token_masked"] = ("••••" + token[-6:]) if len(token) > 8 else ("••••" if token else "")
             ctx["bot_username"] = (profile.bot_username if profile else "") or ""
+        elif tab == "brand":
+            ctx["brand_values"] = await load_own_values(session, rid)
+            ctx["brand_form_action"] = "/panel-brand"
         elif tab == "miniapp":
             ctx.update(await _miniapp_switch_context(session, profile))
         elif tab == "links":

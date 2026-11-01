@@ -84,6 +84,15 @@ from app.services.message_variables import template_variable_specs
 from app.services.psp_gateways import psp_gateways_form_json
 from app.services.panel_assets import get_panel_asset_cache_key
 from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.panel_brand import (
+    BRAND_PRESET_CSS,
+    DEFAULT_BRAND,
+    DEFAULT_COLOR_HEX,
+    DEFAULT_COLOR_LABEL,
+    PRESETS as BRAND_PRESETS,
+    brand_for_staff,
+    load_own_values,
+)
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
     SETTING_VISIBILITY,
@@ -109,6 +118,7 @@ from app.services.web_auth import (
 from app.api.catalog_discounts import register_catalog_discounts
 from app.api.connection_status_pages import register_connection_status_pages
 from app.api.funnel_pages import register_funnel_pages
+from app.api.panel_brand_pages import register_panel_brand_pages
 from app.api.trial_users_pages import register_trial_users_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
 from app.api.bot_overview_pages import register_bot_overview_pages
@@ -145,6 +155,12 @@ templates.env.globals["app_version"] = local_version()
 templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
 templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
+templates.env.globals["brand_presets"] = BRAND_PRESETS
+# Request context overrides these; they keep templates that render without a signed-in person working.
+templates.env.globals["panel_brand"] = DEFAULT_BRAND
+templates.env.globals["panel_brand_css"] = BRAND_PRESET_CSS
+templates.env.globals["default_brand_color_hex"] = DEFAULT_COLOR_HEX
+templates.env.globals["default_brand_color_label"] = DEFAULT_COLOR_LABEL
 templates.env.globals["panel_script_cache_key"] = get_panel_asset_cache_key("panel.js")
 templates.env.globals["panel_widget_cache_key"] = get_panel_asset_cache_key("panel_widget_request.js")
 templates.env.globals["money_inputs_cache_key"] = get_panel_asset_cache_key("money-inputs.js")
@@ -277,6 +293,8 @@ def render(request: Request, name: str, context: dict | None = None, status_code
         nonce = _secrets.token_urlsafe(16)
         request.state.csp_nonce = nonce
     ctx.setdefault("csp_nonce", nonce)
+    ctx.setdefault("panel_brand", getattr(request.state, "panel_brand", None) or DEFAULT_BRAND)
+    ctx.setdefault("panel_brand_css", BRAND_PRESET_CSS)
     if "pwa_name" not in ctx:
         try:
             from app.services.pwa import panel_display_name
@@ -779,6 +797,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.db_safe import recover_session
 
         await recover_session(session)
+        # Header brand of the shop this person works for (default on any failure).
+        request.state.panel_brand = await brand_for_staff(session, user)
         finish_panel_authentication(request)
         return user
 
@@ -1547,6 +1567,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_trial_users_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_panel_brand_pages(app, require_staff=require_staff, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
     register_connection_status_pages(app, render=render, require_staff=require_staff, get_db=get_db)
 
@@ -4386,6 +4407,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             from app.services.pwa import load_pwa_settings
 
             ctx["pwa"] = await load_pwa_settings(session)
+            ctx["brand_values"] = await load_own_values(session, None)
+            ctx["brand_form_action"] = "/panel-brand"
         elif tab == "backup":
             from app.services.backup import (
                 clear_idle_restore_status,

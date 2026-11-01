@@ -24,7 +24,7 @@ _TAB_PAGES = {MESSAGE_VARIABLES_TAB_KEY: "/message-variables"}
 
 # (group key, label, tab keys in display order)
 _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("look", "ظاهر و متن‌ها", ("welcome", "appearance", "messages", "buttons", "screens", "colors", "menu", "miniapp")),
+    ("look", "ظاهر و متن‌ها", ("welcome", "appearance", "brand", "messages", "buttons", "screens", "colors", "menu", "miniapp")),
     ("service", "سرویس و فروش", ("naming", "qr", "guides", "limits", "service_import", MESSAGE_VARIABLES_TAB_KEY)),
     ("alerts", "اعلان‌ها", ("notifications", "daily_report")),
     ("connect", "اتصال و لینک‌ها", ("links", "bot")),
