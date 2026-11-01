@@ -92,6 +92,7 @@ tests/test_miniapp_review.py
 tests/test_miniapp_branding.py
 tests/test_miniapp_badges.py
 tests/test_bot_profile_photo.py
+tests/test_bot_appearance_menu_button.py
 tests/test_renewal_preview.py
 tests/test_on_hold_addon_quotas.py
 tests/test_on_hold_service_display.py

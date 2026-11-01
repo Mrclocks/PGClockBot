@@ -80,6 +80,17 @@ async def fetch_appearance(token: str, *, local_photo: str = "") -> BotAppearanc
         await bot.session.close()
 
 
+async def _sync_platform_menu_button(bot: Bot) -> None:
+    """Mini App «Open» on the platform bot when HTTPS is ready, else cleared; best effort."""
+    # app.bot imports services; importing at call time keeps this module free of the cycle.
+    from app.bot.chat_menu import sync_telegram_menu_button
+
+    try:
+        await sync_telegram_menu_button(bot, allow_miniapp=True)
+    except Exception:
+        log.warning("sync menu button after appearance failed", exc_info=True)
+
+
 async def apply_appearance(
     token: str,
     *,
@@ -89,8 +100,15 @@ async def apply_appearance(
     photo_bytes: bytes | None = None,
     photo_filename: str = "photo.jpg",
     remove_photo: bool = False,
+    is_platform_bot: bool,
 ) -> BotAppearance:
-    """Push appearance fields to Telegram Bot API."""
+    """Push appearance fields to Telegram Bot API.
+
+    Only the platform bot's «Open» button is pointed at the platform Mini App here. A shop
+    bot's button follows its own Mini App switches (``reseller_bots.resync_shop_menu_buttons``):
+    the platform address on a shop bot fails every request, because the shop bot signs
+    initData with its own token.
+    """
     token = (token or "").strip()
     if not token:
         return BotAppearance(error="توکن ربات تنظیم نشده")
@@ -113,14 +131,9 @@ async def apply_appearance(
         await bot.set_my_name(name=name)
         await bot.set_my_description(description=description)
         await bot.set_my_short_description(short_description=short_description)
-        # Menu button: Mini App «Open» when HTTPS public URL is ready; else cleared
         await bot.delete_my_commands()
-        try:
-            from app.bot.chat_menu import sync_telegram_menu_button
-
-            await sync_telegram_menu_button(bot, allow_miniapp=True)
-        except Exception:
-            log.debug("sync menu button after appearance failed", exc_info=True)
+        if is_platform_bot:
+            await _sync_platform_menu_button(bot)
         if remove_photo and not photo_bytes:
             try:
                 await bot.remove_my_profile_photo()
@@ -258,6 +271,7 @@ async def save_appearance_from_form(
         photo_bytes=photo_bytes,
         photo_filename=photo_filename,
         remove_photo=remove_photo,
+        is_platform_bot=reseller_id is None,
     )
     if not result.ok:
         return False, result.error or "اعمال در تلگرام ناموفق"
