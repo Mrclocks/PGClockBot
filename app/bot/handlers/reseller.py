@@ -24,6 +24,7 @@ from app.services.chat_records import keep_sent
 from app.services.automation_review import count_review_queue
 from app.services.color_tags import tag_mark
 from app.services.customer_marks import marks_for, marks_of
+from app.bot.handlers.reseller_customer_tools import customer_tool_rows
 from app.services.customer_service_lines import service_lines
 from app.services.home_overview import reseller_shop_summary
 from app.services.formatting import (
@@ -510,6 +511,7 @@ async def res_user_view(
                 )
             ]
         )
+    rows_kb.extend(customer_tool_rows(profile, db_user, int(user.id)))
     rows_kb.append([kb.back_button(None, "res:users:0")])
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows_kb))
