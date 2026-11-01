@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings, normalize_pg_base_url
 from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
+from app.services.miniapp_shop import PERMISSION as MINIAPP_PERMISSION
+from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
 from app.services.db_safe import rollback_quiet
 from app.services.platform_identity import is_explicit_owner_staff
@@ -36,6 +38,7 @@ from app.services.resellers import (
     list_applications,
     normalize_feature_perms,
     notify_reseller_revoked,
+    has_perm,
     parse_perms,
     provision_reseller,
     reject_application,
@@ -104,6 +107,17 @@ def _redirect_reseller_edit(user_id: int, *, ok: str | None = None, err: str | N
     return RedirectResponse(f"/resellers?{'&'.join(qs)}", status_code=303)
 
 
+
+
+def _shop_miniapp_may_open(profile: ResellerProfile) -> bool:
+    """Whether the profile's own state lets its Mini App open (the platform and shop switches aside)."""
+    return bool(profile.is_active and has_perm(profile, MINIAPP_PERMISSION))
+
+
+def _resync_menu_if_miniapp_changed(profile: ResellerProfile, was_open: bool) -> None:
+    """The shop bot's «Open» button follows the permission and the shop's active state."""
+    if _shop_miniapp_may_open(profile) != was_open:
+        schedule_shop_menu_sync([int(profile.id)])
 
 
 def _feature_perms_from_form(form) -> str:
@@ -822,6 +836,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         if not user or not profile:
             return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
         perms = _feature_perms_from_form(form)
+        miniapp_before = _shop_miniapp_may_open(profile)
         profile.web_permissions = perms
         profile.bot_permissions = perms  # must stay identical
         profile.can_approve_receipts = "payments" in parse_perms(perms)
@@ -913,6 +928,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 return _redirect_reseller_edit(user_id, err=str(e))
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
         await session.commit()
+        _resync_menu_if_miniapp_changed(profile, miniapp_before)
         return _redirect_reseller_edit(user_id, ok='ذخیره شد')
 
     @app.post("/resellers/{user_id}/billing-topup")

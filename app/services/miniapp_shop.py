@@ -215,6 +215,17 @@ async def shop_miniapp_available(session: AsyncSession, profile: ResellerProfile
     )
 
 
+async def shop_miniapp_blocker(session: AsyncSession, profile: ResellerProfile) -> str:
+    """Why the shop cannot turn its Mini App on, in words it can act on; "" when it can."""
+    if not (profile.is_active and profile.setup_completed_at is not None and profile.bot_token):
+        return "ابتدا راه‌اندازی ربات فروشگاه را کامل کنید"
+    if not on(await get_setting(session, PLATFORM_SWITCH, "0")):
+        return "مینی‌اپ فروشگاه‌ها هنوز از طرف مدیریت پلتفرم روشن نشده است؛ با مدیریت هماهنگ کنید"
+    if not has_perm(profile, PERMISSION):
+        return "دسترسی «مینی‌اپ» برای فروشگاه شما داده نشده است؛ از مدیریت بخواهید آن را فعال کند"
+    return ""
+
+
 async def set_shop_miniapp(session: AsyncSession, profile: ResellerProfile, *, enabled: bool) -> None:
     """Turn the shop's own switch on or off; on needs the platform switch and the permission."""
     if enabled and not await shop_miniapp_available(session, profile):

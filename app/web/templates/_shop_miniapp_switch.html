@@ -1,4 +1,4 @@
-{# The shop's own Mini App switch; expects: miniapp_available, miniapp_on, miniapp_url, csrf_token #}
+{# The shop's own Mini App switch; expects: miniapp_available, miniapp_blocker, miniapp_on, miniapp_url, csrf_token #}
 <form method="post" action="/shop-settings/miniapp" class="settings-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
   <div class="card settings-card">
@@ -23,7 +23,7 @@
       <button class="btn" type="submit">ذخیره</button>
     </div>
     {% else %}
-    <p class="muted">مینی‌اپ برای فروشگاه شما فعال نشده است. برای فعال شدن با مدیریت هماهنگ کنید.</p>
+    <p class="muted">{{ miniapp_blocker|default("مینی‌اپ برای فروشگاه شما فعال نشده است. برای فعال شدن با مدیریت هماهنگ کنید.", true) }}</p>
     {% endif %}
   </div>
 </form>
