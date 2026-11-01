@@ -269,6 +269,26 @@ class SettingTests(RoutesHarness):
             )
         self.assertEqual((platform, shop), ("1", "0"))
 
+    async def test_the_restart_row_switch_is_saved_from_the_menu_tab_per_bot(self) -> None:
+        await self.request(OWNER_SESSION, "/settings?tab=menu", {"menu_order": "shop", "show_restart_button": "1"})
+        await self.request(SHOP_SESSION, "/shop-settings/menu-layout", {"menu_order": "shop"})
+        async with self.Session() as session:
+            platform = await session.scalar(select(Setting.value).where(Setting.key == "show_restart_button"))
+            shop = await session.scalar(
+                select(ResellerSetting.value).where(
+                    ResellerSetting.reseller_user_id == 5, ResellerSetting.key == "show_restart_button"
+                )
+            )
+        self.assertEqual((platform, shop), ("1", "0"))
+
+    def test_the_switch_lives_on_the_menu_tab_not_the_button_texts_tab(self) -> None:
+        from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS
+
+        button_keys = {item[0] for name in TAB_SETTING_GROUPS["buttons"] for item in SETTING_GROUPS[name]}
+        self.assertNotIn("show_restart_button", button_keys)
+        self.assertIn("btn_restart", button_keys, "the row's text stays with the other button texts")
+        self.assertEqual(DEFAULT_SETTINGS["show_restart_button"], "1")
+
 
 if __name__ == "__main__":
     unittest.main()
