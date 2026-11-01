@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot
@@ -21,47 +20,14 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentMethod, PaymentReceiptFingerprint, PaymentStatus
+from app.services.approval_rule import MUTATION_NOTE_PREFIXES, ApprovalRule, rule_from_settings
 from app.services.db_safe import rollback_quiet
 from app.services.receipts import auto_approve_receipt
 
 logger = logging.getLogger(__name__)
 
-MINUTES_KEY = "auto_approve_after_minutes"
-MAX_AMOUNT_KEY = "auto_approve_after_max_amount"
-RETURNING_ONLY_KEY = "auto_approve_after_returning_only"
-MAX_MINUTES = 24 * 60
 BATCH_LIMIT = 50
 SHOP_SCAN_LIMIT = 500
-MUTATION_NOTE_PREFIXES = ("renew:", "svc_addon:", "reseller_app:")
-TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
-
-
-@dataclass(frozen=True, slots=True)
-class ApprovalRule:
-    minutes: int
-    max_amount: int
-    returning_only: bool
-
-    @property
-    def reason(self) -> str:
-        return f"بدون بررسی ادمین تا {self.minutes} دقیقه"
-
-
-def _whole_number(raw: object) -> int:
-    text = str(raw or "").strip()
-    return int(text) if text.isascii() and text.isdigit() and len(text) <= 12 else 0
-
-
-def rule_from_settings(settings: Mapping[str, str]) -> ApprovalRule | None:
-    """The shop's rule, or None while it is off (0, empty or any malformed value)."""
-    minutes = _whole_number(settings.get(MINUTES_KEY))
-    if minutes < 1:
-        return None
-    return ApprovalRule(
-        minutes=min(minutes, MAX_MINUTES),
-        max_amount=_whole_number(settings.get(MAX_AMOUNT_KEY)),
-        returning_only=str(settings.get(RETURNING_ONLY_KEY, "1")).strip().lower() in TRUE_VALUES,
-    )
 
 
 def _shop_clause(shop_id: int | None) -> ColumnElement[bool]:

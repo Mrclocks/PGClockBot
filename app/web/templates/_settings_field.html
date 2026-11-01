@@ -23,7 +23,9 @@
 ] %}
 {# A field tied to another field's value (see SETTING_VISIBILITY) starts hidden when that value does not show it. #}
 {% set rule = (setting_visibility|default({})).get(key) %}
-{% set rule_hidden = rule and (values.get(rule[0], '')|string) not in rule[1] %}
+{% set controller_value = (values.get(rule[0], '')|string|lower) if rule else '' %}
+{% set controller_value = '1' if controller_value in ['true', 'yes', 'on'] else controller_value %}
+{% set rule_hidden = rule and controller_value not in rule[1] %}
 <div class="setting-item {% if kind in full_kinds or key in full_keys %}full{% endif %}"{% if rule %} data-setting="{{ key }}" data-show-when="s_{{ rule[0] }}:{{ rule[1]|join(',') }}"{% endif %}{% if rule_hidden %} hidden{% endif %}>
   {% if kind == 'toggle' %}
   <label class="toggle-row ui-switch-row">
