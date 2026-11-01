@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db import Base
-from app.db.models import BotUser, Order, Payment, Plan, Role, UserService
+from app.db.models import BotUser, Order, Payment, Plan, ResellerProfile, Role, UserService
 from app.bot.handlers.payment_voids import ID as VOID_ID
 from app.services import notifications
 from app.services.payment_voids import load_void_candidate
@@ -125,9 +125,20 @@ class AutoApproveNoticeTests(NoticeTestCase):
             shop = BotUser(telegram_id=900, username="shop", full_name="Shop", role=Role.RESELLER.value, referral_code="R900")
             session.add(shop)
             await session.flush()
+            session.add(ResellerProfile(user_id=shop.id, is_active=True, web_permissions="payments,payment_void", bot_permissions="payments,payment_void"))
             user, order, payment = await self._seed(session, shop=shop.id)
             dispatch = await self._notify(session, payment)
         self.assertEqual(_callbacks(dispatch.await_args.kwargs["markup"]), [f"res:user:{user.id}", f"payvoid:v:{payment.id}"])
+
+    async def test_a_shop_without_the_void_permission_is_not_offered_the_button(self) -> None:
+        async with self.Session() as session:
+            shop = BotUser(telegram_id=901, username="shop2", full_name="Shop", role=Role.RESELLER.value, referral_code="R901")
+            session.add(shop)
+            await session.flush()
+            session.add(ResellerProfile(user_id=shop.id, is_active=True, web_permissions="payments", bot_permissions="payments"))
+            user, order, payment = await self._seed(session, shop=shop.id)
+            dispatch = await self._notify(session, payment)
+        self.assertEqual(_callbacks(dispatch.await_args.kwargs["markup"]), [f"res:user:{user.id}"])
 
     async def test_a_wallet_top_up_has_no_service_button(self) -> None:
         async with self.Session() as session:
