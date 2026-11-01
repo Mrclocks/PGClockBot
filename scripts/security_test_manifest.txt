@@ -340,3 +340,5 @@ tests/test_shop_miniapp_defaults.py
 tests/test_customer_notes_permission.py
 # Gift codes: own gift_codes key, own shop only; migration 0077 keeps current access.
 tests/test_gift_codes_permission.py
+# Shop staff action log: written with the change, read only by the shop it belongs to.
+tests/test_staff_audit.py
