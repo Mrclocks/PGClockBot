@@ -1,4 +1,4 @@
-{# Finance settings modal — tabs: پرداخت | PAYG | پاکسازی #}
+{# Finance settings modal — tabs: پرداخت | PAYG | پاکسازی | حذف کامل #}
 {% from "macros.html" import modal_title %}
 
 {% set open_settings = (open_finance_settings or '')|string %}
@@ -21,16 +21,19 @@
     </div>
     {% endif %}
     <nav class="section-tabs settings-tabs modal-section-tabs" role="tablist" aria-label="تب‌های تنظیمات مالی" data-modal-tabs>
-      <button type="button" class="tab-btn {% if open_settings not in ['billing', 'cleanup'] %}active{% endif %}" data-modal-tab="payment" role="tab">پرداخت</button>
+      <button type="button" class="tab-btn {% if open_settings not in ['billing', 'cleanup', 'purge'] %}active{% endif %}" data-modal-tab="payment" role="tab">پرداخت</button>
       {% if can_billing_settings %}
       <button type="button" class="tab-btn {% if open_settings == 'billing' %}active{% endif %}" data-modal-tab="billing" role="tab">مدیریت PAYG</button>
       {% endif %}
       {% if can_pending_orders %}
       <button type="button" class="tab-btn {% if open_settings == 'cleanup' %}active{% endif %}" data-modal-tab="cleanup" role="tab">پاکسازی</button>
       {% endif %}
+      {% if purge %}
+      <button type="button" class="tab-btn {% if open_settings == 'purge' %}active{% endif %}" data-modal-tab="purge" role="tab">حذف کامل</button>
+      {% endif %}
     </nav>
     <div class="settings-modal-body">
-      <div class="modal-tab-panel" data-modal-tab-panel="payment" {% if open_settings in ['billing', 'cleanup'] %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="payment" {% if open_settings in ['billing', 'cleanup', 'purge'] %}hidden{% endif %}>
         {% set settings_form_action = payment_settings_action %}
         {% set tab_groups = payment_tab_groups %}
         {% set groups = payment_groups %}
@@ -57,6 +60,11 @@
         {% set pending_orders_action = finance_pending_action %}
         {% set show_cleanup_status = true %}
         {% include "_domain_settings_form.html" %}
+      </div>
+      {% endif %}
+      {% if purge %}
+      <div class="modal-tab-panel" data-modal-tab-panel="purge" {% if open_settings != 'purge' %}hidden{% endif %}>
+        {% include "_settings_order_purge.html" %}
       </div>
       {% endif %}
     </div>

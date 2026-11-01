@@ -333,6 +333,19 @@ async def cleanup_stale_pending_orders() -> None:
             logger.exception("pending order cleanup failed")
 
 
+async def run_auto_order_purge() -> None:
+    """Hourly: delete the order and payment rows each shop chose for automatic deletion."""
+    async with SessionLocal() as session:
+        try:
+            from app.services.order_purge import auto_purge_all_shops
+
+            total = await auto_purge_all_shops(session)
+            if total:
+                logger.info("automatic order purge deleted=%s", total)
+        except Exception:
+            logger.exception("automatic order purge failed")
+
+
 async def run_scheduled_receipt_approvals() -> None:
     """Every minute: approve card receipts nobody reviewed within their shop's chosen time."""
     async with SessionLocal() as session:
@@ -856,6 +869,7 @@ def start_background_scheduler() -> None:
         ("billing_tick", run_reseller_billing_tick, {"minutes": 1}, 120),
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
         ("pending_order_cleanup", cleanup_stale_pending_orders, {"hours": 1}, 3600),
+        ("order_purge", run_auto_order_purge, {"hours": 1}, 3600),
         ("scheduled_receipt_approval", run_scheduled_receipt_approvals, {"seconds": 60}, 90),
         ("crypto_rate_refresh", run_crypto_rate_refresh, {"seconds": 60}, 90),
         ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),

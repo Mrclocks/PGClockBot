@@ -12643,3 +12643,32 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   background: var(--preview);
   box-shadow: 0 5px 14px color-mix(in srgb, var(--preview) 22%, transparent);
 }
+
+/* Cleanup tab: status-tag delete switches in two columns */
+.order-purge-title {
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: 0.9em;
+  color: var(--muted-fg);
+}
+.order-purge-tags {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+.order-purge-options {
+  margin-top: var(--space-2);
+  align-items: end;
+}
+.order-purge-tag .ui-switch-copy {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-0);
+}
+.order-purge-tag .ui-switch-copy .badge {
+  flex: 0 0 auto;
+}
+@media (max-width: 420px) {
+  .order-purge-tags {
+    grid-template-columns: 1fr;
+  }
+}

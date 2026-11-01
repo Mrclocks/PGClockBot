@@ -11,6 +11,7 @@ from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.order_purge import purge_panel_context
 from app.db.models import BotUser, Order, Payment, Plan
 from app.services.authz import authz_from_staff, can_shop
 from app.services.dashboard_trend import sales_trend_or_empty
@@ -148,7 +149,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
 
         search_q = normalize_search_q(request.query_params.get("q"))
         open_settings = (request.query_params.get("settings") or "").strip()
-        if open_settings not in {"payment", "billing", "cleanup"}:
+        if open_settings not in {"payment", "billing", "cleanup", "purge"}:
             open_settings = ""
         if open_settings == "billing" and not can_billing_settings:
             open_settings = "payment" if can_finance_settings else ""
@@ -195,6 +196,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "cleanup_groups": {},
             "cleanup_settings_action": "",
             "cleanup_status": None,
+            "purge": None,
             "receipt_matches": {},
             "report": {},
             "report_period": report_period,
@@ -242,6 +244,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                     + quote(next_base + "&settings=cleanup")
                 )
                 ctx["cleanup_status"] = await cleanup_status(session, ctx["values"], reseller_id=None)
+                ctx["purge"] = await purge_panel_context(
+                    session, staff, ctx["values"], return_to=next_base + "&settings=purge"
+                )
             else:
                 rid = shop_owner_id(staff)
                 if rid:
@@ -260,6 +265,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                     )
                     ctx["cleanup_status"] = await cleanup_status(
                         session, ctx["values"], reseller_id=int(rid)
+                    )
+                    ctx["purge"] = await purge_panel_context(
+                        session, staff, ctx["values"], return_to=next_base + "&settings=purge"
                     )
                 # else: leave values={} — fail-closed / degraded, no Owner fallback
 

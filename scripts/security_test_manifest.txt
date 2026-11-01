@@ -336,6 +336,8 @@ tests/test_user_search_folding.py
 tests/test_shop_customer_card.py
 # Shop Mini App: permission default for new shops and the reason a shop cannot switch it on.
 tests/test_shop_miniapp_defaults.py
+# Cleanup tab deletion: own shop only, chosen tags only, never money in flight, from the root.
+tests/test_order_purge.py
 # Owner bulk grant of the shop Mini App permission: owner only, never widens an explicit empty list.
 tests/test_bulk_grant_miniapp.py
 # Customer staff note and risk tag: customer_notes key, own shop only.

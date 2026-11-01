@@ -1476,6 +1476,30 @@ def stars_amount_for_toman(amount_toman: int, toman_per_star: int) -> int:
     return max(1, (int(amount_toman) + rate - 1) // rate)
 
 
+async def release_unpaid_order_holds(session: AsyncSession, order: Order, *, reason: str) -> None:
+    """Give back what an unpaid order held once it was claimed as cancelled; nothing is committed.
+
+    The discount or loyalty code, the trial claim, an unsold custom plan and an unpaid agency
+    application. Call it only after the caller's own atomic claim moved the order to cancelled,
+    so two runs never release twice.
+    """
+    if order.discount_code:
+        if str(order.discount_code).upper().startswith("LOY"):
+            from app.services.loyalty import release_loyalty_discount_for_order
+
+            await release_loyalty_discount_for_order(session, order)
+        else:
+            await _release_discount_code(session, order.discount_code, order=order)
+    # Always attempt trial release (create_order never sets note="trial:…").
+    await _release_trial_claim_for_order(session, order)
+    await discard_unsold_custom_plan(session, order)
+    # Unblock reseller apply if this was an unpaid agency checkout.
+    if (order.note or "").startswith("reseller_app:"):
+        from app.services.resellers import cancel_application_for_order
+
+        await cancel_application_for_order(session, order, reason=reason, commit=False)
+
+
 async def cancel_stale_pending_orders(
     session: AsyncSession,
     *,
@@ -1532,26 +1556,7 @@ async def cancel_stale_pending_orders(
         for pay in pend.scalars().all():
             pay.status = PaymentStatus.REJECTED.value
             pay.review_note = pay.review_note or "auto-cancelled stale pending order"
-        if order.discount_code:
-            if str(order.discount_code).upper().startswith("LOY"):
-                from app.services.loyalty import release_loyalty_discount_for_order
-
-                await release_loyalty_discount_for_order(session, order)
-            else:
-                await _release_discount_code(session, order.discount_code, order=order)
-        # Always attempt trial release (create_order never sets note="trial:…").
-        await _release_trial_claim_for_order(session, order)
-        await discard_unsold_custom_plan(session, order)
-        # Unblock reseller apply if this was an unpaid agency checkout.
-        if (order.note or "").startswith("reseller_app:"):
-            from app.services.resellers import cancel_application_for_order
-
-            await cancel_application_for_order(
-                session,
-                order,
-                reason="auto-cancelled stale pending order",
-                commit=False,
-            )
+        await release_unpaid_order_holds(session, order, reason="auto-cancelled stale pending order")
         cancelled += 1
 
     if cancelled:

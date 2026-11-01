@@ -65,6 +65,7 @@ async def _purge_children(
     parent_where: ColumnElement[bool],
     *,
     stack: frozenset[tuple[str, str]],
+    owned_tables: frozenset[str] = SHOP_OWNED_TABLES,
 ) -> None:
     pk_name = _primary_key_column(parent)
     if pk_name is None:
@@ -76,10 +77,10 @@ async def _purge_children(
             continue
         column = child.c[column_name]
         child_where = column.in_(parent_ids)
-        if column.nullable and child.name not in SHOP_OWNED_TABLES:
+        if column.nullable and child.name not in owned_tables:
             await session.execute(update(child).where(child_where).values({column_name: None}))
             continue
-        await _purge_children(session, child, child_where, stack=stack | {key})
+        await _purge_children(session, child, child_where, stack=stack | {key}, owned_tables=owned_tables)
         await session.execute(delete(child).where(child_where))
 
 
@@ -95,3 +96,14 @@ async def purge_user_references(session: AsyncSession, user_id: int) -> None:
         BotUser.__table__.c.id == user_id,
         stack=frozenset(),
     )
+
+
+async def purge_row_references(session: AsyncSession, table: Table, where: ColumnElement[bool]) -> None:
+    """Detach or remove every row that points at the rows of ``table`` matching ``where``.
+
+    For history rows (orders, payments): a nullable reference is always cleared, never a
+    reason to delete the referencing row, so shop configuration and usage history survive;
+    a NOT NULL reference is deleted, recursively. The rows themselves are left for the
+    caller to delete; nothing is committed here.
+    """
+    await _purge_children(session, table, where, stack=frozenset(), owned_tables=frozenset())
