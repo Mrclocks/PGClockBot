@@ -3623,18 +3623,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
         from app.services.pg_access import staff_user_actions
         from app.services.color_tags import (
-            DEFAULT_COLOR_TAG,
             color_tag_meta,
             color_tags_for_ui,
             normalize_color_filter,
         )
+        from app.services.customer_marks import color_filter_clause, marks_for
         from app.services.users_ops import (
             build_users_ops_page,
             parse_focus_uid,
             scoped_users_where,
             users_list_href,
         )
-        from sqlalchemy import and_, or_
+        from sqlalchemy import and_
 
         try:
             scope = resolve_shop_scope_id(staff)
@@ -3650,20 +3650,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         # Shop scope: Owner → platform users only; reseller → own customers.
         # Pure resellers (no shop services) stay on /resellers.
         where = scoped_users_where(scope)
-        if color_filter == DEFAULT_COLOR_TAG:
-            # Default green also matches legacy NULL / unmapped rows.
-            where = and_(
-                where,
-                or_(
-                    BotUser.color_tag == DEFAULT_COLOR_TAG,
-                    BotUser.color_tag.is_(None),
-                    BotUser.color_tag.in_(("blue", "violet", "pink", "slate", "")),
-                ),
-            )
-        elif color_filter == "yellow":
-            where = and_(where, BotUser.color_tag.in_(("yellow", "amber")))
-        elif color_filter:
-            where = and_(where, BotUser.color_tag == color_filter)
+        if color_filter:
+            # This shop's own tags only (the platform's own on BotUser).
+            where = and_(where, color_filter_clause(scope, color_filter))
         result = await session.execute(
             select(BotUser)
             .where(where)
@@ -3729,6 +3718,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "color_filter": color_filter,
                 "color_tags": color_tags_for_ui(),
                 "color_tag_meta": color_tag_meta,
+                "marks_by_uid": await marks_for(session, scope, [int(r.user.id) for r in rows]),
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
                 "open_edit": request.query_params.get("edit"),

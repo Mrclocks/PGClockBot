@@ -497,6 +497,9 @@ class BotUserShop(Base):
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     blocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     blocked_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # This shop's private note and risk tag; the platform's own stay on ``BotUser``.
+    staff_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    color_tag: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
 
 class ServiceImportAttempt(Base):

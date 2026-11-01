@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ChargeCode, Order
 from app.services.authz import authz_from_staff, can_shop
-from app.services.customer_marks import has_customer_notes_permission
+from app.services.customer_marks import has_customer_notes_permission, save_marks
 from app.services.gift_codes import gift_code_scope
 from app.services.staff_audit import actor_from_staff, add_staff_action
-from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope, assert_bot_user_in_scope
+from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope
 from app.services.users import set_setting
 from app.services.ux20 import (
     create_charge_code,
@@ -142,10 +142,9 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         if not user:
             return RedirectResponse("/users", status_code=303)
         try:
-            assert_bot_user_in_scope(staff, user)
-        except ShopScopeError:
+            await save_marks(session, staff=staff, user=user, note=note or "")
+        except PermissionError:
             return RedirectResponse("/home", status_code=303)
-        user.staff_note = (note or "").strip()[:2000] or None
         # Manual risk checkbox removed — staff risk level lives on color_tag.
         # Keep automatic risk_flags refresh; strip stale "manual" markers.
         flags = [f for f in parse_risk_flags(user.risk_flags) if f != "manual"]
@@ -164,8 +163,6 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.color_tags import apply_color_tag
-
         if not has_customer_notes_permission(staff):
             return RedirectResponse("/home", status_code=303)
         user = (
@@ -174,10 +171,9 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         if not user:
             return RedirectResponse("/users", status_code=303)
         try:
-            assert_bot_user_in_scope(staff, user)
-        except ShopScopeError:
+            await save_marks(session, staff=staff, user=user, tag=color_tag)
+        except PermissionError:
             return RedirectResponse("/home", status_code=303)
-        apply_color_tag(user, color_tag)
         await session.commit()
         from app.api.user_pages import _redirect_user
 

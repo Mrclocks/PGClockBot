@@ -159,7 +159,7 @@
         <td class="col-name li-title" data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">
             <span class="cell-name-primary">
-              {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
+              {% set tag = color_tag_meta((marks_by_uid or {}).get(u.id).tag if (marks_by_uid or {}).get(u.id) else none) if color_tag_meta is defined else none %}
               <button type="button" class="cell-name-text cell-name-link"
                       data-modal-open="modal-user-card"
                       data-modal-load="/users/{{ u.id }}/card"

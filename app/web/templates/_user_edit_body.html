@@ -12,7 +12,7 @@
         {% if user.username %}<span>@{{ user.username }}</span>{% endif %}
         {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
         {% if user.is_demo %}<span class="badge neutral">دمو</span>{% endif %}
-        {% set tag = color_tag_meta(user.color_tag) if (color_tag_meta is defined and show_private_marks|default(true)) else none %}
+        {% set tag = color_tag_meta(marks.tag) if (color_tag_meta is defined and marks is defined) else none %}
         {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
       </p>
     </div>
@@ -50,7 +50,7 @@
     <p class="muted">چهار سطح ثابت — دیفالت «مطمئن». فقط کارکنان می‌بینند.</p>
   </header>
   <form method="post" action="/users/{{ user.id }}/color-tag" class="form-stack" data-color-tag-form>
-    {% set selected_color = (user.color_tag or 'green') %}
+    {% set selected_color = marks.tag if marks is defined else 'green' %}
     {% include "_color_tag_picker.html" %}
     <div class="actions">
       <button class="btn" type="submit">ذخیره تگ ریسک</button>
@@ -67,7 +67,7 @@
   </header>
   <form method="post" action="/users/{{ user.id }}/staff-note" class="form-stack">
     <label class="form-field">یادداشت داخلی
-      <textarea name="note" rows="3" placeholder="مثلاً دیر کرد، کارت فلان…">{{ user.staff_note or '' }}</textarea>
+      <textarea name="note" rows="3" placeholder="مثلاً دیر کرد، کارت فلان…">{{ marks.note if marks is defined else '' }}</textarea>
     </label>
     <div class="actions">
       <button class="btn" type="submit">ذخیره یادداشت</button>

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Plan
 from app.services.authz import authz_from_staff, can_shop
-from app.services.customer_marks import has_customer_notes_permission
+from app.services.customer_marks import marks_for_staff, may_edit_private_marks
 from app.services.shop_customer_block import shop_block_form_context
 from app.services.shop_wallet_adjust import shop_wallet_form_context
 from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
@@ -22,8 +22,6 @@ from app.services.platform_identity import is_explicit_owner_staff
 from app.services.shop_membership import assert_customer_in_staff_scope
 from app.services.shop_scope import (
     ShopScopeError,
-    assert_bot_user_in_scope,
-    bot_user_in_scope,
     resolve_shop_scope_id,
 )
 from app.services.user_card import build_user_card
@@ -266,19 +264,14 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         can_pg_delete = bool(pg_acts.get("delete"))
         from app.services.color_tags import color_tag_meta, color_tags_for_ui
 
-        # The staff note and risk tag are one record on the person; only the shop that attributed
-        # them (the platform for an unattributed person) may read them, a member shop may not.
-        try:
-            assert_bot_user_in_scope(staff, user)
-            show_private_marks = True
-        except ShopScopeError:
-            show_private_marks = False
-
+        # Each shop reads only its own note and tag (the platform its own); the customer is
+        # already checked to be in this staff member's scope.
         ctx = {
             "staff": staff,
             "user": user,
-            "show_private_marks": show_private_marks,
-            "can_edit_private_marks": show_private_marks and has_customer_notes_permission(staff),
+            "marks": await marks_for_staff(session, staff, user),
+            "show_private_marks": True,
+            "can_edit_private_marks": await may_edit_private_marks(session, staff, user),
             "display_wallet": display_wallet,
             "services": snaps,
             "wallet_txs": wallet_txs,
@@ -325,7 +318,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             session,
             loaded,
             shop_id=shop_scope,
-            show_private_marks=bot_user_in_scope(staff, loaded),
+            show_private_marks=True,
         )
         pg_acts = staff_user_actions(staff)
         in_shop = is_explicit_owner_staff(staff) or shop_scope is not None
