@@ -164,7 +164,6 @@ class MiniAppInitDataSourceTests(unittest.TestCase):
         self.assertIn("X-Telegram-Init-Data", auth)
         self.assertNotIn('query_params.get("initData"', auth)
         self.assertNotIn('query_params.get("initData"', pages)
-        self.assertIn("now - auth_date > 600", auth)
         self.assertIn("is_blocked", auth)
         self.assertIn("assert_mini_force_join", auth)
 

@@ -1594,18 +1594,39 @@
     return !!core.getInitData();
   }
 
+  // Reasons a retry with the same Telegram sign-in cannot fix: only reopening the Mini App can.
+  const REOPEN_CODES = new Set(["expired", "bad_signature", "no_init_data"]);
+
   function bootErrorText(err) {
     if (!core.getInitData()) {
       return "مینی‌اپ را از دکمهٔ «Open» کنار چت یا دکمهٔ داخل ربات باز کنید.";
     }
-    if (err && err.status === 404) return "برای استفاده، ابتدا ربات را /start کنید.";
+    // The server's own Persian reason (shop switched off, not started, not a customer…).
     return (err && err.message) || "بارگذاری مینی‌اپ ناموفق بود.";
+  }
+
+  function needsReopen(err) {
+    return !!err && (REOPEN_CODES.has(err.code) || (err.status === 401 && !err.code));
   }
 
   function showBootError(err) {
     els.nav.innerHTML = "";
     state.nav = { key: "", active: null };
-    els.root.innerHTML = R.errorHtml(bootErrorText(err), "reload");
+    const reopen = needsReopen(err);
+    const code = err && err.code ? err.code : "";
+    els.root.innerHTML = R.errorHtml(bootErrorText(err), reopen ? "close-app" : "reload", {
+      label: reopen ? "بستن مینی‌اپ" : "",
+      code,
+    });
+  }
+
+  /** A 401 after launch: the session ended under an open screen; show how to reopen. */
+  function onAuthLost(err) {
+    if (!state.me) return;
+    closeSheet();
+    // Without /me no screen redraws over the notice; reopening the app boots afresh.
+    state.me = null;
+    showBootError(err);
   }
 
   async function boot() {
@@ -1623,6 +1644,9 @@
   }
 
   ACTIONS.reload = () => boot();
+  ACTIONS["close-app"] = () => {
+    if (!core.closeApp()) core.toast("مینی‌اپ را ببندید و دوباره از دکمهٔ «Open» باز کنید.");
+  };
 
   /** Re-read /me in the background; the home badges follow it. */
   function refreshBadges() {
@@ -1661,6 +1685,7 @@
     els.sheetBody = doc.getElementById("sheet-body");
     els.sheetClose = doc.getElementById("sheet-close");
     core.initTelegram();
+    core.onAuthLost(onAuthLost);
     bindTelegramBackButton();
     bindEvents();
     attachPullToRefresh();
