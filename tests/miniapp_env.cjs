@@ -60,6 +60,7 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
     BackButton: { show() { back.visible = true; }, hide() { back.visible = false; }, onClick(fn) { back.handler = fn; } },
     HapticFeedback: { notificationOccurred() {}, selectionChanged() {} },
     openLink(url) { calls.push({ method: "OPEN", url }); },
+    close() { calls.push({ method: "CLOSE" }); },
   } : null;
   const context = {
     console, URL, URLSearchParams, Promise, Map, Set, Intl, Date, JSON, Math, Number, String, Object, Array, Error,
@@ -79,7 +80,11 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
       const body = typeof options.body === "string" ? JSON.parse(options.body) : options.body;
       calls.push({ method: options.method, url, body, headers: options.headers });
       const res = await routes(options.method, url, body);
-      return { ok: res.status < 400, status: res.status, text: async () => JSON.stringify(res.body), blob: async () => res.blob };
+      const headers = res.headers || {};
+      return {
+        ok: res.status < 400, status: res.status, text: async () => JSON.stringify(res.body), blob: async () => res.blob,
+        headers: { get: (name) => (name in headers ? String(headers[name]) : null) },
+      };
     },
   };
   context.window = context;

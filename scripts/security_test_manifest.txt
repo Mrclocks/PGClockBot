@@ -79,6 +79,7 @@ tests/test_hybrid_quota_boxes.py
 tests/test_inbox_platform_scope_leak.py
 tests/test_live_pg_menus.py
 tests/test_miniapp_security_audit.py
+tests/test_miniapp_init_data_window.py
 tests/test_miniapp_service_addons.py
 tests/test_miniapp_feeds.py
 tests/test_miniapp_frontend.py

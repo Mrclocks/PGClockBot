@@ -165,10 +165,28 @@
   }
 
   class ApiError extends Error {
-    constructor(message, status) {
+    constructor(message, status, code) {
       super(message);
       this.status = status;
+      // Why the server turned the request away (``X-Mini-Error``), e.g. "expired"; "" if unsaid.
+      this.code = code || "";
     }
+  }
+
+  const ERROR_CODE = /^[a-z_]{1,32}$/;
+
+  /** The server's reason header, only when it is one of its short lowercase codes. */
+  function errorCode(res) {
+    const raw = res && res.headers && typeof res.headers.get === "function" ? res.headers.get("X-Mini-Error") : "";
+    const code = String(raw || "");
+    return ERROR_CODE.test(code) ? code : "";
+  }
+
+  // Called once when the server says this page's Telegram sign-in no longer works.
+  let authLostHandler = null;
+
+  function onAuthLost(handler) {
+    authLostHandler = typeof handler === "function" ? handler : null;
   }
 
   const FALLBACK_ERROR = "ارتباط با سرور برقرار نشد؛ دوباره تلاش کنید.";
@@ -219,7 +237,11 @@
     } catch (_) {
       data = null;
     }
-    if (!res.ok) throw new ApiError(errorText(data, res.status), res.status);
+    if (!res.ok) {
+      const err = new ApiError(errorText(data, res.status), res.status, errorCode(res));
+      if (res.status === 401 && authLostHandler) authLostHandler(err);
+      throw err;
+    }
     return data;
   }
 
@@ -317,6 +339,17 @@
     doc.documentElement.setAttribute("data-fullscreen", tg && tg.isFullscreen ? "1" : "0");
   }
 
+  /** Close the Mini App so Telegram signs a fresh session on the next open. */
+  function closeApp() {
+    if (tg && typeof tg.close === "function") {
+      try {
+        tg.close();
+        return true;
+      } catch (_) {}
+    }
+    return false;
+  }
+
   function initTelegram() {
     if (!tg) return;
     try {
@@ -338,7 +371,7 @@
 
   const core = Object.freeze({
     tg, getInitData, shopKey, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, formatRelative, faDigits,
-    haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, copyText, markCopied,
+    haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, onAuthLost, closeApp, copyText, markCopied,
     applyTheme, applyBrand, inkFor, initTelegram,
   });
   root.PGMini = Object.assign(root.PGMini || {}, { core });
