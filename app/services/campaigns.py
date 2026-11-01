@@ -10,12 +10,24 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import BotUser, CampaignRecipient, MarketingPreference, Order, Plan, TargetedCampaign, UserService
+from app.db.models import BotUser, CampaignRecipient, MarketingPreference, Order, Plan, ShopBroadCampaignDay, TargetedCampaign, UserService
+from app.services.daily_cap import claim_daily_cap
 from app.services.service_scope import shop_services_clause
 from app.services.shop_customer_block import not_blocked_in_shop_clause
 from app.services.shop_membership import shop_member_clause
 
-AUDIENCES = {"trial": "کاربران تست بدون خرید", "expiring": "سرویس‌های نزدیک انقضا", "inactive": "مشتریان بدون خرید در بازهٔ انتخابی"}
+AUDIENCES = {
+    "trial": "کاربران تست بدون خرید",
+    "expiring": "سرویس‌های نزدیک انقضا",
+    "inactive": "مشتریان بدون خرید در بازهٔ انتخابی",
+    "active": "دارندگان سرویس فعال",
+    "all": "همهٔ مشتریان فروشگاه",
+}
+# Reach a shop's whole audience: at most this many per shop per UTC day, so a shop bot is
+# not reported as spam. The platform has its own broadcast and is not counted here.
+BROAD_AUDIENCES = frozenset({"active", "all"})
+BROAD_PER_DAY = 1
+BROAD_LIMIT_MESSAGE = "مخاطبان گسترده (همهٔ مشتریان یا دارندگان سرویس فعال) برای هر فروشگاه روزی یک کمپین است"
 RECIPIENT_LIMIT = 5000
 CAMPAIGN_LIST_LIMIT = 5
 
@@ -38,21 +50,34 @@ def audience_query(*, shop_id, audience, days, now=None):
     query = select(BotUser.id).where(
         member, BotUser.is_blocked.is_(False), not_blocked_in_shop_clause(shop_id), BotUser.role.in_(["user", "reseller"]), ~opted_out
     )
+    return query.where(*_audience_filters(audience, shop_id=shop_id, days=days, now=now, bought=bought, shop_order=shop_order)).order_by(BotUser.id)
+
+
+def _active_service(shop_id, now):
+    return and_(
+        UserService.bot_user_id == BotUser.id, shop_services_clause(shop_id),
+        UserService.is_cancelled.is_(False), UserService.cancellation_pending.is_(False),
+        UserService.quota_status == "active",
+        UserService.quota_synced_at >= now - timedelta(days=1),
+        UserService.quota_expire_at >= now,
+    )
+
+
+def _audience_filters(audience, *, shop_id, days, now, bought, shop_order):
+    """Extra WHERE clauses that pick one audience out of the shop's reachable customers."""
     if audience == "trial":
-        query = query.where(~bought, exists(select(Order.id).join(Plan, Plan.id == Order.plan_id).where(
-            shop_order, Order.status == "delivered", Plan.is_trial.is_(True))))
-    elif audience == "inactive":
+        return [~bought, exists(select(Order.id).join(Plan, Plan.id == Order.plan_id).where(
+            shop_order, Order.status == "delivered", Plan.is_trial.is_(True)))]
+    if audience == "inactive":
         cutoff = now - timedelta(days=days)
-        query = query.where(BotUser.created_at <= cutoff, ~exists(select(Order.id).where(
-            shop_order, Order.status == "delivered", Order.created_at > cutoff)))
-    else:
-        query = query.where(exists(select(UserService.id).where(
-            UserService.bot_user_id == BotUser.id, shop_services_clause(shop_id),
-            UserService.is_cancelled.is_(False), UserService.cancellation_pending.is_(False),
-            UserService.quota_status == "active",
-            UserService.quota_synced_at >= now - timedelta(days=1),
-            UserService.quota_expire_at >= now, UserService.quota_expire_at <= now + timedelta(days=days))))
-    return query.order_by(BotUser.id)
+        return [BotUser.created_at <= cutoff, ~exists(select(Order.id).where(
+            shop_order, Order.status == "delivered", Order.created_at > cutoff))]
+    if audience == "active":
+        return [exists(select(UserService.id).where(_active_service(shop_id, now)))]
+    if audience == "all":
+        return []
+    return [exists(select(UserService.id).where(
+        _active_service(shop_id, now), UserService.quota_expire_at <= now + timedelta(days=days)))]
 
 
 async def audience_count(session, **kwargs):
@@ -76,6 +101,9 @@ async def create_campaign(session, *, shop_id, audience, days, text, actor):
     ids = list((await session.scalars(audience_query(shop_id=shop_id, audience=audience, days=days).limit(RECIPIENT_LIMIT))).all())
     if not ids:
         raise ValueError("مخاطبی در این گروه موجود نیست")
+    if audience in BROAD_AUDIENCES and shop_id:
+        if not await claim_daily_cap(session, ShopBroadCampaignDay, shop_id=int(shop_id), amount=1, cap=BROAD_PER_DAY):
+            raise ValueError(BROAD_LIMIT_MESSAGE)
     row = TargetedCampaign(reseller_id=shop_id, audience=audience, days=days, text=text, created_by=actor)
     session.add(row)
     await session.flush()
