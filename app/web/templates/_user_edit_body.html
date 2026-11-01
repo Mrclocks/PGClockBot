@@ -43,7 +43,7 @@
   </form>
 </section>
 {% endif %}
-{% if show_private_marks|default(true) %}
+{% if can_edit_private_marks|default(false) %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>تگ ریسک</h3>
@@ -59,12 +59,11 @@
 </section>
 {% endif %}
 
-{% if manage_user %}
-{% if show_private_marks|default(true) %}
+{% if can_edit_private_marks|default(false) %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>یادداشت داخلی</h3>
-    <p class="muted">فقط ادمین می‌بیند — برای پشتیبانی</p>
+    <p class="muted">فقط کارکنان همین فروشگاه می‌بینند — برای پشتیبانی</p>
   </header>
   <form method="post" action="/users/{{ user.id }}/staff-note" class="form-stack">
     <label class="form-field">یادداشت داخلی
@@ -77,6 +76,7 @@
 </section>
 {% endif %}
 
+{% if manage_user %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>تغییر نقش</h3>

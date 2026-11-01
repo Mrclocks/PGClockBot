@@ -333,3 +333,5 @@ tests/test_user_search_folding.py
 tests/test_shop_customer_card.py
 # Shop Mini App: permission default for new shops and the reason a shop cannot switch it on.
 tests/test_shop_miniapp_defaults.py
+# Customer staff note and risk tag: customer_notes key, own shop only.
+tests/test_customer_notes_permission.py
