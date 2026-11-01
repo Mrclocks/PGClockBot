@@ -346,3 +346,5 @@ tests/test_staff_audit.py
 tests/test_shop_wallet_adjust.py
 # Manual loyalty-point changes by shop staff: own shop only, capped, once per request.
 tests/test_shop_points_adjust.py
+# Per-shop customer block: that shop's bot, Mini App and campaigns only; never account-wide.
+tests/test_shop_customer_block.py

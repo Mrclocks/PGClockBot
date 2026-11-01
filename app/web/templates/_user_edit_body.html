@@ -111,6 +111,29 @@
 </section>
 
 {% endif %}
+{% if can_block_in_shop|default(false) %}
+<section class="edit-section" id="user-shop-block">
+  <header class="edit-section-head">
+    <h3>مسدودسازی در این فروشگاه</h3>
+    <p class="muted">فقط ربات و مینی‌اپ همین فروشگاه برای این مشتری بسته می‌شود؛ سرویس‌های فعلی‌اش قطع نمی‌شوند و در فروشگاه‌های دیگر اثری ندارد.</p>
+  </header>
+  {% if shop_blocked %}
+  <p><span class="badge blocked">مسدود در این فروشگاه</span>{% if shop_blocked_reason %} <span class="muted" dir="auto">{{ shop_blocked_reason }}</span>{% endif %}</p>
+  <form method="post" action="/users/{{ user.id }}/shop-block" class="form-stack"
+        data-confirm="مسدودی این مشتری در فروشگاه شما برداشته شود؟" data-confirm-title="رفع مسدودی" data-confirm-label="رفع مسدودی">
+    <input type="hidden" name="action" value="unblock" />
+    <div class="actions"><button class="btn" type="submit">رفع مسدودی</button></div>
+  </form>
+  {% else %}
+  <form method="post" action="/users/{{ user.id }}/shop-block" class="form-stack"
+        data-confirm="این مشتری در ربات و مینی‌اپ فروشگاه شما مسدود شود؟ سرویس‌های فعلی‌اش قطع نمی‌شوند." data-confirm-title="مسدود کردن مشتری" data-confirm-label="مسدود کن" data-confirm-danger="1">
+    <input type="hidden" name="action" value="block" />
+    <label class="form-field">علت<input name="reason" type="text" required minlength="3" maxlength="200" placeholder="الزامی" /></label>
+    <div class="actions"><button class="btn btn-danger" type="submit">مسدود کردن در این فروشگاه</button></div>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
 {% if can_adjust_shop_wallet|default(false) %}
 <section class="edit-section" id="user-shop-wallet">
   <header class="edit-section-head">
