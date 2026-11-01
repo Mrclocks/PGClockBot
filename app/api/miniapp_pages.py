@@ -103,6 +103,14 @@ def _nav_for(persona: str) -> list[dict[str, str]]:
 
 
 def _require_commerce(user: BotUser) -> str:
+    """The persona that may shop here; platform admins may not shop in the platform Mini App.
+
+    In a shop's Mini App ``load_mini_user`` has already admitted only that shop's customers
+    and staff and set the shop context; there everyone shops as a customer (as ``/me``
+    shows), so a platform admin who is also the shop's customer is not turned away.
+    """
+    if current_shop_reseller_id() is not None:
+        return "user"
     persona = resolve_mini_persona(user)
     if not commerce_allowed(persona):
         raise HTTPException(403, "خرید/تمدید برای این نقش در مینی‌اپ مجاز نیست")
