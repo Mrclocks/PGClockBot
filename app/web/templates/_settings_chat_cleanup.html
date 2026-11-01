@@ -1,4 +1,4 @@
-{# «پاک‌سازی خودکار صفحهٔ ربات» and «کیبورد همیشه باز»; post with the menu form they sit beside. #}
+{# «پاک‌سازی خودکار صفحهٔ ربات», «کیبورد همیشه باز» and «نمایش دکمه شروع مجدد»; post with the menu form they sit beside. #}
 <div class="setting-item full">
   <label class="toggle-row ui-switch-row">
     <span class="ui-switch-copy">
@@ -19,6 +19,18 @@
     </span>
     <span class="ui-switch">
       <input type="checkbox" name="menu_keyboard_persistent" value="1" form="menu-form" {% if values.get('menu_keyboard_persistent', '0') in ['1','true','yes','on'] %}checked{% endif %} />
+      <span class="ui-switch-track" aria-hidden="true"></span>
+    </span>
+  </label>
+</div>
+<div class="setting-item full">
+  <label class="toggle-row ui-switch-row">
+    <span class="ui-switch-copy">
+      <strong>نمایش دکمه شروع مجدد</strong>
+      <small class="muted">روشن = زیر کیبورد اصلی ربات برای همه یک ردیف «شروع مجدد» نمایش داده می‌شود که منو را از نو می‌سازد. متن دکمه در تب «متن دکمه‌ها» تنظیم می‌شود. تغییر با «شروع مجدد» یا /start اعمال می‌شود.</small>
+    </span>
+    <span class="ui-switch">
+      <input type="checkbox" name="show_restart_button" value="1" form="menu-form" {% if values.get('show_restart_button', '1') in ['1','true','yes','on'] %}checked{% endif %} />
       <span class="ui-switch-track" aria-hidden="true"></span>
     </span>
   </label>
