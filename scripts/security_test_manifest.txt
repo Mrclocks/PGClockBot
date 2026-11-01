@@ -345,3 +345,5 @@ tests/test_shop_wallet_adjust.py
 tests/test_shop_points_adjust.py
 # Per-shop customer block: that shop's bot, Mini App and campaigns only; never account-wide.
 tests/test_shop_customer_block.py
+# Campaigns to a shop's whole audience: own reachable customers only, one per shop per day.
+tests/test_campaign_broad_audiences.py

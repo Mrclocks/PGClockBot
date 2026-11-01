@@ -1943,3 +1943,15 @@ class ShopPointsAdjustDay(Base):
     shop_id: Mapped[int] = mapped_column(Integer)
     day: Mapped[str] = mapped_column(String(10))
     used: Mapped[int] = mapped_column(BigInteger, server_default="0")
+
+
+class ShopBroadCampaignDay(Base):
+    """How many campaigns to a shop's whole audience it created on one UTC day (daily cap)."""
+
+    __tablename__ = "shop_broad_campaign_days"
+    __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_broad_campaign_days_shop_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    day: Mapped[str] = mapped_column(String(10))
+    used: Mapped[int] = mapped_column(BigInteger, server_default="0")
