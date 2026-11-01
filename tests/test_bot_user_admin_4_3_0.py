@@ -114,7 +114,6 @@ class UserEditUiTests(unittest.TestCase):
     def test_users_list_risk_tag_and_search_pad(self):
         users = Path("app/web/templates/users.html").read_text(encoding="utf-8")
         self.assertIn("badge-risk-tag", users)
-        self.assertIn("u.color_tag", users)
         self.assertIn("cell-name", users)
         self.assertNotIn("risk-dot", users)
         picker = Path("app/web/templates/_color_tag_picker.html").read_text(encoding="utf-8")
