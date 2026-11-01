@@ -1,6 +1,12 @@
 {% from "macros.html" import modal_title %}
+{# Header brand; pages rendered without a signed-in person (or by a bare template environment) keep the default. #}
+{% set brand = panel_brand if panel_brand is defined and panel_brand else none %}
+{% set brand_name = brand.name if brand and brand.name else (pwa_name|default('MrClockBot')) %}
+{% set brand_logo = brand.logo_url if brand else '/static/logo-64.png' %}
+{% set brand_custom_logo = brand.has_custom_logo if brand else false %}
+{% set brand_color = brand.color if brand else '' %}
 <!DOCTYPE html>
-<html lang="fa" dir="rtl" data-theme="dark">
+<html lang="fa" dir="rtl" data-theme="dark"{% if brand_color %} data-brand="{{ brand_color }}"{% endif %}>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -9,10 +15,10 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="{{ pwa_name|default('MrClockBot') }}" />
+  <meta name="apple-mobile-web-app-title" content="{{ brand_name }}" />
   <script src="/static/panel_widget_request.js?v={{ panel_widget_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   {% if csrf_token %}<meta name="csrf-token" content="{{ csrf_token }}" />{% endif %}
-  <title>{% block title %}پنل مدیریت{% endblock %} · {{ pwa_name|default('MrClockBot') }}</title>
+  <title>{% block title %}پنل مدیریت{% endblock %} · {{ brand_name }}</title>
   <script{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>
   (function () {
     try {
@@ -49,6 +55,8 @@
   <link rel="preload" href="/static/panel.css?v={{ app_version }}" as="style" />
   <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
   <link rel="stylesheet" href="/static/panel.css?v={{ app_version }}" />
+  {# Fixed accent presets, generated from code constants (never from saved text). #}
+  {% if panel_brand_css is defined %}<style{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>{{ panel_brand_css }}</style>{% endif %}
   <link rel="stylesheet" href="/static/list-inputs.css?v={{ app_version }}" />
   <link rel="stylesheet" href="/static/panel-nav-modes.css?v={{ app_version }}" />
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
@@ -70,14 +78,16 @@
   <div class="shell">
     <header class="topbar mobile-only">
       <a class="topbar-brand" href="/home" aria-label="داشبورد">
-        <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" width="40" height="40" /></span>
+        <span class="brand-logo{% if brand_custom_logo %} brand-logo--custom{% endif %}" aria-hidden="true"><img src="{{ brand_logo }}" alt="" width="40" height="40" /></span>
         <div class="topbar-brand-text">
-          <strong dir="ltr">MrClockBot</strong>
+          <strong dir="auto">{{ brand_name }}</strong>
+          {% if is_owner %}
           <span class="topbar-version" dir="ltr">
             <span class="brand-ver-dot {% if update and update.update_available %}brand-ver-dot-warn{% else %}brand-ver-dot-ok{% endif %}" aria-hidden="true"></span>
             v{{ app_version }}
             <span class="channel-badge channel-badge-{{ deployed_channel|default('main') }}" title="کانال نصب‌شده فعلی">{{ deployed_channel_label|default('پایدار') }}</span>
           </span>
+          {% endif %}
         </div>
       </a>
       <button type="button" class="menu-toggle" id="menu-toggle" aria-label="منو" aria-expanded="false" aria-controls="sidebar">
@@ -88,14 +98,16 @@
     <aside class="side" id="sidebar" aria-label="منوی اصلی">
       <div class="side-panel">
       <a class="brand desk-only" href="/home" aria-label="داشبورد">
-        <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" width="40" height="40" /></span>
+        <span class="brand-logo{% if brand_custom_logo %} brand-logo--custom{% endif %}" aria-hidden="true"><img src="{{ brand_logo }}" alt="" width="40" height="40" /></span>
         <div>
-          <strong dir="ltr">MrClockBot</strong>
+          <strong dir="auto">{{ brand_name }}</strong>
+          {% if is_owner %}
           <span class="brand-ver-line" dir="ltr">
             <span class="brand-ver-dot {% if update and update.update_available %}brand-ver-dot-warn{% else %}brand-ver-dot-ok{% endif %}" aria-hidden="true"></span>
             v{{ app_version }}
             <span class="channel-badge channel-badge-{{ deployed_channel|default('main') }}" title="کانال نصب‌شده فعلی">{{ deployed_channel_label|default('پایدار') }}</span>
           </span>
+          {% endif %}
         </div>
       </a>
       <div class="side-theme" id="side-theme">

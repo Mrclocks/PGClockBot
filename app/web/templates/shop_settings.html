@@ -60,6 +60,9 @@
     {% set settings_action = '/shop-settings?tab=appearance' %}
     {% include "_settings_appearance.html" %}
 
+  {% elif tab == 'brand' %}
+    {% include "_panel_brand_card.html" %}
+
   {% elif tab == 'miniapp' %}
     {% set miniapp_brand_action = '/shop-settings/miniapp-brand' %}
     {% set settings_base = '/shop-settings' %}

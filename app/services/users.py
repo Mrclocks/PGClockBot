@@ -1208,7 +1208,7 @@ SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
 PANEL_SETTINGS_TABS: list[tuple[str, str]] = [
     ("general", "عمومی"),
     ("backup", "بکاپ"),
-    ("pwa", "وب‌اپ"),
+    ("pwa", "ظاهر و برند"),
     # Tab key stays "ssl" so saved links keep working.
     ("ssl", "دامنه‌ها"),
     ("update", "آپدیت"),
