@@ -55,6 +55,7 @@ DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_sett
 RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("welcome", "خوش‌آمد و هویت"),
     ("appearance", "هویت ربات"),
+    ("brand", "ظاهر و برند"),
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
     ("screens", "تیتر و توضیح منوها"),
