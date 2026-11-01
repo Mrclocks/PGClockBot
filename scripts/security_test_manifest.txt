@@ -335,3 +335,5 @@ tests/test_shop_customer_card.py
 tests/test_shop_miniapp_defaults.py
 # Customer staff note and risk tag: customer_notes key, own shop only.
 tests/test_customer_notes_permission.py
+# Gift codes: own gift_codes key, own shop only; migration 0077 keeps current access.
+tests/test_gift_codes_permission.py

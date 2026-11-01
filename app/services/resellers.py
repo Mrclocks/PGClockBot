@@ -43,6 +43,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("trial_users", "مشاهدهٔ کاربران تست و خریداران"),
     ("trial_users_manage", "پیام به کاربران تست"),
     ("catalog_discounts", "تخفیف و کاهش قیمت فروشگاه"),
+    ("gift_codes", "کد هدیه و کد تخفیف فروشگاه"),
     ("loyalty", "باشگاه مشتریان"),
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),
     ("connection_status_manage", "مدیریت تست اتصال"),
@@ -50,7 +51,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
 ]
 
-DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import,miniapp,customer_notes"
+DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import,miniapp,customer_notes,gift_codes"
 
 # Tabs a reseller may edit for their own shop bot
 RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
