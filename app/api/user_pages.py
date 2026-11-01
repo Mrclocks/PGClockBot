@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, Plan
 from app.services.authz import authz_from_staff, can_shop
 from app.services.customer_marks import has_customer_notes_permission
+from app.services.shop_wallet_adjust import shop_wallet_form_context
 from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
 from app.services.pg_access import staff_user_actions
 from app.services.platform_identity import is_explicit_owner_staff
@@ -281,6 +282,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "services": snaps,
             "wallet_txs": wallet_txs,
             "wallet_nonce": secrets.token_hex(8),
+            **shop_wallet_form_context(staff),
             "plans": plans,
             "format_toman": format_toman,
             "flash_ok": request.query_params.get("ok"),

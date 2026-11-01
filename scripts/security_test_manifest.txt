@@ -339,3 +339,5 @@ tests/test_customer_notes_permission.py
 tests/test_gift_codes_permission.py
 # Shop staff action log: written with the change, read only by the shop it belongs to.
 tests/test_staff_audit.py
+# Manual shop wallet changes by shop staff: own shop purse only, capped, once per request.
+tests/test_shop_wallet_adjust.py
