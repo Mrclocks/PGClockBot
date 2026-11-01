@@ -31,6 +31,7 @@ from app.services.miniapp_shop import (
     SHOP_SWITCH,
     set_shop_miniapp,
     shop_miniapp_available,
+    shop_miniapp_blocker,
     shop_miniapp_url,
     switch_value,
 )
@@ -60,10 +61,11 @@ from app.services.users import (
 async def _miniapp_switch_context(session: AsyncSession, profile: ResellerProfile | None) -> dict:
     """The shop's Mini App switch: whether it may be turned on, whether it is, and its address."""
     if profile is None:
-        return {"miniapp_available": False, "miniapp_on": False, "miniapp_url": ""}
+        return {"miniapp_available": False, "miniapp_blocker": "", "miniapp_on": False, "miniapp_url": ""}
     on_now = (await get_setting(session, SHOP_SWITCH, "0", reseller_id=int(profile.user_id))) == "1"
     return {
         "miniapp_available": await shop_miniapp_available(session, profile),
+        "miniapp_blocker": await shop_miniapp_blocker(session, profile),
         "miniapp_on": on_now,
         "miniapp_url": shop_miniapp_url(profile.miniapp_key or ""),
     }

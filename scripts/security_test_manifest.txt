@@ -329,3 +329,5 @@ tests/test_panel_brand.py
 
 # Staff search: Persian folds, partial ids and service names stay inside the shop scope.
 tests/test_user_search_folding.py
+# Shop Mini App: permission default for new shops and the reason a shop cannot switch it on.
+tests/test_shop_miniapp_defaults.py

@@ -49,7 +49,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
 ]
 
-DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import"
+DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import,miniapp"
 
 # Tabs a reseller may edit for their own shop bot
 RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
