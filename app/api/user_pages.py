@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Plan
 from app.services.authz import authz_from_staff, can_shop
+from app.services.customer_marks import has_customer_notes_permission
 from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
 from app.services.pg_access import staff_user_actions
 from app.services.platform_identity import is_explicit_owner_staff
@@ -275,6 +276,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "staff": staff,
             "user": user,
             "show_private_marks": show_private_marks,
+            "can_edit_private_marks": show_private_marks and has_customer_notes_permission(staff),
             "display_wallet": display_wallet,
             "services": snaps,
             "wallet_txs": wallet_txs,

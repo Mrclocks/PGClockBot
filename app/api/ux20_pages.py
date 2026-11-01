@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ChargeCode, Order
 from app.services.authz import authz_from_staff, can_shop
+from app.services.customer_marks import has_customer_notes_permission
 from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope, assert_bot_user_in_scope
 from app.services.users import set_setting
 from app.services.ux20 import (
@@ -131,7 +132,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
     ):
         from app.services.ux20 import parse_risk_flags, refresh_user_risk, serialize_risk_flags
 
-        if not is_platform_admin(staff) and not can_shop(authz_from_staff(staff), "users"):
+        if not has_customer_notes_permission(staff):
             return RedirectResponse("/home", status_code=303)
         user = (
             await session.execute(select(BotUser).where(BotUser.id == int(user_id)))
@@ -163,7 +164,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
     ):
         from app.services.color_tags import apply_color_tag
 
-        if not is_platform_admin(staff) and not can_shop(authz_from_staff(staff), "users"):
+        if not has_customer_notes_permission(staff):
             return RedirectResponse("/home", status_code=303)
         user = (
             await session.execute(select(BotUser).where(BotUser.id == int(user_id)))
