@@ -412,13 +412,17 @@ class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
                 "authz": SimpleNamespace(shop_perms=set(), is_platform=False),
             }
 
-        # Minimal registration — exercise gift create guard via endpoint source.
-        src = (ROOT / "app/api/ux20_pages.py").read_text(encoding="utf-8")
-        self.assertIn(
-            "if not is_platform_admin(staff) and rid is None",
-            src,
-        )
-        _ = (app, _db, _staff_platform, RedirectResponse, register_ux20_pages)
+        # Staff without a shop never get a gift-code scope, so they can never mint platform codes.
+        from app.services.gift_codes import gift_code_scope
+
+        for staff in (
+            _staff_platform(),
+            {"role": "pg_staff", "permissions": ["gift_codes"]},
+            {"role": "reseller", "bot_user_id": 0, "permissions": ["gift_codes"]},
+        ):
+            with self.subTest(staff=staff), self.assertRaises(PermissionError):
+                gift_code_scope(staff)
+        _ = (app, _db, RedirectResponse, register_ux20_pages)
 
     async def test_psp_nok_does_not_burn_settlement_source(self):
         from app.services.payment_settlement import callback_indicates_user_abort
