@@ -57,6 +57,7 @@
         {% set pending_orders_action = finance_pending_action %}
         {% set show_cleanup_status = true %}
         {% include "_domain_settings_form.html" %}
+        {% if purge %}{% include "_settings_order_purge.html" %}{% endif %}
       </div>
       {% endif %}
     </div>

@@ -118,6 +118,7 @@ from app.services.web_auth import (
 from app.api.catalog_discounts import register_catalog_discounts
 from app.api.connection_status_pages import register_connection_status_pages
 from app.api.funnel_pages import register_funnel_pages
+from app.api.order_purge_pages import register_order_purge_pages
 from app.api.panel_brand_pages import register_panel_brand_pages
 from app.api.trial_users_pages import register_trial_users_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
@@ -1566,6 +1567,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_broadcast_queue_pages(app, require_admin=require_admin, get_db=get_db)
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_order_purge_pages(app, require_staff=require_staff, get_db=get_db)
     register_trial_users_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_panel_brand_pages(app, require_staff=require_staff, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)

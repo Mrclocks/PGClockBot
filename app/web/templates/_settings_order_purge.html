@@ -1,0 +1,96 @@
+{# Cleanup tab: delete whole rows by status tag, by hand or every hour. Expects purge (order_purge.purge_panel_context). #}
+{% set purge_tone = {
+  'awaiting_receipt': 'pending', 'awaiting_approval': 'pending',
+  'delivering': 'info', 'voided': 'cancelled',
+} %}
+<form method="post" action="{{ purge.rules_action }}" class="settings-form" id="order-purge-rules">
+  <div class="card settings-card">
+    <h2>حذف کامل از پایگاه داده</h2>
+    <p class="muted update-card-caption">
+      برای هر وضعیت مشخص کنید حذف دستی و حذف خودکار (هر ساعت) آن را پاک کند یا نه.
+      سفارش با همهٔ پرداخت‌ها و ردیف‌های وابسته‌اش از ریشه پاک می‌شود و برنمی‌گردد؛ سرویس مشتری حذف نمی‌شود
+      و کد تخفیف مصرف‌شده یا تست گرفته‌شده دوباره آزاد نمی‌شود.
+      ردیفی که پرداخت درگاهِ باز یا در انتظار بررسی، یا ابطالِ در جریان دارد هرگز حذف نمی‌شود.
+    </p>
+    <div class="settings-grid">
+      <div class="setting-item full">
+        <label>فقط ردیف‌های قدیمی‌تر از (روز)
+          <input name="days" type="number" min="{{ purge.min_days }}" max="{{ purge.max_days }}" value="{{ purge.days }}" required dir="ltr" inputmode="numeric" />
+          <small class="muted">بر اساس زمان ساخت ردیف؛ برای حذف دستی و خودکار یکسان است (<bdi dir="ltr">{{ purge.min_days }}</bdi> تا <bdi dir="ltr">{{ purge.max_days | num }}</bdi>)</small>
+        </label>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table-compact order-purge-grid">
+        <thead>
+          <tr>
+            <th scope="col">وضعیت</th>
+            <th scope="col" class="col-switch">حذف دستی</th>
+            <th scope="col" class="col-switch">حذف خودکار</th>
+          </tr>
+        </thead>
+        {% for section in purge.sections %}
+        <tbody>
+          <tr class="order-purge-section"><th scope="rowgroup" colspan="3">{{ section.title }}</th></tr>
+          {% for row in section.rows %}
+          {% set tag = row.tag %}
+          <tr{% if tag.locked %} class="is-locked"{% endif %}>
+            <th scope="row">
+              <span class="badge {{ purge_tone.get(tag.status, tag.status) }}">{{ tag.label }}</span>
+              {% if tag.note %}<small class="muted order-purge-note">{{ tag.note }}</small>{% endif %}
+            </th>
+            {% for column, label, checked in [('m_', 'حذف دستی', row.manual), ('a_', 'حذف خودکار', row.auto)] %}
+            <td class="col-switch">
+              <span class="ui-switch">
+                <input type="checkbox" name="{{ column }}{{ tag.token }}" value="1"
+                       aria-label="{{ label }} {{ section.title }} {{ tag.label }}"
+                       {% if checked %}checked{% endif %}{% if tag.locked %} disabled{% endif %} />
+                <span class="ui-switch-track" aria-hidden="true"></span>
+              </span>
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div class="actions sticky-actions">
+    <button class="btn" type="submit">ذخیرهٔ قواعد حذف</button>
+  </div>
+</form>
+
+<form method="post" action="{{ purge.run_action }}" class="settings-form"
+      data-confirm="{{ purge.manual_ready.orders | num }} سفارش و {{ purge.manual_ready.payments | num }} پرداخت با همهٔ ردیف‌های وابسته برای همیشه از پایگاه داده پاک شوند؟ این کار برگشت‌ناپذیر است."
+      data-confirm-title="حذف کامل دستی" data-confirm-label="حذف کامل" data-confirm-danger="1">
+  <div class="card settings-card">
+    <h2>حذف دستی</h2>
+    <p class="muted update-card-caption">بر اساس قواعد ذخیره‌شده؛ بعد از تغییر سوییچ‌ها اول ذخیره کنید. هر بار حداکثر ۲۰۰ سفارش و ۲۰۰ پرداخت.</p>
+    <div class="home-panel-grid">
+      <div class="stat">
+        <div class="stat-top"><span>آمادهٔ حذف</span></div>
+        <strong>{{ purge.manual_ready.total | num }}</strong>
+        <span>{{ purge.manual_ready.orders | num }} سفارش · {{ purge.manual_ready.payments | num }} پرداخت</span>
+      </div>
+      <div class="stat">
+        <div class="stat-top"><span>حذف خودکار</span></div>
+        <strong>{{ 'روشن' if purge.auto_on else 'خاموش' }}</strong>
+        <span>{{ 'هر ساعت طبق ستون «حذف خودکار»' if purge.auto_on else 'هیچ وضعیتی در ستون خودکار روشن نیست' }}</span>
+      </div>
+      <div class="stat">
+        <div class="stat-top"><span>آخرین حذف</span></div>
+        {% if purge.last_run %}
+        <strong><bdi dir="ltr">{{ purge.last_run.at }}</bdi></strong>
+        <span>{{ purge.last_run.kind }} · {{ purge.last_run.orders | num }} سفارش · {{ purge.last_run.payments | num }} پرداخت</span>
+        {% else %}
+        <strong>—</strong>
+        <span>هنوز اجرا نشده</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="actions sticky-actions">
+    <button class="btn btn-danger" type="submit"{% if not purge.manual_ready.total %} disabled{% endif %}>حذف کامل الان</button>
+  </div>
+</form>
