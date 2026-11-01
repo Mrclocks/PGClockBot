@@ -1,0 +1,88 @@
+{# Panel brand (name, logo, colour) for the signed-in person's own scope.
+   Expects: brand_values {name, logo, color} (what this scope saved), brand_form_action, panel_brand (the brand in
+   effect, with fallbacks), shop_mode (true for a shop). The scope is never sent from here: the server derives it. #}
+{% set own = brand_values or {} %}
+{% set own_color = own.get('color', '') %}
+{% set fallback_name = 'نام پلتفرم' if shop_mode else 'MrClockBot' %}
+<form method="post" action="{{ brand_form_action }}" enctype="multipart/form-data" class="settings-form" id="panel-brand-form" data-panel-brand-form>
+  {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
+  <div class="card settings-card">
+    <h2>برند وب‌پنل</h2>
+    <p class="muted update-card-caption">
+      {% if shop_mode %}
+      نام و لوگو بالای وب‌پنل و رنگ برند در تب‌ها و هایلایت‌ها فقط برای کارکنان فروشگاه شما نمایش داده می‌شود.
+      هر مورد را خالی بگذارید تا برند پلتفرم نشان داده شود.
+      {% else %}
+      نام و لوگو بالای وب‌پنل و رنگ برند در تب‌ها و هایلایت‌ها نمایش داده می‌شود. فروشگاه‌هایی که برند خودشان را نگذاشته‌اند هم همین را می‌بینند.
+      {% endif %}
+    </p>
+
+    <div class="brand-preview" data-brand="{{ own_color }}" data-brand-preview aria-hidden="true">
+      <span class="brand-logo brand-logo--custom"><img src="{{ panel_brand.logo_url }}" alt="" width="40" height="40" data-brand-preview-logo /></span>
+      <span class="brand-preview-text">
+        <strong dir="auto" data-brand-preview-name>{{ own.get('name') or panel_brand.name }}</strong>
+        <small class="muted">پیش‌نمایش هدر</small>
+      </span>
+      <span class="brand-preview-chip">تب فعال</span>
+    </div>
+
+    <div class="settings-grid">
+      <div class="setting-item full">
+        <label>نام برند
+          <input name="panel_brand_name" type="text" maxlength="40" value="{{ own.get('name', '') }}"
+                 placeholder="{{ fallback_name }}" dir="auto" autocomplete="off" data-brand-name-input />
+          <small class="muted">حداکثر ۴۰ کاراکتر — خالی = {{ fallback_name }}</small>
+        </label>
+      </div>
+
+      <div class="setting-item full">
+        <div class="image-setting">
+          <strong>لوگو</strong>
+          <label class="file-label upload-box">
+            <input name="panel_brand_logo" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" data-brand-logo-input />
+            <span class="upload-box-plus" aria-hidden="true">+</span>
+            <span class="upload-box-title">انتخاب لوگو</span>
+            <span class="upload-box-hint muted">PNG، JPG یا WebP — حداکثر ۲ مگابایت</span>
+            <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
+            <span class="upload-box-progress" hidden aria-hidden="true"><i class="upload-box-progress-bar"></i></span>
+          </label>
+          <small class="muted">لوگو در قاب مربع ۴۰ پیکسلی هدر، بدون برش و با همان نسبت نمایش داده می‌شود. پس‌زمینهٔ شفاف توصیه می‌شود.</small>
+          <div class="ap-photo-row">
+            {% if own.get('logo') %}
+            <button type="submit" name="panel_brand_logo_clear" value="1" class="btn btn-danger btn-sm"
+                    data-confirm="لوگوی سفارشی حذف شود؟" data-confirm-title="تأیید" data-confirm-danger="1" data-confirm-label="حذف">
+              حذف لوگو
+            </button>
+            {% else %}
+            <span class="muted">{% if panel_brand.has_custom_logo %}لوگوی پلتفرم نمایش داده می‌شود{% else %}لوگوی پیش‌فرض نمایش داده می‌شود{% endif %}</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="setting-item full">
+        <fieldset class="miniapp-accent">
+          <legend>رنگ برند</legend>
+          <div class="color-tag-picker" role="radiogroup" aria-label="رنگ برند وب‌پنل">
+            <label class="color-tag-option" style="--tag-color: {{ default_brand_color_hex }}">
+              <input type="radio" name="panel_brand_color" value="" {% if not own_color %}checked{% endif %} data-brand-color-input />
+              <span class="accent-dot" aria-hidden="true"></span><span class="color-tag-label">{{ default_brand_color_label }}</span>
+            </label>
+            {% for preset in brand_presets %}
+            <label class="color-tag-option" style="--tag-color: {{ preset.dark_brand }}">
+              <input type="radio" name="panel_brand_color" value="{{ preset.key }}" {% if own_color == preset.key %}checked{% endif %} data-brand-color-input />
+              <span class="accent-dot" aria-hidden="true"></span><span class="color-tag-label">{{ preset.label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+          <small class="muted">فقط رنگ برند عوض می‌شود؛ رنگ‌های موفق، خطا و هشدار ثابت می‌مانند.</small>
+        </fieldset>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions sticky-actions">
+    <button class="btn" type="submit">ذخیره برند</button>
+  </div>
+</form>
+<script src="/static/panel-brand-form.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>

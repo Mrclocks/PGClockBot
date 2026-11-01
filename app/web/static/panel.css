@@ -336,6 +336,36 @@ a.topbar-brand:focus-visible {
   display: block;
   border-radius: inherit;
 }
+/* A logo someone uploaded: shown whole (never cropped) on a neutral tile, not on the brand colour. */
+.brand-logo--custom { background: var(--bg-muted); }
+.brand-logo--custom img { object-fit: contain; }
+/* Header preview on the brand settings card; recoloured by data-brand on the element itself. */
+.brand-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1_5);
+  padding: var(--space-1_5);
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+.brand-preview-text { display: flex; flex-direction: column; gap: var(--space-0); min-width: 0; margin-inline-end: auto; }
+.brand-preview-text strong { font-size: 14px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+.brand-preview-text small { font-size: 11px; }
+.brand-preview-chip {
+  display: inline-flex;
+  align-items: center;
+  height: var(--btn-h);
+  padding: 0 var(--space-2);
+  border-radius: var(--control-radius);
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--accent-fg);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--brand-base) 42%, transparent);
+}
 .brand strong { display: block; font-size: 14px; font-weight: 600; line-height: 1.25; }
 .brand small { color: var(--muted-fg); font-size: 11px; }
 .brand-ver-line {
