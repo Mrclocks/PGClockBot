@@ -35,7 +35,11 @@ function trigger(attrs) {
  * routes: function(method, url, body) -> {status, body} | Promise thereof, or throws
  * to simulate a lost response.
  */
-function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => true, telegram = true, pathname = "/miniapp/" }) {
+/**
+ * hash: the address fragment at launch (Telegram puts #tgWebAppData=… there).
+ * launch: a stand-in for launch.js's PGMiniLaunch ({ initData, sdk: Promise<boolean> }).
+ */
+function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => true, telegram = true, pathname = "/miniapp/", hash = "", launch = null }) {
   const elements = new Map();
   const element = (id) => {
     if (!elements.has(id)) elements.set(id, fakeElement(id));
@@ -44,7 +48,7 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
   const calls = [];
   const back = { visible: false, handler: null };
   const toasts = [];
-  const location = { hash: "", pathname };
+  const location = { hash, pathname };
   const doc = {
     documentElement: { attrs: {}, setAttribute(name, value) { this.attrs[name] = String(value); } },
     body: { classList: element("body").classList, appendChild(el) { toasts.push(el); } },
@@ -60,6 +64,7 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
     BackButton: { show() { back.visible = true; }, hide() { back.visible = false; }, onClick(fn) { back.handler = fn; } },
     HapticFeedback: { notificationOccurred() {}, selectionChanged() {} },
     openLink(url) { calls.push({ method: "OPEN", url }); },
+    close() { calls.push({ method: "CLOSE" }); },
   } : null;
   const context = {
     console, URL, URLSearchParams, Promise, Map, Set, Intl, Date, JSON, Math, Number, String, Object, Array, Error,
@@ -75,11 +80,16 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
     document: doc,
     Telegram: tg ? { WebApp: tg } : undefined,
     PGMini: { autostart: false },
+    ...(launch ? { PGMiniLaunch: launch } : {}),
     fetch: async (url, options) => {
       const body = typeof options.body === "string" ? JSON.parse(options.body) : options.body;
       calls.push({ method: options.method, url, body, headers: options.headers });
       const res = await routes(options.method, url, body);
-      return { ok: res.status < 400, status: res.status, text: async () => JSON.stringify(res.body), blob: async () => res.blob };
+      const headers = res.headers || {};
+      return {
+        ok: res.status < 400, status: res.status, text: async () => JSON.stringify(res.body), blob: async () => res.blob,
+        headers: { get: (name) => (name in headers ? String(headers[name]) : null) },
+      };
     },
   };
   context.window = context;

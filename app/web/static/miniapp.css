@@ -640,6 +640,8 @@ div.list-row { cursor: default; }
   padding: var(--space-1_5); border-radius: var(--radius);
   background: var(--danger-soft); color: var(--fg); font-size: 13px;
 }
+/* The reason code a customer can quote to support. */
+.error-box .error-code { margin: 0; color: var(--muted-fg); font-size: 11px; }
 
 /* ---------- QR ---------- */
 .qr-frame {
@@ -745,4 +747,6 @@ body.no-tabbar .toast { bottom: calc(var(--nav-bottom) + var(--space-2)); }
 @media (min-width: 560px) {
   body { max-width: 560px; margin-inline: auto; }
   .sheet-panel { max-width: 560px; margin-inline: auto; }
+  /* Fixed bars span the window; on desktop and Telegram Web keep them over the centred column. */
+  .tabbar { max-width: 560px; margin-inline: auto; }
 }

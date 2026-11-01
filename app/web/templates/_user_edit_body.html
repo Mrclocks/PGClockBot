@@ -43,7 +43,7 @@
   </form>
 </section>
 {% endif %}
-{% if show_private_marks|default(true) %}
+{% if can_edit_private_marks|default(false) %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>تگ ریسک</h3>
@@ -59,12 +59,11 @@
 </section>
 {% endif %}
 
-{% if manage_user %}
-{% if show_private_marks|default(true) %}
+{% if can_edit_private_marks|default(false) %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>یادداشت داخلی</h3>
-    <p class="muted">فقط ادمین می‌بیند — برای پشتیبانی</p>
+    <p class="muted">فقط کارکنان همین فروشگاه می‌بینند — برای پشتیبانی</p>
   </header>
   <form method="post" action="/users/{{ user.id }}/staff-note" class="form-stack">
     <label class="form-field">یادداشت داخلی
@@ -77,6 +76,7 @@
 </section>
 {% endif %}
 
+{% if manage_user %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>تغییر نقش</h3>
@@ -110,6 +110,39 @@
   {{ wallet_adjust_form('/users/' ~ user.id ~ '/wallet-credit', 'موجودی کیف پول این کاربر مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟', nonce=wallet_nonce) }}
 </section>
 
+{% endif %}
+{% if can_block_in_shop|default(false) %}
+<section class="edit-section" id="user-shop-block">
+  <header class="edit-section-head">
+    <h3>مسدودسازی در این فروشگاه</h3>
+    <p class="muted">فقط ربات و مینی‌اپ همین فروشگاه برای این مشتری بسته می‌شود؛ سرویس‌های فعلی‌اش قطع نمی‌شوند و در فروشگاه‌های دیگر اثری ندارد.</p>
+  </header>
+  {% if shop_blocked %}
+  <p><span class="badge blocked">مسدود در این فروشگاه</span>{% if shop_blocked_reason %} <span class="muted" dir="auto">{{ shop_blocked_reason }}</span>{% endif %}</p>
+  <form method="post" action="/users/{{ user.id }}/shop-block" class="form-stack"
+        data-confirm="مسدودی این مشتری در فروشگاه شما برداشته شود؟" data-confirm-title="رفع مسدودی" data-confirm-label="رفع مسدودی">
+    <input type="hidden" name="action" value="unblock" />
+    <div class="actions"><button class="btn" type="submit">رفع مسدودی</button></div>
+  </form>
+  {% else %}
+  <form method="post" action="/users/{{ user.id }}/shop-block" class="form-stack"
+        data-confirm="این مشتری در ربات و مینی‌اپ فروشگاه شما مسدود شود؟ سرویس‌های فعلی‌اش قطع نمی‌شوند." data-confirm-title="مسدود کردن مشتری" data-confirm-label="مسدود کن" data-confirm-danger="1">
+    <input type="hidden" name="action" value="block" />
+    <label class="form-field">علت<input name="reason" type="text" required minlength="3" maxlength="200" placeholder="الزامی" /></label>
+    <div class="actions"><button class="btn btn-danger" type="submit">مسدود کردن در این فروشگاه</button></div>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% if can_adjust_shop_wallet|default(false) %}
+<section class="edit-section" id="user-shop-wallet">
+  <header class="edit-section-head">
+    <h3>تنظیم کیف پول در این فروشگاه</h3>
+    <p class="muted">فقط کیف پول همین فروشگاه تغییر می‌کند. هر بار حداکثر {{ shop_wallet_max | money }} تومان و روزانه برای کل فروشگاه {{ shop_wallet_daily | money }} تومان. علت در گزارش کارکنان ثبت می‌شود.</p>
+  </header>
+  {% from "_wallet_adjust_form.html" import wallet_adjust_form %}
+  {{ wallet_adjust_form('/users/' ~ user.id ~ '/shop-wallet', 'کیف پول این مشتری در فروشگاه شما مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟ این کار در گزارش کارکنان ثبت می‌شود.', nonce=shop_wallet_nonce, note_label='علت', note_required=true) }}
+</section>
 {% endif %}
 
 {% if can_pg_create %}

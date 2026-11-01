@@ -22,6 +22,7 @@ from app.db.models import (
 )
 from app.services.authz import authz_from_staff, can_shop
 from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.staff_audit import StaffActor, add_staff_action
 
 TEHRAN = ZoneInfo("Asia/Tehran")
 PURCHASE_TYPES = {
@@ -33,6 +34,8 @@ PURCHASE_TYPES = {
 MAX_AMOUNT = 50_000_000
 MAX_USES = 1000
 GIFT_CODE_LIST_LIMIT = 200
+# Gift codes mint wallet credit in the shop, so they have their own key, apart from orders or plans.
+GIFT_CODES_PERMISSION = "gift_codes"
 
 
 def utc(value: datetime) -> datetime:
@@ -118,7 +121,7 @@ def validate_rules(
 
 
 async def create_gift_code(
-    session: AsyncSession, *, code=None, note=None, reseller_id=None, **rules
+    session: AsyncSession, *, code=None, note=None, reseller_id=None, audit: StaffActor | None = None, **rules
 ) -> ChargeCode:
     from app.services.ux20 import generate_charge_code, normalize_charge_code
 
@@ -146,6 +149,12 @@ async def create_gift_code(
     )
     session.add(row)
     try:
+        if audit is not None:
+            await session.flush()
+            add_staff_action(
+                session, audit, action="gift_code_create", target_type="gift_code", target_id=int(row.id),
+                amount=int(row.amount or 0) if row.kind == "wallet" else None,
+            )
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
@@ -441,14 +450,13 @@ def describe_code(row: ChargeCode) -> dict:
 def gift_code_scope(staff: Mapping[str, Any]) -> int | None:
     """Shop whose gift codes ``staff`` may manage (``None`` = the platform shop).
 
-    Same rule as the create, edit and toggle routes: an explicit Owner manages the
-    platform codes, anyone else needs the orders or plans permission *and* a shop.
+    The one rule for the page and every POST route: an explicit Owner manages the
+    platform codes, anyone else needs the ``gift_codes`` permission *and* a shop.
     Staff without a shop (for example PG staff) never reach another tenant's codes.
     """
     if is_platform_admin(dict(staff)):
         return None
-    authz = authz_from_staff(staff)
-    if not (can_shop(authz, "orders") or can_shop(authz, "plans")):
+    if not can_shop(authz_from_staff(staff), GIFT_CODES_PERMISSION):
         raise PermissionError("دسترسی مدیریت کد هدیه ندارید")
     shop_id = shop_owner_id(dict(staff))
     if shop_id is None:

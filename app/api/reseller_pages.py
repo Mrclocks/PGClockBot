@@ -15,7 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings, normalize_pg_base_url
 from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
-from app.services.miniapp_shop import PERMISSION as MINIAPP_PERMISSION
+from app.services.miniapp_shop import (
+    PERMISSION as MINIAPP_PERMISSION,
+    STATE_NO_PERMISSION,
+    STATE_OPEN,
+    STATE_PLATFORM_OFF,
+    STATE_SETUP,
+    STATE_SHOP_OFF,
+    shop_miniapp_state,
+)
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
 from app.services.db_safe import rollback_quiet
@@ -107,6 +115,16 @@ def _redirect_reseller_edit(user_id: int, *, ok: str | None = None, err: str | N
     return RedirectResponse(f"/resellers?{'&'.join(qs)}", status_code=303)
 
 
+
+
+# The shop's Mini App state as the platform owner reads it on the reseller page.
+MINIAPP_STATUS_TEXT = {
+    STATE_SETUP: "خاموش — راه‌اندازی ربات فروشگاه کامل نشده یا نماینده غیرفعال است",
+    STATE_PLATFORM_OFF: "خاموش — «مینی‌اپ فروشگاه‌ها» در تنظیمات مینی‌اپ پلتفرم روشن نیست",
+    STATE_NO_PERMISSION: "خاموش — دسترسی «مینی‌اپ فروشگاه برای مشتریان» در همین صفحه داده نشده است",
+    STATE_SHOP_OFF: "خاموش — نماینده هنوز آن را در تنظیمات فروشگاه خود روشن نکرده است",
+    STATE_OPEN: "فعال — مشتری‌ها از دکمهٔ «Open» ربات فروشگاه وارد می‌شوند",
+}
 
 
 def _shop_miniapp_may_open(profile: ResellerProfile) -> bool:
@@ -699,6 +717,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             "profile": profile,
             "feature_perms": FEATURE_PERMS,
             "selected_perms": perms,
+            "miniapp_status": MINIAPP_STATUS_TEXT[await shop_miniapp_state(session, profile)],
             "pg_roles": roles,
             "is_payg": is_payg(profile),
             "billing_txs": billing_txs,

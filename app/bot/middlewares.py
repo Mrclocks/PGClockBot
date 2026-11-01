@@ -20,6 +20,7 @@ from app.services.referral_registration import (
     referral_required_outbound,
 )
 from app.services.reseller_bots import lookup_reseller_by_bot_token
+from app.services.shop_customer_block import blocked_notice
 from app.services.users import (
     get_or_create_user,
     reset_shop_reseller_id,
@@ -627,11 +628,14 @@ class UserMiddleware(BaseMiddleware):
                             logger.debug("__call__: ignored failure", exc_info=True)
                     return None
                 data["db_user"] = user
-                if user.is_blocked:
+                blocked_text = await blocked_notice(
+                    session, user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+                )
+                if blocked_text:
                     msg = _reply_message(event)
                     if msg:
                         try:
-                            await msg.answer("دسترسی شما مسدود شده است.")
+                            await msg.answer(blocked_text)
                         except Exception:
                             logger.debug("__call__: ignored failure", exc_info=True)
                     cq = event.callback_query if isinstance(event, Update) else (
@@ -639,7 +643,7 @@ class UserMiddleware(BaseMiddleware):
                     )
                     if cq is not None:
                         try:
-                            await cq.answer("دسترسی شما مسدود شده است.", show_alert=True)
+                            await cq.answer(blocked_text, show_alert=True)
                         except Exception:
                             logger.debug("__call__: ignored failure", exc_info=True)
                     return None

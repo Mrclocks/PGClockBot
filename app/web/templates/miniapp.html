@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="dark light" />
   <title>مینی‌اپ</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- async: a blocked telegram.org must not hold the page; launch.js keeps the sign-in from the address. -->
+  <script src="https://telegram.org/js/telegram-web-app.js" id="tg-sdk" async></script>
+  <script src="/static/miniapp/launch.js?v={{ app_version }}"></script>
   <link rel="preload" href="/static/fonts/Vazirmatn-Variable.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
   <link rel="stylesheet" href="/static/miniapp.css?v={{ app_version }}&brand=4" />

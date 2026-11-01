@@ -884,8 +884,13 @@
     return `<div class="empty"><p>${esc(message)}</p>${cta ? `<button type="button" class="btn" data-action="goto" data-view="${esc(cta.view)}">${esc(cta.label)}</button>` : ""}</div>`;
   }
 
-  function errorHtml(message, retry) {
-    return `<div class="error-box" role="alert"><p>${esc(message)}</p>${retry ? `<button type="button" class="btn ghost sm" data-action="${esc(retry)}">تلاش دوباره</button>` : ""}</div>`;
+  /** ``opts.label`` renames the action button; ``opts.code`` is shown small for support. */
+  function errorHtml(message, retry, opts) {
+    const o = opts || {};
+    const label = o.label || "تلاش دوباره";
+    const button = retry ? `<button type="button" class="btn ghost sm" data-action="${esc(retry)}">${esc(label)}</button>` : "";
+    const code = o.code ? `<p class="error-code" dir="ltr">${esc(o.code)}</p>` : "";
+    return `<div class="error-box" role="alert"><p>${esc(message)}</p>${button}${code}</div>`;
   }
 
   root.PGMini.render = Object.freeze({

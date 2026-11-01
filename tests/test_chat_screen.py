@@ -442,9 +442,9 @@ class AlwaysOpenMenuSettingTests(unittest.TestCase):
         open_ = kb.main_reply_keyboard("user", ui={"menu_keyboard_persistent": "1"})
         self.assertNotEqual(keyboard_fingerprint(closed), keyboard_fingerprint(open_))
 
-    def test_the_menu_form_saves_both_switches(self) -> None:
+    def test_the_menu_form_saves_all_three_switches(self) -> None:
         from app.services.chat_cleanup_config import chat_cleanup_payload
 
         self.assertEqual(chat_cleanup_payload({"menu_keyboard_persistent": "1"}),
-                         {"chat_cleanup_enabled": "0", "menu_keyboard_persistent": "1"})
-        self.assertEqual(chat_cleanup_payload({}), {"chat_cleanup_enabled": "0", "menu_keyboard_persistent": "0"})
+                         {"chat_cleanup_enabled": "0", "menu_keyboard_persistent": "1", "show_restart_button": "0"})
+        self.assertEqual(chat_cleanup_payload({}), {"chat_cleanup_enabled": "0", "menu_keyboard_persistent": "0", "show_restart_button": "0"})
