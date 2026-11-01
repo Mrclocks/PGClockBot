@@ -14,6 +14,7 @@ from app.db.models import BotUser, ChargeCode, Order
 from app.services.authz import authz_from_staff, can_shop
 from app.services.customer_marks import has_customer_notes_permission
 from app.services.gift_codes import gift_code_scope
+from app.services.staff_audit import actor_from_staff, add_staff_action
 from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope, assert_bot_user_in_scope
 from app.services.users import set_setting
 from app.services.ux20 import (
@@ -196,7 +197,8 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             form = await request.form()
             row = await create_charge_code(
                 session, reseller_id=rid, note=str(form.get("note") or ""),
-                code=str(form.get("code") or "") or None, **_gift_rules(form),
+                code=str(form.get("code") or "") or None,
+                audit=actor_from_staff(staff, shop_id=rid), **_gift_rules(form),
             )
             return RedirectResponse(
                 f"/gift-codes?ok={quote('کد ساخته شد: ' + row.code)}",
@@ -235,6 +237,10 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             for name, value in rules.items():
                 setattr(row, name, value)
             row.note = str(form.get("note") or "").strip()[:255] or None
+            add_staff_action(
+                session, actor_from_staff(staff, shop_id=rid), action="gift_code_edit",
+                target_type="gift_code", target_id=int(row.id),
+            )
             await session.commit()
             return RedirectResponse(f"/gift-codes?ok={quote('تنظیمات کد ذخیره شد')}", status_code=303)
         except Exception as exc:
@@ -261,6 +267,10 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         if rid is not None and int(row.reseller_id or 0) != int(rid):
             return RedirectResponse("/gift-codes", status_code=303)
         row.is_active = not bool(row.is_active)
+        add_staff_action(
+            session, actor_from_staff(staff, shop_id=rid), action="gift_code_toggle",
+            target_type="gift_code", target_id=int(row.id),
+        )
         await session.commit()
         return RedirectResponse("/gift-codes?ok=1", status_code=303)
 

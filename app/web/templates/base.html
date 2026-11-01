@@ -253,6 +253,12 @@
             <span>بازاریابی و وفاداری</span>
           </a>
           {% endif %}
+          {% if is_owner or staff.role in ('reseller', 'principal') %}
+          <a href="/staff-actions" class="nav-item nav-item-bot {% if path.startswith('/staff-actions') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10a2 2 0 0 1 2 2v14l-3-2-2 2-2-2-2 2-2-2-3 2V6a2 2 0 0 1 2-2z"/><path d="M9 9h6M9 13h4"/></svg>
+            <span>گزارش کارکنان</span>
+          </a>
+          {% endif %}
           {% if is_owner or 'shop_settings' in perms %}
           <a href="{% if is_owner %}/settings{% else %}/shop-settings{% endif %}" class="nav-item nav-item-bot {% if (path.startswith('/settings') and not is_panel_settings) or path.startswith('/shop-settings') or path.startswith('/message-variables') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V5H9"/><path d="M2 14h2M20 14h2"/><circle cx="9.5" cy="13.5" r="1.1"/><circle cx="14.5" cy="13.5" r="1.1"/><path d="M9.5 17h5"/></svg>

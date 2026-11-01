@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ChargeCode, ResellerPlan
 from app.services.gift_codes import gift_code_scope
+from app.services.staff_audit import actor_from_staff, add_staff_action
 from app.services.table_bulk import parse_bulk_ids
 
 logger = logging.getLogger(__name__)
@@ -276,6 +277,7 @@ async def bulk_gift_code_toggle(
         rid = gift_code_scope(staff)
     except PermissionError:
         return 0, len(parse_bulk_ids(code_ids))
+    actor = actor_from_staff(staff, shop_id=rid)
 
     ids = parse_bulk_ids(code_ids)
     ok = fail = 0
@@ -291,6 +293,7 @@ async def bulk_gift_code_toggle(
             fail += 1
             continue
         row.is_active = not bool(row.is_active)
+        add_staff_action(session, actor, action="gift_code_toggle", target_type="gift_code", target_id=int(row.id))
         ok += 1
     if ok:
         await session.commit()

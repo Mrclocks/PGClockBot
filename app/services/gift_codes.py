@@ -22,6 +22,7 @@ from app.db.models import (
 )
 from app.services.authz import authz_from_staff, can_shop
 from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.staff_audit import StaffActor, add_staff_action
 
 TEHRAN = ZoneInfo("Asia/Tehran")
 PURCHASE_TYPES = {
@@ -120,7 +121,7 @@ def validate_rules(
 
 
 async def create_gift_code(
-    session: AsyncSession, *, code=None, note=None, reseller_id=None, **rules
+    session: AsyncSession, *, code=None, note=None, reseller_id=None, audit: StaffActor | None = None, **rules
 ) -> ChargeCode:
     from app.services.ux20 import generate_charge_code, normalize_charge_code
 
@@ -148,6 +149,12 @@ async def create_gift_code(
     )
     session.add(row)
     try:
+        if audit is not None:
+            await session.flush()
+            add_staff_action(
+                session, audit, action="gift_code_create", target_type="gift_code", target_id=int(row.id),
+                amount=int(row.amount or 0) if row.kind == "wallet" else None,
+            )
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
