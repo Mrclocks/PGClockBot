@@ -21,7 +21,34 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+import app.db.integration_models  # noqa: F401 — register foundation tables with shared metadata
+import app.db.integration_security_models  # noqa: F401 — register shared security tables
+from app.db.integration_read_models import (
+    IntegrationCatalogPlan as IntegrationCatalogPlan,
+    IntegrationRequestReplay as IntegrationRequestReplay,
+    IntegrationServiceSnapshot as IntegrationServiceSnapshot,
+)
 from app.db import Base
+from app.db.customer_link_models import (
+    CustomerLinkAction as CustomerLinkAction,
+)
+from app.db.customer_link_models import (
+    CustomerLinkChallenge as CustomerLinkChallenge,
+)
+from app.db.customer_link_models import (
+    CustomerTelegramLink as CustomerTelegramLink,
+)
+from app.db.customer_models import (
+    Customer as Customer,
+)
+from app.db.customer_models import (
+    IntegrationCustomer as IntegrationCustomer,
+)
+from app.db.customer_models import (
+    new_service_public_id,
+)
+from app.db.integration_audit_models import IntegrationAdminAudit as IntegrationAdminAudit
+from app.db.integration_audit_models import IntegrationManagementAction as IntegrationManagementAction
 
 
 class Role(str, Enum):
@@ -401,6 +428,16 @@ class UserService(Base):
     __tablename__ = "user_services"
     __table_args__ = (
         Index("ix_user_services_pg_username_lower", text("lower(pg_username)")),
+        Index("ix_user_services_shop_customer_id", "shop_id", "customer_id", "id"),
+        Index("ix_user_services_integration_customer_id", "integration_id", "customer_id", "id"),
+        CheckConstraint(
+            "(bot_user_id IS NOT NULL AND integration_id IS NULL AND origin_operation_id IS NULL) OR "
+            "(bot_user_id IS NULL AND customer_id IS NOT NULL AND public_id IS NOT NULL AND "
+            "integration_id IS NOT NULL AND origin_operation_id IS NOT NULL AND "
+            "owner_principal_id IS NOT NULL AND NOT shop_needs_review AND "
+            "subscription_url IS NULL AND subscription_token IS NULL)",
+            name="ck_service_channel_owner",
+        ),
         # A panel user can be imported into «سرویس‌های من» by one customer only.
         Index(
             "uq_user_services_imported_pg_user", "pg_user_id", unique=True,
@@ -416,7 +453,11 @@ class UserService(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    bot_user_id: Mapped[int | None] = mapped_column(ForeignKey("bot_users.id"), nullable=True, index=True)
+    integration_id: Mapped[str | None] = mapped_column(ForeignKey("integrations.id"), nullable=True, index=True)
+    origin_operation_id: Mapped[str | None] = mapped_column(String(40), nullable=True, unique=True)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
+    public_id: Mapped[str | None] = mapped_column(String(40), nullable=True, unique=True, default=new_service_public_id)
     plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("plans.id"), nullable=True)
     # Phase 1E — nullable; shop tenant via BotUser.reseller_id until set.
     owner_principal_id: Mapped[Optional[int]] = mapped_column(
@@ -460,7 +501,7 @@ class UserService(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    owner: Mapped["BotUser"] = relationship(
+    owner: Mapped["BotUser | None"] = relationship(
         back_populates="services", foreign_keys=[bot_user_id]
     )
     plan: Mapped[Optional["Plan"]] = relationship()
