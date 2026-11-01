@@ -1599,7 +1599,11 @@ async def attach_receipt(
         claim = await session.execute(
             update(Payment)
             .where(*conditions)
-            .values(receipt_file_id=file_id, status=PaymentStatus.PENDING.value)
+            .values(
+                receipt_file_id=file_id,
+                status=PaymentStatus.PENDING.value,
+                receipt_at=datetime.now(timezone.utc),
+            )
             .execution_options(synchronize_session=False)
         )
     if claim.rowcount != 1:

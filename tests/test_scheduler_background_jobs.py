@@ -24,6 +24,8 @@ OPERATIONS = {
     "psp_settlement_poll",
     "volume_external_sync",
     "chat_message_purge",
+    # Approves card receipts nobody reviewed in time; opens the bot it needs only when a receipt is due.
+    "scheduled_receipt_approval",
     # Copies each bot's Telegram profile photo for its Mini App logo; needs no running bot.
     "bot_profile_photo",
     # Removes cached customer profile photos for the user card; needs no running bot.

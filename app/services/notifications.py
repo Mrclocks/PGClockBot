@@ -1190,6 +1190,8 @@ async def notify_auto_approve(
     bot: Bot,
     session: AsyncSession,
     payment: Payment,
+    *,
+    reason: str | None = None,
 ) -> None:
     """Tell the payment's staff an automatic approval happened, with the receipt and the customer's service."""
     user = await session.get(BotUser, payment.user_id) if payment.user_id else None
@@ -1209,6 +1211,8 @@ async def notify_auto_approve(
         lines.append(kv_line("📦", "نوع", kind))
         lines.extend(detail_lines)
     lines.append(kv_line("✅", "نتیجه", "خودکار تأیید شد"))
+    if reason:
+        lines.append(kv_line("⏱", "علت", html.escape(reason)))
     shop_id = payment.wallet_shop_id if payment.is_wallet_topup else (order.reseller_id if order else None)
     is_agency_fee = bool(order and (order.note or "").startswith("reseller_app:"))
     # Local import: payment_voids imports services that import this module.

@@ -320,3 +320,5 @@ tests/test_trial_users.py
 tests/test_trial_user_actions.py
 # Auto-approval notice: receipt photo and customer/service buttons reach only the payment's own staff chat.
 tests/test_auto_approve_notice.py
+# Scheduled receipt approval: per-shop rule, safe selection, no retries, duplicates stay manual.
+tests/test_scheduled_approval.py
