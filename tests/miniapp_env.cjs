@@ -35,7 +35,11 @@ function trigger(attrs) {
  * routes: function(method, url, body) -> {status, body} | Promise thereof, or throws
  * to simulate a lost response.
  */
-function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => true, telegram = true, pathname = "/miniapp/" }) {
+/**
+ * hash: the address fragment at launch (Telegram puts #tgWebAppData=… there).
+ * launch: a stand-in for launch.js's PGMiniLaunch ({ initData, sdk: Promise<boolean> }).
+ */
+function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => true, telegram = true, pathname = "/miniapp/", hash = "", launch = null }) {
   const elements = new Map();
   const element = (id) => {
     if (!elements.has(id)) elements.set(id, fakeElement(id));
@@ -44,7 +48,7 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
   const calls = [];
   const back = { visible: false, handler: null };
   const toasts = [];
-  const location = { hash: "", pathname };
+  const location = { hash, pathname };
   const doc = {
     documentElement: { attrs: {}, setAttribute(name, value) { this.attrs[name] = String(value); } },
     body: { classList: element("body").classList, appendChild(el) { toasts.push(el); } },
@@ -76,6 +80,7 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
     document: doc,
     Telegram: tg ? { WebApp: tg } : undefined,
     PGMini: { autostart: false },
+    ...(launch ? { PGMiniLaunch: launch } : {}),
     fetch: async (url, options) => {
       const body = typeof options.body === "string" ? JSON.parse(options.body) : options.body;
       calls.push({ method: options.method, url, body, headers: options.headers });

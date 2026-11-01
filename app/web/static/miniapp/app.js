@@ -3,10 +3,11 @@
   "use strict";
 
   const { core, render: R } = root.PGMini;
-  const tg = core.tg;
   const doc = root.document;
 
   const SEARCH_DEBOUNCE_MS = 350;
+  // How long the first screen waits for the Telegram SDK before going on without it.
+  const SDK_WAIT_MS = 2500;
   const ACTIVITY_PAGE = 20;
   const ACTIVITY_MORE = 50;
   // Links saved before the redesign keep working.
@@ -234,8 +235,14 @@
 
   /* ---------- routing and back button ---------- */
 
+  /** The route part of the address; Telegram's own ``tgWebApp…`` parameters are not a route. */
+  function routeHash() {
+    const raw = String(root.location.hash || "").replace(/^#/, "").split("?")[0];
+    return raw.startsWith("tgWebApp") ? "" : raw.split("&")[0];
+  }
+
   function hashRoute() {
-    const raw = String(root.location.hash || "").replace(/^#/, "");
+    const raw = routeHash();
     const match = /^(service|ticket)\/(\d{1,10})$/.exec(raw);
     if (match && match[1] === "service") return { view: "service", serviceId: Number(match[2]) };
     if (match) return { view: "ticket", ticketId: Number(match[2]) };
@@ -258,7 +265,8 @@
     if (next === "ticket" && !state.ticketId) state.view = "support";
     const hash = state.view === "service" ? "service/" + state.serviceId
       : state.view === "ticket" ? "ticket/" + state.ticketId : state.view;
-    if (String(root.location.hash || "").replace(/^#/, "") !== hash) {
+    // Until the SDK has loaded or failed, the address still holds the parameters it reads.
+    if (!core.sdkPending() && String(root.location.hash || "").replace(/^#/, "") !== hash) {
       root.history.replaceState(null, "", "#" + hash);
     }
     state.viewSeq += 1;
@@ -285,6 +293,7 @@
    * only this WebApp API can.
    */
   function syncTelegramBackButton() {
+    const tg = core.webApp();
     if (!tg || !tg.BackButton) return;
     const show = hasOpenOverlay() || (state.me && state.view !== homeViewId());
     try {
@@ -304,6 +313,7 @@
   }
 
   function bindTelegramBackButton() {
+    const tg = core.webApp();
     if (!tg || !tg.BackButton || state.backBound) return;
     state.backBound = true;
     try {
@@ -1598,6 +1608,10 @@
   const REOPEN_CODES = new Set(["expired", "bad_signature", "no_init_data"]);
 
   function bootErrorText(err) {
+    if (!core.getInitData() && core.sdkFailed()) {
+      return "اتصال به تلگرام برقرار نشد. اگر فقط از پروکسی داخل تلگرام استفاده می‌کنید، "
+        + "VPN سیستم را روشن کنید و مینی‌اپ را دوباره باز کنید.";
+    }
     if (!core.getInitData()) {
       return "مینی‌اپ را از دکمهٔ «Open» کنار چت یا دکمهٔ داخل ربات باز کنید.";
     }
@@ -1629,9 +1643,18 @@
     showBootError(err);
   }
 
+  /** Telegram's theme, back button and expand, whenever the SDK is there (now or later). */
+  function connectTelegram() {
+    core.initTelegram();
+    bindTelegramBackButton();
+    syncTelegramBackButton();
+  }
+
   async function boot() {
     els.root.innerHTML = R.loadingHtml(3);
     try {
+      if (await core.whenTelegram(SDK_WAIT_MS)) connectTelegram();
+      else if (root.PGMiniLaunch) Promise.resolve(root.PGMiniLaunch.sdk).then((ok) => ok && connectTelegram(), () => {});
       await waitForInitData(6);
       if (!core.getInitData()) throw new core.ApiError("no initData", 401);
       applyMe(await core.api("/api/mini/me"));
@@ -1684,9 +1707,7 @@
     els.sheetTitle = doc.getElementById("sheet-title");
     els.sheetBody = doc.getElementById("sheet-body");
     els.sheetClose = doc.getElementById("sheet-close");
-    core.initTelegram();
     core.onAuthLost(onAuthLost);
-    bindTelegramBackButton();
     bindEvents();
     attachPullToRefresh();
     boot();
