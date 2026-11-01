@@ -26,7 +26,7 @@ from app.services.formatting import format_bytes, format_expire_short, format_to
 from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import has_bot_perm
 from app.services.subscription_lookup import SubscriptionMatch, find_service_by_link, link_token
-from app.services.user_search import MIN_QUERY_LENGTH, clean_handle, search_bot_users
+from app.services.user_search import MIN_QUERY_LENGTH, clean_handle, search_bot_users, service_owner_clause
 from app.services.users_ops import scoped_users_where
 from app.services.users import get_all_settings
 from app.services.wallet import get_wallet_balance
@@ -46,7 +46,8 @@ SEARCH_PROMPT = (
     "می‌توانید با این‌ها جستجو کنید:\n"
     "• نام یا بخشی از نام\n"
     "• یوزرنیم تلگرام، مثلاً <code>@username</code>\n"
-    "• آیدی عددی تلگرام، مثلاً <code>123456789</code>\n"
+    "• آیدی عددی تلگرام، مثلاً <code>123456789</code>، یا چند رقم آخر آن (حداقل ۴ رقم)\n"
+    "• نام‌کاربری سرویس (حداقل ۳ حرف)\n"
     "• لینک اشتراک یا توکن آن (پیام شما پس از جستجو پاک می‌شود)\n\n"
     "متن جستجو را بفرستید:"
 )
@@ -151,10 +152,10 @@ def _user_label(user: BotUser) -> str:
 
 
 async def _search_results(
-    session: AsyncSession, raw: str | None, *, scope, card: str, again: str, back: str, not_found: str
+    session: AsyncSession, raw: str | None, *, scope, card: str, again: str, back: str, not_found: str, also=None
 ) -> tuple[str, InlineKeyboardMarkup]:
     """Up to ten matches of ``raw`` in ``scope`` as buttons into ``card``, with search-again and back rows."""
-    users, more = await search_bot_users(session, raw, scope=scope)
+    users, more = await search_bot_users(session, raw, scope=scope, also=also)
     rows = [[InlineKeyboardButton(text=_user_label(user), callback_data=card.format(user.id))] for user in users]
     rows.append([InlineKeyboardButton(text="🔎 جستجوی دوباره", callback_data=again)])
     markup = with_inline_back(InlineKeyboardMarkup(inline_keyboard=rows), await get_all_settings(session), back)
@@ -171,7 +172,10 @@ async def staff_user_search(
     scope = BotUser.reseller_id.is_(None) if shop_id is None else scoped_users_where(shop_id)
     again, back = (PLATFORM_ASK, PLATFORM_BACK) if shop_id is None else (ASK_CALLBACK, SHOP_BACK)
     card = "adm:users:view:{}" if shop_id is None else "res:user:{}"
-    return await _search_results(session, raw, scope=scope, card=card, again=again, back=back, not_found=USER_NOT_FOUND_TEXT)
+    return await _search_results(
+        session, raw, scope=scope, card=card, again=again, back=back, not_found=USER_NOT_FOUND_TEXT,
+        also=service_owner_clause(raw, shop_id=shop_id),
+    )
 
 
 async def staff_reseller_search(session: AsyncSession, raw: str | None) -> tuple[str, InlineKeyboardMarkup]:
