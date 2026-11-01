@@ -23,6 +23,7 @@ from app.db.models import (
 from app.services.chat_records import keep_sent
 from app.services.automation_review import count_review_queue
 from app.services.color_tags import risk_mark
+from app.services.customer_service_lines import service_lines
 from app.services.home_overview import reseller_shop_summary
 from app.services.formatting import (
     bot_user_panel_label,
@@ -481,6 +482,8 @@ async def res_user_view(
         if bits:
             alert_line = "\n🔔 " + " · ".join(bits)
     shop_bal = await get_wallet_balance(session, user, shop_id=owner_id)
+    summary = service_lines(by.get(int(user.id), []))
+    service_block = "\n\n" + "\n".join(summary) if summary else ""
     text = (
         f"{flags} <b>{display}</b>\n\n"
         f"آیدی: {copyable(user.telegram_id)}\n"
@@ -488,7 +491,8 @@ async def res_user_view(
         f"کیف پول فروشگاه: {format_toman(shop_bal, get_settings().currency)}\n"
         f"سرویس‌ها: {ops.service_count}\n"
         f"مسدود: {blocked}"
-        f"{alert_line}\n\n"
+        f"{alert_line}"
+        f"{service_block}\n\n"
         f"<i>وب‌پنل: /users?uid={user.id}</i>"
     )
     rows_kb: list[list[InlineKeyboardButton]] = []

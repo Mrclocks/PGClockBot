@@ -1201,6 +1201,16 @@ def _customer_markup(
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
+async def _shop_may_void(session: AsyncSession, shop_id: int | None) -> bool:
+    """The void flow re-checks ``payment_void`` for a shop's staff, so the button is offered only to a shop that has it."""
+    if shop_id is None:
+        return True
+    from app.services.resellers import get_reseller_profile, has_bot_perm
+
+    profile = await get_reseller_profile(session, int(shop_id))
+    return profile is not None and has_bot_perm(profile, "payment_void")
+
+
 async def notify_auto_approve(
     bot: Bot,
     session: AsyncSession,
@@ -1233,6 +1243,8 @@ async def notify_auto_approve(
     # Local import: payment_voids imports services that import this module.
     from app.services.payment_voids import offers_void
 
+    can_void = offers_void(payment, order) and await _shop_may_void(session, shop_id)
+
     await _dispatch_dual_notify(
         bot,
         session,
@@ -1242,7 +1254,7 @@ async def notify_auto_approve(
             user_id=payment.user_id,
             service_id=None if is_agency_fee or order is None else order.service_id,
             shop_id=shop_id,
-            void_payment_id=payment.id if offers_void(payment, order) else None,
+            void_payment_id=payment.id if can_void else None,
         ),
         photo=_receipt_photo(payment),
         payment=payment,

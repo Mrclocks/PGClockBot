@@ -326,3 +326,6 @@ tests/test_scheduled_approval.py
 tests/test_crypto_rates.py
 # Panel brand: per-shop isolation, safe logo handling, who may edit, escaped header.
 tests/test_panel_brand.py
+
+# Shop bot: void button only for a shop holding payment_void; customer card lists only the shop's services.
+tests/test_shop_customer_card.py
