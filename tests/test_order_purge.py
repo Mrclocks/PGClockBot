@@ -43,7 +43,7 @@ def _reseller(shop_id: int, perms: list[str] | None = None) -> dict:
 
 
 class TagAndScopeTests(unittest.TestCase):
-    def test_locked_and_unknown_tags_are_dropped(self):
+    def test_paid_delivering_and_unknown_tags_are_dropped(self):
         self.assertEqual(
             parse_tags("order:delivered, order:paid,order:delivering,payment:rejected,order:nonsense,x"),
             frozenset({"order:delivered", "payment:rejected"}),
@@ -315,16 +315,17 @@ class PurgeRouteTests(PurgeDbHarness):
 
 
 class PurgePanelTemplateTests(PurgeDbHarness):
-    async def test_one_switch_per_tag_shared_by_manual_and_automatic_and_locks_in_flight_orders(self):
+    async def test_one_switch_per_deletable_tag_shared_by_manual_and_automatic(self):
         from app.api.app import templates
 
         async with self.Session() as session:
             ctx = await purge_panel_context(session, OWNER, {KEY_TAGS: "order:cancelled", KEY_AUTO: "1"}, return_to="/finance?tab=orders")
             self.assertIsNone(await purge_panel_context(session, _reseller(SHOP_A, ["orders"]), {}, return_to="/x"))
         html = templates.env.get_template("_settings_order_purge.html").render(purge=ctx)
-        self.assertEqual(html.count('name="t_'), 12)
+        self.assertEqual(html.count('name="t_'), 10)
+        self.assertNotIn("t_order:paid", html)
+        self.assertNotIn("t_order:delivering", html)
         self.assertIn('name="t_order:cancelled" value="1" aria-label="حذف سفارش‌ها لغوشده"\n                 checked', html)
-        self.assertEqual(html.count(" disabled />"), 2)
         self.assertIn('name="auto" value="1" checked', html)
 
 if __name__ == "__main__":

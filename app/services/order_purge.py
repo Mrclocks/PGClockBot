@@ -7,7 +7,8 @@ funnel events) are cleared instead, so a used code or a taken trial stays used. 
 services are never touched.
 
 Never deleted, whatever the switches say:
-* orders being paid or delivered (``paid``, ``delivering``): money is in flight;
+* orders being paid or delivered (``paid``, ``delivering``): money is in flight, so they
+  are not tags at all;
 * anything with an open gateway checkout or a gateway payment waiting for staff review,
   or a void still being processed: money may still arrive or be owed;
 * payments of an order that is still open.
@@ -78,7 +79,6 @@ class PurgeTag:
     table: str
     status: str
     label: str
-    locked: bool = False
 
     @property
     def token(self) -> str:
@@ -89,8 +89,6 @@ ORDER_TAGS: tuple[PurgeTag, ...] = (
     PurgeTag(ORDER, OrderStatus.PENDING.value, "در انتظار"),
     PurgeTag(ORDER, OrderStatus.AWAITING_RECEIPT.value, "منتظر رسید"),
     PurgeTag(ORDER, OrderStatus.AWAITING_APPROVAL.value, "منتظر تأیید"),
-    PurgeTag(ORDER, OrderStatus.PAID.value, "پرداخت‌شده", locked=True),
-    PurgeTag(ORDER, OrderStatus.DELIVERING.value, "در حال تحویل", locked=True),
     PurgeTag(ORDER, OrderStatus.DELIVERED.value, "تحویل‌شده"),
     PurgeTag(ORDER, OrderStatus.REJECTED.value, "ردشده"),
     PurgeTag(ORDER, OrderStatus.CANCELLED.value, "لغوشده"),
@@ -122,9 +120,9 @@ class PurgeCounts:
 
 
 def parse_tags(raw: object) -> frozenset[str]:
-    """Known, unlocked tag tokens from a saved CSV value; anything else is dropped."""
+    """Known tag tokens from a saved CSV value; anything else (paid or delivering orders too) is dropped."""
     tokens = {part.strip() for part in str(raw or "").split(",")}
-    return frozenset(token for token in tokens if token in TAGS and not TAGS[token].locked)
+    return frozenset(token for token in tokens if token in TAGS)
 
 
 def join_tags(tokens: Iterable[str]) -> str:
@@ -172,7 +170,7 @@ async def save_rules(session: AsyncSession, *, shop_id: int | None, rules: Purge
 
 
 def _statuses(tags: frozenset[str], table: str) -> list[str]:
-    """Statuses to delete in one table; locked tags are refused here too, whatever the caller passed."""
+    """Statuses to delete in one table; tags outside ``TAGS`` are refused here too, whatever the caller passed."""
     return sorted(TAGS[t].status for t in parse_tags(",".join(tags)) if TAGS[t].table == table)
 
 

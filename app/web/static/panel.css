@@ -12659,9 +12659,6 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   margin-top: var(--space-2);
   align-items: end;
 }
-.order-purge-tag.is-locked {
-  opacity: 0.55;
-}
 .order-purge-tag .ui-switch-copy {
   flex-direction: row;
   align-items: center;

@@ -1,7 +1,7 @@
 {# Cleanup tab: delete whole rows by status tag, by hand or every hour. Expects purge (order_purge.purge_panel_context). #}
 {% set purge_tone = {
   'awaiting_receipt': 'pending', 'awaiting_approval': 'pending',
-  'delivering': 'info', 'voided': 'cancelled',
+  'voided': 'cancelled',
 } %}
 <form method="post" action="{{ purge.run_action }}" class="settings-form"
       data-confirm="{{ purge.ready.orders | num }} سفارش و {{ purge.ready.payments | num }} پرداخت برای همیشه پاک شوند؟"
@@ -40,11 +40,11 @@
     <div class="order-purge-tags">
       {% for row in section.rows %}
       {% set tag = row.tag %}
-      <label class="ui-switch-row order-purge-tag{% if tag.locked %} is-locked{% endif %}"{% if tag.locked %} title="در حال پرداخت یا تحویل؛ حذف نمی‌شود"{% endif %}>
-        <span class="ui-switch-copy"><span class="badge {{ purge_tone.get(tag.status, tag.status) }}">{{ tag.label }}</span>{% if tag.locked %} <span aria-label="قفل">🔒</span>{% endif %}</span>
+      <label class="ui-switch-row order-purge-tag">
+        <span class="ui-switch-copy"><span class="badge {{ purge_tone.get(tag.status, tag.status) }}">{{ tag.label }}</span></span>
         <span class="ui-switch">
           <input type="checkbox" name="t_{{ tag.token }}" value="1" aria-label="حذف {{ section.title }} {{ tag.label }}"
-                 {% if row.on %}checked{% endif %}{% if tag.locked %} disabled{% endif %} />
+                 {% if row.on %}checked{% endif %} />
           <span class="ui-switch-track" aria-hidden="true"></span>
         </span>
       </label>
