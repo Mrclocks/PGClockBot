@@ -27,6 +27,7 @@ from app.services.bbc_settlement import CUSTOMER_UNAVAILABLE, BbcNotReady, ensur
 from app.services.db_safe import rollback_quiet
 from app.services.redact import user_safe_error
 from app.services.trial_notify import notify_trial_claimed
+from app.services.crypto_rates import attach_quote, display_amount, quote_from_settings, validity_note
 from app.services.purchase_contact import verified_contact_phone_hash
 from app.services.checkout_summary import checkout_summary
 from app.services.delivery import send_delivery_to_user
@@ -2246,20 +2247,26 @@ async def pay_crypto_cb(
         await callback.answer("این آدرس دیگر فعال نیست", show_alert=True)
         return
     address = (wallet.get("address") or "").strip()
+    asset = wallet.get("asset") or "USDT"
     try:
+        # The rate is read from memory (a job refreshes it), so no network call waits here.
+        quote = quote_from_settings(ui, wallet_asset=asset, toman=int(order.amount))
         payment = await start_method_payment(
             session, order, db_user.id, PaymentMethod.CRYPTO.value
         )
     except ValueError as e:
         await callback.answer(user_safe_error(e), show_alert=True)
         return
+    if quote is not None:
+        await attach_quote(session, payment.id, quote)
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
-    asset = wallet.get("asset") or "USDT"
+    if quote is not None:
+        amount = display_amount(quote, amount)
     network = wallet.get("network") or "—"
     from app.services.rich_text import outbound_setting_text, rich_plain_text
 
-    append = f"\n\n(پرداخت #{payment.id})"
+    append = f"\n\n(پرداخت #{payment.id})" + (validity_note(quote) if quote is not None else "")
     try:
         text, send_kw = outbound_setting_text(
             ui.get("crypto_pay_text") or "",

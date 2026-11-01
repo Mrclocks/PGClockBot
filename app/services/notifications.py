@@ -727,6 +727,20 @@ async def notify_new_subscription(
     )
 
 
+def _crypto_quote_lines(payment: Payment) -> list[str]:
+    """What the customer was asked to pay in crypto, to check the receipt against."""
+    from app.services.crypto_rates import quote_lines
+
+    quote = quote_lines(payment)
+    if quote is None:
+        return []
+    amount, rate, validity = quote
+    lines = [kv_line("💎", "مبلغ مورد انتظار", html.escape(amount)), kv_line("📈", "نرخ (تومان)", html.escape(rate))]
+    if validity:
+        lines.append(kv_line("⏳", "اعتبار نرخ", html.escape(validity)))
+    return lines
+
+
 async def notify_pending_approval(
     bot: Bot,
     session: AsyncSession,
@@ -743,6 +757,7 @@ async def notify_pending_approval(
     lines = [
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
         kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
+        *_crypto_quote_lines(payment),
         *_buyer_lines(user, user_tg_id),
     ]
 

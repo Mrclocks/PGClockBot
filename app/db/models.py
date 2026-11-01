@@ -278,6 +278,11 @@ class Payment(Base):
     receipt_file_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # When the latest receipt arrived; NULL for payments from before this was recorded (never auto-approved).
     receipt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Crypto quote shown to the customer: amount in millionths of the asset, toman per unit x 10^4, validity.
+    crypto_asset: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    crypto_amount_micro: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    crypto_rate_scaled: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    crypto_quote_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_wallet_topup: Mapped[bool] = mapped_column(Boolean, default=False)

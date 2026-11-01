@@ -31,6 +31,7 @@ from app.services.ux20 import payment_shop_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import list_activity
 from app.services.wallet_topup import TOPUP_METHODS
+from app.services.crypto_rates import CryptoQuote, attach_quote, display_amount, quote_from_settings, validity_note
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_title_html
@@ -364,6 +365,7 @@ async def _topup_instructions(
     card: dict | None = None,
     gateway: dict | None = None,
     wallet: dict | None = None,
+    quote: CryptoQuote | None = None,
 ) -> tuple[str, InlineKeyboardMarkup, dict]:
     from app.services.payment_destinations import (
         enabled_cards,
@@ -375,9 +377,13 @@ async def _topup_instructions(
     if ui is None:
         ui = await get_all_settings(session)
     amount = format_toman(payment.amount, get_settings().currency)
+    if quote is not None:
+        amount = display_amount(quote, amount)
     rows: list[list[InlineKeyboardButton]] = []
     shop_title = rich_plain_text(ui.get("shop_title")) or ""
-    append = f"\n\nسپس عکس رسید را بفرستید.\n(پرداخت #{payment.id})"
+    append = f"\n\nسپس عکس رسید را بفرستید.\n(پرداخت #{payment.id})" + (
+        validity_note(quote) if quote is not None else ""
+    )
     raw = ""
     title = ""
     fallback = ""
@@ -666,7 +672,16 @@ async def wtop_choose_method(
             await callback.answer("این کیف پول ارز دیجیتال دیگر فعال نیست", show_alert=True)
             return
 
+    quote = None
+    if key == "crypto":
+        try:
+            quote = quote_from_settings(ui, wallet_asset=(wallet or {}).get("asset") or "USDT", toman=int(amount))
+        except ValueError as e:
+            await callback.answer(user_safe_error(e), show_alert=True)
+            return
     payment = await create_wallet_topup(session, db_user.id, amount, method=method)
+    if quote is not None:
+        await attach_quote(session, payment.id, quote)
     if key == "card" and on(ui.get("pay_card_auto_enabled")):
         try:
             from app.services.payment_settlement import create_card_auto_awaiting
@@ -679,7 +694,7 @@ async def wtop_choose_method(
     from app.services.rich_text import rich_plain_text
 
     text, markup, send_kw = await _topup_instructions(
-        session, payment, method, ui=ui, card=card, gateway=gateway, wallet=wallet
+        session, payment, method, ui=ui, card=card, gateway=gateway, wallet=wallet, quote=quote
     )
     if key == "card" and on(ui.get("pay_card_auto_enabled")):
         hint = rich_plain_text(ui.get("card_auto_hint_text")).strip()

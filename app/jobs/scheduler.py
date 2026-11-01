@@ -357,6 +357,29 @@ async def run_scheduled_receipt_approvals() -> None:
             logger.exception("scheduled receipt approval failed")
 
 
+async def run_crypto_rate_refresh() -> None:
+    """Every minute: read the API rate of each shop that converts crypto amounts with one."""
+    async with SessionLocal() as session:
+        try:
+            from app.services.crypto_rates import refresh_api_rates
+            from app.services.users import get_all_settings
+
+            shop_ids = list(
+                (
+                    await session.execute(
+                        select(ResellerProfile.user_id).where(ResellerProfile.is_active.is_(True))
+                    )
+                ).scalars().all()
+            )
+
+            async def settings_for(shop_id: int | None) -> dict[str, str]:
+                return await get_all_settings(session, reseller_id=shop_id)
+
+            await refresh_api_rates(settings_for, [None, *[int(rid) for rid in shop_ids]])
+        except Exception:
+            logger.exception("crypto rate refresh failed")
+
+
 async def run_scheduled_backup() -> None:
     """Nightly backup + archive validation when enabled."""
     async with SessionLocal() as session:
@@ -834,6 +857,7 @@ def start_background_scheduler() -> None:
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
         ("pending_order_cleanup", cleanup_stale_pending_orders, {"hours": 1}, 3600),
         ("scheduled_receipt_approval", run_scheduled_receipt_approvals, {"seconds": 60}, 90),
+        ("crypto_rate_refresh", run_crypto_rate_refresh, {"seconds": 60}, 90),
         ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),
         ("connection_status", run_connection_status, {"seconds": 60}, 60),
         ("bbc_settlement_poll", run_bbc_settlement_poll, {"seconds": 45}, 90),
