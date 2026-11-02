@@ -98,17 +98,19 @@ test('live metrics never overlap while a previous read is pending', async () => 
   const context = {
     document: {
       hidden: false,
+      readyState: 'complete',
       getElementById: () => null,
-      querySelector: selector => selector.startsWith('[data-pg-nodes-live]') ? liveRoot : null,
+      querySelectorAll: () => [],
+      querySelector: selector => (selector === '[data-pg-live][data-metrics-url]' ? liveRoot : null),
       addEventListener: (name, callback) => { callbacks[name] = callback; },
     },
     PGClockPanelWidgetRequest: {
       fetchJson: () => { calls++; return new Promise(resolve => { complete = resolve; }); },
     },
-    setInterval: () => {}, setTimeout: () => {}, Date,
+    setInterval: () => {}, setTimeout: () => {}, Date, Math, isFinite, Number, String,
   };
-  const template = fs.readFileSync(path.join(__dirname, '../app/web/templates/_pg_live_metrics_script.html'), 'utf8');
-  vm.runInNewContext(template.match(/<script>([\s\S]*?)<\/script>/)[1], context);
+  context.window = context;
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../app/web/static/overview-live.js'), 'utf8'), context);
   callbacks['panel-widgets-ready']();
   callbacks.visibilitychange();
   assert.equal(calls, 1);
