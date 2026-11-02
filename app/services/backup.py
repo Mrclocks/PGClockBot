@@ -32,6 +32,13 @@ from uuid import uuid4
 from app.config import DATA_DIR, ROOT_DIR, get_settings
 from app.db.alembic_runner import alembic_config, current_revision
 from app.db.engine_url import parse_engine
+from app.services.backup_env import (
+    UNREADABLE_SECRETS_WARNING,
+    env_value,
+    merge_restored_env,
+    stored_secrets_readable,
+    write_private_file,
+)
 from app.services.backup_postgres import (
     BackupDatabaseError,
     check_dump_readable,
@@ -47,6 +54,9 @@ BACKUP_PREFIX = "pgclock-backup-"
 MANIFEST_NAME = "manifest.json"
 MAX_BACKUPS = 20
 RESTORE_STATUS_FILE = DATA_DIR / "backup_restore.json"
+# Outlives the restart that resets the progress status, so the admin still sees it.
+RESTORE_NOTICE_FILE = DATA_DIR / "backup_restore_notice.json"
+RESTORE_NOTICE_MAX_AGE_SEC = 7 * 24 * 3600
 MAGIC = "pgclock-backup-v1"
 
 RESTORE_STEPS = [
@@ -829,6 +839,51 @@ def start_restore_async(
     return {"ok": True, "status": read_restore_status()}
 
 
+def _restore_env_file(env_src: Path) -> None:
+    """Install the backed-up .env but keep this server's database and listen settings."""
+    env_dest = ROOT_DIR / ".env"
+    current = env_dest.read_text(encoding="utf-8") if env_dest.is_file() else ""
+    if current:
+        bak = ROOT_DIR / f".env.bak.restore.{_utcnow_stamp()}"
+        shutil.copy2(env_dest, bak)
+        bak.chmod(0o600)
+    merged = merge_restored_env(env_src.read_text(encoding="utf-8"), current)
+    write_private_file(env_dest, merged)
+
+
+def _write_restore_notice(warnings: list[str]) -> None:
+    notice = RESTORE_NOTICE_FILE
+    if not warnings:
+        notice.unlink(missing_ok=True)
+        return
+    write_private_file(notice, json.dumps({"at": _now_iso(), "warnings": warnings}, ensure_ascii=False))
+
+
+def read_restore_notice() -> list[str]:
+    """Warnings from the last restore, for a week after it."""
+    try:
+        data = json.loads(RESTORE_NOTICE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    age = _restore_age_seconds(data.get("at") if isinstance(data, dict) else None)
+    if age is None or age > RESTORE_NOTICE_MAX_AGE_SEC:
+        return []
+    return [str(item) for item in data.get("warnings") or [] if str(item).strip()]
+
+
+def _secrets_warnings() -> list[str]:
+    """Warn when the restored secrets will not open with the WEB_SECRET in effect after restart."""
+    env_path = ROOT_DIR / ".env"
+    env_text = env_path.read_text(encoding="utf-8") if env_path.is_file() else ""
+    web_secret = env_value(env_text, "WEB_SECRET") or get_settings().web_secret or ""
+    try:
+        readable = stored_secrets_readable(get_settings().database_url, web_secret)
+    except Exception:  # noqa: BLE001 - the check is advisory; the restore already succeeded
+        log.warning("could not check restored secrets", exc_info=True)
+        return []
+    return [UNREADABLE_SECRETS_WARNING] if readable is False else []
+
+
 def _prepare_archive(source_copy: Path, extract_root: Path, manifest: dict[str, Any]) -> str:
     """Extract the archive and check it matches this install; returns its database engine."""
     extract_root.mkdir(parents=True, exist_ok=True)
@@ -988,28 +1043,17 @@ def restore_backup(
                 except OSError:
                     pass
 
-                env_restored = False
                 env_src = tmp_root / "env" / ".env"
-                if restore_env and env_src.is_file():
-                    _set_restore_step(
-                        "env",
-                        "بازیابی تنظیمات .env…",
-                            actor=actor,
-                        safety_id=safety_id,
-                    )
-                    env_dest = ROOT_DIR / ".env"
-                    bak = ROOT_DIR / f".env.bak.restore.{_utcnow_stamp()}"
-                    if env_dest.exists():
-                        shutil.copy2(env_dest, bak)
-                    shutil.copy2(env_src, env_dest)
-                    try:
-                        env_dest.chmod(0o600)
-                    except OSError:
-                        pass
-                    env_restored = True
+                env_restored = bool(restore_env and env_src.is_file())
+                if env_restored:
+                    _set_restore_step("env", "بازیابی تنظیمات .env…", actor=actor, safety_id=safety_id)
+                    _restore_env_file(env_src)
+                warnings = _secrets_warnings()
+                _write_restore_notice(warnings)
 
             result = {
                 "ok": True,
+                "warnings": warnings,
                 "message": "ریستور انجام شد",
                 "safety_id": safety_id,
                 "app_version_in_backup": manifest.get("app_version"),
