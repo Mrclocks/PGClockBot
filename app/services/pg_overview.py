@@ -10,8 +10,9 @@ from app.services.formatting import (
     format_count_ratio,
     format_number,
 )
-from app.services.pasarguard import get_pg
+from app.services.pasarguard import get_pg, is_pg_transport_failure
 from app.services.pg_quota import extract_admin_capacity
+from app.services.pg_read_resilience import PG_READ_UNAVAILABLE_MESSAGE
 
 
 _SERVER_STAT_KEYS = {
@@ -354,6 +355,7 @@ async def build_reseller_pg_overview(
                 out["error"] = e.message
                 return out
         admin = None
+        panel_unreachable = False
         try:
             current = await pg.get_current_admin()
             if isinstance(current, dict):
@@ -363,15 +365,17 @@ async def build_reseller_pg_overview(
                     if got:
                         owner = got
                         out["username"] = got
-        except Exception:
+        except Exception as exc:
             admin = None
-        if not isinstance(admin, dict):
+            # The fallback lookups would hit the same unreachable panel, only slower.
+            panel_unreachable = is_pg_transport_failure(exc)
+        if not isinstance(admin, dict) and not panel_unreachable:
             try:
                 admin = await pg.get_admin(owner)
             except Exception:
                 admin = None
         if not isinstance(admin, dict):
-            out["error"] = (
+            out["error"] = PG_READ_UNAVAILABLE_MESSAGE if panel_unreachable else (
                 "حساب پاسارگارد خوانده نشد. "
                 "اگر ورود پنل پاسارگارد با همین یوزر موفق است، نقش را برای خواندن حساب خودتان بررسی کنید."
             )
