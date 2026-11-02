@@ -21,7 +21,6 @@ import os
 import re
 import shutil
 import sqlite3
-import subprocess
 import tempfile
 import threading
 import zipfile
@@ -31,8 +30,15 @@ from typing import Any
 from uuid import uuid4
 
 from app.config import DATA_DIR, ROOT_DIR, get_settings
-from app.db.engine_url import parse_engine, pg_connection_parts
-from app.services.updates import local_version
+from app.db.alembic_runner import alembic_config, current_revision
+from app.db.engine_url import parse_engine
+from app.services.backup_postgres import (
+    BackupDatabaseError,
+    check_dump_readable,
+    dump_database,
+    restore_database,
+)
+from app.services.updates import is_newer, local_version
 
 log = logging.getLogger(__name__)
 
@@ -99,103 +105,6 @@ def current_db_engine() -> str:
         return "sqlite"
 
 
-def _which(cmd: str) -> str | None:
-    """Resolve a CLI tool even when systemd PATH is only ``.venv/bin``."""
-    found = shutil.which(cmd)
-    if found:
-        return found
-    for path in (Path(f"/usr/bin/{cmd}"), Path(f"/usr/local/bin/{cmd}"), Path(f"/bin/{cmd}")):
-        try:
-            if path.is_file() and os.access(path, os.X_OK):
-                return str(path)
-        except OSError:
-            continue
-    try:
-        versioned = sorted(
-            Path("/usr/lib/postgresql").glob(f"*/bin/{cmd}"),
-            reverse=True,
-        )
-    except OSError:
-        versioned = []
-    for path in versioned:
-        try:
-            if path.is_file() and os.access(path, os.X_OK):
-                return str(path)
-        except OSError:
-            continue
-    return None
-
-
-def _dump_postgres(dest: Path) -> dict[str, Any]:
-    """Create a custom-format pg_dump at dest."""
-    pg_dump = _which("pg_dump")
-    if not pg_dump:
-        raise RuntimeError("pg_dump not found — install postgresql-client")
-    parts = pg_connection_parts(get_settings().database_url)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists():
-        dest.unlink()
-    env = os.environ.copy()
-    if parts.get("password"):
-        env["PGPASSWORD"] = str(parts["password"])
-    cmd = [
-        pg_dump,
-        "--format=custom",
-        "--no-owner",
-        "--no-acl",
-        "--file",
-        str(dest),
-        "--host",
-        str(parts["host"]),
-        "--port",
-        str(parts["port"]),
-        "--username",
-        str(parts["user"]),
-        "--dbname",
-        str(parts["dbname"]),
-    ]
-    proc = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=600)
-    if proc.returncode != 0 or not dest.is_file() or dest.stat().st_size < 1:
-        raise RuntimeError(
-            f"pg_dump failed (code={proc.returncode}): {(proc.stderr or proc.stdout or '')[:500]}"
-        )
-    return {"path": POSTGRES_DUMP_MEMBER, "size": dest.stat().st_size}
-
-
-def _restore_postgres_dump(dump_path: Path) -> None:
-    """Restore a custom-format dump into the configured PostgreSQL database."""
-    pg_restore = _which("pg_restore")
-    if not pg_restore:
-        raise RuntimeError("pg_restore not found — install postgresql-client")
-    parts = pg_connection_parts(get_settings().database_url)
-    env = os.environ.copy()
-    if parts.get("password"):
-        env["PGPASSWORD"] = str(parts["password"])
-    # Drop+recreate public schema objects via --clean --if-exists
-    cmd = [
-        pg_restore,
-        "--clean",
-        "--if-exists",
-        "--no-owner",
-        "--no-acl",
-        "--host",
-        str(parts["host"]),
-        "--port",
-        str(parts["port"]),
-        "--username",
-        str(parts["user"]),
-        "--dbname",
-        str(parts["dbname"]),
-        str(dump_path),
-    ]
-    proc = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=600)
-    # pg_restore may return non-zero for benign notices; require DB connectivity after
-    if proc.returncode not in (0, 1):
-        raise RuntimeError(
-            f"pg_restore failed (code={proc.returncode}): {(proc.stderr or proc.stdout or '')[:800]}"
-        )
-
-
 def _sha256_file(path: Path, *, chunk: int = 1024 * 1024) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -224,6 +133,55 @@ def _safe_copy_sqlite(src: Path, dest: Path) -> None:
             dst_conn.close()
     finally:
         src_conn.close()
+
+
+NEWER_BACKUP_MESSAGE = (
+    "این بکاپ با نسخهٔ جدیدتر پنل ({version}) ساخته شده است. "
+    "اول پنل را به همان نسخه یا جدیدتر به‌روز کنید و بعد ریستور کنید."
+)
+RESTORE_FAILED_MESSAGE = "ریستور انجام نشد؛ جزئیات در لاگ سرور ثبت شد."
+
+
+class BackupRestoreRefused(ValueError):
+    """The archive cannot be restored here; the message is safe to show to the admin."""
+
+
+def _schema_revision() -> str | None:
+    """Alembic revision of the live database, or ``None`` when it cannot be read."""
+    try:
+        return current_revision(get_settings().database_url)
+    except Exception:  # noqa: BLE001 - descriptive metadata must never fail a backup
+        log.warning("could not read the schema revision for the backup manifest", exc_info=True)
+        return None
+
+
+def _revision_known(revision: str) -> bool:
+    from alembic.script import ScriptDirectory
+    from alembic.util import CommandError
+
+    try:
+        return ScriptDirectory.from_config(alembic_config()).get_revision(revision) is not None
+    except CommandError:
+        return False
+
+
+def ensure_backup_not_newer(manifest: dict[str, Any]) -> None:
+    """Refuse archives whose schema this code cannot start on after the restore."""
+    revision = str(manifest.get("alembic_revision") or "").strip()
+    version = str(manifest.get("app_version") or "").strip()
+    if revision:
+        newer = not _revision_known(revision)
+    else:
+        # Archives made before revisions were recorded only carry the app version.
+        newer = bool(version) and is_newer(version, local_version())
+    if newer:
+        raise BackupRestoreRefused(NEWER_BACKUP_MESSAGE.format(version=version or "نامشخص"))
+
+
+def _restore_error_text(exc: Exception) -> str:
+    if isinstance(exc, (BackupDatabaseError, BackupRestoreRefused)):
+        return str(exc)
+    return RESTORE_FAILED_MESSAGE
 
 
 def ensure_backup_dir() -> Path:
@@ -348,8 +306,9 @@ def validate_backup_archive(zip_path: Path) -> tuple[bool, str, dict[str, Any] |
             return True, "ok", manifest
     except zipfile.BadZipFile:
         return False, "فایل ZIP معتبر نیست", None
-    except Exception as e:
-        return False, f"خطا در بررسی بکاپ: {e}", None
+    except Exception:  # noqa: BLE001 - any unreadable archive is reported the same safe way
+        log.warning("backup archive check failed for %s", zip_path.name, exc_info=True)
+        return False, "بکاپ قابل بررسی نیست؛ فایل آسیب‌دیده یا ناقص است.", None
 
 
 def create_backup(
@@ -382,7 +341,7 @@ def create_backup(
 
             if db_engine == "postgresql":
                 dump_copy = data_tmp / "postgres.dump"
-                _dump_postgres(dump_copy)
+                dump_database(dump_copy)
                 db_member = POSTGRES_DUMP_MEMBER
                 files_meta.append(
                     {
@@ -476,6 +435,8 @@ def create_backup(
                 "include_env": include_env_ok,
                 "db_engine": db_engine,
                 "db_path": db_member,
+                # Lets a restore refuse an archive from a newer schema than this code knows.
+                "alembic_revision": _schema_revision(),
                 "files": files_meta,
                 "file_count": len(files_meta),
             }
@@ -868,6 +829,35 @@ def start_restore_async(
     return {"ok": True, "status": read_restore_status()}
 
 
+def _prepare_archive(source_copy: Path, extract_root: Path, manifest: dict[str, Any]) -> str:
+    """Extract the archive and check it matches this install; returns its database engine."""
+    extract_root.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(source_copy, "r") as zf:
+        for info in zf.infolist():
+            name = info.filename
+            if name.startswith("/") or ".." in Path(name).parts:
+                raise BackupRestoreRefused("مسیر نامعتبر داخل بکاپ")
+        zf.extractall(extract_root)
+    extracted_db = extract_root / "data" / "bot.db"
+    extracted_pg = extract_root / "data" / "postgres.dump"
+    archive_engine = str(manifest.get("db_engine") or "").strip().lower()
+    if not archive_engine:
+        archive_engine = "postgresql" if extracted_pg.is_file() and not extracted_db.is_file() else "sqlite"
+    live_engine = current_db_engine()
+    if archive_engine != live_engine:
+        raise BackupRestoreRefused(
+            f"بکاپ مربوط به موتور {archive_engine} است ولی DATABASE_URL فعلی {live_engine} است. "
+            "قبل از ریستور DATABASE_URL را هم‌خوان کنید."
+        )
+    if archive_engine == "sqlite" and not extracted_db.is_file():
+        raise BackupRestoreRefused("bot.db در بکاپ نیست")
+    if archive_engine == "postgresql":
+        if not extracted_pg.is_file():
+            raise BackupRestoreRefused("postgres.dump در بکاپ نیست")
+        check_dump_readable(extracted_pg)
+    return archive_engine
+
+
 def restore_backup(
     zip_path: Path,
     *,
@@ -881,6 +871,11 @@ def restore_backup(
     Always creates a safety backup first (unless disabled). Schedules service restart.
     """
     ok, err, manifest = validate_backup_archive(zip_path)
+    if ok and manifest:
+        try:
+            ensure_backup_not_newer(manifest)
+        except BackupRestoreRefused as exc:
+            ok, err = False, str(exc)
     if not ok or not manifest:
         _finish_restore_error(err or "بکاپ نامعتبر", actor=actor, source=str(zip_path))
         return {"ok": False, "error": err}
@@ -903,6 +898,13 @@ def restore_backup(
                 source_copy = tmp_root / "source.zip"
                 shutil.copy2(zip_path, source_copy)
 
+                # Extract and check everything before the safety backup and before
+                # any live data is touched, so a bad archive changes nothing.
+                tmp_root = tmp_root / "extract"
+                archive_engine = _prepare_archive(source_copy, tmp_root, manifest)
+                extracted_db = tmp_root / "data" / "bot.db"
+                extracted_pg = tmp_root / "data" / "postgres.dump"
+
                 if safety_backup:
                     _set_restore_step(
                         "safety",
@@ -916,34 +918,6 @@ def restore_backup(
                     )
                     safety_id = safety.get("id")
 
-                extract_root = tmp_root / "extract"
-                extract_root.mkdir(parents=True, exist_ok=True)
-                with zipfile.ZipFile(source_copy, "r") as zf:
-                    # Prevent zip-slip
-                    for info in zf.infolist():
-                        name = info.filename
-                        if name.startswith("/") or ".." in Path(name).parts:
-                            raise ValueError(f"مسیر نامعتبر در آرشیو: {name}")
-                    zf.extractall(extract_root)
-                # Point subsequent paths at the extracted tree
-                tmp_root = extract_root
-
-                extracted_db = tmp_root / "data" / "bot.db"
-                extracted_pg = tmp_root / "data" / "postgres.dump"
-                archive_engine = str(manifest.get("db_engine") or "").strip().lower()
-                if not archive_engine:
-                    archive_engine = "postgresql" if extracted_pg.is_file() and not extracted_db.is_file() else "sqlite"
-                live_engine = current_db_engine()
-                if archive_engine != live_engine:
-                    raise RuntimeError(
-                        f"بکاپ مربوط به موتور {archive_engine} است ولی DATABASE_URL فعلی {live_engine} است. "
-                        "قبل از ریستور DATABASE_URL را هم‌خوان کنید."
-                    )
-                if archive_engine == "sqlite" and not extracted_db.is_file():
-                    raise FileNotFoundError("bot.db در بکاپ نیست")
-                if archive_engine == "postgresql" and not extracted_pg.is_file():
-                    raise FileNotFoundError("postgres.dump در بکاپ نیست")
-
                 _set_restore_step(
                     "db",
                     "بازیابی دیتابیس…",
@@ -953,7 +927,7 @@ def restore_backup(
                 )
                 DATA_DIR.mkdir(parents=True, exist_ok=True)
                 if archive_engine == "postgresql":
-                    _restore_postgres_dump(extracted_pg)
+                    restore_database(extracted_pg)
                 else:
                     live_db = sqlite_db_path()
                     live_db.parent.mkdir(parents=True, exist_ok=True)
@@ -1081,8 +1055,10 @@ def restore_backup(
                 )
             return result
         except Exception as e:
-            _finish_restore_error(e, actor=actor, safety_id=safety_id)
-            return {"ok": False, "error": str(e), "safety_id": safety_id}
+            message = _restore_error_text(e)
+            log.warning("restore_backup failed", exc_info=True)
+            _finish_restore_error(message, actor=actor, safety_id=safety_id)
+            return {"ok": False, "error": message, "safety_id": safety_id}
 
 
 def save_uploaded_backup(content: bytes, *, filename: str = "") -> dict[str, Any]:

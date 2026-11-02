@@ -48,12 +48,12 @@ class SystemdPathBackupTests(unittest.TestCase):
         self.assertIn("install_systemd", update)
 
     def test_which_falls_back_to_usr_bin(self):
-        from app.services import backup as backup_mod
+        from app.services import backup_postgres
 
-        with patch.object(backup_mod.shutil, "which", return_value=None):
-            with patch.object(backup_mod.os, "access", return_value=True):
+        with patch.object(backup_postgres.shutil, "which", return_value=None):
+            with patch.object(backup_postgres.os, "access", return_value=True):
                 with patch.object(Path, "is_file", return_value=True):
-                    found = backup_mod._which("pg_dump")
+                    found = backup_postgres.find_tool("pg_dump")
         self.assertEqual(found, "/usr/bin/pg_dump")
 
 
