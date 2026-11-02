@@ -41,6 +41,9 @@ from app.services.screen_titles import screen_caption, screen_heading
 from app.services.users import get_all_settings
 
 
+# Bot API getFile refuses larger files.
+BOT_DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024
+
 router = Router(name="admin_backup")
 
 
@@ -421,6 +424,12 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
     name = (doc.file_name or "").lower()
     if not name.endswith(".zip"):
         await message.answer("فقط فایل .zip بکاپ پذیرفته می‌شود.")
+        return
+    if (doc.file_size or 0) > BOT_DOWNLOAD_LIMIT_BYTES:
+        await message.answer(
+            "ربات تلگرام فایل بزرگ‌تر از ۲۰ مگابایت را دریافت نمی‌کند. "
+            "این بکاپ را از وب‌پنل ← تنظیمات ← بکاپ ← «آپلود بکاپ» بارگذاری کنید."
+        )
         return
     await message.answer("⏳ در حال دریافت و بررسی…")
     try:

@@ -395,52 +395,11 @@ async def run_crypto_rate_refresh() -> None:
 
 async def run_scheduled_backup() -> None:
     """Nightly backup + archive validation when enabled."""
+    from app.services.backup_schedule import run_nightly_backup
+
     async with SessionLocal() as session:
         try:
-            from datetime import datetime, timezone
-            from pathlib import Path
-
-            from app.services.backup import create_backup, prune_backups, validate_backup_archive
-            from app.services.backup_settings import KEEP_KEY, keep_count
-            from app.services.backup_telegram import send_backup
-            from app.services.users import get_setting, on, set_setting
-
-            if not on(await get_setting(session, "backup_schedule_enabled", "1")):
-                return
-            try:
-                hour = int(await get_setting(session, "backup_schedule_hour", "3") or 3)
-            except Exception:
-                hour = 3
-            now = datetime.now(timezone.utc)
-            if now.hour != max(0, min(23, hour)):
-                return
-            # Dedup same UTC day
-            last = (await get_setting(session, "backup_last_ok_at", "")) or ""
-            day_key = now.strftime("%Y-%m-%d")
-            if last.startswith(day_key):
-                return
-            include_env = on(await get_setting(session, "backup_include_env_scheduled", "0"))
-            meta = create_backup(
-                note="scheduled",
-                include_env=include_env,
-                created_by="scheduler",
-            )
-            path = Path(str(meta.get("path") or ""))
-            ok, err, _ = validate_backup_archive(path)
-            await set_setting(session, "backup_last_verify_ok", "1" if ok else "0")
-            if not ok:
-                logger.warning("scheduled backup verify failed: %s", err)
-            await set_setting(session, "backup_last_ok_at", now.isoformat())
-            await session.commit()
-            await asyncio.to_thread(prune_backups, keep_count(await get_setting(session, KEEP_KEY, "10")))
-            try:
-                await send_backup(
-                    session, path, include_env=include_env,
-                    caption=f"💾 بکاپ خودکار PGClockBot — {now.strftime('%Y-%m-%d %H:%M')} UTC",
-                )
-            except Exception:  # noqa: BLE001 - a failed delivery must not undo a good backup
-                logger.exception("scheduled backup telegram delivery failed")
-            logger.info("scheduled backup ok id=%s", meta.get("id"))
+            await run_nightly_backup(session, datetime.now(timezone.utc))
         except Exception:
             logger.exception("scheduled backup failed")
 
