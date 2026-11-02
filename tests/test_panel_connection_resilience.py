@@ -94,7 +94,8 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(allowed)
         self.assertNotIn("private provider detail", message)
         revoke.assert_not_awaited()
-        self.assertEqual(calls, ["/api/admin"])
+        # One short retry of the gateway error, then no fallback lookups.
+        self.assertEqual(calls, ["/api/admin", "/api/admin"])
 
     async def test_failed_acl_never_reuses_cookie_or_owner_permissions(self) -> None:
         def offline(request: httpx.Request) -> httpx.Response:
@@ -108,6 +109,8 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(admin)
 
     async def test_circuit_shares_health_but_never_shop_data(self) -> None:
+        # Pause mechanics: confirm the outage on the first failure.
+        self.enterContext(patch.object(resilience, "FAILURES_TO_PAUSE", 1))
         calls = []
 
         def respond(request: httpx.Request) -> httpx.Response:
@@ -122,7 +125,8 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         with resilience.web_read_budget():
             with self.assertRaises(resilience.PgReadUnavailable):
                 await second.get_current_admin()
-        self.assertEqual(len(calls), 1)
+        # The first shop's read and its one gateway retry; the second shop is not sent.
+        self.assertEqual(len(calls), 2)
 
     async def test_read_cache_isolated_between_shops_and_recreated_credentials(self) -> None:
         def response(name: str) -> Callable[[httpx.Request], httpx.Response]:
@@ -172,6 +176,8 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, resilience.MAX_CONCURRENT_READS)
 
     async def test_only_one_read_probes_recovery_and_success_closes_circuit(self) -> None:
+        # Pause mechanics: confirm the outage on the first failure.
+        self.enterContext(patch.object(resilience, "FAILURES_TO_PAUSE", 1))
         now = [100.0]
         entered = asyncio.Event()
         release = asyncio.Event()
@@ -241,8 +247,9 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(200, json={"access_token": "new-token"})
 
         send = AsyncMock(side_effect=slow)
-        probe = httpx.AsyncClient(base_url=client.base_url, transport=httpx.MockTransport(send))
-        with patch("app.services.pasarguard.httpx.AsyncClient", return_value=probe):
+        await client._client.aclose()
+        client._client = httpx.AsyncClient(base_url=client.base_url, transport=httpx.MockTransport(send))
+        with patch("app.services.pasarguard.new_panel_http_client", side_effect=AssertionError("new connection")):
             with resilience.web_read_budget(seconds=0.02):
                 with self.assertRaises(resilience.PgReadUnavailable):
                     await client.ensure_token()
@@ -491,12 +498,10 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
 
         client = await self.make_client(respond)
         client._api_base_resolved = False
-        http_client = httpx.AsyncClient
+        def probe_client(base_url: str, **kwargs: Any) -> httpx.AsyncClient:
+            return httpx.AsyncClient(base_url=base_url, transport=httpx.MockTransport(respond))
 
-        def probe_client(**kwargs: Any) -> httpx.AsyncClient:
-            return http_client(**kwargs, transport=httpx.MockTransport(respond))
-
-        with patch("app.services.pasarguard.httpx.AsyncClient", side_effect=probe_client):
+        with patch("app.services.pasarguard.new_panel_http_client", side_effect=probe_client):
             with resilience.web_read_budget():
                 await client._ensure_api_base()
             self.assertFalse(client._api_base_resolved)
@@ -509,6 +514,8 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, ["/dashboard/openapi.json", "/dashboard/openapi.json", "/openapi.json"])
 
     async def test_older_success_does_not_resume_reads_after_another_request_fails(self) -> None:
+        # Pause mechanics: confirm the outage on the first failure.
+        self.enterContext(patch.object(resilience, "FAILURES_TO_PAUSE", 1))
         entered = asyncio.Event()
         release = asyncio.Event()
         calls = []

@@ -12689,3 +12689,18 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
     width: 100%;
   }
 }
+
+/* Connection health card: title at the start, a compact status badge at the end. */
+.link-health-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+.link-health-head > h2 { margin: 0; }
+.link-health-head > .badge {
+  flex: 0 0 auto;
+  width: auto;
+  white-space: nowrap;
+}

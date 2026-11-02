@@ -9,7 +9,7 @@ function harness(fetch) {
   let cleared = false;
   const context = {
     module: { exports: {} }, AbortController, fetch,
-    setTimeout(callback, ms) { assert.equal(ms, 8000); deadline = callback; return 1; },
+    setTimeout(callback, ms) { assert.equal(ms, 15000); deadline = callback; return 1; },
     clearTimeout(id) { assert.equal(id, 1); cleared = true; },
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../app/web/static/panel_widget_request.js'), 'utf8'), context);
@@ -98,17 +98,19 @@ test('live metrics never overlap while a previous read is pending', async () => 
   const context = {
     document: {
       hidden: false,
+      readyState: 'complete',
       getElementById: () => null,
-      querySelector: selector => selector.startsWith('[data-pg-nodes-live]') ? liveRoot : null,
+      querySelectorAll: () => [],
+      querySelector: selector => (selector === '[data-pg-live][data-metrics-url]' ? liveRoot : null),
       addEventListener: (name, callback) => { callbacks[name] = callback; },
     },
     PGClockPanelWidgetRequest: {
       fetchJson: () => { calls++; return new Promise(resolve => { complete = resolve; }); },
     },
-    setInterval: () => {}, setTimeout: () => {}, Date,
+    setInterval: () => {}, setTimeout: () => {}, Date, Math, isFinite, Number, String,
   };
-  const template = fs.readFileSync(path.join(__dirname, '../app/web/templates/_pg_live_metrics_script.html'), 'utf8');
-  vm.runInNewContext(template.match(/<script>([\s\S]*?)<\/script>/)[1], context);
+  context.window = context;
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../app/web/static/overview-live.js'), 'utf8'), context);
   callbacks['panel-widgets-ready']();
   callbacks.visibilitychange();
   assert.equal(calls, 1);
@@ -174,4 +176,18 @@ test('widget reads never hold the navigation clock after pageshow', () => {
   listeners.window.pageshow();
   assert.equal(attributes.get('data-panel-widgets-pending'), '1');
   assert.equal(clock.hidden, true);
+});
+
+test('failure messages tell the viewer which side failed', () => {
+  const { api } = harness(async () => ({}));
+  assert.equal(api.failureKind(new Error('widget-auth'), true), 'auth');
+  assert.equal(api.failureKind(new Error('widget-auth'), false), 'auth', 'an expired session still asks to log in');
+  assert.equal(api.failureKind(new Error('widget-response'), false), 'offline');
+  assert.equal(api.failureKind(new Error('widget-timeout'), true), 'slow');
+  assert.equal(api.failureKind(new TypeError('Failed to fetch'), true), 'offline');
+  assert.equal(api.failureKind(new Error('widget-response'), true), 'server');
+  assert.equal(api.failureKind(undefined, true), 'server');
+  assert.match(api.failureMessage(new TypeError('Failed to fetch'), true), /اینترنت شما/);
+  assert.match(api.failureMessage(new Error('widget-timeout'), true), /طول کشید/);
+  assert.match(api.failureMessage(new Error('widget-response'), true), /دریافت آمار کامل نشد/);
 });

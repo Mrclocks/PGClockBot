@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import tempfile
 from pathlib import Path
 
@@ -40,6 +41,9 @@ from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading
 from app.services.users import get_all_settings
 
+
+# Bot API getFile refuses larger files.
+BOT_DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024
 
 router = Router(name="admin_backup")
 
@@ -364,6 +368,8 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
         await message.answer(f"❌ ریستور انجام نشد:\n{result.get('error')}")
         return
     msg = "✅ ریستور انجام شد."
+    for warning in result.get("warnings") or []:
+        msg += f"\n⚠️ {html.escape(str(warning))}"
     if result.get("safety_id"):
         msg += f"\nبکاپ ایمنی: <code>{result['safety_id']}</code>"
     if result.get("restart_scheduled"):
@@ -421,6 +427,12 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
     name = (doc.file_name or "").lower()
     if not name.endswith(".zip"):
         await message.answer("فقط فایل .zip بکاپ پذیرفته می‌شود.")
+        return
+    if (doc.file_size or 0) > BOT_DOWNLOAD_LIMIT_BYTES:
+        await message.answer(
+            "ربات تلگرام فایل بزرگ‌تر از ۲۰ مگابایت را دریافت نمی‌کند. "
+            "این بکاپ را از وب‌پنل ← تنظیمات ← بکاپ ← «آپلود بکاپ» بارگذاری کنید."
+        )
         return
     await message.answer("⏳ در حال دریافت و بررسی…")
     try:

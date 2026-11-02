@@ -24,6 +24,7 @@ from app.services.pasarguard import (
 )
 from app.services.pg_overview_view import overview_view, owner_user_counts
 from app.services.pg_access import staff_pg_action, staff_pg_writes, staff_user_actions
+from app.services.pg_read_cache import DASHBOARD_COUNT_MAX_AGE_SEC, NODE_LIST_MAX_AGE_SEC
 from app.services.pg_quota import (
     PgQuotaError,
     assert_can_mutate_owned_users,
@@ -322,12 +323,15 @@ def register_pg_pages(
                 from app.services.node_traffic import build_nodes_overview
 
                 pg = get_pg()
+                # Admin/group/host lists only feed the count tiles here. During an
+                # outage the tiles show the last good answer, flagged by the notice;
+                # live rates have no meaningful saved value.
                 raw, nodes_raw, admins, groups, hosts, realtime = await asyncio.gather(
-                    pg.get_system_stats(),
-                    pg.get_nodes(),
-                    pg.get_admins_simple(),
-                    pg.get_groups_simple(),
-                    pg.get_hosts(),
+                    pg.get_system_stats(last_good_ok=True),
+                    pg.get_nodes(last_good_ok=True),
+                    pg.get_admins_simple(cache_max_age=DASHBOARD_COUNT_MAX_AGE_SEC, last_good_ok=True),
+                    pg.get_groups_simple(cache_max_age=DASHBOARD_COUNT_MAX_AGE_SEC, last_good_ok=True),
+                    pg.get_hosts(cache_max_age=DASHBOARD_COUNT_MAX_AGE_SEC, last_good_ok=True),
                     pg.get_nodes_realtime(),
                     return_exceptions=True,
                 )
@@ -481,9 +485,10 @@ def register_pg_pages(
             return JSONResponse({"detail": "forbidden"}, status_code=403)
         pg = get_pg()
         try:
+            # Polled every few seconds: CPU/RAM and live rates stay fresh, the node list may lag.
             raw, nodes_raw, realtime = await asyncio.gather(
                 pg.get_system_stats(),
-                pg.get_nodes(),
+                pg.get_nodes(cache_max_age=NODE_LIST_MAX_AGE_SEC),
                 pg.get_nodes_realtime(),
                 return_exceptions=True,
             )

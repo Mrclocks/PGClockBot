@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
 import json
+from collections.abc import Awaitable, Callable
 import asyncio
 import secrets
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
+from urllib.parse import quote
 
 import httpx
 
 from app.config import get_settings, normalize_pg_subscription_path, pg_api_base_candidates
+from app.services.pg_read_cache import cache_get_last_good, last_good_notice_active, note_last_good_read
 from app.services.redact import redact
 from app.services.pg_read_resilience import DNS_CACHE_TTL_SEC, panel_read_request, reset_read_circuits, validate_panel_base
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
@@ -23,6 +28,106 @@ async def _mutation_request(
 ) -> httpx.Response:
     """Keep mutation timeouts and unknown outcomes independent of web reads."""
     return await client.request(method, url, **kwargs)
+
+
+# Read/write keep the old 30 s ceiling so slow panel writes do not turn into
+# unknown outcomes; a dead link now fails at connect instead of after 30 s.
+PG_HTTP_TIMEOUT = httpx.Timeout(30.0, connect=10.0, pool=10.0)
+PG_PROBE_TIMEOUT = httpx.Timeout(15.0, connect=10.0)
+# PasarGuard's uvicorn drops idle keep-alive sockets after 5 s; expiring ours
+# first avoids "server disconnected" on the next request.
+PG_HTTP_LIMITS = httpx.Limits(max_connections=32, max_keepalive_connections=8, keepalive_expiry=4.0)
+# Transport retries only repeat failed connects (nothing was sent), so they
+# are safe for mutations as well as reads.
+PG_CONNECT_RETRIES = 2
+RETIRED_CLIENT_GRACE_SEC = 120.0
+MAX_VALIDATED_TARGETS = 16
+
+_retiring_clients: set[asyncio.Task[None]] = set()
+_validated_targets: dict[str, tuple[str, float]] = {}
+# Configured PG_BASE_URL -> API root that identified itself as PasarGuard.
+_discovered_api_bases: dict[str, str] = {}
+
+
+def _remember_api_base(configured: str, api_base: str) -> None:
+    if len(_discovered_api_bases) >= MAX_VALIDATED_TARGETS:
+        _discovered_api_bases.clear()
+    _discovered_api_bases[configured] = api_base
+
+
+def new_panel_http_client(base_url: str, *, timeout: httpx.Timeout = PG_HTTP_TIMEOUT) -> httpx.AsyncClient:
+    """HTTP client with the shared PasarGuard transport policy."""
+    return httpx.AsyncClient(
+        base_url=base_url,
+        timeout=timeout,
+        # Never follow redirects with Bearer tokens (SSRF / credential forwarding)
+        follow_redirects=False,
+        transport=httpx.AsyncHTTPTransport(retries=PG_CONNECT_RETRIES, limits=PG_HTTP_LIMITS),
+    )
+
+
+# Renew a Bearer token this long before its exp claim.
+TOKEN_REFRESH_MARGIN_SEC = 120
+
+
+def jwt_expires_within(token: str, seconds: float) -> bool:
+    """Whether the JWT's ``exp`` is within ``seconds``; an unreadable token never counts as expiring.
+
+    Only the expiry is read (no signature check): it decides when to log in
+    again, never whether to trust the token.
+    """
+    parts = (token or "").split(".")
+    if len(parts) != 3:
+        return False
+    try:
+        claims = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
+    except (ValueError, binascii.Error):
+        return False
+    exp = claims.get("exp") if isinstance(claims, dict) else None
+    if isinstance(exp, bool) or not isinstance(exp, (int, float)):
+        return False
+    return exp - time.time() <= seconds
+
+
+def is_pg_transport_failure(exc: BaseException) -> bool:
+    """True when the panel could not be reached, as opposed to answering with an error."""
+    return isinstance(exc, (httpx.TransportError, TimeoutError))
+
+
+async def _close_after_grace(close: Callable[[], Awaitable[None]]) -> None:
+    await asyncio.sleep(RETIRED_CLIENT_GRACE_SEC)
+    try:
+        await close()
+    except (httpx.HTTPError, OSError, RuntimeError):
+        logger.debug("closing a retired PasarGuard client failed", exc_info=True)
+
+
+def _schedule_close(close: Callable[[], Awaitable[None]]) -> None:
+    """Close later, once requests already running on the client had time to end."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    task = loop.create_task(_close_after_grace(close))
+    _retiring_clients.add(task)
+    task.add_done_callback(_retiring_clients.discard)
+
+
+def _retire_client(client: object) -> None:
+    """Release the sockets of a client dropped from a cache."""
+    if isinstance(client, PasarGuardClient):
+        _schedule_close(client.close)
+
+
+def _retire_http_client(client: httpx.AsyncClient) -> None:
+    _schedule_close(client.aclose)
+
+
+async def _close_unshared_client(client: PasarGuardClient) -> None:
+    try:
+        await client.close()
+    except (httpx.HTTPError, OSError, RuntimeError):
+        logger.debug("closing an unused PasarGuard client failed", exc_info=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +162,13 @@ def is_pg_not_found(exc: BaseException) -> bool:
     return isinstance(exc, PasarGuardError) and exc.status_code == 404
 
 
+def _is_panel_outage(exc: BaseException) -> bool:
+    """Unreachable panel or gateway error, as opposed to a definite answer."""
+    if isinstance(exc, PasarGuardError):
+        return exc.status_code in (502, 503, 504)
+    return isinstance(exc, (httpx.TransportError, TimeoutError))
+
+
 def is_pg_permission_denied(exc: Exception) -> bool:
     """True when PasarGuard refused a resource (not a transport outage).
 
@@ -64,6 +176,22 @@ def is_pg_permission_denied(exc: Exception) -> bool:
     even after a valid token — callers must not paint that as «قطع اتصال».
     """
     return isinstance(exc, PasarGuardError) and exc.status_code in (403, 404, 405)
+
+
+ADMIN_DIRECTORY_PAGE_SIZE = 100
+ADMIN_DIRECTORY_MAX_PAGES = 20
+
+
+class AdminDirectoryIncomplete(Exception):
+    """The admin list could not be read to its end, so absence is unproven."""
+
+
+def _is_admin_named(payload: Any, username: str) -> bool:
+    """True only for an admin record carrying exactly this username."""
+    if not isinstance(payload, dict):
+        return False
+    got = str(payload.get("username") or "").strip()
+    return bool(got) and got.lower() == username.strip().lower()
 
 
 def _pg_error_detail(body: Any) -> str | None:
@@ -251,12 +379,7 @@ class PasarGuardClient:
             self._token = (self.settings.pg_access_token or None) or None
         if self._token == "":
             self._token = None
-        self._client = httpx.AsyncClient(
-            base_url=self.base_url,
-            timeout=30.0,
-            # Never follow redirects with Bearer tokens (SSRF / credential forwarding)
-            follow_redirects=False,
-        )
+        self._client = new_panel_http_client(self.base_url)
 
     @property
     def uses_api_key(self) -> bool:
@@ -264,19 +387,44 @@ class PasarGuardClient:
 
     @property
     def is_auth_ready(self) -> bool:
-        """True when this client can authorize requests (API key or Bearer token)."""
-        return bool(self._api_key) or bool(self._token)
+        """True when this client can authorize requests (API key or a Bearer token not about to expire).
+
+        Shop clients drop their password after login, so a cached client whose
+        token is about to expire is rebuilt instead of failing its next request.
+        """
+        if self._api_key:
+            return True
+        return bool(self._token) and not jwt_expires_within(self._token, TOKEN_REFRESH_MARGIN_SEC)
+
+    def _can_log_in_again(self) -> bool:
+        if self._login_username:
+            return bool(self._login_password)
+        return bool((self.settings.pg_username or "").strip() and (self.settings.pg_password or "").strip())
 
     async def close(self) -> None:
         await self._client.aclose()
 
+    def _http(self) -> httpx.AsyncClient:
+        """The pooled client, reopened if a cache retired it while a caller still held this object."""
+        if getattr(self._client, "is_closed", False) is True:
+            self._client = new_panel_http_client(self.base_url)
+        return self._client
+
     async def _ensure_safe_target(self, *, protected: bool = True) -> None:
         if not self.base_url:
             return
-        if getattr(self, "_validated_base", None) == self.base_url and getattr(self, "_validated_until", 0) > time.monotonic():
+        now = time.monotonic()
+        if getattr(self, "_validated_base", None) == self.base_url and getattr(self, "_validated_until", 0) > now:
             return
-        self._validated_base = await validate_panel_base(self.base_url, protected=protected)
-        self._validated_until = time.monotonic() + DNS_CACHE_TTL_SEC
+        # Shared by base URL so each new shop client does not repeat the DNS check.
+        known = _validated_targets.get(self.base_url)
+        if known is None or known[1] <= now:
+            validated = await validate_panel_base(self.base_url, protected=protected)
+            if len(_validated_targets) >= MAX_VALIDATED_TARGETS:
+                _validated_targets.clear()
+            known = (validated, time.monotonic() + DNS_CACHE_TTL_SEC)
+            _validated_targets[self.base_url] = known
+        self._validated_base, self._validated_until = known
 
     async def _rebind_base(self, base: str) -> None:
         base = (base or "").rstrip("/")
@@ -293,30 +441,29 @@ class PasarGuardClient:
         )
         old = self._client
         self.base_url = base
-        self._client = httpx.AsyncClient(
-            base_url=base,
-            timeout=30.0,
-            follow_redirects=False,
-        )
-        try:
-            await old.aclose()
-        except Exception:
-            logger.debug("_rebind_base: ignored failure", exc_info=True)
+        self._client = new_panel_http_client(base)
+        # Concurrent requests may still be using the old client.
+        _retire_http_client(old)
 
     async def _ensure_api_base(self) -> None:
         """If PG_BASE_URL includes a dashboard path, switch to the real API root."""
         await self._ensure_safe_target()
         if getattr(self, "_api_base_resolved", False):
             return
-        candidates = pg_api_base_candidates(self.settings.pg_base_url or self.base_url)
+        configured = self.settings.pg_base_url or self.base_url
+        candidates = pg_api_base_candidates(configured)
         if len(candidates) <= 1:
+            self._api_base_resolved = True
+            return
+        # Another client already found the API root: skip downloading openapi.json again.
+        known = _discovered_api_bases.get(configured)
+        if known in candidates:
+            await self._rebind_base(known)
             self._api_base_resolved = True
             return
         for base in candidates:
             try:
-                async with httpx.AsyncClient(
-                    base_url=base, timeout=15.0, follow_redirects=False
-                ) as probe:
+                async with new_panel_http_client(base, timeout=PG_PROBE_TIMEOUT) as probe:
                     # Only accept a candidate that identifies as PasarGuard.
                     # Do NOT treat bare /api/system 401/403 as proof — that
                     # pattern matches many unrelated internal services (SSRF).
@@ -324,6 +471,7 @@ class PasarGuardClient:
                     if r.status_code == 200 and "PasarGuard" in (r.text or ""):
                         await self._rebind_base(base)
                         self._api_base_resolved = True
+                        _remember_api_base(configured, base)
                         return
             except Exception:
                 continue
@@ -335,7 +483,10 @@ class PasarGuardClient:
             # Real requests use X-Api-Key via _headers — never Bearer with this client.
             return "__apikey__"
         if self._token:
-            return self._token
+            if not (jwt_expires_within(self._token, TOKEN_REFRESH_MARGIN_SEC) and self._can_log_in_again()):
+                return self._token
+            # Renew before PasarGuard starts answering 401, saving a failed round trip.
+            self._token = None
         await self._ensure_api_base()
         if self._login_username:
             username = self._login_username
@@ -363,40 +514,11 @@ class PasarGuardClient:
         last_base = candidates[0] if candidates else self.base_url
         for base in candidates:
             last_base = base
-            # Never follow redirects on credential POSTs (prevents auth-forwarding SSRF)
-            async with httpx.AsyncClient(
-                base_url=base, timeout=30.0, follow_redirects=False
-            ) as probe:
-                for data in attempts:
-                    last = await panel_read_request(probe, "POST", "/api/admin/token", data=data)
-                    if last.status_code < 400:
-                        await self._rebind_base(base)
-                        self._api_base_resolved = True
-                        payload = last.json()
-                        token = payload.get("access_token")
-                        if not token:
-                            raise PasarGuardError(
-                                "PasarGuard login response missing access_token",
-                                body=payload,
-                            )
-                        self._token = token
-                        # Drop plaintext password from memory once a Bearer token exists
-                        # (cached clients must not retain PG passwords).
-                        self._login_password = None
-                        logger.info("PasarGuard login OK · base=%s", self.base_url)
-                        return self._token
-                    if last.status_code in (401, 403):
-                        detail = (last.text or "")[:300]
-                        raise PasarGuardError(
-                            redact(
-                                f"PasarGuard login failed ({last.status_code}) at "
-                                f"{base}/api/admin/token — check PG_USERNAME / PG_PASSWORD. {detail}"
-                            ),
-                            last.status_code,
-                            redact(last.text),
-                        )
-                    if last.status_code not in (404, 405):
-                        break
+            response, token = await self._login_at(base, attempts)
+            if response is not None:
+                last = response
+            if token:
+                return token
 
         assert last is not None
         detail = (last.text or "")[:300]
@@ -413,6 +535,48 @@ class PasarGuardClient:
             last.text,
         )
 
+    async def _login_at(self, base: str, attempts: list[dict[str, str]]) -> tuple[httpx.Response | None, str | None]:
+        """Try the password grants at one API root; reuse the open connection when possible."""
+        reuse = base == self.base_url
+        # Never follow redirects on credential POSTs (prevents auth-forwarding SSRF)
+        probe = self._http() if reuse else new_panel_http_client(base)
+        last: httpx.Response | None = None
+        try:
+            for data in attempts:
+                last = await panel_read_request(probe, "POST", "/api/admin/token", data=data)
+                if last.status_code < 400:
+                    return last, await self._accept_login(base, last)
+                if last.status_code in (401, 403):
+                    detail = (last.text or "")[:300]
+                    raise PasarGuardError(
+                        redact(
+                            f"PasarGuard login failed ({last.status_code}) at "
+                            f"{base}/api/admin/token — check PG_USERNAME / PG_PASSWORD. {detail}"
+                        ),
+                        last.status_code,
+                        redact(last.text),
+                    )
+                if last.status_code not in (404, 405):
+                    break
+        finally:
+            if not reuse:
+                await probe.aclose()
+        return last, None
+
+    async def _accept_login(self, base: str, response: httpx.Response) -> str:
+        await self._rebind_base(base)
+        self._api_base_resolved = True
+        payload = response.json()
+        token = payload.get("access_token")
+        if not token:
+            raise PasarGuardError("PasarGuard login response missing access_token", body=payload)
+        self._token = token
+        # Drop plaintext password from memory once a Bearer token exists
+        # (cached clients must not retain PG passwords).
+        self._login_password = None
+        logger.info("PasarGuard login OK · base=%s", self.base_url)
+        return token
+
     async def _headers(self) -> dict[str, str]:
         if self._api_key:
             await self._ensure_api_base()
@@ -428,6 +592,36 @@ class PasarGuardClient:
             return f"u:{user}@{base}:{self._cache_partition}"
         return f"owner@{base}:{self._cache_partition}"
 
+    async def _display_read(
+        self,
+        path: str,
+        *,
+        last_good_ok: bool,
+        cache_max_age: float | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        """GET for display; with ``last_good_ok``, an outage returns the last good answer.
+
+        The saved answer is this client's own (cache entries are per identity)
+        and at most LAST_GOOD_MAX_AGE_SEC old. Only web pages, whose notice says
+        it is not live, get it. Never pass ``last_good_ok`` for reads that
+        decide access or money.
+        """
+        extra: dict[str, Any] = {} if params is None else {"params": params}
+        try:
+            return await self.request("GET", path, cache_max_age=cache_max_age, **extra)
+        except (httpx.TransportError, TimeoutError, PasarGuardError) as exc:
+            # Bot and job callers have no notice to show, so they keep the error.
+            if not last_good_ok or not last_good_notice_active() or not _is_panel_outage(exc):
+                raise
+            saved = cache_get_last_good(self._read_cache_ident(), path, params)
+            if saved is None:
+                raise
+            payload, age = saved
+            note_last_good_read(age)
+            logger.info("PasarGuard unreachable; showing saved %s from %.0fs ago", path, age)
+            return payload
+
     async def request(
         self,
         method: str,
@@ -436,6 +630,7 @@ class PasarGuardClient:
         auth: bool = True,
         use_cache: bool = True,
         resolve_api_base: bool = True,
+        cache_max_age: float | None = None,
         **kwargs: Any,
     ) -> Any:
         from app.services.pg_read_cache import cache_get, cache_put, invalidate_ident
@@ -446,7 +641,7 @@ class PasarGuardClient:
         if method_u != "GET":
             invalidate_ident(ident)
         elif use_cache:
-            cached = cache_get(ident, path, kwargs.get("params"))
+            cached = cache_get(ident, path, kwargs.get("params"), max_age=cache_max_age)
             if cached is not None:
                 return cached
         headers = kwargs.pop("headers", {})
@@ -455,14 +650,14 @@ class PasarGuardClient:
         elif resolve_api_base:
             await self._ensure_api_base()
         send_request = panel_read_request if method_u == "GET" else _mutation_request
-        resp = await send_request(self._client, method, path, headers=headers, **kwargs)
+        resp = await send_request(self._http(), method, path, headers=headers, **kwargs)
         if resp.status_code == 401 and auth:
             # Bearer: clear JWT and re-login once. API key: same key cannot recover —
             # skip retry (would only double the same unauthorized request).
             if not self._api_key:
                 self._token = None
                 headers.update(await self._headers())
-                resp = await send_request(self._client, method, path, headers=headers, **kwargs)
+                resp = await send_request(self._http(), method, path, headers=headers, **kwargs)
         if resp.status_code >= 400:
             if resp.status_code == 422:
                 logger.warning(
@@ -484,8 +679,10 @@ class PasarGuardClient:
             cache_put(ident, path, kwargs.get("params"), payload)
         return payload
 
-    async def get_users(self, **params: Any) -> dict:
-        return await self.request("GET", "/api/users", params=params)
+    async def get_users(self, *, cache_max_age: float | None = None, last_good_ok: bool = False, **params: Any) -> dict:
+        return await self._display_read(
+            "/api/users", params=params, cache_max_age=cache_max_age, last_good_ok=last_good_ok
+        )
 
     async def get_user_by_username(self, username: str) -> dict:
         return await self.request("GET", f"/api/user/by-username/{username}")
@@ -555,8 +752,8 @@ class PasarGuardClient:
     async def get_groups(self) -> Any:
         return await self.request("GET", "/api/groups")
 
-    async def get_groups_simple(self) -> list[dict]:
-        data = await self.request("GET", "/api/groups/simple")
+    async def get_groups_simple(self, *, cache_max_age: float | None = None, last_good_ok: bool = False) -> list[dict]:
+        data = await self._display_read("/api/groups/simple", cache_max_age=cache_max_age, last_good_ok=last_good_ok)
         return as_list(data, "groups")
 
     async def create_group(self, payload: dict) -> dict:
@@ -582,8 +779,8 @@ class PasarGuardClient:
     async def get_inbounds_details(self) -> Any:
         return await self.request("GET", "/api/inbounds/details")
 
-    async def get_hosts(self) -> list[dict]:
-        data = await self.request("GET", "/api/hosts")
+    async def get_hosts(self, *, cache_max_age: float | None = None, last_good_ok: bool = False) -> list[dict]:
+        data = await self._display_read("/api/hosts", cache_max_age=cache_max_age, last_good_ok=last_good_ok)
         return as_list(data, "hosts")
 
     async def get_host(self, host_id: int) -> dict:
@@ -606,11 +803,11 @@ class PasarGuardClient:
         data = await self.request("GET", "/api/admins")
         return as_list(data, "admins")
 
-    async def get_admins_simple(self) -> list[dict]:
-        data = await self.request("GET", "/api/admins/simple")
+    async def get_admins_simple(self, *, cache_max_age: float | None = None, last_good_ok: bool = False) -> list[dict]:
+        data = await self._display_read("/api/admins/simple", cache_max_age=cache_max_age, last_good_ok=last_good_ok)
         return as_list(data, "admins")
 
-    async def get_current_admin(self) -> dict | None:
+    async def get_current_admin(self, *, last_good_ok: bool = False) -> dict | None:
         """The authenticated admin's own account (``GET /api/admin``).
 
         PasarGuard's panel uses this for the signed-in user. It does **not**
@@ -621,7 +818,10 @@ class PasarGuardClient:
         errors propagate as ``PasarGuardError`` so callers can tell a missing
         route (404) from a real outage.
         """
-        data = await self.request("GET", "/api/admin")
+        if last_good_ok:
+            data = await self._display_read("/api/admin", last_good_ok=True)
+        else:
+            data = await self.request("GET", "/api/admin")
         if isinstance(data, dict):
             if data.get("username") or data.get("id") is not None or data.get("role"):
                 self._api_base_resolved = True
@@ -654,74 +854,78 @@ class PasarGuardClient:
         would permanently revoke a legitimate staff member's web access just
         because PasarGuard was briefly down. Returns ``(gate, admin)`` where
         ``gate`` is one of ``"ok"``, ``"missing"``, ``"unreachable"``.
+
+        Only an exact (case-insensitive) username match is ever returned:
+        billing and access decisions are made on this record, so a similar
+        name returned by a substring search must never stand in for it.
         """
         username = (username or "").strip()
         if not username:
             return "missing", None
-        from urllib.parse import quote
-
-        enc = quote(username, safe="")
-        saw_transport_error = False
-
-        def _not_found(exc: Exception) -> bool:
-            return isinstance(exc, PasarGuardError) and exc.status_code == 404
-
-        def _username_matches(payload: dict | None) -> bool:
-            if not isinstance(payload, dict):
-                return False
-            got = str(payload.get("username") or "").strip()
-            return bool(got) and got.lower() == username.lower()
+        saw_unreachable = False
 
         # Own account first: no admins.read required. Never treat the token
         # holder's record as a *different* admin being looked up.
         try:
             current = await self.get_current_admin()
-            if _username_matches(current):
+            if _is_admin_named(current, username):
                 return "ok", current
         except Exception as exc:
             # 403/404/405: endpoint hidden or forbidden on this role/version.
             # Keep looking; do not flip a later confirmed-404 into unreachable.
-            status = getattr(exc, "status_code", None)
-            if not _not_found(exc) and status not in (403, 405):
-                saw_transport_error = True
+            if getattr(exc, "status_code", None) not in (403, 404, 405):
+                saw_unreachable = True
 
-        for path in (
-            f"/api/admin/by-username/{enc}",
-            f"/api/admin/{enc}",
-        ):
+        enc = quote(username, safe="")
+        for path in (f"/api/admin/by-username/{enc}", f"/api/admin/{enc}"):
             try:
                 data = await self.request("GET", path)
-                if isinstance(data, dict) and (
-                    str(data.get("username") or "").strip().lower() == username.lower()
-                    or data.get("id") is not None
-                ):
-                    # Strict identity when username is present
-                    got = str(data.get("username") or "").strip()
-                    if got and got.lower() != username.lower():
-                        continue
-                    return "ok", data
             except Exception as exc:
-                if not _not_found(exc):
-                    saw_transport_error = True
+                saw_unreachable = saw_unreachable or not is_pg_not_found(exc)
+                continue
+            if _is_admin_named(data, username):
+                return "ok", data
+
         try:
-            data = await self.request("GET", "/api/admins", params={"username": username, "limit": 20})
-            admins = as_list(data, "admins")
-            for a in admins:
-                if str(a.get("username") or "").lower() == username.lower():
-                    return "ok", a
-            if len(admins) == 1:
-                return "ok", admins[0]
+            found = await self._find_admin_in_directory(username)
         except Exception as exc:
-            if not _not_found(exc):
-                saw_transport_error = True
+            saw_unreachable = saw_unreachable or not is_pg_not_found(exc)
+            found = None
+        if found is not None:
+            return "ok", found
+        return ("unreachable" if saw_unreachable else "missing"), None
+
+    async def _find_admin_in_directory(self, username: str) -> dict | None:
+        """Exact match from ``/api/admins``; ``None`` only after a complete scan.
+
+        PasarGuard filters ``username`` as a substring, so the wanted admin can
+        sit behind similar names on a later page. A scan that cannot reach the
+        end raises ``AdminDirectoryIncomplete`` instead of claiming absence.
+        """
         try:
-            for a in await self.get_admins():
-                if str(a.get("username") or "").lower() == username.lower():
-                    return "ok", a
-        except Exception as exc:
-            if not _not_found(exc):
-                saw_transport_error = True
-        return ("unreachable" if saw_transport_error else "missing"), None
+            return await self._scan_admin_directory({"username": username}, username)
+        except PasarGuardError as exc:
+            if exc.status_code not in (400, 422):
+                raise
+        # Panel rejected the filter parameter: scan the plain list instead.
+        return await self._scan_admin_directory({}, username)
+
+    async def _scan_admin_directory(self, filters: dict[str, str], username: str) -> dict | None:
+        seen: set[str] = set()
+        for page in range(ADMIN_DIRECTORY_MAX_PAGES):
+            params = {**filters, "offset": page * ADMIN_DIRECTORY_PAGE_SIZE, "limit": ADMIN_DIRECTORY_PAGE_SIZE}
+            admins = as_list(await self.request("GET", "/api/admins", params=params), "admins")
+            match = next((admin for admin in admins if _is_admin_named(admin, username)), None)
+            if match is not None:
+                return match
+            if len(admins) < ADMIN_DIRECTORY_PAGE_SIZE:
+                return None
+            names = {str(admin.get("username") or "").strip().lower() for admin in admins}
+            if len(admins) > ADMIN_DIRECTORY_PAGE_SIZE or names <= seen:
+                # The panel ignored offset/limit; later pages would repeat this one.
+                raise AdminDirectoryIncomplete(username)
+            seen |= names
+        raise AdminDirectoryIncomplete(username)
 
     async def get_admin_roles(self) -> list[dict]:
         """Pasarguard admin roles (owner-defined access levels)."""
@@ -826,16 +1030,16 @@ class PasarGuardClient:
             404,
         )
 
-    async def get_system_stats(self) -> dict:
-        data = await self.request("GET", "/api/system")
+    async def get_system_stats(self, *, cache_max_age: float | None = None, last_good_ok: bool = False) -> dict:
+        data = await self._display_read("/api/system", cache_max_age=cache_max_age, last_good_ok=last_good_ok)
         return data if isinstance(data, dict) else {"raw": data}
 
-    async def get_nodes(self) -> list[dict]:
-        data = await self.request("GET", "/api/nodes")
+    async def get_nodes(self, *, cache_max_age: float | None = None, last_good_ok: bool = False) -> list[dict]:
+        data = await self._display_read("/api/nodes", cache_max_age=cache_max_age, last_good_ok=last_good_ok)
         return as_list(data, "nodes")
 
-    async def get_nodes_simple(self) -> list[dict]:
-        data = await self.request("GET", "/api/nodes/simple")
+    async def get_nodes_simple(self, *, cache_max_age: float | None = None) -> list[dict]:
+        data = await self.request("GET", "/api/nodes/simple", cache_max_age=cache_max_age)
         return as_list(data, "nodes")
 
     async def get_nodes_realtime(self) -> Any:
@@ -902,7 +1106,7 @@ class PasarGuardClient:
         await self._ensure_safe_target()
         payload = bytearray()
         try:
-            async with self._client.stream("GET", path, headers={"Accept": "application/json"}) as response:
+            async with self._http().stream("GET", path, headers={"Accept": "application/json"}) as response:
                 if response.status_code != 200:
                     raise PasarGuardError("Monitoring subscription unavailable", response.status_code)
                 async for chunk in response.aiter_bytes(chunk_size=16384):
@@ -929,7 +1133,7 @@ class PasarGuardClient:
         try:
             await self._ensure_safe_target()
             resp = await panel_read_request(
-                self._client,
+                self._http(),
                 "GET",
                 path,
                 headers={
@@ -1008,6 +1212,10 @@ def get_pg() -> PasarGuardClient:
 def reset_pg() -> None:
     """Drop cached clients (after PG_BASE_URL / credentials change)."""
     global _pg, _pg_reseller_cache, _pg_staff_cache, _pg_principal_cache
+    for client in (_pg, *_pg_reseller_cache.values(), *_pg_staff_cache.values(), *_pg_principal_cache.values()):
+        _retire_client(client)
+    _validated_targets.clear()
+    _discovered_api_bases.clear()
     _pg = None
     _pg_reseller_cache = {}
     _pg_staff_cache = {}
@@ -1029,7 +1237,7 @@ def invalidate_pg_principal_cache(principal_id: int | None) -> None:
     if pid <= 0:
         return
     for stale_key in [k for k in _pg_principal_cache if k[0] == pid]:
-        _pg_principal_cache.pop(stale_key, None)
+        _retire_client(_pg_principal_cache.pop(stale_key, None))
 
 
 def invalidate_pg_reseller_cache(reseller_user_id: int | None) -> None:
@@ -1046,7 +1254,7 @@ def invalidate_pg_reseller_cache(reseller_user_id: int | None) -> None:
     if rid <= 0:
         return
     for stale_key in [k for k in _pg_reseller_cache if k[0] == rid]:
-        _pg_reseller_cache.pop(stale_key, None)
+        _retire_client(_pg_reseller_cache.pop(stale_key, None))
 
 
 def invalidate_pg_staff_cache(
@@ -1062,13 +1270,38 @@ def invalidate_pg_staff_cache(
             sid = 0
         if sid > 0:
             for stale_key in [k for k in _pg_staff_cache if k[0] == sid]:
-                _pg_staff_cache.pop(stale_key, None)
+                _retire_client(_pg_staff_cache.pop(stale_key, None))
             return
     uname = (pg_username or "").strip().lower()
     if not uname:
         return
     for stale_key in [k for k in _pg_staff_cache if k[1] == uname]:
-        _pg_staff_cache.pop(stale_key, None)
+        _retire_client(_pg_staff_cache.pop(stale_key, None))
+
+
+async def _authenticate_and_cache(
+    cache: dict[tuple[int, str], PasarGuardClient],
+    cache_key: tuple[int, str],
+    client: PasarGuardClient,
+) -> PasarGuardClient:
+    """Log the new client in, then make it the only cached client for its owner row.
+
+    Entries of the same row under another PasarGuard username are dropped so a
+    re-linked shop or staff member can never act under the previous identity.
+    """
+    try:
+        await client.ensure_token()
+    except BaseException:
+        # A client that never authenticated is not shared yet; free its sockets now.
+        await _close_unshared_client(client)
+        raise
+    for stale_key in [key for key in cache if key[0] == cache_key[0] and key != cache_key]:
+        _retire_client(cache.pop(stale_key, None))
+    previous = cache.get(cache_key)
+    if previous is not None and previous is not client:
+        _retire_client(previous)
+    cache[cache_key] = client
+    return client
 
 
 async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClient:
@@ -1124,11 +1357,7 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
             api_key=api_key,
         )
         api_key = ""
-        await client.ensure_token()
-        for stale_key in [k for k in _pg_reseller_cache if k[0] == rid and k != cache_key]:
-            _pg_reseller_cache.pop(stale_key, None)
-        _pg_reseller_cache[cache_key] = client
-        return client
+        return await _authenticate_and_cache(_pg_reseller_cache, cache_key, client)
 
     password = decrypt_secret(profile.pg_admin_password_enc)
     if not password:
@@ -1142,13 +1371,7 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
         password=password,
     )
     password = ""
-    await client.ensure_token()
-    # Drop any stale entry for this reseller under a different (old) admin
-    # username so it can never be resurrected/reused.
-    for stale_key in [k for k in _pg_reseller_cache if k[0] == rid and k != cache_key]:
-        _pg_reseller_cache.pop(stale_key, None)
-    _pg_reseller_cache[cache_key] = client
-    return client
+    return await _authenticate_and_cache(_pg_reseller_cache, cache_key, client)
 
 
 async def get_pg_for_staff(
@@ -1196,11 +1419,7 @@ async def get_pg_for_staff(
     if api_key:
         client = PasarGuardClient(username=row.pg_username, api_key=api_key)
         api_key = ""
-        await client.ensure_token()
-        for stale_key in [k for k in _pg_staff_cache if k[0] == sid and k != cache_key]:
-            _pg_staff_cache.pop(stale_key, None)
-        _pg_staff_cache[cache_key] = client
-        return client
+        return await _authenticate_and_cache(_pg_staff_cache, cache_key, client)
     password = decrypt_secret(row.pg_admin_password_enc)
     if not password:
         raise PasarGuardError(
@@ -1210,13 +1429,7 @@ async def get_pg_for_staff(
         )
     client = PasarGuardClient(username=row.pg_username, password=password)
     password = ""
-    await client.ensure_token()
-    # Drop stale keys for this staff row (username rename) and legacy
-    # username-only keys if any remain from older builds.
-    for stale_key in [k for k in _pg_staff_cache if k[0] == sid and k != cache_key]:
-        _pg_staff_cache.pop(stale_key, None)
-    _pg_staff_cache[cache_key] = client
-    return client
+    return await _authenticate_and_cache(_pg_staff_cache, cache_key, client)
 
 
 async def get_pg_for_principal(
@@ -1293,11 +1506,7 @@ async def get_pg_for_principal(
     if api_key:
         client = PasarGuardClient(username=uname, api_key=api_key)
         api_key = ""
-        await client.ensure_token()
-        for stale_key in [k for k in _pg_principal_cache if k[0] == pid and k != cache_key]:
-            _pg_principal_cache.pop(stale_key, None)
-        _pg_principal_cache[cache_key] = client
-        return client
+        return await _authenticate_and_cache(_pg_principal_cache, cache_key, client)
     password = decrypt_secret(row.pg_password_enc)
     if not password:
         raise PasarGuardError(
@@ -1308,11 +1517,7 @@ async def get_pg_for_principal(
     client = PasarGuardClient(username=uname, password=password)
     # Local plaintext reference must not outlive token acquisition.
     password = ""
-    await client.ensure_token()
-    for stale_key in [k for k in _pg_principal_cache if k[0] == pid and k != cache_key]:
-        _pg_principal_cache.pop(stale_key, None)
-    _pg_principal_cache[cache_key] = client
-    return client
+    return await _authenticate_and_cache(_pg_principal_cache, cache_key, client)
 
 
 def public_pg_api_base() -> str:

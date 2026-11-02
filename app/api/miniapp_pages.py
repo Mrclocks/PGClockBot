@@ -72,6 +72,10 @@ log = logging.getLogger(__name__)
 
 # Personas allowed to buy/renew/wallet commerce in Mini App (never platform admin/owner).
 _COMMERCE_PERSONAS = frozenset({"user", "reseller"})
+# At most this many panel reads per Mini App screen at once, and one deadline
+# for all of them (each read already gives up after 5 s on its own).
+MINIAPP_PANEL_CONCURRENCY = 8
+MINIAPP_INFO_DEADLINE_SEC = 6.0
 
 
 def _no_store(payload: dict) -> JSONResponse:
@@ -304,14 +308,44 @@ def _unavailable_service_row(svc: UserService) -> dict:
     }
 
 
+async def _fetch_service_infos(services: list[UserService]) -> list[dict | BaseException]:
+    """Live info for each service with bounded panel concurrency and one overall deadline.
+
+    Without the bound, one customer with many services sent all requests at
+    once to a possibly slow panel; the deadline keeps the screen as fast as
+    before, and services not answered in time show the timeout state.
+    """
+    gate = asyncio.Semaphore(MINIAPP_PANEL_CONCURRENCY)
+
+    async def fetch(svc: UserService) -> dict:
+        async with gate:
+            return await _fetch_pg_info(
+                _service_sub_token(svc), subscription_url=svc.subscription_url,
+                service_id=svc.id, expected_pg_user_id=getattr(svc, "pg_user_id", None),
+            )
+
+    tasks = [asyncio.create_task(fetch(svc)) for svc in services]
+    if not tasks:
+        return []
+    _done, pending = await asyncio.wait(tasks, timeout=MINIAPP_INFO_DEADLINE_SEC)
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
+    results: list[dict | BaseException] = []
+    for task in tasks:
+        if task in pending or task.cancelled():
+            results.append(service_info_error("timeout"))
+        elif task.exception() is not None:
+            results.append(task.exception())
+        else:
+            results.append(task.result())
+    return results
+
+
 async def _enrich_services(services: list[UserService], *, session=None) -> list[dict]:
     if not services:
         return []
-    infos = await asyncio.gather(*[
-        _fetch_pg_info(_service_sub_token(s), subscription_url=s.subscription_url,
-                       service_id=s.id, expected_pg_user_id=getattr(s, "pg_user_id", None))
-        for s in services[:20]
-    ], return_exceptions=True)
+    infos = await _fetch_service_infos(services[:20])
     out = []
     for index, svc in enumerate(services):
         info = infos[index] if index < len(infos) else service_info_error("not_loaded")

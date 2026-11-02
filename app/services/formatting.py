@@ -752,6 +752,15 @@ def info_block(lines: list[str]) -> str:
     return "\n".join(clean)
 
 
+def _stored_volume(info: dict) -> str:
+    """Saved total volume when live usage is unavailable; usage itself stays unknown."""
+    limit = info.get("stored_data_limit")
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0:
+        return "—"
+    total = "نامحدود" if limit == 0 else format_bytes(limit)
+    return f"مصرف نامشخص از {total}"
+
+
 def service_card(info: dict, currency_note: str = "") -> str:
     username = info.get("username", "—")
     status_raw = info.get("status")
@@ -772,7 +781,7 @@ def service_card(info: dict, currency_note: str = "") -> str:
         f"👤 {copyable(username)}",
         "",
         kv_line("📶", "وضعیت", status),
-        kv_line("📦", "حجم", format_bytes_ratio(used, limit, joiner=" از ") if volume_known else "—"),
+        kv_line("📦", "حجم", format_bytes_ratio(used, limit, joiner=" از ") if volume_known else _stored_volume(info)),
         kv_line("📅", "انقضا", f"<b>{expire}</b>"),
     ]
     if bar is not None:
@@ -781,6 +790,12 @@ def service_card(info: dict, currency_note: str = "") -> str:
         lines.extend(["", "⚠️ خطا در دریافت اطلاعات سرویس: " + html_mod.escape(str(info["error_message"]))])
         if info.get("error_code"):
             lines.append("کد خطا: " + copyable(info["error_code"]))
+    stored_at = parse_expire(info.get("stored_at"))
+    if stored_at is not None:
+        lines.append(
+            "🕒 حجم و انقضا از آخرین اطلاعات ذخیره‌شده "
+            f"({stored_at.astimezone().strftime('%Y/%m/%d %H:%M')}) است و ممکن است به‌روز نباشد."
+        )
     if currency_note:
         lines.extend(["", currency_note])
     online = info.get("online_at")

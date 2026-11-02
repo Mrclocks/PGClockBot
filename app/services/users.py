@@ -1141,6 +1141,7 @@ DEFAULT_SETTINGS = {
     "backup_schedule_hour": "3",
     "backup_include_env_scheduled": "0",
     "backup_last_ok_at": "",
+    "backup_last_attempt_at": "",
     "backup_last_verify_ok": "",
     "backup_keep_count": "10",
     "backup_telegram_enabled": "0",

@@ -11,6 +11,7 @@ menus/actions are clamped to the env ``PG_USERNAME`` role (fail-closed).
 import time
 from typing import Any, Mapping
 
+from app.services.redact import user_safe_error
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 import logging
 
@@ -185,7 +186,7 @@ async def resolve_platform_pg_capabilities(
     Auth: API key (X-Api-Key) preferred over password when either is provided.
     """
     from app.config import get_settings
-    from app.services.pasarguard import PasarGuardClient, PasarGuardError
+    from app.services.pasarguard import PasarGuardClient, PasarGuardError, new_panel_http_client
 
     settings = get_settings()
     env_username = getattr(settings, "pg_username", None)
@@ -249,15 +250,9 @@ async def resolve_platform_pg_capabilities(
                 except UnsafePgUrlError as exc:
                     empty["error"] = str(exc)
                     return empty
-                # Rebind httpx client base
-                import httpx
-
+                # Rebind the temporary client to the probed base before any request.
                 old = client._client
-                client._client = httpx.AsyncClient(
-                    base_url=client.base_url,
-                    timeout=30.0,
-                    follow_redirects=False,
-                )
+                client._client = new_panel_http_client(client.base_url)
                 try:
                     await old.aclose()
                 except Exception:
@@ -342,7 +337,9 @@ async def resolve_platform_pg_capabilities(
             _PLATFORM_CAPS_CACHE[cache_key] = (now, dict(empty))
         return empty
     except Exception as e:
-        empty["error"] = str(e) or "خطا در خواندن نقش پاسارگارد"
+        # Transport errors carry internal hosts and ports; show a mapped Persian cause only.
+        logger.warning("PasarGuard capability probe failed", exc_info=True)
+        empty["error"] = user_safe_error(e, fallback="خطا در خواندن نقش پاسارگارد")
         if use_cache and not own_client:
             _PLATFORM_CAPS_CACHE[cache_key] = (now, dict(empty))
         return empty
