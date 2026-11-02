@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # PGClockBot bootstrap — clone if missing, update if present, then open the menu.
 #
+# Default channel is main (stable 0.5). Development builds use PGCLOCK_CHANNEL=dev.
+#
 # Fresh or existing server (from any directory):
 #   bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
+#   PGCLOCK_CHANNEL=dev bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/dev/get.sh)
 #
 # Also works (TTY is reattached automatically):
 #   curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh | bash
@@ -10,6 +13,7 @@
 # Or locally (inside / next to the repo):
 #   bash get.sh
 #   bash get.sh update
+#   bash get.sh install-main
 #
 set -euo pipefail
 
