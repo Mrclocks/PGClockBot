@@ -193,6 +193,10 @@ class OverviewEarlyStopTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ApiBaseDiscoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        # Other tests discover the same test URL; start from an empty memo.
+        pasarguard._discovered_api_bases.clear()
+
     async def asyncTearDown(self) -> None:
         pasarguard._discovered_api_bases.clear()
 
