@@ -92,6 +92,23 @@ def decrypt_secret(token: str | None) -> str | None:
     return None
 
 
+def decrypts_with_secret(token: str, web_secret: str) -> bool:
+    """Whether ``token`` was encrypted under ``web_secret`` (current or legacy key)."""
+    from cryptography.fernet import InvalidToken
+
+    secret = (web_secret or "").strip().encode("utf-8")
+    raw = (token or "").strip().encode("ascii", errors="ignore")
+    if not secret or not raw:
+        return False
+    for key in (_hkdf_fernet_key(secret), _legacy_fernet_key(secret)):
+        try:
+            _fernet(key).decrypt(raw)
+            return True
+        except InvalidToken:
+            continue
+    return False
+
+
 def hash_bot_token(token: str | None) -> str | None:
     """Stable SHA-256 hex for equality lookups (never store raw token for search)."""
     text = (token or "").strip()

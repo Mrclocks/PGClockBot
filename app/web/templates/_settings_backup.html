@@ -155,6 +155,12 @@
   <p class="muted update-card-caption">
     بعد از تأیید، مراحل بازیابی اینجا نمایش داده می‌شود — مشابه آپدیت پنل.
   </p>
+  {% for warning in restore_warnings or [] %}
+  <div class="flash warn flash-has-ico" role="status">
+    {{ flash_warn_icon() }}
+    <span class="flash-copy">{{ warning }}</span>
+  </div>
+  {% endfor %}
   <div id="backup-restore-ops" class="update-ops" {% if not restore_ops %}hidden{% endif %}>
     <div class="flash warn update-stay-warn flash-has-ico" id="backup-restore-stay-warn" role="status">
       {{ flash_warn_icon() }}
@@ -257,7 +263,7 @@
         جایگزین می‌شود. قبل از ریستور یک بکاپ ایمنی خودکار ساخته می‌شود.
       </p>
       <label class="support-enabled">
-        <span>بازیابی .env هم</span>
+        <span>بازیابی .env هم <small class="muted">— برای انتقال به سرور جدید روشن کنید؛ آدرس دیتابیس و پورت همین سرور حفظ می‌شود.</small></span>
         <span class="ui-switch">
           <input type="checkbox" name="restore_env" value="1" id="backup-restore-env" />
           <span class="ui-switch-track" aria-hidden="true"></span>

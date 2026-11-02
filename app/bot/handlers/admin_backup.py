@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import tempfile
 from pathlib import Path
 
@@ -364,6 +365,8 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
         await message.answer(f"❌ ریستور انجام نشد:\n{result.get('error')}")
         return
     msg = "✅ ریستور انجام شد."
+    for warning in result.get("warnings") or []:
+        msg += f"\n⚠️ {html.escape(str(warning))}"
     if result.get("safety_id"):
         msg += f"\nبکاپ ایمنی: <code>{result['safety_id']}</code>"
     if result.get("restart_scheduled"):

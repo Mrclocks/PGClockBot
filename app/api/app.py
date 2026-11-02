@@ -4413,6 +4413,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             from app.services.backup import (
                 clear_idle_restore_status,
                 list_backups,
+                read_restore_notice,
                 resolve_stale_restore_status,
                 sqlite_db_path,
             )
@@ -4421,6 +4422,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 clear_idle_restore_status()
             ctx["backups"] = list_backups()
             ctx["restore_status"] = resolve_stale_restore_status()
+            ctx["restore_warnings"] = read_restore_notice()
             ctx["local_version"] = local_version()
             ctx["db_path"] = str(sqlite_db_path())
             # values already loaded above — do not re-import get_all_settings
