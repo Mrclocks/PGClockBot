@@ -2068,6 +2068,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 PG_ACCESS_DENIED_MSG,
                 access_by_web_username,
                 enforce_pg_admin_web_gate,
+                login_denial,
                 resolve_pg_role_id_for_admin,
                 staff_has_pg_auth_secret,
             )
@@ -2110,8 +2111,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                             session, profile.pg_admin_username, revoke_if_missing=True
                         )
                         if not allowed:
-                            for k in limit_keys:
-                                _login_fail(k)
+                            # The password was right; an outage must not count toward lockout.
+                            status_code, counts_as_failure = login_denial(deny_msg)
+                            if counts_as_failure:
+                                for k in limit_keys:
+                                    _login_fail(k)
                             return render(
                                 request,
                                 "login.html",
@@ -2119,7 +2123,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                                     "error": deny_msg or PG_ACCESS_DENIED_MSG,
                                     "username": typed_user,
                                 },
-                                status_code=403,
+                                status_code=status_code,
                             )
                     from app.services.pg_access import (
                         map_pg_role_writes,
@@ -2192,8 +2196,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                         session, staff_row.pg_username, revoke_if_missing=True
                     )
                     if not allowed:
-                        for k in limit_keys:
-                            _login_fail(k)
+                        # The password was right; an outage must not count toward lockout.
+                        status_code, counts_as_failure = login_denial(deny_msg)
+                        if counts_as_failure:
+                            for k in limit_keys:
+                                _login_fail(k)
                         return render(
                             request,
                             "login.html",
@@ -2201,7 +2208,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                                 "error": deny_msg or PG_ACCESS_DENIED_MSG,
                                 "username": typed_user,
                             },
-                            status_code=403,
+                            status_code=status_code,
                         )
                     # Re-load in case revoke removed the row
                     staff_row = await access_by_web_username(session, u.strip().lower())

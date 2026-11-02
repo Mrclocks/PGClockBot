@@ -93,6 +93,37 @@ async def fetch_pg_admin_gate(pg_username: str) -> tuple[PgAdminGate, dict | Non
 _PG_GATE_CACHE: dict[str, tuple[float, tuple[bool, str | None]]] = {}
 _PG_GATE_TTL_SEC = 45.0
 _PG_GATE_UNAVAILABLE_TTL_SEC = READ_COOLDOWN_SEC
+# A transient outage does not log out an account PasarGuard confirmed within
+# this window; it never applies to a deleted or denied admin.
+GATE_OUTAGE_GRACE_SEC = 300.0
+_PG_GATE_MAX_ENTRIES = 512
+_PG_GATE_LAST_OK: dict[str, float] = {}
+
+
+def is_outage_denial(message: str | None) -> bool:
+    """True when access was refused only because PasarGuard could not be reached."""
+    return message == PG_UNAVAILABLE_MSG
+
+
+def login_denial(message: str | None) -> tuple[int, bool]:
+    """HTTP status for a refused login after a correct password, and whether it counts toward lockout.
+
+    An outage is not the user's fault: it must not lock out a correct password.
+    """
+    if is_outage_denial(message):
+        return 503, False
+    return 403, True
+
+
+def _remember(store: dict, uname: str, value) -> None:
+    store[uname] = value
+    if len(store) > _PG_GATE_MAX_ENTRIES:
+        def age(item):
+            entry = item[1]
+            return entry[0] if isinstance(entry, tuple) else entry
+
+        for key, _ in sorted(store.items(), key=age)[:128]:
+            store.pop(key, None)
 
 
 async def enforce_pg_admin_web_gate(
@@ -114,13 +145,25 @@ async def enforce_pg_admin_web_gate(
         return cached[1]
 
     gate, _admin = await fetch_pg_admin_gate(pg_username)
+    cached_at = time.monotonic()
     if gate == "ok":
         result: tuple[bool, str | None] = (True, None)
+        if uname:
+            _remember(_PG_GATE_LAST_OK, uname, cached_at)
     elif gate == "unreachable":
-        # M3: cannot safely resolve PG identity → deny access (do NOT revoke).
-        # Never convert outage into allow / unrestricted menus.
-        result = (False, PG_UNAVAILABLE_MSG)
+        last_ok = _PG_GATE_LAST_OK.get(uname) if uname else None
+        if last_ok is not None and cached_at - last_ok <= GATE_OUTAGE_GRACE_SEC:
+            # Recently confirmed by PasarGuard: keep the session through a short outage,
+            # with the same permissions; re-check as soon as the outage cache expires.
+            logger.info("PasarGuard unreachable; keeping web access confirmed %.0fs ago", cached_at - last_ok)
+            result = (True, None)
+            cached_at -= _PG_GATE_TTL_SEC - _PG_GATE_UNAVAILABLE_TTL_SEC
+        else:
+            # M3: cannot safely resolve PG identity → deny access (do NOT revoke).
+            # Never convert an unconfirmed identity into allow / unrestricted menus.
+            result = (False, PG_UNAVAILABLE_MSG)
     else:
+        _PG_GATE_LAST_OK.pop(uname, None)
         if gate == "missing" and revoke_if_missing:
             try:
                 await revoke_web_access(session, pg_username)
@@ -129,11 +172,7 @@ async def enforce_pg_admin_web_gate(
         result = (False, PG_ACCESS_DENIED_MSG)
 
     if uname:
-        _PG_GATE_CACHE[uname] = (time.monotonic(), result)
-        if len(_PG_GATE_CACHE) > 512:
-            oldest = sorted(_PG_GATE_CACHE.items(), key=lambda kv: kv[1][0])[:128]
-            for k, _ in oldest:
-                _PG_GATE_CACHE.pop(k, None)
+        _remember(_PG_GATE_CACHE, uname, (cached_at, result))
     return result
 
 
