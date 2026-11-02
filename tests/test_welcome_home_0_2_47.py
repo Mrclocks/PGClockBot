@@ -99,8 +99,8 @@ class OpenSupportHomeShopBotTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("include_reseller_apply", captured["kwargs"])
 
 
-class RenderHomeEditFallbackTests(unittest.IsolatedAsyncioTestCase):
-    async def test_edit_failure_falls_back_to_answer(self):
+class RenderHomeFreshStartTests(unittest.IsolatedAsyncioTestCase):
+    async def test_home_from_a_panel_is_a_new_message_with_the_menu(self):
         from app.bot.handlers.start import render_home
 
         message = AsyncMock()
@@ -149,69 +149,13 @@ class RenderHomeEditFallbackTests(unittest.IsolatedAsyncioTestCase):
                 message,
                 session,
                 db_user,
-                edit=True,
                 is_reseller_bot=False,
                 reseller_owner_id=None,
             )
 
+        message.edit_text.assert_not_awaited()
         message.answer.assert_awaited()
         self.assertIsNotNone(message.answer.await_args.kwargs.get("reply_markup"))
-
-    async def test_not_modified_stays_silent(self):
-        from app.bot.handlers.start import render_home
-
-        message = AsyncMock()
-        message.photo = None
-        message.edit_text = AsyncMock(
-            side_effect=TelegramBadRequest(
-                method=MagicMock(), message="Bad Request: message is not modified"
-            )
-        )
-        message.answer = AsyncMock()
-        session = AsyncMock()
-        db_user = MagicMock()
-        db_user.id = 1
-        db_user.role = "user"
-        db_user.full_name = "U"
-        db_user.telegram_id = 10
-        db_user.username = None
-
-        with (
-            patch(
-                "app.bot.handlers.start.get_all_settings",
-                new=AsyncMock(return_value={"welcome_text": "سلام", "shop_title": ""}),
-            ),
-            patch(
-                "app.services.reseller_access.effective_menu_role",
-                new=AsyncMock(return_value="user"),
-            ),
-            patch(
-                "app.services.reseller_access.is_shop_owner_on_main_bot",
-                return_value=False,
-            ),
-            patch(
-                "app.bot.handlers.start._has_services",
-                new=AsyncMock(return_value=False),
-            ),
-            patch(
-                "app.services.rich_text.outbound_setting_text",
-                return_value=("سلام", {}),
-            ),
-            patch(
-                "app.bot.handlers.start.kb.main_reply_keyboard",
-                return_value=MagicMock(name="KB"),
-            ),
-        ):
-            await render_home(
-                message,
-                session,
-                db_user,
-                edit=True,
-                is_reseller_bot=False,
-                reseller_owner_id=None,
-            )
-
-        message.answer.assert_not_awaited()
 
 
 if __name__ == "__main__":

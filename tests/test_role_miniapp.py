@@ -64,20 +64,52 @@ class MiniAppAuthUnitTests(unittest.TestCase):
 
 
 class MiniAppSourceTests(unittest.TestCase):
-    def test_static_js_escapes_and_safe_url(self):
-        src = (ROOT / "app/web/static/miniapp.js").read_text(encoding="utf-8")
-        self.assertIn("function esc(", src)
-        self.assertIn("createTextNode", src)
-        self.assertIn("function safeUrl(", src)
-        self.assertNotIn("onclick=\"showSvc(", src)
-        self.assertNotIn("tg.openLink(data.service.url)", src)
+    # Escaping, link safety, copy feedback and actions are behavior-tested in
+    # tests/miniapp_app.test.cjs (run by tests/test_miniapp_frontend.py).
 
-    def test_template_loads_panel_like_assets(self):
-        html = (ROOT / "app/web/templates/miniapp.html").read_text(encoding="utf-8")
+    def test_template_loads_scripts_in_dependency_order(self):
+        from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+        env = Environment(loader=FileSystemLoader(ROOT / "app/web/templates"), autoescape=select_autoescape())
+        html = env.get_template("miniapp.html").render(app_version="t")
+        order = [html.index(path) for path in (
+            "/static/catalog_price.js", "/static/miniapp/core.js",
+            "/static/miniapp/render.js", "/static/miniapp/app.js",
+        )]
+        self.assertEqual(order, sorted(order))
         self.assertIn("/static/miniapp.css", html)
-        self.assertIn("/static/miniapp.js", html)
-        self.assertIn("ma-nav", html)
-        self.assertIn("role-badge", html)
+        for element_id in ('id="root"', 'id="nav"', 'id="sheet"', 'id="sheet-body"', 'id="sheet-close"'):
+            self.assertIn(element_id, html)
+        for name in ("core.js", "render.js", "app.js"):
+            self.assertTrue((ROOT / "app/web/static/miniapp" / name).is_file())
+
+    def test_a_blocked_telegram_sdk_cannot_hold_the_page(self):
+        from html.parser import HTMLParser
+
+        from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+        class Scripts(HTMLParser):
+            def __init__(self) -> None:
+                super().__init__()
+                self.tags: list[dict] = []
+
+            def handle_starttag(self, tag, attrs):
+                if tag == "script":
+                    self.tags.append(dict(attrs))
+
+        env = Environment(loader=FileSystemLoader(ROOT / "app/web/templates"), autoescape=select_autoescape())
+        parser = Scripts()
+        parser.feed(env.get_template("miniapp.html").render(app_version="t"))
+        srcs = [t.get("src", "") for t in parser.tags]
+        sdk = next(t for t in parser.tags if "telegram-web-app.js" in t.get("src", ""))
+        self.assertIn("async", sdk)
+        self.assertEqual(sdk.get("id"), "tg-sdk")
+        launch = next(i for i, s in enumerate(srcs) if "/static/miniapp/launch.js" in s)
+        # Right after the SDK tag and before every app script, so it reads the address first.
+        self.assertEqual(launch, srcs.index(sdk["src"]) + 1)
+        self.assertTrue(all(launch < i for i, s in enumerate(srcs) if "/static/miniapp/" in s and i != launch))
+        self.assertNotIn("defer", parser.tags[launch])
+        self.assertNotIn("async", parser.tags[launch])
 
     def test_css_matches_panel_brand_tokens(self):
         css = (ROOT / "app/web/static/miniapp.css").read_text(encoding="utf-8")
@@ -85,58 +117,26 @@ class MiniAppSourceTests(unittest.TestCase):
         self.assertIn("--background: #09090b", css)
         self.assertIn("Vazirmatn", css)
 
-    def test_api_registered_via_module(self):
-        app_src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("register_miniapp_pages", app_src)
-        pages = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
-        self.assertIn("persona", pages)
-        self.assertIn("_admin_ops_payload", pages)
-        self.assertIn("_reseller_ops_payload", pages)
-        self.assertIn('/api/mini/buy', pages)
-        self.assertIn('/api/mini/renew', pages)
-        self.assertIn('/api/mini/service/{service_id}/qr', pages)
-        self.assertIn("list_activity", pages)
-        self.assertIn("wallet_pay_enabled", pages)
-        self.assertIn("_require_commerce", pages)
-        self.assertIn("_owned_service_or_404", pages)
-        self.assertIn("commerce_allowed", pages)
-        self.assertIn("owner_reseller_id.is_(None)", pages)
-        self.assertIn("auth=False", pages)
+    def test_api_routes_registered(self):
+        from app.api.app import create_api_app
 
-    def test_mobile_nav_and_actions(self):
-        html = (ROOT / "app/web/templates/miniapp.html").read_text(encoding="utf-8")
-        self.assertIn("ma-nav-wrap", html)
-        js = (ROOT / "app/web/static/miniapp.js").read_text(encoding="utf-8")
-        self.assertIn("data-buy", js)
-        self.assertIn("data-renew", js)
-        self.assertIn("data-qr", js)
-        self.assertIn("data-copy", js)
-        self.assertIn("ICONS", js)
-        self.assertIn("servicePeekHtml", js)
-        self.assertIn("commerce_allowed", js)
-        self.assertIn("function markCopied(", js)
-        self.assertIn("کپی شد", js)
-        self.assertIn("qr-frame", js)
-        # Link text must not be dumped into service cards
-        self.assertNotIn("word-break:break-all", js)
-        css = (ROOT / "app/web/static/miniapp.css").read_text(encoding="utf-8")
-        self.assertIn("ma-nav-wrap", css)
-        self.assertIn("svc-card", css)
-        self.assertIn("meter", css)
-        self.assertIn("svc-peek", css)
-        self.assertIn("var(--brand)", css)
-        self.assertIn("qr-frame", css)
-        self.assertIn(".btn.is-copied", css)
+        paths = {getattr(route, "path", "") for route in create_api_app().routes}
+        for path in (
+            "/miniapp", "/api/mini/me", "/api/mini/services", "/api/mini/service/{service_id}",
+            "/api/mini/service/{service_id}/qr", "/api/mini/plans", "/api/mini/activity",
+            "/api/mini/ops", "/api/mini/buy", "/api/mini/renew", "/api/mini/addon",
+        ):
+            self.assertIn(path, paths)
 
-    def test_nav_includes_wallet(self):
+    def test_nav_includes_account(self):
         from app.api.miniapp_pages import _nav_for, commerce_allowed
 
         ids = [x["id"] for x in _nav_for("user")]
-        self.assertEqual(ids, ["home", "services", "shop", "wallet"])
+        self.assertEqual(ids, ["home", "services", "shop", "account"])
         admin_ids = [x["id"] for x in _nav_for("admin")]
         self.assertEqual(admin_ids, ["home", "ops"])
         self.assertNotIn("shop", admin_ids)
-        self.assertNotIn("wallet", admin_ids)
+        self.assertNotIn("account", admin_ids)
         self.assertNotIn("services", admin_ids)
         self.assertIn("ops", [x["id"] for x in _nav_for("reseller")])
         self.assertFalse(commerce_allowed("admin"))

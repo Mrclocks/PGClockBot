@@ -18,11 +18,24 @@ OPERATIONS = {
     "billing_tick",
     "pg_admin_subscription",
     "pending_order_cleanup",
+    # Deletes the order and payment rows each shop chose for automatic deletion; needs no running bot.
+    "order_purge",
     "scheduled_backup",
     "connection_status",
     "bbc_settlement_poll",
+    "psp_settlement_poll",
+    "volume_external_sync",
+    "chat_message_purge",
+    # Approves card receipts nobody reviewed in time; opens the bot it needs only when a receipt is due.
+    "scheduled_receipt_approval",
+    # Reads each converting shop's API rate into memory; needs no running bot.
+    "crypto_rate_refresh",
+    # Copies each bot's Telegram profile photo for its Mini App logo; needs no running bot.
+    "bot_profile_photo",
+    # Removes cached customer profile photos for the user card; needs no running bot.
+    "user_photo_prune",
 }
-NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "cancellation_notifications", "panel_alert_notifications"}
+NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "broadcast", "first_use_nudge", "cancellation_notifications", "panel_alert_notifications"}
 
 
 class BackgroundSchedulerTests(unittest.IsolatedAsyncioTestCase):

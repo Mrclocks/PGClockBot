@@ -243,6 +243,7 @@ async def shop_payment_method_breakdown(
         )
     ).all()
     labels = {"card": "کارت", "wallet": "کیف پول", "stars": "Stars", "—": "نامشخص"}
+    total = sum(int(amount or 0) for _method, _count, amount in rows)
     out = []
     for method, count, amount in rows:
         key = str(method or "—")
@@ -252,6 +253,8 @@ async def shop_payment_method_breakdown(
                 "label": labels.get(key, key),
                 "count": int(count or 0),
                 "amount": int(amount or 0),
+                # Whole percent of the period's revenue, for the share bar.
+                "share_pct": round(int(amount or 0) * 100 / total) if total > 0 else 0,
             }
         )
     return out

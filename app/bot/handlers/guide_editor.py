@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.handlers.button_colors import shop_settings_shop_id
-from app.bot.handlers.guides import guide_detail_keyboard, send_guide_album
+from app.bot.handlers.guides import guide_detail_keyboard
 from app.bot.nav_input import (
     PROMPT_CHAT_ID,
     PROMPT_MSG_ID,
@@ -55,6 +55,7 @@ from app.services.connection_guides import (
     update_guide,
 )
 from app.services.formatting import format_message
+from app.services.guide_delivery import send_guide_album
 from app.services.guide_media import (
     KIND_PHOTO,
     KIND_VIDEO,

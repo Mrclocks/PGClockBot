@@ -4,15 +4,15 @@ from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware, Bot, Dispatcher, Router
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.base import BaseSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import TelegramObject
 
-from app.bot.chat_cleanup import ChatCleanupMiddleware, install_notice_watch
+from app.bot.chat_screen import ChatScreenMiddleware, install_screen_rules
 from app.bot.edit_mode import EditModeMiddleware
-from app.bot.menu_keyboard_reopen import MenuKeyboardReopenMiddleware, install_menu_keyboard_watch
-from app.bot.reply_keyboard_state import ReplyKeyboardStateMiddleware
 from app.bot.screen_replay import install_replay_guard, set_dispatcher
+from app.bot.slow_updates import SlowUpdateMiddleware
 from app.bot.middlewares import (
     DbSessionMiddleware,
     ErrorLogMiddleware,
@@ -23,6 +23,9 @@ from app.bot.middlewares import (
 )
 from app.config import get_settings
 from app.services import bot_feedback_texts as feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class _BlockPlatformAdminOnResellerBot(BaseMiddleware):
@@ -75,22 +78,27 @@ class _RequireBotOwnerPrincipal(BaseMiddleware):
                 try:
                     await event.answer(feedback.SYSTEM_OWNER_REQUIRED, show_alert=True)
                 except Exception:
-                    pass
+                    logger.debug("__call__: ignored failure", exc_info=True)
                 return None
             if isinstance(event, Message):
                 try:
                     await event.answer("دسترسی مالک سیستم لازم است.")
                 except Exception:
-                    pass
+                    logger.debug("__call__: ignored failure", exc_info=True)
                 return None
             return None
         return await handler(event, data)
 
 
-def create_bot(token: str | None = None) -> Bot:
+def create_bot(token: str | None = None, *, session: BaseSession | None = None) -> Bot:
+    """The platform bot with its request rules; ``session`` replaces Telegram in tests."""
     settings = get_settings()
-    bot = Bot(token=(token or settings.bot_token).strip(), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    return install_notice_watch(install_menu_keyboard_watch(install_replay_guard(bot)))
+    bot = Bot(
+        token=(token or settings.bot_token).strip(),
+        session=session,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    return install_screen_rules(install_replay_guard(bot))
 
 
 def bot_routers() -> list[Router]:
@@ -103,28 +111,36 @@ def bot_routers() -> list[Router]:
         admin_pg_nodes,
         admin_pg_users,
         admin_settings,
+        automation_review,
         button_colors,
+        cancellation_review,
         connection_status_admin,
         connection_status_admin_input,
         connection_status,
+        customer_orders,
         guide_editor,
         loyalty,
         nav_hubs,
         marketing_tools,
         nav_marketing,
+        payment_voids,
         payments,
         plan_catalog_manage,
+        psp_check,
         purchase_contact,
         reply_nav,
         reseller,
         reseller_hub,
+        reseller_package,
         reseller_plans,
         reseller_reps,
+        reseller_customer_tools,
         reseller_settings,
         screen_editor,
         service_import,
         service_search,
         shop,
+        subscription_lookup,
         stale_menu,
         start,
         terms,
@@ -159,15 +175,23 @@ def bot_routers() -> list[Router]:
         loyalty.router,
         shop.router,
         wallet.router,
+        customer_orders.router,
         service_import.router,
         service_search.router,
+        subscription_lookup.router,
         services.router,
         guides.router,
         support.router,
         ticket_actions.router,
         payments.router,
+        payment_voids.router,
+        automation_review.router,
+        cancellation_review.router,
+        psp_check.router,
         reseller.router,
+        reseller_package.router,
         reseller_reps.router,
+        reseller_customer_tools.router,
         reseller_plans.router,
         plan_catalog_manage.router,
         reseller_settings.router,
@@ -187,17 +211,16 @@ def bot_routers() -> list[Router]:
 
 def create_dispatcher() -> Dispatcher:
     dp = Dispatcher(storage=MemoryStorage())
+    dp.update.middleware(SlowUpdateMiddleware())
     dp.update.middleware(ErrorLogMiddleware())
     dp.update.middleware(RateLimitMiddleware())
     dp.update.middleware(DbSessionMiddleware())
     dp.update.middleware(UserMiddleware())
+    # Before the join and terms gates, so their prompts are tidied like any other screen.
+    dp.update.middleware(ChatScreenMiddleware())
     dp.update.middleware(ForceJoinMiddleware())
     dp.update.middleware(TermsEntryMiddleware())
     dp.update.middleware(EditModeMiddleware())
-    dp.update.middleware(ChatCleanupMiddleware())
-    # Notes typed text so the next main menu unfolds the reply keyboard again.
-    dp.message.outer_middleware(ReplyKeyboardStateMiddleware())
-    dp.message.outer_middleware(MenuKeyboardReopenMiddleware())
 
     for router in bot_routers():
         dp.include_router(router)

@@ -30,6 +30,7 @@ from app.services.loyalty import (
     list_available_discounts,
     list_points_history,
     loyalty_enabled,
+    next_redemption_key,
     points_balance,
     month_earned_points,
     overview_metrics,
@@ -157,7 +158,7 @@ async def build_referral_text(
     try:
         await ensure_loyalty_defaults(session, reseller_id=current_shop_reseller_id())
     except Exception:
-        pass
+        logger.debug("build_referral_text: ignored failure", exc_info=True)
     stats = await referral_stats(session, db_user.id)
     _, packed_ents = unpack_rich_text(ui.get("referral_text"))
     if packed_ents:
@@ -201,7 +202,7 @@ async def build_loyalty_text(session: AsyncSession, db_user: BotUser) -> str:
     try:
         await ensure_loyalty_defaults(session, reseller_id=current_shop_reseller_id())
     except Exception:
-        pass
+        logger.debug("build_loyalty_text: ignored failure", exc_info=True)
     tier = await get_tier_for_points(session, await _points(session, db_user))
     stats = await referral_stats(session, db_user.id)
     month = await month_earned_points(session, db_user.id, shop_id=current_shop_reseller_id())
@@ -539,18 +540,11 @@ async def _staff_loyalty_answer(
     content_inline: InlineKeyboardMarkup | None = None,
     content_caption: str | None = None,
     state: FSMContext | None = None,
-    heal_reply: bool = False,
 ) -> None:
-    """Staff loyalty leaf/hub — one inline panel (edit-in-place on callbacks).
-
-    Never sends the filler «از منوی پایین…» chrome message. Pass
-    ``heal_reply=True`` only after ``cancel_reply`` displaced the main KB.
-    """
+    """Staff loyalty leaf/hub — one inline panel (edit-in-place on callbacks)."""
     _ = content_caption
-    from app.bot.nav_chrome import heal_main_reply
     from app.bot.nav_inline import (
         admin_loyalty_manage_hub_keyboard,
-        is_bot_panel_message,
         present_inline_only,
         with_inline_back,
     )
@@ -564,17 +558,6 @@ async def _staff_loyalty_answer(
     else:
         inline = admin_loyalty_manage_hub_keyboard(
             ui, include_tiers=can_tiers, back_callback=hub_back
-        )
-    # After cancel_reply the main KB must be restored once (user message).
-    if heal_reply and not is_bot_panel_message(message):
-        await heal_main_reply(
-            message,
-            session,
-            db_user,
-            text=feedback.MAIN_KEYBOARD_RESTORED,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-            ui=ui,
         )
     await present_inline_only(message, text=text, inline=inline)
     _ = db_user
@@ -1180,26 +1163,7 @@ async def _do_redeem(
     reward_id: int,
     service_id: int | None,
 ) -> None:
-    # Stable slot key (not callback.id): double-tap shares the same next slot
-    # so uniqueness + IntegrityError replay prevent double spend.
-    from sqlalchemy import func, select
-
-    from app.db.models import RewardRedemption
-
-    used = int(
-        (
-            await session.execute(
-                select(func.count())
-                .select_from(RewardRedemption)
-                .where(
-                    RewardRedemption.user_id == int(db_user.id),
-                    RewardRedemption.reward_id == int(reward_id),
-                )
-            )
-        ).scalar_one()
-        or 0
-    )
-    key = f"tg:redeem:{db_user.id}:{reward_id}:{service_id or 0}:{used}"
+    key = await next_redemption_key(session, int(db_user.id), reward_id, service_id)
     try:
         red = await redeem_reward(
             session,
@@ -1735,7 +1699,6 @@ async def staff_save_wallet_rate(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
             content_inline=_staff_settings_markup(enabled=enabled),
-            heal_reply=True,
         )
         return
     raw = text.replace(",", "").replace("٬", "").strip()
@@ -1763,7 +1726,6 @@ async def staff_save_wallet_rate(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
         content_inline=_staff_settings_markup(enabled=enabled),
-        heal_reply=True,
     )
 
 @router.message(LoyaltyManageStates.edit_referral_text)
@@ -1830,7 +1792,6 @@ async def staff_save_referral_text(
             can_tiers=can_tiers,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
-            heal_reply=True,
         )
         return
     if not text:
@@ -1849,5 +1810,4 @@ async def staff_save_referral_text(
         can_tiers=can_tiers,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
-        heal_reply=True,
     )

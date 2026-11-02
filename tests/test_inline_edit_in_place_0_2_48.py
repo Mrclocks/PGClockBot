@@ -101,40 +101,19 @@ class StaffLoyaltyAnswerTests(unittest.IsolatedAsyncioTestCase):
         # No second chrome answer after the panel
         message.answer.assert_not_awaited()
 
-    async def test_fsm_cancel_heals_then_reopens_settings(self):
+    async def test_fsm_cancel_reopens_settings_without_a_keyboard_message(self):
         from app.bot.handlers.loyalty import _staff_loyalty_answer
 
         message = _user_message()
-        session = AsyncMock()
-        db_user = MagicMock()
-        inline = MagicMock()
-
         with (
-            patch(
-                "app.services.users.get_all_settings",
-                AsyncMock(return_value={}),
-            ),
-            patch(
-                "app.bot.nav_inline.present_inline_only",
-                AsyncMock(return_value=None),
-            ) as present,
-            patch(
-                "app.bot.nav_chrome.heal_main_reply",
-                AsyncMock(),
-            ) as heal,
+            patch("app.services.users.get_all_settings", AsyncMock(return_value={})),
+            patch("app.bot.nav_inline.present_inline_only", AsyncMock(return_value=None)) as present,
         ):
             await _staff_loyalty_answer(
-                message,
-                session,
-                db_user,
-                "⚙️ تنظیمات",
-                can_tiers=True,
-                content_inline=inline,
-                heal_reply=True,
+                message, AsyncMock(), MagicMock(), "⚙️ تنظیمات", can_tiers=True, content_inline=MagicMock()
             )
-
-        heal.assert_awaited_once()
         present.assert_awaited_once()
+        message.answer.assert_not_awaited()
 
 
 class SyncPlansNoFillerTests(unittest.IsolatedAsyncioTestCase):

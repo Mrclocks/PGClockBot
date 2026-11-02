@@ -7,6 +7,9 @@ from typing import Optional
 
 from fastapi import Request
 from starlette.datastructures import UploadFile
+import logging
+
+logger = logging.getLogger(__name__)
 
 CSRF_COOKIE = "csrf"
 CSRF_FORM_FIELD = "csrf_token"
@@ -77,7 +80,7 @@ async def extract_csrf_from_request(request: Request) -> str:
             # body() enables BaseHTTPMiddleware replay; json() also reads body.
             await request.body()
         except Exception:
-            pass
+            logger.debug("extract_csrf_from_request: ignored failure", exc_info=True)
         try:
             body = await request.json()
         except Exception:
@@ -93,7 +96,7 @@ async def extract_csrf_from_request(request: Request) -> str:
             # the endpoint Request (see Starlette _CachedRequest).
             await request.body()
         except Exception:
-            pass
+            logger.debug("extract_csrf_from_request: ignored failure", exc_info=True)
         try:
             form = await request.form()
             raw = form.get(CSRF_FORM_FIELD)

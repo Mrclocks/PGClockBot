@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
@@ -11,30 +13,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import bbc_checkout_view as bbc_view
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
+from app.bot.handlers.customer_orders import with_orders_button
+from app.bot.handlers.psp_check import PICK_GATEWAY_TEXT, psp_check_button, psp_gateway_picker
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
-from app.services.bbc_settlement import reusable_bbc_topup, start_bbc_checkout
+from app.services.bbc_settlement import (
+    CUSTOMER_UNAVAILABLE, BbcNotReady, ensure_gateway_ready, reusable_bbc_topup, start_bbc_checkout,
+)
 from app.services.redact import user_safe_error
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import create_wallet_topup
+from app.services.psp_gateways import gateway_choices
+from app.bot.nav_input import retire_prompt_buttons
 from app.services.receipts import submit_receipt
 from app.services.ux20 import payment_shop_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import list_activity
+from app.services.wallet_topup import TOPUP_METHODS
+from app.services.crypto_rates import CryptoQuote, attach_quote, display_amount, quote_from_settings, validity_note
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_title_html
 
+logger = logging.getLogger(__name__)
+
 router = Router(name="wallet")
 
-_TOPUP_METHODS = {
-    "card": ("pay_card_enabled", PaymentMethod.CARD.value),
-    "gateway": ("pay_gateway_enabled", PaymentMethod.GATEWAY.value),
-    "psp": ("pay_psp_enabled", PaymentMethod.PSP.value),
-    "bbc": ("pay_bbc_enabled", PaymentMethod.BBC.value),
-    "crypto": ("pay_crypto_enabled", PaymentMethod.CRYPTO.value),
-}
 
 class WalletStates(StatesGroup):
     topup_amount = State()
@@ -227,7 +232,7 @@ async def wallet_tx(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         await safe_edit_text(
             callback.message,
             format_message("📜 تراکنش‌ها", body),
-            reply_markup=wallet_hub_keyboard(ui),
+            reply_markup=with_orders_button(wallet_hub_keyboard(ui)),
         )
 
 @router.callback_query(F.data == "wallet:topup")
@@ -271,14 +276,8 @@ async def present_topup_methods(
     *,
     is_reseller_bot: bool,
     reseller_owner_id: int | None,
-    heal_main: bool = False,
 ) -> None:
-    """After amount is known — show pay methods on the inline panel.
-
-    When ``heal_main`` is set (free-text amount left ``cancel_reply`` on the
-    ReplyKeyboard), restore the stable main keyboard *after* the inline methods
-    bubble so iOS keeps the custom menu.
-    """
+    """After amount is known — show pay methods on the inline panel."""
     ui = await get_all_settings(session)
     await state.set_state(WalletStates.choose_method)
     await state.update_data(topup_amount=amount)
@@ -294,21 +293,6 @@ async def present_topup_methods(
     await present_inline_only(
         message, text=body, inline=topup_methods_keyboard(ui)
     )
-    if heal_main:
-        from app.bot.menu_nav import build_main_reply_keyboard
-        from app.bot.tg_utils import attach_reply_keyboard
-
-        main_kb, _, _ = await build_main_reply_keyboard(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-        )
-        await attach_reply_keyboard(
-            message,
-            main_kb,
-            text="مبلغ ثبت شد — روش واریز را انتخاب کنید.",
-        )
     return
 
 @router.message(WalletStates.topup_amount)
@@ -381,6 +365,7 @@ async def _topup_instructions(
     card: dict | None = None,
     gateway: dict | None = None,
     wallet: dict | None = None,
+    quote: CryptoQuote | None = None,
 ) -> tuple[str, InlineKeyboardMarkup, dict]:
     from app.services.payment_destinations import (
         enabled_cards,
@@ -392,9 +377,13 @@ async def _topup_instructions(
     if ui is None:
         ui = await get_all_settings(session)
     amount = format_toman(payment.amount, get_settings().currency)
+    if quote is not None:
+        amount = display_amount(quote, amount)
     rows: list[list[InlineKeyboardButton]] = []
     shop_title = rich_plain_text(ui.get("shop_title")) or ""
-    append = f"\n\nسپس عکس رسید را بفرستید.\n(پرداخت #{payment.id})"
+    append = f"\n\nسپس عکس رسید را بفرستید.\n(پرداخت #{payment.id})" + (
+        validity_note(quote) if quote is not None else ""
+    )
     raw = ""
     title = ""
     fallback = ""
@@ -429,7 +418,7 @@ async def _topup_instructions(
                     html=False,
                 )
             except Exception:
-                pass
+                logger.debug("_topup_instructions: ignored failure", exc_info=True)
         raw = ui.get("gateway_pay_text") or ""
         title = f"🌐 {name}"
         kwargs.update(order_id=0, gateway_name=name)
@@ -459,6 +448,76 @@ async def _topup_instructions(
     rows.append([kb.back_button(ui, "wallet:home")])
     return text, InlineKeyboardMarkup(inline_keyboard=rows), send_kw
 
+async def _show_psp_topup(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    state: FSMContext,
+    db_user: BotUser,
+    ui: dict,
+    *,
+    amount: int,
+    method: str,
+    gateway_id: str | None,
+) -> None:
+    """Wallet top-up through an API gateway; asks which one first when the shop has several."""
+    from app.services.payment_settlement import create_psp_checkout
+
+    choices = gateway_choices(ui)
+    if choices and gateway_id is None:
+        await callback.answer()
+        if callback.message:
+            markup = psp_gateway_picker(
+                choices, prefix="wtop", order_id=0, extra_rows=[[kb.back_button(ui, "wallet:home")]]
+            )
+            await safe_edit_text(callback.message, format_message("🏦 درگاه آنلاین", PICK_GATEWAY_TEXT), reply_markup=markup)
+        return
+    # Answer before the gateway call so Telegram does not expire the tap.
+    await callback.answer("در حال آماده‌سازی درگاه…")
+    payment = await create_wallet_topup(session, db_user.id, amount, method=method)
+    try:
+        settlement = await create_psp_checkout(
+            session, payment, description=f"شارژ کیف پول #{payment.id}", gateway_id=gateway_id
+        )
+    except ValueError as e:
+        if callback.message:
+            await callback.message.answer(user_safe_error(e))
+        return
+    amount_txt = format_toman(amount, get_settings().currency)
+    try:
+        body = render_message_template(
+            ui.get("psp_pay_text") or "",
+            domain=DOMAIN_PAYMENT,
+            amount=amount_txt,
+            order_id=0,
+            payment_id=payment.id,
+            shop_title=ui.get("shop_title") or "",
+        )
+    except Exception:
+        body = f"مبلغ {amount_txt} را از درگاه آنلاین پرداخت کنید."
+    body += f"\n\n(پرداخت #{payment.id})"
+    from app.services.payment_settlement import (
+        public_checkout_button_url,
+        with_psp_checkout_guidance,
+    )
+
+    body = with_psp_checkout_guidance(body)
+    rows: list[list[InlineKeyboardButton]] = []
+    link = public_checkout_button_url(settlement, ui=ui)
+    if link.startswith("http://") or link.startswith("https://"):
+        rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
+        rows.append([psp_check_button(int(settlement.id))])
+    rows.append(
+        [kb.back_button(ui, "wallet:home")]
+    )
+    await state.clear()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message("🏦 درگاه آنلاین", body),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
 async def _show_bbc_topup(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -470,11 +529,21 @@ async def _show_bbc_topup(
     method: str,
 ) -> None:
     """Wallet top-up through «بزن به کارت»; an unused top-up of the same amount is reused."""
+    try:
+        await ensure_gateway_ready(session, current_shop_reseller_id())
+    except BbcNotReady as exc:
+        logger.warning("bezanbecard top-up refused: %s", exc)
+        await callback.answer(CUSTOMER_UNAVAILABLE, show_alert=True)
+        return
     payment = await reusable_bbc_topup(
         session, int(db_user.id), amount, shop_id=current_shop_reseller_id()
     ) or await create_wallet_topup(session, db_user.id, amount, method=method)
     try:
         checkout = await start_bbc_checkout(session, payment, description=f"شارژ کیف پول #{payment.id}")
+    except BbcNotReady as exc:
+        logger.warning("bezanbecard top-up refused: %s", exc)
+        await callback.answer(CUSTOMER_UNAVAILABLE, show_alert=True)
+        return
     except ValueError as exc:
         await callback.answer(user_safe_error(exc), show_alert=True)
         return
@@ -521,7 +590,7 @@ async def wtop_choose_method(
     key = parts[1]
     # wtop:KEY | wtop:KEY:ORDER_ID | wtop:KEY:ORDER_ID:DEST_ID
     dest_id = parts[3] if len(parts) > 3 else None
-    flag, method = _TOPUP_METHODS[key]
+    flag, method = TOPUP_METHODS[key]
     if not on(ui.get(flag)):
         await callback.answer("غیرفعال است", show_alert=True)
         return
@@ -532,44 +601,9 @@ async def wtop_choose_method(
         return
 
     if key == "psp":
-        from app.services.payment_settlement import create_psp_checkout
-
-        payment = await create_wallet_topup(session, db_user.id, amount, method=method)
-        try:
-            settlement = await create_psp_checkout(
-                session, payment, description=f"شارژ کیف پول #{payment.id}"
-            )
-        except ValueError as e:
-            await callback.answer(user_safe_error(e), show_alert=True)
-            return
-        await callback.answer()
-        amount_txt = format_toman(amount, get_settings().currency)
-        try:
-            body = render_message_template(
-                ui.get("psp_pay_text") or "",
-                domain=DOMAIN_PAYMENT,
-                amount=amount_txt,
-                order_id=0,
-                payment_id=payment.id,
-                shop_title=ui.get("shop_title") or "",
-            )
-        except Exception:
-            body = f"مبلغ {amount_txt} را از درگاه آنلاین پرداخت کنید."
-        body += f"\n\n(پرداخت #{payment.id})"
-        rows: list[list[InlineKeyboardButton]] = []
-        link = (settlement.checkout_url or "").strip()
-        if link.startswith("http://") or link.startswith("https://"):
-            rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
-        rows.append(
-            [kb.back_button(ui, "wallet:home")]
+        await _show_psp_topup(
+            callback, session, state, db_user, ui, amount=amount, method=method, gateway_id=dest_id
         )
-        await state.clear()
-        if callback.message:
-            await safe_edit_text(
-                callback.message,
-                format_message("🏦 درگاه آنلاین", body),
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-            )
         return
 
     if key == "bbc":
@@ -638,7 +672,16 @@ async def wtop_choose_method(
             await callback.answer("این کیف پول ارز دیجیتال دیگر فعال نیست", show_alert=True)
             return
 
+    quote = None
+    if key == "crypto":
+        try:
+            quote = quote_from_settings(ui, wallet_asset=(wallet or {}).get("asset") or "USDT", toman=int(amount))
+        except ValueError as e:
+            await callback.answer(user_safe_error(e), show_alert=True)
+            return
     payment = await create_wallet_topup(session, db_user.id, amount, method=method)
+    if quote is not None:
+        await attach_quote(session, payment.id, quote)
     if key == "card" and on(ui.get("pay_card_auto_enabled")):
         try:
             from app.services.payment_settlement import create_card_auto_awaiting
@@ -651,7 +694,7 @@ async def wtop_choose_method(
     from app.services.rich_text import rich_plain_text
 
     text, markup, send_kw = await _topup_instructions(
-        session, payment, method, ui=ui, card=card, gateway=gateway, wallet=wallet
+        session, payment, method, ui=ui, card=card, gateway=gateway, wallet=wallet, quote=quote
     )
     if key == "card" and on(ui.get("pay_card_auto_enabled")):
         hint = rich_plain_text(ui.get("card_auto_hint_text")).strip()
@@ -733,6 +776,7 @@ async def wallet_receipt_photo(
         )
         return
     photo = message.photo[-1]
+    await retire_prompt_buttons(message, state)
     await state.clear()
     text = await submit_receipt(
         session,
@@ -825,6 +869,7 @@ async def generic_receipt(
     if not payment:
         return
     photo = message.photo[-1]
+    await retire_prompt_buttons(message, state)
     text = await submit_receipt(
         session,
         payment,
@@ -843,7 +888,6 @@ async def generic_receipt(
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
-            as_user=True,
         )
     else:
         from app.bot.menu_nav import clear_checkout_nav

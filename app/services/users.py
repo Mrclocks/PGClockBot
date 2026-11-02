@@ -19,6 +19,7 @@ from app.services.screen_titles import SCREEN_TEXT_TAB, screen_text_defaults, sc
 from app.services.settings_button_labels import appearance_button_subs, shop_button_subs
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
+from app.services.psp_gateways import KEY_PSP_GATEWAYS, merge_submitted_psp_gateways
 from app.services.retired_text_defaults import refresh_retired_defaults
 from app.services.user_purge import purge_user_references
 
@@ -547,7 +548,7 @@ async def get_or_create_user(
 
             await on_user_referred(session, referred=user, source="telegram")
         except Exception:
-            pass
+            logger.debug("get_or_create_user: ignored failure", exc_info=True)
     return user
 
 
@@ -644,6 +645,16 @@ async def set_setting(
     clear_settings_cache(0)
 
 
+async def _keep_saved_psp_credentials(
+    session: AsyncSession, values: dict[str, str], rid: int | None
+) -> dict[str, str]:
+    """A gateway submitted without its credential keeps the one already saved."""
+    if KEY_PSP_GATEWAYS not in values:
+        return values
+    existing_ui = await get_all_settings(session, reseller_id=rid)
+    return {**values, KEY_PSP_GATEWAYS: merge_submitted_psp_gateways(values[KEY_PSP_GATEWAYS], existing_ui)}
+
+
 async def set_settings_bulk(
     session: AsyncSession,
     values: dict[str, str],
@@ -680,6 +691,7 @@ async def set_settings_bulk(
             if legacy in merged:
                 values[legacy] = merged[legacy]
     rid = _effective_reseller_id(reseller_id)
+    values = await _keep_saved_psp_credentials(session, values, rid)
     if any(is_button_label_key(k) for k in values if k != ALIAS_SETTING_KEY):
         existing_ui = await get_all_settings(session, reseller_id=rid)
         alias_extra = merge_alias_updates_for_payload(
@@ -760,6 +772,7 @@ DEFAULT_SETTINGS = {
     "trial_require_contact": "0",
     "purchase_require_contact": "0",
     "trial_require_iran_phone": "0",
+    "trial_min_account_minutes": "0",
     "receipt_dup_policy": "warn",
     "connection_guides": "[]",
     "btn_guides": "📘 آموزش اتصال",
@@ -782,6 +795,17 @@ DEFAULT_SETTINGS = {
     "lucky_wheel_free_spins_daily": "0",
     "loyalty_submenu_order": "loy_referral,loy_points,loy_rewards,loy_wheel,loy_history",
     "auto_approve_payments": "0",
+    "crypto_rate_mode": "off",
+    "crypto_rate_asset": "USDT",
+    "crypto_rate_manual": "",
+    "crypto_rate_api_url": "",
+    "crypto_rate_api_path": "",
+    "crypto_rate_api_divisor": "1",
+    "crypto_rate_margin_percent": "0",
+    "crypto_quote_minutes": "15",
+    "auto_approve_after_minutes": "0",
+    "auto_approve_after_max_amount": "0",
+    "auto_approve_after_returning_only": "1",
     "faq_text": (
         "❓ حجم تمام شد چه کنم؟\nاز بخش سرویس‌ها → تمدید.\n\n"
         "❓ لینک کار نمی‌کند؟\nQR یا لینک را دوباره از سرویس‌های من بگیرید."
@@ -800,6 +824,9 @@ DEFAULT_SETTINGS = {
     "pending_order_cleanup_enabled": "0",
     "pending_order_ttl_hours": "48",
     "pending_order_cleanup_awaiting_approval": "0",
+    "pending_order_approval_ttl_hours": "72",
+    "pending_order_cleanup_last_run": "",
+    "pending_order_cleanup_last_count": "0",
     "card_pay_text": (
         "مبلغ قابل پرداخت: <b>{amount}</b>\n"
         "شماره کارت: <code>{card}</code>\n"
@@ -821,6 +848,7 @@ DEFAULT_SETTINGS = {
     "notify_new_subscription": "1",
     "notify_pending_approval": "1",
     "notify_new_order": "0",
+    "notify_trial_claimed": "1",
     "notify_wallet_topup": "1",
     "notify_new_ticket": "1",
     "notify_service_cancellation": "1",
@@ -834,6 +862,7 @@ DEFAULT_SETTINGS = {
     "user_alert_low_enabled": "0",
     "user_alert_low_traffic_pct": "20",
     "user_alert_low_time_pct": "20",
+    "first_use_nudge_enabled": "0",
     # Reseller panel URLs (setup links + messages). Empty = system defaults
     "reseller_panel_base_url": "",
     "reseller_pg_panel_base_url": "",
@@ -886,9 +915,10 @@ DEFAULT_SETTINGS = {
     "btn_pg_group": "📁 ساخت گروه",
     "btn_pg_template": "📋 ساخت تمپلیت",
     "btn_adm_users_list": "📋 لیست کاربران",
-    "btn_adm_users_search": "🔎 جستجو با آیدی تلگرام",
+    "btn_adm_users_search": "🔎 جستجو",
     "btn_adm_users_web": "🌐 مدیریت کامل در وب‌پنل",
     "btn_adm_res_list": "📋 لیست نمایندگان",
+    "btn_adm_res_search": "🔎 جستجوی نماینده",
     "btn_adm_res_apps": "📋 درخواست‌های در انتظار",
     "btn_adm_res_add": "➕ افزودن نماینده",
     "btn_adm_st_shop": "نام و متن‌ها",
@@ -1041,13 +1071,19 @@ DEFAULT_SETTINGS = {
     "pay_bbc_enabled": "0",
     "pay_card_auto_enabled": "0",
     "pay_discount_enabled": "1",
+    # JSON list of API gateways (see psp_gateways.py); empty = the single psp_* gateway below.
+    "psp_gateways": "[]",
     "psp_provider": "zarinpal",
     "psp_merchant_id": "",
+    "psp_pay_url": "",
+    "psp_sunpay_request_method": "GET",
+    # Telegram «ورود به درگاه»: direct PSP URL (default) or panel /go/ hop.
+    "psp_checkout_link_mode": "direct",
     "psp_sandbox": "1",
     "psp_pay_text": (
         "مبلغ قابل پرداخت: <b>{amount}</b>\n"
         "از دکمه زیر وارد درگاه شوید و پرداخت را تکمیل کنید.\n"
-        "پس از تأیید درگاه، سرویس به‌صورت خودکار تحویل می‌شود."
+        "پس از پرداخت، به همین چت ربات برگردید؛ تأیید و تحویل خودکار است."
     ),
     "btn_pay_psp": "🔵🏦 درگاه آنلاین",
     "bbc_api_key": "",
@@ -1087,6 +1123,7 @@ DEFAULT_SETTINGS = {
     "billing_low_balance": "10000",
     "billing_on_empty": "block_provision",
     "billing_tick_minutes": "15",
+    "volume_external_sync_minutes": "15",
     # UX20 ops
     "shop_maintenance_enabled": "0",
     "shop_maintenance_text": (
@@ -1104,6 +1141,7 @@ DEFAULT_SETTINGS = {
     "backup_schedule_hour": "3",
     "backup_include_env_scheduled": "0",
     "backup_last_ok_at": "",
+    "backup_last_attempt_at": "",
     "backup_last_verify_ok": "",
     "backup_keep_count": "10",
     "backup_telegram_enabled": "0",
@@ -1120,6 +1158,13 @@ DEFAULT_SETTINGS = {
     "one_tap_renew_enabled": "1",
     "service_import_enabled": "0",
     "chat_cleanup_enabled": "1",
+    "menu_keyboard_persistent": "0",
+    # Shop Mini Apps: platform switch and each shop's own switch, both off until turned on.
+    "miniapp_shops_enabled": "0",
+    "miniapp_shop_enabled": "0",
+    # Mini App brand: "" keeps the default accent colour and shows no notice.
+    "miniapp_accent_color": "",
+    "miniapp_notice": "",
     "service_import_mode": "instant",
     "service_import_max_per_user": "5",
     "service_import_paths": "",
@@ -1140,6 +1185,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     (SCREEN_TEXT_TAB, "تیتر و توضیح منوها"),
     ("colors", "رنگبندی دکمه‌ها"),
     ("menu", "منوی بات"),
+    ("miniapp", "مینی‌اپ"),
     ("links", "لینک‌های سریع"),
     ("qr", "QR اشتراک"),
     ("naming", "نام‌گذاری سرویس"),
@@ -1155,6 +1201,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
 SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
     "payment": "/finance?tab=orders&settings=payment",
     "billing": "/finance?tab=orders&settings=billing",
+    "cleanup": "/finance?tab=orders&settings=cleanup",
     "finance": "/finance?tab=orders&settings=payment",
     "supports": "/tickets?supports=1",
     "loyalty": "/loyalty?settings=referral",
@@ -1170,14 +1217,30 @@ SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
 PANEL_SETTINGS_TABS: list[tuple[str, str]] = [
     ("general", "عمومی"),
     ("backup", "بکاپ"),
-    ("pwa", "وب‌اپ"),
-    ("ssl", "SSL"),
+    ("pwa", "ظاهر و برند"),
+    # Tab key stays "ssl" so saved links keep working.
+    ("ssl", "دامنه‌ها"),
     ("update", "آپدیت"),
 ]
 PANEL_SETTINGS_KEYS = {t[0] for t in PANEL_SETTINGS_TABS}
 ALL_SETTINGS_TABS: list[tuple[str, str]] = [*SETTINGS_TABS, *PANEL_SETTINGS_TABS]
 
 BUTTON_LABELS_GROUP = "متن دکمه‌های منو"
+
+# Settings fields shown only while another select field has one of the listed values:
+# key -> (controlling key, values that show it). The form hides the rest and keeps their saved values.
+SETTING_VISIBILITY: dict[str, tuple[str, tuple[str, ...]]] = {
+    "auto_approve_after_minutes": ("auto_approve_payments", ("1",)),
+    "auto_approve_after_max_amount": ("auto_approve_payments", ("1",)),
+    "auto_approve_after_returning_only": ("auto_approve_payments", ("1",)),
+    "crypto_rate_asset": ("crypto_rate_mode", ("manual", "api")),
+    "crypto_rate_manual": ("crypto_rate_mode", ("manual", "api")),
+    "crypto_rate_margin_percent": ("crypto_rate_mode", ("manual", "api")),
+    "crypto_quote_minutes": ("crypto_rate_mode", ("manual", "api")),
+    "crypto_rate_api_url": ("crypto_rate_mode", ("api",)),
+    "crypto_rate_api_path": ("crypto_rate_mode", ("api",)),
+    "crypto_rate_api_divisor": ("crypto_rate_mode", ("api",)),
+}
 
 SETTING_GROUPS = {
     "خوش‌آمد و هویت": [
@@ -1237,6 +1300,12 @@ SETTING_GROUPS = {
             "فقط شماره ایران برای تست",
             "toggle",
             "همراه با تأیید شماره: فقط موبایل ایران (+۹۸) پذیرفته می‌شود. شمارهٔ کامل ذخیره یا لاگ نمی‌شود.",
+        ),
+        (
+            "trial_min_account_minutes",
+            "حداقل سن حساب برای تست (دقیقه)",
+            "number",
+            "کاربری که تازه وارد ربات شده باید این‌قدر صبر کند تا بتواند تست بگیرد. ۰ یعنی خاموش. جلوی ساخت حساب و گرفتن تست در همان لحظه را می‌گیرد؛ تستی که رد شود مصرف نمی‌شود.",
         ),
     ],
     "شماره تماس خرید": [
@@ -1298,13 +1367,7 @@ SETTING_GROUPS = {
             "هر مبلغ را جداگانه اضافه کنید؛ برای تغییر مبلغ، آن را در فهرست ویرایش کنید.",
         ),
         ("btn_support", "دکمه پشتیبانی", "text", ""),
-        ("btn_restart", "دکمه شروع مجدد", "text", "ردیف آخر کیبورد اصلی؛ منو را از نو می‌سازد"),
-        (
-            "show_restart_button",
-            "نمایش دکمه شروع مجدد",
-            "toggle",
-            "روشن = زیر کیبورد اصلی برای همه دکمه «شروع مجدد» نمایش داده می‌شود.",
-        ),
+        ("btn_restart", "دکمه شروع مجدد", "text", "ردیف آخر کیبورد اصلی؛ منو را از نو می‌سازد. روشن/خاموش‌کردنش در تب «منوی بات» است."),
         ("btn_support_new", "دکمه تیکت جدید", "text", "زیرمنوی پشتیبانی (حالت تیکت)"),
         ("btn_support_list", "دکمه تیکت‌های من", "text", "زیرمنوی پشتیبانی (حالت تیکت)"),
         ("btn_guide", "دکمه راهنما", "text", ""),
@@ -1412,6 +1475,12 @@ SETTING_GROUPS = {
             "number",
             "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام برود",
         ),
+        (
+            "first_use_nudge_enabled",
+            "پیام کمکی برای سرویس بدون مصرف",
+            "toggle",
+            "اگر ۲۴ ساعت پس از تحویل سرویس هنوز هیچ ترافیکی مصرف نشده باشد، یک بار پیام کمکی با دکمهٔ آموزش اتصال و پشتیبانی برای کاربر می‌رود.",
+        ),
     ],
     "گزارش روزانه": [
         (
@@ -1430,7 +1499,7 @@ SETTING_GROUPS = {
             "admin_daily_report_hour",
             "ساعت ارسال (۰–۲۳، UTC)",
             "number",
-            "مثلاً ۰ = نیمه‌شب UTC · ۲۰ = حدود نیمه‌شب تهران در تابستان",
+            "ساعت تهران = UTC + ۳:۳۰ · مثلاً ۲۰ = ۲۳:۳۰ تهران · اگر ربات در آن ساعت خاموش باشد، گزارش همان روز بعداً فرستاده می‌شود",
         ),
         (
             "admin_daily_report_template",
@@ -1554,41 +1623,70 @@ SETTING_GROUPS = {
     "روش‌های پرداخت": [
         ("pay_wallet_enabled", "کیف پول داخلی", "toggle", "پرداخت از موجودی کیف پول کاربر"),
         ("pay_card_enabled", "کارت به کارت", "toggle", ""),
-        ("pay_gateway_enabled", "درگاه پرداخت (لینک + رسید)", "toggle", "لینک درگاه خارجی + ارسال رسید — روش قبلی حفظ می‌شود"),
-        ("pay_psp_enabled", "درگاه آنلاین API", "toggle", "درگاه واقعی request→verify (Mock بدون مرچنت / زرین‌پال با مرچنت)"),
+        ("auto_approve_payments", "تأیید خودکار رسید", "toggle", "اگر روشن باشد، سرویس بلافاصله بعد از ارسال رسید خرید تحویل می‌شود؛ یا بعد از مدتی که پایین‌تر تعیین می‌کنید. شارژ کیف پول هرگز خودکار تأیید نمی‌شود."),
+        (
+            "auto_approve_after_minutes",
+            "تأیید خودکار رسید بعد از مدت (دقیقه)",
+            "number",
+            "رسید کارت‌به‌کارتِ خرید سرویس که این‌قدر دقیقه بی‌پاسخ بماند خودکار تأیید می‌شود. ۰ = فوری. شارژ کیف پول، تمدید، افزونه و رسید تکراری شامل نمی‌شوند. ادمین دکمهٔ «رد درخواست» را دارد.",
+        ),
+        (
+            "auto_approve_after_max_amount",
+            "سقف مبلغ تأیید خودکار زمان‌بندی‌شده (تومان)",
+            "number",
+            "رسید بالاتر از این مبلغ دستی می‌ماند. ۰ = بدون سقف.",
+        ),
+        (
+            "auto_approve_after_returning_only",
+            "فقط مشتریان با خرید قبلی",
+            "toggle",
+            "روشن (پیشنهادی): فقط مشتریانی که قبلاً از همین فروشگاه خرید پولی تحویل‌شده دارند خودکار تأیید می‌شوند؛ مشتری جدید دستی می‌ماند.",
+        ),
+        ("pay_card_auto_enabled", "تأیید خودکار کارت به کارت", "toggle", "وب‌هوک امضادار از سرویس تأیید کارت — کنار رسید دستی"),
         (
             "pay_bbc_enabled",
             "بزن به کارت",
             "toggle",
             "کارت‌به‌کارت خودکار با bezanbecard.ir و کلید API خود فروشگاه: مشتری مبلغ یکتا را "
-            "واریز می‌کند و ربات بعد از تأیید بزن به کارت، خودکار تحویل می‌دهد.",
+            "واریز می‌کند و ربات بعد از تأیید بزن به کارت، خودکار تحویل می‌دهد. نیاز به آدرس https دارد.",
         ),
-        ("pay_card_auto_enabled", "تأیید خودکار کارت به کارت", "toggle", "وب‌هوک امضادار از سرویس تأیید کارت — کنار رسید دستی"),
+        ("pay_gateway_enabled", "درگاه پرداخت (لینک + رسید)", "toggle", "لینک درگاه خارجی + ارسال رسید — روش قبلی حفظ می‌شود"),
+        (
+            "pay_psp_enabled",
+            "درگاه آنلاین API",
+            "toggle",
+            "درگاه واقعی request→verify (زرین‌پال / سان‌پی / Mock فقط با ALLOW_SETTLEMENT_MOCK)",
+        ),
         ("pay_crypto_enabled", "رمزارز", "toggle", ""),
         ("pay_stars_enabled", "استارز تلگرام", "toggle", "پرداخت درون‌برنامه‌ای با ⭐"),
         ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),
-        ("auto_approve_payments", "تأیید خودکار رسید", "toggle", "اگر روشن باشد، سرویس بلافاصله بعد از ارسال رسید خرید تحویل می‌شود. شارژ کیف پول هرگز خودکار تأیید نمی‌شود."),
         ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
         ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
     ],
     "پاکسازی سفارش‌های معلق": [
         (
             "pending_order_cleanup_enabled",
-            "حذف خودکار سفارش‌های معلق",
+            "لغو خودکار سفارش‌های معلق",
             "toggle",
-            "سفارش‌های پرداخت‌نشده قدیمی به‌صورت خودکار لغو شوند",
+            "هر ساعت سفارش‌های پرداخت‌نشده‌ای که از مهلت گذشته‌اند لغو می‌شوند",
         ),
         (
             "pending_order_ttl_hours",
-            "سن لغو (ساعت)",
+            "مهلت سفارش پرداخت‌نشده (ساعت)",
             "number",
-            "سفارش‌های قدیمی‌تر از این مقدار لغو می‌شوند (۱ تا ۷۲۰)",
+            "سفارش‌های در انتظار پرداخت یا رسید که قدیمی‌تر از این مقدار باشند لغو می‌شوند (۱ تا ۷۲۰)",
         ),
         (
             "pending_order_cleanup_awaiting_approval",
-            "شامل منتظر تأیید رسید",
+            "لغو سفارش‌های منتظر تأیید رسید",
             "toggle",
-            "اگر روشن باشد، سفارش‌های awaiting_approval هم بعد از TTL لغو می‌شوند",
+            "مشتری رسید فرستاده و منتظر تأیید ادمین است؛ فقط اگر بخواهید بعد از مهلت جداگانهٔ زیر لغو شود روشن کنید",
+        ),
+        (
+            "pending_order_approval_ttl_hours",
+            "مهلت سفارش منتظر تأیید (ساعت)",
+            "number",
+            "فقط وقتی گزینهٔ بالا روشن است اعمال می‌شود (۱ تا ۷۲۰)",
         ),
     ],
     "کارت به کارت": [
@@ -1625,6 +1723,20 @@ SETTING_GROUPS = {
             "چند آدرس — هر ردیف: رمزارز، شبکه، آدرس",
         ),
         ("crypto_pay_text", "راهنمای رمزارز", "textarea", "متغیرها: {amount} {asset} {network} {address}"),
+        (
+            "crypto_rate_mode",
+            "تبدیل مبلغ تومان به رمزارز",
+            "select",
+            "خاموش: مبلغ تومان نمایش داده می‌شود. نرخ دستی یا API: مبلغ به ارز مبنا تبدیل و با نرخ قفل‌شده روی پرداخت ثبت می‌شود.",
+            [("off", "خاموش"), ("manual", "نرخ دستی"), ("api", "نرخ از API")],
+        ),
+        ("crypto_rate_asset", "ارز مبنای تبدیل", "text", "مثلاً USDT؛ فقط آدرس‌هایی که همین ارز را دارند تبدیل می‌شوند."),
+        ("crypto_rate_manual", "نرخ دستی (تومان برای هر واحد)", "text", "مثلاً 98500. در حالت API، پشتیبان وقتی API پاسخ نمی‌دهد."),
+        ("crypto_rate_api_url", "آدرس API نرخ (HTTPS)", "text", "فقط https عمومی؛ پاسخ باید JSON باشد. نرخ هر دقیقه خوانده می‌شود."),
+        ("crypto_rate_api_path", "مسیر عدد در JSON", "text", "با نقطه، مثلاً stats.usdt-rls.latest یا data.0.price"),
+        ("crypto_rate_api_divisor", "تقسیم‌کنندهٔ نرخ API", "number", "اگر API ریال می‌دهد 10 بگذارید تا به تومان تبدیل شود. پیش‌فرض 1."),
+        ("crypto_rate_margin_percent", "حاشیه روی مبلغ (٪)", "text", "مثلاً 1.5: مشتری این درصد بیشتر از نرخ بازار می‌پردازد. 0 تا 20."),
+        ("crypto_quote_minutes", "اعتبار نرخ (دقیقه)", "number", "مدتی که نرخ برای مشتری معتبر است؛ ۱ تا ۱۲۰. پیش‌فرض ۱۵."),
         ("btn_pay_crypto", "متن دکمه رمزارز", "text", ""),
     ],
     "استارز تلگرام": [
@@ -1640,23 +1752,21 @@ SETTING_GROUPS = {
     ],
     "درگاه آنلاین API": [
         (
-            "psp_provider",
-            "ارائه‌دهنده",
+            "psp_gateways",
+            "درگاه‌ها",
+            "psp_gateways",
+            "چند درگاه — دکمه + برای افزودن؛ با بیش از یک درگاه فعال، مشتری انتخاب می‌کند. "
+            "زرین‌پال: Merchant ID — سان‌پی: api_key و آدرس https. کلید خالی = بدون تغییر",
+        ),
+        (
+            "psp_checkout_link_mode",
+            "لینک دکمهٔ درگاه",
             "select",
-            "zarinpal = درگاه واقعی؛ mock فقط با ALLOW_SETTLEMENT_MOCK=1 روی سرور",
-            [("zarinpal", "زرین‌پال"), ("mock", "Mock (فقط تست محلی)")],
-        ),
-        (
-            "psp_merchant_id",
-            "مرچنت آیدی",
-            "password",
-            "خالی بماند = بدون تغییر. برای mock لازم نیست",
-        ),
-        (
-            "psp_sandbox",
-            "حالت سندباکس",
-            "toggle",
-            "روشن = محیط آزمایشی زرین‌پال",
+            "اگر برگشت شاپرک گیر کرد، آدرس پنل فروشگاه را انتخاب کنید",
+            [
+                ("direct", "آدرس خود درگاه"),
+                ("panel", "آدرس پنل فروشگاه"),
+            ],
         ),
         (
             "psp_pay_text",
@@ -1876,7 +1986,6 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "استارز تلگرام",
         "متن دکمه‌های پرداخت",
         "حالت تعمیرات و رسید",
-        "پاکسازی سفارش‌های معلق",
     ],
     "supports": ["متن پشتیبانی ربات"],
     "loyalty": ["متن دعوت دوستان"],
@@ -1897,6 +2006,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "forcejoin": ["کانال اجباری"],
     "terms": ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"],
     "billing": ["مدیریت PAYG"],
+    "cleanup": ["پاکسازی سفارش‌های معلق"],
     "notifications": ["هشدار سرویس کاربر", "گزارش و عملیات"],
     "daily_report": ["گزارش روزانه"],
     "backup": ["بکاپ زمان‌بندی", "ارسال بکاپ به تلگرام"],

@@ -133,9 +133,9 @@ class ModelAndMigrationSurfaceTests(unittest.TestCase):
         self.assertIn("pg_admin_subscription", src)
 
     def test_renew_uses_subscription_service(self):
-        src = (ROOT / "app/services/reseller_capacity.py").read_text(encoding="utf-8")
-        self.assertIn("renew_subscription", src)
-        self.assertIn("record_unit_extra", src)
+        from app.services import pg_admin_subscription, reseller_package
+
+        self.assertIs(reseller_package.renew_subscription, pg_admin_subscription.renew_subscription)
 
 
 class EarlyRenewAnchorTests(unittest.TestCase):

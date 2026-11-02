@@ -1,3 +1,6 @@
+{% set shop_mode = false %}
+{% include "_panel_brand_card.html" %}
+
 {% set p = pwa or {} %}
 <form method="post" action="/settings?tab=pwa" enctype="multipart/form-data" class="settings-form" id="pwa-form">
   <div class="card settings-card">

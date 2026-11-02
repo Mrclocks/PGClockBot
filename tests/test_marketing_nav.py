@@ -25,6 +25,7 @@ from app.services.marketing_nav import (
     DISCOUNTS,
     FUNNEL,
     GIFT_CODES,
+    TRIAL_USERS,
     MarketingSection,
     marketing_sections,
 )
@@ -116,7 +117,7 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         self.assertEqual(marketing_sections({}), ())
 
     def test_owner_sees_every_section_in_order(self):
-        self.assertEqual(_keys(OWNER), [CLUB, CLUB_TRANSACTIONS, DISCOUNTS, GIFT_CODES, CAMPAIGNS, FUNNEL, BROADCAST])
+        self.assertEqual(_keys(OWNER), [CLUB, CLUB_TRANSACTIONS, DISCOUNTS, GIFT_CODES, CAMPAIGNS, TRIAL_USERS, FUNNEL, BROADCAST])
 
     def test_legacy_admin_without_owner_principal_gets_no_tenant_sections(self):
         self.assertEqual(marketing_sections(LEGACY_ADMIN), ())
@@ -136,14 +137,16 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
 
     def test_funnel_follows_the_orders_or_payments_permission(self):
         self.assertEqual(_keys(_reseller(["payments"])), [FUNNEL])
-        self.assertEqual(_keys(_reseller(["orders"])), [GIFT_CODES, FUNNEL])
+        self.assertEqual(_keys(_reseller(["orders"])), [FUNNEL])
+        self.assertEqual(_keys(_reseller(["orders", "gift_codes"])), [GIFT_CODES, FUNNEL])
         self.assertEqual(_keys(_reseller(["orders"], shop_id=None)), [])
         self.assertNotIn(FUNNEL, _keys(_reseller(["plans", "loyalty"])))
 
-    def test_gift_codes_follow_the_orders_or_plans_permission(self):
-        self.assertEqual(_keys(_reseller(["plans"])), [GIFT_CODES])
-        self.assertIn(GIFT_CODES, _keys(_reseller(["orders"])))
-        self.assertEqual(_keys(_reseller(["plans"], shop_id=None)), [])
+    def test_gift_codes_follow_the_gift_codes_permission(self):
+        self.assertEqual(_keys(_reseller(["gift_codes"])), [GIFT_CODES])
+        self.assertNotIn(GIFT_CODES, _keys(_reseller(["plans"])))
+        self.assertNotIn(GIFT_CODES, _keys(_reseller(["orders"])))
+        self.assertEqual(_keys(_reseller(["gift_codes"], shop_id=None)), [])
         self.assertNotIn(GIFT_CODES, _keys(_reseller(["loyalty", "campaigns"])))
 
     def test_reseller_never_sees_broadcast(self):

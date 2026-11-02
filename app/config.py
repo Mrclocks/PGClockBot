@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+import math
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, List
 
 from pydantic import BeforeValidator, Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+import logging
+
+logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data"
+
+PG_WEB_READ_BUDGET_DEFAULT_SEC = 4.0
+PG_WEB_READ_BUDGET_MIN_SEC = 1.0
+PG_WEB_READ_BUDGET_MAX_SEC = 15.0
 
 
 def _clean_str(value: object) -> str:
@@ -117,6 +125,8 @@ class Settings(BaseSettings):
     # Admin API key for the connected PG identity (X-Api-Key). Preferred over password.
     pg_api_key: str = Field(default="", alias="PG_API_KEY")
     pg_access_token: str = Field(default="", alias="PG_ACCESS_TOKEN")
+    # How long one web-panel page may wait for PasarGuard reads in total.
+    pg_web_read_budget_sec: float = Field(default=PG_WEB_READ_BUDGET_DEFAULT_SEC, alias="PG_WEB_READ_BUDGET_SEC")
     connection_monitor_xray_path: str = Field(default="", alias="CONNECTION_MONITOR_XRAY_PATH")
     connection_monitor_xray_sha256: str = Field(default="", alias="CONNECTION_MONITOR_XRAY_SHA256")
 
@@ -210,6 +220,20 @@ class Settings(BaseSettings):
             return 1
         return max(1, min(10, n))
 
+    @field_validator("pg_web_read_budget_sec", mode="before")
+    @classmethod
+    def parse_pg_web_read_budget(cls, value: object) -> float:
+        # A typo in .env must not stop the panel from starting.
+        if isinstance(value, bool):
+            return PG_WEB_READ_BUDGET_DEFAULT_SEC
+        try:
+            seconds = float(_clean_str(value) if isinstance(value, str) else value)
+        except (TypeError, ValueError):
+            return PG_WEB_READ_BUDGET_DEFAULT_SEC
+        if not math.isfinite(seconds):
+            return PG_WEB_READ_BUDGET_DEFAULT_SEC
+        return max(PG_WEB_READ_BUDGET_MIN_SEC, min(PG_WEB_READ_BUDGET_MAX_SEC, seconds))
+
     @field_validator("pg_base_url", mode="after")
     @classmethod
     def normalize_pg_url(cls, value: str) -> str:
@@ -228,14 +252,15 @@ class Settings(BaseSettings):
         it is already ``https://…``. Never return ``http://`` (Telegram rejects it).
         """
         try:
-            from app.services.ssl_certs import https_is_active, public_panel_base_url
+            from app.services.ssl_certs import https_is_active, public_miniapp_base_url
 
             if https_is_active():
-                live = (public_panel_base_url() or "").strip().rstrip("/")
+                # The Mini App's own domain when one is set on the certificate, else the panel's.
+                live = (public_miniapp_base_url() or "").strip().rstrip("/")
                 if live.startswith("https://"):
                     return live
         except Exception:
-            pass
+            logger.debug("_miniapp_https_base: ignored failure", exc_info=True)
         configured = (self.public_base_url or "").strip().rstrip("/")
         if configured.startswith("https://"):
             return configured

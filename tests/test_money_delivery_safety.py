@@ -17,11 +17,33 @@ ROOT = Path(__file__).resolve().parents[1]
 class LoyaltyIdempotencyKeyTests(unittest.TestCase):
     def test_handlers_do_not_use_callback_id_as_idempotency_key(self):
         src = (ROOT / "app/bot/handlers/loyalty.py").read_text(encoding="utf-8")
-        self.assertIn('f"tg:redeem:{db_user.id}:{reward_id}:{service_id or 0}:{used}"', src)
         self.assertIn('f"tg:wheel:{db_user.id}:{spins_done}"', src)
         # Double-tap must not mint unique keys via Telegram callback.id
         self.assertNotIn("tg:{callback.id}", src)
         self.assertNotIn("tg_wheel:{callback.id}", src)
+
+
+class RedemptionSlotKeyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_double_tap_shares_the_key_and_a_new_redemption_moves_it(self):
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from app.db.models import Base, BotUser, RewardRedemption
+        from app.services.loyalty import next_redemption_key
+
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            session.add(BotUser(id=1, telegram_id=1, referral_code="a"))
+            await session.commit()
+            first = await next_redemption_key(session, 1, 7, None)
+            self.assertEqual(first, await next_redemption_key(session, 1, 7, None))
+            self.assertNotEqual(first, await next_redemption_key(session, 1, 7, 5), "another service is another slot")
+            session.add(RewardRedemption(user_id=1, reward_id=7, points_spent=1, reward_type="wallet_credit",
+                                         reward_value=1, status="completed", idempotency_key=first))
+            await session.commit()
+            self.assertNotEqual(first, await next_redemption_key(session, 1, 7, None))
+        await engine.dispose()
 
 
 class ServiceDeleteFailClosedTests(unittest.IsolatedAsyncioTestCase):

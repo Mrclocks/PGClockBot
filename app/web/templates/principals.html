@@ -20,7 +20,7 @@
 <div class="card card-flush">
   <h2>فهرست نمایندگان</h2>
   <div class="table-wrap">
-  <table class="table-compact" data-sortable>
+  <table class="table-compact table-list-sm" data-sortable>
     <thead>
       <tr>
         <th data-sort-type="num">شناسه</th>
@@ -33,6 +33,7 @@
         <th class="col-hide-sm" data-sort-type="text">ربات</th>
         <th class="col-hide-sm" data-sort-type="text">ایجاد</th>
         <th class="col-actions"></th>
+        <th class="li-head" scope="col"><span class="li-count">حساب‌ها</span><select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select></th>
       </tr>
     </thead>
     <tbody>
@@ -41,17 +42,18 @@
       {% set row = g.l1 %}
       <tr>
         <td class="mono" dir="ltr" data-sort-value="{{ row.principal_id }}">{{ row.principal_id }}</td>
-        <td data-sort-value="{{ row.status }}">
+        <td class="li-badge" data-sort-value="{{ row.status }}">
           {% if row.status == 'active' %}
           <span class="badge approved">فعال</span>
           {% else %}
           <span class="badge warn">غیرفعال</span>
           {% endif %}
         </td>
-        <td data-sort-value="{{ row.hierarchy_label }}">
+        <td class="li-sub" data-sort-value="{{ row.hierarchy_label }}">
           <span class="role-tag role-tag-principal">{{ row.hierarchy_label }}</span>
+          <span class="li-only">{% if row.pg_role_name %}· {{ row.pg_role_name }} {% endif %}· {{ row.web_identity_label }}</span>
         </td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ row.pg_username or '' }}">{{ row.pg_username or '—' }}</td>
+        <td class="mono col-hide-sm li-title" dir="ltr" data-sort-value="{{ row.pg_username or '' }}">{{ row.pg_username or '—' }} <span class="li-only li-id">(#{{ row.principal_id }})</span></td>
         <td class="col-hide-sm">—</td>
         <td class="col-hide-sm" data-sort-value="{{ row.pg_role_name or '' }}">
           {% if row.pg_role_name %}
@@ -72,17 +74,18 @@
       {% for child in g.children %}
       <tr class="principal-row-l2">
         <td class="mono" dir="ltr" data-sort-value="{{ child.principal_id }}">{{ child.principal_id }}</td>
-        <td data-sort-value="{{ child.status }}">
+        <td class="li-badge" data-sort-value="{{ child.status }}">
           {% if child.status == 'active' %}
           <span class="badge approved">فعال</span>
           {% else %}
           <span class="badge warn">غیرفعال</span>
           {% endif %}
         </td>
-        <td data-sort-value="{{ child.hierarchy_label }}">
+        <td class="li-sub" data-sort-value="{{ child.hierarchy_label }}">
           <span class="role-tag role-tag-principal">{{ child.hierarchy_label }}</span>
+          <span class="li-only">{% if child.pg_role_name %}· {{ child.pg_role_name }} {% endif %}· {{ child.web_identity_label }}</span>
         </td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ child.pg_username or '' }}">{{ child.pg_username or '—' }}</td>
+        <td class="mono col-hide-sm li-title" dir="ltr" data-sort-value="{{ child.pg_username or '' }}">{{ child.pg_username or '—' }} <span class="li-only li-id">(#{{ child.principal_id }})</span></td>
         <td class="mono col-hide-sm" dir="ltr">{{ child.parent_username or row.pg_username or '—' }}</td>
         <td class="col-hide-sm" data-sort-value="{{ child.pg_role_name or '' }}">
           {% if child.pg_role_name %}
@@ -108,17 +111,18 @@
       {% for child in l2_rows %}
       <tr>
         <td class="mono" dir="ltr" data-sort-value="{{ child.principal_id }}">{{ child.principal_id }}</td>
-        <td data-sort-value="{{ child.status }}">
+        <td class="li-badge" data-sort-value="{{ child.status }}">
           {% if child.status == 'active' %}
           <span class="badge approved">فعال</span>
           {% else %}
           <span class="badge warn">غیرفعال</span>
           {% endif %}
         </td>
-        <td data-sort-value="{{ child.hierarchy_label }}">
+        <td class="li-sub" data-sort-value="{{ child.hierarchy_label }}">
           <span class="role-tag role-tag-principal">{{ child.hierarchy_label }}</span>
+          <span class="li-only">{% if child.pg_role_name %}· {{ child.pg_role_name }} {% endif %}· {{ child.web_identity_label }}</span>
         </td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ child.pg_username or '' }}">{{ child.pg_username or '—' }}</td>
+        <td class="mono col-hide-sm li-title" dir="ltr" data-sort-value="{{ child.pg_username or '' }}">{{ child.pg_username or '—' }} <span class="li-only li-id">(#{{ child.principal_id }})</span></td>
         <td class="mono col-hide-sm" dir="ltr">{{ child.parent_username or '—' }}</td>
         <td class="col-hide-sm" data-sort-value="{{ child.pg_role_name or '' }}">
           {% if child.pg_role_name %}

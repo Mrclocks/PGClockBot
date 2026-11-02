@@ -8,17 +8,22 @@ the 7-day range is computed with the rest of the dashboard so its figures always
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timedelta, timezone
 from typing import TypedDict
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import case, func, or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, UserService
+from app.services.db_safe import rollback_quiet
 from app.services.demo_users import non_demo_customer
 from app.services.service_scope import shop_services_clause
+
+logger = logging.getLogger(__name__)
 
 TEHRAN = ZoneInfo("Asia/Tehran")
 ALLOWED_DAYS = (7, 30)
@@ -135,6 +140,16 @@ async def sales_trend(
             _cache.clear()
         _cache[key] = (time.monotonic(), result)
     return result
+
+
+async def sales_trend_or_empty(session: AsyncSession, *, reseller_id: int | None, days: int = 7) -> SalesTrend:
+    """The trend, or an empty chart when the query fails; the page around it still renders."""
+    try:
+        return await sales_trend(session, reseller_id=reseller_id, days=days)
+    except SQLAlchemyError:
+        logger.warning("sales trend failed reseller_id=%s", reseller_id, exc_info=True)
+        await rollback_quiet(session)
+        return empty_trend(days)
 
 
 def clear_trend_cache() -> None:

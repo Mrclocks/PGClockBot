@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import tempfile
 from pathlib import Path
 
@@ -25,6 +26,7 @@ from app.bot.auth import require_bot_owner_handler
 from app.bot.nav_inline import admin_backup_hub_keyboard, with_inline_back
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
+from app.services.chat_records import keep_sent
 from app.services.redact import user_safe_error
 from app.services.backup import (
     create_backup,
@@ -40,12 +42,8 @@ from app.services.screen_titles import screen_caption, screen_heading
 from app.services.users import get_all_settings
 
 
-async def _lasting_kb(session, db_user, classic):
-    from app.bot.nav_chrome import lasting_staff_reply
-    return await lasting_staff_reply(
-        session, db_user, classic=classic,
-        is_reseller_bot=False, reseller_owner_id=None,
-    )
+# Bot API getFile refuses larger files.
+BOT_DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024
 
 router = Router(name="admin_backup")
 
@@ -204,10 +202,11 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser, session: Asyn
     )
     if callback.message:
         try:
-            await callback.message.answer_document(
-                FSInputFile(path, filename=path.name),
-                caption=caption,
-            )
+            with keep_sent():  # a backup file must stay downloadable
+                await callback.message.answer_document(
+                    FSInputFile(path, filename=path.name),
+                    caption=caption,
+                )
         except Exception:
             await callback.message.answer(
                 caption + f"\n\nدانلود از وب‌پنل: تنظیمات ← بکاپ\nمسیر: <code>{path}</code>"
@@ -260,10 +259,11 @@ async def backup_download(callback: CallbackQuery, db_user: BotUser):
     await callback.answer("ارسال فایل…")
     if callback.message:
         try:
-            await callback.message.answer_document(
-                FSInputFile(path, filename=path.name),
-                caption=f"⬇️ {path.name}",
-            )
+            with keep_sent():  # a backup file must stay downloadable
+                await callback.message.answer_document(
+                    FSInputFile(path, filename=path.name),
+                    caption=f"⬇️ {path.name}",
+                )
         except Exception as e:
             await callback.message.answer(
                 f"❌ ارسال ممکن نشد (حجم زیاد؟):\n{user_safe_error(e)}"
@@ -337,7 +337,7 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
         if await try_legacy_cancel(message, state, session, db_user):
             return
         await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
+        await message.answer(feedback.CANCELLED)
         return
     if text != "RESTORE":
         await message.answer(
@@ -368,6 +368,8 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
         await message.answer(f"❌ ریستور انجام نشد:\n{result.get('error')}")
         return
     msg = "✅ ریستور انجام شد."
+    for warning in result.get("warnings") or []:
+        msg += f"\n⚠️ {html.escape(str(warning))}"
     if result.get("safety_id"):
         msg += f"\nبکاپ ایمنی: <code>{result['safety_id']}</code>"
     if result.get("restart_scheduled"):
@@ -426,6 +428,12 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
     if not name.endswith(".zip"):
         await message.answer("فقط فایل .zip بکاپ پذیرفته می‌شود.")
         return
+    if (doc.file_size or 0) > BOT_DOWNLOAD_LIMIT_BYTES:
+        await message.answer(
+            "ربات تلگرام فایل بزرگ‌تر از ۲۰ مگابایت را دریافت نمی‌کند. "
+            "این بکاپ را از وب‌پنل ← تنظیمات ← بکاپ ← «آپلود بکاپ» بارگذاری کنید."
+        )
+        return
     await message.answer("⏳ در حال دریافت و بررسی…")
     try:
         content = await _download_upload_bytes(message.bot, doc)
@@ -458,6 +466,6 @@ async def backup_upload_cancel(message: Message, session, db_user: BotUser, stat
         if await try_legacy_cancel(message, state, session, db_user):
             return
         await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
+        await message.answer(feedback.CANCELLED)
         return
     await message.answer("یک فایل ZIP بفرستید یا انصراف.")

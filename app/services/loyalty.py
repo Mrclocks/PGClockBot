@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import Select, func, select, update
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +34,7 @@ from app.db.models import (
 from app.services.demo_users import non_demo_customer
 from app.services.formatting import bot_user_panel_label
 from app.services.service_scope import customer_may_use_service, service_shop_id
+from app.services.volume_allocation import VolumeAllocationError, assert_volume_delta_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -552,12 +554,14 @@ async def admin_adjust_points(
     reason: str,
     admin_identity: str,
     shop_id: int | None,
+    request_key: str,
 ) -> PointsTransaction:
+    """Owner adjust; ``request_key`` comes from the form, so a repeated submit is applied once."""
     if not reason or not str(reason).strip():
         raise ValueError("دلیل الزامی است")
     if delta == 0:
         raise ValueError("مقدار نمی‌تواند صفر باشد")
-    key = f"admin_adjust:{user.id}:{admin_identity}:{int(datetime.now(timezone.utc).timestamp())}:{delta}:{reason.strip()[:40]}"
+    key = f"admin_adjust:{request_key}"
     prev = await points_balance(session, user, shop_id)
     if delta > 0:
         tx = await credit_points(
@@ -796,7 +800,7 @@ async def on_user_referred(
     try:
         await ensure_loyalty_defaults(session, reseller_id=referred.reseller_id)
     except Exception:
-        pass
+        logger.debug("on_user_referred: ignored failure", exc_info=True)
     await record_referral_event(
         session,
         referrer_id=int(referred.referred_by_id),
@@ -1088,6 +1092,32 @@ async def _user_redemption_count(session: AsyncSession, user_id: int, reward_id:
     )
 
 
+async def _replayed_redemption(session: AsyncSession, key: str) -> RewardRedemption:
+    existing = await session.scalar(select(RewardRedemption).where(RewardRedemption.idempotency_key == key))
+    if existing is None:
+        raise ValueError("این درخواست در حال انجام است؛ چند لحظه بعد دوباره بررسی کنید")
+    return existing
+
+
+async def next_redemption_key(
+    session: AsyncSession, user_id: int, reward_id: int, service_id: int | None
+) -> str:
+    """Idempotency key for the customer's next redemption of one reward.
+
+    Derived from the redemptions already recorded (not from the request), so a double
+    tap or a retried request shares the key and the unique index keeps it to one spend.
+    """
+    used = int(
+        await session.scalar(
+            select(func.count()).select_from(RewardRedemption).where(
+                RewardRedemption.user_id == int(user_id), RewardRedemption.reward_id == int(reward_id),
+            )
+        )
+        or 0
+    )
+    return f"tg:redeem:{int(user_id)}:{int(reward_id)}:{int(service_id or 0)}:{used}"
+
+
 async def redeem_reward(
     session: AsyncSession,
     user: BotUser,
@@ -1176,6 +1206,10 @@ async def redeem_reward(
         commit=False,
         shop_id=user_rid,
     )
+    if sa_inspect(reward).expired:
+        # debit_points lost the unique-key race and rolled back: a concurrent request with this
+        # key has already debited and recorded the redemption, so the benefit is not applied again.
+        return await _replayed_redemption(session, key)
 
     try:
         if rtype in ("traffic_gb", "time_days"):
@@ -1535,6 +1569,8 @@ async def apply_service_reward(
         current = info.get("data_limit")
         if current is None or int(current or 0) <= 0:
             raise ValueError("سرویس نامحدود است؛ جایزه ترافیک قابل اعمال نیست")
+        if service_shop:
+            await _assert_reward_volume_fits(session, int(service_shop), add_bytes)
         payload["data_limit"] = int(current) + add_bytes
     elif reward_type == "time_days":
         add_sec = int(reward_value) * 86400
@@ -1551,9 +1587,26 @@ async def apply_service_reward(
                     parsed = dt.fromisoformat(str(expire).replace("Z", "+00:00"))
                     base = max(base, int(parsed.timestamp()))
             except Exception:
-                pass
+                logger.debug("apply_service_reward: ignored failure", exc_info=True)
         payload["expire"] = base + add_sec
     await pg.modify_user_by_id(int(service.pg_user_id), payload)
+    if "data_limit" in payload:
+        # Counted in the shop's allocation from the caller's commit on.
+        service.quota_data_limit_bytes = int(payload["data_limit"])
+
+
+async def _assert_reward_volume_fits(session: AsyncSession, shop_id: int, add_bytes: int) -> None:
+    """Check a traffic reward against the shop's ceiling under the profile lock.
+
+    The caller keeps one transaction (the points debit rolls back with a failed grant), so no
+    separate hold is committed here: the lock serialises grants until the new limit is written.
+    """
+    try:
+        await assert_volume_delta_allowed(
+            session, shop_id=shop_id, delta_bytes=add_bytes, audience="customer", lock=True,
+        )
+    except VolumeAllocationError as e:
+        raise ValueError(e.user_message()) from e
 
 
 async def overview_metrics(

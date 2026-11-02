@@ -26,6 +26,7 @@ from app.bot.reseller_hub_groups import (
     group_entries,
     reseller_group,
 )
+from app.services.wallet_topup import DEFAULT_TOPUP_PRESETS, parse_topup_presets  # noqa: F401  (re-exported)
 
 logger = logging.getLogger(__name__)
 
@@ -261,27 +262,6 @@ def with_inline_back(
             return InlineKeyboardMarkup(inline_keyboard=rows)
     rows.append(_hub_back_row(ui, callback_data=back_callback))
     return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-DEFAULT_TOPUP_PRESETS: tuple[int, ...] = (50_000, 100_000, 200_000, 500_000)
-
-
-def parse_topup_presets(ui: dict | None = None) -> list[int]:
-    """CSV of toman amounts from ``wallet_topup_presets`` (falls back to defaults)."""
-    raw = str((ui or {}).get("wallet_topup_presets") or "").strip()
-    out: list[int] = []
-    if raw:
-        for part in raw.replace("،", ",").split(","):
-            part = part.replace(",", "").replace("٬", "").strip()
-            if not part:
-                continue
-            try:
-                n = int(part)
-            except ValueError:
-                continue
-            if n >= 1000:
-                out.append(n)
-    return out or list(DEFAULT_TOPUP_PRESETS)
 
 
 def wallet_topup_presets_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
@@ -1108,11 +1088,13 @@ def admin_resellers_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
         REPLY_ACTION_ADM_RES_ADD,
         REPLY_ACTION_ADM_RES_APPS,
         REPLY_ACTION_ADM_RES_LIST,
+        REPLY_ACTION_ADM_RES_SEARCH,
         _admin_resellers_submenu_entries,
     )
 
     cb_map = {
         REPLY_ACTION_ADM_RES_LIST: "adm:resellers:list:0",
+        REPLY_ACTION_ADM_RES_SEARCH: "adm:resellers:search",
         REPLY_ACTION_ADM_RES_APPS: "adm:resapp:list",
         REPLY_ACTION_ADM_RES_ADD: "adm:resellers:add",
     }

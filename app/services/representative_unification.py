@@ -158,6 +158,7 @@ async def attach_shop_package_to_principal(
             web_permissions=perms,
             bot_permissions=perms,
             is_active=True,
+            allow_volume_oversell=False,
         )
         session.add(profile)
         await session.flush()

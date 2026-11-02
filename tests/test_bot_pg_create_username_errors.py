@@ -119,7 +119,6 @@ class BotCreateUsernameErrorRoutingTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 mod, "_pg_user_gate", new=AsyncMock(return_value=_allowed_gate(fake_pg))
             ),
-            patch.object(mod, "filtered_pg_reply_keyboard", new=AsyncMock(return_value=None)),
         ):
             await mod.pg_create_username(
                 message, state, db_user=SimpleNamespace(telegram_id=1)

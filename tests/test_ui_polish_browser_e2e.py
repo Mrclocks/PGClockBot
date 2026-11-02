@@ -97,6 +97,31 @@ def _modal_page() -> str:
     )
 
 
+def _settings_save_modal_page() -> str:
+    """Domain-settings shape: one primary sticky save + a separate warn action."""
+    lines = "".join(f'<p class="muted">خط تنظیمات {i}</p>' for i in range(36))
+    return (
+        '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<link rel="stylesheet" href="/static/panel.css"></head><body>'
+        '<button id="open" data-modal-open="m1">باز</button>'
+        '<div class="ui-modal" id="m1" hidden><div class="ui-modal-backdrop" data-modal-close></div>'
+        '<div class="ui-modal-panel" role="dialog" aria-modal="true">'
+        '<div class="ui-modal-head"><h2>تنظیمات</h2>'
+        '<button class="icon-btn" data-modal-close>×</button></div>'
+        '<div class="settings-domain-stack">'
+        f'<form class="settings-form" action="#">{lines}'
+        '<div class="actions sticky-actions ui-modal-sticky-save">'
+        '<button class="btn" id="save" type="submit">ذخیره تنظیمات</button></div></form>'
+        '<form class="settings-form" action="#">'
+        '<div class="card settings-card"><h2>عمل جدا</h2></div>'
+        '<div class="actions sticky-actions">'
+        '<button class="btn btn-warn" id="warn" type="submit">لغو الان</button></div></form>'
+        '</div></div></div>'
+        '<script src="/static/panel.js"></script></body></html>'
+    )
+
+
 class AppPagesCase(RoutesHarness):
     async def fetch(self, path: str) -> str:
         cookie = f"session={self.signer.dumps(OWNER_SESSION)}; csrf=token"
@@ -176,12 +201,131 @@ class BrowserTests(AppPagesCase):
                 """() => { const panel = document.querySelector('#m1 .ui-modal-panel').getBoundingClientRect();
                   const scroll = document.querySelector('#m1 .ui-modal-scroll');
                   const gutter = scroll.offsetWidth - scroll.clientWidth;
-                  const head = document.querySelector('#m1 .ui-modal-head').getBoundingClientRect();
+                  /* Sticky head sits outside the scrollport; measure to the title
+                     text (not the head box edge) so top air matches side padding. */
+                  const title = document.querySelector('#m1 .ui-modal-head h2').getBoundingClientRect();
                   const last = document.getElementById('last').getBoundingClientRect();
                   const field = document.getElementById('field').getBoundingClientRect();
-                  return {top: head.top - panel.top, bottom: panel.bottom - last.bottom, side: field.left - panel.left - gutter / 2}; }"""
+                  return {top: title.top - panel.top, bottom: panel.bottom - last.bottom, side: field.left - panel.left - gutter / 2}; }"""
             )
             self.assertAlmostEqual(gaps["top"], gaps["side"], delta=1.5, msg=gaps)
             self.assertAlmostEqual(gaps["bottom"], gaps["side"], delta=1.5, msg=gaps)
 
         self._with_browser({"/modal": _modal_page()}, check)
+
+    def test_modal_title_stays_fixed_while_body_scrolls(self):
+        """Sticky frosted header: head is sticky inside .ui-modal-scroll."""
+
+        def check(browser, base):
+            page = browser.new_page(viewport=MOBILE)
+            page.goto(base + "/modal")
+            page.click("#open")
+            page.wait_for_selector("#m1.open")
+            page.wait_for_timeout(400)
+            layout = page.evaluate(
+                """() => {
+                  const panel = document.querySelector('#m1 .ui-modal-panel');
+                  const scroll = panel.querySelector(':scope > .ui-modal-scroll');
+                  const head = scroll && scroll.querySelector(':scope > .ui-modal-head');
+                  const form = document.querySelector('#m1 form');
+                  if (!head || !scroll || !form) return {ok: false};
+                  const style = getComputedStyle(head);
+                  const before = head.getBoundingClientRect().top;
+                  scroll.scrollTop = Math.min(160, scroll.scrollHeight);
+                  const after = head.getBoundingClientRect().top;
+                  const pb = parseFloat(style.paddingBottom) || 0;
+                  return {
+                    ok: true,
+                    headInsideScroll: scroll.contains(head),
+                    formInsideScroll: scroll.contains(form),
+                    sticky: style.position === 'sticky',
+                    headFixed: Math.abs(before - after) < 1.5,
+                    paddingBottom: pb,
+                    frosted: (style.backdropFilter || style.webkitBackdropFilter || '').includes('blur'),
+                  };
+                }"""
+            )
+            self.assertTrue(layout["ok"], msg=layout)
+            self.assertTrue(layout["headInsideScroll"], msg=layout)
+            self.assertTrue(layout["formInsideScroll"], msg=layout)
+            self.assertTrue(layout["sticky"], msg=layout)
+            self.assertTrue(layout["headFixed"], msg=layout)
+            self.assertTrue(layout["frosted"], msg=layout)
+            self.assertGreaterEqual(layout["paddingBottom"], 15, msg=layout)
+
+        tall = _modal_page().replace(
+            '<form class="form-stack">',
+            '<form class="form-stack">' + "".join(f'<p class="muted">خط {i}</p>' for i in range(40)),
+        )
+        self._with_browser({"/modal": tall}, check)
+
+    def test_single_save_stays_fixed_while_warn_action_scrolls(self):
+        """Primary save is a panel footer; warn actions stay in the scroll body."""
+
+        def check(browser, base):
+            page = browser.new_page(viewport=MOBILE)
+            page.goto(base + "/modal")
+            page.click("#open")
+            page.wait_for_selector("#m1.open")
+            page.wait_for_timeout(400)
+            layout = page.evaluate(
+                """() => {
+                  const panel = document.querySelector('#m1 .ui-modal-panel');
+                  const scroll = panel.querySelector(':scope > .ui-modal-scroll');
+                  const saveRow = document.querySelector('#save').closest('.ui-modal-sticky-save');
+                  const warnRow = document.querySelector('#warn').closest('.sticky-actions');
+                  const head = document.querySelector('#m1 .ui-modal-head');
+                  if (!panel || !scroll || !saveRow || !warnRow || !head) return {ok: false};
+                  const saveStyle = getComputedStyle(saveRow);
+                  const headStyle = getComputedStyle(head);
+                  const scrollPadBottom = parseFloat(getComputedStyle(scroll).paddingBottom) || 0;
+                  scroll.scrollTop = 0;
+                  const saveTopAtStart = saveRow.getBoundingClientRect().top;
+                  const warnTopAtStart = warnRow.getBoundingClientRect().top;
+                  scroll.scrollTop = Math.min(220, scroll.scrollHeight);
+                  const saveTopScrolled = saveRow.getBoundingClientRect().top;
+                  const warnTopScrolled = warnRow.getBoundingClientRect().top;
+                  const panelBox = panel.getBoundingClientRect();
+                  const saveBox = saveRow.getBoundingClientRect();
+                  const saveBtn = document.getElementById('save').getBoundingClientRect();
+                  const savePad = parseFloat(saveStyle.paddingLeft) || 0;
+                  const padTop = parseFloat(saveStyle.paddingTop) || 0;
+                  const padBottom = parseFloat(saveStyle.paddingBottom) || 0;
+                  scroll.scrollTop = scroll.scrollHeight;
+                  const warnBottomAtEnd = warnRow.getBoundingClientRect().bottom;
+                  return {
+                    ok: true,
+                    saveIsPanelChild: saveRow.parentElement === panel,
+                    saveOutsideScroll: !scroll.contains(saveRow),
+                    warnInsideScroll: scroll.contains(warnRow),
+                    saveFrosted: (saveStyle.backdropFilter || saveStyle.webkitBackdropFilter || '').includes('blur'),
+                    sameFrost: saveStyle.backgroundColor === headStyle.backgroundColor,
+                    savePinned: Math.abs(saveBox.bottom - panelBox.bottom) < 2.5,
+                    saveFixedWhileScroll: Math.abs(saveTopScrolled - saveTopAtStart) < 1.5,
+                    warnMoved: Math.abs(warnTopScrolled - warnTopAtStart) > 40,
+                    saveFullWidth: Math.abs(saveBtn.width - (saveBox.width - 2 * savePad)) < 2,
+                    saveVerticallyCentered: Math.abs(padTop - padBottom) < 0.5,
+                    savePadY: padTop,
+                    saveOverlays: saveStyle.position === 'absolute',
+                    scrollKeepsBottomPad: scrollPadBottom >= 60,
+                    warnNotFlushAtEnd: (panelBox.bottom - warnBottomAtEnd) >= 60,
+                  };
+                }"""
+            )
+            self.assertTrue(layout["ok"], msg=layout)
+            self.assertTrue(layout["saveIsPanelChild"], msg=layout)
+            self.assertTrue(layout["saveOutsideScroll"], msg=layout)
+            self.assertTrue(layout["warnInsideScroll"], msg=layout)
+            self.assertTrue(layout["saveFrosted"], msg=layout)
+            self.assertTrue(layout["sameFrost"], msg=layout)
+            self.assertTrue(layout["savePinned"], msg=layout)
+            self.assertTrue(layout["saveFixedWhileScroll"], msg=layout)
+            self.assertTrue(layout["warnMoved"], msg=layout)
+            self.assertTrue(layout["saveFullWidth"], msg=layout)
+            self.assertTrue(layout["saveVerticallyCentered"], msg=layout)
+            self.assertTrue(layout["saveOverlays"], msg=layout)
+            self.assertGreaterEqual(layout["savePadY"], 18, msg=layout)
+            self.assertTrue(layout["scrollKeepsBottomPad"], msg=layout)
+            self.assertTrue(layout["warnNotFlushAtEnd"], msg=layout)
+
+        self._with_browser({"/modal": _settings_save_modal_page()}, check)

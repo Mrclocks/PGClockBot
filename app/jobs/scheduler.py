@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -10,11 +10,26 @@ from sqlalchemy import or_, select
 
 from app.db.models import BotUser, ResellerProfile, UserService
 from app.db.session import SessionLocal
+from app.jobs.bot_profile_photo import run_bot_profile_photo_sync
 from app.jobs.cancellation_notifications import run_cancellation_notifications
+from app.jobs.chat_message_purge import run_chat_message_purge
 from app.jobs.connection_status import run_connection_status
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
+from app.jobs.user_photo_cache import run_user_photo_prune
+from app.jobs.volume_external_sync import run_volume_external_sync
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
+from app.services.replaceable_notices import DAILY_REPORT_KEY, SUBORDINATE_REPORT_KEY, send_replacing_report
+from app.services.usage_alerts import (
+    ALERT_TIME,
+    ALERT_TRAFFIC,
+    SentAlert,
+    alert_extras,
+    replace_previous_alerts,
+    time_alert_markup,
+    traffic_alert_markup,
+    usage_alert_key,
+)
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -158,7 +173,12 @@ async def check_expiring_services(bot: Bot) -> None:
                     break
                 continue
 
+            extras_by_shop = {
+                shop: await alert_extras(session, [item[0] for item in eligible if item[5] == shop], shop_id=shop)
+                for shop in {item[5] for item in eligible}
+            }
             sem = asyncio.Semaphore(_PG_FETCH_CONCURRENCY)
+            sent_alerts: list[SentAlert] = []
 
             async def _fetch_info(token: str):
                 async with sem:
@@ -184,6 +204,7 @@ async def check_expiring_services(bot: Bot) -> None:
                 send_bot = _resolve_send_bot(bot, shop_rid, profile_by_user)
                 if send_bot is None:
                     continue  # the shop's own bot is not running: never alert its customers from the platform bot
+                extras = extras_by_shop[shop_rid]
 
                 # --- remaining TIME percent ---
                 if not svc.notified_expire:
@@ -198,36 +219,21 @@ async def check_expiring_services(bot: Bot) -> None:
                             rem_pct = (remaining / total) * 100
                             if rem_pct <= time_pct:
                                 try:
-                                    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
-                                    renew_kb = None
-                                    if on(_ui.get("one_tap_renew_enabled", "1")):
-                                        from app.services.button_styles import style_kwargs
-
-                                        renew_kb = InlineKeyboardMarkup(
-                                            inline_keyboard=[
-                                                [
-                                                    InlineKeyboardButton(
-                                                        text="🔄 تمدید یک‌ضربی",
-                                                        callback_data=f"svc:renew:{svc.id}",
-                                                        **style_kwargs(
-                                                            _ui, "one_tap_renew", fallback="primary"
-                                                        ),
-                                                    )
-                                                ]
-                                            ]
-                                        )
-                                    await send_bot.send_message(
+                                    one_tap = on(_ui.get("one_tap_renew_enabled", "1"))
+                                    markup = time_alert_markup(_ui, svc.id, extras)
+                                    alert = await send_bot.send_message(
                                         user.telegram_id,
                                         f"⏰ زمان سرویس <b>{svc.pg_username}</b> به کمتر از "
                                         f"<b>{time_pct}٪</b> رسیده است.\n"
                                         "از بخش سرویس‌ها تمدید کنید."
-                                        + ("\nیا دکمه زیر را بزنید:" if renew_kb else ""),
+                                        + ("\nیا دکمه زیر را بزنید:" if one_tap else "")
+                                        + extras.note_for(svc.id),
                                         parse_mode="HTML",
-                                        reply_markup=renew_kb,
+                                        reply_markup=markup,
                                     )
                                     svc.notified_expire = True
-                                    if renew_kb is not None:
+                                    sent_alerts.append((send_bot, usage_alert_key(ALERT_TIME, svc.id), alert))
+                                    if one_tap:
                                         svc.renew_nudge_sent_at = now
                                 except Exception:
                                     logger.debug(
@@ -247,20 +253,24 @@ async def check_expiring_services(bot: Bot) -> None:
                             rem_pct = max(0.0, (1.0 - (used / limit_f)) * 100)
                             if rem_pct <= traffic_pct:
                                 try:
-                                    await send_bot.send_message(
+                                    alert = await send_bot.send_message(
                                         user.telegram_id,
                                         f"📉 حجم باقی‌مانده سرویس <b>{svc.pg_username}</b> کمتر از "
                                         f"<b>{traffic_pct}٪</b> است "
-                                        f"({format_bytes_ratio(used, limit_f, joiner=' از ')}).",
+                                        f"({format_bytes_ratio(used, limit_f, joiner=' از ')})."
+                                        + extras.note_for(svc.id),
                                         parse_mode="HTML",
+                                        reply_markup=traffic_alert_markup(_ui, svc.id, extras),
                                     )
                                     svc.notified_traffic = True
+                                    sent_alerts.append((send_bot, usage_alert_key(ALERT_TRAFFIC, svc.id), alert))
                                 except Exception:
                                     logger.debug(
                                         "traffic alert send failed tg=%s", user.telegram_id, exc_info=True
                                     )
 
             await session.commit()
+            await replace_previous_alerts(session, sent_alerts)
             if len(services) < batch_size:
                 break
 
@@ -323,54 +333,73 @@ async def cleanup_stale_pending_orders() -> None:
             logger.exception("pending order cleanup failed")
 
 
-async def run_scheduled_backup() -> None:
-    """Nightly backup + archive validation when enabled."""
+async def run_auto_order_purge() -> None:
+    """Hourly: delete the order and payment rows each shop chose for automatic deletion."""
     async with SessionLocal() as session:
         try:
-            from datetime import datetime, timezone
-            from pathlib import Path
+            from app.services.order_purge import auto_purge_all_shops
 
-            from app.services.backup import create_backup, prune_backups, validate_backup_archive
-            from app.services.backup_settings import KEEP_KEY, keep_count
-            from app.services.backup_telegram import send_backup
-            from app.services.users import get_setting, on, set_setting
+            total = await auto_purge_all_shops(session)
+            if total:
+                logger.info("automatic order purge deleted=%s", total)
+        except Exception:
+            logger.exception("automatic order purge failed")
 
-            if not on(await get_setting(session, "backup_schedule_enabled", "1")):
-                return
-            try:
-                hour = int(await get_setting(session, "backup_schedule_hour", "3") or 3)
-            except Exception:
-                hour = 3
-            now = datetime.now(timezone.utc)
-            if now.hour != max(0, min(23, hour)):
-                return
-            # Dedup same UTC day
-            last = (await get_setting(session, "backup_last_ok_at", "")) or ""
-            day_key = now.strftime("%Y-%m-%d")
-            if last.startswith(day_key):
-                return
-            include_env = on(await get_setting(session, "backup_include_env_scheduled", "0"))
-            meta = create_backup(
-                note="scheduled",
-                include_env=include_env,
-                created_by="scheduler",
+
+async def run_scheduled_receipt_approvals() -> None:
+    """Every minute: approve card receipts nobody reviewed within their shop's chosen time."""
+    async with SessionLocal() as session:
+        try:
+            from app.bot import create_bot
+            from app.services.reseller_bots import open_notify_bot_for_reseller
+            from app.services.scheduled_approval import approve_due_receipts
+            from app.services.users import get_all_settings
+
+            async def settings_for(shop_id: int | None) -> dict[str, str]:
+                return await get_all_settings(session, reseller_id=shop_id)
+
+            async def open_bot(shop_id: int | None):
+                if shop_id is None:
+                    return create_bot(), True
+                return await open_notify_bot_for_reseller(session, shop_id)
+
+            approved = await approve_due_receipts(session, settings_for=settings_for, open_bot=open_bot)
+            if approved:
+                logger.info("scheduled receipt approval approved=%s", approved)
+        except Exception:
+            logger.exception("scheduled receipt approval failed")
+
+
+async def run_crypto_rate_refresh() -> None:
+    """Every minute: read the API rate of each shop that converts crypto amounts with one."""
+    async with SessionLocal() as session:
+        try:
+            from app.services.crypto_rates import refresh_api_rates
+            from app.services.users import get_all_settings
+
+            shop_ids = list(
+                (
+                    await session.execute(
+                        select(ResellerProfile.user_id).where(ResellerProfile.is_active.is_(True))
+                    )
+                ).scalars().all()
             )
-            path = Path(str(meta.get("path") or ""))
-            ok, err, _ = validate_backup_archive(path)
-            await set_setting(session, "backup_last_verify_ok", "1" if ok else "0")
-            if not ok:
-                logger.warning("scheduled backup verify failed: %s", err)
-            await set_setting(session, "backup_last_ok_at", now.isoformat())
-            await session.commit()
-            await asyncio.to_thread(prune_backups, keep_count(await get_setting(session, KEEP_KEY, "10")))
-            try:
-                await send_backup(
-                    session, path, include_env=include_env,
-                    caption=f"💾 بکاپ خودکار PGClockBot — {now.strftime('%Y-%m-%d %H:%M')} UTC",
-                )
-            except Exception:  # noqa: BLE001 - a failed delivery must not undo a good backup
-                logger.exception("scheduled backup telegram delivery failed")
-            logger.info("scheduled backup ok id=%s", meta.get("id"))
+
+            async def settings_for(shop_id: int | None) -> dict[str, str]:
+                return await get_all_settings(session, reseller_id=shop_id)
+
+            await refresh_api_rates(settings_for, [None, *[int(rid) for rid in shop_ids]])
+        except Exception:
+            logger.exception("crypto rate refresh failed")
+
+
+async def run_scheduled_backup() -> None:
+    """Nightly backup + archive validation when enabled."""
+    from app.services.backup_schedule import run_nightly_backup
+
+    async with SessionLocal() as session:
+        try:
+            await run_nightly_backup(session, datetime.now(timezone.utc))
         except Exception:
             logger.exception("scheduled backup failed")
 
@@ -389,6 +418,7 @@ async def run_admin_daily_report(bot: Bot) -> None:
                 ACTOR_OWNER,
                 ACTOR_SHOP,
                 DEFAULT_REPORT_TEMPLATE,
+                is_report_due,
                 shop_daily_report_chat_ids,
             )
             from app.services.org_principals import DEPTH_ONE, STATUS_ACTIVE
@@ -459,11 +489,7 @@ async def run_admin_daily_report(bot: Bot) -> None:
                 return out
 
             # —— Platform Owner report ——
-            try:
-                hour = int(await get_setting(session, "admin_daily_report_hour", "0") or 0)
-            except Exception:
-                hour = 0
-            owner_hour_ok = now.hour == max(0, min(23, hour))
+            owner_hour_ok = is_report_due(now, await get_setting(session, "admin_daily_report_hour", "0"))
 
             if owner_hour_ok and on(
                 await get_setting(session, "admin_daily_report_enabled", "1")
@@ -485,17 +511,10 @@ async def run_admin_daily_report(bot: Bot) -> None:
                             session, "admin_daily_report_metrics", ""
                         ),
                     )
-                    for aid in get_settings().admin_ids or []:
-                        try:
-                            await bot.send_message(
-                                int(aid),
-                                text,
-                                **{"parse_mode": "HTML", **report_kw},
-                            )
-                        except Exception:
-                            logger.debug(
-                                "daily report send failed admin=%s", aid, exc_info=True
-                            )
+                    await send_replacing_report(
+                        session, bot, list(get_settings().admin_ids or []), text,
+                        replace_key=DAILY_REPORT_KEY, **{"parse_mode": "HTML", **report_kw},
+                    )
                     await set_setting(session, "admin_daily_report_last", day_key)
                     await session.commit()
 
@@ -520,17 +539,10 @@ async def run_admin_daily_report(bot: Bot) -> None:
                                 session, parent=owner, traffic_by_user_id=traffic
                             )
                             if text:
-                                for aid in get_settings().admin_ids or []:
-                                    try:
-                                        await bot.send_message(
-                                            int(aid), text, parse_mode="HTML"
-                                        )
-                                    except Exception:
-                                        logger.debug(
-                                            "subordinate report send failed admin=%s",
-                                            aid,
-                                            exc_info=True,
-                                        )
+                                await send_replacing_report(
+                                    session, bot, list(get_settings().admin_ids or []), text,
+                                    replace_key=SUBORDINATE_REPORT_KEY, parse_mode="HTML",
+                                )
                         await set_setting(session, SUB_REPORT_LAST, day_key)
                         await session.commit()
 
@@ -546,12 +558,7 @@ async def run_admin_daily_report(bot: Bot) -> None:
             for profile in profiles:
                 rid = int(profile.user_id)
                 ui = await get_all_settings(session, reseller_id=rid)
-                try:
-                    hour = int(ui.get("admin_daily_report_hour") or 0)
-                except Exception:
-                    hour = 0
-                hour_ok = now.hour == max(0, min(23, hour))
-                if not hour_ok:
+                if not is_report_due(now, ui.get("admin_daily_report_hour")):
                     continue
 
                 if on(ui.get("admin_daily_report_enabled")) and (
@@ -579,22 +586,10 @@ async def run_admin_daily_report(bot: Bot) -> None:
                     )
                     if shop_bot is not None:
                         try:
-                            for chat_id in await shop_daily_report_chat_ids(
-                                session, rid
-                            ):
-                                try:
-                                    await shop_bot.send_message(
-                                        int(chat_id),
-                                        text,
-                                        **{"parse_mode": "HTML", **report_kw},
-                                    )
-                                except Exception:
-                                    logger.debug(
-                                        "daily report shop send failed rid=%s chat=%s",
-                                        rid,
-                                        chat_id,
-                                        exc_info=True,
-                                    )
+                            await send_replacing_report(
+                                session, shop_bot, await shop_daily_report_chat_ids(session, rid), text,
+                                replace_key=DAILY_REPORT_KEY, **{"parse_mode": "HTML", **report_kw},
+                            )
                             await set_setting(
                                 session,
                                 "admin_daily_report_last",
@@ -650,20 +645,10 @@ async def run_admin_daily_report(bot: Bot) -> None:
                             )
                             if shop_bot is not None:
                                 try:
-                                    for chat_id in await shop_daily_report_chat_ids(
-                                        session, rid
-                                    ):
-                                        try:
-                                            await shop_bot.send_message(
-                                                int(chat_id), text, parse_mode="HTML"
-                                            )
-                                        except Exception:
-                                            logger.debug(
-                                                "subordinate report shop send failed rid=%s chat=%s",
-                                                rid,
-                                                chat_id,
-                                                exc_info=True,
-                                            )
+                                    await send_replacing_report(
+                                        session, shop_bot, await shop_daily_report_chat_ids(session, rid), text,
+                                        replace_key=SUBORDINATE_REPORT_KEY, parse_mode="HTML",
+                                    )
                                 finally:
                                     if should_close:
                                         try:
@@ -701,6 +686,7 @@ async def run_service_automation_tick(bot: Bot) -> None:
     from app.services.service_automation import process_service_automation
 
     last_id = 0
+    unreachable_shops: set[int] = set()
     while True:
         async with SessionLocal() as session:
             rows = (await session.execute(
@@ -725,6 +711,9 @@ async def run_service_automation_tick(bot: Bot) -> None:
                     if shop_id:
                         send_bot, should_close = await open_notify_bot_for_reseller(session, shop_id)
                         if send_bot is None:
+                            if shop_id not in unreachable_shops:
+                                unreachable_shops.add(shop_id)
+                                logger.warning("service automation skipped: shop %s has no bot token", shop_id)
                             continue
                     await process_service_automation(session, service_id, send_bot)
                 except Exception:
@@ -767,6 +756,32 @@ async def run_targeted_campaigns_tick(bot: Bot) -> None:
                         await send_bot.session.close()
 
 
+async def run_broadcast_tick(bot: Bot) -> None:
+    """Send owner broadcasts a step at a time; the platform bot only reaches platform customers."""
+    from app.services.broadcast_queue import run_broadcast_worker
+
+    await run_broadcast_worker(SessionLocal, bot)
+async def run_first_use_nudge_tick(bot: Bot) -> None:
+    """Message customers whose new service has not carried any traffic after a day."""
+    from app.services.first_use_nudge import run_first_use_check
+
+    async with SessionLocal() as session:
+        profiles = (
+            await session.execute(
+                select(ResellerProfile.user_id, ResellerProfile.id).where(
+                    ResellerProfile.is_active.is_(True), ResellerProfile.bot_token.is_not(None)
+                )
+            )
+        ).all()
+        profile_by_user = {int(user_id): int(profile_id) for user_id, profile_id in profiles if user_id is not None}
+        try:
+            await run_first_use_check(
+                session, get_pg(), lambda shop_id: _resolve_send_bot(bot, shop_id, profile_by_user)
+            )
+        except Exception:
+            logger.exception("first-use nudge tick failed")
+
+
 async def run_bbc_settlement_poll() -> None:
     """Re-read open «بزن به کارت» orders: the callback's backup and the late-payment check."""
     from app.services.bbc_settlement import poll_bbc_settlements
@@ -780,15 +795,49 @@ async def run_bbc_settlement_poll() -> None:
             logger.exception("bbc settlement poll failed")
 
 
+async def run_psp_settlement_poll() -> None:
+    """Re-verify open SunPay/Zarinpal settlements when the browser never returns,
+    and finish settlements a crash left half-settled."""
+    from app.services.payment_settlement import (
+        poll_psp_settlements,
+        recover_stuck_psp_settlements,
+    )
+
+    async with SessionLocal() as session:
+        try:
+            n = await poll_psp_settlements(session)
+            if n:
+                logger.info("psp settlement poll settled=%s", n)
+        except Exception:
+            logger.exception("psp settlement poll failed")
+    async with SessionLocal() as session:
+        try:
+            n = await recover_stuck_psp_settlements(session)
+            if n:
+                logger.info("psp stuck settlements recovered=%s", n)
+        except Exception:
+            logger.exception("psp stuck settlement recovery failed")
+
+
+BOT_PHOTO_FIRST_RUN_MINUTES = 2
+
+
 def start_background_scheduler() -> None:
     """Run financial and maintenance jobs as soon as the database is ready."""
     jobs = (
         ("billing_tick", run_reseller_billing_tick, {"minutes": 1}, 120),
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
         ("pending_order_cleanup", cleanup_stale_pending_orders, {"hours": 1}, 3600),
+        ("order_purge", run_auto_order_purge, {"hours": 1}, 3600),
+        ("scheduled_receipt_approval", run_scheduled_receipt_approvals, {"seconds": 60}, 90),
+        ("crypto_rate_refresh", run_crypto_rate_refresh, {"seconds": 60}, 90),
         ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),
         ("connection_status", run_connection_status, {"seconds": 60}, 60),
         ("bbc_settlement_poll", run_bbc_settlement_poll, {"seconds": 45}, 90),
+        ("psp_settlement_poll", run_psp_settlement_poll, {"seconds": 45}, 90),
+        # Ticks often; each shop is recounted on the period set in volume_external_sync_minutes.
+        ("volume_external_sync", run_volume_external_sync, {"minutes": 1}, 120),
+        ("chat_message_purge", run_chat_message_purge, {"hours": 1}, 3600),
     )
     for job_id, func, interval, grace in jobs:
         if scheduler.get_job(job_id) is None:
@@ -801,6 +850,18 @@ def start_background_scheduler() -> None:
                 misfire_grace_time=grace,
                 **interval,
             )
+    if scheduler.get_job("bot_profile_photo") is None:
+        # Every 6 hours, but the first copy soon after start so a new logo shows the same day.
+        scheduler.add_job(
+            run_bot_profile_photo_sync, "interval", hours=6, id="bot_profile_photo",
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=BOT_PHOTO_FIRST_RUN_MINUTES),
+            max_instances=1, coalesce=True, misfire_grace_time=3600,
+        )
+    if scheduler.get_job("user_photo_prune") is None:
+        scheduler.add_job(
+            run_user_photo_prune, "interval", hours=24, id="user_photo_prune",
+            max_instances=1, coalesce=True, misfire_grace_time=3600,
+        )
     if not scheduler.running:
         scheduler.start()
         logger.info("Background scheduler started")
@@ -820,6 +881,14 @@ def start_scheduler(bot: Bot) -> None:
     scheduler.add_job(
         run_targeted_campaigns_tick, "interval", minutes=1, args=[bot], id="targeted_campaigns",
         max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,
+    )
+    scheduler.add_job(
+        run_broadcast_tick, "interval", minutes=1, args=[bot], id="broadcast",
+        max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,
+    )
+    scheduler.add_job(
+        run_first_use_nudge_tick, "interval", minutes=30, args=[bot], id="first_use_nudge",
+        max_instances=1, coalesce=True, misfire_grace_time=1800, replace_existing=True,
     )
     scheduler.add_job(
         run_service_automation_tick,

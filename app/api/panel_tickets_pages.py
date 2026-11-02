@@ -29,6 +29,9 @@ from app.services.panel_tickets import (
     unread_from_tickets,
 )
 from app.services.shop_scope import is_platform_admin, shop_owner_id
+import logging
+
+logger = logging.getLogger(__name__)
 
 _OK_FLASH = {
     "created": "تیکت ثبت شد",
@@ -97,7 +100,7 @@ async def _notify_bot_ticket_staff_reply(
         try:
             await bot.session.close()
         except Exception:
-            pass
+            logger.debug("_notify_bot_ticket_staff_reply: ignored failure", exc_info=True)
 
 
 def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db) -> None:

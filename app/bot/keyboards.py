@@ -538,6 +538,7 @@ REPLY_ACTION_ADM_USERS_LIST = "adm_users_list"
 REPLY_ACTION_ADM_USERS_SEARCH = "adm_users_search"
 REPLY_ACTION_ADM_USERS_WEB = "adm_users_web"
 REPLY_ACTION_ADM_RES_LIST = "adm_res_list"
+REPLY_ACTION_ADM_RES_SEARCH = "adm_res_search"
 REPLY_ACTION_ADM_RES_APPS = "adm_res_apps"
 REPLY_ACTION_ADM_RES_ADD = "adm_res_add"
 
@@ -1366,7 +1367,7 @@ def wholesale_qty_keyboard(
         ],
         [
             _ikb(
-                "ادامه ← تأیید",
+                _t(ui, "btn_buy_continue") or "🟢✅ ادامه خرید",
                 callback_data="shop:wholesale:confirm",
                 style=_style(ui, "buy_continue", fallback="primary") or kind_style,
             )
@@ -1382,23 +1383,6 @@ def wholesale_qty_keyboard(
         ],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def wholesale_confirm_keyboard(
-    ui: dict | None = None,
-) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                _ikb(
-                    "✅ تأیید و پرداخت",
-                    callback_data="shop:wholesale:buy",
-                    style=_style(ui, "buy_continue", fallback="primary"),
-                )
-            ],
-            [back_button(ui, "shop:wholesale:qty")],
-        ]
-    )
 
 
 def custom_gb_keyboard(
@@ -1430,28 +1414,16 @@ def custom_days_keyboard(
                 InlineKeyboardButton(text="➕", callback_data="shop:custom:days:+"),
             ],
             [InlineKeyboardButton(text="✏️ ورود دستی روز", callback_data="shop:custom:days:input")],
-            [InlineKeyboardButton(text="✅ مشاهده قیمت و تأیید", callback_data="shop:custom:confirm")],
-            [back_button(ui, "shop:custom")],
-        ]
-    )
-
-
-def custom_confirm_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    buy_label = _t(ui, "btn_buy_continue") or "🟢✅ ادامه خرید"
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
             [
                 _ikb(
-                    buy_label,
-                    callback_data="shop:custom:buy",
+                    _t(ui, "btn_buy_continue") or "🟢✅ ادامه خرید",
+                    callback_data="shop:custom:confirm",
                     style_id="buy_continue", style_fallback="primary",
                     ui=ui,
                     label_key="btn_buy_continue",
                 )
             ],
-            [InlineKeyboardButton(text="✏️ تغییر روز", callback_data="shop:custom:gb:next")],
-            [InlineKeyboardButton(text="✏️ تغییر حجم", callback_data="shop:custom")],
-            [back_button(ui, "shop:list")],
+            [back_button(ui, "shop:custom")],
         ]
     )
 
@@ -2035,8 +2007,12 @@ def admin_reseller_actions(
     *,
     has_shop_services: bool = False,
     color_tag: str | None = None,
+    oversell: bool | None = None,
 ) -> InlineKeyboardMarkup:
-    """Reseller card actions — PG-owned services are primary; optional shop UserServices link."""
+    """Reseller card actions — PG-owned services are primary; optional shop UserServices link.
+
+    ``oversell`` is the volume-oversell switch; None hides it (PAYG shops have no ceiling).
+    """
     from app.services.color_tags import bot_tag_button_label
 
     tag_label = bot_tag_button_label(color_tag)
@@ -2049,10 +2025,19 @@ def admin_reseller_actions(
         ],
         [
             InlineKeyboardButton(
+                text="✉️ پیام",
+                callback_data=f"adm:resellers:msg:{user_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 text="⏱ تغییر ظرفیت",
                 callback_data=f"adm:resellers:capadj:{user_id}",
             )
         ],
+        # One button per row: pack_detail_rows pairs them two by two.
+        [InlineKeyboardButton(text="➕ افزایش کیف", callback_data=f"adm:resellers:wcredit:{user_id}")],
+        [InlineKeyboardButton(text="➖ کاهش کیف", callback_data=f"adm:resellers:wdebit:{user_id}")],
         [
             InlineKeyboardButton(
                 text=f"🏷 تگ: {tag_label}"[:64],
@@ -2060,6 +2045,15 @@ def admin_reseller_actions(
             )
         ],
     ]
+    if oversell is not None:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"📈 فروش بیش از سقف حجم: {'روشن' if oversell else 'خاموش'}",
+                    callback_data=f"adm:resellers:osell:{user_id}",
+                )
+            ]
+        )
     if has_shop_services:
         rows.append(
             [

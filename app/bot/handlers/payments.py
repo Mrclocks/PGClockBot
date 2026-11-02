@@ -7,12 +7,16 @@ from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
+from app.services.chat_records import keep_sent
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
+from app.services.notifications import notify_stars_delivery_failed
 from app.services.orders import approve_payment, reject_payment, stars_amount_for_toman
 from app.services.resellers import reseller_can_review_payment
 from app.services.users import get_all_settings, get_setting
 from app.services import bot_feedback_texts as feedback
+
+logger = logging.getLogger(__name__)
 
 router = Router(name="payments")
 
@@ -172,33 +176,22 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
             logging.getLogger(__name__).exception(
                 "stars post-failure payment update failed id=%s", payment.id
             )
-        if refunded:
-            await message.answer(
-                f"پرداخت استارز دریافت شد ولی تحویل ناموفق بود و استارز بازگردانده شد: {e}"
-            )
-        else:
-            await message.answer(
-                f"پرداخت استارز دریافت شد ولی تحویل ناموفق بود: {e}\n"
-                "بازگشت خودکار ناموفق بود — با پشتیبانی تماس بگیرید؛ شناسه پرداخت ثبت شد."
-            )
+        with keep_sent():  # a payment outcome the buyer must be able to find again
+            if refunded:
+                await message.answer("پرداخت استارز دریافت شد ولی تحویل ناموفق بود و استارز بازگردانده شد.")
+            else:
+                await message.answer(
+                    "پرداخت استارز دریافت شد ولی تحویل ناموفق بود.\n"
+                    "بازگشت خودکار ناموفق بود — با پشتیبانی تماس بگیرید؛ شناسه پرداخت ثبت شد."
+                )
         try:
-            from app.config import get_settings
-
-            alert = (
-                f"⚠️ تحویل استارز ناموفق\n"
-                f"payment=#{payment.id}\n"
-                f"user_tg={db_user.telegram_id}\n"
-                f"charge={charge_id or '—'}\n"
-                f"refunded={'yes' if refunded else 'NO'}\n"
-                f"error={e}"
+            await notify_stars_delivery_failed(
+                message.bot, session, payment, telegram_id=int(db_user.telegram_id),
+                charge_id=charge_id, refunded=refunded, error=str(e),
             )
-            for aid in get_settings().admin_ids:
-                try:
-                    await message.bot.send_message(aid, alert)
-                except Exception:
-                    pass
         except Exception:
-            pass
+            # Best-effort staff alert: the failure is logged above and stamped on the payment.
+            logging.getLogger(__name__).warning("stars failure alert failed payment=%s", payment.id, exc_info=True)
         return
     from app.bot.menu_nav import buyer_main_reply_keyboard, clear_checkout_nav
 
@@ -211,10 +204,11 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
         is_reseller_bot=False,
         reseller_owner_id=None,
     )
-    await message.answer(
-        format_message("✅ پرداخت استارز", "پرداخت با موفقیت انجام شد."),
-        reply_markup=main_kb,
-    )
+    with keep_sent():
+        await message.answer(
+            format_message("✅ پرداخت استارز", "پرداخت با موفقیت انجام شد."),
+            reply_markup=main_kb,
+        )
     try:
         await send_delivery_to_user(message.bot, db_user.telegram_id, session, payment, order)
     except Exception as send_exc:
@@ -226,11 +220,12 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
                     session, order=order, payment=payment, error=str(send_exc)
                 )
             except Exception:
-                pass
+                logger.debug("stars_successful_payment: ignored failure", exc_info=True)
         try:
-            await message.answer("پرداخت شد ولی ارسال جزئیات سرویس ناموفق بود — از «سرویس‌های من» بررسی کنید.")
+            with keep_sent():
+                await message.answer("پرداخت شد ولی ارسال جزئیات سرویس ناموفق بود — از «سرویس‌های من» بررسی کنید.")
         except Exception:
-            pass
+            logger.debug("stars_successful_payment: ignored failure", exc_info=True)
     try:
         from app.db.models import Plan
         from app.services.notifications import notify_new_subscription
@@ -247,7 +242,7 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
                 needs_approval=False,
             )
     except Exception:
-        pass
+        logger.debug("stars_successful_payment: ignored failure", exc_info=True)
 
 
 async def _payrev_load(
@@ -292,7 +287,7 @@ async def _payrev_finish(callback: CallbackQuery, result) -> None:
                 reply_markup=None,
             )
     except Exception:
-        pass
+        logger.debug("_payrev_finish: ignored failure", exc_info=True)
 
 
 @router.callback_query(F.data.startswith("payrev:ok:"))
@@ -381,11 +376,12 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
                 is_reseller_bot=False,
                 reseller_owner_id=None,
             )
-            await callback.bot.send_message(
-                user.telegram_id,
-                text,
-                reply_markup=main_kb,
-                **{"parse_mode": "HTML", **send_kw},
-            )
+            with keep_sent():  # a notice or review item, never a temporary panel
+                await callback.bot.send_message(
+                    user.telegram_id,
+                    text,
+                    reply_markup=main_kb,
+                    **{"parse_mode": "HTML", **send_kw},
+                )
         except Exception:
-            pass
+            logger.debug("pay_reject: ignored failure", exc_info=True)

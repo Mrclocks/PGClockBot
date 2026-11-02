@@ -154,7 +154,7 @@ class GiftCodeToggleAuthzTests(unittest.IsolatedAsyncioTestCase):
                 "bot_user_id": 42,
                 "id": 42,
                 "username": "shop_owner",
-                "permissions": ["plans", "orders"],
+                "permissions": ["gift_codes"],
             }
             await self.toggle_route.endpoint(
                 code_id=row.id, staff=reseller, session=session

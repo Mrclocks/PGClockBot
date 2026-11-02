@@ -34,9 +34,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.chat_screen import shows_keyboard
 from app.db.models import BotUser
 from app.services.users import get_all_settings
 from app.services import bot_feedback_texts as feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 ReopenPanel = Callable[..., Awaitable[Any]]
 
@@ -103,6 +107,8 @@ async def heal_main_reply(
         as_user=as_user,
         ui=ui,
     )
+    if body == _HEAL_FALLBACK_TEXT and shows_keyboard(message.bot, message.chat.id, markup):
+        return resolved_ui  # nothing to say and the menu is already there
     await message.answer(body, reply_markup=markup)
     return resolved_ui
 
@@ -133,7 +139,7 @@ async def answer_staff_nav(
         try:
             await state.clear()
         except Exception:
-            pass
+            logger.debug("answer_staff_nav: ignored failure", exc_info=True)
     _ = classic
     from app.bot.nav_inline import is_bot_panel_message
 

@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 import html as html_mod
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def copyable(value: Any, *, empty: str = "—") -> str:
@@ -210,6 +213,21 @@ def format_bytes_ratio_parts(
     }
 
 
+UNLIMITED_TRAFFIC_LABEL = "نامحدود"
+
+
+def format_bytes_left(used: int | float | None, limit: int | float | None) -> str:
+    """Traffic still left, e.g. «6.4 گیگ»; «نامحدود» without a limit, «0 بایت» when used up."""
+    try:
+        lim = float(limit) if limit is not None else 0.0
+        u = float(used or 0)
+    except (TypeError, ValueError):
+        return "—"
+    if lim <= 0:
+        return UNLIMITED_TRAFFIC_LABEL
+    return format_bytes(max(0.0, lim - abs(u)))
+
+
 def format_count_ratio(used: int | float | None, limit: int | float | None) -> str:
     """Integer used/limit without spaces: «۱۲/۲۰»."""
     if limit is None:
@@ -253,7 +271,7 @@ def format_number(num: int | float | None) -> str:
         if isinstance(num, Undefined):
             return "—"
     except Exception:
-        pass
+        logger.debug("format_number: ignored failure", exc_info=True)
     try:
         if isinstance(num, float) and not num.is_integer():
             return f"{num:,.2f}".replace(",", "٬")
@@ -734,6 +752,15 @@ def info_block(lines: list[str]) -> str:
     return "\n".join(clean)
 
 
+def _stored_volume(info: dict) -> str:
+    """Saved total volume when live usage is unavailable; usage itself stays unknown."""
+    limit = info.get("stored_data_limit")
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0:
+        return "—"
+    total = "نامحدود" if limit == 0 else format_bytes(limit)
+    return f"مصرف نامشخص از {total}"
+
+
 def service_card(info: dict, currency_note: str = "") -> str:
     username = info.get("username", "—")
     status_raw = info.get("status")
@@ -754,7 +781,7 @@ def service_card(info: dict, currency_note: str = "") -> str:
         f"👤 {copyable(username)}",
         "",
         kv_line("📶", "وضعیت", status),
-        kv_line("📦", "حجم", format_bytes_ratio(used, limit, joiner=" از ") if volume_known else "—"),
+        kv_line("📦", "حجم", format_bytes_ratio(used, limit, joiner=" از ") if volume_known else _stored_volume(info)),
         kv_line("📅", "انقضا", f"<b>{expire}</b>"),
     ]
     if bar is not None:
@@ -763,6 +790,12 @@ def service_card(info: dict, currency_note: str = "") -> str:
         lines.extend(["", "⚠️ خطا در دریافت اطلاعات سرویس: " + html_mod.escape(str(info["error_message"]))])
         if info.get("error_code"):
             lines.append("کد خطا: " + copyable(info["error_code"]))
+    stored_at = parse_expire(info.get("stored_at"))
+    if stored_at is not None:
+        lines.append(
+            "🕒 حجم و انقضا از آخرین اطلاعات ذخیره‌شده "
+            f"({stored_at.astimezone().strftime('%Y/%m/%d %H:%M')}) است و ممکن است به‌روز نباشد."
+        )
     if currency_note:
         lines.extend(["", currency_note])
     online = info.get("online_at")

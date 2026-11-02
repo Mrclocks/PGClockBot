@@ -1,12 +1,26 @@
 {# Shared settings groups inside a domain modal panel.
    Expects: settings_form_action, tab_groups, groups, values
-   Optional: show_pending_orders, pending_orders_action
+   Optional: show_pending_orders, pending_orders_action, show_cleanup_status (+ cleanup_status)
 #}
+{% set pay_settings_gate = {
+  'کارت به کارت': 'pay_card_enabled',
+  'تأیید خودکار کارت به کارت': 'pay_card_auto_enabled',
+  'درگاه پرداخت': 'pay_gateway_enabled',
+  'درگاه آنلاین API': 'pay_psp_enabled',
+  'بزن به کارت': 'pay_bbc_enabled',
+  'رمزارز': 'pay_crypto_enabled',
+  'استارز تلگرام': 'pay_stars_enabled',
+} %}
+{% set _pay_on = ['1', 'true', 'yes', 'on'] %}
 <div class="settings-domain-stack">
+{% if show_cleanup_status and cleanup_status %}
+  {% include "_settings_cleanup_status.html" %}
+{% endif %}
 <form method="post" action="{{ settings_form_action }}" enctype="multipart/form-data" class="settings-form">
   {% for group_name in tab_groups %}
   {% set fields = groups[group_name] %}
-  <div class="card settings-card">
+  {% set gate_key = pay_settings_gate.get(group_name) %}
+  <div class="card settings-card"{% if gate_key %} data-pay-settings-for="{{ gate_key }}"{% if (values.get(gate_key, '')|string|lower) not in _pay_on %} hidden{% endif %}{% endif %}>
     <h2>{{ group_name }}</h2>
     <div class="settings-grid">
     {% for field in fields %}
@@ -15,10 +29,11 @@
     </div>
   </div>
   {% endfor %}
-  <div class="actions sticky-actions">
+  <div class="actions sticky-actions ui-modal-sticky-save">
     <button class="btn" type="submit">ذخیره تنظیمات</button>
   </div>
 </form>
+<script src="/static/settings-show-when.js?v={{ app_version }}" defer></script>
 {% if show_pending_orders %}
   {% include "_settings_pending_orders.html" %}
 {% endif %}

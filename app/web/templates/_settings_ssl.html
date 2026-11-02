@@ -1,4 +1,4 @@
-{# SSL — دریافت گواهی و فعال‌سازی خودکار HTTPS #}
+{# دامنه‌ها — دامنهٔ پنل وب، دامنهٔ مینی‌اپ و گواهی SSL مشترک آن‌ها #}
 {% from "macros.html" import modal_title %}
 
 {% set st = ssl %}
@@ -9,9 +9,9 @@
 
 <form method="post" action="/settings?tab=ssl" class="form-stack settings-form" id="ssl-form">
   <div class="card settings-card">
-    <h2>گواهی SSL (HTTPS)</h2>
+    <h2>دامنهٔ پنل وب</h2>
     <p class="muted update-card-caption">
-      فقط دامنه پنل و مینی‌اپ را وارد کنید. پس از دریافت موفق گواهی، HTTPS به‌صورت خودکار فعال می‌شود.
+      دامنهٔ پنل را وارد کنید. پس از دریافت موفق گواهی SSL، HTTPS به‌صورت خودکار فعال می‌شود.
       تا قبل از آن همه آدرس‌ها با <code dir="ltr">http</code> باز می‌شوند.
     </p>
 
@@ -39,8 +39,7 @@
 
     <div class="settings-grid">
       <div class="setting-item full">
-        <label>دامنه پنل و مینی‌اپ
-          
+        <label>دامنهٔ پنل
           <input name="domain" value="{{ st.pending_domain or st.domain }}" dir="ltr" required placeholder="bot.example.com" autocomplete="off" />
         <small class="muted">DNS باید به IP همین سرور اشاره کند</small>
         {% if st.pending_domain and st.domain and st.pending_domain != st.domain %}
@@ -50,12 +49,48 @@
       </div>
       <div class="setting-item full">
         <label>ایمیل Let's Encrypt
-          
           <input name="acme_email" type="email" value="{{ st.pending_email or st.email }}" dir="ltr" required placeholder="admin@example.com" />
         <small class="muted">برای اعلان انقضا — عمومی نمی‌شود.</small>
         </label>
       </div>
     </div>
+  </div>
+
+  {% set own_miniapp = st.pending_miniapp_domain or st.miniapp_domain %}
+  <div class="card settings-card" id="miniapp-domain">
+    <h2>مینی‌اپ</h2>
+    <p class="muted update-card-caption">
+      مینی‌اپ تلگرام می‌تواند روی دامنهٔ جدای خودش باز شود (مثلاً <code dir="ltr">app.example.com</code>).
+      هر دو دامنه روی یک گواهی SSL قرار می‌گیرند و با همان دکمهٔ پایین صادر می‌شوند؛ دکمهٔ «Open» ربات و ربات‌های فروشگاه نمایندگان خودکار به آدرس جدید می‌روند.
+    </p>
+    <div class="settings-grid">
+      <div class="setting-item full">
+        <label class="toggle-row ui-switch-row">
+          <span class="ui-switch-copy">
+            <strong>همان دامنهٔ پنل</strong>
+            <small class="muted">روشن = مینی‌اپ روی دامنهٔ پنل باز می‌شود و فیلد زیر نادیده گرفته می‌شود.</small>
+          </span>
+          <span class="ui-switch">
+            <input type="checkbox" name="miniapp_same_domain" value="1" {% if not own_miniapp %}checked{% endif %} />
+            <span class="ui-switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+      </div>
+      <div class="setting-item full">
+        <label>دامنهٔ مینی‌اپ
+          <input name="miniapp_domain" value="{{ own_miniapp }}" dir="ltr" placeholder="app.example.com" autocomplete="off" />
+          <small class="muted">DNS این دامنه هم باید به IP همین سرور اشاره کند. پس از تغییر، «صدور مجدد گواهی» را بزنید.</small>
+          {% if st.pending_miniapp_domain and st.pending_miniapp_domain != st.miniapp_domain %}
+          <small class="muted">در حال دریافت برای <code dir="ltr">{{ st.pending_miniapp_domain }}</code> — تا موفقیت، آدرس فعلی مینی‌اپ می‌ماند.</small>
+          {% endif %}
+        </label>
+      </div>
+    </div>
+    {% if st.public_miniapp %}
+    <p class="muted ssl-status-line">آدرس فعلی مینی‌اپ:
+      <code class="ssl-status-code" dir="ltr">{{ st.public_miniapp }}</code>
+    </p>
+    {% endif %}
   </div>
 
   <div class="actions sticky-actions">
@@ -93,6 +128,7 @@
     <span class="badge warn">موقت · خودامضا (IP)</span>
     {% endif %}
     <code class="ssl-status-code" dir="ltr">{{ st.domain }}</code>
+    {% if st.miniapp_domain %}<code class="ssl-status-code" dir="ltr">{{ st.miniapp_domain }}</code>{% endif %}
   </p>
   {% if st.public_https %}
   <p class="muted ssl-status-line">آدرس HTTPS:

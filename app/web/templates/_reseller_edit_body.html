@@ -82,6 +82,9 @@
         {{ switch('perm_' ~ key, label, checked=(key in selected_perms)) }}
         {% endfor %}
       </div>
+      {% if miniapp_status %}
+      <p class="ui-switch-section-hint" role="status">وضعیت مینی‌اپ فروشگاه: {{ miniapp_status }}</p>
+      {% endif %}
     </div>
 
     <p class="muted">
@@ -123,6 +126,10 @@
     <div class="ui-switch-list">
       {{ switch('is_active', 'نماینده فعال', checked=profile.is_active) }}
       {{ switch('share_pg_panel_url', 'ارسال لینک پنل پاسارگارد', checked=profile.share_pg_panel_url, help='اگر خاموش باشد، فقط وب‌پنل ربات برای مدیریت استفاده می‌شود') }}
+      {% if owner_can_toggle_oversell and not is_payg %}
+      <input type="hidden" name="volume_oversell_shown" value="1" />
+      {{ switch('allow_volume_oversell', 'اجازه فروش بیش از سقف حجم', checked=profile.allow_volume_oversell, help='اگر خاموش باشد، مجموع حجم سرویس‌های فروشگاه از سقف اشتراک بیشتر نمی‌شود. نماینده‌ای که اشتراک یا سقف حجم ندارد محدود نمی‌شود.') }}
+      {% endif %}
     </div>
 
     <div class="actions">
@@ -180,6 +187,24 @@
       <span class="payg-meta-label">حجم اضافه</span>
       <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_gb_text }}</span>
     </li>
+    {% if pg_subscription.alloc_ratio_text %}
+    <li>
+      <span class="payg-meta-label">تخصیص / سقف</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_ratio_text }}</span>
+    </li>
+    <li>
+      <span class="payg-meta-label">ساخته‌شده مستقیم در پاسارگارد</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_external_text }}</span>
+    </li>
+    <li>
+      <span class="payg-meta-label">واگذارشده به زیرنماینده‌ها</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_children_text }}</span>
+    </li>
+    <li>
+      <span class="payg-meta-label">حجم در اختیار منقضی‌ها</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_expired_held_text }}</span>
+    </li>
+    {% endif %}
     <li>
       <span class="payg-meta-label">کاربران کل</span>
       <span class="payg-meta-value num-ratio">{{ pg_subscription.total_users_text }}</span>
@@ -195,6 +220,32 @@
     </li>
     {% endif %}
   </ul>
+  {% if pg_subscription.alloc_is_oversold %}
+  <div class="flash warn">تخصیص حجم این نماینده از سقف بیشتر است. افزایش حجم تا کاهش یا حذف سرویس‌ها مسدود است.</div>
+  {% endif %}
+  {% if pg_subscription.alloc_external_stale %}
+  <div class="flash warn">کاربرانی که مستقیم در پاسارگارد ساخته شده‌اند مدتی است شمرده نشده‌اند؛ آخرین مقدار شمرده‌شده حساب می‌شود. اتصال پنل را بررسی کنید.</div>
+  {% endif %}
+  {% if pg_subscription.alloc_uncapped_children %}
+  <div class="flash warn">
+    زیرنماینده‌های بدون سقف حجم (از حجم این نماینده کم نمی‌کنند و محدود هم نمی‌شوند):
+    <ul class="muted">
+      {% for c in pg_subscription.alloc_uncapped_children %}
+      <li dir="ltr">#{{ c.shop_id }} {{ c.pg_username }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% if pg_subscription.alloc_unlimited %}
+  <div class="flash warn">
+    سرویس‌های نامحدود یا همگام‌نشده (در تخصیص صفر حساب می‌شوند):
+    <ul class="muted">
+      {% for u in pg_subscription.alloc_unlimited %}
+      <li dir="ltr">#{{ u.id }} {{ u.pg_username }} ({{ u.kind }})</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
   {% if pg_subscription.can_sync %}
   {% if pg_subscription.differs %}
   <div class="flash warn">ظرفیت ثبت‌شده با سقف فعلی ادمین در پاسارگارد یکی نیست. اگر سقف پاسارگارد درست است، «همگام‌سازی از پاسارگارد» را بزنید.</div>
@@ -227,6 +278,17 @@
 </section>
 {% endif %}
 
+{% if not is_payg %}
+<section class="edit-section" id="reseller-wallet">
+  <header class="edit-section-head">
+    <h3>کیف پول</h3>
+    <p class="muted">موجودی فعلی: <b><span dir="ltr">{{ (user.wallet_balance or 0) | money }}</span> تومان</b> — مبلغ را وارد کنید، سپس افزایش یا کاهش را بزنید. موجودی منفی مجاز نیست.</p>
+  </header>
+  {% from "_wallet_adjust_form.html" import wallet_adjust_form %}
+  {{ wallet_adjust_form('/resellers/' ~ user.id ~ '/billing-topup', 'موجودی کیف پول این نماینده مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟', nonce=topup_nonce, note_max=200) }}
+</section>
+{% endif %}
+
 {% if is_payg %}
 <section class="edit-section">
   <header class="edit-section-head">
@@ -254,28 +316,12 @@
       <span class="payg-meta-value num-ratio">{{ (profile.billing_watermark_bytes or 0) | bytes }}</span>
     </li>
   </ul>
-  <p class="muted payg-help">مصرف ترافیک از کیف پول فروشگاه نماینده کم می‌شود و شارژ دستی هم به همان کیف پول می‌رود. ستون «مانده» موجودی بعد از هر تراکنش است.</p>
-  <form method="post" action="/resellers/{{ user.id }}/billing-topup" class="form-stack">
-    <input type="hidden" name="nonce" value="{{ topup_nonce }}" />
-    <div class="form-row">
-      <div>
-        <label class="form-field">شارژ کیف پول (تومان)
-          <input name="amount" type="number" data-money min="{{ min_unsuspend or 1000 }}" step="1000" value="{{ min_unsuspend or '' }}" placeholder="مثلاً ۵۰,۰۰۰" required />
-          {% if min_unsuspend %}
-          <small class="muted">حداقل برای رفع مسدودی: <span dir="ltr">{{ (min_unsuspend) | money }}</span> تومان (۲× آستانه هشدار)</small>
-          {% endif %}
-        </label>
-      </div>
-      <div>
-        <label class="form-field">یادداشت
-          <input name="note" type="text" maxlength="200" placeholder="اختیاری" />
-        </label>
-      </div>
-    </div>
-    <div class="actions">
-      <button class="btn" type="submit">ثبت شارژ کیف پول</button>
-    </div>
-  </form>
+  <p class="muted payg-help">مصرف ترافیک از کیف پول فروشگاه نماینده کم می‌شود و افزایش یا کاهش دستی هم روی همان کیف پول اعمال می‌شود؛ موجودی منفی مجاز نیست. ستون «مانده» موجودی بعد از هر تراکنش است.</p>
+  {% from "_wallet_adjust_form.html" import wallet_adjust_form %}
+  {{ wallet_adjust_form('/resellers/' ~ user.id ~ '/billing-topup',
+       'موجودی کیف پول این نماینده تغییر کند؟ اگر با کاهش موجودی صفر شود، ادمین پاسارگارد نماینده و همهٔ کاربرانش همان لحظه قطع می‌شوند.',
+       nonce=topup_nonce, amount_value=(min_unsuspend or ''), note_max=200,
+       hint=(('حداقل شارژ برای رفع مسدودی: ' ~ (min_unsuspend | money) ~ ' تومان (۲× آستانه هشدار)') if min_unsuspend else none)) }}
   {% if wallet_txs %}
   <div class="wallet-tx-block">
     <header class="edit-section-head">
@@ -308,7 +354,7 @@
       <li class="wallet-tx-item">
         <div class="wallet-tx-main">
           <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount | money }}</span>
-          <span class="muted wallet-tx-reason">{{ tx.kind or '—' }}{% if tx.note %} · {{ tx.note }}{% endif %}</span>
+          <span class="muted wallet-tx-reason">{{ {'topup': 'شارژ', 'usage': 'مصرف', 'adjustment': 'تنظیم دستی'}.get(tx.kind, tx.kind or '—') }}{% if tx.note %} · {{ tx.note }}{% endif %}</span>
         </div>
         <div class="wallet-tx-side">
           <span class="mono muted">#{{ tx.id }}</span>

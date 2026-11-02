@@ -1,4 +1,5 @@
 {% from "_list_input.html" import list_input %}
+{% from "macros.html" import setting_help %}
 {% set key = field[0] %}
 {% set label = field[1] %}
 {% set kind = field[2] if field|length > 2 else 'text' %}
@@ -6,25 +7,31 @@
 {% set options = field[4] if field|length > 4 else [] %}
 {% set val = values.get(key, '') %}
 {# Full-span kinds + lone payment/text keys that look half-empty in a 2-col modal grid #}
-{% set full_kinds = ['textarea', 'image', 'toggle', 'btn_color', 'force_channels', 'connection_guides', 'payment_cards', 'payment_gateways', 'payment_crypto_wallets'] %}
+{% set full_kinds = ['textarea', 'image', 'toggle', 'btn_color', 'force_channels', 'connection_guides', 'payment_cards', 'payment_gateways', 'payment_crypto_wallets', 'psp_gateways'] %}
 {% set full_keys = [
   'referral_bonus',
   'pending_order_ttl_hours',
+  'pending_order_approval_ttl_hours',
   'btn_pay_card', 'btn_pay_gateway', 'btn_pay_crypto', 'btn_pay_stars',
   'stars_toman_per_star', 'stars_title', 'stars_description',
-  'psp_provider', 'psp_merchant_id',
+  'psp_checkout_link_mode',
   'bbc_api_key', 'btn_pay_bbc',
   'btn_force_join', 'btn_force_join_check',
   'btn_guides', 'btn_guide_open_link',
   'terms_entry_btn', 'terms_buy_user_btn', 'terms_buy_reseller_btn',
   'receipt_dup_policy',
 ] %}
-<div class="setting-item {% if kind in full_kinds or key in full_keys %}full{% endif %}">
+{# A field tied to another field's value (see SETTING_VISIBILITY) starts hidden when that value does not show it. #}
+{% set rule = (setting_visibility|default({})).get(key) %}
+{% set controller_value = (values.get(rule[0], '')|string|lower) if rule else '' %}
+{% set controller_value = '1' if controller_value in ['true', 'yes', 'on'] else controller_value %}
+{% set rule_hidden = rule and controller_value not in rule[1] %}
+<div class="setting-item {% if kind in full_kinds or key in full_keys %}full{% endif %}"{% if rule %} data-setting="{{ key }}" data-show-when="s_{{ rule[0] }}:{{ rule[1]|join(',') }}"{% endif %}{% if rule_hidden %} hidden{% endif %}>
   {% if kind == 'toggle' %}
   <label class="toggle-row ui-switch-row">
     <span class="ui-switch-copy">
       <strong>{{ label }}</strong>
-      {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+      {{ setting_help(help) }}
     </span>
     <span class="ui-switch">
       <input type="checkbox" name="s_{{ key }}" value="1" {% if val in ['1','true','yes','on'] %}checked{% endif %} />
@@ -32,13 +39,14 @@
     </span>
   </label>
   {% elif kind == 'select' %}
+  {% set select_val = val if val else (options[0][0] if options else '') %}
   <label>{{ label }}
     <select name="s_{{ key }}" {% if key == 'menu_layout' %}id="menu_layout_select"{% endif %}>
       {% for opt_val, opt_label in options %}
-      <option value="{{ opt_val }}" {% if val == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+      <option value="{{ opt_val }}" {% if select_val == opt_val %}selected{% endif %}>{{ opt_label }}</option>
       {% endfor %}
     </select>
-    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+    {{ setting_help(help) }}
   </label>
   {% elif kind == 'btn_color' %}
   {# Same tone-aware select as رنگبندی دکمه‌ها / plan color fields #}
@@ -61,13 +69,13 @@
         {% endfor %}
       </select>
     </div>
-    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+    {{ setting_help(help) }}
   </div>
   {% elif kind == 'force_channels' %}
   <div class="force-channels" data-force-channels>
     <div class="force-channels-head">
       <strong class="force-channels-title">{{ label }}</strong>
-      {% if help %}<p class="muted force-channels-help">{{ help }}</p>{% endif %}
+      {{ setting_help(help, class_name='force-channels-help') }}
     </div>
     <input type="hidden" name="s_{{ key }}" value="{{ val }}" data-force-channels-json />
     <div class="force-channels-list" data-force-channels-list></div>
@@ -77,7 +85,7 @@
        {% if guides_media_base %}data-guides-media-base="{{ guides_media_base }}" data-guides-media='{{ (guides_media or {})|tojson }}'{% endif %}>
     <div class="pay-dest-head">
       <strong class="pay-dest-title">{{ label }}</strong>
-      {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
+      {{ setting_help(help, class_name='pay-dest-help') }}
     </div>
     <input type="hidden" name="s_{{ key }}" value="{{ val }}" data-guides-json />
     <div class="pay-dest-rows" data-guides-list></div>
@@ -87,7 +95,7 @@
   <div class="pay-dest-list" data-pay-dest="cards" data-style-inherit-label="ارث از کارت به کارت">
     <div class="pay-dest-head">
       <strong class="pay-dest-title">{{ label }}</strong>
-      {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
+      {{ setting_help(help, class_name='pay-dest-help') }}
     </div>
     <input type="hidden" name="s_payment_cards" value="{{ values.get('payment_cards', '[]') }}" data-pay-dest-json />
     <div class="pay-dest-rows" data-pay-dest-list></div>
@@ -96,16 +104,26 @@
   <div class="pay-dest-list" data-pay-dest="gateways" data-style-inherit-label="ارث از درگاه پرداخت">
     <div class="pay-dest-head">
       <strong class="pay-dest-title">{{ label }}</strong>
-      {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
+      {{ setting_help(help, class_name='pay-dest-help') }}
     </div>
     <input type="hidden" name="s_payment_gateways" value="{{ values.get('payment_gateways', '[]') }}" data-pay-dest-json />
+    <div class="pay-dest-rows" data-pay-dest-list></div>
+  </div>
+  {% elif kind == 'psp_gateways' %}
+  <div class="pay-dest-list" data-pay-dest="psp">
+    <div class="pay-dest-head">
+      <strong class="pay-dest-title">{{ label }}</strong>
+      {{ setting_help(help, class_name='pay-dest-help') }}
+    </div>
+    {# Credentials never reach the browser (fails closed to an empty list); a blank key keeps the saved one. #}
+    <input type="hidden" name="s_psp_gateways" value="{{ psp_gateways_form_json(values) if psp_gateways_form_json is defined else '[]' }}" data-pay-dest-json />
     <div class="pay-dest-rows" data-pay-dest-list></div>
   </div>
   {% elif kind == 'payment_crypto_wallets' %}
   <div class="pay-dest-list" data-pay-dest="crypto" data-style-inherit-label="ارث از رمزارز">
     <div class="pay-dest-head">
       <strong class="pay-dest-title">{{ label }}</strong>
-      {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
+      {{ setting_help(help, class_name='pay-dest-help') }}
     </div>
     <input type="hidden" name="s_payment_crypto_wallets" value="{{ values.get('payment_crypto_wallets', '[]') }}" data-pay-dest-json />
     <div class="pay-dest-rows" data-pay-dest-list></div>
@@ -115,7 +133,7 @@
   {% elif kind == 'textarea' %}
   <label>{{ label }}
     <textarea name="s_{{ key }}" rows="5">{{ val }}</textarea>
-    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+    {{ setting_help(help) }}
   </label>
   {% elif kind == 'number' %}
   <label>{{ label }}
@@ -129,7 +147,7 @@
       min="1" max="99" step="1" inputmode="numeric"
       {% endif %}
     />
-    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+    {{ setting_help(help) }}
   </label>
   {% elif kind == 'image' %}
   <div class="image-setting">
@@ -151,24 +169,24 @@
       <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
       <span class="upload-box-progress" hidden aria-hidden="true"><i class="upload-box-progress-bar"></i></span>
     </label>
-    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+    {{ setting_help(help) }}
   </div>
   {% elif kind == 'password' %}
-  <label>{{ label }}
+  <label>{{ label }}{% if val %} <span class="badge active secret-saved">ذخیره شده</span>{% endif %}
     <input
       name="s_{{ key }}"
       type="password"
       value=""
       autocomplete="new-password"
       dir="ltr"
-      placeholder="{% if val %}•••••••• (خالی = بدون تغییر){% else %}وارد کنید{% endif %}"
+      placeholder="{% if val %}•••••••• (ذخیره شده؛ برای تغییر مقدار جدید را بنویسید){% else %}وارد کنید{% endif %}"
     />
-    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+    {{ setting_help(help) }}
   </label>
   {% else %}
   <label>{{ label }}
     <input name="s_{{ key }}" value="{{ val }}" />
-    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+    {{ setting_help(help) }}
   </label>
   {% endif %}
 </div>

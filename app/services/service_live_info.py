@@ -30,6 +30,9 @@ ERROR_MESSAGES = {
     "not_loaded": "اطلاعات این سرویس هنوز دریافت نشده؛ دکمه به‌روزرسانی را بزنید.",
     "upstream_unavailable": "دریافت اطلاعات سرویس از پنل ناموفق بود؛ دوباره تلاش کنید.",
 }
+# Only when the panel did not answer; a 404, a denial or a mismatch means the
+# saved values may describe a service that no longer exists as shown.
+STORED_QUOTA_FALLBACK_CODES = frozenset({"timeout", "upstream_unavailable"})
 
 
 def service_info_error(code: str = "upstream_unavailable") -> dict[str, Any]:
@@ -155,6 +158,33 @@ async def fetch_subscription_info(
             "service info failed service=%s code=%s", service_id, info["error_code"]
         )
     return info
+
+
+def with_stored_quota(info: dict[str, Any], service: Any) -> dict[str, Any]:
+    """Add the expiry and volume limit saved at the last successful panel read.
+
+    For display only: the status stays unknown and usage is not invented. The
+    caller must not persist the result back into the quota cache.
+    """
+    if info.get("error_code") not in STORED_QUOTA_FALLBACK_CODES:
+        return info
+    synced_at = getattr(service, "quota_synced_at", None)
+    if not isinstance(synced_at, datetime):
+        return info
+    stored = dict(info)
+    expire_at = getattr(service, "quota_expire_at", None)
+    # Synced with no expiry means the panel reported an unlimited service.
+    stored["expire"] = int(_as_utc(expire_at).timestamp()) if isinstance(expire_at, datetime) else 0
+    limit = getattr(service, "quota_data_limit_bytes", None)
+    if isinstance(limit, int) and not isinstance(limit, bool) and limit >= 0:
+        stored["stored_data_limit"] = limit
+    stored["stored_at"] = _as_utc(synced_at).isoformat()
+    return stored
+
+
+def _as_utc(moment: datetime) -> datetime:
+    # SQLite returns naive values for columns the app writes in UTC.
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=timezone.utc)
 
 
 async def fetch_live_service_info(

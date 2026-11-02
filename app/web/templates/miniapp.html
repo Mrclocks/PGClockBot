@@ -3,26 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="color-scheme" content="dark" />
-  <meta name="theme-color" content="#09090b" />
-  <title>مینی‌اپ · MrClockBot</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <meta name="color-scheme" content="dark light" />
+  <title>مینی‌اپ</title>
+  <!-- async: a blocked telegram.org must not hold the page; launch.js keeps the sign-in from the address. -->
+  <script src="https://telegram.org/js/telegram-web-app.js" id="tg-sdk" async></script>
+  <script src="/static/miniapp/launch.js?v={{ app_version }}"></script>
+  <link rel="preload" href="/static/fonts/Vazirmatn-Variable.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
-  <link rel="stylesheet" href="/static/miniapp.css?v={{ app_version }}&support=1" />
+  <link rel="stylesheet" href="/static/miniapp.css?v={{ app_version }}&brand=4" />
 </head>
 <body>
-  <header class="ma-header">
-    <div class="ma-brand">
-      <strong id="hello">مینی‌اپ</strong>
-      <p class="muted" id="subtitle">در حال بارگذاری…</p>
-    </div>
-    <span class="ma-role" id="role-badge">…</span>
-  </header>
-  <main id="root" aria-live="polite"></main>
-  <div class="ma-nav-wrap">
-    <nav class="ma-nav" id="nav" aria-label="منوی مینی‌اپ"></nav>
+  <div id="ptr" class="ptr" aria-hidden="true">
+    <svg focusable="false" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.5-4.5L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.5 4.5L20 16"/><path d="M20 20v-4h-4"/></svg>
   </div>
-  <script src="/static/catalog_price.js?v={{ app_version }}&discounts=1"></script>
-  <script src="/static/miniapp.js?v={{ app_version }}&addons=2&support=1&money=1&init=3&discounts=1"></script>
+  <main id="root" class="ma-root" aria-live="polite"></main>
+  <nav id="nav" class="tabbar" aria-label="منوی مینی‌اپ"></nav>
+  <div id="sheet" class="sheet" hidden>
+    <button type="button" class="sheet-backdrop" data-action="close-sheet" aria-label="بستن" tabindex="-1"></button>
+    <section class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <header class="sheet-head">
+        <h2 id="sheet-title"></h2>
+        <button type="button" id="sheet-close" class="icon-btn" data-action="close-sheet" aria-label="بستن">
+          <svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </header>
+      <div id="sheet-body" class="sheet-body"></div>
+    </section>
+  </div>
+  <script src="/static/catalog_price.js?v={{ app_version }}&discounts=1" defer></script>
+  <script src="/static/miniapp/core.js?v={{ app_version }}&brand=4" defer></script>
+  <script src="/static/miniapp/render.js?v={{ app_version }}&brand=4" defer></script>
+  <script src="/static/miniapp/pull.js?v={{ app_version }}&brand=4" defer></script>
+  <script src="/static/miniapp/app.js?v={{ app_version }}&discounts=1&brand=4" defer></script>
 </body>
 </html>

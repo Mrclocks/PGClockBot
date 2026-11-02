@@ -112,7 +112,7 @@ class FunnelPageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
 
     async def test_tab_strip_marks_the_funnel_active_for_a_shop(self):
-        response = await self._get(_reseller(["orders", "plans"]), AsyncMock(return_value={}))
+        response = await self._get(_reseller(["orders", "gift_codes"]), AsyncMock(return_value={}))
         self.assertIn('href="/funnel" class="active" aria-current="page"', response.text)
 
 

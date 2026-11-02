@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import quote
 
 from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -33,6 +34,7 @@ from app.services.demo_users import non_demo_customer
 from app.services.pasarguard import is_pg_permission_denied
 from app.services.pg_read_resilience import PG_READ_UNAVAILABLE_MESSAGE, PgReadUnavailable
 from app.services.service_scope import shop_services_clause
+from app.services.staff_audit import StaffActor
 from app.services.ticket_scope import ticket_shop_clause
 from app.services import bot_feedback_texts as feedback
 
@@ -553,7 +555,7 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
                 try:
                     await bot.session.close()
                 except Exception:
-                    pass
+                    logger.debug("_resend: ignored failure", exc_info=True)
 
     try:
         if order.status == OrderStatus.DELIVERED.value and order.service_id:
@@ -696,6 +698,7 @@ async def create_charge_code(
     max_uses_per_user: int | None = None,
     first_purchase_only: bool = False,
     purchase_types: str | list[str] | None = None,
+    audit: StaffActor | None = None,
 ) -> ChargeCode:
     from app.services.gift_codes import create_gift_code
 
@@ -704,7 +707,7 @@ async def create_charge_code(
         note=note, code=code, kind=kind, percent=percent,
         max_discount_toman=max_discount_toman, expires_at=expires_at,
         max_uses_per_user=max_uses_per_user, first_purchase_only=first_purchase_only,
-        purchase_types=purchase_types,
+        purchase_types=purchase_types, audit=audit,
     )
 
 
@@ -740,9 +743,11 @@ async def record_funnel_event(
         )
     )
     try:
-        await session.flush()
-    except Exception:
-        await session.rollback()
+        # A savepoint, so a lost race on the unique key leaves the caller's transaction alone.
+        async with session.begin_nested():
+            await session.flush()
+    except IntegrityError:
+        logger.debug("funnel event %s already recorded", key, exc_info=True)
 
 
 async def funnel_summary(
@@ -910,6 +915,17 @@ async def refresh_user_risk(session: AsyncSession, user: BotUser) -> list[str]:
     return flags
 
 
+_BOT_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{5,32}$")
+
+
+def normalize_bot_username(bot_username: str | None) -> str | None:
+    """Strip ``@`` and accept only Telegram username shape."""
+    uname = (bot_username or "").strip().lstrip("@")
+    if not uname or not _BOT_USERNAME_RE.fullmatch(uname):
+        return None
+    return uname
+
+
 def bot_deep_link(bot_username: str | None, payload: str) -> str | None:
     uname = (bot_username or "").strip().lstrip("@")
     if not uname:
@@ -918,6 +934,65 @@ def bot_deep_link(bot_username: str | None, payload: str) -> str | None:
     if not payload:
         return f"https://t.me/{uname}"
     return f"https://t.me/{uname}?start={quote(payload)}"
+
+
+def bot_tg_resolve_link(bot_username: str | None) -> str | None:
+    """Native deep link that opens the bot chat inside the Telegram client.
+
+    Prefer this over ``https://t.me/...`` on payment-return pages: Telegram's
+    in-app browser often swallows ``https://t.me`` navigations (treats them as
+    internal URIs without opening the chat), and ``t.me`` HTTPS may be filtered.
+    """
+    uname = normalize_bot_username(bot_username)
+    if not uname:
+        return None
+    return f"tg://resolve?domain={uname}"
+
+
+async def resolve_shop_bot_username(
+    session: AsyncSession,
+    *,
+    shop_owner_id: int | None,
+) -> str | None:
+    """Shop ``ResellerProfile.bot_username``, else platform ``BOT_USERNAME``."""
+    from app.config import get_settings
+    from app.db.models import ResellerProfile
+
+    uname: str | None = None
+    rid = int(shop_owner_id) if shop_owner_id is not None else 0
+    if rid > 0:
+        profile = (
+            await session.execute(
+                select(ResellerProfile).where(ResellerProfile.user_id == rid)
+            )
+        ).scalar_one_or_none()
+        uname = (profile.bot_username if profile else None) or None
+    if not uname:
+        uname = (get_settings().bot_username or "").strip() or None
+    stripped = (uname or "").strip().lstrip("@") or None
+    return normalize_bot_username(stripped) or stripped
+
+
+async def shop_bot_chat_url(
+    session: AsyncSession,
+    *,
+    shop_owner_id: int | None,
+) -> str | None:
+    """``tg://resolve?domain=<bot>`` for returning from a payment WebView."""
+    uname = await resolve_shop_bot_username(session, shop_owner_id=shop_owner_id)
+    return bot_tg_resolve_link(uname) or bot_deep_link(uname, "")
+
+
+async def shop_bot_https_url(
+    session: AsyncSession,
+    *,
+    shop_owner_id: int | None,
+) -> str | None:
+    """HTTPS ``t.me`` fallback when the native ``tg://`` scheme is unavailable."""
+    return bot_deep_link(
+        await resolve_shop_bot_username(session, shop_owner_id=shop_owner_id),
+        "",
+    )
 
 
 async def build_magic_links_context(session: AsyncSession, staff: dict) -> dict[str, Any]:
@@ -952,6 +1027,15 @@ async def build_magic_links_context(session: AsyncSession, staff: dict) -> dict[
     return {"bot_username": bot_username, "links": links}
 
 
+# Credentials never leave the server in a downloadable settings file.
+_SECRET_SETTING_KEYS = frozenset({"bot_token", "webhook_secret", "backup_telegram_bot_token", "psp_merchant_id"})
+_SECRET_SETTING_SUFFIXES = ("_token", "_secret", "_api_key", "_password")
+
+
+def _is_secret_setting(key: str) -> bool:
+    return key in _SECRET_SETTING_KEYS or key.endswith(_SECRET_SETTING_SUFFIXES)
+
+
 async def export_shop_bundle(
     session: AsyncSession, *, reseller_id: int | None = None
 ) -> dict[str, Any]:
@@ -959,8 +1043,7 @@ async def export_shop_bundle(
 
     values = await get_all_settings(session, reseller_id=reseller_id)
     # Keep operator-facing keys; drop secrets-ish if any sneak in
-    skip = {"bot_token", "webhook_secret", "backup_telegram_bot_token"}
-    settings = {k: v for k, v in values.items() if k not in skip}
+    settings = {k: v for k, v in values.items() if not _is_secret_setting(k)}
     pq = select(Plan).order_by(Plan.sort_order.asc(), Plan.id.asc())
     if reseller_id is None:
         pq = pq.where(Plan.owner_reseller_id.is_(None))
@@ -1060,16 +1143,9 @@ async def _validate_import_plan(
     if gids and not groups_allowed_for_staff(staff, gids):
         raise ValueError("یکی از گروه‌های پلن در دسترس این حساب نیست")
 
-    try:
-        duration_days = int(raw.get("duration_days") or 30)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("مدت پلن نامعتبر است") from exc
-    data_limit = None
-    if raw.get("data_limit_gb") is not None and str(raw.get("data_limit_gb")).strip() != "":
-        try:
-            data_limit = int(float(raw.get("data_limit_gb")) * (1024**3))
-        except (TypeError, ValueError) as exc:
-            raise ValueError("حجم پلن نامعتبر است") from exc
+    duration_days = _import_int(raw.get("duration_days"), "مدت", default=30, maximum=MAX_IMPORT_DURATION_DAYS)
+    gb = _import_gb(raw.get("data_limit_gb"))
+    data_limit = None if gb is None else int(gb * (1024**3))
     try:
         await assert_user_plan_within_limits(
             staff,
@@ -1090,6 +1166,12 @@ async def import_shop_bundle(
     replace_plans: bool = False,
     staff: dict | None = None,
 ) -> dict[str, int]:
+    """Apply an exported settings + plans bundle in one commit, or change nothing.
+
+    Every plan is validated before anything is written. With ``replace_plans``,
+    plans that were ever sold or referenced are deactivated rather than deleted,
+    so existing services and orders keep their plan.
+    """
     from app.services.users import DEFAULT_SETTINGS, set_settings_bulk
 
     if not isinstance(payload, dict) or payload.get("format") != "pgclock-shop-bundle":
@@ -1097,6 +1179,9 @@ async def import_shop_bundle(
     settings = payload.get("settings") or {}
     if not isinstance(settings, dict):
         raise ValueError("settings نامعتبر است")
+    plans_in = payload.get("plans") or []
+    if not isinstance(plans_in, list):
+        raise ValueError("فهرست پلن‌ها نامعتبر است")
     # Known keys only; shop imports are further limited to shop-settings surface.
     allowed_keys = (
         shop_bundle_allowed_setting_keys()
@@ -1108,61 +1193,126 @@ async def import_shop_bundle(
         for k, v in settings.items()
         if str(k) in DEFAULT_SETTINGS and str(k) in allowed_keys
     }
+    new_plans: list[Plan] = []
+    for raw in plans_in:
+        if not isinstance(raw, dict) or not str(raw.get("name") or "").strip():
+            continue
+        await _validate_import_plan(session, raw, staff=staff)
+        new_plans.append(_plan_from_import(raw, reseller_id=reseller_id))
     if "connection_guides" in clean:
         # Media files live on the exporting server; an import keeps only this shop's own media.
         clean["connection_guides"] = await serialize_submitted_guides(
             session, clean["connection_guides"], reseller_id=reseller_id
         )
+    deleted = deactivated = 0
+    if replace_plans:
+        deleted, deactivated = await _retire_catalog_plans(session, reseller_id=reseller_id)
+    session.add_all(new_plans)
     if clean:
+        # Commits the plan changes above in the same transaction.
         await set_settings_bulk(session, clean, reseller_id=reseller_id)
-    plans_in = payload.get("plans") or []
-    created = 0
-    if replace_plans and isinstance(plans_in, list):
-        q = select(Plan)
-        if reseller_id is None:
-            q = q.where(Plan.owner_reseller_id.is_(None), Plan.is_trial.is_(False))
+    else:
+        await session.commit()
+    return {"settings": len(clean), "plans": len(new_plans), "deleted": deleted, "deactivated": deactivated}
+
+
+MAX_IMPORT_INT = 2_147_483_647
+MAX_IMPORT_DURATION_DAYS = 36_500
+
+
+def _import_int(raw: Any, label: str, *, default: int, maximum: int = MAX_IMPORT_INT) -> int:
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return default
+    if isinstance(raw, bool):
+        raise ValueError(f"{label} پلن ایمپورت نامعتبر است")
+    try:
+        number = float(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"{label} پلن ایمپورت نامعتبر است") from None
+    if not number.is_integer() or number < 0 or number > maximum:
+        raise ValueError(f"{label} پلن ایمپورت نامعتبر است")
+    return int(number)
+
+
+def _import_gb(raw: Any) -> float | None:
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    if isinstance(raw, bool):
+        raise ValueError("حجم پلن ایمپورت نامعتبر است")
+    try:
+        number = float(raw)
+    except (TypeError, ValueError):
+        raise ValueError("حجم پلن ایمپورت نامعتبر است") from None
+    if number != number or number < 0 or number > 1_000_000:
+        raise ValueError("حجم پلن ایمپورت نامعتبر است")
+    return number
+
+
+def _import_flag(raw: Any, *, default: bool) -> bool:
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() not in {"0", "false", "no", "off", ""}
+
+
+def _plan_from_import(raw: dict[str, Any], *, reseller_id: int | None) -> Plan:
+    gids = _parse_import_group_ids(raw.get("pg_group_ids"))
+    tpl_raw = raw.get("pg_template_id")
+    tpl_id = None if tpl_raw is None or str(tpl_raw).strip() == "" else _import_int(tpl_raw, "تمپلیت", default=0)
+
+    def text(key: str, limit: int) -> str | None:
+        value = raw.get(key)
+        return None if value is None else str(value)[:limit] or None
+
+    return Plan(
+        name=str(raw.get("name")).strip()[:128],
+        description=text("description", 2000),
+        price=_import_int(raw.get("price"), "قیمت", default=0),
+        duration_days=_import_int(raw.get("duration_days"), "مدت", default=30, maximum=MAX_IMPORT_DURATION_DAYS),
+        data_limit_gb=_import_gb(raw.get("data_limit_gb")),
+        pg_template_id=tpl_id,
+        pg_group_ids=",".join(str(g) for g in gids) or None,
+        pg_username_prefix=text("pg_username_prefix", 64),
+        pg_username_suffix=text("pg_username_suffix", 64),
+        pg_username_pattern=text("pg_username_pattern", 255),
+        owner_reseller_id=int(reseller_id) if reseller_id else None,
+        is_active=_import_flag(raw.get("is_active"), default=True),
+        is_trial=False,
+        sort_order=_import_int(raw.get("sort_order"), "ترتیب", default=0),
+    )
+
+
+async def _retire_catalog_plans(session: AsyncSession, *, reseller_id: int | None) -> tuple[int, int]:
+    """Delete unused catalog plans and deactivate referenced ones; returns (deleted, deactivated)."""
+    scope = Plan.owner_reseller_id.is_(None) if reseller_id is None else Plan.owner_reseller_id == int(reseller_id)
+    plans = (await session.execute(select(Plan).where(scope, Plan.is_trial.is_(False)))).scalars().all()
+    if not plans:
+        return 0, 0
+    referenced = await _referenced_plan_ids(session, [plan.id for plan in plans])
+    deleted = deactivated = 0
+    for plan in plans:
+        if plan.id in referenced:
+            plan.is_active = False
+            deactivated += 1
         else:
-            q = q.where(Plan.owner_reseller_id == int(reseller_id), Plan.is_trial.is_(False))
-        for old in (await session.execute(q)).scalars().all():
-            await session.delete(old)
-        await session.flush()
-    if isinstance(plans_in, list):
-        for raw in plans_in:
-            if not isinstance(raw, dict):
-                continue
-            name = str(raw.get("name") or "").strip()
-            if not name:
-                continue
-            await _validate_import_plan(session, raw, staff=staff)
-            gids = _parse_import_group_ids(raw.get("pg_group_ids"))
-            pg_group_ids = ",".join(str(g) for g in gids) if gids else raw.get("pg_group_ids")
-            if isinstance(pg_group_ids, list):
-                pg_group_ids = ",".join(str(int(x)) for x in pg_group_ids)
-            tpl_raw = raw.get("pg_template_id")
-            tpl_id = None
-            if tpl_raw is not None and str(tpl_raw).strip() != "":
-                tpl_id = int(tpl_raw)
-            session.add(
-                Plan(
-                    name=name[:128],
-                    description=(str(raw.get("description") or "")[:2000] or None),
-                    price=int(raw.get("price") or 0),
-                    duration_days=int(raw.get("duration_days") or 30),
-                    data_limit_gb=raw.get("data_limit_gb"),
-                    pg_template_id=tpl_id,
-                    pg_group_ids=pg_group_ids,
-                    pg_username_prefix=raw.get("pg_username_prefix"),
-                    pg_username_suffix=raw.get("pg_username_suffix"),
-                    pg_username_pattern=raw.get("pg_username_pattern"),
-                    owner_reseller_id=int(reseller_id) if reseller_id else None,
-                    is_active=bool(raw.get("is_active", True)),
-                    is_trial=False,
-                    sort_order=int(raw.get("sort_order") or 0),
-                )
-            )
-            created += 1
-    await session.commit()
-    return {"settings": len(clean), "plans": created}
+            await session.delete(plan)
+            deleted += 1
+    await session.flush()
+    return deleted, deactivated
+
+
+async def _referenced_plan_ids(session: AsyncSession, plan_ids: list[int]) -> set[int]:
+    """Plans any table points to (orders, services, automations, …), one query per reference."""
+    from app.db import Base
+
+    found: set[int] = set()
+    for table in Base.metadata.sorted_tables:
+        for column in table.columns:
+            if any(fk.column.table.name == Plan.__tablename__ for fk in column.foreign_keys):
+                rows = await session.execute(select(column).where(column.in_(plan_ids)).distinct())
+                found |= {int(value) for (value,) in rows if value is not None}
+    return found
 
 
 def capacity_used_pct(meter: dict | None) -> float | None:

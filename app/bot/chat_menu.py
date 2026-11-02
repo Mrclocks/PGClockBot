@@ -36,17 +36,19 @@ async def sync_telegram_menu_button(
     *,
     allow_miniapp: bool = True,
     label: str | None = None,
+    url: str | None = None,
 ) -> str:
     """Set global Menu Button to Mini App «Open» when enabled, else clear it.
 
     Returns ``webapp`` | ``cleared`` | ``skipped``.
-    Platform bot only should pass ``allow_miniapp=True``. Shop reseller bots
-    must pass ``False`` (initData HMAC uses the main bot token).
+    The platform bot opens the platform Mini App. A shop bot passes its own Mini App
+    ``url`` (``/miniapp/s/<key>/``, verified with that bot's token) only while the shop's
+    Mini App is on, and ``allow_miniapp=False`` otherwise.
     """
     from app.config import get_settings
 
     settings = get_settings()
-    url = (settings.miniapp_url or "").strip() if allow_miniapp else ""
+    url = ((url if url is not None else settings.miniapp_url) or "").strip() if allow_miniapp else ""
     if allow_miniapp and settings.miniapp_enabled and url.startswith("https://"):
         text = (label or "Open").strip()[:16] or "Open"
         try:

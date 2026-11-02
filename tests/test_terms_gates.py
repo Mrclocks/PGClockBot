@@ -126,7 +126,7 @@ class TermsWiringTests(unittest.TestCase):
         self.assertIn("needs_entry_gate", start)
         shop = Path("app/bot/handlers/shop.py").read_text()
         self.assertIn("prompt_terms_if_needed", shop)
-        self.assertEqual(shop.count("prompt_terms_if_needed"), 6)  # import+call x3
+        self.assertEqual(shop.count("prompt_terms_if_needed"), 8)  # import+call x4
         res = Path("app/bot/handlers/reseller.py").read_text()
         self.assertIn("buy_reseller", res)
         self.assertIn("prompt_terms_if_needed", res)

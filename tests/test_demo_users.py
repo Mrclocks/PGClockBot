@@ -116,7 +116,10 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
                 report = await build_finance_report(self.session, reseller_id=shop_id)
                 for period in ("day", "week", "month"):
                     self.assertEqual(report["periods"][period], {"orders": 2, "delivered": 1, "revenue": 100, "new_users": 1, "avg_order": 100})
-                self.assertEqual(report["payment_methods"], [{"method": "wallet", "label": "کیف پول", "count": 1, "amount": 100}])
+                self.assertEqual(
+                    report["payment_methods"],
+                    [{"method": "wallet", "label": "کیف پول", "count": 1, "amount": 100, "share_pct": 100}],
+                )
                 for key in ("total_users", "open_tickets", "delivery_failures", "expiring_services", "low_volume_services"):
                     self.assertEqual(report["ops"][key], 3 if shop_id is None and key == "total_users" else 1)
                 self.assertEqual(report["ops"]["pending_receipts"], 2)

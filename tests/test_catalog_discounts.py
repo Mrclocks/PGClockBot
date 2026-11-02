@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from app.api.catalog_discounts import register_catalog_discounts
-from app.api.miniapp_pages import _user_shop_payload
+from app.api.miniapp_feeds import catalog_plans_payload
 from app.db.models import (
     Base, BotUser, CampaignRecipient, CatalogDiscount, DiscountCode, MarketingPreference,
     Order, Plan, PlanCategory, ServiceAddonPack, TargetedCampaign, UserService,
@@ -40,7 +40,7 @@ from app.services.gift_codes import expiry_input
 from app.services.orders import create_custom_order, create_order, create_wholesale_order, get_catalog_plan, renew_service_with_plan
 from app.services.service_addons import create_addon_order
 from app.services.service_automation import automation_settings
-from app.bot.handlers import shop
+from app.services.checkout_summary import checkout_summary
 from app.services.shop_scope import ShopScopeError
 from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_shop_reseller_id
 
@@ -286,6 +286,7 @@ class CatalogDiscountTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(addon.amount, 80)
         with patch("app.services.users.get_all_settings", AsyncMock(return_value={
             "custom_plan_enabled": "1", "custom_plan_price_per_gb": "100", "custom_plan_price_per_day": "100",
+            "custom_plan_group_ids": "1",
             'wholesale_tiers': '[{"min": 1, "percent": 0}]',
             "wholesale_enabled": "1", "wholesale_min_qty": "1", "wholesale_max_qty": "100",
         })):
@@ -305,15 +306,14 @@ class CatalogDiscountTests(unittest.IsolatedAsyncioTestCase):
         await self.create(notify=False)
         plan = await get_catalog_plan(self.session, 1)
         self.assertEqual((displayed_quote(plan).price, plan.price), (80, 100))
-        with patch("app.api.miniapp_pages._enrich_services", AsyncMock(return_value=[{}])):
-            payload = await _user_shop_payload(self.session, self.user)
+        payload = await catalog_plans_payload(self.session)
         item = next(item for item in payload["plans"] if item["id"] == 1)
         self.assertEqual((item["price"], item["original_price"]), (80, 100))
         self.assertIsNotNone(item["discount_ends_at"])
         env = Environment(loader=FileSystemLoader(ROOT / "app/web/templates"), autoescape=select_autoescape())
         parser = ScriptSources()
         parser.feed(env.get_template("miniapp.html").render(app_version="test"))
-        core = next(url for url in parser.sources if urlsplit(url).path == "/static/miniapp.js")
+        core = next(url for url in parser.sources if urlsplit(url).path == "/static/miniapp/app.js")
         prices = next(url for url in parser.sources if urlsplit(url).path == "/static/catalog_price.js")
         self.assertEqual(parse_qs(urlsplit(core).query).get("discounts"), ["1"])
         self.assertLess(parser.sources.index(prices), parser.sources.index(core))
@@ -364,18 +364,14 @@ class CatalogDiscountTests(unittest.IsolatedAsyncioTestCase):
                 await call
         self.assertEqual(await self.session.scalar(select(func.count()).select_from(Order)), 0)
 
-    async def test_bot_plan_details_show_crossed_price_and_escape_catalog_text(self) -> None:
+    async def test_bot_payment_screen_shows_crossed_price_and_escapes_catalog_text(self) -> None:
         await self.create(notify=False)
         self.plan.name = "<img src=x>"
         self.plan.description = "<script>unsafe</script>"
+        order = Order(id=91, user_id=self.user.id, plan_id=1, amount=80)
+        self.session.add(order)
         await self.session.commit()
-        callback = SimpleNamespace(data="shop:plan:1", answer=AsyncMock(), message=SimpleNamespace())
-        with patch.object(shop, "get_all_settings", AsyncMock(return_value={})), \
-             patch.object(shop, "_answer_shop_maintenance", AsyncMock(return_value=False)), \
-             patch.object(shop, "_record_shop_funnel", AsyncMock()), \
-             patch.object(shop, "safe_edit_text", AsyncMock()) as edit:
-            await shop.shop_plan(callback, self.session, self.user)
-        message = edit.call_args.args[1]
+        message = await checkout_summary(self.session, order, currency="تومان")
         self.assertIn("<s>", message)
         self.assertIn("تخفیف تا", message)
         self.assertIn("&lt;img", message)

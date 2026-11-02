@@ -14,14 +14,17 @@ instead of being approved or retried blindly.
 from __future__ import annotations
 
 import hmac
+import html
 import json
 import logging
 import secrets
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import case, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Order, Payment, PaymentMethod, PaymentSettlement, PaymentStatus, SettlementStatus
@@ -29,29 +32,75 @@ from app.services.payment_providers import bezanbecard as bbc
 from app.services.payment_settlement import (
     BBC_PROVIDER,
     CHANNEL_BBC,
+    _as_utc,
     _get_by_idem,
     _insert_settlement_race_safe,
     _on,
-    _public_base,
     _shop_ids_equal,
     idem_key_bbc,
     notify_after_settlement,
+    psp_poll_delay,
     resolve_payment_shop_owner_id,
     settle_and_approve,
     tenant_key_for,
 )
+from app.services.public_https import https_public_base
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
 
 ENABLED_KEY = "pay_bbc_enabled"
 API_KEY = "bbc_api_key"
+# What a customer is told when the shop's gateway setup is incomplete; the cause goes to the log.
+CUSTOMER_UNAVAILABLE = "این روش پرداخت موقتاً در دسترس نیست؛ روش دیگری را انتخاب کنید."
+HTTPS_REQUIRED = "برای «بزن به کارت» آدرس عمومی پنل باید https باشد؛ SSL را روی پنل اصلی فعال کنید."
+
+
+class BbcNotReady(ValueError):
+    """The gateway cannot be used until its setup is fixed; customers only see ``CUSTOMER_UNAVAILABLE``."""
+
+
+def https_base() -> str:
+    """The https origin for BezanBeCard callbacks, or an empty string when there is none."""
+    return https_public_base()
+
+
+def gateway_origin(base: str) -> str:
+    """``https://host`` of ``base`` without a non-default port.
+
+    BezanBeCard refuses links on a panel port such as ``:9000``. Payment truth comes
+    from the poll, so a callback that cannot reach the panel only delays settling.
+    """
+    parts = urlsplit(base)
+    return urlunsplit(("https", parts.hostname or "", "", "", "")) if parts.hostname else ""
+
+
+def https_base_ready() -> bool:
+    """BezanBeCard calls back and returns over https only."""
+    return bool(https_base())
+
+
+
+async def bbc_enable_error(session: AsyncSession, payload: dict[str, str], *, reseller_id: int | None) -> str | None:
+    """A message when a saved payment tab would newly switch the gateway on without an https address.
+
+    A gateway that is already on does not block unrelated payment settings from being saved.
+    """
+    if str(payload.get(ENABLED_KEY, "")).strip() != "1" or https_base_ready():
+        return None
+    from app.services.users import get_setting
+
+    already_on = _on(await get_setting(session, ENABLED_KEY, "0", reseller_id=reseller_id))
+    return None if already_on else HTTPS_REQUIRED
 POLL_BATCH = 40
 # Expired orders are still read for a while: staff may approve a late transfer in the dashboard.
 LATE_PAYMENT_WINDOW = timedelta(hours=48)
 MAX_EXPIRED_ATTEMPTS = 5
 REVIEW_PREFIX = "review:"
 REJECTED_PREFIX = "rejected:"
+REFUSAL_TITLE = "❌ «بزن به کارت» ساخت سفارش را نپذیرفت"
+REFUSAL_NOTICE_INTERVAL = 30 * 60
+_last_refusal_notice: dict[int, float] = {}
 
 REVIEW_REASONS = {
     "needs_review": "بزن به کارت این واریز را «نیاز به بررسی» زده است. در داشبورد بزن به کارت بررسی و تأییدش کنید؛ ربات بعد از تأیید خودش تحویل می‌دهد.",
@@ -102,11 +151,18 @@ def checkout_of(settlement: PaymentSettlement) -> BbcCheckout | None:
 async def _shop_api_key(session: AsyncSession, shop_owner_id: int | None) -> str:
     ui = await get_all_settings(session, reseller_id=shop_owner_id)
     if not _on(ui.get(ENABLED_KEY)):
-        raise ValueError("درگاه بزن به کارت غیرفعال است")
+        raise BbcNotReady("درگاه بزن به کارت غیرفعال است")
     key = str(ui.get(API_KEY) or "").strip()
     if len(key) < 8:
-        raise ValueError("کلید API بزن به کارت تنظیم نشده")
+        raise BbcNotReady("کلید API بزن به کارت تنظیم نشده")
     return key
+
+
+async def ensure_gateway_ready(session: AsyncSession, shop_owner_id: int | None) -> None:
+    """Fail before any payment row is created when the shop's gateway cannot work."""
+    await _shop_api_key(session, shop_owner_id)
+    if not https_base_ready():
+        raise BbcNotReady(HTTPS_REQUIRED)
 
 
 # --- Create ------------------------------------------------------------------------
@@ -159,6 +215,8 @@ async def start_bbc_checkout(
     if reseller_id is not None and not _shop_ids_equal(shop_owner_id, int(reseller_id)):
         raise ValueError("پرداخت خارج از محدوده فروشگاه است")
     api_key = await _shop_api_key(session, shop_owner_id)
+    if not https_base_ready():
+        raise BbcNotReady(HTTPS_REQUIRED)
     settlement = await _settlement_for(session, payment, shop_owner_id)
     ready = checkout_of(settlement)
     if ready is not None:
@@ -246,15 +304,19 @@ async def _swap_attempt(session: AsyncSession, settlement: PaymentSettlement, ne
 
 
 def _new_request(
-    settlement: PaymentSettlement, payment: Payment, description: str, data: dict[str, Any]
+    settlement: PaymentSettlement,
+    payment: Payment,
+    description: str,
+    data: dict[str, Any],
 ) -> bbc.BbcOrderRequest:
-    base = _public_base()
-    if not base:
-        raise ValueError("آدرس عمومی ربات (PUBLIC_BASE_URL) برای درگاه تنظیم نشده")
+    origin = gateway_origin(https_base())
+    if not origin:
+        raise BbcNotReady(HTTPS_REQUIRED)
     link_token = secrets.token_urlsafe(24)
     data["link_token"] = link_token
     attempt = secrets.token_hex(4)
-    prefix = f"{base}/payments/settlement/bbc/tenant/{int(settlement.tenant_key)}"
+    prefix = f"{origin}/payments/settlement/bbc/tenant/{int(settlement.tenant_key)}"
+    # Both links stay on the panel host: the return page verifies at once and links to the shop's bot.
     return bbc.build_order_request(
         amount_toman=int(payment.amount),
         merchant_order_id=str(int(payment.id)),
@@ -285,6 +347,7 @@ async def _create_remote(
         settlement.status = SettlementStatus.FAILED.value
         settlement.error_message = f"{REJECTED_PREFIX}{exc.code or exc.status_code}"
         await session.commit()
+        await _notify_refusal(session, settlement, exc)
         raise
     # BbcUnreachable propagates: the row stays CREATED with its request for a replay.
     data = _payload(settlement)
@@ -439,6 +502,41 @@ async def _notify_staff(session: AsyncSession, settlement: PaymentSettlement, re
         logger.warning("bbc review notice failed settlement=%s", settlement.id, exc_info=True)
 
 
+def _refusal_notice_due(tenant_key: int) -> bool:
+    """At most one refusal notice per shop per window, so a broken setup does not flood staff."""
+    now = time.monotonic()
+    last = _last_refusal_notice.get(tenant_key)
+    if last is not None and now - last < REFUSAL_NOTICE_INTERVAL:
+        return False
+    _last_refusal_notice[tenant_key] = now
+    return True
+
+
+async def _notify_refusal(session: AsyncSession, settlement: PaymentSettlement, exc: bbc.BbcRejected) -> None:
+    """Tell the shop's staff why BezanBeCard refused to create the order; customers keep the fixed text."""
+    if not _refusal_notice_due(int(settlement.tenant_key)):
+        return
+    # Local import: notifications pulls in bot keyboards, which import payment modules.
+    from app.services.notifications import notify_settlement_review
+
+    payment = await session.get(Payment, int(settlement.payment_id))
+    if payment is None:
+        return
+    reason = html.escape(exc.reason or "بدون توضیح")
+    code = html.escape(exc.code or str(exc.status_code))
+    text = (
+        f"پاسخ بزن به کارت ({code}): <code>{reason}</code>\n\n"
+        "هیچ سفارشی ساخته نشد و مبلغی کسر نشده است. تنظیمات حساب و دامنهٔ پنل را در بزن به کارت بررسی کنید."
+    )
+    try:
+        await notify_settlement_review(
+            session, payment, shop_id=settlement.shop_owner_id, reason=text, title=REFUSAL_TITLE,
+        )
+    except Exception:
+        # Best effort: the refusal is saved on the settlement and in the log.
+        logger.warning("bbc refusal notice failed settlement=%s", settlement.id, exc_info=True)
+
+
 async def claim_delivery_notice(session: AsyncSession, settlement: PaymentSettlement) -> bool:
     """True for exactly one caller once the settlement is settled: that caller notifies."""
     claimed = await session.execute(
@@ -502,8 +600,14 @@ async def handle_bbc_link(
 
 
 async def poll_bbc_settlements(session: AsyncSession, *, limit: int = POLL_BATCH) -> int:
-    """Re-read open orders and recently expired ones; deliver what settled. Returns the count."""
-    since = datetime.now(timezone.utc) - LATE_PAYMENT_WINDOW
+    """Re-read open orders and recently expired ones that are due; deliver what settled.
+
+    Never-checked rows come first, then the oldest due. Each read pushes the row back
+    by its age (``psp_poll_delay``), so expired or abandoned orders cannot fill every
+    batch ahead of a new payment. Returns the count settled.
+    """
+    now = datetime.now(timezone.utc)
+    since = now - LATE_PAYMENT_WINDOW
     rows = (
         await session.execute(
             select(PaymentSettlement)
@@ -515,16 +619,39 @@ async def poll_bbc_settlements(session: AsyncSession, *, limit: int = POLL_BATCH
                     (PaymentSettlement.status == SettlementStatus.EXPIRED.value)
                     & (PaymentSettlement.updated_at >= since),
                 ),
+                or_(PaymentSettlement.next_check_at.is_(None), PaymentSettlement.next_check_at <= now),
             )
-            .order_by(PaymentSettlement.updated_at.asc(), PaymentSettlement.id.asc())
+            .order_by(
+                case((PaymentSettlement.next_check_at.is_(None), 0), else_=1),
+                PaymentSettlement.next_check_at.asc(),
+                PaymentSettlement.id.asc(),
+            )
             .limit(max(1, min(100, int(limit))))
         )
     ).scalars().all()
     settled = 0
     for settlement in rows:
+        await _schedule_next_check(session, settlement, now=now)
         if await _poll_one(session, settlement):
             settled += 1
     return settled
+
+
+async def _schedule_next_check(session: AsyncSession, settlement: PaymentSettlement, *, now: datetime) -> None:
+    """Commit the next read time before the API call.
+
+    An expired order's age counts from its expiry (``updated_at``), which this write
+    keeps unchanged so the late-payment window still ends on time.
+    """
+    expired = settlement.status == SettlementStatus.EXPIRED.value
+    since = _as_utc(settlement.updated_at if expired else settlement.created_at) or now
+    await session.execute(
+        update(PaymentSettlement)
+        .where(PaymentSettlement.id == int(settlement.id))
+        .values(next_check_at=now + psp_poll_delay(now - since), updated_at=PaymentSettlement.updated_at)
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
 
 
 async def _poll_one(session: AsyncSession, settlement: PaymentSettlement) -> bool:

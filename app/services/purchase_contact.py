@@ -38,6 +38,21 @@ async def purchase_contact_needed(
     return verified is None
 
 
+async def verified_contact_phone_hash(
+    session: AsyncSession, user_id: int, *, shop_key: int | None = None,
+) -> str | None:
+    """The phone hash the customer already verified in this shop, if it is still theirs."""
+    shop_key = purchase_shop_key() if shop_key is None else shop_key
+    return await session.scalar(select(PurchaseContact.phone_hash).join(
+        BotUser, BotUser.id == PurchaseContact.user_id,
+    ).where(
+        PurchaseContact.user_id == user_id,
+        PurchaseContact.shop_key == shop_key,
+        PurchaseContact.telegram_id == BotUser.telegram_id,
+        BotUser.is_blocked.is_(False),
+    ))
+
+
 async def require_purchase_contact(session: AsyncSession, user_id: int) -> None:
     if await purchase_contact_needed(session, user_id):
         raise ValueError(CONTACT_REQUIRED_MESSAGE)

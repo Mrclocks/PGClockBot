@@ -29,6 +29,7 @@ from app.services.org_principals import (
     is_owner_principal,
 )
 from app.services.platform_identity import is_explicit_owner_staff
+from app.services.volume_allocation_cascade import ParentVolumeError, assert_parent_has_room_for_reenabled
 from app.services.principal_lifecycle import (
     PrincipalLifecycleError,
     _invalidate_pg_cache,
@@ -372,6 +373,10 @@ async def enable_level2_principal(
 
     row.status = STATUS_ACTIVE
     await session.flush()
+    try:
+        await assert_parent_has_room_for_reenabled(session, row)
+    except ParentVolumeError as exc:
+        raise PrincipalLifecycleError(str(exc), code="parent_volume") from exc
     log.info(
         "Product 2: re-enabled Level-2 principal_id=%s by actor_id=%s",
         int(row.id),

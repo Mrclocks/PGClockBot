@@ -33,9 +33,8 @@ class BotUserDeleteReasonTests(unittest.TestCase):
         self.assertIn("reason=reason", block)
         self.assertIn("delete_bot_user", block)
         self.assertLess(block.find("notify_account_edit"), block.find("delete_bot_user"))
-        # Must not attach ReplyKeyboard via edit_text (root of «خطایی رخ داد»).
-        self.assertNotIn("edit_text(", block)
-        self.assertIn("admin_users_reply_keyboard()", block)
+        # The outcome replaces the prompt; no reply keyboard is sent with it.
+        self.assertNotIn("admin_users_reply_keyboard()", block)
         self.assertIn("message.answer(", block)
 
     def test_no_legacy_hardcoded_bot_delete_reason(self):

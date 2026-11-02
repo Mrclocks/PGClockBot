@@ -84,8 +84,8 @@ class SslUiWiredTests(unittest.TestCase):
     def test_settings_tab_and_template(self):
         from app.services.users import PANEL_SETTINGS_TABS, SETTINGS_TABS, TAB_SETTING_GROUPS
 
-        self.assertNotIn(("ssl", "SSL"), SETTINGS_TABS)
-        self.assertIn(("ssl", "SSL"), PANEL_SETTINGS_TABS)
+        self.assertNotIn(("ssl", "دامنه‌ها"), SETTINGS_TABS)
+        self.assertIn(("ssl", "دامنه‌ها"), PANEL_SETTINGS_TABS)
         self.assertEqual(TAB_SETTING_GROUPS.get("ssl"), [])
         self.assertTrue(Path("app/web/templates/_settings_ssl.html").is_file())
         self.assertTrue(Path("app/services/ssl_certs.py").is_file())

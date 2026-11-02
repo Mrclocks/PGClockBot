@@ -45,7 +45,7 @@ def _status_payload() -> dict:
         st["pid"] = PID
         st["current_version"] = local_version()
     except Exception:
-        pass
+        logger.debug("_status_payload: ignored failure", exc_info=True)
     return st
 
 

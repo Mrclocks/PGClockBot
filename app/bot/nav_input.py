@@ -25,7 +25,7 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.chat_cleanup import note_throwaway, sweep_above
+from app.bot.chat_cleanup import keep_message, note_throwaway, sweep_above
 from app.bot.nav_inline import NAV_PANEL_CHAT_KEY, NAV_PANEL_MSG_KEY, is_bot_panel_message, panel_is_still_live
 from app.bot.screen_replay import replay_screen
 from app.db.models import BotUser
@@ -109,7 +109,7 @@ async def ask_text(
         try:
             import app.bot.staff_cancel  # noqa: F401
         except Exception:
-            pass
+            logger.debug("ask_text: ignored failure", exc_info=True)
     if cancel_code not in CANCEL_REGISTRY:
         raise KeyError(f"cancel code not registered: {cancel_code!r}")
     await state.set_state(fsm_state)
@@ -191,6 +191,9 @@ async def finish_text_step(
     await state.update_data(
         **{PROMPT_MSG_ID: None, PROMPT_CHAT_ID: None, CANCEL_CODE_KEY: None, RETURN_TO_KEY: None}
     )
+    if keep_input:
+        # Typed text is temporary by default (chat_screen); this text is worth keeping.
+        keep_message(message)
     if prompt_id and chat_id and int(chat_id) == int(message.chat.id):
         try:
             await message.bot.edit_message_text(
@@ -212,6 +215,18 @@ async def finish_text_step(
     sent = await message.answer(text, reply_markup=inline, **send_kw)
     await _tidy_after_step(None if keep_input else message, sent)
     return sent
+
+
+async def retire_prompt_buttons(message: Message, state: FSMContext) -> None:
+    """The step is done: the stored prompt keeps its text (payment details) but loses its buttons."""
+    data = await state.get_data()
+    prompt_id, chat_id = data.get(PROMPT_MSG_ID), data.get(PROMPT_CHAT_ID)
+    if not prompt_id or not chat_id or int(chat_id) != int(message.chat.id):
+        return
+    try:
+        await message.bot.edit_message_reply_markup(chat_id=int(chat_id), message_id=int(prompt_id), reply_markup=None)
+    except TelegramAPIError:
+        logger.debug("prompt buttons already gone", exc_info=True)
 
 
 async def remember_prompt(
@@ -285,7 +300,7 @@ async def try_legacy_cancel(
     try:
         await state.set_state(None)
     except Exception:
-        pass
+        logger.debug("try_legacy_cancel: ignored failure", exc_info=True)
     await state.update_data(
         **{PROMPT_MSG_ID: None, PROMPT_CHAT_ID: None, CANCEL_CODE_KEY: None}
     )
@@ -354,7 +369,7 @@ async def nv_cancel_input(
     try:
         await state.set_state(None)
     except Exception:
-        pass
+        logger.debug("nv_cancel_input: ignored failure", exc_info=True)
     data = await state.get_data()
     await state.update_data(
         **{PROMPT_MSG_ID: None, PROMPT_CHAT_ID: None, CANCEL_CODE_KEY: None}

@@ -21,6 +21,15 @@ for (const peak of [900, 1500, 5800000, 6100000, 8500000, 10000000, 27420000, 99
 assert.strictEqual(chart.niceScale(6100000).max, 8000000);
 assert.ok(chart.niceScale(0).step > 0, 'empty data still has a scale');
 
+// Counts (orders, new users) step by whole numbers and still cover the peak.
+for (const peak of [0, 1, 3, 7, 11, 37, 240]) {
+  const scale = chart.niceCountScale(peak);
+  assert.ok(Number.isInteger(scale.step) && scale.step >= 1, `whole step for ${peak}`);
+  assert.ok(scale.max >= peak, `covers ${peak}`);
+  assert.strictEqual(scale.max, scale.step * 4);
+}
+assert.strictEqual(chart.niceCountScale(3).max, 4);
+
 // Oldest day at the right edge, today at the left edge, evenly spaced.
 assert.strictEqual(chart.dayX(0, 7, 600), 600);
 assert.strictEqual(chart.dayX(6, 7, 600), 0);

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title, card_title, row_actions %}
+{% block title %}اشتراک من{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    {{ page_title('payments', 'اشتراک من') }}
+  </div>
+</div>
+
+{% if unavailable %}
+<div class="card">
+  <p class="muted">{{ unavailable }}</p>
+</div>
+{% else %}
+{% set ov = overview %}
+{% set sub = ov.sub %}
+<div class="grid">
+  <div class="stat">
+    <span>بستهٔ فعلی</span>
+    <strong>{{ ov.current.name if ov.current else '—' }}</strong>
+  </div>
+  <div class="stat">
+    <span>انقضا</span>
+    <strong>{{ (ov.expires_at_iso | expire) if ov.expires_at_iso else 'بدون انقضا' }}</strong>
+  </div>
+  <div class="stat">
+    <span>کاربران</span>
+    {% set users_total = (sub.base_users or 0) + (sub.extra_users_purchased or 0) if sub else 0 %}
+    <strong><bdi dir="ltr">{{ (ov.usage.users | num) if ov.usage else '—' }} / {{ (users_total | num) if users_total else '∞' }}</bdi></strong>
+  </div>
+  <div class="stat">
+    <span>حجم مصرف‌شده</span>
+    {% set gb_total = (sub.base_gb or 0) + (sub.extra_gb_purchased or 0) if sub else 0 %}
+    <strong>{{ (ov.usage.used_bytes | bytes) if ov.usage else '—' }} / {{ ((gb_total | num) ~ ' گیگ') if gb_total else '∞' }}</strong>
+  </div>
+  <div class="stat">
+    <span>کیف پول</span>
+    <strong><bdi dir="ltr">{{ wallet | money }}</bdi> تومان</strong>
+    {% if bot_username %}<small><a href="https://t.me/{{ bot_username }}" target="_blank" rel="noopener">شارژ کیف پول در ربات</a></small>{% endif %}
+  </div>
+</div>
+{% if not ov.usage %}
+<div class="flash warn">مصرف فعلی از پنل خوانده نشد؛ بسته‌های کوچک‌تر هنگام خرید دوباره بررسی می‌شوند.</div>
+{% endif %}
+
+<div class="card card-flush">
+  <div class="card-flush-head">{{ card_title('payments', 'تمدید یا تغییر بسته') }}</div>
+  <p class="muted">با تمدید، مدت بسته از تاریخ انقضای فعلی اضافه می‌شود و ظرفیت بستهٔ انتخابی همین حالا اعمال می‌شود. مصرف کاربران صفر می‌شود و هزینه از کیف پول کسر می‌شود.</p>
+  <div class="table-wrap">
+    <table class="table-compact table-list-sm">
+      <thead>
+        <tr><th>بسته</th><th>ظرفیت</th><th>مدت</th><th>مبلغ</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ ov.choices | length | num }} بسته</span></th></tr>
+      </thead>
+      <tbody>
+        {% for c in ov.choices %}
+        <tr>
+          <td class="li-title">
+            <span dir="auto">{{ c.plan.name }}</span>
+            <span class="badge li-hide {{ 'ok' if c.relation == 'upgrade' else ('warn' if c.relation == 'downgrade' else 'info') }}">{{ c.label }}</span>
+          </td>
+          <td class="li-sub">
+            <span class="li-only badge {{ 'ok' if c.relation == 'upgrade' else ('warn' if c.relation == 'downgrade' else 'info') }}">{{ c.label }}</span>
+            <span><span dir="ltr">{{ (c.plan.included_users | num) if c.plan.included_users else '∞' }}</span> کاربر · {{ ((c.plan.included_gb | num) ~ ' گیگ') if c.plan.included_gb else 'حجم ∞' }}</span>
+            <span class="li-only">· {{ (c.plan.duration_days | num) ~ ' روز' if c.plan.duration_days else 'بدون انقضا' }}{% if c.blocked %} · {{ c.blocked }}{% endif %}</span>
+          </td>
+          <td>{{ (c.plan.duration_days | num) ~ ' روز' if c.plan.duration_days else 'بدون انقضا' }}</td>
+          <td class="li-value"><span dir="ltr">{{ c.invoice.total | money }}</span> <span class="li-hide">تومان</span></td>
+          <td class="col-actions">
+            {% if c.blocked %}
+            <span class="muted li-hide">{{ c.blocked }}</span>
+            {% else %}
+            {% call row_actions() %}
+            <form method="post" action="/my-subscription/renew"
+                  data-confirm="{{ ('تمدید «' ~ c.plan.name ~ '» با ' ~ (c.invoice.total | money) ~ ' تومان از کیف پول؟') if c.relation == 'current' else ('تغییر به «' ~ c.plan.name ~ '» و پرداخت ' ~ (c.invoice.total | money) ~ ' تومان از کیف پول؟ ظرفیت بستهٔ جدید همین حالا اعمال می‌شود.') }}"
+                  data-confirm-title="{{ 'تمدید بسته' if c.relation == 'current' else c.label ~ ' بسته' }}"
+                  data-confirm-label="پرداخت و تمدید">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="plan_id" value="{{ c.plan.id }}">
+              <input type="hidden" name="generation" value="{{ ov.generation }}">
+              <button type="submit" class="btn btn-sm{{ '' if c.relation in ('current', 'upgrade') else ' btn-ghost' }}">{{ 'تمدید' if c.relation == 'current' else c.label }}</button>
+            </form>
+            {% endcall %}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if extras %}
+<div class="card">
+  {{ card_title('payments', 'خرید ظرفیت اضافه') }}
+  <p class="muted">ظرفیت اضافه تا پایان دوره می‌ماند و در تمدید بعدی هم حساب می‌شود.</p>
+  <div class="form-row">
+    {% if extras.gb_price %}
+    <form method="post" action="/my-subscription/extra" class="form-stack"
+          data-confirm="حجم اضافه با گیگی {{ extras.gb_price | money }} تومان از کیف پول خریده شود؟" data-confirm-title="خرید حجم اضافه" data-confirm-label="خرید">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="kind" value="gb">
+      <label class="form-field">
+        <span class="form-field-label">حجم اضافه (گیگی <bdi dir="ltr">{{ extras.gb_price | money }}</bdi> تومان)</span>
+        <select name="amount">
+          {% for n in extras.gb_options %}<option value="{{ n }}">{{ n }} گیگ — {{ (n * extras.gb_price) | money }} تومان</option>{% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="btn btn-sm">خرید حجم</button>
+    </form>
+    {% endif %}
+    {% if extras.user_price %}
+    <form method="post" action="/my-subscription/extra" class="form-stack"
+          data-confirm="کاربر اضافه با هر نفر {{ extras.user_price | money }} تومان از کیف پول خریده شود؟" data-confirm-title="خرید کاربر اضافه" data-confirm-label="خرید">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="kind" value="users">
+      <label class="form-field">
+        <span class="form-field-label">کاربر اضافه (هر نفر <bdi dir="ltr">{{ extras.user_price | money }}</bdi> تومان)</span>
+        <select name="amount">
+          {% for n in extras.user_options %}<option value="{{ n }}">{{ n }} کاربر — {{ (n * extras.user_price) | money }} تومان</option>{% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="btn btn-sm">خرید کاربر</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

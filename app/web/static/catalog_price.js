@@ -5,13 +5,14 @@
     const current = Number(quote.price);
     const previous = Number(quote.original_price);
     const hasOffer = quote.original_price != null && Number.isFinite(previous) && previous > current;
-    const price = '<b dir="ltr">' + esc(money(quote.price)) + '</b>';
+    // <bdi> keeps the amount and its currency in reading order inside RTL text.
+    const price = '<b><bdi>' + esc(money(quote.price)) + '</bdi></b>';
     if (!hasOffer) return price;
     const end = new Date(quote.discount_ends_at);
     const deadline = Number.isFinite(end.getTime())
       ? new Intl.DateTimeFormat("fa-IR", {timeZone: "Asia/Tehran", dateStyle: "short", timeStyle: "short"}).format(end)
       : "";
-    return '<s dir="ltr">' + esc(money(previous)) + '</s> ← ' + price +
+    return '<s><bdi>' + esc(money(previous)) + '</bdi></s> ← ' + price +
       (deadline ? '<div class="muted">تخفیف تا ' + esc(deadline) + '</div>' : "");
   }
   const api = Object.freeze({renderPrice});

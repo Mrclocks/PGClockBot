@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app.services.ux20 import (
     FUNNEL_STEPS,
     bot_deep_link,
+    bot_tg_resolve_link,
     capacity_should_warn,
     compute_user_risk_flags,
     generate_charge_code,
@@ -46,7 +47,10 @@ class Ux20HelpersTests(unittest.TestCase):
             bot_deep_link("MyBot", "renew"),
             "https://t.me/MyBot?start=renew",
         )
+        self.assertEqual(bot_deep_link("MyBot", ""), "https://t.me/MyBot")
         self.assertIsNone(bot_deep_link("", "wallet"))
+        self.assertEqual(bot_tg_resolve_link("MyBot"), "tg://resolve?domain=MyBot")
+        self.assertIsNone(bot_tg_resolve_link(""))
 
     def test_funnel_steps(self):
         self.assertIn("shop_open", FUNNEL_STEPS)
@@ -528,8 +532,11 @@ class Ux20VersionTests(unittest.TestCase):
         self.assertIn("ارسال به تلگرام کاربر", html)
 
     def test_export_skips_secrets(self):
-        ux = Path("app/services/ux20.py").read_text(encoding="utf-8")
-        self.assertIn('skip = {"bot_token", "webhook_secret", "backup_telegram_bot_token"}', ux)
+        from app.services.ux20 import _is_secret_setting
+
+        for key in ("bot_token", "webhook_secret", "backup_telegram_bot_token"):
+            self.assertTrue(_is_secret_setting(key), key)
+        self.assertFalse(_is_secret_setting("welcome_text"))
         inbox = Path("app/services/panel_inbox.py").read_text(encoding="utf-8")
         self.assertIn("never includes bot tokens", inbox)
 

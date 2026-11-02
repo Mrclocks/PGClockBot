@@ -1,0 +1,29 @@
+{# One wallet form for users and resellers: amount, «کاهش» / «افزایش», note. The nonce makes a
+   repeated submit a no-op on the PAYG ledger. #}
+{% macro wallet_adjust_form(action, confirm, nonce=none, amount_value='', note_max=120, hint=none, note_label='یادداشت', note_required=false) -%}
+<form method="post" action="{{ action }}" class="form-stack"
+      data-confirm="{{ confirm }}"
+      data-confirm-title="تأیید تنظیم کیف پول"
+      data-confirm-label="اعمال">
+  {% if nonce %}<input type="hidden" name="nonce" value="{{ nonce }}" />{% endif %}
+  <div class="user-edit-fields">
+    <label class="form-field">مبلغ (تومان)
+      <input name="amount" type="number" data-money min="1000" step="1000" value="{{ amount_value }}" required placeholder="مثلاً ۵۰,۰۰۰" inputmode="numeric" />
+      {% if hint %}<small class="muted">{{ hint }}</small>{% endif %}
+    </label>
+    <div class="wallet-adjust-modes" role="group" aria-label="نوع تنظیم کیف پول">
+      <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">
+        <span class="wallet-mode-swatch" aria-hidden="true"></span>
+        <span class="wallet-mode-label">کاهش</span>
+      </button>
+      <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">
+        <span class="wallet-mode-swatch" aria-hidden="true"></span>
+        <span class="wallet-mode-label">افزایش</span>
+      </button>
+    </div>
+    <label class="form-field">{{ note_label }}
+      <input name="note" type="text" maxlength="{{ note_max }}"{% if note_required %} required minlength="3" placeholder="الزامی"{% else %} placeholder="اختیاری"{% endif %} />
+    </label>
+  </div>
+</form>
+{%- endmacro %}

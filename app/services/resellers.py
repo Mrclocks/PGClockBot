@@ -22,6 +22,8 @@ from app.db.models import (
     Role,
     UserService,
 )
+from app.services.db_safe import rollback_quiet
+from app.services.chat_records import keeps_sent
 
 logger = logging.getLogger(__name__)
 
@@ -31,29 +33,41 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("plans", "پلن‌های فروش"),
     ("orders", "سفارش‌ها"),
     ("payments", "پرداخت‌ها و تأیید رسید"),
+    ("payment_void", "ابطال پرداخت تأییدشده"),
     ("tickets", "تیکت‌ها"),
     ("stats", "آمار"),
     ("demo_users", "مدیریت کاربران دمو"),
+    ("customer_notes", "یادداشت و تگ ریسک مشتری"),
     ("shop_settings", "تنظیمات ربات فروشگاه"),
     ("campaigns", "کمپین‌های هدفمند فروشگاه"),
+    ("trial_users", "مشاهدهٔ کاربران تست و خریداران"),
+    ("trial_users_manage", "پیام به کاربران تست"),
     ("catalog_discounts", "تخفیف و کاهش قیمت فروشگاه"),
+    ("gift_codes", "کد هدیه و کد تخفیف فروشگاه"),
+    ("wallet_adjust", "تنظیم دستی کیف پول مشتری"),
+    ("loyalty_adjust", "تغییر دستی امتیاز مشتری"),
+    ("customers_block", "مسدودسازی مشتری در فروشگاه"),
     ("loyalty", "باشگاه مشتریان"),
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),
     ("connection_status_manage", "مدیریت تست اتصال"),
     ("service_import", "تأیید افزودن سرویس قبلی"),
+    ("orders_purge", "حذف کامل سفارش‌ها و پرداخت‌ها"),
+    ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
 ]
 
-DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import"
+DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import,miniapp,customer_notes,gift_codes"
 
 # Tabs a reseller may edit for their own shop bot
 RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("welcome", "خوش‌آمد و هویت"),
     ("appearance", "هویت ربات"),
+    ("brand", "ظاهر و برند"),
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
     ("screens", "تیتر و توضیح منوها"),
     ("colors", "رنگبندی دکمه‌ها"),
     ("menu", "منوی بات"),
+    ("miniapp", "مینی‌اپ"),
     ("links", "لینک‌های سریع"),
     ("qr", "QR اشتراک"),
     ("limits", "محدودیت"),
@@ -68,6 +82,7 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
 # Legacy shop-settings tabs moved to page modals
 SHOP_SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
     "payment": "/finance?tab=orders&settings=payment",
+    "cleanup": "/finance?tab=orders&settings=cleanup",
     "supports": "/tickets?supports=1",
     "loyalty": "/loyalty?settings=referral",
     "forcejoin": "/shop-settings?tab=limits",
@@ -108,7 +123,7 @@ def parse_perms(raw: str | None) -> list[str]:
             if isinstance(data, list):
                 return [str(x).strip() for x in data if str(x).strip()]
         except Exception:
-            pass
+            logger.debug("parse_perms: ignored failure", exc_info=True)
     allowed = {k for k, _ in FEATURE_PERMS}
     # Map legacy bot-only keys
     legacy = {"approve_receipts": "payments"}
@@ -290,7 +305,7 @@ async def apply_reseller_panel_password(
         try:
             invalidate_pg_principal_cache(int(linked.id))
         except Exception:
-            pass
+            logger.debug("apply_reseller_panel_password: ignored failure", exc_info=True)
         return
     if (profile.pg_admin_password_enc or "").strip() or (
         getattr(profile, "pg_api_key_enc", None) or ""
@@ -306,7 +321,7 @@ async def apply_reseller_panel_password(
         try:
             invalidate_pg_reseller_cache(int(profile.user_id))
         except Exception:
-            pass
+            logger.debug("apply_reseller_panel_password: ignored failure", exc_info=True)
         return
     # Owner-panel shop with no stored tenant secret — Owner provisioning only.
     profile.pg_admin_password_enc = enc
@@ -318,7 +333,7 @@ async def apply_reseller_panel_password(
     try:
         reset_pg()
     except Exception:
-        pass
+        logger.debug("apply_reseller_panel_password: ignored failure", exc_info=True)
 
 
 async def apply_reseller_pg_api_key(
@@ -348,12 +363,12 @@ async def apply_reseller_pg_api_key(
             try:
                 invalidate_pg_principal_cache(int(linked.id))
             except Exception:
-                pass
+                logger.debug("apply_reseller_pg_api_key: ignored failure", exc_info=True)
         profile.pg_api_key_enc = None
         try:
             invalidate_pg_reseller_cache(int(profile.user_id))
         except Exception:
-            pass
+            logger.debug("apply_reseller_pg_api_key: ignored failure", exc_info=True)
         return
 
     raw = (api_key or "").replace("\r", "").strip()
@@ -379,17 +394,17 @@ async def apply_reseller_pg_api_key(
         try:
             invalidate_pg_principal_cache(int(linked.id))
         except Exception:
-            pass
+            logger.debug("apply_reseller_pg_api_key: ignored failure", exc_info=True)
         try:
             invalidate_pg_reseller_cache(int(profile.user_id))
         except Exception:
-            pass
+            logger.debug("apply_reseller_pg_api_key: ignored failure", exc_info=True)
         return
     profile.pg_api_key_enc = enc
     try:
         invalidate_pg_reseller_cache(int(profile.user_id))
     except Exception:
-        pass
+        logger.debug("apply_reseller_pg_api_key: ignored failure", exc_info=True)
 
 
 def _rand_username(prefix: str = "res") -> str:
@@ -722,6 +737,7 @@ async def make_reseller(
             web_permissions=perms,
             bot_permissions=perms,
             plan_id=plan_id,
+            allow_volume_oversell=False,
         )
         session.add(profile)
 
@@ -999,6 +1015,42 @@ async def mark_application_paid(session: AsyncSession, order: Order) -> Reseller
     return app
 
 
+async def _start_new_subscription(
+    session: AsyncSession, plan: ResellerPlan, profile: ResellerProfile, pg_username: str
+) -> None:
+    """Record the package's period and capacity for a just-created admin.
+
+    The admin already carries the package's limits from its creation, so when pushing them again
+    fails (panel timeout) the subscription is still recorded locally; it is never left unlimited
+    and never without an expiry.
+    """
+    # Function-local: pg_admin_subscription imports billing, which imports this module.
+    from app.services.pg_admin_subscription import start_or_refresh_subscription
+
+    try:
+        await start_or_refresh_subscription(
+            session, pg_username=pg_username, plan=plan, reset_extras=True, apply_pg_limits=True,
+        )
+        await session.commit()
+        return
+    except Exception:  # noqa: BLE001 - the admin exists and is limited; record the period below
+        logger.exception("subscription start failed after provision reseller pg=%s", pg_username)
+        await rollback_quiet(session)
+        # The rollback expired them; the retry and the caller still read them.
+        await session.refresh(plan)
+        await session.refresh(profile)
+    try:
+        await start_or_refresh_subscription(
+            session, pg_username=pg_username, plan=plan, reset_extras=True, apply_pg_limits=False,
+        )
+        await session.commit()
+    except Exception:  # noqa: BLE001 - logged for staff; the admin keeps the limits it was created with
+        logger.exception("subscription record failed after provision reseller pg=%s", pg_username)
+        await rollback_quiet(session)
+        await session.refresh(plan)
+        await session.refresh(profile)
+
+
 async def provision_reseller(
     session: AsyncSession,
     *,
@@ -1015,7 +1067,12 @@ async def provision_reseller(
 ) -> dict:
     """Activate reseller: PG admin + web panel creds + optional bot-token setup link."""
     from app.services.pasarguard import get_pg
-    from app.services.pg_admin_subscription import is_current_capacity_plan
+    from app.services.pg_admin_subscription import (
+        assert_new_admin_fits_owner_budget,
+        is_current_capacity_plan,
+        is_subscription_plan,
+        plan_admin_limits,
+    )
     from app.services.web_auth import hash_password
 
     if plan is not None and is_current_capacity_plan(plan):
@@ -1089,6 +1146,11 @@ async def provision_reseller(
             payload["role_id"] = int(role_id)
         else:
             payload["is_sudo"] = False
+        if plan is not None and is_subscription_plan(plan):
+            # Refuse before anything exists, and create the admin with the package's limits:
+            # a PasarGuard admin without ``data_limit`` is unlimited until something sets one.
+            await assert_new_admin_fits_owner_budget(session, plan, pg_username)
+            payload.update(plan_admin_limits(plan))
         try:
             await get_pg().create_admin(payload)
         except Exception as e:
@@ -1129,26 +1191,8 @@ async def provision_reseller(
     await session.commit()
     await session.refresh(profile)
 
-    if plan is not None and pg_username:
-        try:
-            from app.services.pg_admin_subscription import (
-                is_subscription_plan,
-                start_or_refresh_subscription,
-            )
-
-            if is_subscription_plan(plan):
-                await start_or_refresh_subscription(
-                    session,
-                    pg_username=pg_username,
-                    plan=plan,
-                    reset_extras=True,
-                    apply_pg_limits=True,
-                )
-                await session.commit()
-        except Exception:
-            logger.exception(
-                "subscription start failed after provision reseller pg=%s", pg_username
-            )
+    if plan is not None and pg_username and is_subscription_plan(plan):
+        await _start_new_subscription(session, plan, profile, pg_username)
 
     base = (panel_base_url or "").rstrip("/")
     if not base:
@@ -1493,13 +1537,13 @@ async def complete_reseller_setup(
     try:
         await seed_reseller_shop_settings(session, int(profile.user_id))
     except Exception:
-        pass
+        logger.debug("complete_reseller_setup: ignored failure", exc_info=True)
     try:
         from app.services.reseller_bots import clear_reseller_token_cache
 
         clear_reseller_token_cache()
     except Exception:
-        pass
+        logger.debug("complete_reseller_setup: ignored failure", exc_info=True)
     return profile
 
 
@@ -1606,7 +1650,7 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
 
             clear_settings_cache(rid)
         except Exception:
-            pass
+            logger.debug("seed_reseller_shop_settings: ignored failure", exc_info=True)
 
 
 def _synthetic_telegram_id(pg_username: str, *, salt: int = 0) -> int:
@@ -2006,7 +2050,7 @@ async def convert_staff_to_reseller(
 
             invalidate_pg_reseller_cache(int(profile.user_id))
         except Exception:
-            pass
+            logger.debug("convert_staff_to_reseller: ignored failure", exc_info=True)
         await session.commit()
     return profile, hint, err
 
@@ -2199,7 +2243,7 @@ async def revoke_reseller(
         if mgr:
             await mgr.stop_reseller(profile_id)
     except Exception:
-        pass
+        logger.debug("revoke_reseller: ignored failure", exc_info=True)
 
     return {
         "user_id": user_id,
@@ -2217,6 +2261,7 @@ def format_revoke_message(reason: str) -> str:
     return format_account_edit_subject(event="reseller_revoke", reason=reason)
 
 
+@keeps_sent
 async def notify_reseller_revoked(
     telegram_id: int,
     reason: str,

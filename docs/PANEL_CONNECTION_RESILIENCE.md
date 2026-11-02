@@ -8,8 +8,9 @@ could also make the connection badge report success after the actual probe faile
 
 ## Request and connection limits
 
-`PanelConnectionMiddleware` establishes a two-second deadline for PasarGuard reads
-within each web request. API and Mini App requests keep their existing behavior.
+`PanelConnectionMiddleware` establishes one deadline for PasarGuard reads within
+each web request: `PG_WEB_READ_BUDGET_SEC`, four seconds by default, clamped to
+1-15 seconds (an invalid value falls back to the default). API and Mini App requests keep their existing behavior.
 The deadline is shared by DNS validation, token acquisition, API-root discovery,
 authorization reads and subsequent display reads. HTTP reads consume the remaining
 time rather than starting another full timeout for every fallback.
@@ -28,11 +29,17 @@ An unsuccessful API-root discovery remains retryable. A confirmed API root or
 valid current-admin response marks discovery complete, so an initial outage does
 not permanently keep API-key clients on a dashboard URL after the panel recovers.
 
-On a timeout, transport failure or server error, further web reads pause for ten
-seconds. Health is shared for the configured panel's origin, with at most eight
-concurrent reads and no waiting queue. After the pause, one read probes recovery.
-An older concurrent success cannot erase a newer failure. Forbidden or unsupported
-endpoints do not open the circuit. State is bounded to sixteen origins, including
+A timeout, transport failure, DNS failure or 502/503/504 answer fails the rest of
+that page's reads at once. Reads for everyone pause only after three such failures
+within thirty seconds, so one slow request does not hide PasarGuard from every
+shop. The first pause lasts five seconds; each failed recovery probe doubles it up
+to sixty seconds, and a successful read resets it. A request that started before
+the pause and fails late does not extend it. Other 5xx answers fail only that read.
+`/pg/metrics` polling honours a pause but never starts one. Health is shared for
+the configured panel's origin, with at most eight concurrent reads and no waiting
+queue. After the pause, one read probes recovery. An older concurrent success
+cannot erase a newer failure. Forbidden or unsupported endpoints do not open the
+circuit. State is bounded to sixteen origins, including
 temporary setup checks, and `reset_pg()` invalidates it after configuration changes.
 
 DNS validation runs in a worker thread before credentials are sent. Requests share
@@ -53,7 +60,7 @@ GET cache partitions now include an opaque identity for the actual client. A new
 client after credential rotation cannot reuse another client's cached account or
 role response, even when the panel username is unchanged. Successful web-access
 gate results keep their existing forty-five-second cache; temporary outage denials
-expire after the ten-second cooldown so access can recover sooner.
+expire after the first five-second pause so access can recover sooner.
 
 Password verification runs in worker threads for owner, reseller, staff and
 principal logins. Owner login captures the credential version before asynchronous
@@ -67,9 +74,13 @@ authorization checks. A small status message indicates that statistics are loadi
 The navigation clock is reserved for navigation and no longer covers the page
 while optional widgets load.
 
-Fragment reads have an eight-second browser deadline that includes downloading
-the response body. Timeout/failure leaves the visible shell available and offers a
-retry. Authentication redirects never inject a login page into the dashboard;
+Fragment reads have a fifteen-second browser deadline that includes downloading
+the response body; the server already bounds its PasarGuard reads, so the rest of
+the wait is the transfer over the viewer's own link. Timeout/failure leaves the
+visible shell available and offers a retry. The message names the failing side:
+the viewer's connection (the request never reached the panel, or the browser
+reports it is offline), a slow transfer (the deadline expired), the session, or
+the server. Authentication redirects never inject a login page into the dashboard;
 they offer an explicit login link. Fragments must match the existing dashboard
 root before replacement. Safe Persian notices describe unavailable panel data.
 
@@ -84,6 +95,19 @@ Failed or partial reads retain the last sample with a visible notice. A cached
 token alone no longer proves connectivity: a limited role can verify its own
 account when system statistics are forbidden. A bounded probe that could not run
 or finish reports an unknown state with an explanatory notice.
+
+## Weak servers and lossy links
+
+The web panel talks to PasarGuard server to server, so the viewer's own internet
+only affects how fast pages reach the browser. When PasarGuard often looks
+unavailable on a working panel, check the route between the two servers first:
+
+- Point `PG_BASE_URL` at the closest address of the panel (same data centre or a
+  private network address) instead of a public CDN hostname when possible.
+- Behind nginx or another reverse proxy, do not lower `keepalive_timeout` below a
+  few seconds, so reused connections are not closed just as a request is sent.
+- `/api/system` and `/api/nodes/realtime_stats` are the heaviest dashboard reads on
+  a small PasarGuard server. Their slowness affects only the dashboard widgets.
 
 ## Measured behavior
 

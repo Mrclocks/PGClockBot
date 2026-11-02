@@ -138,7 +138,7 @@ class RenderHomeOpenOnlyTests(unittest.IsolatedAsyncioTestCase):
         message.answer.assert_awaited_once()
         self.assertIs(message.answer.await_args.kwargs.get("reply_markup"), main_kb)
 
-    async def test_edit_home_clears_inline_markup(self):
+    async def test_home_is_a_new_message_with_the_menu_and_no_inline_markup(self):
         from app.bot.handlers.start import render_home
 
         message = AsyncMock()
@@ -178,12 +178,11 @@ class RenderHomeOpenOnlyTests(unittest.IsolatedAsyncioTestCase):
                 db_user,
                 ui=ui,
                 effective_role="user",
-                edit=True,
             )
 
-        message.edit_text.assert_awaited_once()
-        self.assertIsNone(message.edit_text.await_args.kwargs.get("reply_markup"))
-        message.answer.assert_not_awaited()
+        message.edit_text.assert_not_awaited()  # a home is a fresh start, never an edited panel
+        message.answer.assert_awaited_once()
+        self.assertIs(message.answer.await_args.kwargs.get("reply_markup"), main_kb)
 
 
 class MenuButtonOpenPreservedTests(unittest.TestCase):
@@ -202,7 +201,6 @@ class MenuButtonOpenPreservedTests(unittest.TestCase):
         self.assertNotIn("miniapp_inline_keyboard", src)
         self.assertNotIn("mini_markup", src)
         self.assertIn("reply_markup=reply_kb", src)
-        self.assertIn("reply_markup=None", src)
 
 
 class SeedMainReplyNoKeyboardEmojiTests(unittest.IsolatedAsyncioTestCase):

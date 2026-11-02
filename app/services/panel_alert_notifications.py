@@ -75,17 +75,11 @@ async def claim_signal(session: AsyncSession, signal: Signal, *, now: datetime |
     is cleared so the next occurrence is announced again.
     """
     now = now or _utcnow()
+    if signal.count <= 0:
+        await clear_signal(session, signal)
+        return False
     scope = scope_key(signal.shop_id)
     row = await _state(session, scope, signal.alert)
-    if signal.count <= 0:
-        if row is not None and row.active:
-            await session.execute(
-                update(PanelAlertState).where(PanelAlertState.id == row.id)
-                .values(active=False, last_count=0, fingerprint=""),
-                execution_options={"synchronize_session": False},
-            )
-            await session.commit()
-        return False
     if row is None:
         session.add(PanelAlertState(
             scope_key=scope, alert=signal.alert, active=True, last_count=signal.count,
@@ -112,6 +106,25 @@ async def claim_signal(session: AsyncSession, signal: Signal, *, now: datetime |
             PanelAlertState.fingerprint == row.fingerprint,
         )
         .values(active=True, last_count=signal.count, fingerprint=signal.fingerprint, notified_at=now),
+        execution_options={"synchronize_session": False},
+    )
+    await session.commit()
+    return result.rowcount == 1
+
+
+async def clear_signal(session: AsyncSession, signal: Signal) -> bool:
+    """Turn an announced alert off; True when it was on (its last message should go).
+
+    A plain read first, so the common «still off» case writes nothing; the update itself is
+    conditional, so two runs cannot both clear the same alert.
+    """
+    row = await _state(session, scope_key(signal.shop_id), signal.alert)
+    if row is None or not row.active:
+        return False
+    result = await session.execute(
+        update(PanelAlertState)
+        .where(PanelAlertState.id == row.id, PanelAlertState.active.is_(True))
+        .values(active=False, last_count=0, fingerprint=""),
         execution_options={"synchronize_session": False},
     )
     await session.commit()

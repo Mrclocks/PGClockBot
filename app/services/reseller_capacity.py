@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import update
@@ -10,7 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ResellerPlan, ResellerProfile
 from app.services.billing import GB, is_payg
+from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_toman
+from app.services.volume_allocation_cascade import assert_child_growth_fits
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +143,86 @@ def _admin_data_limit(admin: dict) -> int:
     return 0
 
 
+EXTRA_FAILED_REFUNDED = "افزایش ظرفیت در پاسارگارد ناموفق بود — مبلغ بازگردانده شد"
+EXTRA_OUTCOME_UNKNOWN = (
+    "پاسخ پاسارگارد برای افزایش ظرفیت نرسید. خرید ثبت شده و ظرفیت با تمدید بعدی یا بررسی پشتیبانی اعمال می‌شود؛ "
+    "دوباره خرید نکنید."
+)
+
+
+@dataclass(slots=True)
+class _ExtraPurchase:
+    uname: str
+    amount: int
+    gb: int
+    users: int
+    reason: str
+
+
+def _panel_rejected(exc: Exception) -> bool:
+    """True only when the panel answered with a refusal, so nothing was changed there."""
+    from app.services.pasarguard import PasarGuardError
+
+    status = getattr(exc, "status_code", None) if isinstance(exc, PasarGuardError) else None
+    return status is not None and 400 <= int(status) < 500
+
+
+async def _refund_extra(session: AsyncSession, user: BotUser, purchase: _ExtraPurchase) -> None:
+    from app.services.pg_admin_subscription import get_subscription
+    from app.services.wallet import credit_wallet
+
+    await rollback_quiet(session)
+    sub = await get_subscription(session, purchase.uname)
+    if sub is not None:
+        sub.extra_gb_purchased = max(0, int(sub.extra_gb_purchased or 0) - purchase.gb)
+        sub.extra_users_purchased = max(0, int(sub.extra_users_purchased or 0) - purchase.users)
+    await credit_wallet(session, user, purchase.amount, reason=purchase.reason.replace(":", "_refund:", 1), commit=False)
+    await session.commit()
+
+
+async def _apply_paid_extra(
+    session: AsyncSession,
+    *,
+    user: BotUser,
+    purchase: _ExtraPurchase,
+    apply: Callable[[Any, dict], Awaitable[int]],
+) -> int:
+    """Charge and record the extra, commit, then raise the panel limit with ``apply``.
+
+    The purchase is committed before the panel call so a crash cannot lose the charge
+    or the recorded extra. A refusal from the panel refunds; a timeout or transport
+    error keeps the purchase, because the panel may already have applied it, and the
+    next capacity sync from the subscription applies it again.
+    """
+    from app.services.pasarguard import get_pg
+    from app.services.pg_admin_subscription import record_unit_extra
+    from app.services.wallet import debit_wallet
+
+    await debit_wallet(session, user, purchase.amount, reason=purchase.reason, commit=False)
+    await record_unit_extra(session, pg_username=purchase.uname, gb=purchase.gb, users=purchase.users)
+    await session.commit()
+
+    pg = get_pg()
+    try:
+        admin = await pg.get_admin(purchase.uname)
+    except Exception as exc:
+        logger.warning("extra capacity: reading admin failed admin=%s", purchase.uname, exc_info=True)
+        await _refund_extra(session, user, purchase)
+        raise ValueError(EXTRA_FAILED_REFUNDED) from exc
+    if not isinstance(admin, dict) or not admin:
+        await _refund_extra(session, user, purchase)
+        raise ValueError("ادمین پاسارگارد یافت نشد — مبلغ بازگردانده شد")
+    try:
+        return await apply(pg, admin)
+    except Exception as exc:
+        if _panel_rejected(exc):
+            logger.warning("extra capacity refused by panel admin=%s", purchase.uname, exc_info=True)
+            await _refund_extra(session, user, purchase)
+            raise ValueError(EXTRA_FAILED_REFUNDED) from exc
+        logger.error("extra capacity outcome unknown admin=%s reason=%s", purchase.uname, purchase.reason, exc_info=True)
+        raise ValueError(EXTRA_OUTCOME_UNKNOWN) from exc
+
+
 async def buy_extra_gb(
     session: AsyncSession,
     *,
@@ -166,41 +250,18 @@ async def buy_extra_gb(
         raise ValueError("ادمین پاسارگارد برای این نماینده تنظیم نشده است")
 
     total = price * gb_n
-    from app.services.wallet import credit_wallet, debit_wallet
+    # Before the charge and the panel call; the parent stays locked until this purchase commits.
+    await assert_child_growth_fits(session, pg_username=uname, add_gb=gb_n)
+    purchase = _ExtraPurchase(uname=uname, amount=total, gb=gb_n, users=0, reason=f"reseller_extra_gb:{gb_n}:{uname}")
 
-    await debit_wallet(
-        session, user, total, reason=f"reseller_extra_gb:{gb_n}:{uname}", commit=False
-    )
-
-    from app.services.pasarguard import get_pg
-
-    pg = get_pg()
-    try:
-        admin = await pg.get_admin(uname)
-        if not isinstance(admin, dict):
-            raise ValueError("ادمین پاسارگارد یافت نشد")
+    async def raise_volume(pg, admin: dict) -> int:
         current = _admin_data_limit(admin)
         # If unlimited (0), start from purchased amount
         new_limit = (current if current > 0 else 0) + gb_n * GB
         await pg.modify_admin(uname, {"data_limit": int(new_limit)})
-    except ValueError:
-        await credit_wallet(
-            session, user, total, reason=f"reseller_extra_gb_refund:{gb_n}:{uname}", commit=False
-        )
-        await session.commit()
-        raise
-    except Exception as e:
-        await credit_wallet(
-            session, user, total, reason=f"reseller_extra_gb_refund:{gb_n}:{uname}", commit=False
-        )
-        await session.commit()
-        logger.exception("buy_extra_gb PG failed admin=%s", uname)
-        raise ValueError("افزایش حجم در پاسارگارد ناموفق بود — مبلغ بازگردانده شد") from e
+        return new_limit
 
-    from app.services.pg_admin_subscription import record_unit_extra
-
-    await record_unit_extra(session, pg_username=uname, gb=gb_n, users=0)
-    await session.commit()
+    new_limit = await _apply_paid_extra(session, user=user, purchase=purchase, apply=raise_volume)
     return {"gb": gb_n, "amount": total, "data_limit": new_limit}
 
 
@@ -231,21 +292,10 @@ async def buy_extra_users(
         raise ValueError("ادمین پاسارگارد برای این نماینده تنظیم نشده است")
 
     total = price * n
-    from app.services.wallet import credit_wallet, debit_wallet
+    purchase = _ExtraPurchase(uname=uname, amount=total, gb=0, users=n, reason=f"reseller_extra_users:{n}:{uname}")
 
-    await debit_wallet(
-        session, user, total, reason=f"reseller_extra_users:{n}:{uname}", commit=False
-    )
-
-    from app.services.pasarguard import get_pg
-
-    pg = get_pg()
-    try:
-        admin = await pg.get_admin(uname)
-        if not isinstance(admin, dict):
-            raise ValueError("ادمین پاسارگارد یافت نشد")
-        current = _admin_max_users(admin)
-        new_max = current + n
+    async def raise_users(pg, admin: dict) -> int:
+        new_max = _admin_max_users(admin) + n
         overrides = (
             dict(admin.get("permission_overrides") or {})
             if isinstance(admin.get("permission_overrides"), dict)
@@ -255,68 +305,10 @@ async def buy_extra_users(
         await pg.modify_admin(
             uname, {"permission_overrides": overrides, "max_users": int(new_max)}
         )
-    except ValueError:
-        await credit_wallet(
-            session, user, total, reason=f"reseller_extra_users_refund:{n}:{uname}", commit=False
-        )
-        await session.commit()
-        raise
-    except Exception as e:
-        await credit_wallet(
-            session, user, total, reason=f"reseller_extra_users_refund:{n}:{uname}", commit=False
-        )
-        await session.commit()
-        logger.exception("buy_extra_users PG failed admin=%s", uname)
-        raise ValueError("افزایش کاربر در پاسارگارد ناموفق بود — مبلغ بازگردانده شد") from e
+        return new_max
 
-    from app.services.pg_admin_subscription import record_unit_extra
-
-    await record_unit_extra(session, pg_username=uname, gb=0, users=n)
-    await session.commit()
+    new_max = await _apply_paid_extra(session, user=user, purchase=purchase, apply=raise_users)
     return {"users": n, "amount": total, "max_users": new_max}
-
-
-async def renew_reseller_capacity(
-    session: AsyncSession,
-    *,
-    user: BotUser,
-    profile: ResellerProfile,
-    plan: ResellerPlan,
-) -> dict[str, Any]:
-    """Renew subscription: invoice from capacity, restore access, reset traffic."""
-    from app.services.pg_admin_subscription import (
-        get_or_create_subscription,
-        is_subscription_plan,
-        renew_subscription,
-    )
-
-    if is_payg(profile):
-        raise ValueError("پلن PAYG تمدید زمانی ندارد — از شارژ کیف پول استفاده کنید")
-    if not is_subscription_plan(plan):
-        raise ValueError("تمدید فقط برای پلن اشتراک است")
-
-    uname = (profile.pg_admin_username or "").strip()
-    if not uname:
-        raise ValueError("ادمین پاسارگارد برای این نماینده تنظیم نشده است")
-
-    sub = await get_or_create_subscription(session, uname)
-    if sub.plan_id is None:
-        sub.plan_id = int(plan.id)
-    result = await renew_subscription(
-        session,
-        sub=sub,
-        plan=plan,
-        payer=user,
-        charge_wallet=True,
-        reset_user_traffic=True,
-    )
-    return {
-        "amount": result.get("amount", 0),
-        "reset_ok": result.get("reset_ok", 0),
-        "reset_err": result.get("reset_err", 0),
-        "invoice": result.get("invoice"),
-        "expires_at": result.get("expires_at"),
-    }
 
 
 async def admin_adjust_reseller_subscription(

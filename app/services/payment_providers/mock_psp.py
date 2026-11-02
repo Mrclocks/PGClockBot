@@ -36,6 +36,7 @@ class MockPspAdapter:
         external_ref: str,
         amount: int,
         callback_params: dict[str, Any],
+        expected_invoice_id: int | None = None,
     ) -> VerifyResult:
         status = str(callback_params.get("status") or "").lower()
         paid_amount = callback_params.get("amount")

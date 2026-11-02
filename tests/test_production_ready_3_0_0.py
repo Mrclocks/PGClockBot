@@ -79,14 +79,6 @@ class SubscriptionUrlSanitizeTests(unittest.TestCase):
 
 
 class MiniAppSecurityTests(unittest.TestCase):
-    def test_miniapp_escapes_and_uses_dom(self):
-        src = Path("app/web/static/miniapp.js").read_text(encoding="utf-8")
-        self.assertIn("function esc(", src)
-        self.assertIn("createTextNode", src)
-        self.assertIn("safeUrl", src)
-        self.assertNotIn("onclick=\"showSvc(", src)
-        self.assertNotIn("tg.openLink(data.service.url)", src)
-
     def test_csp_allows_telegram_for_miniapp(self):
         src = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn('path.startswith("/miniapp")', src)

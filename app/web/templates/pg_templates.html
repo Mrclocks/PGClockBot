@@ -21,7 +21,7 @@
   ]) }}
   {% endif %}
   <div class="table-wrap">
-  <table class="table-compact"{% if can_delete %} data-bulk-select{% endif %}>
+  <table class="table-compact table-list-sm"{% if can_delete %} data-bulk-select{% endif %}>
     <thead>
       <tr>
         {% if can_delete %}{{ table_select_head() }}{% endif %}
@@ -31,6 +31,7 @@
         <th class="col-hide-sm">مدت</th>
         <th class="col-hide-sm">گروه‌ها</th>
         <th class="col-actions"></th>
+        <th class="li-head" scope="col"><span class="li-count">{{ templates | length | num }} تمپلیت</span></th>
       </tr>
     </thead>
     <tbody>
@@ -41,18 +42,17 @@
       <tr data-bulk-ops="{% if can_delete and t.get('id') %}delete{% endif %}">
         {% if can_delete %}{% if t.get('id') %}{{ table_select_cell(t.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
         <td class="mono col-hide-sm">{{ t.get('id') }}</td>
-        <td>{{ t.get('name') or '—' }}</td>
-        <td class="mono reseller-quota-cell">
+        <td class="li-title"><span dir="auto">{{ t.get('name') or '—' }}</span> <span class="li-only li-id" dir="ltr">(#{{ t.get('id') }})</span></td>
+        <td class="mono reseller-quota-cell li-value">
           <span class="byte-size reseller-quota-line">
           {% if t.get('data_limit') %}
             {{ t.get('data_limit') | bytes }}
           {% else %}نامحدود{% endif %}
           </span>
         </td>
-        <td class="col-hide-sm">
-          {% if t.get('expire_duration') %}
-            {{ (t.get('expire_duration') / 86400) | round(0) }} روز
-          {% else %}—{% endif %}
+        <td class="col-hide-sm li-sub">
+          <span>{% if t.get('expire_duration') %}{{ (t.get('expire_duration') / 86400) | round(0) | int }} روز{% else %}بدون مدت{% endif %}</span>
+          <span class="li-only">· گروه <bdi dir="ltr">{{ gids|join(',') if gids else '—' }}</bdi></span>
         </td>
         <td class="mono col-hide-sm">{{ gids or '—' }}</td>
         <td class="col-actions">

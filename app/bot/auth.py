@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, OrgPrincipal
 from app.services import bot_feedback_texts as feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Single Owner-only denial copy (Web-equivalent explicit Owner Principal).
 OWNER_REQUIRED_MESSAGE = feedback.SYSTEM_OWNER_REQUIRED
@@ -82,13 +85,13 @@ async def notify_owner_required(*, callback=None, message=None) -> None:
         try:
             await callback.answer(OWNER_REQUIRED_MESSAGE, show_alert=True)
         except Exception:
-            pass
+            logger.debug("notify_owner_required: ignored failure", exc_info=True)
         return
     if message is not None:
         try:
             await message.answer(OWNER_REQUIRED_MESSAGE + ".")
         except Exception:
-            pass
+            logger.debug("notify_owner_required: ignored failure", exc_info=True)
 
 async def require_bot_owner(
     session: AsyncSession | None,
@@ -521,12 +524,12 @@ def require_platform_rep_mgmt(fn: Callable[..., Awaitable[Any]]):
                 try:
                     await callback.answer(text, show_alert=True)
                 except Exception:
-                    pass
+                    logger.debug("wrapper: ignored failure", exc_info=True)
             elif message is not None:
                 try:
                     await message.answer(text)
                 except Exception:
-                    pass
+                    logger.debug("wrapper: ignored failure", exc_info=True)
             return None
         return await fn(*args, **kwargs)
 

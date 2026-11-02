@@ -8,8 +8,10 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, Message, ReplyKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.menu_nav import build_main_reply_keyboard
+from app.bot import keyboards as kb
+from app.bot.menu_nav import build_main_reply_keyboard, restore_main_reply
 from app.db.models import BotUser
+from app.services import bot_feedback_texts as feedback
 from app.services.purchase_contact import purchase_contact_needed, purchase_shop_key, verify_purchase_contact
 
 router = Router(name="purchase_contact")
@@ -85,5 +87,19 @@ async def receive_purchase_contact(
 
 
 @router.message(PurchaseContactStates.contact)
-async def purchase_contact_hint(message: Message) -> None:
+async def purchase_contact_hint(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
+    if kb.is_cancel_text(message.text):
+        # The contact keyboard goes; the person's own menu comes back.
+        await restore_main_reply(
+            message, session, db_user, text=feedback.CANCELLED, state=state,
+            is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id,
+        )
+        return
     await message.answer("از دکمه «ارسال شماره تماس» استفاده کنید یا انصراف بزنید.")

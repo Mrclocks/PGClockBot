@@ -12,6 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.chat_screen import fresh_keyboard
 from app.bot.nav_chrome import heal_main_reply
 from app.db.models import BotUser
 from app.services.stale_menu import should_send_stale_notice
@@ -45,13 +46,15 @@ async def stale_menu_notice(
         **{STALE_NOTICE_STATE_KEY: datetime.now(timezone.utc).timestamp()}
     )
     try:
-        await heal_main_reply(
-            message,
-            session,
-            db_user,
-            text=STALE_NOTICE_TEXT,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-        )
+        # The person is pressing a button of an old keyboard: send the current one again.
+        with fresh_keyboard():
+            await heal_main_reply(
+                message,
+                session,
+                db_user,
+                text=STALE_NOTICE_TEXT,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
     except TelegramAPIError:
         logger.warning("stale menu notice failed", exc_info=True)

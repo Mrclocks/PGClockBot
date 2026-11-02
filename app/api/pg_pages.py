@@ -24,6 +24,7 @@ from app.services.pasarguard import (
 )
 from app.services.pg_overview_view import overview_view, owner_user_counts
 from app.services.pg_access import staff_pg_action, staff_pg_writes, staff_user_actions
+from app.services.pg_read_cache import DASHBOARD_COUNT_MAX_AGE_SEC, NODE_LIST_MAX_AGE_SEC
 from app.services.pg_quota import (
     PgQuotaError,
     assert_can_mutate_owned_users,
@@ -32,8 +33,14 @@ from app.services.provision_gate import (
     ProvisionError,
     assert_provision_create,
     assert_provision_modify,
+    finish_staff_edit,
+    hold_staff_create,
+    hold_staff_edit,
+    settle_failed_hold,
 )
+from app.services.platform_identity import is_explicit_owner_staff
 from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.volume_allocation import apply_create_form_oversell
 
 
 logger = logging.getLogger(__name__)
@@ -316,12 +323,15 @@ def register_pg_pages(
                 from app.services.node_traffic import build_nodes_overview
 
                 pg = get_pg()
+                # Admin/group/host lists only feed the count tiles here. During an
+                # outage the tiles show the last good answer, flagged by the notice;
+                # live rates have no meaningful saved value.
                 raw, nodes_raw, admins, groups, hosts, realtime = await asyncio.gather(
-                    pg.get_system_stats(),
-                    pg.get_nodes(),
-                    pg.get_admins_simple(),
-                    pg.get_groups_simple(),
-                    pg.get_hosts(),
+                    pg.get_system_stats(last_good_ok=True),
+                    pg.get_nodes(last_good_ok=True),
+                    pg.get_admins_simple(cache_max_age=DASHBOARD_COUNT_MAX_AGE_SEC, last_good_ok=True),
+                    pg.get_groups_simple(cache_max_age=DASHBOARD_COUNT_MAX_AGE_SEC, last_good_ok=True),
+                    pg.get_hosts(cache_max_age=DASHBOARD_COUNT_MAX_AGE_SEC, last_good_ok=True),
                     pg.get_nodes_realtime(),
                     return_exceptions=True,
                 )
@@ -475,9 +485,10 @@ def register_pg_pages(
             return JSONResponse({"detail": "forbidden"}, status_code=403)
         pg = get_pg()
         try:
+            # Polled every few seconds: CPU/RAM and live rates stay fresh, the node list may lag.
             raw, nodes_raw, realtime = await asyncio.gather(
                 pg.get_system_stats(),
-                pg.get_nodes(),
+                pg.get_nodes(cache_max_age=NODE_LIST_MAX_AGE_SEC),
                 pg.get_nodes_realtime(),
                 return_exceptions=True,
             )
@@ -704,6 +715,7 @@ def register_pg_pages(
                 "ادمین پاسارگارد برای این حساب تنظیم نشده است",
                 modal="create",
             )
+        hold = None
         try:
             if mode == "template":
                 raw_tid = str(form.get("template_id") or form.get("pg_template_id") or "").strip()
@@ -719,6 +731,7 @@ def register_pg_pages(
                 except (ProvisionError, PgQuotaError) as qe:
                     return _pg_form_err(getattr(qe, "message", str(qe)), modal="create")
                 pg, as_owner = await _staff_pg(session, staff)
+                hold = await hold_staff_create(session, staff, pg=pg, template_id=tid, data_limit=None)
                 await pg.create_user_from_template(
                     {
                         "username": uname,
@@ -786,6 +799,7 @@ def register_pg_pages(
                     return _pg_form_err(getattr(qe, "message", str(qe)), modal="create")
 
                 pg, as_owner = await _staff_pg(session, staff)
+                hold = await hold_staff_create(session, staff, pg=pg, template_id=None, data_limit=data_limit)
                 await pg.create_user(
                     build_user_create_payload(
                         username=uname,
@@ -802,6 +816,7 @@ def register_pg_pages(
             # second owner-token transfer — that path bypassed staff ACL.
             _ = as_owner
         except Exception as e:
+            await settle_failed_hold(session, hold, e, panel_touched=True)
             msg = e.user_message(fallback="خطا در ساخت کاربر") if isinstance(e, PasarGuardError) else str(e)
             return _pg_form_err(msg, modal="create")
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ساخته شد')}", status_code=303)
@@ -886,6 +901,7 @@ def register_pg_pages(
             else:
                 hwid_limit = 0  # unlimited
 
+        hold = None
         try:
             current = await _assert_owned_user(staff, user_id, session=session)
             if current is None:
@@ -913,9 +929,14 @@ def register_pg_pages(
                 status=str(current.get("status") or "") or None,
             )
             pg, _as_owner = await _staff_pg(session, staff)
+            hold = await hold_staff_edit(
+                session, staff, current_limit=current.get("data_limit"), new_limit=data_limit
+            )
             await pg.modify_user_by_id(user_id, payload)
+            await finish_staff_edit(session, hold, pg_user_id=user_id, data_limit=data_limit)
             uname = str(current.get("username") or user_id)
         except Exception as e:
+            await settle_failed_hold(session, hold, e, panel_touched=True)
             msg = e.user_message(fallback="خطا در ویرایش") if isinstance(e, PasarGuardError) else str(e)
             return _pg_form_err(msg, modal="edit", uid=user_id)
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ویرایش شد')}", status_code=303)
@@ -1809,12 +1830,12 @@ def register_pg_pages(
                 try:
                     await session.rollback()
                 except Exception:
-                    pass
+                    logger.debug("pg_admins: ignored failure", exc_info=True)
             # Drop web rows for PG admins that no longer exist in PasarGuard
             try:
                 await purge_orphaned_staff_access(session)
             except Exception:
-                pass
+                logger.debug("pg_admins: ignored failure", exc_info=True)
             pg = get_pg()
             admins = await pg.get_admins()
             if not admins:
@@ -1858,7 +1879,7 @@ def register_pg_pages(
                         if isinstance(full, dict):
                             payload = full
                     except Exception:
-                        pass
+                        logger.debug("pg_admins: ignored failure", exc_info=True)
                 role = payload.get("role") if isinstance(payload.get("role"), dict) else None
                 if role is None:
                     rid = payload.get("role_id") or a.get("role_id")
@@ -1880,6 +1901,7 @@ def register_pg_pages(
                 admin_usage=admin_usage,
                 reseller_plans=reseller_plans,
                 feature_perms=FEATURE_PERMS,
+                owner_can_toggle_oversell=is_explicit_owner_staff(staff),
                 flash_err=err,
                 flash_ok=ok,
                 active="pg_admins",
@@ -2033,6 +2055,10 @@ def register_pg_pages(
                     f"/pg/admins?err={_q(f'{msg} — {werr}')}",
                     status_code=303,
                 )
+            await apply_create_form_oversell(
+                session, _profile.user_id if _profile else None,
+                form_value=form.get("allow_volume_oversell"), actor_is_owner=is_explicit_owner_staff(staff),
+            )
             msg += " و به‌عنوان نماینده (پنل ربات + پاسارگارد) فعال شد"
             if hint:
                 msg += " — ربات شخصی را از تنظیمات فروشگاه راه‌اندازی کنید"
@@ -2293,6 +2319,10 @@ def register_pg_pages(
         )
         if err:
             return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
+        await apply_create_form_oversell(
+            session, profile.user_id if profile else None,
+            form_value=form.get("allow_volume_oversell"), actor_is_owner=is_explicit_owner_staff(staff),
+        )
         uname = profile.web_username if profile else web_username
         msg = (
             f"دسترسی وب‌پنل «{uname}» با پلن نمایندگی فعال شد — "
@@ -2331,6 +2361,10 @@ def register_pg_pages(
         )
         if err:
             return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
+        await apply_create_form_oversell(
+            session, _profile.user_id if _profile else None,
+            form_value=form.get("allow_volume_oversell"), actor_is_owner=is_explicit_owner_staff(staff),
+        )
         msg = (
             f"ادمین فرعی «{pg_u}» به نماینده تبدیل شد "
             "(دسترسی ادمین فرعی حذف و پنل ربات/فروشگاه فعال شد)"
@@ -2444,7 +2478,7 @@ def register_pg_pages(
                     try:
                         await notify_reseller_revoked(int(tg), reason)
                     except Exception:
-                        pass
+                        logger.debug("pg_admins_delete: ignored failure", exc_info=True)
             except Exception as e:
                 return RedirectResponse(f"/pg/admins?err={_pg_err(e)}", status_code=303)
         else:
@@ -2459,7 +2493,7 @@ def register_pg_pages(
                 await revoke_web_access(session, pg_u)
                 notes.append("دسترسی ادمین فرعی وب حذف شد")
             except Exception:
-                pass
+                logger.debug("pg_admins_delete: ignored failure", exc_info=True)
 
         msg = "حذف شد"
         if notes:

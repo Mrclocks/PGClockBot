@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from typing import Any, Iterable, Mapping, MutableMapping
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _iter_form_values(form: Mapping[str, Any] | MutableMapping[str, Any], key: str) -> Iterable[Any]:
@@ -30,7 +33,7 @@ def _iter_form_values(form: Mapping[str, Any] | MutableMapping[str, Any], key: s
                     yield raw
             return
         except Exception:
-            pass
+            logger.debug("_iter_form_values: ignored failure", exc_info=True)
     raw = form.get(key)
     if raw is not None:
         yield raw

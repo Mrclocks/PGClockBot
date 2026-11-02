@@ -6,7 +6,7 @@ import unittest
 
 import app.bot.keyboards  # noqa: F401 — resolve reply_keyboards circular init
 
-from app.bot.keyboards import custom_confirm_keyboard, plan_actions
+from app.bot.keyboards import custom_days_keyboard, plan_actions, wholesale_qty_keyboard
 from app.bot.nav_inline import admin_groups_hub_keyboard
 from app.bot.nav_mode import is_inline_nav, nav_mode
 from app.bot.reply_keyboards import (
@@ -51,11 +51,15 @@ class TestPlanActionsBackAndLabel(unittest.TestCase):
         self.assertEqual(rows[1][0].text, "بازگشت تست")
         self.assertEqual(rows[1][0].callback_data, "shop:list")
 
-    def test_custom_confirm_buy_label(self):
+    def test_custom_and_wholesale_continue_straight_to_payment(self):
         ui = {"btn_buy_continue": "ادامه X", "btn_back": "بازگشت Y"}
-        kb = custom_confirm_keyboard(ui)
-        flat = [(b.text, b.callback_data) for row in kb.inline_keyboard for b in row]
-        self.assertIn(("ادامه X", "shop:custom:buy"), flat)
+        for name, markup, callback in (
+            ("custom", custom_days_keyboard(30, ui), "shop:custom:confirm"),
+            ("wholesale", wholesale_qty_keyboard(5, ui, plan_id=3), "shop:wholesale:confirm"),
+        ):
+            with self.subTest(name):
+                flat = [(b.text, b.callback_data) for row in markup.inline_keyboard for b in row]
+                self.assertIn(("ادامه X", callback), flat)
 
 
 class TestPreviewEscape(unittest.TestCase):

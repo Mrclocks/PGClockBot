@@ -12,9 +12,27 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.db.models import BotUser, DeliveryFailure, Order, Payment, ShopWallet, WalletTransaction
+from app.db.models import (
+    BotUser,
+    DeliveryFailure,
+    Order,
+    Payment,
+    ResellerApplication,
+    ResellerPlan,
+    ShopWallet,
+    WalletTransaction,
+)
 from app.services.shop_scope import ShopScopeError
-from app.services.stuck_order_resolution import NOT_STUCK, cancel_and_refund, count_still_stuck, mark_delivered_manually
+from app.services.stuck_order_resolution import (
+    APPLICATION_APPROVED,
+    MUTATION_MAY_BE_APPLIED,
+    NOT_STUCK,
+    cancel_and_refund,
+    close_without_refund,
+    count_still_stuck,
+    describe_stuck_orders,
+    mark_delivered_manually,
+)
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION, RoutesHarness
 
 OWNER = OWNER_SESSION
@@ -39,12 +57,26 @@ class StuckCase(RoutesHarness):
                 Order(id=13, user_id=1, amount=1, status="delivered", updated_at=OLD),
                 Order(id=14, user_id=1, amount=1, status="paid", note="renew:5", updated_at=OLD),
                 Order(id=15, user_id=1, amount=0, status="delivering", updated_at=OLD),
+                Order(id=16, user_id=1, amount=7000, status="paid", note="renew:9",
+                      service_mutation_pending=True, updated_at=OLD),
+                Order(id=17, user_id=1, amount=8000, status="paid", note="reseller_app:1", updated_at=OLD),
+                Order(id=18, user_id=1, amount=9000, status="paid", note="reseller_app:2", updated_at=OLD),
+            ])
+            session.add(ResellerPlan(id=1, name="rp"))
+            await session.flush()
+            session.add_all([
+                ResellerApplication(id=1, user_id=1, plan_id=1, status="awaiting_approval"),
+                ResellerApplication(id=2, user_id=1, plan_id=1, status="approved"),
             ])
             await session.flush()
             session.add_all([
                 Payment(order_id=10, user_id=1, amount=50000, method="card", status="approved"),
                 Payment(order_id=11, user_id=6, amount=30000, method="wallet", status="approved"),
                 Payment(order_id=12, user_id=1, amount=1, method="card", status="approved"),
+                Payment(order_id=14, user_id=1, amount=4000, method="card", status="approved"),
+                Payment(order_id=16, user_id=1, amount=7000, method="card", status="approved"),
+                Payment(order_id=17, user_id=1, amount=8000, method="card", status="approved"),
+                Payment(order_id=18, user_id=1, amount=9000, method="card", status="approved"),
                 Payment(order_id=10, user_id=1, amount=999, method="card", status="rejected"),
                 DeliveryFailure(order_id=10, error="x"),
             ])
@@ -108,11 +140,35 @@ class RefundTests(StuckCase):
             await self.run_action(cancel_and_refund, OWNER, 12)
         self.assertEqual((await self.state())[0][12], "paid")
 
-    async def test_other_states_and_renewal_orders_are_refused(self):
-        for order_id in (13, 14, 999):
+    async def test_other_states_and_missing_orders_are_refused(self):
+        for order_id in (13, 999):
             with self.subTest(order=order_id), self.assertRaises(ValueError):
                 await self.run_action(cancel_and_refund, OWNER, order_id)
         self.assertEqual((await self.state())[1:4], (1000, None, 0))
+
+    async def test_a_renewal_that_never_reached_the_panel_is_refunded(self):
+        result = await self.run_action(cancel_and_refund, OWNER, 14)
+        self.assertEqual(result.refunded, 4000)
+        self.assertEqual((await self.state())[0][14], "cancelled")
+
+    async def test_a_renewal_with_an_unknown_panel_outcome_is_not_refunded(self):
+        with self.assertRaises(ValueError) as ctx:
+            await self.run_action(cancel_and_refund, OWNER, 16)
+        self.assertEqual(str(ctx.exception), MUTATION_MAY_BE_APPLIED)
+        orders, balance, _s, txs, _f = await self.state()
+        self.assertEqual((orders[16], balance, txs), ("paid", 1000, 0))
+
+    async def test_an_application_order_is_refunded_and_its_application_closed(self):
+        result = await self.run_action(cancel_and_refund, OWNER, 17)
+        self.assertEqual(result.refunded, 8000)
+        async with self.Session() as session:
+            self.assertEqual((await session.get(ResellerApplication, 1)).status, "cancelled")
+
+    async def test_an_approved_application_is_not_refunded(self):
+        with self.assertRaises(ValueError) as ctx:
+            await self.run_action(cancel_and_refund, OWNER, 18)
+        self.assertEqual(str(ctx.exception), APPLICATION_APPROVED)
+        self.assertEqual((await self.state())[1], 1000)
 
     async def test_an_order_with_nothing_paid_is_closed_without_a_credit(self):
         result = await self.run_action(cancel_and_refund, OWNER, 15)
@@ -138,6 +194,45 @@ class ManualDeliveryTests(StuckCase):
         with self.assertRaises(ValueError):
             await self.run_action(cancel_and_refund, OWNER, 10)
         self.assertEqual((await self.state())[1], 1000)
+
+
+class CloseWithoutRefundTests(StuckCase):
+    async def test_any_stuck_order_is_closed_once_without_moving_money(self):
+        for order_id in (10, 14, 16, 17, 18):
+            result = await self.run_action(close_without_refund, OWNER, order_id)
+            self.assertEqual(result.refunded, 0)
+        orders, balance, _s, txs, failures = await self.state()
+        self.assertEqual([orders[i] for i in (10, 14, 16, 17, 18)], ["cancelled"] * 5)
+        self.assertEqual((balance, txs, failures), (1000, 0, 0))
+        with self.assertRaises(ValueError):
+            await self.run_action(close_without_refund, OWNER, 10)
+        async with self.Session() as session:
+            self.assertFalse((await session.get(Order, 16)).service_mutation_pending)
+            self.assertEqual((await session.get(ResellerApplication, 1)).status, "cancelled")
+            self.assertEqual((await session.get(ResellerApplication, 2)).status, "approved")
+
+    async def test_another_shop_cannot_close_it(self):
+        with self.assertRaises(ShopScopeError):
+            await self.run_action(close_without_refund, SHOP, 10)
+        self.assertEqual((await self.state())[0][10], "paid")
+
+
+class ReasonTests(StuckCase):
+    async def test_each_kind_gets_its_own_reason_and_refund_flag(self):
+        async with self.Session() as session:
+            orders = list((await session.scalars(select(Order).where(Order.id.in_([10, 14, 15, 16, 17, 18])))).all())
+            reasons = await describe_stuck_orders(session, orders)
+        self.assertEqual(reasons[10].kind, "خرید سرویس")
+        self.assertIn("ساخته نشد", reasons[10].reason)
+        self.assertIn("تمام نشد", reasons[15].reason)
+        self.assertEqual(reasons[14].kind, "تمدید")
+        self.assertIn("دیگر وجود ندارد", reasons[14].reason)
+        self.assertTrue(reasons[14].can_refund)
+        self.assertIn("نامعلوم", reasons[16].reason)
+        self.assertFalse(reasons[16].can_refund)
+        self.assertEqual(reasons[17].kind, "درخواست نمایندگی")
+        self.assertIn("منتظر تأیید", reasons[17].reason)
+        self.assertFalse(reasons[18].can_refund)
 
 
 class StillStuckTests(StuckCase):
@@ -183,10 +278,19 @@ class RouteTests(StuckCase):
         self.assertIn("هنوز", message)
         self.assertIn("گیرکرده", message)
 
-    async def test_the_list_offers_the_two_actions_for_a_stuck_order_only(self):
+    async def test_the_list_offers_the_close_actions_for_a_stuck_order_only(self):
         cookie = f"session={self.signer.dumps(OWNER_SESSION)}; csrf=token"
         page = await self.client.get("/finance?tab=delivery", headers={"cookie": cookie})
         self.assertEqual(page.status_code, 200)
-        self.assertIn("/orders/10/refund-stuck-order", page.text)
-        self.assertIn("/orders/10/mark-delivered-manually", page.text)
-        self.assertNotIn("/orders/13/refund-stuck-order", page.text)
+        for path in ("refund-stuck-order", "mark-delivered-manually", "close-stuck-order"):
+            self.assertIn(f"/orders/10/{path}", page.text)
+            self.assertNotIn(f"/orders/13/{path}", page.text)
+        # A renewal that may already be applied is offered no refund, only the other two.
+        self.assertNotIn("/orders/16/refund-stuck-order", page.text)
+        self.assertIn("/orders/16/close-stuck-order", page.text)
+        self.assertIn("دیگر وجود ندارد", page.text)
+
+    async def test_the_close_route_closes_the_order(self):
+        response = await self.post(OWNER_SESSION, "/orders/14/close-stuck-order")
+        self.assertIn("ok=", response.headers["location"])
+        self.assertEqual((await self.state())[0][14], "cancelled")

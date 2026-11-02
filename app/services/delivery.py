@@ -20,6 +20,7 @@ from app.services.message_variables import DOMAIN_ORDER, DOMAIN_WALLET, render_m
 from app.services.users import get_all_settings, on
 from app.services.wireguard_delivery import has_wireguard
 from app.services.wireguard_send import deliver_wireguard
+from app.services.chat_records import keeps_sent
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ def _plan_name(order) -> str:
         if plan is not None:
             return getattr(plan, "name", "") or ""
     except Exception:
-        pass
+        logger.debug("_plan_name: ignored failure", exc_info=True)
     return ""
 
 
@@ -61,7 +62,7 @@ def _plan_type_label(order) -> str:
         if pk == "subscription" or bm == "fixed":
             return "اشتراک ثابت"
     except Exception:
-        pass
+        logger.debug("_plan_type_label: ignored failure", exc_info=True)
     return "ثابت"
 
 
@@ -155,6 +156,12 @@ def _subscription_success_outbound(ui: dict[str, str], order) -> tuple[str, dict
     if not (text or "").strip():
         return format_message(title, f"سفارش #{order.id} با موفقیت فعال شد."), {}
     return text, send_kw
+
+
+UNDELIVERED_ORDER_NOTE = (
+    "پرداخت شما دریافت و تأیید شد، ولی ساخت سرویس هنوز کامل نشده است. "
+    "پشتیبانی در جریان است و سرویس به‌محض آماده شدن برایتان فرستاده می‌شود؛ نیازی به پرداخت دوباره نیست."
+)
 
 
 async def build_delivery_content(
@@ -328,6 +335,30 @@ async def build_delivery_content(
             "title": title,
             "text": text,
             "send_kw": send_kw,
+            "detail_text": None,
+            "markup": markup,
+            "sub_url": None,
+            "sub_info": None,
+            "ui": ui,
+            "is_subscription": False,
+            "skip_qr": True,
+        }
+
+    if order is not None:
+        # Paid but nothing created yet (the panel failed; staff were alerted to resume it).
+        # Saying only "approved" here left buyers waiting for a service that never came.
+        title = rich_plain_text(ui.get("payment_ok_title")) or "✅ پرداخت تأیید شد"
+        body = info_block(
+            [
+                kv_line("🧾", "پرداخت", f"#{payment.id if payment else '—'}"),
+                kv_line("🛒", "سفارش", f"#{order.id}"),
+                kv_line("⏳", "وضعیت سرویس", "در حال آماده‌سازی"),
+            ]
+        ) + f"\n\n{UNDELIVERED_ORDER_NOTE}"
+        return {
+            "title": title,
+            "text": format_message(title, body),
+            "send_kw": {},
             "detail_text": None,
             "markup": markup,
             "sub_url": None,
@@ -666,6 +697,7 @@ async def _deliver_subscription_order(
     return text
 
 
+@keeps_sent
 async def send_delivery_to_user(
     bot: Bot,
     chat_id: int,
@@ -704,6 +736,7 @@ async def send_delivery_to_user(
     )
 
 
+@keeps_sent
 async def send_subscription_qr_photo(
     bot: Bot,
     chat_id: int,

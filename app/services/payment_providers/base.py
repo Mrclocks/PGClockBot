@@ -32,6 +32,12 @@ class VerifyResult:
     amount: int | None = None
     message: str = ""
     raw: dict[str, Any] | None = None
+    # Gateway tracking number and payment time of a paid transaction, when reported.
+    reference: str = ""
+    paid_at: str = ""
+    # Set when the gateway says the money was paid but it cannot settle this row
+    # (e.g. a different amount): staff must review it instead of a retry.
+    review_reason: str = ""
 
 
 class PspAdapter(Protocol):
@@ -45,4 +51,5 @@ class PspAdapter(Protocol):
         external_ref: str,
         amount: int,
         callback_params: dict[str, Any],
+        expected_invoice_id: int | None = None,
     ) -> VerifyResult: ...

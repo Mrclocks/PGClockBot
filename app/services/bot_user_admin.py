@@ -7,17 +7,19 @@ VPN quota/links are live from PasarGuard through ``UserService.pg_user_id``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, Plan, Role, UserService, WalletTransaction
+from app.db.models import BotUser, BotUserShop, Plan, Role, UserService, WalletTransaction
 from app.services.formatting import (
     expire_remaining_days,
     format_bytes,
@@ -30,14 +32,25 @@ from app.services.formatting import (
 )
 from app.services.numbers import normalize_number_text
 from app.services.pasarguard import (
+    PasarGuardError,
     absolutize_subscription_url,
     build_user_modify_payload,
+    extract_sub_token,
     get_pg,
     user_subscription_url,
 )
+from app.services.redact import user_safe_error
 from app.services.wallet import credit_wallet, debit_wallet, list_transactions
 from app.services.service_scope import assert_service_in_shop, service_shop_id, shop_services_clause
 from app.services.shop_membership import ensure_member
+from app.services.provision_gate import (
+    ProvisionError,
+    hold_limit_change,
+    hold_plan_create,
+    new_hold_key,
+    settle_failed_hold,
+)
+from app.services.volume_allocation import HeldVolume, is_hard_panel_rejection, release_volume_hold
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +61,13 @@ MIN_ADMIN_WALLET_ADJUST = 1_000  # absolute toman floor for manual adjust UI/API
 MAX_EXTEND_DAYS = 3650
 MAX_EXTEND_GB = 10_000
 MIN_TELEGRAM_ID = 1
+# Live service status: one panel read is cut off after this, and a few run at once.
+SNAPSHOT_TIMEOUT_SECONDS = 3.0
+SNAPSHOT_CONCURRENCY = 4
+# A customer screen lists at most this many services with live status.
+SNAPSHOT_LIMIT = 30
+# Panel read failures that only mean «status unknown»: the stored row is shown instead.
+PANEL_READ_ERRORS = (asyncio.TimeoutError, PasarGuardError, httpx.HTTPError, ValueError)
 MAX_TELEGRAM_ID = 9_007_199_254_740_991  # signed int64 safe upper bound
 
 
@@ -169,106 +189,132 @@ async def load_user_services(
     return list(rows)
 
 
-async def service_snapshot(session: AsyncSession, service: UserService) -> ServiceSnapshot:
-    """Live PG status for one shop service."""
-    import asyncio
-
-    url = absolutize_subscription_url(service.subscription_url) or (
-        (service.subscription_url or "").strip() or None
+def _snapshot_without_panel(service: UserService, url: str | None, *, status_fa: str, error: str) -> ServiceSnapshot:
+    return ServiceSnapshot(
+        service=service,
+        pg=None,
+        status_fa=status_fa,
+        used_text="—",
+        limit_text="—",
+        volume_text="—",
+        remain_gb_text="—",
+        days_left=None,
+        expire_text="—",
+        subscription_url=url,
+        error=error,
     )
+
+
+def _stored_subscription_url(service: UserService) -> str | None:
+    url = absolutize_subscription_url(service.subscription_url) or ((service.subscription_url or "").strip() or None)
     if url and url != (service.subscription_url or "").strip():
         service.subscription_url = url
-    if not service.pg_user_id:
-        return ServiceSnapshot(
-            service=service,
-            pg=None,
-            status_fa="بدون پنل",
-            used_text="—",
-            limit_text="—",
-            volume_text="—",
-            remain_gb_text="—",
-            days_left=None,
-            expire_text="—",
-            subscription_url=url,
-            error="سرویس به پاسارگارد وصل نیست",
-        )
-    try:
-        pg = await _pg_client_for_bot_service(session, service)
-        # Cap wait so edit-modal fragment never hangs on slow PG (client timeout is 30s).
-        info = await asyncio.wait_for(pg.get_user_by_id(int(service.pg_user_id)), timeout=3.0)
-        if not isinstance(info, dict):
-            raise ValueError("پاسخ نامعتبر پاسارگارد")
-        used = int(info.get("used_traffic") or 0)
-        limit = info.get("data_limit")
-        try:
-            limit_n = int(limit) if limit not in (None, "") else 0
-        except (TypeError, ValueError):
-            limit_n = 0
-        remain_gb = "نامحدود"
-        if limit_n > 0:
-            left = max(0, limit_n - used)
-            remain_gb = format_bytes(left)
-        live_url = user_subscription_url(info) or url
-        if live_url and live_url != service.subscription_url:
-            service.subscription_url = live_url
-            # token refresh best-effort
-            from app.services.pasarguard import extract_sub_token
+    return url
 
-            tok = extract_sub_token(live_url)
-            if tok:
-                service.subscription_token = tok
-        lim_for_ratio = limit_n if limit_n > 0 else None
-        # Keep users-list cache warm whenever we successfully read live PG.
-        sync_service_quota_cache(service, info)
-        status_raw = info.get("status")
-        exp_raw = info.get("expire") if "expire" in info else info.get("expire_date")
-        hold_dur = on_hold_expire_duration_seconds(info)
-        days_left = expire_remaining_days(
-            exp_raw, status=status_raw, expire_duration=hold_dur
-        )
-        expire_text = format_expire_short(
-            exp_raw, status=status_raw, expire_duration=hold_dur
-        )
-        # on_hold without a known duration: never show «نامحدود» for remaining days
-        if is_on_hold_status(status_raw) and days_left is None and not exp_raw:
-            days_left = None  # snapshot_telegram_lines must not say نامحدود
-        return ServiceSnapshot(
-            service=service,
-            pg=info,
-            status_fa=status_label_plain(status_raw),
-            used_text=format_bytes(used),
-            limit_text=format_bytes(limit_n) if limit_n > 0 else "نامحدود",
-            volume_text=format_bytes_ratio(used, lim_for_ratio),
-            remain_gb_text=remain_gb,
-            days_left=days_left,
-            expire_text=expire_text,
-            subscription_url=live_url or url,
-            error=None,
-        )
-    except Exception as e:
-        logger.debug("service snapshot failed id=%s: %s", service.id, e, exc_info=True)
-        err = "پاسارگارد پاسخ نداد" if isinstance(e, asyncio.TimeoutError) else str(e)[:160]
-        return ServiceSnapshot(
-            service=service,
-            pg=None,
-            status_fa="خطا",
-            used_text="—",
-            limit_text="—",
-            volume_text="—",
-            remain_gb_text="—",
-            days_left=None,
-            expire_text="—",
-            subscription_url=url,
-            error=err,
-        )
+
+async def _fetch_panel_user(pg: Any, pg_user_id: int) -> dict | BaseException:
+    """The panel's user record, or the error; bounded so a slow panel never stalls a screen."""
+    try:
+        info = await asyncio.wait_for(pg.get_user_by_id(int(pg_user_id)), timeout=SNAPSHOT_TIMEOUT_SECONDS)
+    except PANEL_READ_ERRORS as exc:
+        return exc
+    if not isinstance(info, dict):
+        return ValueError("پاسخ نامعتبر پاسارگارد")
+    return info
+
+
+def _snapshot_from_panel(service: UserService, url: str | None, info: dict) -> ServiceSnapshot:
+    used = int(info.get("used_traffic") or 0)
+    limit = info.get("data_limit")
+    try:
+        limit_n = int(limit) if limit not in (None, "") else 0
+    except (TypeError, ValueError):
+        limit_n = 0
+    remain_gb = format_bytes(max(0, limit_n - used)) if limit_n > 0 else "نامحدود"
+    live_url = user_subscription_url(info) or url
+    if live_url and live_url != service.subscription_url:
+        service.subscription_url = live_url
+        token = extract_sub_token(live_url)
+        if token:
+            service.subscription_token = token
+    # Keep users-list cache warm whenever we successfully read live PG.
+    sync_service_quota_cache(service, info)
+    status_raw = info.get("status")
+    exp_raw = info.get("expire") if "expire" in info else info.get("expire_date")
+    hold_dur = on_hold_expire_duration_seconds(info)
+    days_left = expire_remaining_days(exp_raw, status=status_raw, expire_duration=hold_dur)
+    # on_hold without a known duration never shows «نامحدود» for remaining days.
+    if is_on_hold_status(status_raw) and days_left is None and not exp_raw:
+        days_left = None
+    return ServiceSnapshot(
+        service=service,
+        pg=info,
+        status_fa=status_label_plain(status_raw),
+        used_text=format_bytes(used),
+        limit_text=format_bytes(limit_n) if limit_n > 0 else "نامحدود",
+        volume_text=format_bytes_ratio(used, limit_n if limit_n > 0 else None),
+        remain_gb_text=remain_gb,
+        days_left=days_left,
+        expire_text=format_expire_short(exp_raw, status=status_raw, expire_duration=hold_dur),
+        subscription_url=live_url or url,
+        error=None,
+    )
+
+
+def _build_snapshot(service: UserService, url: str | None, fetched: dict | BaseException) -> ServiceSnapshot:
+    if isinstance(fetched, BaseException):
+        logger.debug("service snapshot failed id=%s", service.id, exc_info=fetched)
+        error = "پاسارگارد پاسخ نداد" if isinstance(fetched, asyncio.TimeoutError) else user_safe_error(fetched, limit=160)
+        return _snapshot_without_panel(service, url, status_fa="خطا", error=error)
+    return _snapshot_from_panel(service, url, fetched)
+
+
+async def service_snapshot(session: AsyncSession, service: UserService) -> ServiceSnapshot:
+    """Live PG status for one shop service."""
+    snapshots = await _snapshots(session, [service])
+    return snapshots[0]
+
+
+async def _client_or_error(session: AsyncSession, service: UserService) -> Any:
+    """The service's panel client, None when it has no panel user, or why it cannot be reached."""
+    if not service.pg_user_id:
+        return None
+    try:
+        return await _pg_client_for_bot_service(session, service)
+    except PANEL_READ_ERRORS as exc:
+        return exc
+
+
+async def _snapshots(session: AsyncSession, services: list[UserService]) -> list[ServiceSnapshot]:
+    """Live status of ``services``; the panel is asked for all of them at once, a few at a time.
+
+    The database is read first (one session must not run queries concurrently), then the panel
+    calls run together, so a customer with many services waits about one call, not one per service.
+    """
+    urls = [_stored_subscription_url(service) for service in services]
+    clients = [await _client_or_error(session, s) for s in services]
+    gate = asyncio.Semaphore(SNAPSHOT_CONCURRENCY)
+
+    async def fetch(service: UserService, pg: Any) -> dict | BaseException | None:
+        if pg is None or isinstance(pg, BaseException):
+            return pg
+        async with gate:
+            return await _fetch_panel_user(pg, int(service.pg_user_id))
+
+    fetched = await asyncio.gather(*(fetch(s, pg) for s, pg in zip(services, clients, strict=True)))
+    return [
+        _snapshot_without_panel(s, url, status_fa="بدون پنل", error="سرویس به پاسارگارد وصل نیست")
+        if result is None
+        else _build_snapshot(s, url, result)
+        for s, url, result in zip(services, urls, fetched, strict=True)
+    ]
 
 
 async def list_service_snapshots(
     session: AsyncSession, bot_user_id: int, *, shop_id: int | None
 ) -> list[ServiceSnapshot]:
-    out: list[ServiceSnapshot] = []
-    for svc in await load_user_services(session, bot_user_id, shop_id=shop_id):
-        out.append(await service_snapshot(session, svc))
+    services = await load_user_services(session, bot_user_id, shop_id=shop_id)
+    out = await _snapshots(session, services[:SNAPSHOT_LIMIT])
     await session.commit()  # persist refreshed subscription urls
     return out
 
@@ -366,9 +412,13 @@ async def admin_create_bot_user(
         role=Role.USER.value,
         referral_code=referral_code,
         reseller_id=assign_reseller,
-        color_tag=normalize_color_tag(color_tag),
+        # A shop's tag lives on its membership row; only the platform's lives on the person.
+        color_tag=normalize_color_tag(color_tag if assign_reseller is None else None),
     )
     session.add(user)
+    if assign_reseller is not None:
+        await session.flush()
+        session.add(BotUserShop(bot_user_id=user.id, shop_id=assign_reseller, color_tag=normalize_color_tag(color_tag)))
     await session.commit()
     await session.refresh(user)
     return user
@@ -397,7 +447,7 @@ async def admin_provision_service(
         parse_group_ids,
     )
     from app.services.plans_catalog import plan_belongs_to_staff
-    from app.services.provision_gate import ProvisionError, assert_provision_create
+    from app.services.provision_gate import assert_provision_create
 
     if not plan.is_active:
         raise ValueError("پلن غیرفعال است")
@@ -464,6 +514,7 @@ async def admin_provision_service(
         reseller_id=shop_rid,
     )
 
+    hold = await _hold_assign_volume(session, shop_rid, pg, plan, data_limit)
     pg_uid: int | None = None
     try:
         if plan.pg_template_id:
@@ -523,6 +574,7 @@ async def admin_provision_service(
             )
         session.add(service)
         await ensure_member(session, int(user.id), shop_rid)
+        await release_volume_hold(session, hold)
         await session.commit()
         await session.refresh(service)
         return service
@@ -535,6 +587,7 @@ async def admin_provision_service(
                     "rollback PG user failed uid=%s", pg_uid, exc_info=True
                 )
         await session.rollback()
+        await settle_failed_hold(session, hold, exc, panel_touched=True)
         from app.services.pasarguard import PasarGuardError
 
         if isinstance(exc, PasarGuardError):
@@ -752,6 +805,47 @@ def sync_service_quota_cache(
         service.quota_synced_at = datetime.now(timezone.utc)
 
 
+async def _hold_assign_volume(
+    session: AsyncSession, shop_rid: int | None, pg: Any, plan: Plan, data_limit: int | None
+) -> HeldVolume | None:
+    """Hold a manual assignment's volume in the shop's ceiling before the panel create."""
+    try:
+        return await hold_plan_create(
+            session, shop_id=shop_rid, pg=pg, template_id=plan.pg_template_id,
+            data_limit=data_limit, key=new_hold_key("assign"),
+        )
+    except ProvisionError as e:
+        raise ValueError(e.message) from e
+
+
+async def _hold_quota_change(
+    session: AsyncSession, service: UserService, data_limit_bytes: int | None
+) -> HeldVolume | None:
+    """Hold a staff quota increase in the shop's volume ceiling before the panel write."""
+    if data_limit_bytes is None or service.shop_id is None:
+        return None
+    try:
+        return await hold_limit_change(
+            session, shop_id=int(service.shop_id), current_limit=service.quota_data_limit_bytes,
+            new_limit=int(data_limit_bytes), key=new_hold_key("svc-quota"),
+        )
+    except ProvisionError as e:
+        raise ValueError(e.message) from e
+
+
+async def _modify_with_hold(
+    session: AsyncSession, pg: Any, service: UserService, payload: dict[str, Any], hold: HeldVolume | None
+) -> Any:
+    try:
+        return await pg.modify_user_by_id(int(service.pg_user_id), payload)
+    except Exception as exc:
+        # A refused write granted nothing; an unknown outcome keeps the hold until it expires.
+        if is_hard_panel_rejection(exc):
+            await release_volume_hold(session, hold)
+            await session.commit()
+        raise
+
+
 async def admin_set_service_quota(
     session: AsyncSession,
     service: UserService,
@@ -767,6 +861,7 @@ async def admin_set_service_quota(
         raise ValueError("سرویس به پاسارگارد وصل نیست")
     assert_staff_pg_user_action(staff, "update")
     pg = await _pg_client_for_bot_service(session, service)
+    hold = await _hold_quota_change(session, service, data_limit_bytes)
     # Reset is a separate PG ACL (users.reset_usage). Without it, still allow
     # quota update — never use Owner token to bypass a missing reset right.
     do_reset = bool(reset_traffic)
@@ -789,7 +884,7 @@ async def admin_set_service_quota(
         raise ValueError("تغییری برای اعمال نیست")
     info: dict | None = None
     if payload:
-        info = await pg.modify_user_by_id(int(service.pg_user_id), payload)
+        info = await _modify_with_hold(session, pg, service, payload, hold)
         if isinstance(info, dict):
             live = user_subscription_url(info)
             if live:
@@ -817,6 +912,7 @@ async def admin_set_service_quota(
             logger.debug("quota cache refresh failed uid=%s", service.pg_user_id, exc_info=True)
     service.notified_expire = False
     service.notified_traffic = False
+    await release_volume_hold(session, hold)
     await session.commit()
     snap = await service_snapshot(session, service)
     # Persist any cache refresh from the live snapshot read

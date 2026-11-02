@@ -62,6 +62,10 @@ class RestartRowTests(unittest.TestCase):
         )
         self.assertNotIn(LABEL, [t for row in rows for t in row])
 
+    def test_customer_view_keyboard_keeps_restart(self) -> None:
+        rows = _rows(main_reply_keyboard("admin", ui={}, as_user=True))
+        self.assertEqual(rows[-1], [LABEL], "only the staff preview drops the restart row")
+
     def test_custom_label_is_recognised_as_home(self) -> None:
         ui = {"btn_restart": "♻️ از اول"}
         self.assertTrue(kb.is_home_text("♻️ از اول", ui))
@@ -95,3 +99,27 @@ class RestartActionTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RestartAfterPurchaseTests(unittest.IsolatedAsyncioTestCase):
+    async def test_the_keyboard_sent_with_a_delivery_keeps_restart(self) -> None:
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from app.db.models import Base, BotUser, Order
+        from app.services.delivery import _buyer_reply_markup
+        from app.services.users import clear_settings_cache
+
+        clear_settings_cache()
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            session.add_all([
+                BotUser(id=1, telegram_id=101, referral_code="u1", role="user"),
+                Order(id=1, user_id=1, amount=1_000),
+            ])
+            await session.commit()
+            markup = await _buyer_reply_markup(session, None, await session.get(Order, 1))
+        await engine.dispose()
+        clear_settings_cache()
+        self.assertEqual(_rows(markup)[-1], [LABEL])

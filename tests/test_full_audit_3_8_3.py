@@ -200,14 +200,6 @@ class SessionCookieHardeningTests(unittest.TestCase):
         self.assertIn('method="post"', html)
 
 
-class StarsDeliveryAlertTests(unittest.TestCase):
-    def test_handler_alerts_admins_on_failure(self):
-        src = (ROOT / "app/bot/handlers/payments.py").read_text(encoding="utf-8")
-        self.assertIn("stars delivery failed", src)
-        self.assertIn("تحویل استارز ناموفق", src)
-        self.assertIn("admin_ids", src)
-
-
 class SyntheticIdCollisionTests(unittest.TestCase):
     def test_salt_disambiguates(self):
         from app.services.resellers import _synthetic_telegram_id

@@ -42,22 +42,33 @@
     <main class="panel-status-stage">
       <article class="panel-status-card" aria-labelledby="panel-status-title">
         <div class="panel-status-card-accent" aria-hidden="true"></div>
-        <p class="panel-status-watermark" dir="ltr" aria-hidden="true">{{ code }}</p>
+        <p class="panel-status-watermark" dir="ltr" aria-hidden="true">{{ watermark|default(code) }}</p>
 
         <div class="panel-status-badge" aria-hidden="true">
-          {% if code == 404 %}
+          {% if code == 'ok' or code == '200' %}
+          <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M8.2 12.2l2.4 2.4 5.2-5.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          {% elif code == 'warn' or code == 'pending' %}
+          <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M12 8v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <circle cx="12" cy="16.2" r="1" fill="currentColor"/>
+          </svg>
+          {% elif code == 404 or code == '404' %}
           <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
             <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.6"/>
             <path d="M16 16l4.2 4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
             <path d="M9 11h4M11 9v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
           </svg>
-          {% elif code == 500 %}
+          {% elif code == 500 or code == '500' or code == 'error' %}
           <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
             <path d="M12 8v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
             <circle cx="12" cy="16.2" r="1" fill="currentColor"/>
             <path d="M10.2 4.8 3.6 17.1A2 2 0 0 0 5.4 20h13.2a2 2 0 0 0 1.8-2.9L13.8 4.8a2 2 0 0 0-3.6 0Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
           </svg>
-          {% elif code == 403 %}
+          {% elif code == 403 or code == '403' %}
           <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
             <rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/>
             <path d="M8 10V7.5a4 4 0 0 1 8 0V10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
@@ -71,9 +82,16 @@
           {% endif %}
         </div>
 
-        <p class="panel-status-kicker muted" dir="ltr">HTTP {{ code }}</p>
+        {% if kicker %}
+        <p class="panel-status-kicker muted"{% if kicker_ltr %} dir="ltr"{% endif %}>{{ kicker }}</p>
+        {% endif %}
         <h1 class="panel-status-title" id="panel-status-title">{{ title }}</h1>
+        {% if message %}
         <p class="panel-status-msg muted">{{ message }}</p>
+        {% endif %}
+        {% if body_html %}
+        <div class="panel-status-body-html">{{ body_html | safe }}</div>
+        {% endif %}
         {% if ref %}
         <p class="panel-status-ref" dir="ltr"><span class="muted">ref</span> {{ ref }}</p>
         {% endif %}
@@ -104,13 +122,19 @@
         </section>
         {% endif %}
 
-        {% if primary_href or secondary_href %}
-        <div class="panel-status-actions">
+        {% if primary_href or secondary_href or show_close_button %}
+        {% set _single_action = (primary_href and not secondary_href and not show_close_button) or (show_close_button and not primary_href and not secondary_href) %}
+        <div class="panel-status-actions{% if _single_action %} panel-status-actions--single{% endif %}">
           {% if primary_href %}
-          <a class="btn" href="{{ primary_href }}">{{ primary_label }}</a>
+          <a class="btn" id="panel-status-bot-return" href="{{ primary_href }}"{% if primary_fallback_href|default('') %} data-https="{{ primary_fallback_href }}"{% endif %}>{{ primary_label }}</a>
           {% endif %}
           {% if secondary_href %}
           <a class="btn btn-ghost" href="{{ secondary_href }}">{{ secondary_label }}</a>
+          {% endif %}
+          {% if show_close_button %}
+          <button type="button" class="btn panel-status-close-btn" id="panel-status-close">
+            {{ close_button_label|default('بستن') }}
+          </button>
           {% endif %}
         </div>
         {% endif %}
@@ -121,5 +145,60 @@
       {{ footer|default('اگر مشکل ادامه داشت، از حساب خارج شوید و دوباره وارد شوید.') }}
     </footer>
   </div>
+  {% if primary_href and primary_fallback_href|default('') %}
+  <script>
+  (function () {
+    var a = document.getElementById("panel-status-bot-return");
+    if (!a) return;
+    a.addEventListener("click", function (ev) {
+      var https = a.getAttribute("data-https") || "";
+      var href = a.getAttribute("href") || "";
+      try {
+        if (
+          window.Telegram &&
+          Telegram.WebApp &&
+          typeof Telegram.WebApp.openTelegramLink === "function" &&
+          https.indexOf("https://t.me/") === 0
+        ) {
+          ev.preventDefault();
+          Telegram.WebApp.openTelegramLink(https);
+          return;
+        }
+      } catch (e) {}
+      // tg:// hands off to the Telegram app; if the page is still visible,
+      // fall back to https://t.me (external browser / desktop without handler).
+      if (href.indexOf("tg:") === 0 && https) {
+        setTimeout(function () {
+          try {
+            if (!document.hidden) {
+              window.location.href = https;
+            }
+          } catch (e2) {}
+        }, 900);
+      }
+    });
+  })();
+  </script>
+  {% endif %}
+  {% if show_close_button %}
+  <script>
+  (function () {
+    var btn = document.getElementById("panel-status-close");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      try {
+        if (window.Telegram && Telegram.WebApp && typeof Telegram.WebApp.close === "function") {
+          Telegram.WebApp.close();
+          return;
+        }
+      } catch (e) {}
+      try { window.close(); } catch (e) {}
+      try {
+        if (history.length > 1) history.back();
+      } catch (e) {}
+    });
+  })();
+  </script>
+  {% endif %}
 </body>
 </html>

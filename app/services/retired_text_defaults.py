@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 RETIRED_TEXT_DEFAULTS: dict[str, tuple[str, ...]] = {
+    "btn_adm_users_search": ("🔎 جستجو با آیدی تلگرام",),
     "btn_adm_hub_product": ("📦 محصول و PG",),
     "btn_adm_res_apps": ("📋 درخواست‌های منتظر",),
     "btn_adm_res_add": ("➕ افزودن دستی",),

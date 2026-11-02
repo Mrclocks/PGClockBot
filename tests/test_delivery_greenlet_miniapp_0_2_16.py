@@ -232,10 +232,7 @@ class OnHoldDisplayLabelTests(unittest.TestCase):
         self.assertNotIn("نامحدود", text)
 
     def test_ui_sources_not_map_null_days_to_unlimited(self):
-        js = (ROOT / "app/web/static/miniapp.js").read_text(encoding="utf-8")
-        self.assertIn("expireDaysLabel", js)
-        self.assertIn("isOnHoldStatus", js)
-        self.assertNotIn('s.expire_days == null ? "نامحدود"', js)
+        # Mini App label: tests/miniapp_app.test.cjs (on_hold never reads «نامحدود»).
         html = (ROOT / "app/web/templates/_user_edit_body.html").read_text(
             encoding="utf-8"
         )

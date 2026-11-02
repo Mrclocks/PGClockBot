@@ -151,6 +151,22 @@ class ServiceSummary:
     has_alert: bool
     sort_expire: float  # sooner first; inf if unknown
     sort_volume: float  # smaller plan GB first; inf if unlimited/unknown
+    plan_name: str = ""
+    pg_username: str = ""
+
+    @property
+    def expire_tone(self) -> ExpireTone:
+        return expire_tone(self.days_left, expiring=self.expiring)
+
+
+ExpireTone = Literal["", "warn", "danger"]
+
+
+def expire_tone(days_left: int | None, *, expiring: bool) -> ExpireTone:
+    """How loudly a time-left value is shown: expired is danger, inside the alert window warn."""
+    if days_left is not None and days_left <= 0:
+        return "danger"
+    return "warn" if expiring else ""
 
 
 @dataclass
@@ -169,6 +185,14 @@ class UserOpsRow:
     # Scoped purse for the current staff shop (platform or ShopWallet) — never
     # cross-tenant. Template must use this, not raw user.wallet_balance.
     wallet_balance: int = 0
+
+    @property
+    def expire_tone(self) -> ExpireTone:
+        """Tone of the soonest-expiring service, the one the row's time-left value shows."""
+        if not self.services:
+            return ""
+        soonest = min(self.services, key=lambda s: (s.sort_expire, s.id))
+        return soonest.expire_tone
 
 
 def _service_label(svc: UserService, plan: Plan | None) -> str:
@@ -252,6 +276,8 @@ def _summarize_service(
         has_alert=has_alert,
         sort_expire=exp.timestamp() if exp is not None else float("inf"),
         sort_volume=gb_sort,
+        plan_name=((getattr(plan, "name", None) or "").strip() if plan else ""),
+        pg_username=(getattr(svc, "pg_username", None) or "").strip(),
     )
 
 

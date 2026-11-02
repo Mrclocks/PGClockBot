@@ -21,6 +21,14 @@ from app.db.models import (
     UserService,
 )
 from app.services.plans_catalog import require_catalog_owner_id
+from app.services.provision_gate import ProvisionError, hold_limit_change, new_hold_key
+from app.services.volume_allocation import (
+    HeldVolume,
+    VolumeAllocationError,
+    assert_volume_delta_allowed,
+    is_hard_panel_rejection,
+    release_volume_hold,
+)
 from app.services.shop_scope import ShopScopeError, is_platform_admin, shop_owner_id
 
 log = logging.getLogger(__name__)
@@ -428,6 +436,23 @@ async def delete_pack(
     await session.commit()
 
 
+def pack_volume_bytes(amount: float) -> int:
+    """Bytes a volume pack adds, with the rounding the panel write uses."""
+    return int(float(amount) * (1024**3))
+
+
+async def _assert_pack_volume_available(
+    session: AsyncSession, shop_rid: int | None, pack: ServiceAddonPack
+) -> None:
+    """Refuse a volume pack the shop cannot apply within its ceiling; delivery holds it again."""
+    try:
+        await assert_volume_delta_allowed(
+            session, shop_id=shop_rid, delta_bytes=pack_volume_bytes(pack.amount), audience="customer",
+        )
+    except VolumeAllocationError as e:
+        raise ValueError(e.user_message()) from e
+
+
 async def create_addon_order(
     session: AsyncSession,
     *,
@@ -481,6 +506,9 @@ async def create_addon_order(
             raise ValueError("این سرویس حجم نامحدود دارد — بسته حجم قابل خرید نیست")
         if pack.kind == KIND_DURATION and service.quota_expire_at is None:
             raise ValueError("این سرویس زمان نامحدود دارد — بسته زمان قابل خرید نیست")
+
+    if pack.kind == KIND_VOLUME:
+        await _assert_pack_volume_available(session, shop_rid, pack)
 
     quote = await quote_product(session, pack, shop_id=shop_rid)
     assert_expected_price(quote, expected_price)
@@ -587,6 +615,7 @@ async def apply_service_addon(
             kind=apply_kind,
             amount=apply_amount,
             order_reseller_id=order.reseller_id,
+            order_id=int(order_id),
         )
         pg_applied = True
 
@@ -671,6 +700,35 @@ async def _on_hold_activation_expire_ts(
     return now + plan_days * 86400
 
 
+async def _hold_pack_volume(
+    session: AsyncSession, service: UserService, *, shop_id: int | None, new_limit: int | None, key: str
+) -> HeldVolume | None:
+    """Hold a volume pack's increase in the shop's ceiling before the panel write."""
+    if new_limit is None or not shop_id:
+        return None
+    try:
+        return await hold_limit_change(
+            session, shop_id=int(shop_id), current_limit=service.quota_data_limit_bytes,
+            new_limit=int(new_limit), key=key, audience="customer",
+        )
+    except ProvisionError as e:
+        raise ValueError(e.message) from e
+
+
+async def _write_pack(
+    session: AsyncSession, pg: Any, service: UserService, payload: dict[str, Any], hold: HeldVolume | None
+) -> None:
+    """Write the pack to the panel; the hold is dropped in the caller's commit of the new limit."""
+    try:
+        await pg.modify_user_by_id(int(service.pg_user_id), payload)
+    except Exception as exc:
+        # Refused by the panel: nothing was granted. Any other failure keeps the hold until it expires.
+        if is_hard_panel_rejection(exc):
+            await release_volume_hold(session, hold)
+        raise
+    await release_volume_hold(session, hold)
+
+
 async def _apply_pack_to_service(
     session: AsyncSession,
     service: UserService,
@@ -678,6 +736,7 @@ async def _apply_pack_to_service(
     kind: str,
     amount: float,
     order_reseller_id: int | None,
+    order_id: int | None = None,
 ) -> None:
     """Additive PG mutate — never falls back across shop PG credentials.
 
@@ -708,7 +767,7 @@ async def _apply_pack_to_service(
     data_limit_bytes = None
 
     if kind == KIND_VOLUME:
-        add_bytes = int(float(amount) * (1024**3))
+        add_bytes = pack_volume_bytes(amount)
         if add_bytes <= 0:
             raise ValueError("حجم نامعتبر است")
         try:
@@ -755,7 +814,11 @@ async def _apply_pack_to_service(
     else:
         raise ValueError("نوع بسته پشتیبانی نمی‌شود")
 
-    await pg.modify_user_by_id(int(service.pg_user_id), payload)
+    hold = await _hold_pack_volume(
+        session, service, shop_id=order_reseller_id,
+        new_limit=data_limit_bytes if kind == KIND_VOLUME else None, key=f"addon:{int(order_id)}" if order_id else new_hold_key("addon"),
+    )
+    await _write_pack(session, pg, service, payload, hold)
     # Cache sync is best-effort — PG already mutated. Never fail the delivery
     # claim here or a retry would double-apply the same addon.
     try:

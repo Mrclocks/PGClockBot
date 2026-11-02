@@ -22,15 +22,15 @@
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن نمایندگی حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
   ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-bulk-select>
-    <thead><tr>{{ table_select_head() }}<th>نام</th><th>قیمت</th><th>وضعیت</th><th class="col-actions"></th></tr></thead>
+  <table class="table-compact table-list-sm" data-bulk-select>
+    <thead><tr>{{ table_select_head() }}<th>نام</th><th>قیمت</th><th>وضعیت</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ plans | length | num }} پلن</span></th></tr></thead>
     <tbody>
     {% for p in plans %}
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
-        <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
-        <td class="mono" dir="ltr">{{ p.price | money }}</td>
-        <td>{{ "فعال" if p.is_active else "خاموش" }}</td>
+        <td class="li-title"><span dir="auto">{{ p.name }}</span>{% if p.description %}<br class="li-hide"><small class="muted li-hide">{{ p.description }}</small>{% endif %}</td>
+        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="li-badge"><span class="li-hide">{{ "فعال" if p.is_active else "خاموش" }}</span><span class="li-only badge {{ 'active' if p.is_active else 'warn' }}">{{ "فعال" if p.is_active else "خاموش" }}</span></td>
         <td class="col-actions">
           {% call row_actions() %}
           <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
@@ -42,6 +42,7 @@
                 data-confirm-label="حذف"><button class="btn btn-danger btn-sm" type="submit">حذف</button></form>
           {% endcall %}
         </td>
+        <td class="li-only-cell li-sub"><span dir="auto">{{ p.description or '—' }}</span></td>
       </tr>
     {% else %}
       <tr><td colspan="5" class="muted">پلنی نیست — تا پلن نسازید دکمه درخواست در بات برای کاربر بی‌فایده است</td></tr>

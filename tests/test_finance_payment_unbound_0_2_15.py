@@ -25,7 +25,10 @@ class FinancePaymentUnboundSourceGuards(unittest.TestCase):
         src = (ROOT / "app/api/finance_pages.py").read_text(encoding="utf-8")
         # Module-level import is required; a nested re-import inside finance_page
         # shadows it for orders/payments tabs.
-        self.assertIn("from app.db.models import BotUser, Order, Payment, Plan, ResellerProfile", src)
+        import app.api.finance_pages as finance_pages
+        from app.db.models import Payment
+
+        self.assertIs(finance_pages.Payment, Payment)
         start = src.index("def register_finance_pages")
         # Only the finance_page body matters (through legacy redirects).
         body = src[start : src.index("def _legacy_finance_redirect", start)]

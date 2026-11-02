@@ -1,0 +1,29 @@
+{# The shop's own Mini App switch; expects: miniapp_available, miniapp_blocker, miniapp_on, miniapp_url, csrf_token #}
+<form method="post" action="/shop-settings/miniapp" class="settings-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+  <div class="card settings-card">
+    <h2>مینی‌اپ برای مشتریان</h2>
+    {% if miniapp_available %}
+    <p class="muted update-card-caption">
+      با روشن شدن، دکمهٔ «Open» کنار کادر پیام ربات شما مینی‌اپ فروشگاه خودتان را باز می‌کند. مشتریان فقط سرویس‌ها، پلن‌ها، کیف پول و آموزش‌های همین فروشگاه را می‌بینند و با کیف پول همین فروشگاه خرید، تمدید و افزایش حجم یا زمان انجام می‌دهند. شارژ کیف پول، کد تخفیف، پشتیبانی و باشگاه فعلاً از خود ربات انجام می‌شود.
+    </p>
+    <div class="setting-item full">
+      <label class="toggle-row ui-switch-row">
+        <span class="ui-switch-copy">
+          <strong>مینی‌اپ فروشگاه</strong>
+          {% if miniapp_on and miniapp_url %}<small class="muted">آدرس: <span dir="ltr">{{ miniapp_url }}</span></small>{% endif %}
+        </span>
+        <span class="ui-switch">
+          <input type="checkbox" name="miniapp_shop_enabled" value="1" {% if miniapp_on %}checked{% endif %} />
+          <span class="ui-switch-track" aria-hidden="true"></span>
+        </span>
+      </label>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit">ذخیره</button>
+    </div>
+    {% else %}
+    <p class="muted">{{ miniapp_blocker|default("مینی‌اپ برای فروشگاه شما فعال نشده است. برای فعال شدن با مدیریت هماهنگ کنید.", true) }}</p>
+    {% endif %}
+  </div>
+</form>

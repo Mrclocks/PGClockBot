@@ -27,7 +27,7 @@ class PayMethodsBackKeyboardTests(unittest.TestCase):
 
 
 class NavigateOrderPayBackTests(unittest.IsolatedAsyncioTestCase):
-    async def test_fixed_plan_reopens_plan_detail(self):
+    async def test_fixed_plan_returns_to_the_plan_list(self):
         from app.bot.handlers.shop import navigate_order_pay_back
         from app.db.models import OrderStatus
 
@@ -51,17 +51,18 @@ class NavigateOrderPayBackTests(unittest.IsolatedAsyncioTestCase):
                 new_callable=AsyncMock,
             ),
             patch(
-                "app.bot.handlers.shop.shop_plan",
+                "app.bot.handlers.shop.shop_kind_fixed",
                 new_callable=AsyncMock,
-            ) as shop_plan,
+            ) as plan_list,
         ):
             await navigate_order_pay_back(
                 message, session, db_user, order, state
             )
 
-        shop_plan.assert_awaited()
-        cb = shop_plan.await_args.args[0]
-        self.assertEqual(cb.data, "shop:plan:12")
+        # The plan details live on the payment screen; back goes to the list, not a new order.
+        plan_list.assert_awaited()
+        cb = plan_list.await_args.args[0]
+        self.assertEqual(cb.data, "shop:kind:fixed")
 
     async def test_renew_reopens_service_card(self):
         from app.bot.handlers.shop import navigate_order_pay_back

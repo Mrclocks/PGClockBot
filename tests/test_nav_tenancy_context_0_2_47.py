@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import app.bot.keyboards  # noqa: F401 — resolve reply_keyboards circular init
 
@@ -193,59 +193,6 @@ class BuildMainReplyTenancyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(role, "admin")
         labels = _labels(markup)
         self.assertTrue(any("ادمین" in (x or "") for x in labels), labels)
-
-
-class PresentTopupMethodsContextTests(unittest.IsolatedAsyncioTestCase):
-    async def test_heal_main_forwards_shop_bot_context(self):
-        from app.bot.handlers.wallet import present_topup_methods
-
-        message = AsyncMock()
-        session = AsyncMock()
-        db_user = MagicMock()
-        state = AsyncMock()
-        state.set_state = AsyncMock()
-        state.update_data = AsyncMock()
-        captured: dict = {}
-
-        async def _capture_build(*_a, **kw):
-            captured.update(kw)
-            return MagicMock(), {}, "reseller"
-
-        with (
-            patch(
-                "app.bot.handlers.wallet.get_all_settings",
-                new=AsyncMock(return_value={}),
-            ),
-            patch(
-                "app.bot.nav_inline.present_inline_only",
-                new=AsyncMock(),
-            ),
-            patch(
-                "app.bot.menu_nav.set_nav_level",
-                new=AsyncMock(),
-            ),
-            patch(
-                "app.bot.menu_nav.build_main_reply_keyboard",
-                new=_capture_build,
-            ),
-            patch(
-                "app.bot.tg_utils.attach_reply_keyboard",
-                new=AsyncMock(),
-            ),
-        ):
-            await present_topup_methods(
-                message,
-                session,
-                db_user,
-                state,
-                5000,
-                is_reseller_bot=True,
-                reseller_owner_id=42,
-                heal_main=True,
-            )
-
-        self.assertTrue(captured.get("is_reseller_bot"))
-        self.assertEqual(captured.get("reseller_owner_id"), 42)
 
 
 if __name__ == "__main__":

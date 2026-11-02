@@ -1,0 +1,49 @@
+{% if automation_flash_err %}
+<div class="flash warn">{{ automation_flash_err }}</div>
+{% endif %}
+<p class="muted update-card-caption">
+  خرید خودکاری که ممکن است از کیف پول کسر شده ولی کامل نشده باشد، برای احتیاط متوقف می‌شود و دوباره خرید نمی‌کند. پس از تعیین تکلیف سفارش، آن را از اینجا آزاد کنید. سفارش تحویل‌شده را سامانه خودش تکمیل می‌کند.
+</p>
+{% if automation_missing_bots %}
+<div class="flash warn">
+  این فروشگاه‌ها خرید خودکار فعال دارند ولی ربات ندارند، پس اجرا و اعلان آن‌ها انجام نمی‌شود:
+  {% for shop_id in automation_missing_bots %}<span dir="ltr">#{{ shop_id }}</span>{% if not loop.last %}، {% endif %}{% endfor %}
+</div>
+{% endif %}
+{% if automation_items %}
+{% for item in automation_items %}
+<div class="card settings-card">
+  <h2>سرویس <span dir="ltr">{{ item.username }}</span> — {{ item.customer }}</h2>
+  <p class="muted">
+    {% if item.action %}{{ automation_actions.get(item.action, item.action) }}{% else %}عمل نامشخص{% endif %}
+    {% if item.order_id %} · سفارش <bdi dir="ltr">#{{ item.order_id }}</bdi>{% if item.order_status %} ({{ item.order_status | order_status }}){% else %} (پیدا نشد){% endif %}{% endif %}
+    {% if item.amount is not none %} · <span dir="ltr">{{ item.amount | money }}</span> تومان{% endif %}
+  </p>
+  <p>{{ automation_labels[item.state] }}</p>
+  {% if item.state == 'clearable' %}
+  <form method="post" action="/service-automation/{{ item.service_id }}/clear" class="form-stack"
+        data-confirm="این سرویس آزاد شود؟ خرید خودکار بعدی طبق تنظیمات مشتری ادامه پیدا می‌کند." data-confirm-title="آزادسازی خرید خودکار" data-confirm-label="آزاد شود">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if item.wallet_debited %}
+    <label class="form-field">
+      <span><input type="checkbox" name="money_settled" value="1" required> مبلغ کسرشده از کیف مشتری برگردانده شده است</span>
+    </label>
+    {% endif %}
+    <label class="form-field">
+      <span><input type="checkbox" name="disable_automation" value="1"> خرید خودکار این سرویس خاموش شود</span>
+    </label>
+    <button class="btn" type="submit">آزادسازی</button>
+  </form>
+  {% elif item.state == 'wait_order' and item.order_id %}
+  <a class="btn btn-ghost" href="/finance?tab=delivery">رفتن به تحویل ناموفق</a>
+  {% endif %}
+</div>
+{% endfor %}
+{% if automation_next %}
+<a class="btn" href="/finance?tab=automation&amp;after={{ automation_next }}">موارد بعدی</a>
+{% endif %}
+{% else %}
+<div class="card settings-card">
+  <p class="muted">خرید خودکار متوقف‌شده‌ای نیست.</p>
+</div>
+{% endif %}

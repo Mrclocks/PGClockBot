@@ -23,8 +23,8 @@
   ]) }}
   {% endif %}
   <div class="table-wrap">
-  <table class="table-compact"{% if can_update or can_delete %} data-bulk-select{% endif %}>
-    <thead><tr>{% if can_update or can_delete %}{{ table_select_head() }}{% endif %}<th class="col-id">شناسه</th><th class="col-name">عنوان</th><th class="col-hide-sm col-address">آدرس</th><th class="col-hide-sm col-id">پورت</th><th class="col-hide-sm col-text">اینباند</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr></thead>
+  <table class="table-compact table-list-sm"{% if can_update or can_delete %} data-bulk-select{% endif %}>
+    <thead><tr>{% if can_update or can_delete %}{{ table_select_head() }}{% endif %}<th class="col-id">شناسه</th><th class="col-name">عنوان</th><th class="col-hide-sm col-address">آدرس</th><th class="col-hide-sm col-id">پورت</th><th class="col-hide-sm col-text">اینباند</th><th class="col-status">وضعیت</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ hosts | length | num }} هاست</span></th></tr></thead>
     <tbody>
     {% for h in hosts %}
       {% set addr = h.get('address') %}
@@ -37,11 +37,11 @@
       <tr data-bulk-ops="{{ ns.ops.rstrip(',') }}">
         {% if can_update or can_delete %}{% if h.get('id') %}{{ table_select_cell(h.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
         <td class="mono" dir="ltr">{{ h.get('id') or '—' }}</td>
-        <td>{{ h.get('remark') or h.get('name') or '—' }}</td>
-        <td class="mono col-hide-sm" dir="ltr">{{ addr_text or '—' }}</td>
+        <td class="li-title"><span dir="auto">{{ h.get('remark') or h.get('name') or '—' }}</span> <span class="li-only li-id" dir="ltr">(#{{ h.get('id') or '—' }})</span></td>
+        <td class="mono col-hide-sm li-sub"><bdi dir="ltr">{{ addr_text or '—' }}<span class="li-only">{% if h.get('port') %}:{{ h.get('port') }}{% endif %}</span></bdi><span class="li-only">· <bdi dir="ltr">{{ h.get('inbound_tag') or '—' }}</bdi></span></td>
         <td class="mono col-hide-sm" dir="ltr">{{ h.get('port') or '—' }}</td>
         <td class="mono col-hide-sm" dir="ltr">{{ h.get('inbound_tag') or '—' }}</td>
-        <td>{% if h.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
+        <td class="li-badge">{% if h.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
         <td class="col-actions">
           {% if (can_update or can_delete) and h.get('id') %}
           {% call row_actions() %}

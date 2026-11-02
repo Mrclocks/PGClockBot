@@ -3,13 +3,15 @@ from __future__ import annotations
 import html
 import logging
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.chat_records import keep_sent
 from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id
 from app.services.catalog_pricing import PriceTarget, active_discounts, displayed_quote, price_html, quote_price, sale_price
@@ -17,18 +19,26 @@ from app.bot import bbc_checkout_view as bbc_view
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
 from app.bot.handlers.purchase_contact import prompt_purchase_contact_if_needed
+from app.bot.handlers.psp_check import PICK_GATEWAY_TEXT, psp_check_button, psp_gateway_picker
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
-from app.db.models import BotUser, Order, PaymentMethod
-from app.services.bbc_settlement import start_bbc_checkout
+from app.db.models import BotUser, Order, Payment, PaymentMethod
+from app.services.bbc_settlement import CUSTOMER_UNAVAILABLE, BbcNotReady, ensure_gateway_ready, start_bbc_checkout
+from app.services.db_safe import rollback_quiet
 from app.services.redact import user_safe_error
+from app.services.trial_notify import notify_trial_claimed
+from app.services.crypto_rates import attach_quote, display_amount, quote_from_settings, validity_note
+from app.services.purchase_contact import verified_contact_phone_hash
+from app.services.checkout_summary import checkout_summary
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import (
     format_message,
     format_plan_duration_days,
     format_toman,
+    info_block,
     kv_line,
 )
+from app.services.psp_gateways import gateway_choices
 from app.services.orders import (
     is_customer_order_in_current_shop,
     apply_discount_to_order,
@@ -37,12 +47,15 @@ from app.services.orders import (
     create_custom_order,
     create_order,
     create_wholesale_order,
+    DeliveryAttempt,
+    deliver_order,
     get_catalog_plan,
     get_plan,
     list_active_plans,
     mark_order_free_paid,
     parse_wholesale_tiers,
     pay_with_wallet,
+    settle_failed_free_delivery,
     stars_amount_for_toman,
     start_card_payment,
     start_method_payment,
@@ -54,8 +67,56 @@ from app.services.users import get_all_settings, on
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 from app.services import bot_feedback_texts as feedback
 
+DISCOUNT_APPLIED = "✅ تخفیف اعمال شد"
+
 router = Router(name="shop")
 logger = logging.getLogger(__name__)
+
+FREE_DELIVERY_UNDER_REVIEW = (
+    "پنل به ساخت سرویس پاسخ نداد. پشتیبانی وضعیت را بررسی می‌کند و سرویس را تحویل می‌دهد؛"
+    " نیازی به درخواست دوباره نیست."
+)
+
+
+async def _notify_free_delivery_stuck(
+    bot: Bot, session: AsyncSession, payment: Payment, db_user: BotUser, error: str
+) -> None:
+    # Local import: notifications pulls in handler modules.
+    from app.services.notifications import notify_approved_delivery_stuck
+
+    try:
+        await notify_approved_delivery_stuck(bot, session, payment, db_user.telegram_id, error=error)
+    except Exception:
+        # The failed-delivery queue still lists the order for staff.
+        logger.warning("free delivery stuck notice failed payment=%s", payment.id, exc_info=True)
+
+
+async def _deliver_free_order(
+    bot: Bot, session: AsyncSession, db_user: BotUser, order: Order
+) -> tuple[Order | None, str]:
+    """Deliver a zero-amount order now; on failure return ``(None, text for the buyer)``."""
+    await mark_order_free_paid(session, order, db_user.id)
+    attempt = DeliveryAttempt()
+    try:
+        delivered = await deliver_order(session, order, attempt=attempt)
+    except Exception as exc:
+        logger.warning("free delivery failed order=%s", order.id, exc_info=True)
+        error = str(exc)
+        failure = format_message("❌ خطا در تحویل", user_safe_error(exc))
+    else:
+        await notify_trial_claimed(bot, session, order=delivered, user=db_user)
+        return delivered, ""
+    try:
+        payment = await settle_failed_free_delivery(session, order, attempt=attempt, error=error)
+    except SQLAlchemyError:
+        # Nothing was released: the order stays paid and its trial claim stays spent.
+        logger.warning("free delivery settle failed order=%s", order.id, exc_info=True)
+        await rollback_quiet(session)
+        return None, failure
+    if payment is None:
+        return None, failure
+    await _notify_free_delivery_stuck(bot, session, payment, db_user, error)
+    return None, format_message("⏳ تحویل در حال بررسی", FREE_DELIVERY_UNDER_REVIEW)
 
 async def _show_order_pay(
     message,
@@ -111,7 +172,7 @@ async def _answer_shop_maintenance(callback: CallbackQuery, session: AsyncSessio
             text, send_kw = outbound_setting_text(msg, title="🛠 فروشگاه")
             await callback.message.answer(text, **send_kw)
         except Exception:
-            pass
+            logger.debug("_answer_shop_maintenance: ignored failure", exc_info=True)
     return True
 
 async def _record_shop_funnel(
@@ -139,7 +200,7 @@ async def _record_shop_funnel(
             order_id=int(order_id) if order_id else None,
         )
     except Exception:
-        pass
+        logger.debug("_record_shop_funnel: ignored failure", exc_info=True)
 
 class ShopStates(StatesGroup):
     discount = State()
@@ -761,35 +822,11 @@ async def custom_days_entered(
     )
 
 @router.callback_query(F.data == "shop:custom:confirm")
-async def custom_confirm(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
-    ui = await get_all_settings(session)
-    if not await _custom_gate(session, ui, state):
-        await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
-        return
-    data = await state.get_data()
-    min_gb, _, min_days, _, price_gb, price_day = _custom_bounds(ui)
-    gb = int(data.get("custom_gb") or min_gb)
-    days = int(data.get("custom_days") or min_days)
-    amount = calc_custom_plan_price(
-        gb=gb, days=days, price_per_gb=price_gb, price_per_day=price_day
-    )
-    quote = quote_price(PriceTarget(amount, kind="custom"), await active_discounts(session, shop_id=current_shop_reseller_id()))
-    await callback.answer()
-    from app.services.formatting import info_block, kv_line
-
-    body = info_block(
-        [
-            kv_line("📦", "حجم", f"<b>{gb}</b> گیگابایت"),
-            kv_line("⏱", "مدت", f"<b>{days}</b> روز"),
-            kv_line("💰", "قیمت", price_html(quote, get_settings().currency)),
-            f"<i>({price_gb:,} ت/گیگابایت + {price_day:,} ت/روز)</i>".replace(",", "٬"),
-        ]
-    )
-    if callback.message:
-        await safe_edit_text(callback.message, 
-            format_message("✨ تأیید پلن دلخواه", body),
-            reply_markup=kb.custom_confirm_keyboard(ui),
-        )
+async def custom_confirm(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
+    reseller_owner_id: int | None = None,
+):
+    """«ادامه خرید» after the days step opens the payment screen; the details are shown there."""
+    await custom_buy(callback, session, db_user, state, reseller_owner_id=reseller_owner_id)
 
 async def _notify_new_order(bot, session, order, db_user, plan_name: str | None):
     try:
@@ -857,22 +894,12 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     await _record_shop_funnel(session, db_user, "pay_start", ui=ui, order_id=order.id)
 
     if order.amount <= 0:
-        from app.services.orders import deliver_order, revert_failed_free_delivery
-
-        await mark_order_free_paid(session, order, db_user.id)
-        try:
-            order = await deliver_order(session, order)
-        except Exception as e:
-            try:
-                await revert_failed_free_delivery(session, order)
-            except Exception:
-                pass
+        delivered, failure = await _deliver_free_order(callback.bot, session, db_user, order)
+        if delivered is None:
             if callback.message:
-                await safe_edit_text(callback.message, 
-                    format_message("❌ خطا در تحویل", user_safe_error(e)),
-                    reply_markup=kb.back_home(ui),
-                )
+                await safe_edit_text(callback.message, failure, reply_markup=kb.back_home(ui))
             return
+        order = delivered
         if callback.message:
             await safe_edit_text(callback.message, 
                 format_message("✅ فعال شد", f"سفارش #{order.id} تحویل شد."),
@@ -881,14 +908,10 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         try:
             await send_delivery_to_user(callback.bot, db_user.telegram_id, session, None, order)
         except Exception:
-            pass
+            logger.debug("custom_buy: ignored failure", exc_info=True)
         return
 
-    text = format_message(
-        f"🧾 سفارش #{order.id}",
-        f"پلن دلخواه — <b>{gb:g}</b> گیگابایت / <b>{days}</b> روز\n"
-        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}",
-    )
+    text = await checkout_summary(session, order, currency=get_settings().currency)
     if callback.message:
         await _show_order_pay(callback.message, session, db_user, order.id, state, text)
     await _notify_new_order(callback.bot, session, order, db_user, "پلن دلخواه")
@@ -1127,48 +1150,12 @@ async def wholesale_qty_entered(
     _ = (is_reseller_bot, reseller_owner_id)
 
 @router.callback_query(F.data == "shop:wholesale:confirm")
-async def wholesale_confirm(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
-    ui = await get_all_settings(session)
-    if not on(ui.get("wholesale_enabled")):
-        await callback.answer("فروش عمده فعال نیست", show_alert=True)
-        return
-    data = await state.get_data()
-    plan_id = int(data.get("wholesale_plan_id") or 0)
-    plan = await get_catalog_plan(session, plan_id) if plan_id else None
-    if not plan:
-        await callback.answer("ابتدا پلن را انتخاب کنید", show_alert=True)
-        return
-    mn, mx = wholesale_bounds(ui)
-    qty = int(data.get("wholesale_qty") or mn)
-    qty = max(mn, min(mx, qty))
-    await state.update_data(wholesale_qty=qty)
-    tiers = parse_wholesale_tiers(ui.get("wholesale_tiers"))
-    pct = wholesale_tier_percent(qty, tiers)
-    payable, discount = calc_wholesale_price(
-        unit_price=sale_price(plan), quantity=qty, percent=pct
-    )
-    await callback.answer()
-    limit = f"{plan.data_limit_gb:g} گیگابایت" if plan.data_limit_gb is not None else "نامحدود"
-    disc_block = ""
-    if pct:
-        disc_block = (
-            f"\n{kv_line('🏷', 'تخفیف عمده', f'<b>{pct}٪</b> (−{format_toman(discount, get_settings().currency)})')}"
-        )
-    text = format_message(
-        "📦 تأیید فروش عمده",
-        f"{wholesale_description(ui)}\n\n"
-        f"{kv_line('💎', 'پلن', plan.name)}\n"
-        f"{kv_line('📦', 'تعداد', f'<b>{qty}</b>')}\n"
-        f"{kv_line('📅', 'مدت هر سرویس', format_plan_duration_days(plan.duration_days))}\n"
-        f"{kv_line('📶', 'حجم هر سرویس', limit)}\n"
-        f"{kv_line('💰', 'قیمت واحد', format_toman(sale_price(plan), get_settings().currency))}"
-        f"{disc_block}\n"
-        f"{kv_line('💳', 'مبلغ قابل پرداخت', f'<b>{format_toman(payable, get_settings().currency)}</b>')}",
-    )
-    if callback.message:
-        await safe_edit_text(
-            callback.message, text, reply_markup=kb.wholesale_confirm_keyboard(ui)
-        )
+async def wholesale_confirm(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
+    reseller_owner_id: int | None = None,
+):
+    """«ادامه خرید» after the quantity step opens the payment screen; the details are shown there."""
+    await wholesale_buy(callback, session, db_user, state, reseller_owner_id=reseller_owner_id)
 
 @router.callback_query(F.data == "shop:wholesale:buy")
 async def wholesale_buy(
@@ -1223,13 +1210,7 @@ async def wholesale_buy(
     await _record_shop_funnel(
         session, db_user, "pay_start", ui=ui, plan_id=plan_id, order_id=order.id
     )
-    plan = await get_catalog_plan(session, plan_id)
-    plan_name = plan.name if plan else "پلن"
-    text = format_message(
-        f"🧾 سفارش عمده #{order.id}",
-        f"{plan_name} × <b>{order.quantity}</b>\n"
-        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}",
-    )
+    text = await checkout_summary(session, order, currency=get_settings().currency)
     if callback.message:
         await _show_order_pay(callback.message, session, db_user, order.id, state, text)
     await _notify_new_order(
@@ -1237,7 +1218,15 @@ async def wholesale_buy(
     )
 
 @router.callback_query(F.data.startswith("shop:plan:"))
-async def shop_plan(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def shop_plan(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    reseller_owner_id: int | None = None,
+):
+    """A paid plan opens its payment screen directly (its details are shown there);
+    a free plan keeps this details screen, since its «ادامه» delivers at once."""
     ui = await get_all_settings(session)
     if await _answer_shop_maintenance(callback, session, ui):
         return
@@ -1246,11 +1235,11 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if not plan:
         await callback.answer("پلن پیدا نشد", show_alert=True)
         return
-    await callback.answer()
     await _record_shop_funnel(session, db_user, "plan_view", ui=ui, plan_id=plan.id)
+    if sale_price(plan) > 0:
+        await _begin_plan_purchase(callback, session, db_user, state, ui, plan, reseller_owner_id=reseller_owner_id)
+        return
     limit = f"{plan.data_limit_gb:g} گیگابایت" if plan.data_limit_gb is not None else "نامحدود"
-    from app.services.formatting import info_block, kv_line
-
     body = info_block(
         [
             html.escape(plan.description or ""),
@@ -1300,38 +1289,27 @@ async def _complete_shop_buy(
 
     # Free / trial: deliver immediately
     if order.amount <= 0:
-        from app.services.orders import deliver_order, revert_failed_free_delivery
-
-        await mark_order_free_paid(session, order, db_user.id)
-        try:
-            order = await deliver_order(session, order)
-        except Exception as e:
-            try:
-                await revert_failed_free_delivery(session, order)
-            except Exception:
-                pass
-            err = format_message("❌ خطا در تحویل", user_safe_error(e))
+        bot = callback.bot if callback is not None else message.bot
+        delivered, failure = await _deliver_free_order(bot, session, db_user, order)
+        if delivered is None:
             if callback is not None and callback.message:
-                await safe_edit_text(callback.message, err, reply_markup=kb.back_home(ui))
+                await safe_edit_text(callback.message, failure, reply_markup=kb.back_home(ui))
             elif message is not None:
-                await message.answer(err, reply_markup=kb.back_home(ui))
+                await message.answer(failure, reply_markup=kb.back_home(ui))
             return
+        order = delivered
         ok = format_message("✅ فعال شد", f"سفارش #{order.id} تحویل شد.")
         if callback is not None and callback.message:
             await safe_edit_text(callback.message, ok, reply_markup=kb.back_home(ui))
         elif message is not None:
             await message.answer(ok, reply_markup=kb.back_home(ui))
         try:
-            bot = callback.bot if callback is not None else message.bot
             await send_delivery_to_user(bot, db_user.telegram_id, session, None, order)
         except Exception:
-            pass
+            logger.debug("_complete_shop_buy: ignored failure", exc_info=True)
         return
 
-    text = format_message(
-        f"🧾 سفارش #{order.id}",
-        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}",
-    )
+    text = await checkout_summary(session, order, currency=get_settings().currency)
     msg = callback.message if callback is not None else message
     if msg is not None:
         await _show_order_pay(msg, session, db_user, order.id, state, text)
@@ -1362,6 +1340,33 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     if not plan:
         await callback.answer("پلن پیدا نشد", show_alert=True)
         return
+    await _begin_plan_purchase(
+        callback, session, db_user, state, ui, plan, reseller_owner_id=reseller_owner_id, terms_checked=True
+    )
+
+
+async def _begin_plan_purchase(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    ui: dict,
+    plan,
+    *,
+    reseller_owner_id: int | None,
+    terms_checked: bool = False,
+) -> None:
+    """Every gate of «ادامه خرید» (terms, contact, payment methods, trial phone), then the order."""
+    plan_id = int(plan.id)
+    if not terms_checked:
+        from app.bot.handlers.terms import prompt_terms_if_needed
+
+        if await prompt_terms_if_needed(
+            callback, session, db_user, state, ui, "buy_user", reseller_owner_id=reseller_owner_id
+        ):
+            # Accepting the terms resumes «shop:buy:<id>», which lands here again.
+            await state.update_data(terms_resume=f"shop:buy:{plan_id}")
+            return
     if not plan.is_trial and await prompt_purchase_contact_if_needed(callback, session, db_user, state, ui):
         return
     if sale_price(plan) > 0 and not kb.any_checkout_method_enabled(ui):
@@ -1369,6 +1374,20 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         return
 
     if plan.is_trial and on(ui.get("trial_require_contact")):
+        # A number verified for purchases is the same proof; only the Iran-only gate cannot
+        # reuse it, because the stored hash does not say which country the number is from.
+        verified_hash = (
+            None
+            if on(ui.get("trial_require_iran_phone"))
+            else await verified_contact_phone_hash(session, db_user.id)
+        )
+        if verified_hash:
+            await _complete_shop_buy(
+                callback=callback, message=None, session=session, db_user=db_user, state=state,
+                ui=ui, plan=plan, plan_id=plan_id,
+                trial_phone_hash=verified_hash, trial_telegram_id=int(db_user.telegram_id),
+            )
+            return
         from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
         await callback.answer()
@@ -1587,11 +1606,8 @@ async def navigate_order_pay_back(
         return
 
     if order.plan_id:
-        await shop_plan(
-            _PayBackCallback(message, f"shop:plan:{int(order.plan_id)}"),
-            session,
-            db_user,
-        )
+        # The plan details live on the payment screen now; back is the plan list.
+        await shop_kind_fixed(_PayBackCallback(message, "shop:kind:fixed"), session, db_user, state)
         return
 
     await shop_list(
@@ -1712,10 +1728,8 @@ async def apply_loyalty_discount_btn(
         return
     await callback.answer("تخفیف اعمال شد ✅")
     if callback.message:
-        summary = (
-            f"🛒 سفارش #{order.id}\n"
-            f"تخفیف اعمال شد ✅\n"
-            f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
+        summary = await checkout_summary(
+            session, order, currency=get_settings().currency, notice=DISCOUNT_APPLIED
         )
         await present_order_pay(
             callback.message,
@@ -1726,7 +1740,6 @@ async def apply_loyalty_discount_btn(
             summary=summary,
             is_reseller_bot=False,
             reseller_owner_id=None,
-            heal_main=True,
         )
 
 @router.message(ShopStates.discount)
@@ -1783,10 +1796,8 @@ async def apply_discount_msg(
     try:
         order = await apply_discount_to_order(session, order, code_raw)
     except ValueError as e:
-        summary = (
-            f"🛒 سفارش #{order.id}\n"
-            f"{user_safe_error(e)}\n"
-            f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
+        summary = await checkout_summary(
+            session, order, currency=get_settings().currency, notice=f"⚠️ {html.escape(user_safe_error(e))}"
         )
         await present_order_pay(
             message,
@@ -1797,14 +1808,9 @@ async def apply_discount_msg(
             summary=summary,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
-            heal_main=True,
         )
         return
-    summary = (
-        f"🛒 سفارش #{order.id}\n"
-        f"تخفیف اعمال شد ✅\n"
-        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
-    )
+    summary = await checkout_summary(session, order, currency=get_settings().currency, notice=DISCOUNT_APPLIED)
     await present_order_pay(
         message,
         session,
@@ -1814,7 +1820,6 @@ async def apply_discount_msg(
         summary=summary,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
-        heal_main=True,
     )
 
 @router.callback_query(F.data.startswith("pay:wallet:"))
@@ -1896,21 +1901,23 @@ async def pay_wallet_cb(
         for aid in get_settings().admin_ids:
             try:
                 if approved:
-                    await callback.bot.send_message(
-                        aid,
-                        f"✅ نمایندگی فعال شد — سفارش #{order.id}\n"
-                        f"کاربر: {db_user.full_name or db_user.telegram_id}\n"
-                        f"(تأیید خودکار پس از پرداخت)",
-                    )
+                    with keep_sent():  # a notice or review item, never a temporary panel
+                        await callback.bot.send_message(
+                            aid,
+                            f"✅ نمایندگی فعال شد — سفارش #{order.id}\n"
+                            f"کاربر: {db_user.full_name or db_user.telegram_id}\n"
+                            f"(تأیید خودکار پس از پرداخت)",
+                        )
                 else:
-                    await callback.bot.send_message(
-                        aid,
-                        f"🤝 درخواست نمایندگی پرداخت‌شده — سفارش #{order.id}\n"
-                        f"کاربر: {db_user.full_name or db_user.telegram_id}",
-                        reply_markup=kb.reseller_app_review(app_id) if app_id else None,
-                    )
+                    with keep_sent():  # a notice or review item, never a temporary panel
+                        await callback.bot.send_message(
+                            aid,
+                            f"🤝 درخواست نمایندگی پرداخت‌شده — سفارش #{order.id}\n"
+                            f"کاربر: {db_user.full_name or db_user.telegram_id}",
+                            reply_markup=kb.reseller_app_review(app_id) if app_id else None,
+                        )
             except Exception:
-                pass
+                logger.debug("pay_wallet_cb: ignored failure", exc_info=True)
         return
 
     # Clear pay buttons on the checkout bubble; delivery carries the full success card.
@@ -1993,7 +2000,7 @@ async def _await_order_receipt(
         try:
             await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
         except Exception:
-            pass
+            logger.debug("_await_order_receipt: ignored failure", exc_info=True)
 
 @router.callback_query(F.data.regexp(r"^pay:card:\d+(?::\w+)?$"))
 async def pay_card_cb(
@@ -2161,7 +2168,7 @@ async def pay_gateway_cb(
                 html=False,
             )
         except Exception:
-            pass
+            logger.debug("pay_gateway_cb: ignored failure", exc_info=True)
     from app.services.rich_text import outbound_setting_text, rich_plain_text
 
     append = f"\n\n(پرداخت #{payment.id})"
@@ -2240,20 +2247,26 @@ async def pay_crypto_cb(
         await callback.answer("این آدرس دیگر فعال نیست", show_alert=True)
         return
     address = (wallet.get("address") or "").strip()
+    asset = wallet.get("asset") or "USDT"
     try:
+        # The rate is read from memory (a job refreshes it), so no network call waits here.
+        quote = quote_from_settings(ui, wallet_asset=asset, toman=int(order.amount))
         payment = await start_method_payment(
             session, order, db_user.id, PaymentMethod.CRYPTO.value
         )
     except ValueError as e:
         await callback.answer(user_safe_error(e), show_alert=True)
         return
+    if quote is not None:
+        await attach_quote(session, payment.id, quote)
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
-    asset = wallet.get("asset") or "USDT"
+    if quote is not None:
+        amount = display_amount(quote, amount)
     network = wallet.get("network") or "—"
     from app.services.rich_text import outbound_setting_text, rich_plain_text
 
-    append = f"\n\n(پرداخت #{payment.id})"
+    append = f"\n\n(پرداخت #{payment.id})" + (validity_note(quote) if quote is not None else "")
     try:
         text, send_kw = outbound_setting_text(
             ui.get("crypto_pay_text") or "",
@@ -2345,12 +2358,35 @@ async def pay_stars_cb(
             try:
                 await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
             except Exception:
-                pass
+                logger.debug("pay_stars_cb: ignored failure", exc_info=True)
     except Exception as e:
         if callback.message:
             await callback.message.answer(f"خطا در ساخت فاکتور استارز: {user_safe_error(e)}")
 
-@router.callback_query(F.data.startswith("pay:psp:"))
+def _psp_callback_target(data: str) -> tuple[int, str | None]:
+    """``pay:psp:<order_id>`` or ``pay:psp:<order_id>:<gateway_id>`` from the gateway picker."""
+    parts = data.split(":")
+    gateway_id = parts[3] if len(parts) > 3 else None
+    return int(parts[2]), gateway_id
+
+
+async def _asked_psp_gateway(callback: CallbackQuery, ui: dict, order_id: int) -> bool:
+    """Show the gateway picker when the shop has several; True when it was shown."""
+    from app.bot.nav_input import cancel_keyboard
+
+    choices = gateway_choices(ui)
+    if not choices:
+        return False
+    await callback.answer()
+    if callback.message:
+        markup = psp_gateway_picker(
+            choices, prefix="pay", order_id=order_id, extra_rows=cancel_keyboard("pay_wait").inline_keyboard
+        )
+        await safe_edit_text(callback.message, format_message("🏦 درگاه آنلاین", PICK_GATEWAY_TEXT), reply_markup=markup)
+    return True
+
+
+@router.callback_query(F.data.regexp(r"^pay:psp:\d+(?::\w{1,32})?$"))
 async def pay_psp_cb(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -2366,11 +2402,15 @@ async def pay_psp_cb(
     if not on(ui.get("pay_psp_enabled")):
         await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
         return
-    order_id = int((callback.data or "").split(":")[-1])
+    order_id, gateway_id = _psp_callback_target(callback.data or "")
     order = await session.get(Order, order_id)
     if not is_customer_order_in_current_shop(order, db_user.id):
         await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
         return
+    if gateway_id is None and await _asked_psp_gateway(callback, ui, order_id):
+        return
+    # Answer before the gateway call so Telegram does not expire the tap.
+    await callback.answer("در حال آماده‌سازی درگاه…")
     try:
         payment = await start_method_payment(
             session, order, db_user.id, PaymentMethod.PSP.value
@@ -2379,11 +2419,12 @@ async def pay_psp_cb(
             session,
             payment,
             description=f"سفارش #{order.id}",
+            gateway_id=gateway_id,
         )
     except ValueError as e:
-        await callback.answer(user_safe_error(e), show_alert=True)
+        if callback.message:
+            await callback.message.answer(user_safe_error(e))
         return
-    await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
     try:
         body = render_message_template(
@@ -2397,14 +2438,20 @@ async def pay_psp_cb(
     except Exception:
         body = (
             f"مبلغ {amount} را از طریق درگاه آنلاین پرداخت کنید.\n"
-            "پس از تأیید درگاه، سرویس خودکار تحویل می‌شود."
+            "پس از پرداخت، به همین چت ربات برگردید؛ تأیید و تحویل خودکار است."
         )
     body += f"\n\n(پرداخت #{payment.id})"
+    from app.services.payment_settlement import (
+        public_checkout_button_url,
+        with_psp_checkout_guidance,
+    )
+
+    body = with_psp_checkout_guidance(body)
     rows: list[list[InlineKeyboardButton]] = []
-    link = (settlement.checkout_url or "").strip()
+    link = public_checkout_button_url(settlement, ui=ui)
     if link.startswith("http://") or link.startswith("https://"):
         rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
-    markup = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+        rows.append([psp_check_button(int(settlement.id))])
     if callback.message:
         from app.bot.nav_input import cancel_keyboard
 
@@ -2413,20 +2460,16 @@ async def pay_psp_cb(
         wait_markup = InlineKeyboardMarkup(inline_keyboard=wait_rows)
         await safe_edit_text(
             callback.message,
-            format_message(
-                "🏦 درگاه آنلاین",
-                body + "\n\nپس از پرداخت موفق در درگاه، به ربات برگردید.",
-            ),
+            format_message("🏦 درگاه آنلاین", body),
             reply_markup=wait_markup,
         )
-        _ = markup
     if state is not None:
         from app.bot import menu_nav as nav
 
         try:
             await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
         except Exception:
-            pass
+            logger.debug("pay_psp_cb: ignored failure", exc_info=True)
 
 
 @router.callback_query(F.data.regexp(r"^pay:bbc:\d+$"))
@@ -2446,8 +2489,13 @@ async def pay_bbc_cb(
         await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
         return
     try:
+        await ensure_gateway_ready(session, current_shop_reseller_id())
         payment = await start_method_payment(session, order, db_user.id, PaymentMethod.BBC.value)
         checkout = await start_bbc_checkout(session, payment, description=f"سفارش #{order.id}")
+    except BbcNotReady as exc:
+        logger.warning("bezanbecard checkout refused: %s", exc)
+        await callback.answer(CUSTOMER_UNAVAILABLE, show_alert=True)
+        return
     except ValueError as exc:
         await callback.answer(user_safe_error(exc), show_alert=True)
         return
@@ -2607,10 +2655,7 @@ def _register_shop_cancel_codes() -> None:
         if not is_customer_order_in_current_shop(order, db_user.id):
             await message.answer("این سفارش پیدا نشد.")
             return
-        summary = (
-            f"🛒 سفارش #{order.id}\n"
-            f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
-        )
+        summary = await checkout_summary(session, order, currency=get_settings().currency)
         await present_order_pay(
             message,
             session,

@@ -7,6 +7,7 @@ import secrets
 import string
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select, update
@@ -14,6 +15,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.custom_plans import discard_unsold_custom_plan
+from app.services.funnel_events import STEP_DELIVERED, STEP_RECEIPT, record_order_funnel
+from app.services.stale_order_cleanup import (
+    StaleOrderPolicy,
+    cancellable_statuses,
+    clamp_hours,
+    policy_from_settings,
+    record_cleanup_run,
+    scope_to_shop,
+    stale_orders_clause,
+)
 from app.services.catalog_pricing import PriceTarget, active_discounts, annotate_prices, assert_expected_price, displayed_quote, quote_price, quote_product, sale_price
 from app.db.models import (
     BotUser,
@@ -30,13 +42,26 @@ from app.db.models import (
     UserService,
     WalletTransaction,
 )
-from app.services.pasarguard import extract_sub_token, get_pg, user_subscription_url
+from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
+from app.services.pasarguard import extract_sub_token, get_pg, parse_group_ids, user_subscription_url
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
+from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
 from app.services.provision_gate import (
     ProvisionError,
     assert_provision_create,
     assert_provision_renew,
+    hold_limit_change,
+    hold_plan_create,
+    settle_failed_hold,
+    template_limit_if_gated,
+)
+from app.services.volume_allocation import (
+    HeldVolume,
+    VolumeAllocationError,
+    assert_volume_delta_allowed,
+    is_hard_panel_rejection,
+    release_volume_hold,
 )
 from app.services.wallet import credit_wallet, debit_wallet
 
@@ -411,6 +436,13 @@ def _shop_reseller_id() -> int | None:
     return int(rid) if rid else None
 
 
+def _legacy_code_shop(order: Order | None) -> int | None:
+    """The shop a legacy ``DiscountCode`` would discount; those codes have no shop and are the platform's."""
+    if order is not None:
+        return int(order.reseller_id) if order.reseller_id else None
+    return _shop_reseller_id()
+
+
 async def apply_discount(session: AsyncSession, code: str | None, amount: int, *, order: Order | None = None) -> tuple[int, str | None]:
     """Read-only discount preview (does not consume uses)."""
     if not code:
@@ -421,6 +453,8 @@ async def apply_discount(session: AsyncSession, code: str | None, amount: int, *
         from app.services.gift_codes import preview_gift_discount
 
         return await preview_gift_discount(session, gift, amount, order=order, shop_id=_shop_reseller_id())
+    if _legacy_code_shop(order) is not None:
+        return 0, None
     result = await session.execute(
         select(DiscountCode).where(DiscountCode.code == normalized, DiscountCode.is_active.is_(True))
     )
@@ -494,6 +528,8 @@ async def _reserve_discount_code(
         if order is None:
             return 0, None
         return await reserve_gift_discount(session, gift, order, amount)
+    if _legacy_code_shop(order) is not None:
+        return 0, None
     result = await session.execute(
         select(DiscountCode).where(DiscountCode.code == normalized, DiscountCode.is_active.is_(True))
     )
@@ -556,6 +592,8 @@ async def create_order(
             raise ValueError("برای دریافت تست باید شماره تماس خود را تأیید کنید")
         if on(ui.get("trial_require_iran_phone")) and not phone_hash:
             raise ValueError("برای دریافت تست باید شماره موبایل ایران را تأیید کنید")
+        # Before the claim: a refused young account must not burn its one trial.
+        await assert_trial_account_age(session, user_id, settings=ui)
         claim = TrialClaim(
             user_id=user_id,
             shop_key=shop_key,
@@ -568,6 +606,7 @@ async def create_order(
                 await session.flush()
         except IntegrityError as exc:
             raise ValueError("پلن تست رایگان را قبلاً دریافت کرده‌اید") from exc
+    await _assert_plan_volume_available(session, shop_rid, plan)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -614,6 +653,38 @@ def calc_custom_plan_price(
     # Ceil fractional GB so e.g. 1.9 is billed as 2 (never undercharge).
     gb_units = max(0, math.ceil(float(gb))) if float(gb) > 0 else 0
     return max(0, gb_units * int(price_per_gb) + int(days) * int(price_per_day))
+
+
+CUSTOM_ORDER_NOTE = "custom"
+CUSTOM_PLAN_UNCONFIGURED = "پلن دلخواه فعلاً در دسترس نیست؛ لطفاً یکی از پلن‌های آماده را انتخاب کنید"
+
+
+async def _assert_shop_can_deliver_custom(
+    session: AsyncSession,
+    *,
+    shop_rid: int,
+    data_limit_gb: float,
+    duration_days: int,
+    from_template: bool,
+) -> None:
+    """Refuse a custom size the shop's panel admin role cannot deliver, before payment.
+
+    The buyer picks volume and days freely; delivery runs the same quota gate, so
+    checking here avoids an approved payment that can never be fulfilled.
+    """
+    pg_owner, pg_role_id = await _reseller_pg_link(session, shop_rid)
+    try:
+        await assert_provision_create(
+            session,
+            reseller_user_id=shop_rid,
+            pg_admin_username=pg_owner,
+            pg_role_id=pg_role_id,
+            data_limit=int(data_limit_gb * (1024**3)),
+            expire_ts=int(time.time()) + int(duration_days) * 86400,
+            from_template=from_template,
+        )
+    except ProvisionError as exc:
+        raise ValueError(exc.message) from exc
 
 
 async def create_custom_order(
@@ -694,6 +765,17 @@ async def create_custom_order(
             raise ValueError(
                 "برای پلن دلخواه، تمپلیت یا گروه پاسارگارد اختصاصی فروشگاه را در تنظیمات مشخص کنید"
             )
+    elif not tpl_id and not parse_group_ids(group_ids):
+        # Delivery needs a template or groups; refuse before payment, not after it.
+        raise ValueError(CUSTOM_PLAN_UNCONFIGURED)
+    if shop_rid:
+        await _assert_shop_can_deliver_custom(
+            session,
+            shop_rid=int(shop_rid),
+            data_limit_gb=gb,
+            duration_days=days,
+            from_template=bool(tpl_id),
+        )
 
     plan = Plan(
         name="پلن دلخواه",
@@ -722,7 +804,7 @@ async def create_custom_order(
         amount=amount,
         discount_amount=0,
         status=OrderStatus.PENDING.value,
-        note="custom",
+        note=CUSTOM_ORDER_NOTE,
     )
     session.add(order)
     await session.flush()
@@ -826,6 +908,42 @@ def wholesale_description(ui: dict | None) -> str:
     return "\n".join(lines)
 
 
+def plan_limit_bytes(plan: Plan) -> int:
+    """Per-user limit of a non-template plan in bytes; 0 is unlimited (same rounding as delivery)."""
+    return int(plan.data_limit_gb * (1024**3)) if plan.data_limit_gb is not None else 0
+
+
+async def _assert_plan_volume_available(
+    session: AsyncSession, shop_rid: int | None, plan: Plan, *, quantity: int = 1
+) -> None:
+    """Refuse an order the shop cannot deliver within its volume ceiling; delivery holds it again.
+
+    A template plan's volume lives in the panel and is read at delivery, so it is not checked here.
+    """
+    if shop_rid is None or plan.pg_template_id:
+        return
+    per_user = plan_limit_bytes(plan)
+    try:
+        await assert_volume_delta_allowed(
+            session, shop_id=int(shop_rid), delta_bytes=per_user * max(1, int(quantity)), audience="customer",
+        )
+    except VolumeAllocationError as e:
+        raise ValueError(e.user_message()) from e
+
+
+async def _hold_delivery_volume(
+    session: AsyncSession, order: Order, plan: Plan, pg, *, data_limit: int | None, quantity: int
+) -> HeldVolume | None:
+    """Hold the volume of a shop delivery before its panel calls; None for the platform."""
+    try:
+        return await hold_plan_create(
+            session, shop_id=order.reseller_id, pg=pg, template_id=plan.pg_template_id,
+            data_limit=data_limit, quantity=quantity, key=f"order:{int(order.id)}", audience="customer",
+        )
+    except ProvisionError as e:
+        raise ValueError(e.message) from e
+
+
 def order_quantity(order: Order) -> int:
     qty = getattr(order, "quantity", None)
     n: int | None
@@ -876,6 +994,7 @@ async def create_wholesale_order(
     )
     shop_rid = _shop_reseller_id()
     _ = reseller_id
+    await _assert_plan_volume_available(session, shop_rid, plan, quantity=qty)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -1161,6 +1280,39 @@ async def mark_order_free_paid(session: AsyncSession, order: Order, user_id: int
     return order
 
 
+@dataclass(slots=True)
+class DeliveryAttempt:
+    """What a failed ``deliver_order`` may have left on the panel."""
+
+    panel_may_hold_account: bool = False
+
+
+async def settle_failed_free_delivery(
+    session: AsyncSession, order: Order, *, attempt: DeliveryAttempt, error: str
+) -> Payment | None:
+    """After a free order's delivery failed: revert it for a retry, or keep it for staff.
+
+    When the panel may already hold the account (no answer to the create call), a retry
+    would mint another one, so the order stays paid, its trial claim stays spent, and it is
+    listed under failed deliveries. Returns its approved payment for the staff notice then;
+    None when the order was reverted and the buyer may try again.
+    """
+    if not attempt.panel_may_hold_account:
+        await revert_failed_free_delivery(session, order)
+        return None
+    payment = await session.scalar(
+        select(Payment)
+        .where(Payment.order_id == int(order.id), Payment.status == PaymentStatus.APPROVED.value)
+        .order_by(Payment.id.desc())
+        .limit(1)
+    )
+    # Local import: ux20 imports this module.
+    from app.services.ux20 import note_delivery_send_failure
+
+    await note_delivery_send_failure(session, order=order, payment=payment, error=error)
+    return payment
+
+
 async def revert_failed_free_delivery(session: AsyncSession, order: Order) -> None:
     """Undo mark_order_free_paid so the user can retry after a delivery failure."""
     if getattr(order, "service_mutation_pending", False):
@@ -1278,14 +1430,31 @@ async def start_method_payment(
         )
     if claim.rowcount != 1:
         raise ValueError("این سفارش قابل پرداخت نیست")
-    # Drop older pending payments when switching method
-    old = await session.execute(
-        select(Payment).where(
-            Payment.order_id == order_id,
-            Payment.status == PaymentStatus.PENDING.value,
-        )
+    pending = list(
+        (
+            await session.execute(
+                select(Payment).where(
+                    Payment.order_id == order_id,
+                    Payment.status == PaymentStatus.PENDING.value,
+                )
+            )
+        ).scalars().all()
     )
-    for prev in old.scalars().all():
+    checkouts = await open_psp_checkouts(session, [int(p.id) for p in pending])
+    if method == PaymentMethod.PSP.value:
+        reused = reusable_psp_payment(
+            pending, checkouts, amount=int(order.amount), now=datetime.now(timezone.utc)
+        )
+        if reused is not None:
+            await session.commit()
+            await session.refresh(reused)
+            await session.refresh(order)
+            return reused
+    # Drop older pending payments when switching method, except gateway payments
+    # whose link may still be paid; approve_payment supersedes them if another wins.
+    for prev in pending:
+        if int(prev.id) in checkouts:
+            continue
         prev.status = PaymentStatus.REJECTED.value
         prev.review_note = prev.review_note or "replaced by new payment method"
     payment = Payment(
@@ -1307,13 +1476,28 @@ def stars_amount_for_toman(amount_toman: int, toman_per_star: int) -> int:
     return max(1, (int(amount_toman) + rate - 1) // rate)
 
 
-_STALE_PENDING_BASE = frozenset(
-    {
-        OrderStatus.PENDING.value,
-        OrderStatus.AWAITING_RECEIPT.value,
-        OrderStatus.REJECTED.value,
-    }
-)
+async def release_unpaid_order_holds(session: AsyncSession, order: Order, *, reason: str) -> None:
+    """Give back what an unpaid order held once it was claimed as cancelled; nothing is committed.
+
+    The discount or loyalty code, the trial claim, an unsold custom plan and an unpaid agency
+    application. Call it only after the caller's own atomic claim moved the order to cancelled,
+    so two runs never release twice.
+    """
+    if order.discount_code:
+        if str(order.discount_code).upper().startswith("LOY"):
+            from app.services.loyalty import release_loyalty_discount_for_order
+
+            await release_loyalty_discount_for_order(session, order)
+        else:
+            await _release_discount_code(session, order.discount_code, order=order)
+    # Always attempt trial release (create_order never sets note="trial:…").
+    await _release_trial_claim_for_order(session, order)
+    await discard_unsold_custom_plan(session, order)
+    # Unblock reseller apply if this was an unpaid agency checkout.
+    if (order.note or "").startswith("reseller_app:"):
+        from app.services.resellers import cancel_application_for_order
+
+        await cancel_application_for_order(session, order, reason=reason, commit=False)
 
 
 async def cancel_stale_pending_orders(
@@ -1322,34 +1506,29 @@ async def cancel_stale_pending_orders(
     older_than_hours: int,
     reseller_id: int | None = None,
     include_awaiting_approval: bool = False,
+    approval_older_than_hours: int | None = None,
     limit: int = 500,
 ) -> int:
     """Cancel unpaid/abandoned orders older than TTL. Returns count cancelled.
 
     Uses CANCELLED (not REJECTED) so orders leave the payable set and cannot be
-    completed later. Concurrent approve/pay wins via conditional UPDATE.
+    completed later. Concurrent approve/pay wins via conditional UPDATE. Orders
+    waiting for receipt approval use ``approval_older_than_hours`` (default: the same TTL).
     """
-    from datetime import datetime, timedelta, timezone
-
-    hours = max(1, min(720, int(older_than_hours or 1)))
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-    statuses = set(_STALE_PENDING_BASE)
+    hours = clamp_hours(older_than_hours, 1)
+    approval_hours = None
     if include_awaiting_approval:
-        statuses.add(OrderStatus.AWAITING_APPROVAL.value)
+        approval_hours = clamp_hours(approval_older_than_hours or hours, hours)
+    policy = StaleOrderPolicy(hours=hours, approval_hours=approval_hours)
+    statuses = cancellable_statuses(policy)
 
     q = (
         select(Order)
-        .where(
-            Order.status.in_(tuple(statuses)),
-            Order.created_at < cutoff,
-        )
+        .where(stale_orders_clause(policy))
         .order_by(Order.id.asc())
         .limit(max(1, min(2000, int(limit or 500))))
     )
-    if reseller_id is None:
-        q = q.where(Order.reseller_id.is_(None))
-    else:
-        q = q.where(Order.reseller_id == int(reseller_id))
+    q = scope_to_shop(q, reseller_id)
 
     orders = list((await session.execute(q)).scalars().all())
     cancelled = 0
@@ -1377,25 +1556,7 @@ async def cancel_stale_pending_orders(
         for pay in pend.scalars().all():
             pay.status = PaymentStatus.REJECTED.value
             pay.review_note = pay.review_note or "auto-cancelled stale pending order"
-        if order.discount_code:
-            if str(order.discount_code).upper().startswith("LOY"):
-                from app.services.loyalty import release_loyalty_discount_for_order
-
-                await release_loyalty_discount_for_order(session, order)
-            else:
-                await _release_discount_code(session, order.discount_code, order=order)
-        # Always attempt trial release (create_order never sets note="trial:…").
-        await _release_trial_claim_for_order(session, order)
-        # Unblock reseller apply if this was an unpaid agency checkout.
-        if (order.note or "").startswith("reseller_app:"):
-            from app.services.resellers import cancel_application_for_order
-
-            await cancel_application_for_order(
-                session,
-                order,
-                reason="auto-cancelled stale pending order",
-                commit=False,
-            )
+        await release_unpaid_order_holds(session, order, reason="auto-cancelled stale pending order")
         cancelled += 1
 
     if cancelled:
@@ -1409,35 +1570,45 @@ async def cancel_stale_pending_for_settings(
     reseller_id: int | None = None,
     force: bool = False,
 ) -> int:
-    """Read shop/platform settings and cancel stale pending orders."""
+    """Read shop/platform settings, cancel stale pending orders and record the run."""
     from app.services.users import get_all_settings, on
 
     ui = await get_all_settings(session, reseller_id=reseller_id)
     if not force and not on(ui.get("pending_order_cleanup_enabled", "0")):
         return 0
-    try:
-        hours = int(float(ui.get("pending_order_ttl_hours") or "48"))
-    except (TypeError, ValueError):
-        hours = 48
-    include_aa = on(ui.get("pending_order_cleanup_awaiting_approval", "0"))
-    return await cancel_stale_pending_orders(
+    policy = policy_from_settings(ui)
+    cancelled = await cancel_stale_pending_orders(
         session,
-        older_than_hours=hours,
+        older_than_hours=policy.hours,
         reseller_id=reseller_id,
-        include_awaiting_approval=include_aa,
+        include_awaiting_approval=policy.approval_hours is not None,
+        approval_older_than_hours=policy.approval_hours,
     )
+    await record_cleanup_run(session, cancelled=cancelled, reseller_id=reseller_id)
+    return cancelled
 
-async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) -> Payment:
-    """Attach receipt only while payment is still pending (never overwrite approved/rejected)."""
+
+async def attach_receipt(
+    session: AsyncSession, payment: Payment, file_id: str, *, first_only: bool = False
+) -> Payment:
+    """Attach receipt only while payment is still pending (never overwrite approved/rejected).
+
+    ``first_only`` refuses a payment that already has a receipt, so two concurrent
+    uploads cannot both reach the reviewers.
+    """
     payment_id = int(payment.id)
+    conditions = [Payment.id == payment_id, Payment.status == PaymentStatus.PENDING.value]
+    if first_only:
+        conditions.append(Payment.receipt_file_id.is_(None))
     with session.no_autoflush:
         claim = await session.execute(
             update(Payment)
-            .where(
-                Payment.id == payment_id,
-                Payment.status == PaymentStatus.PENDING.value,
+            .where(*conditions)
+            .values(
+                receipt_file_id=file_id,
+                status=PaymentStatus.PENDING.value,
+                receipt_at=datetime.now(timezone.utc),
             )
-            .values(receipt_file_id=file_id, status=PaymentStatus.PENDING.value)
             .execution_options(synchronize_session=False)
         )
     if claim.rowcount != 1:
@@ -1460,6 +1631,10 @@ async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) 
         )
     await session.commit()
     await session.refresh(payment)
+    if payment.order_id:
+        order = await session.get(Order, payment.order_id)
+        if order is not None and not is_mutation_order_note(_order_note(order)):
+            await record_order_funnel(session, order, STEP_RECEIPT, key=f"receipt:payment:{payment_id}")
     return payment
 
 
@@ -1817,6 +1992,7 @@ async def reject_payment(
         if rejected_order is not None:
             await _release_order_discount(session, rejected_order)
             await _release_trial_claim_for_order(session, rejected_order)
+            await discard_unsold_custom_plan(session, rejected_order)
     await session.commit()
     await _sync_payment_review_messages(session, payment_id, bot=bot)
 
@@ -1890,6 +2066,7 @@ async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -
         else:
             await _release_discount_code(session, order.discount_code, order=order)
     await _release_trial_claim_for_order(session, order)
+    await discard_unsold_custom_plan(session, order)
     if (order.note or "").startswith("reseller_app:"):
         from app.services.resellers import cancel_application_for_order
 
@@ -1946,7 +2123,10 @@ async def reject_order(session: AsyncSession, order: Order, *, note: str = "") -
     return order
 
 
-async def deliver_order(session: AsyncSession, order: Order) -> Order:
+async def deliver_order(
+    session: AsyncSession, order: Order, *, attempt: DeliveryAttempt | None = None
+) -> Order:
+    """Create the panel user(s) of a paid order; ``attempt`` learns what a failure left behind."""
     order_id = int(order.id)
     note = _order_note(order)
     # Defense-in-depth: mutation orders must never be sealed by mint-delivery.
@@ -2035,6 +2215,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         )
         await session.commit()
 
+    panel = {"touched": False}
     try:
         # Shop deliveries authenticate as the reseller's PG admin (role limits apply).
         # Platform orders use the owner client.
@@ -2071,7 +2252,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             except ProvisionError as e:
                 raise ValueError(e.message) from e
 
-        from app.services.pasarguard import build_user_create_payload, parse_group_ids
+        from app.services.pasarguard import build_user_create_payload, build_user_modify_payload, parse_group_ids
 
         group_ids = None
         if not plan.pg_template_id:
@@ -2081,6 +2262,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                     "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
                 )
 
+        volume_hold = await _hold_delivery_volume(session, order, plan, pg, data_limit=data_limit, quantity=qty)
         created_pg_ids: list[int] = []
         services: list[UserService] = []
 
@@ -2097,6 +2279,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             note = f"PGClockBot order #{order.id}"
             if qty > 1:
                 note = f"{note} ({index}/{qty})"
+            panel["touched"] = True
             if plan.pg_template_id:
                 payload = {
                     "username": username,
@@ -2117,6 +2300,13 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             pg_uid = pg_user.get("id")
             if pg_uid:
                 created_pg_ids.append(int(pg_uid))
+            if plan.pg_template_id and _order_note(order) == CUSTOM_ORDER_NOTE and pg_uid:
+                # A template brings its own volume and expiry; the buyer paid for the chosen ones.
+                applied = await pg.modify_user_by_id(
+                    int(pg_uid), build_user_modify_payload(data_limit=data_limit, expire_ts=expire)
+                )
+                if isinstance(applied, dict):
+                    pg_user = {**pg_user, **applied}
             # When creating via the shop's own PG admin, ownership is already that admin.
             # set_owner is only needed for the legacy owner-token path (no stored password).
             # With get_pg_for_reseller we skip transfer.
@@ -2163,31 +2353,35 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         try:
             for i in range(1, qty + 1):
                 services.append(await _create_one(i))
-        except Exception:
+        except Exception as exc:
             # Roll back PG users created so far (atomic wholesale delivery)
             for pg_uid in reversed(created_pg_ids):
                 try:
                     await pg.delete_user_by_id(int(pg_uid))
                 except Exception:
-                    pass
+                    logger.debug("deliver_order: ignored failure", exc_info=True)
             # Drop flushed UserService rows so _release_delivery_claim() commit
             # cannot leave orphans pointing at deleted PG users.
             for svc in list(services):
                 try:
                     await session.delete(svc)
                 except Exception:
-                    pass
+                    logger.debug("deliver_order: ignored failure", exc_info=True)
             services.clear()
+            # After the deletes, so this commit cannot persist services of deleted panel users.
+            await settle_failed_hold(session, volume_hold, exc, panel_touched=panel["touched"])
             raise
 
         order.service_id = services[0].id if services else None
         order.status = OrderStatus.DELIVERED.value
+        # The services now carry the volume; drop the hold in the same commit.
+        await release_volume_hold(session, volume_hold)
         await session.commit()
         await session.refresh(order)
         try:
             await _maybe_pay_referral_bonus(session, order)
         except Exception:
-            pass
+            logger.debug("deliver_order: ignored failure", exc_info=True)
         try:
             from app.services.loyalty import consume_loyalty_discount_for_order, on_order_delivered
 
@@ -2196,13 +2390,22 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             await on_order_delivered(session, order)
         except Exception:
             logger.warning("loyalty on_order_delivered failed order=%s", order.id, exc_info=True)
+        await record_order_funnel(session, order, STEP_DELIVERED, key=f"delivered:order:{order.id}")
         return order
-    except Exception:
+    except Exception as exc:
+        if attempt is not None:
+            # Fail closed: only a definite refusal proves the panel created nothing.
+            attempt.panel_may_hold_account = panel["touched"] and not is_hard_panel_rejection(exc)
         try:
             await _release_delivery_claim()
         except Exception:
-            pass
+            logger.debug("deliver_order: ignored failure", exc_info=True)
         raise
+
+
+MIN_TOPUP_AMOUNT = 1000
+# Soft ceiling to prevent absurd pending top-ups / receipt spam.
+MAX_TOPUP_AMOUNT = 500_000_000
 
 
 async def create_wallet_topup(
@@ -2213,10 +2416,9 @@ async def create_wallet_topup(
     method: str = PaymentMethod.CARD.value,
     wallet_shop_id: int | None = None,
 ) -> Payment:
-    if amount < 1000:
+    if amount < MIN_TOPUP_AMOUNT:
         raise ValueError("حداقل مبلغ شارژ ۱۰۰۰ است")
-    # Soft ceiling to prevent absurd pending top-ups / receipt spam
-    if amount > 500_000_000:
+    if amount > MAX_TOPUP_AMOUNT:
         raise ValueError("مبلغ شارژ بیش از حد مجاز است")
     from app.services.users import current_shop_reseller_id
 
@@ -2533,6 +2735,27 @@ async def _release_failed_renewal(session: AsyncSession, order: Order, run: _Ren
     return run.snapshot is not None and run.write_attempted
 
 
+async def _hold_renewal_volume(
+    session: AsyncSession, order: Order, service: UserService, plan: Plan, pg, run: _RenewalRun,
+    *, data_limit: int | None,
+) -> HeldVolume | None:
+    """Hold the volume a renewal adds on top of the service's current limit."""
+    if not order.reseller_id:
+        return None
+    new_limit = data_limit
+    if run.snapshot is None and plan.pg_template_id:
+        new_limit = await template_limit_if_gated(session, int(order.reseller_id), pg, int(plan.pg_template_id))
+    elif new_limit is None:
+        new_limit = 0
+    try:
+        return await hold_limit_change(
+            session, shop_id=int(order.reseller_id), current_limit=service.quota_data_limit_bytes,
+            new_limit=new_limit, key=f"renew:{int(order.id)}", audience="customer",
+        )
+    except ProvisionError as e:
+        raise ValueError(e.message) from e
+
+
 async def apply_renewal(
     session: AsyncSession, order: Order, service: UserService, plan: Plan,
     *, reset_traffic: bool = False,
@@ -2548,10 +2771,14 @@ async def apply_renewal(
 
     had_saved_target = bool(snapshot and snapshot.get("target"))
     run = _RenewalRun(snapshot=snapshot, had_saved_target=had_saved_target, write_attempted=had_saved_target)
+    volume_hold: HeldVolume | None = None
+    panel_touched = had_saved_target
     try:
         pg = await _renewal_panel_client(session, order, service)
         payload, data_limit, expire, gate_expire = await _renewal_targets(pg, service, plan, snapshot)
         await _assert_renewal_provision_gate(session, order, plan, run, data_limit=data_limit, gate_expire=gate_expire)
+        volume_hold = await _hold_renewal_volume(session, order, service, plan, pg, run, data_limit=data_limit)
+        panel_touched = True
         if snapshot is not None:
             pg_user = await _write_renewal_target(session, order, pg, service, run, payload)
         else:
@@ -2561,11 +2788,14 @@ async def apply_renewal(
         _record_renewed_service(service, plan, pg_user, run, data_limit=data_limit, expire=expire)
         order.status = OrderStatus.DELIVERED.value
         order.service_mutation_pending = False
+        await release_volume_hold(session, volume_hold)
         await session.commit()
         await session.refresh(order)
         await _notify_renewal_delivered(session, order)
         return order
     except Exception as exc:
-        if await _release_failed_renewal(session, order, run, exc):
+        pending_review = await _release_failed_renewal(session, order, run, exc)
+        await settle_failed_hold(session, volume_hold, exc, panel_touched=panel_touched)
+        if pending_review:
             raise RenewalPendingReview() from exc
         raise

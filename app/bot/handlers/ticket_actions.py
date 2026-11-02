@@ -145,7 +145,7 @@ async def _tkt_cancel_reopen(
     try:
         await state.clear()
     except Exception:
-        pass
+        logger.debug("_tkt_cancel_reopen: ignored failure", exc_info=True)
     if reopen == "adm_tickets":
         from app.bot.handlers.admin import _present_admin_tickets_list
 
@@ -306,7 +306,7 @@ async def tkt_reply_body(
             ticket_reseller_id=ticket.reseller_id,
         )
     except Exception:
-        pass
+        logger.debug("tkt_reply_body: ignored failure", exc_info=True)
     if as_staff:
         await _tkt_cancel_reopen(
             message,

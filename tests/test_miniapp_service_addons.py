@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.api.miniapp_feeds import register_miniapp_feeds
 from app.api.miniapp_pages import register_miniapp_pages
 from app.db.models import (
     Base, BotUser, Order, Payment, ServiceAddonPack, UserService,
@@ -52,6 +53,8 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
             patch("app.services.service_addons._apply_pack_to_service", AsyncMock()),
             patch("app.services.notifications._dispatch_dual_notify", AsyncMock()),
             patch("app.services.reseller_bots.open_notify_bot_for_user", AsyncMock(return_value=(self.bot, True))),
+            patch("app.api.miniapp_feeds.load_mini_user", AsyncMock(side_effect=load_user)),
+            patch("app.api.miniapp_pages._fetch_pg_info", AsyncMock(return_value={"error": "upstream_unavailable"})),
         ]
         self.mocks = [p.start() for p in self.patches]
         app = FastAPI()
@@ -60,6 +63,7 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
             yield self.session
 
         register_miniapp_pages(app, render=lambda *args: "", get_db=get_db)
+        register_miniapp_feeds(app, get_db=get_db)
         self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
 
     async def asyncTearDown(self):
@@ -119,9 +123,9 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
         unconnected = UserService(id=12, bot_user_id=1, pg_username="unconnected")
         self.session.add_all([linked, unconnected])
         await self.session.commit()
-        response = await self.client.get("/api/mini/me")
+        response = await self.client.get("/api/mini/services")
         self.assertEqual(response.status_code, 200)
-        allowed = {s["id"]: s["addons_allowed"] for s in response.json()["customer"]["services"]}
+        allowed = {s["id"]: s["addons_allowed"] for s in response.json()["items"]}
         self.assertEqual(allowed, {10: True, 11: False, 12: False})
 
     async def test_volume_and_duration_use_real_wallet_checkout_and_notify(self):

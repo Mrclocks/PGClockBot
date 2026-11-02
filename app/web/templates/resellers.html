@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import switch, oversell_create_switch, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
 {% block title %}{% if owner_view %}نمایندگان{% else %}نمایندگان من{% endif %}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -106,6 +106,15 @@
 </div>
 {% endif %}
 
+{% if owner_view and oversold_shop_ids %}
+<div class="flash warn">
+  نمایندگانی که تخصیص حجمشان از سقف بیشتر است:
+  {% for sid in oversold_shop_ids %}
+  <a href="/resellers/{{ sid }}/edit">#{{ sid }}</a>{% if not loop.last %}، {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="card card-flush">
   <h2>لیست نمایندگان</h2>
   <form method="get" action="/resellers" class="search-bar search-bar--with-tag">
@@ -135,39 +144,49 @@
   </form>
   {% if owner_view %}
   {{ table_bulk_bar('/resellers/bulk-action', [
+    {'key': 'grant_miniapp', 'label': 'دادن دسترسی مینی‌اپ', 'confirm': 'به {n} نماینده دسترسی «مینی‌اپ فروشگاه برای مشتریان» داده شود؟ نماینده‌ای که دسترسی‌هایش عمداً خالی است تغییر نمی‌کند و مینی‌اپ تا وقتی خود نماینده روشنش نکند باز نمی‌شود.', 'confirm_title': 'دادن دسترسی مینی‌اپ', 'confirm_label': 'دادن دسترسی'},
     {'key': 'delete_reseller', 'label': 'حذف نمایندگی', 'class': 'btn-danger', 'confirm': '{n} نمایندگی حذف شوند؟ ادمین پاسارگارد متصل هم حذف می‌شود.', 'confirm_title': 'حذف نمایندگی گروهی', 'confirm_label': 'حذف نمایندگی', 'danger': true, 'reason': true, 'reason_label': 'علت حذف نمایندگی'},
     {'key': 'delete_user', 'label': 'حذف کاربر', 'class': 'btn-danger', 'confirm': '{n} کاربر کامل حذف شوند؟ برگشت‌ناپذیر است.', 'confirm_title': 'حذف کامل گروهی', 'confirm_label': 'حذف کامل', 'danger': true, 'reason': true, 'reason_label': 'علت حذف کامل'},
   ]) }}
   {% endif %}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable{% if owner_view %} data-bulk-select{% endif %}>
+  <table class="table-compact table-list-sm" data-sortable{% if owner_view %} data-bulk-select{% endif %}>
     <thead>
       <tr>
         {% if owner_view %}{{ table_select_head() }}{% endif %}
-        <th data-sort-type="text">کاربر</th>
+        <th data-sort-type="text" data-list-sort-label="نام" data-list-sort-dir="ascending" data-list-sort-order="3">کاربر</th>
         <th class="col-hide-sm" data-sort-type="num">تلگرام</th>
         <th class="col-hide-sm" data-sort-type="text">نقش</th>
         <th data-sort-type="text">نوع پلن</th>
         <th data-sort-type="text">وضعیت</th>
-        <th class="reseller-quota-th" data-sort-type="num">کاربران</th>
-        <th class="reseller-quota-th" data-sort-type="num">حجم</th>
+        <th class="reseller-quota-th" data-sort-type="num" data-list-sort-label="بیشترین کاربر" data-list-sort-dir="descending" data-list-sort-order="1">کاربران</th>
+        <th class="reseller-quota-th" data-sort-type="num" data-list-sort-label="بیشترین مصرف" data-list-sort-dir="descending" data-list-sort-order="2">حجم</th>
         <th class="col-hide-sm" data-sort-type="text">وب</th>
         <th class="col-hide-sm" data-sort-type="text">ربات</th>
         <th class="col-hide-sm" data-sort-type="text">راه‌اندازی</th>
         <th class="col-actions"></th>
+        <th class="li-head" scope="col">
+          <span class="li-count">{{ rows | length | num }} نماینده</span>
+          <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
+        </th>
       </tr>
     </thead>
     <tbody>
     {% for u, p in rows %}
       {% set usage = (reseller_usage or {}).get(u.id) or {} %}
-      <tr{% if owner_view %} data-bulk-ops="delete_reseller,delete_user"{% endif %}>
+      <tr{% if owner_view %} data-bulk-ops="grant_miniapp,delete_reseller,delete_user"{% endif %}>
         {% if owner_view %}{{ table_select_cell(u.id) }}{% endif %}
-        <td data-sort-value="{{ u.full_name or u.username or '' }}">
+        <td class="li-title" data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">
             <span class="cell-name-primary">
               {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
-              <span class="cell-name-text">{{ u.full_name or u.username or '—' }}</span>
-              {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
+              {% set oversold = owner_view and oversold_shop_ids and u.id in oversold_shop_ids %}
+              <span class="cell-name-text" dir="auto">{{ u.full_name or u.username or '—' }}</span>
+              <span class="li-only li-id" dir="ltr">({{ u.telegram_id }})</span>
+              {% if tag %}<span class="badge badge-risk-tag li-hide" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
+              {% if oversold %}
+              <span class="badge rejected li-hide">تجاوز از سقف حجم</span>
+              {% endif %}
             </span>
           </div>
         </td>
@@ -177,14 +196,19 @@
             {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
           </span>
         </td>
-        <td data-sort-value="{{ p.billing_mode or 'fixed' }}">
+        <td class="li-sub" data-sort-value="{{ p.billing_mode or 'fixed' }}">
+          {#- On phones line two: billing mode, the tags that matter, the bot and the users used. -#}
           {% if (p.billing_mode or 'fixed') == 'payg' %}
           <span class="badge info">PAYG</span>
           {% else %}
           <span class="badge fixed">ثابت</span>
           {% endif %}
+          {% if oversold %}<span class="li-only badge rejected">تجاوز از سقف حجم</span>{% endif %}
+          {% if tag and tag.key != color_tag_meta(none).key %}<span class="li-only badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
+          {% if p.bot_username %}<span class="li-only"><bdi dir="ltr">@{{ p.bot_username }}</bdi></span>{% endif %}
+          <span class="li-only">· کاربران <bdi dir="ltr">{{ usage.get('users_text') or '—' }}</bdi></span>
         </td>
-        <td data-sort-value="{% if p.billing_suspended_at %}2{% elif p.is_active %}1{% else %}0{% endif %}">
+        <td class="li-badge" data-sort-value="{% if p.billing_suspended_at %}2{% elif p.is_active %}1{% else %}0{% endif %}">
           {% if p.billing_suspended_at %}
           <span class="badge rejected">مسدود</span>
           {% elif p.is_active %}
@@ -196,11 +220,11 @@
         <td class="mono reseller-quota-cell" title="مصرف / سقف کاربران" data-sort-value="{{ usage.get('users_used') if usage.get('users_used') is not none else usage.get('users_text') or '' }}">
           <span class="reseller-quota-line" dir="ltr">{{ usage.get('users_text') or '—' }}</span>
         </td>
-        <td class="mono reseller-quota-cell" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}" data-sort-value="{{ usage.get('traffic_used') if usage.get('traffic_used') is not none else usage.get('traffic_text') or '' }}">
+        <td class="mono reseller-quota-cell li-value" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}" data-sort-value="{{ usage.get('traffic_used') if usage.get('traffic_used') is not none else usage.get('traffic_text') or '' }}">
           <div class="reseller-quota byte-stack">
             <span class="reseller-quota-line byte-size">{{ usage.get('traffic_text') or '—' }}</span>
             {% if usage.get('lifetime_text') %}
-            <small class="muted reseller-quota-life byte-size">Σ {{ usage.get('lifetime_text') }}</small>
+            <small class="muted reseller-quota-life byte-size li-hide">Σ {{ usage.get('lifetime_text') }}</small>
             {% endif %}
           </div>
         </td>
@@ -319,6 +343,7 @@
       <div class="ui-switch-list">
         {{ switch('create_pg_admin', 'ساخت ادمین پاسارگارد', checked=true, help='برای مالکیت کاربران لازم است — حتی اگر لینک پنل ارسال نشود') }}
         {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند') }}
+        {% if owner_view %}{{ oversell_create_switch() }}{% endif %}
       </div>
 
       <div class="actions">

@@ -96,15 +96,28 @@ force_sync_to_remote() {
   local bak="$RUNTIME_BAK"
 
   git remote set-url origin "$REPO_URL" 2>/dev/null || git remote add origin "$REPO_URL" 2>/dev/null || true
-  # Targeted fetch (no tags / no --all) — much faster on weak VPS links
+  # Targeted fetch (no tags / no --all) — much faster on weak VPS links.
+  # Explicit refspec is required: a single-branch clone only tracks main, so
+  # `git fetch origin dev` succeeds onto FETCH_HEAD but never creates origin/dev.
   if [[ -n "$REMOTE_REF" ]]; then
     git fetch --no-tags --prune origin "$REMOTE_REF" \
       || git fetch --tags --prune origin "$REMOTE_REF" \
-      || git fetch --no-tags --prune origin
+      || git fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'
     git checkout -f "$REMOTE_REF"
     git reset --hard "$REMOTE_REF"
   else
-    git fetch --no-tags --prune origin "$REMOTE_BRANCH" || git fetch --no-tags --prune origin
+    if ! git config --get-all remote.origin.fetch 2>/dev/null \
+        | grep -qx "+refs/heads/${REMOTE_BRANCH}:refs/remotes/origin/${REMOTE_BRANCH}"; then
+      git config --add remote.origin.fetch \
+        "+refs/heads/${REMOTE_BRANCH}:refs/remotes/origin/${REMOTE_BRANCH}" 2>/dev/null || true
+    fi
+    git fetch --no-tags origin \
+      "+refs/heads/${REMOTE_BRANCH}:refs/remotes/origin/${REMOTE_BRANCH}" \
+      || git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
+    if ! git rev-parse --verify "origin/${REMOTE_BRANCH}" >/dev/null 2>&1; then
+      err "origin/${REMOTE_BRANCH} missing after fetch"
+      return 1
+    fi
     # Detach local dirty state safely
     git checkout -f -B "$REMOTE_BRANCH" "origin/${REMOTE_BRANCH}"
     git reset --hard "origin/${REMOTE_BRANCH}"
@@ -203,9 +216,19 @@ fi
 
 chmod +x pgclock.sh get.sh install.sh update.sh 2>/dev/null || true
 
+# When the operator set PGCLOCK_CHANNEL=dev|main, rewrite bare install/update
+# so pgclock.sh does not fall back to main and undo the channel sync above.
+_args=("$@")
+if [[ "$CHANNEL_FROM_ENV" -eq 1 && ${#_args[@]} -ge 1 ]]; then
+  case "${_args[0]}" in
+    update|u)   _args[0]="update-${REMOTE_BRANCH}" ;;
+    install|i)  _args[0]="install-${REMOTE_BRANCH}" ;;
+  esac
+fi
+
 # Pass through optional subcommand (install/update/...), default = menu
 # Re-attach TTY so the menu can read keyboard even when launched via curl|bash
 if [[ ! -t 0 && -r /dev/tty ]]; then
-  exec bash pgclock.sh "$@" </dev/tty
+  exec bash pgclock.sh "${_args[@]}" </dev/tty
 fi
-exec bash pgclock.sh "$@"
+exec bash pgclock.sh "${_args[@]}"

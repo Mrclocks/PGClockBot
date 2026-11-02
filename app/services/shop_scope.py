@@ -9,6 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import ColumnElement, and_, or_
+
+from app.db.models import Order, Payment, PaymentStatus
+
 
 class ShopScopeError(Exception):
     """Raised when a non-admin staff session has no valid shop owner id."""
@@ -140,6 +144,24 @@ def payment_shop_id(payment: Any, order: Any | None) -> int | None:
     if getattr(payment, "is_wallet_topup", False):
         return getattr(payment, "wallet_shop_id", None)
     return _reseller_id_of(order) if order is not None else None
+
+
+def pending_receipt_clause(shop_id: int | None) -> ColumnElement[bool]:
+    """Payments with a receipt waiting for review in one shop (None = platform).
+
+    The caller outer-joins ``Order`` on ``Payment.order_id``; a top-up belongs to its
+    wallet's shop and an order payment to its order's shop, as in ``payment_shop_id``.
+    """
+    topup_shop = Payment.wallet_shop_id.is_(None) if shop_id is None else Payment.wallet_shop_id == int(shop_id)
+    order_shop = Order.reseller_id.is_(None) if shop_id is None else Order.reseller_id == int(shop_id)
+    return and_(
+        Payment.status == PaymentStatus.PENDING.value,
+        Payment.receipt_file_id.is_not(None),
+        or_(
+            and_(Payment.is_wallet_topup.is_(True), topup_shop),
+            and_(Payment.is_wallet_topup.is_(False), order_shop),
+        ),
+    )
 
 
 def platform_may_review_payment(payment: Any, order: Any | None) -> bool:

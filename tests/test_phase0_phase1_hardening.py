@@ -93,7 +93,10 @@ class TrialReleaseSourceTests(unittest.TestCase):
                 "async def cancel_stale_pending_for_settings"
             )
         ]
-        self.assertIn("_release_trial_claim_for_order", stale)
+        # The stale cancel releases holds through the shared helper (also used by the purge).
+        self.assertIn("release_unpaid_order_holds", stale)
+        holds = src[src.find("async def release_unpaid_order_holds") : src.find("async def cancel_stale_pending_orders")]
+        self.assertIn("_release_trial_claim_for_order", holds)
         self.assertNotIn('note.startswith("trial:")', stale)
         self.assertIn(
             "_release_trial_claim_for_order",

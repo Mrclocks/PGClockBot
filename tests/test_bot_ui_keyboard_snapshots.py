@@ -161,10 +161,8 @@ def _inline_scenarios(ui: dict[str, str]) -> dict[str, Callable[[], Markup]]:
         "inline.plans_long_list": lambda: kb.plans_keyboard(many_plans, ui),
         "inline.wholesale_plans": lambda: kb.wholesale_plans_keyboard(plans, ui),
         "inline.wholesale_qty": lambda: kb.wholesale_qty_keyboard(5, ui, plan_id=3),
-        "inline.wholesale_confirm": lambda: kb.wholesale_confirm_keyboard(ui),
         "inline.custom_gb": lambda: kb.custom_gb_keyboard(20, ui),
         "inline.custom_days": lambda: kb.custom_days_keyboard(30, ui),
-        "inline.custom_confirm": lambda: kb.custom_confirm_keyboard(ui),
         "inline.pay_methods": lambda: kb.pay_methods(42, ui),
         "inline.services": lambda: kb.services_keyboard([sample_service(7), sample_service(8)], ui),
         "inline.services_long_list": lambda: kb.services_keyboard(

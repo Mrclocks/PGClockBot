@@ -650,6 +650,75 @@ async def credit_topup(
     return tx
 
 
+async def debit_adjustment(
+    session: AsyncSession,
+    reseller_user_id: int,
+    amount: int,
+    *,
+    created_by: str | None = None,
+    note: str | None = None,
+    idempotency_key: str | None = None,
+    commit: bool = True,
+) -> ResellerBillingTransaction:
+    """Manual admin decrease of a PAYG shop wallet; the balance never goes below zero."""
+    if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
+        raise ValueError("مبلغ کسر باید مثبت باشد")
+    if not idempotency_key:
+        raise ValueError("کلید یکتای کسر (idempotency) الزامی است — صفحه را تازه کنید")
+    profile = (
+        await session.execute(
+            select(ResellerProfile).where(ResellerProfile.user_id == int(reseller_user_id))
+        )
+    ).scalar_one_or_none()
+    if profile is None:
+        raise ValueError("نماینده یافت نشد")
+    if not is_payg(profile):
+        raise ValueError("کسر از کیف پول Billing فقط برای حالت PAYG است")
+
+    existing = await _find_by_idempotency(session, idempotency_key)
+    if existing:
+        return existing
+
+    user, _bal = await ensure_payg_shop_wallet(session, profile)
+    with session.no_autoflush:
+        # Atomic shortfall check: a concurrent usage charge cannot push the wallet negative.
+        result = await session.execute(
+            update(BotUser)
+            .where(BotUser.id == int(user.id), BotUser.wallet_balance >= int(amount))
+            .values(wallet_balance=BotUser.wallet_balance - int(amount))
+            .execution_options(synchronize_session=False)
+        )
+    if result.rowcount != 1:
+        await session.rollback()
+        raise ValueError("موجودی کیف پول نماینده برای این کسر کافی نیست")
+    await session.refresh(user)
+    profile.billing_balance = int(user.wallet_balance or 0)
+
+    tx = ResellerBillingTransaction(
+        reseller_user_id=int(reseller_user_id),
+        kind=KIND_ADJUSTMENT,
+        amount=-int(amount),
+        balance_after=int(user.wallet_balance or 0),
+        idempotency_key=idempotency_key,
+        note=(note or "")[:255] or None,
+        created_by=(created_by or "")[:128] or None,
+    )
+    session.add(tx)
+    try:
+        if commit:
+            await session.commit()
+            await session.refresh(tx)
+        else:
+            await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        existing = await _find_by_idempotency(session, idempotency_key)
+        if existing:
+            return existing
+        raise
+    return tx
+
+
 def _watermark_covered_by_charge(
     watermark_before: int,
     watermark_after: int,

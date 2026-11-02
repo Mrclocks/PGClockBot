@@ -53,17 +53,12 @@ from app.bot.handlers.settings_labels import (
 from app.bot.handlers.guide_editor import entry_button as guides_entry_button
 from app.bot.handlers.screen_editor import entry_button as editor_entry_button
 from app.services.screen_editor import is_editor_enabled
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 
-
-async def _lasting_kb(session, db_user, classic, *, is_reseller_bot=False, reseller_owner_id=None):
-    from app.bot.nav_chrome import lasting_staff_reply
-    return await lasting_staff_reply(
-        session, db_user, classic=classic,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-    )
 
 router = Router(name="reseller_settings")
 
@@ -136,8 +131,11 @@ SECTIONS: dict[str, dict] = {
                 *BTN_PAY_GATEWAY,
             ]),
             ("psp", "درگاه API", [
-                ("psp_provider", "ارائه‌دهنده (zarinpal/mock)", "text"),
-                ("psp_merchant_id", "مرچنت", "text"),
+                ("psp_provider", "ارائه‌دهنده (zarinpal/sunpay/mock)", "text"),
+                ("psp_merchant_id", "مرچنت / کلید API", SECRET),
+                ("psp_pay_url", "آدرس پایه سان‌پی (PAY_URL)", "text"),
+                ("psp_sunpay_request_method", "روش /api/request سان‌پی (GET/POST)", "text"),
+                ("psp_checkout_link_mode", "لینک دکمهٔ درگاه (direct/panel)", "text"),
                 ("psp_sandbox", "سندباکس", "toggle"),
                 ("psp_pay_text", "راهنما", "textarea"),
                 *BTN_PAY_PSP,
@@ -436,26 +434,11 @@ async def _render_hub(
     *,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
-    refresh_keyboard: bool = False,
 ):
-    """Hub tip under the message; lasting reply chrome healed on cancel/save."""
+    """The shop settings hub, edited in place."""
     text, markup = await _hub_panel(session, profile)
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=markup)
-        if refresh_keyboard and db_user is not None:
-            try:
-                await callback.message.answer(
-                    "کیبورد اصلی:",
-                    reply_markup=await _lasting_kb(
-                        session,
-                        db_user,
-                        kb.reseller_settings_reply_keyboard(),
-                        is_reseller_bot=is_reseller_bot,
-                        reseller_owner_id=reseller_owner_id,
-                    ),
-                )
-            except Exception:
-                pass
 
 
 async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id: str, reseller_id: int):

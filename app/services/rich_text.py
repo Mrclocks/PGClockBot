@@ -14,6 +14,7 @@ import html
 import json
 import logging
 import re
+from html.parser import HTMLParser
 from typing import Any, Mapping, Sequence
 
 from aiogram.types import MessageEntity
@@ -105,6 +106,29 @@ def rich_plain_text(raw: str | None) -> str:
     """Display/edit surface for web textarea (entities stripped to plain text)."""
     text, _ = unpack_rich_text(raw)
     return text
+
+
+class _VisibleText(HTMLParser):
+    """Collects the text a Telegram-HTML string shows; tags are dropped, <br> becomes a newline."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "br":
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
+def visible_text(raw: str | None) -> str:
+    """What a setting text looks like on screen, as plain text for non-Telegram clients."""
+    parser = _VisibleText()
+    parser.feed(rich_plain_text(raw))
+    parser.close()
+    return "".join(parser.parts).strip()
 
 
 def content_fingerprint(raw: str | None) -> str:

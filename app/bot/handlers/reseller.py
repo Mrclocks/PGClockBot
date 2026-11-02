@@ -20,9 +20,19 @@ from app.db.models import (
     Ticket,
     TicketStatus,
 )
-from app.services.color_tags import risk_mark
+from app.services.chat_records import keep_sent
+from app.services.automation_review import count_review_queue
+from app.services.color_tags import tag_mark
+from app.services.customer_marks import marks_for, marks_of
+from app.bot.handlers.reseller_customer_tools import customer_tool_rows
+from app.services.customer_service_lines import service_lines
 from app.services.home_overview import reseller_shop_summary
-from app.services.formatting import format_message, format_toman, order_status_fa
+from app.services.formatting import (
+    bot_user_panel_label,
+    format_message,
+    format_toman,
+    order_status_fa,
+)
 from app.services.reseller_access import load_reseller_actor
 from app.services.shop_membership import is_shop_customer
 from app.services.resellers import (
@@ -34,11 +44,18 @@ from app.services.resellers import (
     reseller_billing_mode_label,
     reseller_plan_mode_of,
 )
+from app.bot.handlers.automation_review import review_button
+from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
+from app.bot.handlers.reseller_package import change_button, renew_button
+from app.bot.handlers.subscription_lookup import ASK_CALLBACK
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
 from app.services.redact import user_safe_error
 from app.services import bot_feedback_texts as feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 def _user_card_back(user_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, f"res:user:{int(user_id)}")]])
@@ -379,11 +396,12 @@ async def res_users_list(
     )
     users = list(result.scalars().all())
     by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users], shop_id=int(owner_id))
+    marks = await marks_for(session, int(owner_id), [int(u.id) for u in users])
     buttons: list[InlineKeyboardButton] = []
     for u in users:
         ops = build_user_ops_row(u, by_svc.get(int(u.id), []))
         name = (u.full_name or u.username or str(u.telegram_id))[:16]
-        flag = risk_mark(u, shop_id=int(owner_id)) + bot_user_alert_flags(ops)
+        flag = tag_mark(marks[int(u.id)].tag) + bot_user_alert_flags(ops)
         buttons.append(
             InlineKeyboardButton(
                 text=f"{flag} {name}",
@@ -398,6 +416,7 @@ async def res_users_list(
         nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"res:users:{page + 1}"))
     if nav:
         rows.append(nav)
+    rows.append([InlineKeyboardButton(text="🔎 جستجو", callback_data=ASK_CALLBACK)])
     rows.extend(_group_back("res_users").inline_keyboard)
     text = (
         f"👥 <b>مشتریان من</b>\n"
@@ -453,7 +472,7 @@ async def res_user_view(
 
     by = await load_services_by_user_ids(session, [int(user.id)], shop_id=int(owner_id))
     ops = build_user_ops_row(user, by.get(int(user.id), []))
-    flags = risk_mark(user, shop_id=int(owner_id)) + bot_user_alert_flags(ops)
+    flags = tag_mark((await marks_of(session, int(owner_id), user)).tag) + bot_user_alert_flags(ops)
     blocked = "بله" if user.is_blocked else "خیر"
     display = html.escape(user.full_name or user.username or "—")
     alert_line = ""
@@ -466,6 +485,8 @@ async def res_user_view(
         if bits:
             alert_line = "\n🔔 " + " · ".join(bits)
     shop_bal = await get_wallet_balance(session, user, shop_id=owner_id)
+    summary = service_lines(by.get(int(user.id), []))
+    service_block = "\n\n" + "\n".join(summary) if summary else ""
     text = (
         f"{flags} <b>{display}</b>\n\n"
         f"آیدی: {copyable(user.telegram_id)}\n"
@@ -473,7 +494,8 @@ async def res_user_view(
         f"کیف پول فروشگاه: {format_toman(shop_bal, get_settings().currency)}\n"
         f"سرویس‌ها: {ops.service_count}\n"
         f"مسدود: {blocked}"
-        f"{alert_line}\n\n"
+        f"{alert_line}"
+        f"{service_block}\n\n"
         f"<i>وب‌پنل: /users?uid={user.id}</i>"
     )
     rows_kb: list[list[InlineKeyboardButton]] = []
@@ -489,6 +511,7 @@ async def res_user_view(
                 )
             ]
         )
+    rows_kb.extend(customer_tool_rows(profile, db_user, int(user.id)))
     rows_kb.append([kb.back_button(None, "res:users:0")])
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows_kb))
@@ -587,7 +610,7 @@ async def res_user_message_send(
             user,
             message.text or "",
             shop_id=int(owner_id),
-            actor=str(db_user.telegram_id or owner_id),
+            actor=bot_user_panel_label(db_user),
         )
         await session.commit()
         await message.answer(feedback.MESSAGE_SENT, reply_markup=_user_card_back(uid))
@@ -821,12 +844,14 @@ async def res_orders(
             f"#{o.id} — {format_toman(o.amount, get_settings().currency)} — "
             f"{order_status_fa(o.status)}"
         )
+    markup = _group_back("res_orders")
+    if has_bot_perm(profile, "payment_void"):
+        void_row = [InlineKeyboardButton(text="↩️ ابطال پرداخت تأییدشده", callback_data="payvoid:list")]
+        markup = InlineKeyboardMarkup(inline_keyboard=[void_row, *markup.inline_keyboard])
+    if await count_review_queue(session, shop_id=int(owner_id)):
+        markup = InlineKeyboardMarkup(inline_keyboard=[[review_button()], *markup.inline_keyboard])
     if callback.message:
-        await safe_edit_text(
-            callback.message,
-            "\n".join(lines),
-            reply_markup=_group_back("res_orders"),
-        )
+        await safe_edit_text(callback.message, "\n".join(lines), reply_markup=markup)
 
 
 async def present_reseller_tickets_list(
@@ -942,6 +967,9 @@ async def res_cancellations(
     if not owner_id or not profile:
         await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
+    if not has_bot_perm(profile, "orders"):
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
+        return
     await callback.answer()
     from app.bot.nav_inline import with_inline_back
     from app.services.service_cancellations import (
@@ -974,7 +1002,7 @@ async def res_cancellations(
                 )
             ]
         )
-    lines.append("\n<i>تأیید/رد در وب‌پنل: /finance?tab=cancellations</i>")
+    lines.append("\n<i>یکی را برای تأیید یا رد انتخاب کنید.</i>")
     markup = with_inline_back(
         InlineKeyboardMarkup(inline_keyboard=kb_rows), ui, back_callback_for("res_cancellations")
     )
@@ -990,38 +1018,10 @@ async def res_cancellation_view(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    owner_id, profile = await _actor(
-        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    await show_cancellation_card(
+        callback, session, db_user, int((callback.data or "").rsplit(":", 1)[-1]),
+        is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id,
     )
-    if not owner_id or not profile:
-        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
-        return
-    try:
-        rid = int((callback.data or "").rsplit(":", 1)[-1])
-    except ValueError:
-        await callback.answer(feedback.INVALID, show_alert=True)
-        return
-    from app.bot.nav_inline import with_inline_back
-    from app.db.models import ServiceCancellation
-    from app.services.service_cancellations import STATUS_LABELS
-
-    row = await session.get(ServiceCancellation, rid)
-    if not row or int(row.reseller_id or -1) != int(owner_id):
-        await callback.answer(feedback.NOT_FOUND, show_alert=True)
-        return
-    await callback.answer()
-    ui = await get_all_settings(session)
-    st = STATUS_LABELS.get(row.status, row.status)
-    text = (
-        f"📝 <b>درخواست لغو #{row.id}</b>\n"
-        f"سرویس: <code>{row.service_id}</code>\n"
-        f"وضعیت: {html.escape(st)}\n"
-        f"دلیل:\n{html.escape((row.reason or '')[:800])}\n\n"
-        f"<i>تأیید/رد در وب‌پنل /finance?tab=cancellations</i>"
-    )
-    markup = with_inline_back(None, ui, "res:cancellations")
-    if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=markup)
 
 
 @router.callback_query(F.data == "res:payments")
@@ -1070,20 +1070,22 @@ async def res_payments(
         )
         try:
             if payment.receipt_file_id:
-                await callback.bot.send_photo(
-                    db_user.telegram_id,
-                    photo=payment.receipt_file_id,
-                    caption=caption,
-                    reply_markup=kb.payment_review(payment.id),
-                )
+                with keep_sent():  # a notice or review item, never a temporary panel
+                    await callback.bot.send_photo(
+                        db_user.telegram_id,
+                        photo=payment.receipt_file_id,
+                        caption=caption,
+                        reply_markup=kb.payment_review(payment.id),
+                    )
             else:
-                await callback.bot.send_message(
-                    db_user.telegram_id,
-                    caption,
-                    reply_markup=kb.payment_review(payment.id),
-                )
+                with keep_sent():  # a notice or review item, never a temporary panel
+                    await callback.bot.send_message(
+                        db_user.telegram_id,
+                        caption,
+                        reply_markup=kb.payment_review(payment.id),
+                    )
         except Exception:
-            pass
+            logger.debug("res_payments: ignored failure", exc_info=True)
     if callback.message:
         await safe_edit_text(callback.message, "✅ رسیدهای در انتظار برایتان فرستاده شد. هر کدام را تأیید یا رد کنید.", reply_markup=_group_back("res_payments"))
 
@@ -1396,13 +1398,14 @@ async def resapply_buy(
         )
         for aid in get_settings().admin_ids:
             try:
-                await callback.bot.send_message(
-                    aid,
-                    notify,
-                    reply_markup=kb.reseller_app_review(app.id),
-                )
+                with keep_sent():  # a notice or review item, never a temporary panel
+                    await callback.bot.send_message(
+                        aid,
+                        notify,
+                        reply_markup=kb.reseller_app_review(app.id),
+                    )
             except Exception:
-                pass
+                logger.debug("resapply_buy: ignored failure", exc_info=True)
         return
 
     if not kb.any_checkout_method_enabled(ui):
@@ -1488,13 +1491,10 @@ async def res_renew(
     sub = await get_subscription(session, uname) if uname else None
     invoice = compute_renew_invoice(plan, sub)
     price = int(invoice.get("total") or plan_renew_price(plan))
+    generation = int(sub.renew_generation or 0) if sub else 0
     rows = [
-        [
-            InlineKeyboardButton(
-                text=f"✅ تمدید — {format_toman(price, get_settings().currency)}",
-                callback_data="res:renew:go",
-            )
-        ],
+        [renew_button(price, int(plan.id), generation)],
+        [change_button()],
         [kb.back_button(None, back_callback_for("res_renew"))],
     ]
     detail = format_renew_invoice_html(invoice, currency=get_settings().currency)
@@ -1528,44 +1528,10 @@ async def res_renew_go(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.reseller_capacity import renew_reseller_capacity
-
-    owner_id, profile, plan, owner = await _capacity_context(
-        session,
-        db_user,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
+    """A renew button from before pay buttons carried a generation: show the current invoice again."""
+    await res_renew(
+        callback, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id,
     )
-    if not owner_id or not profile or not plan or not owner:
-        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
-        return
-    try:
-        result = await renew_reseller_capacity(
-            session, user=owner, profile=profile, plan=plan
-        )
-    except ValueError as e:
-        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
-        return
-    await callback.answer(feedback.RENEWED)
-    if callback.message:
-        exp = result.get("expires_at")
-        exp_line = ""
-        if exp is not None:
-            try:
-                exp_line = f"\nانقضای جدید: <b>{exp.strftime('%Y-%m-%d %H:%M')}</b> UTC"
-            except Exception:
-                exp_line = ""
-        await safe_edit_text(
-            callback.message,
-            format_message(
-                "✅ تمدید انجام شد",
-                f"مبلغ: {format_toman(result['amount'], get_settings().currency)}\n"
-                f"صفر شدن مصرف کاربران: {result['reset_ok']}"
-                + (f" (خطا: {result['reset_err']})" if result.get("reset_err") else "")
-                + exp_line,
-            ),
-            reply_markup=_group_back("res_renew"),
-        )
 
 
 @router.callback_query(F.data == "res:buy_gb")

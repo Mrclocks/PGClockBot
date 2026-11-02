@@ -5,15 +5,17 @@ from __future__ import annotations
 import logging
 from urllib.parse import quote, urlencode
 
-import httpx
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, Order, Payment, Plan, ResellerProfile
+from app.services.order_purge import purge_panel_context
+from app.db.models import BotUser, Order, Payment, Plan
 from app.services.authz import authz_from_staff, can_shop
+from app.services.dashboard_trend import sales_trend_or_empty
+from app.services.finance_charts import finance_charts, method_segments
 from app.services.list_query import (
     DEFAULT_LIST_PAGE_SIZE,
     build_list_pager,
@@ -22,9 +24,12 @@ from app.services.list_query import (
     normalize_search_q,
     parse_list_page,
 )
+from app.services.payment_voids import list_voids
+from app.services.receipt_files import fetch_telegram_file, payment_bot_token
 from app.services.shop_scope import is_platform_admin, payment_shop_id, shop_owner_id
+from app.services.stale_order_cleanup import cleanup_status
+from app.services.stuck_order_resolution import describe_stuck_orders
 from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
-from app.services.secret_box import reveal_bot_token
 
 logger = logging.getLogger(__name__)
 
@@ -68,98 +73,6 @@ def _payment_search_clause(pat: str, needle: str):
     if "خرید" in needle:
         parts.append(Payment.is_wallet_topup.is_(False))
     return or_(*parts)
-
-
-async def _payment_bot_token(
-    session: AsyncSession,
-    payment: Payment,
-    *,
-    order: Order | None,
-    payer_reseller_id: int | None,
-) -> str:
-    """Resolve Telegram bot token that owns this receipt file_id.
-
-    Never cross tenants: reseller receipts use only that shop's bot token;
-    platform receipts use only the platform bot token (no fallback either way).
-    """
-    from app.config import get_settings
-
-    if order is not None and order.reseller_id:
-        profile = (
-            await session.execute(
-                select(ResellerProfile).where(
-                    ResellerProfile.user_id == int(order.reseller_id)
-                )
-            )
-        ).scalar_one_or_none()
-        return ((reveal_bot_token(profile.bot_token) if profile else None) or "").strip()
-
-    if payer_reseller_id:
-        profile = (
-            await session.execute(
-                select(ResellerProfile).where(
-                    ResellerProfile.user_id == int(payer_reseller_id)
-                )
-            )
-        ).scalar_one_or_none()
-        return ((reveal_bot_token(profile.bot_token) if profile else None) or "").strip()
-
-    return (get_settings().bot_token or "").strip()
-
-
-def _safe_telegram_file_path(raw: str | None) -> str | None:
-    """Normalize Telegram getFile path; reject traversal / absolute / non-file paths."""
-    import re
-
-    path = (raw or "").strip().lstrip("/")
-    if not path:
-        return None
-    if ".." in path or "\\" in path:
-        return None
-    if path.startswith(("http:", "https:", "file:")):
-        return None
-    if any(ord(ch) < 32 for ch in path):
-        return None
-    if not re.match(r"^[A-Za-z0-9_./-]+$", path):
-        return None
-    return path
-
-
-async def _fetch_telegram_file(token: str, file_id: str) -> tuple[bytes, str] | None:
-    """Download a Telegram file. Returns image bytes only (receipt photos)."""
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        meta = await client.get(
-            f"https://api.telegram.org/bot{token}/getFile",
-            params={"file_id": file_id},
-        )
-        data = meta.json() if meta.status_code == 200 else {}
-        if not data.get("ok"):
-            return None
-        path = _safe_telegram_file_path(((data.get("result") or {}).get("file_path") or ""))
-        if not path:
-            return None
-        file_resp = await client.get(
-            f"https://api.telegram.org/file/bot{token}/{path}"
-        )
-        if file_resp.status_code != 200 or not file_resp.content:
-            return None
-        # Cap size — receipts are photos, not arbitrary dumps.
-        if len(file_resp.content) > 15 * 1024 * 1024:
-            return None
-        ctype = (file_resp.headers.get("content-type") or "").split(";")[0].strip().lower()
-        if not ctype or ctype == "application/octet-stream":
-            lower = path.lower()
-            if lower.endswith(".png"):
-                ctype = "image/png"
-            elif lower.endswith(".webp"):
-                ctype = "image/webp"
-            elif lower.endswith(".gif"):
-                ctype = "image/gif"
-            else:
-                ctype = "image/jpeg"
-        if not ctype.startswith("image/"):
-            return None
-        return file_resp.content, ctype
 
 
 async def _authorize_receipt_access(
@@ -215,7 +128,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         if tab == "behavior":
             # The customer-behaviour panel moved to the marketing section.
             return RedirectResponse("/funnel", status_code=303)
-        if tab not in {"reports", "orders", "payments", "delivery", "cancellations"}:
+        if tab not in {"reports", "orders", "payments", "delivery", "cancellations", "automation"}:
             tab = "reports" if (can_orders or can_payments) else "payments"
         if tab == "reports" and not (can_orders or can_payments):
             tab = "payments"
@@ -227,6 +140,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             tab = "reports" if (can_orders or can_payments) else "payments"
         if tab == "cancellations" and not can_orders:
             tab = "reports" if (can_orders or can_payments) else "payments"
+        if tab == "automation" and not can_orders:
+            tab = "reports" if (can_orders or can_payments) else "payments"
 
         report_period = (request.query_params.get("period") or "week").strip().lower()
         if report_period not in {"day", "week", "month"}:
@@ -234,11 +149,13 @@ def register_finance_pages(app, *, render, require_staff, get_db):
 
         search_q = normalize_search_q(request.query_params.get("q"))
         open_settings = (request.query_params.get("settings") or "").strip()
-        if open_settings not in {"payment", "billing"}:
+        if open_settings not in {"payment", "billing", "cleanup", "purge"}:
             open_settings = ""
         if open_settings == "billing" and not can_billing_settings:
             open_settings = "payment" if can_finance_settings else ""
         if open_settings and not can_finance_settings:
+            open_settings = ""
+        if open_settings == "cleanup" and staff.get("role") != "admin" and not can_shop(authz, "shop_settings"):
             open_settings = ""
 
         ctx: dict = {
@@ -261,6 +178,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "stuck_only_order_ids": [],
             "orders_by_id": {},
             "delivery_diag_by_order": {},
+            "stuck_reasons": {},
             "delivery_payments_by_order": {},
             "pager": None,
             "flash_ok": request.query_params.get("ok")
@@ -274,6 +192,11 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "payment_settings_action": "",
             "billing_settings_action": "",
             "finance_pending_action": "",
+            "cleanup_tab_groups": [],
+            "cleanup_groups": {},
+            "cleanup_settings_action": "",
+            "cleanup_status": None,
+            "purge": None,
             "receipt_matches": {},
             "report": {},
             "report_period": report_period,
@@ -281,6 +204,14 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "cancel_next_before": None,
             "cancel_labels": {},
             "can_approve_cancel": False,
+            "can_void_payment": False,
+            "payment_voids": {},
+            "automation_items": [],
+            "automation_next": None,
+            "automation_labels": {},
+            "automation_actions": {},
+            "automation_missing_bots": [],
+            "automation_flash_err": request.query_params.get("error"),
             "cancel_flash_err": request.query_params.get("error"),
         }
 
@@ -293,6 +224,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             ctx["payment_groups"] = pay_groups
             ctx["billing_tab_groups"] = bill_groups_names
             ctx["billing_groups"] = bill_groups
+            clean_groups_names, clean_groups = _groups_for_tab("cleanup")
+            ctx["cleanup_tab_groups"] = clean_groups_names
+            ctx["cleanup_groups"] = clean_groups
             next_base = f"/finance?tab={tab}"
             if is_platform_admin(staff):
                 ctx["values"] = await get_all_settings(session)
@@ -302,9 +236,16 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 ctx["billing_settings_action"] = (
                     f"/settings?tab=billing&next={quote(next_base + '&settings=billing')}"
                 )
+                ctx["cleanup_settings_action"] = (
+                    f"/settings?tab=cleanup&next={quote(next_base + '&settings=cleanup')}"
+                )
                 ctx["finance_pending_action"] = (
                     "/settings/cancel-pending-orders?next="
-                    + quote(next_base + "&settings=payment")
+                    + quote(next_base + "&settings=cleanup")
+                )
+                ctx["cleanup_status"] = await cleanup_status(session, ctx["values"], reseller_id=None)
+                ctx["purge"] = await purge_panel_context(
+                    session, staff, ctx["values"], return_to=next_base + "&settings=purge"
                 )
             else:
                 rid = shop_owner_id(staff)
@@ -315,9 +256,18 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                     )
                     ctx["can_billing_settings"] = False
                     ctx["can_pending_orders"] = True
+                    ctx["cleanup_settings_action"] = (
+                        f"/shop-settings?tab=cleanup&next={quote(next_base + '&settings=cleanup')}"
+                    )
                     ctx["finance_pending_action"] = (
                         "/shop-settings/cancel-pending-orders?next="
-                        + quote(next_base + "&settings=payment")
+                        + quote(next_base + "&settings=cleanup")
+                    )
+                    ctx["cleanup_status"] = await cleanup_status(
+                        session, ctx["values"], reseller_id=int(rid)
+                    )
+                    ctx["purge"] = await purge_panel_context(
+                        session, staff, ctx["values"], return_to=next_base + "&settings=purge"
                     )
                 # else: leave values={} — fail-closed / degraded, no Owner fallback
 
@@ -342,6 +292,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 session, reseller_id=rid, period=report_period
             )
             ctx["report_period"] = report_period
+            ctx["trend"] = await sales_trend_or_empty(session, reseller_id=rid)
+            ctx["charts"] = await finance_charts(session, reseller_id=rid)
+            ctx["method_segments"] = method_segments(ctx["report"]["payment_methods"])
 
         elif tab == "orders" and can_orders:
             base_filters = []
@@ -512,6 +465,10 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             ctx["payments"] = payments
             ctx["payers"] = payers
             ctx["pager"] = pager
+            ctx["can_void_payment"] = can_shop(authz, "payment_void") and (
+                is_platform_admin(staff) or bool(shop_owner_id(staff))
+            )
+            ctx["payment_voids"] = await list_voids(session, [int(p.id) for p in payments])
             # Soft receipt match suggestions for pending payments
             from app.services.users import on as _on
             from app.services.ux20 import suggest_receipt_matches
@@ -607,6 +564,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 )
                 ctx["delivery_diag_by_order"] = diag_by_order
                 ctx["delivery_payments_by_order"] = payments_by_order
+                ctx["stuck_reasons"] = await describe_stuck_orders(session, stuck)
             except Exception:
                 logger.exception("delivery failures tab failed")
                 await rollback_quiet(session)
@@ -617,6 +575,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 ctx["orders_by_id"] = {}
                 ctx["delivery_diag_by_order"] = {}
                 ctx["delivery_payments_by_order"] = {}
+                ctx["stuck_reasons"] = {}
 
         elif tab == "cancellations" and can_orders:
             from app.services.service_cancellations import (
@@ -639,6 +598,31 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             ctx["cancel_next_before"] = next_before
             ctx["cancel_labels"] = STATUS_LABELS
             ctx["can_approve_cancel"] = can_payments
+
+        elif tab == "automation" and can_orders:
+            from app.services.automation_review import (
+                STATE_LABELS,
+                list_review_queue,
+                shops_without_bot_token,
+            )
+            from app.services.service_automation import LABELS
+            from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
+
+            try:
+                scope = resolve_shop_scope_id(staff)
+            except ShopScopeError:
+                ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
+                return render(request, "finance.html", ctx)
+            after_raw = (request.query_params.get("after") or "").strip()
+            items, next_cursor = await list_review_queue(
+                session, shop_id=scope, after_service_id=int(after_raw) if after_raw.isdigit() else 0
+            )
+            ctx["automation_items"] = items
+            ctx["automation_next"] = next_cursor
+            ctx["automation_labels"] = STATE_LABELS
+            ctx["automation_actions"] = LABELS
+            if scope is None:
+                ctx["automation_missing_bots"] = await shops_without_bot_token(session)
 
         return render(request, "finance.html", ctx)
 
@@ -677,7 +661,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             return Response(status_code=403, content="دسترسی ندارید")
         order, payer_reseller_id = scoped
 
-        token = await _payment_bot_token(
+        token = await payment_bot_token(
             session,
             payment,
             order=order,
@@ -686,7 +670,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         if not token:
             return Response(status_code=503, content="توکن ربات تنظیم نشده")
         try:
-            fetched = await _fetch_telegram_file(token, file_id)
+            fetched = await fetch_telegram_file(token, file_id)
         except Exception:
             logger.exception("receipt getFile failed payment_id=%s", payment_id)
             fetched = None

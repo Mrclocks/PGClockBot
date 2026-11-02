@@ -40,16 +40,43 @@ case "$cmd" in
   status)
     /bin/systemctl status "$SERVICE_NAME" --no-pager
     ;;
+  capabilities)
+    # Features the panel may rely on; an older helper has no such subcommand.
+    echo "san"
+    ;;
   certbot-certonly)
-    # Usage: certbot-certonly <domain> <email> <webroot> [--force]
+    # Usage: certbot-certonly <domain> <email> <webroot> [--force] [--also <domain>]
+    # --also adds one more name to the same certificate (the Mini App domain).
     domain="${2:-}"
     email="${3:-}"
     webroot="${4:-}"
-    force="${5:-}"
+    force=""
+    also=""
     if [[ -z "$domain" || -z "$email" || -z "$webroot" ]]; then
-      echo "usage: pgclockbot-ctl certbot-certonly <domain> <email> <webroot> [--force]" >&2
+      echo "usage: pgclockbot-ctl certbot-certonly <domain> <email> <webroot> [--force] [--also <domain>]" >&2
       exit 2
     fi
+    shift 4
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --force|--force-renewal)
+          force="--force"
+          shift
+          ;;
+        --also)
+          also="${2:-}"
+          if [[ -z "$also" ]] || ! _valid_domain "$also" || [[ "$also" == "$domain" ]]; then
+            echo "invalid extra domain" >&2
+            exit 2
+          fi
+          shift 2
+          ;;
+        *)
+          echo "unknown option" >&2
+          exit 2
+          ;;
+      esac
+    done
     if ! _valid_domain "$domain"; then
       echo "invalid domain" >&2
       exit 2
@@ -90,13 +117,16 @@ case "$cmd" in
       --webroot
       -w "$webroot"
     )
-    if [[ "$force" == "--force" || "$force" == "--force-renewal" ]]; then
+    if [[ -n "$also" ]]; then
+      args+=(-d "$also")
+    fi
+    if [[ "$force" == "--force" ]]; then
       args+=(--force-renewal)
     fi
     exec "$certbot_bin" "${args[@]}"
     ;;
   *)
-    echo "usage: pgclockbot-ctl start|stop|restart|try-restart|enable|disable|is-active|status|certbot-certonly" >&2
+    echo "usage: pgclockbot-ctl start|stop|restart|try-restart|enable|disable|is-active|status|capabilities|certbot-certonly" >&2
     exit 2
     ;;
 esac

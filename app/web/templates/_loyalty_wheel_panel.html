@@ -159,7 +159,7 @@
   <div class="card settings-card">
     <h2>چرخش‌های اخیر</h2>
     <div class="table-wrap">
-      <table class="table-compact">
+      <table class="table-compact table-list-sm">
         <thead>
           <tr>
             <th>شناسه</th>
@@ -167,16 +167,17 @@
             <th>جایزه</th>
             <th>هزینه</th>
             <th>وضعیت</th>
+            <th class="li-head" scope="col"><span class="li-count">{{ wheel_spins | length | num }} چرخش</span></th>
           </tr>
         </thead>
         <tbody>
           {% for row in wheel_spins %}
           <tr>
             <td class="mono">#{{ row.id }}</td>
-            <td>{{ row.user_label }}</td>
-            <td>{{ row.prize_label_snapshot }} <span class="muted">({{ wheel_prize_type_labels.get(row.prize_type, row.prize_type) }})</span></td>
-            <td class="mono">{% if row.used_free_spin %}رایگان{% else %}{{ row.cost_points | num }}{% endif %}</td>
-            <td>{{ row.status }}</td>
+            <td class="li-title"><span dir="auto">{{ row.user_label }}</span> <span class="li-only li-id" dir="ltr">(#{{ row.id }})</span></td>
+            <td class="li-sub"><span dir="auto">{{ row.prize_label_snapshot }}</span> <span class="muted">({{ wheel_prize_type_labels.get(row.prize_type, row.prize_type) }})</span></td>
+            <td class="mono li-value">{% if row.used_free_spin %}رایگان{% else %}{{ row.cost_points | num }}{% endif %}</td>
+            <td class="li-badge"><span class="badge neutral">{{ row.status }}</span></td>
           </tr>
           {% else %}
           <tr><td colspan="5" class="muted">هنوز چرخشی ثبت نشده</td></tr>

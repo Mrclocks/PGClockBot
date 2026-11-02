@@ -50,15 +50,11 @@ class PendingOrderCleanupTests(unittest.TestCase):
 
         self.assertIn("pending_order_cleanup_enabled", DEFAULT_SETTINGS)
         self.assertIn("pending_order_ttl_hours", DEFAULT_SETTINGS)
-        keys = keys_for_tab("payment")
-        self.assertIn("pending_order_cleanup_enabled", keys)
-        self.assertIn("پاکسازی سفارش‌های معلق", TAB_SETTING_GROUPS["payment"])
-        # Auto-cleanup card should sit just above the manual-cancel form (end of payment groups).
-        self.assertEqual(TAB_SETTING_GROUPS["payment"][-1], "پاکسازی سفارش‌های معلق")
-        self.assertLess(
-            TAB_SETTING_GROUPS["payment"].index("روش‌های پرداخت"),
-            TAB_SETTING_GROUPS["payment"].index("پاکسازی سفارش‌های معلق"),
-        )
+        self.assertIn("pending_order_cleanup_enabled", keys_for_tab("cleanup"))
+        self.assertIn("pending_order_approval_ttl_hours", keys_for_tab("cleanup"))
+        self.assertEqual(TAB_SETTING_GROUPS["cleanup"], ["پاکسازی سفارش‌های معلق"])
+        # The cleanup tab owns these keys; saving the payment tab must not touch them.
+        self.assertNotIn("pending_order_cleanup_enabled", keys_for_tab("payment"))
 
     def test_cancel_helper_and_scheduler(self):
         orders = (ROOT / "app/services/orders.py").read_text(encoding="utf-8")

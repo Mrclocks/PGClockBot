@@ -3,8 +3,6 @@ import asyncio
 import importlib.util
 import os
 import secrets
-import shutil
-import subprocess
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -519,11 +517,6 @@ class CustomerFeatureMigrationTests(unittest.TestCase):
                 migration.upgrade()
                 self.assertIn("marketing_preferences", sa.inspect(conn).get_table_names())
         engine.dispose()
-
-    @unittest.skipUnless(shutil.which("node"), "Node unavailable")
-    def test_miniapp_cancellation_interactions(self):
-        result = subprocess.run([shutil.which("node"), str(ROOT / "tests/miniapp_customer_features.test.cjs")], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

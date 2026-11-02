@@ -493,7 +493,7 @@ class GiftCodeRulesTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "role": "reseller",
                     "bot_user_id": 3,
-                    "permissions": ["plans", "orders"],
+                    "permissions": ["gift_codes"],
                 }
             )
             await client.post(

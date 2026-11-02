@@ -10,12 +10,17 @@ from __future__ import annotations
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 from app.db.models import Role
+from app.services.chat_cleanup_config import is_menu_keyboard_persistent
 from app.services.users import on
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 
 # Bind helpers/constants from keyboards after that module has defined them
 # (keyboards imports this module mid-file, once primitives exist).
+from app.bot.keyboard_guard import register_main_keyboard
 from app.bot import keyboards as _k
+import logging
+
+logger = logging.getLogger(__name__)
 
 BTN_CANCEL = "انصراف"
 BTN_RESTART = "🏠 شروع مجدد"  # legacy alias only
@@ -65,6 +70,7 @@ REPLY_ACTION_ADM_LOY_TIERS = _k.REPLY_ACTION_ADM_LOY_TIERS
 REPLY_ACTION_ADM_RES_ADD = _k.REPLY_ACTION_ADM_RES_ADD
 REPLY_ACTION_ADM_RES_APPS = _k.REPLY_ACTION_ADM_RES_APPS
 REPLY_ACTION_ADM_RES_LIST = _k.REPLY_ACTION_ADM_RES_LIST
+REPLY_ACTION_ADM_RES_SEARCH = _k.REPLY_ACTION_ADM_RES_SEARCH
 REPLY_ACTION_ADM_ST_PANEL = _k.REPLY_ACTION_ADM_ST_PANEL
 REPLY_ACTION_ADM_USERS_LIST = _k.REPLY_ACTION_ADM_USERS_LIST
 REPLY_ACTION_ADM_USERS_SEARCH = _k.REPLY_ACTION_ADM_USERS_SEARCH
@@ -124,23 +130,23 @@ def _reply_markup(
     rows: list[list[KeyboardButton]],
     *,
     placeholder: str = "از منوی پایین انتخاب کنید…",
+    persistent: bool = False,
 ) -> ReplyKeyboardMarkup:
     """Standard reply keyboard for bot menus.
 
-    ``is_persistent=False`` (Telegram default): on Android the system back key
-    can hide the custom keyboard first, then leave the chat to the dialog list.
-    With ``is_persistent=True`` clients keep the keyboard forced open, so back
-    often appears broken (cannot reach message list). The 4-square menu icon
-    still reopens the keyboard after hide.
+    ``persistent`` (the bot's «کیبورد همیشه باز» setting, off by default): Telegram shows the
+    menu again as soon as the person closes the phone keyboard after typing. Off, they reopen it
+    with the four-square icon; it was off because on some Android versions the back key then
+    never leaves the chat. The bot never sends a message just to unfold the menu.
 
-    Lasting chrome (never delete the ReplyKeyboard carrier) remains required so
-    iOS does not drop the menu — that is independent of ``is_persistent``.
+    The message carrying the keyboard is never deleted while it is the newest one; deleting it
+    drops the menu on iOS (see ``app.bot.chat_screen``).
     """
     return ReplyKeyboardMarkup(
         keyboard=rows or [[_kb(_home_label(), action=REPLY_ACTION_HOME)]],
         resize_keyboard=True,
         one_time_keyboard=False,
-        is_persistent=False,
+        is_persistent=persistent,
         input_field_placeholder=placeholder,
     )
 
@@ -336,6 +342,7 @@ def _admin_users_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]
 def _admin_resellers_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
         (REPLY_ACTION_ADM_RES_LIST, _t(ui, "btn_adm_res_list")),
+        (REPLY_ACTION_ADM_RES_SEARCH, _t(ui, "btn_adm_res_search")),
         (REPLY_ACTION_ADM_RES_APPS, _t(ui, "btn_adm_res_apps")),
         (REPLY_ACTION_ADM_RES_ADD, _t(ui, "btn_adm_res_add")),
     ]
@@ -576,7 +583,7 @@ def _reseller_submenu_entries(
         if is_payg(profile):
             entries.append(("res_billing", _t(ui, "btn_res_billing")))
     except Exception:
-        pass
+        logger.debug("_reseller_submenu_entries: ignored failure", exc_info=True)
     entries.extend(_reseller_capacity_entries(profile, ui))
     if shop_feature_allowed(key="orders", profile=profile) or shop_feature_allowed(
         key="payments", profile=profile
@@ -616,9 +623,12 @@ def reseller_hub_main_keyboard(
         (REPLY_ACTION_RES_PREVIEW, _t(ui, "btn_adm_preview")),
     ]
     rows = _pack_reply_rows(entries, ui, footer=_restart_footer(ui))
-    return _reply_markup(
-        rows or [[_kb(_home_label(ui), action=REPLY_ACTION_HOME, ui=ui)]],
-        placeholder="از منوی پایین انتخاب کنید…",
+    return register_main_keyboard(
+        _reply_markup(
+            rows or [[_kb(_home_label(ui), action=REPLY_ACTION_HOME, ui=ui)]],
+            placeholder="از منوی پایین انتخاب کنید…",
+            persistent=is_menu_keyboard_persistent(ui),
+        )
     )
 
 
@@ -767,10 +777,14 @@ def main_reply_keyboard(
             _t(ui, "btn_adm_exit_preview") or "🛠 بازگشت به پنل ادمین"
         ).strip()
         entries.append((preview_exit_action, exit_label))
+    # Only the staff preview (which has its own exit row) drops «شروع مجدد»; the
+    # customer keyboard rebuilt after a purchase or receipt keeps it.
     rows = _pack_reply_rows(
-        entries, ui, footer=[] if as_user else _restart_footer(ui)
+        entries, ui, footer=[] if preview_exit_action else _restart_footer(ui)
     )
-    return _reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…")
+    return register_main_keyboard(
+        _reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…", persistent=is_menu_keyboard_persistent(ui))
+    )
 
 
 def admin_reply_keyboard(
@@ -1328,4 +1342,6 @@ def cancel_reply(ui: dict | None = None) -> ReplyKeyboardMarkup:
 def persistent_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
     """Fallback reply keyboard (home only) when role context is unavailable."""
     home = _home_label(ui)
-    return _reply_markup([[_kb(home, action=REPLY_ACTION_HOME, ui=ui)]])
+    return register_main_keyboard(
+        _reply_markup([[_kb(home, action=REPLY_ACTION_HOME, ui=ui)]], persistent=is_menu_keyboard_persistent(ui))
+    )

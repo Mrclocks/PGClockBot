@@ -1,4 +1,4 @@
-"""Failed-delivery list actions on one order: remove the row, refund a stuck order, or record a manual delivery."""
+"""Failed-delivery list actions on one order: remove the row, or close a stuck order (refund, manual delivery, close)."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from app.services.shop_scope import ShopScopeError
 from app.services.stuck_order_resolution import (
     Resolution,
     cancel_and_refund,
+    close_without_refund,
     count_still_stuck,
     mark_delivered_manually,
 )
@@ -75,6 +76,18 @@ def register_delivery_failure_pages(app: FastAPI, *, require_orders: Callable, g
         except (ValueError, ShopScopeError) as exc:
             return _redirect(err=getattr(exc, "message", None) or str(exc))
         return _redirect(ok=f"سفارش #{result.order_id} به‌عنوان تحویل دستی ثبت شد")
+
+    @app.post("/orders/{order_id}/close-stuck-order")
+    async def close_stuck_order(
+        order_id: int,
+        staff: dict = Depends(require_orders),
+        session: AsyncSession = Depends(get_db),
+    ) -> RedirectResponse:
+        try:
+            result = await close_without_refund(session, staff, order_id, actor=_actor(staff))
+        except (ValueError, ShopScopeError) as exc:
+            return _redirect(err=getattr(exc, "message", None) or str(exc))
+        return _redirect(ok=f"سفارش #{result.order_id} بدون بازگشت وجه بسته و از لیست حذف شد")
 
 
 async def _tell_customer(session: AsyncSession, result: Resolution) -> None:

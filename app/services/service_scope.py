@@ -73,21 +73,50 @@ async def list_customer_services(
 SERVICE_SEARCH_MAX_LENGTH = 64
 
 
+def _service_name_clause(text: str) -> ColumnElement[bool]:
+    """Case-insensitive "name contains" filter; rejects empty or oversized search text."""
+    needle = (text or "").strip().lower()
+    if not needle or len(needle) > SERVICE_SEARCH_MAX_LENGTH:
+        raise ValueError("بخشی از نام سرویس را بفرستید (حداکثر ۶۴ حرف).")
+    return func.lower(UserService.pg_username).contains(needle, autoescape=True)
+
+
 async def search_customer_services(
     session: AsyncSession, user_id: int, shop_id: int | None, text: str, *, limit: int
 ) -> list[UserService]:
     """The customer's services in ``shop_id`` whose name contains ``text`` (any letter case)."""
-    needle = (text or "").strip().lower()
-    if not needle or len(needle) > SERVICE_SEARCH_MAX_LENGTH:
-        raise ValueError("بخشی از نام سرویس را بفرستید (حداکثر ۶۴ حرف).")
     query = (
         select(UserService)
         .where(
             UserService.bot_user_id == int(user_id),
             shop_services_clause(shop_id),
-            func.lower(UserService.pg_username).contains(needle, autoescape=True),
+            _service_name_clause(text),
         )
         .order_by(UserService.id.desc())
         .limit(limit)
     )
     return list(await session.scalars(query))
+
+
+async def page_customer_services(
+    session: AsyncSession,
+    user_id: int,
+    shop_id: int | None,
+    *,
+    limit: int,
+    before_id: int | None = None,
+    text: str | None = None,
+) -> tuple[list[UserService], bool]:
+    """One newest-first keyset page of the customer's services in ``shop_id``.
+
+    Returns the page and whether older services remain. ``text`` narrows by name.
+    """
+    query = select(UserService).where(
+        UserService.bot_user_id == int(user_id), shop_services_clause(shop_id)
+    )
+    if before_id is not None:
+        query = query.where(UserService.id < int(before_id))
+    if text is not None and text.strip():
+        query = query.where(_service_name_clause(text))
+    rows = list(await session.scalars(query.order_by(UserService.id.desc()).limit(limit + 1)))
+    return rows[:limit], len(rows) > limit

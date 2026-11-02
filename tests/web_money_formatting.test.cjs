@@ -88,22 +88,18 @@ for (const [name, value] of [["reduction_kind", "amount"], ["reward_type", "wall
   assert.equal(input.value, "1250000");
 }
 
-const source = fs.readFileSync(path.join(__dirname, "../app/web/static/miniapp.js"), "utf8");
-const context = vm.createContext({
-  window: {addEventListener() {}}, location: {hash: ""},
-  document: {getElementById: () => ({}), querySelectorAll: () => []},
-});
-vm.runInContext(fs.readFileSync(path.join(__dirname, "../app/web/static/catalog_price.js"), "utf8"), context);
-vm.runInContext(source.replace(/  load\(\);\s*\}\)\(\);\s*$/, `
-  globalThis.testUI = {money, plansHtml, activityHtml, setCurrency: (value) => {currency = value;}};
-})();`), context);
-const ui = context.testUI;
-assert.equal(ui.money(1250000), "۱,۲۵۰,۰۰۰ تومان");
-assert.equal(ui.money(0), "۰ تومان");
-assert.ok(ui.plansHtml([{id: 1, price: 1250000, name: "<img>", days: 30}]).includes("۱,۲۵۰,۰۰۰"));
-assert.ok(ui.plansHtml([{id: 1, price: 0, name: "<img>"}]).includes("&lt;img&gt;"));
-assert.ok(ui.activityHtml([{amount: -1250000}]).includes("۱,۲۵۰,۰۰۰"));
-ui.setCurrency("<img>");
-assert.ok(ui.plansHtml([{id: 1, price: 1250000}]).includes("&lt;img&gt;"));
-assert.ok(!ui.plansHtml([{id: 1, price: 1250000}]).includes("<img>"));
+const context = vm.createContext({URL, Intl});
+for (const file of ["catalog_price.js", "miniapp/core.js", "miniapp/render.js"]) {
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../app/web/static", file), "utf8"), context);
+}
+const {core, render} = context.PGMini;
+assert.equal(core.money(1250000), "۱,۲۵۰,۰۰۰ تومان");
+assert.equal(core.money(0), "۰ تومان");
+assert.ok(render.planOptionsHtml([{id: 1, price: 1250000, name: "<img>", days: 30}]).includes("۱,۲۵۰,۰۰۰"));
+assert.ok(render.planOptionsHtml([{id: 1, price: 0, name: "<img>"}]).includes("&lt;img&gt;"));
+assert.ok(render.activityHtml([{amount: -1250000}]).includes("۱,۲۵۰,۰۰۰"));
+core.setCurrency("<img>");
+assert.ok(render.planOptionsHtml([{id: 1, price: 1250000}]).includes("&lt;img&gt;"));
+assert.ok(!render.planOptionsHtml([{id: 1, price: 1250000}]).includes("<img>"));
+assert.ok(!render.activityHtml([{amount: 5}]).includes("<img>"));
 console.log("Web monetary inputs and Mini App price formatting passed");

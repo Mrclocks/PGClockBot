@@ -69,7 +69,7 @@ class HealMainReplyTests(unittest.IsolatedAsyncioTestCase):
 
 
 class EmptyFsmServiceActionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_empty_service_id_opens_services_with_heal(self):
+    async def test_empty_service_id_opens_the_services_list(self):
         from app.bot import keyboards as kb
         from app.bot.handlers.reply_nav import reply_main_nav
 
@@ -111,8 +111,7 @@ class EmptyFsmServiceActionTests(unittest.IsolatedAsyncioTestCase):
             )
 
         opened.assert_awaited_once()
-        kwargs = opened.await_args.kwargs
-        self.assertTrue(kwargs.get("heal_reply"))
+        self.assertNotIn("heal_reply", opened.await_args.kwargs)  # the keyboard is never re-sent
         message.answer.assert_not_awaited()  # no dead-end text
 
 

@@ -21,6 +21,39 @@ GB = 1024**3
 PREVIEW_NOTICE = "پیش‌نمایش بر اساس مانده فعلی است؛ مصرف و گذشت زمان تا اجرای تمدید از مانده کم می‌شود."
 
 
+RENEWAL_CURRENT = "current"
+RENEWAL_UPGRADE = "upgrade"
+RENEWAL_DOWNGRADE = "downgrade"
+RENEWAL_LABELS = {
+    RENEWAL_CURRENT: "🔄 پلن فعلی",
+    RENEWAL_UPGRADE: "⬆️ ارتقا",
+    RENEWAL_DOWNGRADE: "⬇️ تنزل",
+}
+
+
+def _plan_size(plan) -> tuple[float, float]:
+    """(volume, days) where an unset or zero value means unlimited."""
+    volume = float(plan.data_limit_gb or 0)
+    days = float(plan.duration_days or 0)
+    return (volume if volume > 0 else math.inf, days if days > 0 else math.inf)
+
+
+def renewal_relation(current_plan, target_plan) -> str | None:
+    """How renewing onto ``target_plan`` compares to the service's plan; None when it is not comparable."""
+    if current_plan is None:
+        return None
+    if int(target_plan.id) == int(current_plan.id):
+        return RENEWAL_CURRENT
+    current, target = _plan_size(current_plan), _plan_size(target_plan)
+    if target == current:
+        return None
+    if all(t >= c for t, c in zip(target, current, strict=True)):
+        return RENEWAL_UPGRADE
+    if all(t <= c for t, c in zip(target, current, strict=True)):
+        return RENEWAL_DOWNGRADE
+    return None
+
+
 class RenewalPendingReview(ValueError):
     def __init__(self):
         super().__init__("نتیجه تمدید نیاز به بررسی پشتیبانی دارد؛ پرداخت شما ثبت شده است. دوباره خرید نکنید.")

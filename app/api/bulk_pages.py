@@ -5,6 +5,10 @@ from __future__ import annotations
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.miniapp_shop import PERMISSION as MINIAPP_PERMISSION
+from app.services.reseller_bots import schedule_shop_menu_sync
+from app.services.shop_permission_grant import GRANT_MINIAPP_ACTION, grant_shop_permission, grant_summary
+
 
 def _bulk_result(
     return_to: str,
@@ -321,11 +325,6 @@ def register_bulk_pages(
             bulk_revoke_resellers,
         )
 
-        try:
-            assert_staff_can_manage_representatives(staff)
-        except RepresentativeUnifyError:
-            return redirect_bulk("/resellers", err="اجازه ندارید")
-
         form = await request.form()
         action = str(form.get("action") or "").strip()
         ids = parse_bulk_ids(form.getlist("ids"))
@@ -334,6 +333,16 @@ def register_bulk_pages(
         )
         if not ids:
             return redirect_bulk(return_to, err="هیچ نماینده‌ای انتخاب نشده")
+        # Same authority as saving a reseller's permissions on its edit page (owner only).
+        if action == GRANT_MINIAPP_ACTION:
+            result = await grant_shop_permission(session, ids, key=MINIAPP_PERMISSION)
+            if result.granted_profile_ids:
+                schedule_shop_menu_sync(result.granted_profile_ids)
+            return redirect_bulk(return_to, **grant_summary(result))
+        try:
+            assert_staff_can_manage_representatives(staff)
+        except RepresentativeUnifyError:
+            return redirect_bulk("/resellers", err="اجازه ندارید")
         from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
 
         reason = extract_delete_reason(form)

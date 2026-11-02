@@ -80,16 +80,28 @@ def build_list_pager(
     }
 
 
+# Letters typed on an Arabic keyboard, and the zero-width joiner, mean the same as their Persian forms.
+SEARCH_LETTER_FOLDS = {"ي": "ی", "ك": "ک", "\u200c": " "}
+_DIGIT_FOLDS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+
+def fold_search_text(raw: str | None) -> str:
+    """Lower-cased text where Arabic ي/ك, half-spaces, Persian digits and repeated spaces cannot hide a match."""
+    text = str(raw or "").casefold().translate(_DIGIT_FOLDS)
+    for arabic, persian in SEARCH_LETTER_FOLDS.items():
+        text = text.replace(arabic, persian)
+    return " ".join(text.split())
+
+
 def text_matches(*parts: Any, needle: str) -> bool:
-    """True when needle is empty or appears in any part (case-insensitive, substring)."""
-    q = normalize_search_q(needle)
-    if not q:
+    """True when needle is empty or appears in any part (case-insensitive, substring, Persian-folded)."""
+    needle_cf = fold_search_text(normalize_search_q(needle))
+    if not needle_cf:
         return True
-    needle_cf = q.casefold()
     for part in parts:
         if part is None:
             continue
-        if needle_cf in str(part).casefold():
+        if needle_cf in fold_search_text(str(part)):
             return True
     return False
 

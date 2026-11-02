@@ -2,6 +2,8 @@ from __future__ import annotations
 
 """Admin Telegram notification preferences and dispatch."""
 
+import html
+import logging
 from typing import Any
 
 from aiogram import Bot
@@ -18,11 +20,15 @@ from app.services.formatting import (
     format_expire,
     format_message,
     format_toman,
-    format_user_label,
     info_block,
     kv_line,
 )
+from app.services.replaceable_notices import replace_notices
+from app.services.ticket_notices import ticket_notice_key
 from app.services.users import get_all_settings, on, set_settings_bulk
+from app.services.chat_records import keeps_sent
+
+logger = logging.getLogger(__name__)
 
 
 def ticket_action_markup(ticket_id: int) -> InlineKeyboardMarkup:
@@ -77,8 +83,14 @@ NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
     ),
     (
         "notify_new_subscription",
-        "اشتراک جدید",
-        "وقتی سرویس/اشتراک جدید تحویل شد (خرید کیف‌پول یا تأیید پرداخت)",
+        "اشتراک جدید / تمدید",
+        "وقتی اشتراک جدید یا تمدید سرویس تحویل شد (خرید کیف‌پول یا تأیید پرداخت)",
+        "1",
+    ),
+    (
+        "notify_trial_claimed",
+        "دریافت اکانت تست",
+        "وقتی کاربری اکانت تست رایگان می‌گیرد — با نام، یوزرنیم و آیدی تلگرام او",
         "1",
     ),
     (
@@ -145,6 +157,7 @@ SHOP_NOTIFY_PERM_MAP: dict[str, frozenset[str]] = {
     "notify_new_subscription": frozenset({"orders", "payments"}),
     "notify_pending_approval": frozenset({"payments"}),
     "notify_new_order": frozenset({"orders"}),
+    "notify_trial_claimed": frozenset({"orders"}),
     "notify_new_ticket": frozenset({"tickets"}),
     "notify_auto_approve": frozenset({"payments"}),
 }
@@ -248,6 +261,7 @@ async def notify_enabled(
     return bool(prefs.get(key, False))
 
 
+@keeps_sent
 async def _send_to_chats(
     bot: Bot,
     chat_ids: list[int],
@@ -310,7 +324,7 @@ async def _send_to_chats(
                         if sent_messages is not None:
                             sent_messages.append(message)
                 except Exception:
-                    pass
+                    logger.debug("_one: ignored failure", exc_info=True)
 
     await asyncio.gather(
         *(_one(admin_id) for admin_id in targets),
@@ -460,8 +474,12 @@ async def _dispatch_dual_notify(
     ticket_reseller_id: object = _TICKET_RID_UNSET,
     platform: bool = True,
     shop: bool = True,
+    replace_key: str | None = None,
 ) -> int:
     """Route staff notifications with hard shop isolation.
+
+    With ``replace_key`` the message replaces the previous one of that key in each chat
+    (``replaceable_notices``) instead of piling up.
 
     Returns the number of successful Telegram deliveries (0 = nobody got it).
 
@@ -477,9 +495,12 @@ async def _dispatch_dual_notify(
     async def _send(send_bot: Bot, targets: list[int]) -> int:
         sent_messages: list[Message] = []
         kwargs = {"markup": markup, "photo": photo}
-        if key == "notify_pending_approval" and payment is not None:
+        if (key == "notify_pending_approval" and payment is not None) or replace_key:
             kwargs["sent_messages"] = sent_messages
         count = await _send_to_chats(send_bot, targets, text, **kwargs)
+        if replace_key:
+            await replace_notices(session, send_bot, replace_key, sent_messages)
+            return count
         if sent_messages:
             from app.services.payment_review_messages import (
                 remember_review_message, sync_review_messages,
@@ -533,7 +554,7 @@ async def _dispatch_dual_notify(
                 try:
                     await shop_bot.session.close()
                 except Exception:
-                    pass
+                    logger.debug("_dispatch_dual_notify: ignored failure", exc_info=True)
 
     # --- Platform-only customers / wallet / account edits ---
     if platform and await notify_enabled(session, key):
@@ -634,6 +655,28 @@ def _approval_markup(
     )
 
 
+def _buyer_lines(user: BotUser | None, telegram_id: int | None = None) -> list[str]:
+    """Who the report is about: name, @username and numeric Telegram id, each on its own line.
+
+    Built from the user row and escaped here, so a customer's name can never break the
+    staff message. The id is plain text (no <code>) so Telegram offers it for copying
+    like any other number; a synthetic placeholder id is not shown.
+    """
+    from app.services.platform_identity import deliverable_telegram_id
+
+    name = (getattr(user, "full_name", None) or "").strip()
+    username = (getattr(user, "username", None) or "").strip().lstrip("@")
+    raw = telegram_id if telegram_id else getattr(user, "telegram_id", None)
+    tid = deliverable_telegram_id(raw) if raw else None
+    label = html.escape(name) if name else (f"@{html.escape(username)}" if username else (str(tid) if tid else "—"))
+    lines = [kv_line("👤", "کاربر", label)]
+    if username and name:
+        lines.append(kv_line("🔗", "یوزرنیم", f"@{html.escape(username)}"))
+    if tid:
+        lines.append(kv_line("🆔", "آیدی", str(tid)))
+    return lines
+
+
 async def notify_new_subscription(
     bot: Bot,
     session: AsyncSession,
@@ -646,12 +689,11 @@ async def notify_new_subscription(
 ) -> None:
     """Inform platform admins and/or shop staff that a subscription was delivered."""
     settings = get_settings()
-    if not user_name:
-        user = await session.get(BotUser, order.user_id) if order.user_id else None
-        user_name = format_user_label(user, telegram_id=user_tg_id)
+    user = await session.get(BotUser, order.user_id) if order.user_id else None
+    _ = user_name  # kept for callers; the report is built from the user row
     lines = [
         kv_line("🧾", "سفارش", f"#{order.id}"),
-        kv_line("👤", "کاربر", user_name or "—"),
+        *_buyer_lines(user, user_tg_id),
         kv_line("💰", "مبلغ", format_toman(order.amount, settings.currency)),
     ]
     addon_details = await _addon_order_detail_lines(session, order)
@@ -662,10 +704,17 @@ async def notify_new_subscription(
     elif plan_name:
         lines.append(kv_line("💎", "پلن", plan_name))
     if order.payment_method and not addon_details:
-        method = "کیف پول" if order.payment_method == "wallet" else "کارت به کارت"
-        lines.append(kv_line("💳", "پرداخت", method))
+        from app.services.payment_method_labels import payment_method_fa
+
+        lines.append(kv_line("💳", "پرداخت", payment_method_fa(order.payment_method)))
     lines.append(kv_line("📌", "وضعیت", "نیاز به تأیید" if needs_approval else "تحویل‌شده"))
-    title = f"➕ {addon_details[0]}" if addon_details else "🆕 اشتراک جدید"
+    note = (order.note or "").strip()
+    if addon_details:
+        title = f"➕ {addon_details[0]}"
+    elif note.startswith("renew:"):
+        title = "🔄 تمدید اشتراک"
+    else:
+        title = "🆕 اشتراک جدید"
     text = format_message(title, info_block(lines))
     markup = _approval_markup(order_id=order.id) if needs_approval else None
     await _dispatch_dual_notify(
@@ -676,6 +725,20 @@ async def notify_new_subscription(
         markup=markup,
         order=order,
     )
+
+
+def _crypto_quote_lines(payment: Payment) -> list[str]:
+    """What the customer was asked to pay in crypto, to check the receipt against."""
+    from app.services.crypto_rates import quote_lines
+
+    quote = quote_lines(payment)
+    if quote is None:
+        return []
+    amount, rate, validity = quote
+    lines = [kv_line("💎", "مبلغ مورد انتظار", html.escape(amount)), kv_line("📈", "نرخ (تومان)", html.escape(rate))]
+    if validity:
+        lines.append(kv_line("⏳", "اعتبار نرخ", html.escape(validity)))
+    return lines
 
 
 async def notify_pending_approval(
@@ -689,12 +752,13 @@ async def notify_pending_approval(
 ) -> None:
     settings = get_settings()
     user = await session.get(BotUser, payment.user_id) if payment.user_id else None
-    user_label = user_name or format_user_label(user, telegram_id=user_tg_id)
+    _ = user_name  # kept for callers; the report is built from the user row
 
     lines = [
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
         kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
-        kv_line("👤", "کاربر", user_label),
+        *_crypto_quote_lines(payment),
+        *_buyer_lines(user, user_tg_id),
     ]
 
     if payment.is_wallet_topup:
@@ -780,17 +844,13 @@ async def _addon_order_detail_lines(
     )
     lines.append(kv_line("🔗", "سرویس", html_mod.escape(service_name)))
     if order.payment_method:
-        methods = {
-            "wallet": "کیف پول",
-            "card": "کارت به کارت",
-            "gateway": "درگاه",
-            "crypto": "رمزارز",
-            "stars": "استارز",
-        }
+        from app.services.payment_method_labels import payment_method_fa
+
         lines.append(
             kv_line(
-                "💳", "روش",
-                html_mod.escape(methods.get(order.payment_method, order.payment_method)),
+                "💳",
+                "روش",
+                html_mod.escape(payment_method_fa(order.payment_method)),
             )
         )
     return label, lines
@@ -895,18 +955,13 @@ async def _pending_order_detail_lines(
             kv_line("📅", "مدت پلن", format_plan_duration_days(plan.duration_days))
         )
     if order.payment_method:
-        method_map = {
-            "wallet": "کیف پول",
-            "card": "کارت به کارت",
-            "gateway": "درگاه",
-            "crypto": "رمزارز",
-            "stars": "استارز",
-        }
+        from app.services.payment_method_labels import payment_method_fa
+
         extras.append(
             kv_line(
                 "💳",
                 "روش",
-                method_map.get(str(order.payment_method), str(order.payment_method)),
+                payment_method_fa(order.payment_method),
             )
         )
     return kind, extras
@@ -922,12 +977,11 @@ async def notify_new_order(
     user_name: str | None = None,
 ) -> None:
     settings = get_settings()
-    if not user_name:
-        user = await session.get(BotUser, order.user_id) if order.user_id else None
-        user_name = format_user_label(user, telegram_id=user_tg_id)
+    user = await session.get(BotUser, order.user_id) if order.user_id else None
+    _ = user_name  # kept for callers; the report is built from the user row
     lines = [
         kv_line("🧾", "سفارش", f"#{order.id}"),
-        kv_line("👤", "کاربر", user_name or "—"),
+        *_buyer_lines(user, user_tg_id),
         kv_line("💰", "مبلغ", format_toman(order.amount, settings.currency)),
     ]
     addon_details = await _addon_order_detail_lines(session, order)
@@ -953,6 +1007,13 @@ async def notify_wallet_topup_ok(
     payment: Payment,
     user_tg_id: int | None,
 ) -> None:
+    """Platform admins: a platform wallet top-up was credited.
+
+    The key is platform-only, so a shop's top-up (``wallet_shop_id`` set) is never
+    announced at all; its staff already reviewed or auto-approved it in their own bot.
+    """
+    if payment.wallet_shop_id is not None:
+        return
     if not await notify_enabled(session, "notify_wallet_topup"):
         return
     settings = get_settings()
@@ -963,7 +1024,7 @@ async def notify_wallet_topup_ok(
             [
                 kv_line("🧾", "پرداخت", f"#{payment.id}"),
                 kv_line("💵", "مبلغ", format_toman(payment.amount, settings.currency)),
-                kv_line("👤", "کاربر", format_user_label(user, telegram_id=user_tg_id)),
+                *_buyer_lines(user, user_tg_id),
                 kv_line("✅", "وضعیت", "تأیید و واریز شد"),
             ]
         ),
@@ -1008,9 +1069,11 @@ async def notify_new_ticket(
         markup=ticket_action_markup(ticket_id),
         ticket_user_id=ticket_user_id,
         ticket_reseller_id=ticket_reseller_id,
+        replace_key=ticket_notice_key(ticket_id),
     )
 
 
+@keeps_sent
 async def notify_ticket_message(
     bot: Bot,
     session: AsyncSession,
@@ -1066,13 +1129,13 @@ async def notify_ticket_message(
                 int(user.telegram_id), text, reply_markup=markup, parse_mode="HTML"
             )
         except Exception:
-            pass
+            logger.debug("notify_ticket_message: ignored failure", exc_info=True)
         finally:
             if close_bot:
                 try:
                     await send_bot.session.close()
                 except Exception:
-                    pass
+                    logger.debug("notify_ticket_message: ignored failure", exc_info=True)
         return
 
     text = format_message(
@@ -1094,23 +1157,106 @@ async def notify_ticket_message(
         markup=markup,
         ticket_user_id=ticket_user_id,
         ticket_reseller_id=ticket_reseller_id,
+        replace_key=ticket_notice_key(ticket_id),
     )
+
+
+def _receipt_photo(payment: Payment) -> str | None:
+    """The receipt as a Telegram file id; internal markers («stars:…», «card_auto:…») are not photos."""
+    file_id = (payment.receipt_file_id or "").strip()
+    return file_id if file_id and ":" not in file_id else None
+
+
+VOID_CALLBACK_PREFIX = "payvoid:v:"
+
+
+def _customer_markup(
+    *,
+    user_id: int | None,
+    service_id: int | None,
+    shop_id: int | None,
+    void_payment_id: int | None = None,
+) -> InlineKeyboardMarkup | None:
+    """Buttons from a staff notice to the customer, their service and the payment's void flow.
+
+    The platform bot opens the platform customer card and the service card; a shop bot only has the
+    shop's customer card (``res:user``), so it never offers a service screen it cannot open. «رد درخواست»
+    opens the existing void card (reason, confirmation, then the order is cancelled and the service
+    disabled); that flow re-checks the staff member's permission on every step.
+    """
+    rows: list[list[InlineKeyboardButton]] = []
+    if user_id and shop_id:
+        rows.append([InlineKeyboardButton(text="👤 کاربر", callback_data=f"res:user:{int(user_id)}")])
+    elif user_id:
+        row = [InlineKeyboardButton(text="👤 کاربر", callback_data=f"adm:users:view:{int(user_id)}")]
+        if service_id:
+            row.append(
+                InlineKeyboardButton(text="📦 سرویس", callback_data=f"adm:users:svc:{int(user_id)}:{int(service_id)}")
+            )
+        rows.append(row)
+    if void_payment_id:
+        rows.append(
+            [InlineKeyboardButton(text="↩️ رد درخواست", callback_data=f"{VOID_CALLBACK_PREFIX}{int(void_payment_id)}")]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+
+
+async def _shop_may_void(session: AsyncSession, shop_id: int | None) -> bool:
+    """The void flow re-checks ``payment_void`` for a shop's staff, so the button is offered only to a shop that has it."""
+    if shop_id is None:
+        return True
+    from app.services.resellers import get_reseller_profile, has_bot_perm
+
+    profile = await get_reseller_profile(session, int(shop_id))
+    return profile is not None and has_bot_perm(profile, "payment_void")
 
 
 async def notify_auto_approve(
     bot: Bot,
     session: AsyncSession,
     payment: Payment,
+    *,
+    reason: str | None = None,
 ) -> None:
-    text = format_message(
-        "⚡ تأیید خودکار",
-        info_block([kv_line("🧾", "پرداخت", f"#{payment.id}"), kv_line("✅", "نتیجه", "خودکار تأیید شد")]),
-    )
+    """Tell the payment's staff an automatic approval happened, with the receipt and the customer's service."""
+    user = await session.get(BotUser, payment.user_id) if payment.user_id else None
+    order = await session.get(Order, payment.order_id) if payment.order_id else None
+    if order is not None:
+        # Delivery set the service id after this session first loaded the order.
+        await session.refresh(order)
+    lines = [
+        kv_line("🧾", "پرداخت", f"#{payment.id}"),
+        kv_line("💰", "مبلغ", format_toman(payment.amount, get_settings().currency)),
+        *_buyer_lines(user),
+    ]
+    if payment.is_wallet_topup:
+        lines.append(kv_line("📦", "نوع", "شارژ کیف پول"))
+    else:
+        kind, detail_lines = await _pending_order_detail_lines(session, order, payment)
+        lines.append(kv_line("📦", "نوع", kind))
+        lines.extend(detail_lines)
+    lines.append(kv_line("✅", "نتیجه", "خودکار تأیید شد"))
+    if reason:
+        lines.append(kv_line("⏱", "علت", html.escape(reason)))
+    shop_id = payment.wallet_shop_id if payment.is_wallet_topup else (order.reseller_id if order else None)
+    is_agency_fee = bool(order and (order.note or "").startswith("reseller_app:"))
+    # Local import: payment_voids imports services that import this module.
+    from app.services.payment_voids import offers_void
+
+    can_void = offers_void(payment, order) and await _shop_may_void(session, shop_id)
+
     await _dispatch_dual_notify(
         bot,
         session,
         "notify_auto_approve",
-        text,
+        format_message("⚡ تأیید خودکار", info_block(lines)),
+        markup=_customer_markup(
+            user_id=payment.user_id,
+            service_id=None if is_agency_fee or order is None else order.service_id,
+            shop_id=shop_id,
+            void_payment_id=payment.id if can_void else None,
+        ),
+        photo=_receipt_photo(payment),
         payment=payment,
         shop=not payment.is_wallet_topup or payment.wallet_shop_id is not None,
     )
@@ -1122,6 +1268,7 @@ async def notify_settlement_review(
     *,
     shop_id: int | None,
     reason: str,
+    title: str = "⚠️ پرداخت «بزن به کارت» نیاز به بررسی دارد",
 ) -> int:
     """Staff of the payment's shop (platform admins for the platform): an automatic
     payment needs a person. Never approves or rejects anything itself."""
@@ -1133,11 +1280,11 @@ async def notify_settlement_review(
     lines = [
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
         kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
-        kv_line("👤", "کاربر", format_user_label(user, telegram_id=getattr(user, "telegram_id", None))),
+        *_buyer_lines(user),
     ]
     if payment.order_id:
         lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
-    text = format_message("⚠️ پرداخت «بزن به کارت» نیاز به بررسی دارد", info_block(lines) + f"\n\n{reason}")
+    text = format_message(title, info_block(lines) + f"\n\n{reason}")
     bot = create_bot()
     try:
         # The settlement's shop is passed as the explicit scope, so shop events never reach platform admins.
@@ -1146,6 +1293,33 @@ async def notify_settlement_review(
         )
     finally:
         await bot.session.close()
+
+
+async def notify_stars_delivery_failed(
+    bot: Bot,
+    session: AsyncSession,
+    payment: Payment,
+    *,
+    telegram_id: int,
+    charge_id: str | None,
+    refunded: bool,
+    error: str,
+) -> int:
+    """Staff of the payment's shop (platform admins for the platform): a paid Stars
+    payment could not be delivered; never reaches another shop's or the platform's staff."""
+    import html as html_mod
+
+    text = format_message(
+        "⚠️ تحویل استارز ناموفق",
+        info_block([
+            kv_line("🧾", "پرداخت", f"#{payment.id}"),
+            kv_line("👤", "کاربر", f"<code>{int(telegram_id)}</code>"),
+            kv_line("🔖", "شناسهٔ پرداخت", f"<code>{html_mod.escape(charge_id or '—')}</code>"),
+            kv_line("↩️", "بازگشت استارز", "انجام شد" if refunded else "ناموفق — دستی بررسی شود"),
+        ]) + f"\n\n<code>{html_mod.escape(error[:300])}</code>",
+    )
+    # A delivery failure, not a review request: no approve buttons to keep in sync.
+    return await _dispatch_dual_notify(bot, session, "notify_panel_delivery_failures", text, payment=payment)
 
 
 async def notify_wireguard_missing(bot: Bot, session: AsyncSession, detail: str) -> int:
@@ -1173,7 +1347,6 @@ async def notify_approved_delivery_stuck(
 
     settings = get_settings()
     user = await session.get(BotUser, payment.user_id) if payment.user_id else None
-    user_label = format_user_label(user, telegram_id=user_tg_id)
     order = (
         await session.get(Order, int(payment.order_id)) if payment.order_id else None
     )
@@ -1193,7 +1366,7 @@ async def notify_approved_delivery_stuck(
     lines = [
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
         kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
-        kv_line("👤", "کاربر", user_label),
+        *_buyer_lines(user, user_tg_id),
         kv_line("✅", "وضعیت پرداخت", "تأیید شده"),
         kv_line("⚠️", "تشخیص", diag.label_fa),
     ]
@@ -1429,18 +1602,42 @@ def format_account_edit_admin(
     return format_message(title, info_block(lines))
 
 
+@keeps_sent
+async def _send_via_shop_bot(session: AsyncSession, shop_id: int, chat_id: int, text: str) -> bool:
+    from app.services.reseller_bots import open_notify_bot_for_reseller
+
+    shop_bot, should_close = await open_notify_bot_for_reseller(session, int(shop_id))
+    if shop_bot is None:
+        return False
+    try:
+        await shop_bot.send_message(chat_id, text, parse_mode="HTML")
+        return True
+    except Exception:
+        logging.getLogger(__name__).warning("account edit notice via shop bot failed shop=%s", shop_id, exc_info=True)
+        return False
+    finally:
+        if should_close:
+            await shop_bot.session.close()
+
+
+@keeps_sent
 async def _send_to_user_chat(
     session: AsyncSession,
     user: BotUser,
     text: str,
+    *,
+    shop_id: int | None = None,
 ) -> bool:
     """Notify the user via main bot and, when available, their shop/reseller bot.
 
     Block / unblock / delete / role messages must reach Telegram even if the person
-    primarily uses a dedicated shop bot — and vice versa.
+    primarily uses a dedicated shop bot — and vice versa. A notice a shop sends
+    (``shop_id``) goes through that shop's bot only.
     """
     if not user.telegram_id:
         return False
+    if shop_id is not None:
+        return await _send_via_shop_bot(session, shop_id, int(user.telegram_id), text)
     from app.bot import create_bot
     from app.services.reseller_bots import open_notify_bot_for_reseller
 
@@ -1460,7 +1657,7 @@ async def _send_to_user_chat(
         finally:
             await bot.session.close()
     except Exception:
-        pass
+        logger.debug("_send_to_user_chat: ignored failure", exc_info=True)
 
     # 2) Also shop bot: customer of a shop, or own reseller dedicated bot
     shop_targets: list[int] = []
@@ -1485,13 +1682,13 @@ async def _send_to_user_chat(
             if tok:
                 tokens_used.add(tok)
         except Exception:
-            pass
+            logger.debug("_send_to_user_chat: ignored failure", exc_info=True)
         finally:
             if should_close and shop_bot is not None:
                 try:
                     await shop_bot.session.close()
                 except Exception:
-                    pass
+                    logger.debug("_send_to_user_chat: ignored failure", exc_info=True)
 
     return sent
 
@@ -1506,10 +1703,13 @@ async def notify_account_edit(
     new_role: str | None = None,
     actor: str | None = None,
     notify_subject: bool = True,
+    shop_id: int | None = None,
 ) -> dict[str, bool]:
     """Notify the affected user and (optionally) platform admins.
 
-    Returns ``{"subject": bool, "admins": bool}``.
+    ``shop_id`` is the shop whose staff made the edit: the customer hears it from that
+    shop's bot only and platform admins get no copy, so a shop's customer actions never
+    leave the shop. Returns ``{"subject": bool, "admins": bool}``.
     """
     result = {"subject": False, "admins": False}
     reason = (reason or "").strip() or None
@@ -1530,9 +1730,9 @@ async def notify_account_edit(
     )
 
     if notify_subject:
-        result["subject"] = await _send_to_user_chat(session, user, subject_text)
+        result["subject"] = await _send_to_user_chat(session, user, subject_text, shop_id=shop_id)
 
-    if await notify_enabled(session, "notify_account_edits"):
+    if shop_id is None and await notify_enabled(session, "notify_account_edits"):
         try:
             from app.bot import create_bot
 

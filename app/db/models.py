@@ -55,6 +55,7 @@ class PaymentStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+    VOIDED = "voided"
 
 
 class TicketStatus(str, Enum):
@@ -259,6 +260,14 @@ class Order(Base):
 
 class Payment(Base):
     __tablename__ = "payments"
+    __table_args__ = (
+        # Receipts waiting for a decision, oldest first: what the scheduled approval scans.
+        Index(
+            "ix_payments_pending_receipt", "receipt_at",
+            sqlite_where=text("status = 'pending' AND receipt_at IS NOT NULL"),
+            postgresql_where=text("status = 'pending' AND receipt_at IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True, index=True)
@@ -267,6 +276,13 @@ class Payment(Base):
     method: Mapped[str] = mapped_column(String(32), default=PaymentMethod.CARD.value)
     status: Mapped[str] = mapped_column(String(32), default=PaymentStatus.PENDING.value, index=True)
     receipt_file_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # When the latest receipt arrived; NULL for payments from before this was recorded (never auto-approved).
+    receipt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Crypto quote shown to the customer: amount in millionths of the asset, toman per unit x 10^4, validity.
+    crypto_asset: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    crypto_amount_micro: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    crypto_rate_scaled: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    crypto_quote_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_wallet_topup: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -350,7 +366,10 @@ class PaymentSettlement(Base):
     # 0 = platform; else reseller user id — for UNIQUE indexes (NULL-safe).
     tenant_key: Mapped[int] = mapped_column(Integer, default=0, index=True)
     channel: Mapped[str] = mapped_column(String(32), index=True)  # psp | card_auto | bbc
-    provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | generic | bezanbecard
+    provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | sunpay | generic | bezanbecard
+    # PSP channel: which of the shop's API gateways (``psp_gateways`` setting) issued the checkout;
+    # NULL = created before several gateways existed (the single configured gateway).
+    gateway_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(
         String(32), default=SettlementStatus.CREATED.value, index=True
     )
@@ -366,6 +385,10 @@ class PaymentSettlement(Base):
     settled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Set by the one caller that sends the delivery of a settled payment (claim, then send).
     notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the PSP poller may re-verify this row next; NULL = not checked yet (due now).
+    next_check_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -383,6 +406,12 @@ class UserService(Base):
             "uq_user_services_imported_pg_user", "pg_user_id", unique=True,
             sqlite_where=text("remark = 'imported'"),
             postgresql_where=text("remark = 'imported'"),
+        ),
+        # New services waiting for the first-use check; the check stamps the row, so it leaves the index.
+        Index(
+            "ix_user_services_first_use_pending", "created_at",
+            sqlite_where=text("first_use_checked_at IS NULL"),
+            postgresql_where=text("first_use_checked_at IS NULL"),
         ),
     )
 
@@ -414,6 +443,10 @@ class UserService(Base):
     )
     quota_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     renew_nudge_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Set when the first-use check ran for this service, whether or not a message was sent.
+    first_use_checked_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     # Shop that sold the service (NULL = platform), written when the service is created.
@@ -460,6 +493,13 @@ class BotUserShop(Base):
     bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
     shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Blocked in this shop only; the account-wide ``BotUser.is_blocked`` stays the owner's.
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    blocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    blocked_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # This shop's private note and risk tag; the platform's own stay on ``BotUser``.
+    staff_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    color_tag: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
 
 class ServiceImportAttempt(Base):
@@ -531,6 +571,50 @@ class PanelAlertState(Base):
     fingerprint: Mapped[str] = mapped_column(String(64), default="", server_default="")
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class VolumeHold(Base):
+    """Volume a shop has promised but not yet recorded on a service, while a panel call runs.
+
+    Counted in the shop's allocation until released or expired, so two concurrent sales cannot
+    both fit into the same free volume. A hold whose panel outcome is unknown simply expires;
+    the service row or the panel sync counts the volume from then on.
+    """
+
+    __tablename__ = "volume_holds"
+    __table_args__ = (Index("ix_volume_holds_shop_expires", "shop_id", "expires_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    hold_key: Mapped[str] = mapped_column(String(96), unique=True)
+    bytes: Mapped[int] = mapped_column(BigInteger)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BotChatMessage(Base):
+    """A message the bot may delete later to keep a private chat tidy (see ``app.bot.chat_cleanup``).
+
+    Kept in the database so a restart does not forget what is still on screen. Telegram lets a
+    bot delete a message only for 48 hours, so older rows are useless and purged.
+    """
+
+    __tablename__ = "bot_chat_messages"
+    __table_args__ = (
+        UniqueConstraint("bot_id", "chat_id", "message_id", name="uq_bot_chat_messages_message"),
+        Index("ix_bot_chat_messages_sent_at", "sent_at"),
+        Index("ix_bot_chat_messages_replace", "bot_id", "replace_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_id: Mapped[int] = mapped_column(BigInteger)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    message_id: Mapped[int] = mapped_column(BigInteger)
+    # "throwaway" (panels, prompts, notices, taps), "home" (a message carrying the main menu) or
+    # "notice" (a system alert that the next alert with the same ``replace_key`` replaces).
+    kind: Mapped[str] = mapped_column(String(16))
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    replace_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
 class ServiceAutomation(Base):
@@ -677,6 +761,15 @@ class BroadcastLog(Base):
     fail_count: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Durable send state: rows written before the queue existed keep status "done".
+    status: Mapped[str] = mapped_column(String(16), default="queued", server_default="done", index=True)
+    cursor_id: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # The user a message is being sent to; left set after a crash, the outcome is then unknown.
+    inflight_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    review_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ResellerProfile(Base):
@@ -709,6 +802,8 @@ class ResellerProfile(Base):
     bot_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
     # Extra Telegram IDs that get reseller panel on THIS shop's dedicated bot only
     bot_admin_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV
+    # Random public key in this shop's Mini App address; the shop bot's token still signs every request.
+    miniapp_key: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, unique=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # --- Unified Billing (PAYG vs fixed package type) ---
     billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")  # fixed | payg
@@ -731,6 +826,18 @@ class ResellerProfile(Base):
     # After True: shop wallet is SoT; billing_balance is kept as a mirror
     payg_wallet_linked: Mapped[bool] = mapped_column(Boolean, default=False)
     capacity_warned_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # When False, allocated UserService volume cannot exceed PgAdminSubscription ceiling.
+    # Migration default True keeps existing shops open; new profiles set False in code.
+    allow_volume_oversell: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("true")
+    )
+    # Volume of PasarGuard users not present in UserService (refreshed by sync job).
+    external_allocated_bytes: Mapped[int] = mapped_column(
+        BigInteger, default=0, server_default=text("0")
+    )
+    external_alloc_synced_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -1570,6 +1677,33 @@ class TermsAcceptance(Base):
     )
 
 
+class PaymentVoid(Base):
+    """Audit and retry state of one approved payment that an operator voided.
+
+    ``service_ids`` is the target saved before the panel is touched, so a retry after an
+    unknown outcome disables exactly the same services.
+    """
+
+    __tablename__ = "payment_voids"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    payment_id: Mapped[int] = mapped_column(
+        ForeignKey("payments.id", ondelete="CASCADE"), unique=True
+    )
+    shop_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    actor: Mapped[str] = mapped_column(String(128))
+    reason: Mapped[str] = mapped_column(Text)
+    refund_amount: Mapped[int] = mapped_column(BigInteger, default=0, server_default=text("0"))
+    status: Mapped[str] = mapped_column(String(16), default="processing", index=True)
+    service_ids: Mapped[str] = mapped_column(Text, default="[]", server_default=text("'[]'"))
+    lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ServiceCancellation(Base):
     __tablename__ = "service_cancellations"
     __table_args__ = (Index("ix_service_cancellations_notification", "notification_status", "id"), Index(
@@ -1751,3 +1885,76 @@ class ConnectionMonitorSnapshot(Base):
     has_observation: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     recovery_required: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     samples_json: Mapped[str] = mapped_column(Text, server_default="[]")
+
+
+class ShopStaffAction(Base):
+    """Who on a shop's staff did what, written in the same transaction as the change itself.
+
+    ``shop_id`` is NULL for the platform shop. Ids are plain integers on purpose: the record
+    outlives a deleted customer, staff member or shop.
+    """
+
+    __tablename__ = "shop_staff_actions"
+    __table_args__ = (
+        Index("ix_shop_staff_actions_shop_id_id", "shop_id", "id"),
+        Index(
+            "uq_shop_staff_actions_request_key",
+            "request_key",
+            unique=True,
+            sqlite_where=text("request_key IS NOT NULL"),
+            postgresql_where=text("request_key IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    actor_kind: Mapped[str] = mapped_column(String(16))
+    actor_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    actor_label: Mapped[str] = mapped_column(String(128))
+    action: Mapped[str] = mapped_column(String(48))
+    target_type: Mapped[str] = mapped_column(String(32))
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    amount: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    request_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ShopWalletAdjustDay(Base):
+    """How much one shop's staff changed customer wallets by hand on one UTC day.
+
+    The daily cap is enforced with a conditional UPDATE on this row, so two requests at the
+    same moment cannot both pass it.
+    """
+
+    __tablename__ = "shop_wallet_adjust_days"
+    __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_wallet_adjust_days_shop_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    day: Mapped[str] = mapped_column(String(10))
+    used: Mapped[int] = mapped_column(BigInteger, server_default="0")
+
+
+class ShopPointsAdjustDay(Base):
+    """How many loyalty points one shop's staff changed by hand on one UTC day (daily cap)."""
+
+    __tablename__ = "shop_points_adjust_days"
+    __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_points_adjust_days_shop_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    day: Mapped[str] = mapped_column(String(10))
+    used: Mapped[int] = mapped_column(BigInteger, server_default="0")
+
+
+class ShopBroadCampaignDay(Base):
+    """How many campaigns to a shop's whole audience it created on one UTC day (daily cap)."""
+
+    __tablename__ = "shop_broad_campaign_days"
+    __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_broad_campaign_days_shop_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    day: Mapped[str] = mapped_column(String(10))
+    used: Mapped[int] = mapped_column(BigInteger, server_default="0")

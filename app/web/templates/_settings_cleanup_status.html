@@ -1,0 +1,23 @@
+{# Cleanup tab summary: orders ready to cancel now and the last run. Expects cleanup_status. #}
+<div class="card settings-card">
+  <h2>وضعیت پاکسازی</h2>
+  <p class="muted update-card-caption">
+    بر اساس مهلت‌های ذخیره‌شده؛ بعد از تغییر مهلت‌ها اول ذخیره کنید.
+  </p>
+  <div class="home-panel-grid">
+    <div class="stat">
+      <div class="stat-top"><span>آمادهٔ لغو</span></div>
+      <strong>{{ cleanup_status.ready_count | num }}</strong>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>آخرین اجرا</span></div>
+      {% if cleanup_status.last_run %}
+      <strong><bdi dir="ltr">{{ cleanup_status.last_run }}</bdi></strong>
+      <span>{{ cleanup_status.last_count | num }} سفارش لغو شد</span>
+      {% else %}
+      <strong>—</strong>
+      <span>هنوز اجرا نشده</span>
+      {% endif %}
+    </div>
+  </div>
+</div>

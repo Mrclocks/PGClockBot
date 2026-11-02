@@ -20,6 +20,9 @@ from app.services.plans_catalog import (
 )
 from app.services.resellers import has_bot_perm
 from app.services import bot_feedback_texts as feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 # The shop plans screen: add / catalog actions and the plan list.
 PLANS_SCREEN = "res:plans"
@@ -313,7 +316,7 @@ async def res_plan_delete(callback: CallbackQuery, session: AsyncSession, db_use
         try:
             await session.rollback()
         except Exception:
-            pass
+            logger.debug("res_plan_delete: ignored failure", exc_info=True)
         msg = e.message if len(e.message) <= 180 else e.message[:177] + "…"
         await callback.answer(msg, show_alert=True)
         return

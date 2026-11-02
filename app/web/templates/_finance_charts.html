@@ -1,0 +1,32 @@
+{# Orders and new users per day, drawn by sales-chart.js like the dashboard's sales chart — expects: charts (finance_charts), report #}
+{% from "macros.html" import card_title %}
+{% set ch = charts or {} %}
+{% set first_days = 30 if (report and report.period == 'month') else 7 %}
+{% macro count_chart(label, icon, series, noun, prev_none, empty_text, first_days, extra_key='', extra_noun='') %}
+{% set s7 = series[7] if series else none %}
+{% set s30 = series[30] if series else none %}
+{% set shown = s30 if first_days == 30 else s7 %}
+<section class="card home-sales-card" aria-label="{{ label }}" data-sales-chart
+  data-metric="value" data-unit="count" data-noun="{{ noun }}" data-title="{{ label }}" data-prev-none="{{ prev_none }}"
+  data-initial-days="{{ first_days }}"{% if extra_key %} data-extra="{{ extra_key }}" data-extra-noun="{{ extra_noun }}"{% endif %}
+  {% if s7 %} data-trend='{{ s7 | tojson }}'{% endif %}{% if s30 %} data-trend-30='{{ s30 | tojson }}'{% endif %}>
+  <div class="home-sales-head">
+    {{ card_title(icon, label) }}
+    <div class="sales-seg" role="group" aria-label="بازهٔ نمودار">
+      <button type="button"{% if first_days == 7 %} class="on"{% endif %} data-range="7" aria-pressed="{{ 'true' if first_days == 7 else 'false' }}">7 روز</button>
+      <button type="button"{% if first_days == 30 %} class="on"{% endif %} data-range="30" aria-pressed="{{ 'true' if first_days == 30 else 'false' }}">30 روز</button>
+    </div>
+  </div>
+  <div class="sales-total">
+    <strong data-total>{% if shown %}{{ shown.total | num }} {{ noun }}{% else %}—{% endif %}</strong>
+    <span class="sales-delta flat" data-delta></span>
+  </div>
+  <div class="sales-plot-wrap"><div class="sales-plot" data-plot tabindex="0" role="img" aria-label="{{ label }}"></div></div>
+  <p class="muted sales-empty" data-empty{% if shown and shown.has_data %} hidden{% endif %}>{{ empty_text }}</p>
+  <p class="muted sales-error" data-error>دریافت نمودار ممکن نشد؛ صفحه را دوباره باز کنید.</p>
+</section>
+{% endmacro %}
+<div class="fin-charts">
+  {{ count_chart('سفارش‌ها', 'orders', ch.orders, 'سفارش', 'دورهٔ قبل سفارشی نداشت', 'در این بازه سفارشی ثبت نشده است.', first_days, 'extra', 'تحویل‌شده') }}
+  {{ count_chart('کاربران جدید', 'users', ch.new_users, 'کاربر', 'دورهٔ قبل کاربر جدیدی نداشت', 'در این بازه کاربر جدیدی اضافه نشده است.', first_days) }}
+</div>

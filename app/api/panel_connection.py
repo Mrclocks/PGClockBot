@@ -5,7 +5,11 @@ from __future__ import annotations
 from starlette.requests import Request
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.services.pg_read_cache import begin_last_good_notice
 from app.services.pg_read_resilience import finish_web_read_budget, web_read_budget
+
+# Automatic polling: honours a read pause but cannot start one for everyone.
+BACKGROUND_READ_PATHS = frozenset({"/pg/metrics"})
 
 
 def finish_panel_authentication(request: Request) -> None:
@@ -23,8 +27,9 @@ class PanelConnectionMiddleware:
         if scope["type"] != "http" or path.startswith(("/api/", "/static/")):
             await self.app(scope, receive, send)
             return
-        with web_read_budget() as budget:
+        with web_read_budget(background=path in BACKGROUND_READ_PATHS) as budget:
             scope.setdefault("state", {})["pg_read_budget"] = budget
+            scope["state"]["pg_last_good"] = begin_last_good_notice()
 
             async def send_status(message: Message) -> None:
                 if message["type"] == "http.response.start" and budget.failure:

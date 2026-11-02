@@ -145,6 +145,88 @@ class DomainModalTemplateTests(unittest.TestCase):
             )
 
 
+class PaymentSettingsModalUxTests(unittest.TestCase):
+    def test_method_settings_cards_are_gated_by_toggle(self):
+        form = (TEMPLATES / "_domain_settings_form.html").read_text(encoding="utf-8")
+        self.assertIn("pay_settings_gate", form)
+        self.assertIn('data-pay-settings-for="{{ gate_key }}"', form)
+        for key in (
+            "pay_card_enabled",
+            "pay_card_auto_enabled",
+            "pay_gateway_enabled",
+            "pay_psp_enabled",
+            "pay_bbc_enabled",
+            "pay_crypto_enabled",
+            "pay_stars_enabled",
+        ):
+            self.assertIn(key, form)
+        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertIn("function syncPaySettingsCards", js)
+        self.assertIn("data-pay-settings-for", js)
+
+    def test_gated_card_hidden_when_method_off(self):
+        from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+        from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS
+
+        env = Environment(
+            loader=FileSystemLoader(str(TEMPLATES)),
+            autoescape=select_autoescape(["html", "xml"]),
+        )
+        tpl = env.get_template("_domain_settings_form.html")
+        tab_groups = TAB_SETTING_GROUPS["payment"]
+        groups = {name: SETTING_GROUPS[name] for name in tab_groups}
+        values = {key: "0" for key in (
+            "pay_card_enabled",
+            "pay_card_auto_enabled",
+            "pay_gateway_enabled",
+            "pay_psp_enabled",
+            "pay_bbc_enabled",
+            "pay_crypto_enabled",
+            "pay_stars_enabled",
+        )}
+        html = tpl.render(
+            settings_form_action="/settings?tab=payment",
+            tab_groups=tab_groups,
+            groups=groups,
+            values=values,
+            show_pending_orders=False,
+            style_options=[],
+        )
+        self.assertIn('data-pay-settings-for="pay_card_enabled" hidden', html)
+        self.assertIn('data-pay-settings-for="pay_bbc_enabled" hidden', html)
+        # Methods card itself is always visible (holds the toggles)
+        self.assertIn(">روش‌های پرداخت<", html)
+        self.assertNotIn('data-pay-settings-for="pay_wallet_enabled"', html)
+
+        values["pay_card_enabled"] = "1"
+        html_on = tpl.render(
+            settings_form_action="/settings?tab=payment",
+            tab_groups=tab_groups,
+            groups=groups,
+            values=values,
+            show_pending_orders=False,
+            style_options=[],
+        )
+        self.assertIn('data-pay-settings-for="pay_card_enabled"', html_on)
+        self.assertNotIn('data-pay-settings-for="pay_card_enabled" hidden', html_on)
+
+    def test_long_setting_help_collapses_behind_details(self):
+        macros = (TEMPLATES / "macros.html").read_text(encoding="utf-8")
+        field = (TEMPLATES / "_settings_field.html").read_text(encoding="utf-8")
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn("{% macro setting_help(", macros)
+        self.assertIn("setting-help-summary", macros)
+        self.assertIn("راهنما", macros)
+        self.assertIn('from "macros.html" import setting_help', field)
+        self.assertIn("{{ setting_help(help) }}", field)
+        self.assertIn(".setting-help {", css)
+        from app.services.users import SETTING_GROUPS
+
+        bbc = next(f for f in SETTING_GROUPS["روش‌های پرداخت"] if f[0] == "pay_bbc_enabled")
+        self.assertGreater(len(bbc[3]), 70)
+
+
 class DomainSettingGroupsTests(unittest.TestCase):
     def test_support_and_referral_groups_split(self):
         from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, keys_for_tab

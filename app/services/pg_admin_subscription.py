@@ -23,6 +23,7 @@ from app.db.models import (
 )
 from app.services.billing import GB, is_payg
 from app.services.formatting import format_toman
+from app.services.volume_allocation_cascade import assert_child_growth_fits, assert_parent_has_room
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,10 @@ def _parse_id_list(raw: str | None) -> list[int]:
 
 def _dump_id_list(ids: list[int]) -> str:
     return json.dumps([int(x) for x in ids], separators=(",", ":"))
+
+
+def _total_gb(sub: PgAdminSubscription | None) -> int:
+    return int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0) if sub is not None else 0
 
 
 def _utcnow() -> datetime:
@@ -259,6 +264,31 @@ def format_renew_invoice_html(invoice: dict[str, Any], *, currency: str = "تو�
     return "\n".join(lines)
 
 
+def plan_admin_limits(plan: ResellerPlan, *, current_overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Panel admin fields for a package's volume and user cap; empty when the package sets none.
+
+    PasarGuard replaces ``permission_overrides`` as a whole, so the admin's other override keys
+    (for example a per-user device cap) are carried over.
+    """
+    return _capacity_payload(
+        int(getattr(plan, "included_gb", 0) or 0),
+        int(getattr(plan, "included_users", 0) or 0),
+        current_overrides,
+    )
+
+
+def _capacity_payload(total_gb: int, total_users: int, current_overrides: dict[str, Any] | None) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if total_gb > 0:
+        payload["data_limit"] = int(total_gb * GB)
+    if total_users > 0:
+        overrides = {k: v for k, v in (current_overrides or {}).items() if v is not None}
+        overrides["max_users"] = int(total_users)
+        payload["max_users"] = int(total_users)
+        payload["permission_overrides"] = overrides
+    return payload
+
+
 async def _apply_pg_capacity(
     pg,
     username: str,
@@ -266,19 +296,31 @@ async def _apply_pg_capacity(
     total_gb: int,
     total_users: int,
 ) -> None:
-    """Set admin data_limit / max_users from local SoT totals."""
+    """Set admin data_limit / max_users from local SoT totals; 0 leaves that limit as it is."""
     uname = normalize_pg_username(username)
     if not uname:
         return
-    payload: dict[str, Any] = {}
-    if total_gb > 0:
-        payload["data_limit"] = int(total_gb * GB)
+    current: dict[str, Any] | None = None
     if total_users > 0:
-        payload["max_users"] = int(total_users)
-        payload["permission_overrides"] = {"max_users": int(total_users)}
+        admin = await pg.get_admin(uname)
+        if isinstance(admin, dict) and isinstance(admin.get("permission_overrides"), dict):
+            current = admin["permission_overrides"]
+    payload = _capacity_payload(total_gb, total_users, current)
     if not payload:
         return
     await pg.modify_admin(uname, payload)
+
+
+async def assert_new_admin_fits_owner_budget(session: AsyncSession, plan: ResellerPlan, pg_username: str) -> None:
+    """Refuse a package for a panel admin about to be created when the owner's panel budget is full."""
+    if not is_subscription_plan(plan) or is_current_capacity_plan(plan):
+        return
+    await _assert_owner_capacity_budget(
+        session,
+        target_pg_username=pg_username,
+        next_total_gb=max(0, int(getattr(plan, "included_gb", 0) or 0)),
+        next_total_users=max(0, int(getattr(plan, "included_users", 0) or 0)),
+    )
 
 
 async def _assert_owner_capacity_budget(
@@ -324,6 +366,10 @@ async def _assert_owner_capacity_budget(
     sold_gb = 0
     sold_users = 0
     target = normalize_pg_username(target_pg_username)
+    if target not in {normalize_pg_username(getattr(row, "pg_username", None)) for row in rows}:
+        # An admin about to be created has no subscription row yet; it still sells its capacity.
+        sold_gb += max(0, int(next_total_gb))
+        sold_users += max(0, int(next_total_users))
     for row in rows:
         uname = normalize_pg_username(getattr(row, "pg_username", None))
         if not uname or uname == owner_username:
@@ -403,6 +449,7 @@ async def start_or_refresh_subscription(
     # PAYG: no time clock (current_capacity is always fixed billing)
     if str(getattr(plan, "billing_mode", "") or "").lower() == "payg" and not preserve:
         sub = await get_or_create_subscription(session, pg_username)
+        previous_gb = _total_gb(sub)
         sub.plan_id = int(plan.id)
         sub.access_status = STATUS_ACTIVE
         sub.expires_at = None
@@ -413,12 +460,14 @@ async def start_or_refresh_subscription(
             sub.extra_users_purchased = 0
         sub.started_at = sub.started_at or _utcnow()
         await session.flush()
+        await assert_parent_has_room(session, pg_username=sub.pg_username, previous_total_gb=previous_gb)
         if apply_pg_limits and (sub.base_gb or sub.base_users):
             await sync_pg_capacity_from_sub(session, sub)
         return sub
 
     base_gb, base_users = await _resolve_base()
     sub = await get_or_create_subscription(session, pg_username)
+    previous_gb = _total_gb(sub)
     now = _utcnow()
     days = max(0, int(getattr(plan, "duration_days", 0) or 0))
     sub.plan_id = int(plan.id)
@@ -439,6 +488,7 @@ async def start_or_refresh_subscription(
     await session.flush()
     # A current_capacity grant records what the admin already has; it does not sell anything new.
     if not preserve:
+        await assert_parent_has_room(session, pg_username=sub.pg_username, previous_total_gb=previous_gb)
         await _assert_owner_capacity_budget(
             session,
             target_pg_username=sub.pg_username,
@@ -608,6 +658,12 @@ async def renew_subscription(
     if claimed.rowcount != 1:
         raise ValueError("تمدید هم‌زمان در حال انجام است — کمی بعد دوباره تلاش کنید")
     await session.refresh(sub)
+    if not is_current_capacity_plan(plan):
+        # Checked before the charge; the parent stays locked until this renewal commits.
+        await assert_child_growth_fits(
+            session, pg_username=sub.pg_username,
+            add_gb=max(0, int(getattr(plan, "included_gb", 0) or 0)) - int(sub.base_gb or 0),
+        )
 
     invoice = compute_renew_invoice(plan, sub)
     amount = int(invoice["total"])
@@ -723,6 +779,8 @@ async def apply_addon_plan(
             raise ValueError("تعداد کاربر بسته نامعتبر است")
         add_gb = 0
 
+    # Checked before the charge; the parent stays locked until this purchase commits.
+    await assert_child_growth_fits(session, pg_username=sub.pg_username, add_gb=add_gb)
     price = max(0, int(getattr(addon_plan, "price", 0) or 0))
     if charge_wallet:
         if payer is None:
@@ -788,11 +846,13 @@ async def record_unit_extra(
     if not uname:
         return None
     sub = await get_or_create_subscription(session, uname)
+    previous_gb = _total_gb(sub)
     if gb:
         sub.extra_gb_purchased = int(sub.extra_gb_purchased or 0) + max(0, int(gb))
     if users:
         sub.extra_users_purchased = int(sub.extra_users_purchased or 0) + max(0, int(users))
     await session.flush()
+    await assert_parent_has_room(session, pg_username=sub.pg_username, previous_total_gb=previous_gb)
     await _assert_owner_capacity_budget(
         session,
         target_pg_username=sub.pg_username,
@@ -969,6 +1029,7 @@ async def admin_adjust_reseller_subscription(
         else:
             sub.expires_at = cur_exp + timedelta(days=days_n)
 
+    previous_gb = _total_gb(sub)
     if gb_n != 0:
         base = max(0, int(sub.base_gb or 0))
         extra = max(0, int(sub.extra_gb_purchased or 0))
@@ -983,6 +1044,7 @@ async def admin_adjust_reseller_subscription(
                 sub.base_gb = max(0, base - remain)
 
     await session.flush()
+    await assert_parent_has_room(session, pg_username=sub.pg_username, previous_total_gb=previous_gb)
     await _assert_owner_capacity_budget(
         session,
         target_pg_username=sub.pg_username,

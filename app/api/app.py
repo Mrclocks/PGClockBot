@@ -41,8 +41,11 @@ from app.services.orders import (
 from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
 from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
 from app.services.chat_cleanup_config import chat_cleanup_payload
+from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
+from app.services.miniapp_branding import ACCENT_PRESETS
+from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 from app.services.payer_notify import notify_payer
 from app.services.resellers import (
     setup_is_complete,
@@ -78,10 +81,21 @@ from app.services.security_policy import (
 )
 from app.services.updates import local_version
 from app.services.message_variables import template_variable_specs
+from app.services.psp_gateways import psp_gateways_form_json
 from app.services.panel_assets import get_panel_asset_cache_key
 from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.panel_brand import (
+    BRAND_PRESET_CSS,
+    DEFAULT_BRAND,
+    DEFAULT_COLOR_HEX,
+    DEFAULT_COLOR_LABEL,
+    PRESETS as BRAND_PRESETS,
+    brand_for_staff,
+    load_own_values,
+)
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
+    SETTING_VISIBILITY,
     SETTINGS_DOMAIN_REDIRECTS,
     SETTING_GROUPS,
     SETTINGS_TABS,
@@ -104,10 +118,18 @@ from app.services.web_auth import (
 from app.api.catalog_discounts import register_catalog_discounts
 from app.api.connection_status_pages import register_connection_status_pages
 from app.api.funnel_pages import register_funnel_pages
+from app.api.order_purge_pages import register_order_purge_pages
+from app.api.staff_audit_pages import register_staff_audit_pages
+from app.api.shop_wallet_pages import register_shop_wallet_pages
+from app.api.shop_points_pages import register_shop_points_pages
+from app.api.shop_customer_block_pages import register_shop_customer_block_pages
+from app.api.panel_brand_pages import register_panel_brand_pages
+from app.api.trial_users_pages import register_trial_users_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
 from app.api.bot_overview_pages import register_bot_overview_pages
 from app.api.dashboard_trend_pages import register_dashboard_trend_pages
 from app.services.backup_settings import apply_backup_retention, normalize_backup_payload
+from app.services.bbc_settlement import bbc_enable_error
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
 from app.api.service_import_pages import register_service_import_pages
@@ -118,6 +140,8 @@ from app.api.login_guard import (
     login_fail as _login_fail,
     login_success as _login_success,
 )
+
+logger = logging.getLogger(__name__)
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
@@ -133,6 +157,15 @@ templates.env.filters["expire"] = format_expire_short
 templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
 templates.env.globals["app_version"] = local_version()
+templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
+templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
+templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
+templates.env.globals["brand_presets"] = BRAND_PRESETS
+# Request context overrides these; they keep templates that render without a signed-in person working.
+templates.env.globals["panel_brand"] = DEFAULT_BRAND
+templates.env.globals["panel_brand_css"] = BRAND_PRESET_CSS
+templates.env.globals["default_brand_color_hex"] = DEFAULT_COLOR_HEX
+templates.env.globals["default_brand_color_label"] = DEFAULT_COLOR_LABEL
 templates.env.globals["panel_script_cache_key"] = get_panel_asset_cache_key("panel.js")
 templates.env.globals["panel_widget_cache_key"] = get_panel_asset_cache_key("panel_widget_request.js")
 templates.env.globals["money_inputs_cache_key"] = get_panel_asset_cache_key("money-inputs.js")
@@ -157,7 +190,7 @@ templates.env.globals["template_variable_specs"] = template_variable_specs
 def render_panel_status(
     request: Request,
     *,
-    code: int,
+    code: int | str,
     title: str,
     message: str,
     ref: str | None = None,
@@ -170,38 +203,37 @@ def render_panel_status(
     code_block: str | None = None,
     guide_note: str | None = None,
     footer: str | None = None,
+    http_status: int | None = None,
+    watermark: str | None = None,
+    kicker: str | None = None,
+    body_html: str = "",
+    show_close_button: bool = False,
+    close_button_label: str = "بستن",
 ):
-    """Shared branded status page (404 / 403 / 500 / setup gate)."""
-    from app.version import __version__ as _ver
+    """Shared branded status page (404 / 403 / 500 / setup gate / payment returns)."""
+    from app.api.status_render import render_status_page
 
-    try:
-        from app.services.pwa import panel_display_name
-
-        pname = panel_display_name()
-    except Exception:
-        pname = "MrClockBot"
-    return templates.TemplateResponse(
+    return render_status_page(
         request,
-        "panel_status.html",
-        {
-            "code": int(code),
-            "title": title,
-            "message": message,
-            "ref": ref,
-            "primary_href": primary_href or "",
-            "primary_label": primary_label,
-            "secondary_href": secondary_href or "",
-            "secondary_label": secondary_label,
-            "guide_heading": guide_heading or "",
-            "guide_steps": guide_steps or [],
-            "code_block": code_block or "",
-            "guide_note": guide_note or "",
-            "footer": footer
-            or "اگر مشکل ادامه داشت، از حساب خارج شوید و دوباره وارد شوید.",
-            "app_version": _ver,
-            "pwa_name": pname,
-        },
-        status_code=int(code),
+        kind=code,
+        title=title,
+        message=message,
+        http_status=http_status,
+        watermark=watermark,
+        kicker=kicker,
+        ref=ref,
+        primary_href=primary_href,
+        primary_label=primary_label,
+        secondary_href=secondary_href,
+        secondary_label=secondary_label,
+        guide_heading=guide_heading,
+        guide_steps=guide_steps,
+        code_block=code_block,
+        guide_note=guide_note,
+        body_html=body_html,
+        footer=footer,
+        show_close_button=show_close_button,
+        close_button_label=close_button_label,
     )
 
 
@@ -266,6 +298,8 @@ def render(request: Request, name: str, context: dict | None = None, status_code
         nonce = _secrets.token_urlsafe(16)
         request.state.csp_nonce = nonce
     ctx.setdefault("csp_nonce", nonce)
+    ctx.setdefault("panel_brand", getattr(request.state, "panel_brand", None) or DEFAULT_BRAND)
+    ctx.setdefault("panel_brand_css", BRAND_PRESET_CSS)
     if "pwa_name" not in ctx:
         try:
             from app.services.pwa import panel_display_name
@@ -337,7 +371,7 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             )
             request.state.csrf_token_set = False
     except Exception:
-        pass
+        logger.debug("render: ignored failure", exc_info=True)
     return response
 
 
@@ -380,7 +414,7 @@ def _cookie_secure(request: Request) -> bool:
             if fwd == "https":
                 return True
     except Exception:
-        pass
+        logger.debug("_cookie_secure: ignored failure", exc_info=True)
     return request.url.scheme == "https"
 
 
@@ -472,7 +506,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             name="acme_challenge",
         )
     except Exception:
-        pass
+        logger.debug("create_api_app: ignored failure", exc_info=True)
 
     def get_signer() -> URLSafeTimedSerializer:
         # Never fall back to a hardcoded or process-only secret.
@@ -768,6 +802,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.db_safe import recover_session
 
         await recover_session(session)
+        # Header brand of the shop this person works for (default on any failure).
+        request.state.panel_brand = await brand_for_staff(session, user)
         finish_panel_authentication(request)
         return user
 
@@ -1049,7 +1085,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         ):
                             allowed = True
                     except Exception:
-                        pass
+                        logger.debug("csrf_origin_guard: ignored failure", exc_info=True)
                 if not allowed:
                     return _csrf_reject(
                         "درخواست امنیتی رد شد؛ صفحه را تازه کنید و دوباره تلاش کنید."
@@ -1435,6 +1471,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    from app.api.reseller_subscription_pages import register_reseller_subscription_pages
+    register_reseller_subscription_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     from app.api.settlement_pages import register_settlement_pages
 
     register_settlement_pages(app, get_db=get_db)
@@ -1460,6 +1498,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         get_db=get_db,
     )
     register_guide_media_pages(
+        app, require_admin=require_admin, require_shop_settings=require_perm("shop_settings"), get_db=get_db
+    )
+    from app.api.miniapp_brand_pages import register_miniapp_brand_pages
+
+    register_miniapp_brand_pages(
         app, require_admin=require_admin, require_shop_settings=require_perm("shop_settings"), get_db=get_db
     )
     from app.api.loyalty_pages import register_loyalty_pages
@@ -1499,15 +1542,42 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    from app.api.miniapp_codes import register_miniapp_codes
+    from app.api.miniapp_feeds import register_miniapp_feeds
+    from app.api.miniapp_guides import register_miniapp_guides
+    from app.api.miniapp_loyalty import register_miniapp_loyalty
     from app.api.miniapp_pages import register_miniapp_pages
+    from app.api.miniapp_review import register_miniapp_review
+    from app.api.miniapp_support import register_miniapp_support
+    from app.api.miniapp_topup import register_miniapp_topup
 
     register_miniapp_pages(app, render=render, get_db=get_db)
+    register_miniapp_feeds(app, get_db=get_db)
+    register_miniapp_topup(app, get_db=get_db)
+    register_miniapp_support(app, get_db=get_db)
+    register_miniapp_codes(app, get_db=get_db)
+    register_miniapp_guides(app, get_db=get_db)
+    register_miniapp_loyalty(app, get_db=get_db)
+    register_miniapp_review(app, get_db=get_db)
     from app.api.customer_features import register_customer_features
 
     register_customer_features(app, render=render, require_staff=require_staff, get_db=get_db)
-    register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
+    from app.api.automation_review_pages import register_automation_review_pages
+    from app.api.broadcast_queue_pages import register_broadcast_queue_pages
+    from app.api.payment_void_pages import register_payment_void_pages
+
+    register_automation_review_pages(app, require_staff=require_staff, get_db=get_db)
+    register_payment_void_pages(app, require_staff=require_staff, get_db=get_db)
+    register_broadcast_queue_pages(app, require_admin=require_admin, get_db=get_db)
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_order_purge_pages(app, require_staff=require_staff, get_db=get_db)
+    register_staff_audit_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_shop_wallet_pages(app, require_staff=require_staff, get_db=get_db)
+    register_shop_points_pages(app, require_staff=require_staff, get_db=get_db)
+    register_shop_customer_block_pages(app, require_staff=require_staff, get_db=get_db)
+    register_trial_users_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_panel_brand_pages(app, require_staff=require_staff, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
     register_connection_status_pages(app, render=render, require_staff=require_staff, get_db=get_db)
 
@@ -1998,6 +2068,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 PG_ACCESS_DENIED_MSG,
                 access_by_web_username,
                 enforce_pg_admin_web_gate,
+                login_denial,
                 resolve_pg_role_id_for_admin,
                 staff_has_pg_auth_secret,
             )
@@ -2040,8 +2111,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                             session, profile.pg_admin_username, revoke_if_missing=True
                         )
                         if not allowed:
-                            for k in limit_keys:
-                                _login_fail(k)
+                            # The password was right; an outage must not count toward lockout.
+                            status_code, counts_as_failure = login_denial(deny_msg)
+                            if counts_as_failure:
+                                for k in limit_keys:
+                                    _login_fail(k)
                             return render(
                                 request,
                                 "login.html",
@@ -2049,7 +2123,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                                     "error": deny_msg or PG_ACCESS_DENIED_MSG,
                                     "username": typed_user,
                                 },
-                                status_code=403,
+                                status_code=status_code,
                             )
                     from app.services.pg_access import (
                         map_pg_role_writes,
@@ -2122,8 +2196,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                         session, staff_row.pg_username, revoke_if_missing=True
                     )
                     if not allowed:
-                        for k in limit_keys:
-                            _login_fail(k)
+                        # The password was right; an outage must not count toward lockout.
+                        status_code, counts_as_failure = login_denial(deny_msg)
+                        if counts_as_failure:
+                            for k in limit_keys:
+                                _login_fail(k)
                         return render(
                             request,
                             "login.html",
@@ -2131,7 +2208,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                                 "error": deny_msg or PG_ACCESS_DENIED_MSG,
                                 "username": typed_user,
                             },
-                            status_code=403,
+                            status_code=status_code,
                         )
                     # Re-load in case revoke removed the row
                     staff_row = await access_by_web_username(session, u.strip().lower())
@@ -2487,7 +2564,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 try:
                     await session.rollback()
                 except Exception:
-                    pass
+                    logger.debug("plans_page: ignored failure", exc_info=True)
             try:
                 reseller_plans = await list_reseller_plans(session)
             except Exception:
@@ -3209,7 +3286,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             try:
                 await session.rollback()
             except Exception:
-                pass
+                logger.debug("plans_delete: ignored failure", exc_info=True)
             return _redirect_msg("/plans", err=e.message)
         return _redirect_msg("/plans", ok="پلن حذف شد")
 
@@ -3220,7 +3297,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
             await notify_after_settlement(session, payment, order)
         except Exception:
-            pass
+            logger.debug("_notify_order_user: ignored failure", exc_info=True)
 
     @app.post("/orders/{order_id}/approve")
     async def order_approve(
@@ -3479,7 +3556,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     if should_close:
                         await bot.session.close()
             except Exception:
-                pass
+                logger.debug("payment_approve: ignored failure", exc_info=True)
         return _redirect_msg("/finance?tab=payments", ok="پرداخت تأیید شد")
 
     @app.post("/payments/{payment_id}/reject")
@@ -3532,7 +3609,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 ui = await get_all_settings(session, reseller_id=shop_rid)
                 body = ui.get("payment_reject_text") or body
             except Exception:
-                pass
+                logger.debug("payment_reject: ignored failure", exc_info=True)
         # Packed reject text keeps premium emoji via notify_payer unpack.
         await notify_payer(
             session,
@@ -3555,18 +3632,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
         from app.services.pg_access import staff_user_actions
         from app.services.color_tags import (
-            DEFAULT_COLOR_TAG,
             color_tag_meta,
             color_tags_for_ui,
             normalize_color_filter,
         )
+        from app.services.customer_marks import color_filter_clause, marks_for
         from app.services.users_ops import (
             build_users_ops_page,
             parse_focus_uid,
             scoped_users_where,
             users_list_href,
         )
-        from sqlalchemy import and_, or_
+        from sqlalchemy import and_
 
         try:
             scope = resolve_shop_scope_id(staff)
@@ -3582,20 +3659,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         # Shop scope: Owner → platform users only; reseller → own customers.
         # Pure resellers (no shop services) stay on /resellers.
         where = scoped_users_where(scope)
-        if color_filter == DEFAULT_COLOR_TAG:
-            # Default green also matches legacy NULL / unmapped rows.
-            where = and_(
-                where,
-                or_(
-                    BotUser.color_tag == DEFAULT_COLOR_TAG,
-                    BotUser.color_tag.is_(None),
-                    BotUser.color_tag.in_(("blue", "violet", "pink", "slate", "")),
-                ),
-            )
-        elif color_filter == "yellow":
-            where = and_(where, BotUser.color_tag.in_(("yellow", "amber")))
-        elif color_filter:
-            where = and_(where, BotUser.color_tag == color_filter)
+        if color_filter:
+            # This shop's own tags only (the platform's own on BotUser).
+            where = and_(where, color_filter_clause(scope, color_filter))
         result = await session.execute(
             select(BotUser)
             .where(where)
@@ -3603,6 +3669,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             .limit(fetch_limit)
         )
         users = list(result.scalars().all())
+        if search_q:
+            users = await _with_search_matches(session, users, where, search_q)
         from app.services.wallet import wallet_balances_for_scope
 
         # Scoped purse only — never surface another shop's ShopWallet / platform
@@ -3613,7 +3681,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if search_q:
             users = filter_by_search(
                 users,
-                search_q,
+                clean_handle(search_q),
                 lambda u: (
                     u.id,
                     u.telegram_id,
@@ -3659,6 +3727,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "color_filter": color_filter,
                 "color_tags": color_tags_for_ui(),
                 "color_tag_meta": color_tag_meta,
+                "marks_by_uid": await marks_for(session, scope, [int(r.user.id) for r in rows]),
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
                 "open_edit": request.query_params.get("edit"),
@@ -3735,7 +3804,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 finally:
                     await bot.session.close()
             except Exception:
-                pass
+                logger.debug("users_set_role: ignored failure", exc_info=True)
             # Admin mirror + short role notice (credentials already sent to subject)
             await notify_account_edit(
                 session,
@@ -4190,7 +4259,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         payload["show_miniapp"] = "0"
         if reseller_id is not None:
             payload["show_reseller_apply"] = "0"
+        # The resellers' Mini App switch lives on the «مینی‌اپ» tab now (miniapp_brand_pages).
         await set_settings_bulk(session, payload, reseller_id=reseller_id)
+        if reseller_id is None:
+            schedule_shop_menu_sync()
 
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(
@@ -4342,10 +4414,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             from app.services.pwa import load_pwa_settings
 
             ctx["pwa"] = await load_pwa_settings(session)
+            ctx["brand_values"] = await load_own_values(session, None)
+            ctx["brand_form_action"] = "/panel-brand"
         elif tab == "backup":
             from app.services.backup import (
                 clear_idle_restore_status,
                 list_backups,
+                read_restore_notice,
                 resolve_stale_restore_status,
                 sqlite_db_path,
             )
@@ -4354,6 +4429,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 clear_idle_restore_status()
             ctx["backups"] = list_backups()
             ctx["restore_status"] = resolve_stale_restore_status()
+            ctx["restore_warnings"] = read_restore_notice()
             ctx["local_version"] = local_version()
             ctx["db_path"] = str(sqlite_db_path())
             # values already loaded above — do not re-import get_all_settings
@@ -4399,6 +4475,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                     host = urlparse(pub if "://" in pub else f"https://{pub}").hostname or ""
                     st["domain"] = normalize_domain(host)
             ctx["ssl"] = st
+        elif tab == "miniapp":
+            ctx["miniapp_url"] = get_settings().miniapp_url
         elif tab == "appearance":
             from app.services.bot_appearance import load_appearance_context
             from app.services.setup_wizard import current_setup_values
@@ -4427,10 +4505,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             n = await cancel_stale_pending_for_settings(
                 session, reseller_id=None, force=True
             )
-        except Exception as e:
-            dest = _settings_next(request, "/finance?tab=orders&settings=payment")
-            return _redirect_msg(dest, err=f"لغو سفارش‌ها ناموفق: {e}")
-        dest = _settings_next(request, "/finance?tab=orders&settings=payment")
+        except Exception:
+            logging.getLogger(__name__).exception("manual pending order cancel failed")
+            dest = _settings_next(request, "/finance?tab=orders&settings=cleanup")
+            return _redirect_msg(dest, err="لغو سفارش‌ها ناموفق بود. لاگ سرور را بررسی کنید.")
+        dest = _settings_next(request, "/finance?tab=orders&settings=cleanup")
         return _redirect_msg(
             dest,
             ok=f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود",
@@ -4572,6 +4651,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             action = str(form.get("action") or "issue").strip()
             domain = normalize_domain(str(form.get("domain") or ""))
             email = str(form.get("acme_email") or "").strip()
+            # The Mini App's own domain; blank or «same as the panel» keeps the panel's.
+            same_miniapp = str(form.get("miniapp_same_domain") or "") in {"1", "on", "true", "yes"}
+            miniapp_domain = "" if same_miniapp else normalize_domain(str(form.get("miniapp_domain") or ""))
+            if miniapp_domain == domain:
+                miniapp_domain = ""
 
             if action == "enable":
                 # Enable only applies the cert already on disk. Switching domains
@@ -4615,6 +4699,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                     "/settings?tab=ssl&err=" + quote("دامنه نامعتبر است"),
                     status_code=303,
                 )
+            if miniapp_domain and not is_valid_domain(miniapp_domain):
+                return RedirectResponse(
+                    "/settings?tab=ssl&err=" + quote("دامنهٔ مینی‌اپ نامعتبر است"),
+                    status_code=303,
+                )
             if not email or "@" not in email:
                 return RedirectResponse(
                     "/settings?tab=ssl&err=" + quote("ایمیل معتبر لازم است"),
@@ -4626,14 +4715,16 @@ def create_api_app(lifespan=None) -> FastAPI:
             meta = read_meta()
             meta["pending_domain"] = domain
             meta["pending_email"] = email
+            meta["pending_miniapp_domain"] = miniapp_domain
             meta["last_error"] = None
             write_meta(meta)
             force = action == "renew"
-            result = start_issue_job(domain=domain, email=email, force=force)
+            result = start_issue_job(domain=domain, email=email, force=force, miniapp_domain=miniapp_domain)
             if not result.get("ok"):
                 meta = read_meta()
                 meta.pop("pending_domain", None)
                 meta.pop("pending_email", None)
+                meta.pop("pending_miniapp_domain", None)
                 write_meta(meta)
                 return RedirectResponse(
                     "/settings?tab=ssl&err=" + quote(str(result.get("error") or "خطا")[:400]),
@@ -4856,7 +4947,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 if public_base.startswith("https://") and not https_is_active():
                     public_base = "http://" + public_base[len("https://") :]
             except Exception:
-                pass
+                logger.debug("settings_save: ignored failure", exc_info=True)
             try:
                 port_n = int(web_port)
                 if port_n < 1 or port_n > 65535:
@@ -5020,6 +5111,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         backup_error = normalize_backup_payload(payload) if tab == "backup" else None
         if backup_error:
             return RedirectResponse("/settings?tab=backup&err=" + quote(backup_error), status_code=303)
+        gateway_error = await bbc_enable_error(session, payload, reseller_id=None) if tab == "payment" else None
+        if gateway_error:
+            back = safe_internal_next(request.query_params.get("next"), "") or "/settings?tab=payment"
+            return RedirectResponse(f"{back}{'&' if '?' in back else '?'}err=" + quote(gateway_error), status_code=303)
         if tab == SCREEN_TEXT_TAB:
             try:
                 validate_screen_text_settings(payload)
@@ -5062,6 +5157,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.broadcast import AUDIENCE_LABELS, list_broadcast_history
+        from app.services.broadcast_queue import STATUS_LABELS
 
         history = await list_broadcast_history(session, limit=40)
         return render(
@@ -5071,6 +5167,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "staff": staff,
                 "history": history,
                 "audience_labels": AUDIENCE_LABELS,
+                "status_labels": STATUS_LABELS,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -5084,29 +5181,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         text: str = Form(...),
         audience: str = Form("all"),
     ):
-        from app.bot import create_bot
-        from app.services.broadcast import send_broadcast
+        from app.services.broadcast_queue import queue_broadcast
 
         audience = (audience or "all").strip()
         if audience not in {"all", "users", "resellers", "admins"}:
             audience = "all"
-        bot = create_bot()
         try:
-            result = await send_broadcast(
-                bot,
-                session,
-                text=text,
-                audience=audience,
-                created_by=str(staff.get("username") or "admin"),
+            log = await queue_broadcast(
+                session, text=text, audience=audience, created_by=str(staff.get("username") or "admin")
             )
         except ValueError as e:
             return _redirect_msg("/broadcast", err=str(e))
-        except Exception as e:
-            return _redirect_msg("/broadcast", err=f"خطا در ارسال: {e}")
-        finally:
-            await bot.session.close()
-        msg = f"ارسال شد: {result['ok']} موفق از {result['total']} (ناموفق: {result['fail']})"
-        return _redirect_msg("/broadcast", ok=msg)
+        return _redirect_msg("/broadcast", ok=f"در صف ارسال قرار گرفت: {log.total} مخاطب. پیشرفت را در تاریخچه ببینید.")
 
     @app.post("/broadcast/history/clear")
     async def broadcast_history_clear(

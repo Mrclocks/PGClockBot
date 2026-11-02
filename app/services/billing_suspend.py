@@ -84,10 +84,12 @@ async def _set_admin_enabled(pg, username: str, *, enabled: bool) -> None:
     uname = (username or "").strip()
     if not uname:
         return
+    # PasarGuard's admin update has only ``status``; unknown keys are accepted and ignored, so
+    # ``status`` must come first or the admin is never actually disabled or enabled.
     payloads: list[dict[str, Any]] = (
-        [{"enabled": True}, {"is_disabled": False}, {"status": "active"}]
+        [{"status": "active"}, {"enabled": True}, {"is_disabled": False}]
         if enabled
-        else [{"enabled": False}, {"is_disabled": True}, {"status": "disabled"}]
+        else [{"status": "disabled"}, {"enabled": False}, {"is_disabled": True}]
     )
     last_err: Exception | None = None
     for payload in payloads:
@@ -362,3 +364,14 @@ async def _send_reseller_dm(
                 await bot.session.close()
     except Exception:
         logger.debug("reseller DM failed", exc_info=True)
+
+
+async def send_reseller_notice(session: AsyncSession, reseller_user_id: int, text: str) -> None:
+    """Telegram notice to a reseller through their shop bot, else the main bot; best-effort."""
+    from app.db.models import BotUser
+    from app.services.platform_identity import deliverable_telegram_id
+
+    user = await session.get(BotUser, int(reseller_user_id))
+    telegram_id = deliverable_telegram_id(getattr(user, "telegram_id", None))
+    if telegram_id is not None:
+        await _send_reseller_dm(session, int(reseller_user_id), int(telegram_id), text)

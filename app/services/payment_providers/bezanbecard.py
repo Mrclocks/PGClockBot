@@ -16,6 +16,7 @@ Every call ends in one of three ways, and callers must keep them apart:
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -52,6 +53,7 @@ MAX_DESCRIPTION = 500
 MAX_URL = 2048
 MAX_IDEMPOTENCY_KEY = 255
 MAX_TOKEN = 128
+MAX_REASON = 300
 
 _TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 # 408 and 429 mean "not processed yet, try again"; every other 4xx is a final refusal.
@@ -68,6 +70,9 @@ _ERROR_TEXTS = {
 REJECTED_TEXT = "درگاه بزن به کارت این پرداخت را نپذیرفت."
 UNREACHABLE_TEXT = "ارتباط با بزن به کارت برقرار نشد؛ چند لحظهٔ دیگر دوباره امتحان کنید."
 
+# The callback and return links carry ``?t=<token>``; mask it if an error message quotes a link.
+_LINK_TOKEN = re.compile(r"([?&]t=)[^&\s\"']+")
+
 _client: httpx.AsyncClient | None = None
 
 
@@ -76,12 +81,17 @@ class BbcError(ValueError):
 
 
 class BbcRejected(BbcError):
-    """The API answered with a final refusal; nothing was created or changed."""
+    """The API answered with a final refusal; nothing was created or changed.
 
-    def __init__(self, message: str, *, status_code: int, code: str = "") -> None:
+    ``reason`` is the API's own short explanation for the shop's staff (plain text,
+    never shown to customers); ``str()`` stays the fixed customer text.
+    """
+
+    def __init__(self, message: str, *, status_code: int, code: str = "", reason: str = "") -> None:
         super().__init__(message)
         self.status_code = status_code
         self.code = code
+        self.reason = reason
 
 
 class BbcUnreachable(BbcError):
@@ -218,14 +228,49 @@ async def _call(method: str, path: str, *, headers: dict[str, str], json: dict |
         logger.warning("bezanbecard %s answered %s", method, resp.status_code)
         raise BbcUnreachable(UNREACHABLE_TEXT)
     if resp.status_code >= 400:
-        code = str(data.get("code") or "") if isinstance(data, dict) else ""
-        detail = str(data.get("detail") or "")[:200] if isinstance(data, dict) else ""
-        logger.warning("bezanbecard %s refused %s code=%s detail=%s", method, resp.status_code, code, detail)
-        raise BbcRejected(_ERROR_TEXTS.get(code, REJECTED_TEXT), status_code=resp.status_code, code=code)
+        code = _plain(data.get("code") or "", 40) if isinstance(data, dict) else ""
+        reason = refusal_reason(data)
+        logger.warning("bezanbecard %s refused %s code=%s reason=%s", method, resp.status_code, code, reason)
+        raise BbcRejected(
+            _ERROR_TEXTS.get(code, REJECTED_TEXT), status_code=resp.status_code, code=code, reason=reason,
+        )
     if not isinstance(data, dict):
         logger.warning("bezanbecard %s answered %s without a JSON object", method, resp.status_code)
         raise BbcUnreachable(UNREACHABLE_TEXT)
     return data
+
+
+def _plain(value: Any, limit: int) -> str:
+    printable = "".join(ch if ch.isprintable() else " " for ch in str(value))
+    return _LINK_TOKEN.sub(r"\1***", " ".join(printable.split()))[:limit]
+
+
+def _validation_item(item: Any) -> str:
+    if not isinstance(item, dict):
+        return _plain(item, 120)
+    loc = item.get("loc")
+    field = ".".join(str(part) for part in loc if part != "body") if isinstance(loc, list) else ""
+    message = _plain(item.get("msg") or item.get("message") or "", 120)
+    return f"{field}: {message}" if field else message
+
+
+def refusal_reason(data: Any) -> str:
+    """The API's explanation of a refusal in one short line: which field and why.
+
+    Handles ``detail`` as text or as a list of ``{loc, msg}`` items, and a
+    ``message``/``error`` field. Echoed request values (``input``) are left out and a
+    link token quoted in a message is masked; the API key is a header and never echoed.
+    """
+    if not isinstance(data, dict):
+        return ""
+    detail = data.get("detail")
+    if isinstance(detail, list):
+        text = "؛ ".join(filter(None, (_validation_item(item) for item in detail[:5])))
+    elif isinstance(detail, dict):
+        text = _validation_item(detail)
+    else:
+        text = detail or data.get("message") or data.get("error") or ""
+    return _plain(text, MAX_REASON)
 
 
 def _int_or_none(value: Any) -> int | None:

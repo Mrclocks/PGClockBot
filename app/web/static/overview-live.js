@@ -4,6 +4,8 @@
 (function (root) {
   'use strict';
   var POLL_MS = 5000;
+  // After failed polls, wait longer before asking again so a struggling panel is not pressed.
+  var MAX_BACKOFF_MS = 60000;
   var SAMPLES = 60;
   var SPARK_W = 300;
   var SPARK_H = 60;
@@ -169,7 +171,14 @@
     source.parentNode.insertBefore(note, source);
   }
 
+  function backoffDelay(failures) {
+    if (!(failures > 0)) return 0;
+    return Math.min(POLL_MS * Math.pow(2, failures - 1), MAX_BACKOFF_MS);
+  }
+
   var pending = false;
+  var failures = 0;
+  var resumeAt = 0;
   function source() {
     return document.querySelector('[data-pg-live][data-metrics-url]')
       || document.querySelector('[data-server-meters][data-metrics-url]');
@@ -177,17 +186,22 @@
   function tick() {
     var src = source();
     if (document.hidden || pending || !src || !root.PGClockPanelWidgetRequest) return;
+    if (Date.now() < resumeAt) return;
     var url = src.getAttribute('data-metrics-url');
     pending = true;
     root.PGClockPanelWidgetRequest.fetchJson(url + (url.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now(), {
       cache: 'no-store',
       credentials: 'same-origin'
     }).then(function (d) {
+      failures = 0;
+      resumeAt = 0;
       setStale(src, false);
       applyServer(document.querySelector('[data-server-meters]'), d || {});
       applyLive(document.querySelector('[data-pg-live]'), d && d.live);
       applyNodes(document.querySelector('[data-node-list]'), d && d.nodes);
     }).catch(function () {
+      failures += 1;
+      resumeAt = Date.now() + backoffDelay(failures);
       setStale(src, true);
     }).finally(function () {
       pending = false;
@@ -195,7 +209,8 @@
   }
 
   var api = { clampPct: clampPct, fmtPct: fmtPct, memHint: memHint, partsText: partsText,
-    pushSample: pushSample, sparkPoints: sparkPoints, areaPoints: areaPoints, fmtRate: fmtRate, badgeClass: badgeClass, SAMPLES: SAMPLES };
+    pushSample: pushSample, sparkPoints: sparkPoints, areaPoints: areaPoints, fmtRate: fmtRate, badgeClass: badgeClass, SAMPLES: SAMPLES,
+    backoffDelay: backoffDelay, POLL_MS: POLL_MS, MAX_BACKOFF_MS: MAX_BACKOFF_MS };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
     return;

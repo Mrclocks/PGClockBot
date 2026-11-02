@@ -32,7 +32,6 @@ class PlansDashboardRebuildTests(unittest.TestCase):
         self.assertIn("def admin_plans_add_type_keyboard", KEYBOARDS)
         self.assertIn("adm:plans:add:users:fixed", KEYBOARDS)
         self.assertIn("adm:plans:add:resellers:payg", KEYBOARDS)
-        self.assertIn("send_add_plan_type_picker", ADMIN_PLANS)
         self.assertIn("open_add_kind_action", ADMIN_PLANS)
 
     def test_overview_lists_plans_inline(self):

@@ -30,6 +30,18 @@ class PgErrorDetailTests(unittest.TestCase):
             "Username already exists",
         )
 
+    def test_field_mapping_detail_names_the_rejected_field(self):
+        body = {"detail": {"username": ["String should match pattern"], "group_ids": "Invalid group"}}
+        detail = _pg_error_detail(body) or ""
+        self.assertIn("username: String should match pattern", detail)
+        self.assertIn("group_ids: Invalid group", detail)
+
+    def test_field_mapping_detail_reaches_the_operator_message(self):
+        exc = PasarGuardError(
+            "POST /api/user failed (422)", 422, {"detail": {"username": ["too short"]}}
+        )
+        self.assertIn("username: too short", exc.user_message())
+
 
 class Friendly422Tests(unittest.TestCase):
     def test_bare_422_is_persian(self):

@@ -107,6 +107,13 @@ def order_bulk_ops(order: Order, payment: Payment | None) -> set[str]:
     return ops
 
 
+def _notice_shop_id(staff: dict) -> int | None:
+    """The shop whose staff act, so their notices stay in that shop; None for platform staff."""
+    from app.services.shop_scope import is_platform_admin, shop_owner_id
+
+    return None if is_platform_admin(staff) else shop_owner_id(staff)
+
+
 async def bulk_toggle_block(
     session: AsyncSession,
     staff: dict,
@@ -121,6 +128,7 @@ async def bulk_toggle_block(
     ids = parse_bulk_ids(user_ids)
     ok = fail = 0
     actor = actor_label_from_staff(staff)
+    notice_shop = _notice_shop_id(staff)
     for uid in ids:
         user = await session.get(BotUser, uid)
         if not user:
@@ -148,6 +156,7 @@ async def bulk_toggle_block(
                 user=user,
                 event="block" if block else "unblock",
                 actor=actor,
+                shop_id=notice_shop,
             )
         except Exception:
             logger.debug("bulk block notify failed uid=%s", uid, exc_info=True)
@@ -175,6 +184,7 @@ async def bulk_delete_users(
     ids = parse_bulk_ids(user_ids)
     ok = fail = 0
     actor = actor_label_from_staff(staff)
+    notice_shop = _notice_shop_id(staff)
     actor_id = None
     try:
         actor_id = int(staff.get("user_id") or 0) or None
@@ -201,6 +211,7 @@ async def bulk_delete_users(
                 event="user_delete",
                 reason=reason,
                 actor=actor,
+                shop_id=notice_shop,
             )
             await delete_bot_user(session, uid, actor_user_id=actor_id)
             ok += 1
@@ -210,7 +221,7 @@ async def bulk_delete_users(
             try:
                 await session.rollback()
             except Exception:
-                pass
+                logger.debug("bulk_delete_users: ignored failure", exc_info=True)
     if ok:
         try:
             await session.commit()

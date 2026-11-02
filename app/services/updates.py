@@ -259,7 +259,7 @@ def clear_update_cache() -> None:
         clear_alembic_tree_cache()
         clear_remote_notes_cache()
     except Exception:
-        pass
+        logger.debug("clear_update_cache: ignored failure", exc_info=True)
 
 
 def normalize_version_tag(value: str | None) -> str | None:

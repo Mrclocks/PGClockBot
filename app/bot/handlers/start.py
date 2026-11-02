@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import html
+import re
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
@@ -9,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import note_throwaway, replace_home
+from app.bot.chat_screen import fresh_keyboard
 from app.bot.nav_input import delete_user_message
-from app.bot.reply_keyboard_state import take_keyboard_folded
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
@@ -18,6 +21,9 @@ from app.services.service_scope import customer_may_use_service, list_customer_s
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
 from app.services import bot_feedback_texts as feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = Router(name="start")
 
@@ -34,7 +40,7 @@ async def render_home(
     session: AsyncSession,
     db_user: BotUser,
     *,
-    edit: bool = False,
+    notice: str | None = None,
     seed_reply_kb: bool = False,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
@@ -118,30 +124,22 @@ async def render_home(
             ui=ui,
         )
 
-    # Welcome always carries the lasting main ReplyKeyboard (four-square menu).
-    # Mini App opens only via Telegram MenuButton «Open» (chat_menu) — never
-    # inline on welcome and never as a ReplyKeyboard web_app row.
-    if edit:
-        from aiogram.exceptions import TelegramBadRequest
-
-        try:
-            await message.edit_text(text, reply_markup=None, **home_send_kw)
-            return
-        except TelegramBadRequest as e:
-            if "message is not modified" in str(e).lower():
-                return
-        except Exception:
-            pass
-        # Edit failed (e.g. can't edit) — one fallback message, never silent.
-        if getattr(message, "photo", None):
-            try:
-                await message.delete()
-            except Exception:
-                pass
-
-    home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
+    # Home is a fresh start: a new welcome with the menu at the bottom; the older welcome and
+    # every temporary message go, records (deliveries, receipts, configs) stay. A notice (a
+    # cancel or an outcome) rides at the end of the welcome instead of being its own message.
+    if notice:
+        text = f"{text}\n\n{_notice_for(notice, home_send_kw)}"
+    with fresh_keyboard():
+        home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
     await replace_home(home, sweep=True)
     _ = seed_reply_kb
+
+
+def _notice_for(notice: str, send_kw: dict) -> str:
+    """The notice as the welcome expects it: HTML, or plain text when the welcome uses entities."""
+    if send_kw.get("parse_mode", "HTML") is None:
+        return html.unescape(re.sub(r"<[^>]+>", "", notice))
+    return notice
 
 
 async def seed_main_reply_kb(message: Message, reply_kb, *, tip: str = "·") -> None:
@@ -610,7 +608,7 @@ async def cb_force_join_check(
                 try:
                     await callback.message.answer(text, reply_markup=markup, **fj_kw)
                 except Exception:
-                    pass
+                    logger.debug("cb_force_join_check: ignored failure", exc_info=True)
         return
 
     await callback.answer("عضویت تأیید شد ✅")
@@ -651,18 +649,12 @@ async def cb_home(
     reseller_owner_id: int | None = None,
 ):
     await callback.answer()
-    # Editing cannot unfold a folded reply keyboard; a new menu message does.
-    keyboard_folded = await take_keyboard_folded(state)
     await state.clear()
     if callback.message:
-        if keyboard_folded:
-            # The old panel goes, so the new menu message is the only one.
-            await delete_user_message(callback.message)
         await render_home(
             callback.message,
             session,
             db_user,
-            edit=not keyboard_folded,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
@@ -689,7 +681,7 @@ async def cb_home_as_user(
         try:
             await callback.message.edit_text(text)
         except Exception:
-            pass
+            logger.debug("cb_home_as_user: ignored failure", exc_info=True)
         markup, _, _ = await build_main_reply_keyboard(
             session,
             db_user,

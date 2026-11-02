@@ -46,8 +46,9 @@ class RtlLtrHotspotsTests(unittest.TestCase):
         users = (ROOT / "app/web/templates/pg_users.html").read_text(encoding="utf-8")
         nodes = (ROOT / "app/web/templates/pg_nodes.html").read_text(encoding="utf-8")
         self.assertIn('dir="ltr"', hosts)
-        self.assertIn('class="mono" dir="ltr"', users)
-        self.assertIn('class="mono" dir="ltr"', nodes)
+        # Usernames and node ids stay left-to-right; the cell may carry more classes.
+        self.assertRegex(users, r'class="mono[^"]*" dir="ltr"')
+        self.assertRegex(nodes, r'class="mono[^"]*" dir="ltr"')
 
     def test_resellers_table_has_no_commission_column(self):
         src = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")

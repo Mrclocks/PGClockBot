@@ -43,7 +43,10 @@ class SourceContractTests(unittest.TestCase):
         stale = src.split("async def cancel_stale_pending_orders", 1)[1].split(
             "async def cancel_stale_pending_for_settings", 1
         )[0]
-        self.assertIn("cancel_application_for_order", stale)
+        # Released through the shared helper (also used by the purge).
+        self.assertIn("release_unpaid_order_holds", stale)
+        holds = src.split("async def release_unpaid_order_holds", 1)[1].split("async def cancel_stale_pending_orders", 1)[0]
+        self.assertIn("cancel_application_for_order", holds)
 
     def test_reseller_app_review_can_hide_approve(self):
         src = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")

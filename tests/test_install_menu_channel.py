@@ -61,7 +61,29 @@ class InstallMenuChannelTests(unittest.TestCase):
         update = src.split("cmd_update() {", 1)[1].split("cmd_edit_env() {", 1)[0]
         self.assertIn("set_install_channel", update)
         self.assertIn("sync_code_to_channel", update)
+        self.assertIn("stop_service_if_any", update)
+        self.assertIn('install_systemd "$svc_user" 0', update)
+        self.assertLess(
+            update.find("stop_service_if_any"),
+            update.find("sync_code_to_channel"),
+        )
+        self.assertLess(
+            update.find("restart_service_if_any"),
+            update.find("ensure_monitor_xray"),
+        )
         self.assertNotIn("syncing hard to origin/main", update)
+        unit = src.split("install_systemd() {", 1)[1].split("stop_service_if_any() {", 1)[0]
+        self.assertIn("TimeoutStopSec=45", unit)
+
+    def test_sync_uses_explicit_channel_refspec(self):
+        src = SH.read_text(encoding="utf-8")
+        sync = src.split("sync_code_to_channel() {", 1)[1].split("panel_is_installed() {", 1)[0]
+        self.assertIn("+refs/heads/${ch}:refs/remotes/origin/${ch}", sync)
+        self.assertIn("+refs/heads/*:refs/remotes/origin/*", sync)
+        self.assertIn("git remote set-url origin", sync)
+        self.assertIn('dispatch "$@"', src)
+        channel = src.split("set_install_channel() {", 1)[1].split("persist_channel_env() {", 1)[0]
+        self.assertIn("env_get DEPLOYED_CHANNEL", channel)
 
     def test_get_sh_clones_selected_branch(self):
         src = GET.read_text(encoding="utf-8")
@@ -69,6 +91,8 @@ class InstallMenuChannelTests(unittest.TestCase):
         self.assertIn("PGCLOCK_CHANNEL", src)
         self.assertIn('REMOTE_BRANCH="dev"', src)
         self.assertIn("CHANNEL_FROM_ENV", src)
+        self.assertIn("+refs/heads/${REMOTE_BRANCH}:refs/remotes/origin/${REMOTE_BRANCH}", src)
+        self.assertIn('update-${REMOTE_BRANCH}', src)
 
 
 class WriteEnvChannelTests(unittest.TestCase):

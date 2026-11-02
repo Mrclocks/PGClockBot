@@ -547,7 +547,7 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
                     )
                 )
             except Exception:
-                pass
+                log.debug("_migrate_sqlite_legacy: ignored failure", exc_info=True)
 
     if insp.has_table("bot_users"):
         bucols = {c["name"] for c in insp.get_columns("bot_users")}
@@ -752,4 +752,4 @@ def _ensure_indexes(sync_conn) -> None:
         try:
             sync_conn.execute(sql_text(stmt))
         except Exception:
-            pass
+            log.debug("_ensure_indexes: ignored failure", exc_info=True)

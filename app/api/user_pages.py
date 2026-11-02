@@ -3,18 +3,29 @@
 from __future__ import annotations
 
 import html
+import secrets
 from urllib.parse import quote
 
 from fastapi import Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Plan
 from app.services.authz import authz_from_staff, can_shop
+from app.services.customer_marks import marks_for_staff, may_edit_private_marks
+from app.services.shop_customer_block import shop_block_form_context
+from app.services.shop_wallet_adjust import shop_wallet_form_context
 from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
+from app.services.pg_access import staff_user_actions
+from app.services.platform_identity import is_explicit_owner_staff
 from app.services.shop_membership import assert_customer_in_staff_scope
-from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope, resolve_shop_scope_id
+from app.services.shop_scope import (
+    ShopScopeError,
+    resolve_shop_scope_id,
+)
+from app.services.user_card import build_user_card
+from app.services.user_photo import photo_bot, user_photo
 
 
 def _q(msg: str) -> str:
@@ -253,21 +264,20 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         can_pg_delete = bool(pg_acts.get("delete"))
         from app.services.color_tags import color_tag_meta, color_tags_for_ui
 
-        # The staff note and risk tag are one record on the person; only the shop that attributed
-        # them (the platform for an unattributed person) may read them, a member shop may not.
-        try:
-            assert_bot_user_in_scope(staff, user)
-            show_private_marks = True
-        except ShopScopeError:
-            show_private_marks = False
-
+        # Each shop reads only its own note and tag (the platform its own); the customer is
+        # already checked to be in this staff member's scope.
         ctx = {
             "staff": staff,
             "user": user,
-            "show_private_marks": show_private_marks,
+            "marks": await marks_for_staff(session, staff, user),
+            "show_private_marks": True,
+            "can_edit_private_marks": await may_edit_private_marks(session, staff, user),
             "display_wallet": display_wallet,
             "services": snaps,
             "wallet_txs": wallet_txs,
+            "wallet_nonce": secrets.token_hex(8),
+            **shop_wallet_form_context(staff),
+            **(await shop_block_form_context(session, staff, user)),
             "plans": plans,
             "format_toman": format_toman,
             "flash_ok": request.query_params.get("ok"),
@@ -287,6 +297,67 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return render(request, "_user_edit_body.html", ctx)
         return render(request, "user_edit.html", ctx)
 
+    @app.get("/users/{user_id}/card", response_class=HTMLResponse)
+    async def user_card(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_ops),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Read-only user card for the users list (modal fragment)."""
+        loaded = await _require_scoped_user(session, staff, user_id, fragment=True)
+        if isinstance(loaded, (RedirectResponse, HTMLResponse)):
+            return loaded
+        try:
+            shop_scope = resolve_shop_scope_id(staff)
+        except ShopScopeError as exc:
+            return HTMLResponse(
+                f'<div class="flash err">{html.escape(exc.message)}</div>', status_code=403
+            )
+        card = await build_user_card(
+            session,
+            loaded,
+            shop_id=shop_scope,
+            show_private_marks=True,
+        )
+        pg_acts = staff_user_actions(staff)
+        in_shop = is_explicit_owner_staff(staff) or shop_scope is not None
+        return render(
+            request,
+            "_user_card_body.html",
+            {
+                "card": card,
+                "can_edit": in_shop and any(pg_acts.get(k) for k in ("create", "update", "delete")),
+                "can_message": not loaded.is_blocked,
+            },
+        )
+
+    @app.get("/users/{user_id}/photo")
+    async def user_card_photo(
+        user_id: int,
+        staff: dict = Depends(require_ops),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """The customer's Telegram photo as the viewer's own bot sees it; 404 shows the initial."""
+        loaded = await _require_scoped_user(session, staff, user_id, fragment=True)
+        if isinstance(loaded, (RedirectResponse, HTMLResponse)):
+            return Response(status_code=loaded.status_code)
+        try:
+            bot = await photo_bot(session, shop_id=resolve_shop_scope_id(staff))
+        except ShopScopeError:
+            return Response(status_code=403)
+        bot_user_id, telegram_id = int(loaded.id), int(loaded.telegram_id)
+        # End the read transaction: a cache miss waits on Telegram.
+        await session.rollback()
+        data = await user_photo(bot, bot_user_id=bot_user_id, telegram_id=telegram_id) if bot else None
+        if not data:
+            return Response(status_code=404, headers={"Cache-Control": "private, max-age=600"})
+        return Response(
+            content=data,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
+        )
+
     @app.post("/users/{user_id}/wallet-credit")
     async def user_wallet_credit(
         user_id: int,
@@ -300,6 +371,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             parse_admin_wallet_mode,
         )
         from app.services.notifications import actor_label_from_staff
+        from app.services.reseller_wallet import adjust_reseller_wallet, load_reseller_profile, schedule_followups
 
         loaded = await _require_scoped_user(session, staff, user_id)
         if isinstance(loaded, RedirectResponse):
@@ -315,14 +387,24 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         except (TypeError, ValueError) as e:
             return _redirect_user(user_id, err=str(e) or "مبلغ نامعتبر است")
         try:
-            await admin_adjust_user_wallet(
-                session,
-                user,
-                amount,
-                mode=mode,
-                actor=actor_label_from_staff(staff),
-                note=note or None,
-            )
+            if await load_reseller_profile(session, int(user.id)) is not None:
+                # A reseller's wallet is also their PAYG shop wallet: same path as the reseller page.
+                nonce = str(form.get("nonce") or "").strip()
+                key = f"user-page:{mode}:{user_id}:{amount}:{nonce}" if len(nonce) >= 8 else None
+                change = await adjust_reseller_wallet(
+                    session, user, amount, mode=mode, actor=actor_label_from_staff(staff),
+                    note=note or None, idempotency_key=key,
+                )
+                schedule_followups(change)
+            else:
+                await admin_adjust_user_wallet(
+                    session,
+                    user,
+                    amount,
+                    mode=mode,
+                    actor=actor_label_from_staff(staff),
+                    note=note or None,
+                )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
         if mode == "credit":

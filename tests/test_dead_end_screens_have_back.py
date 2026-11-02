@@ -14,8 +14,8 @@ def _callbacks(markup) -> list[str]:
 
 
 class DeadEndScreenTests(unittest.IsolatedAsyncioTestCase):
-    def test_custom_plan_confirm_can_go_back_to_the_plan_list(self):
-        self.assertIn("shop:list", _callbacks(kb.custom_confirm_keyboard({})))
+    def test_custom_plan_days_can_go_back(self):
+        self.assertIn("shop:custom", _callbacks(kb.custom_days_keyboard(30, {})))
 
     def test_reseller_info_screens_return_to_their_group(self):
         self.assertEqual(_callbacks(reseller._group_back("res_stats")), ["nv:res:grp:account"])

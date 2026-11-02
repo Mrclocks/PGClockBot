@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 from urllib.parse import quote
@@ -14,17 +15,29 @@ from starlette.datastructures import UploadFile
 from app.config import DATA_DIR
 from app.db.models import ResellerProfile
 from app.api.safe_next import safe_internal_next
+from app.services.bbc_settlement import bbc_enable_error
 from app.services.resellers import (
     RESELLER_SETTINGS_TABS,
     SHOP_SETTINGS_DOMAIN_POST_TABS,
     SHOP_SETTINGS_DOMAIN_REDIRECTS,
     complete_reseller_setup,
+    get_reseller_profile,
 )
 from app.api.guide_media_pages import SHOP_BASE, guides_media_view
 from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.secret_box import reveal_bot_token
+from app.services.miniapp_shop import (
+    SHOP_SWITCH,
+    set_shop_miniapp,
+    shop_miniapp_available,
+    shop_miniapp_blocker,
+    shop_miniapp_url,
+    switch_value,
+)
+from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
+from app.services.panel_brand import load_own_values
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.rich_text import merge_rich_settings_on_save, prepare_settings_values_for_web
 from app.services.screen_titles import SCREEN_TEXT_TAB, platform_only_screen_text_keys, validate_screen_text_settings
@@ -37,11 +50,28 @@ from app.services.users import (
     SETTING_GROUPS,
     default_values_for_keys,
     get_all_settings,
+    get_setting,
     keys_for_tab,
     set_settings_bulk,
     should_keep_secret_value,
 )
 
+
+
+async def _miniapp_switch_context(session: AsyncSession, profile: ResellerProfile | None) -> dict:
+    """The shop's Mini App switch: whether it may be turned on, whether it is, and its address."""
+    if profile is None:
+        return {"miniapp_available": False, "miniapp_blocker": "", "miniapp_on": False, "miniapp_url": ""}
+    on_now = (await get_setting(session, SHOP_SWITCH, "0", reseller_id=int(profile.user_id))) == "1"
+    return {
+        "miniapp_available": await shop_miniapp_available(session, profile),
+        "miniapp_blocker": await shop_miniapp_blocker(session, profile),
+        "miniapp_on": on_now,
+        "miniapp_url": shop_miniapp_url(profile.miniapp_key or ""),
+    }
+
+
+logger = logging.getLogger(__name__)
 
 def register_shop_settings(app, *, render, require_staff, get_db, require_shop_settings=None):
     allowed_tabs = {t[0] for t in RESELLER_SETTINGS_TABS}
@@ -258,6 +288,11 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             ctx["bot_status"] = await _bot_token_status(token)
             ctx["bot_token_masked"] = ("••••" + token[-6:]) if len(token) > 8 else ("••••" if token else "")
             ctx["bot_username"] = (profile.bot_username if profile else "") or ""
+        elif tab == "brand":
+            ctx["brand_values"] = await load_own_values(session, rid)
+            ctx["brand_form_action"] = "/panel-brand"
+        elif tab == "miniapp":
+            ctx.update(await _miniapp_switch_context(session, profile))
         elif tab == "links":
             from app.services.ux20 import build_magic_links_context
 
@@ -401,6 +436,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                     "/shop-settings?tab=appearance&err=" + quote(msg),
                     status_code=303,
                 )
+            # The shop bot's «Open» button follows its own Mini App, never the platform's.
+            schedule_shop_menu_sync([int(profile.id)])
             return RedirectResponse(
                 "/shop-settings?tab=appearance&saved=1&msg=" + quote(msg),
                 status_code=303,
@@ -520,6 +557,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         for k in list(payload.keys()):
             if str(k).startswith("btn_style_") and k not in allowed_btn:
                 payload.pop(k, None)
+        gateway_error = await bbc_enable_error(session, payload, reseller_id=rid) if tab == "payment" else None
+        if gateway_error:
+            back = _safe_next(request, "/shop-settings?tab=payment")
+            return RedirectResponse(f"{back}{'&' if '?' in back else '?'}err=" + quote(gateway_error), status_code=303)
         if tab == SCREEN_TEXT_TAB:
             try:
                 validate_screen_text_settings(payload)
@@ -540,22 +581,23 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         session: AsyncSession = Depends(get_db),
     ):
         if _is_owner_settings_actor(staff):
-            return RedirectResponse("/finance?tab=orders&settings=payment", status_code=303)
+            return RedirectResponse("/finance?tab=orders&settings=cleanup", status_code=303)
         rid = _rid(staff)
         if not rid:
             return _deny_scope()
         from app.services.orders import cancel_stale_pending_for_settings
 
-        fallback = "/finance?tab=orders&settings=payment"
+        fallback = "/finance?tab=orders&settings=cleanup"
         try:
             n = await cancel_stale_pending_for_settings(
                 session, reseller_id=int(rid), force=True
             )
-        except Exception as e:
+        except Exception:
+            logger.exception("manual pending order cancel failed shop=%s", rid)
             dest = _safe_next(request, fallback)
             sep = "&" if "?" in dest else "?"
             return RedirectResponse(
-                f"{dest}{sep}err={quote(str(e)[:200])}",
+                f"{dest}{sep}err={quote('لغو سفارش‌ها ناموفق بود. لاگ سرور را بررسی کنید.')}",
                 status_code=303,
             )
         msg = f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود"
@@ -603,6 +645,27 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             + quote("نوتیفیکیشن‌های فروشگاه ذخیره شد"),
             status_code=303,
         )
+
+    @app.post("/shop-settings/miniapp")
+    async def shop_miniapp_save(
+        request: Request,
+        staff: dict = Depends(shop_dep),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """The shop owner turns the shop's Mini App on or off; the shop comes from the session."""
+        if _is_owner_settings_actor(staff):
+            return RedirectResponse("/settings", status_code=303)
+        rid = _rid(staff)
+        profile = await get_reseller_profile(session, rid) if rid else None
+        if profile is None:
+            return _deny_scope()
+        form = await request.form()
+        try:
+            await set_shop_miniapp(session, profile, enabled=switch_value(form, SHOP_SWITCH) == "1")
+        except ValueError as exc:
+            return RedirectResponse(f"/shop-settings?tab=miniapp&err={quote(str(exc))}", status_code=303)
+        schedule_shop_menu_sync([int(profile.id)])
+        return RedirectResponse("/shop-settings?tab=miniapp&saved=1", status_code=303)
 
     @app.post("/shop-settings/menu-layout")
     async def shop_menu_layout_save(

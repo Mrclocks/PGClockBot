@@ -1,4 +1,5 @@
-/* Dashboard sales chart: smooth monotone curve, no library. Text lives in HTML so it never stretches. */
+/* Dashboard sales chart: smooth monotone curve, no library. Text lives in HTML so it never stretches.
+   The same chart draws any daily count (orders, new users) when the card names its metric. */
 (function (root) {
   'use strict';
 
@@ -36,6 +37,12 @@
     for (var i = 0; i < steps.length; i++) {
       if (steps[i] * power >= target) { step = steps[i] * power; break; }
     }
+    return { step: step, max: step * SCALE_STEPS };
+  }
+
+  // Counts are whole numbers: the same scale with a whole step of at least one.
+  function niceCountScale(peak) {
+    var step = Math.max(1, Math.ceil(niceScale(peak).step));
     return { step: step, max: step * SCALE_STEPS };
   }
 
@@ -80,7 +87,10 @@
     return d;
   }
 
-  var api = { fa: fa, fullToman: fullToman, compactToman: compactToman, niceScale: niceScale, dayX: dayX, monotonePath: monotonePath };
+  var api = {
+    fa: fa, fullToman: fullToman, compactToman: compactToman, niceScale: niceScale, niceCountScale: niceCountScale,
+    dayX: dayX, monotonePath: monotonePath,
+  };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; }
   if (!root.document) return;
 
@@ -109,15 +119,31 @@
     this.delta = card.querySelector('[data-delta]');
     this.empty = card.querySelector('[data-empty]');
     this.endpoint = card.getAttribute('data-endpoint');
+    // Revenue in Toman unless the card names another daily figure, counted in its noun.
+    this.metric = card.getAttribute('data-metric') || 'revenue';
+    this.isCount = card.getAttribute('data-unit') === 'count';
+    this.noun = card.getAttribute('data-noun') || '';
+    this.extraKey = card.getAttribute('data-extra');
+    this.extraNoun = card.getAttribute('data-extra-noun') || '';
+    this.title = card.getAttribute('data-title') || 'نمودار فروش';
+    this.prevNone = card.getAttribute('data-prev-none') || 'دورهٔ قبل فروشی نداشت';
     this.cache = {};
     this.days = 7;
     this.active = null;
-    var initial = null;
-    try { initial = JSON.parse(card.getAttribute('data-trend') || 'null'); } catch (e) { initial = null; }
-    if (initial && initial.days) this.cache[initial.days.length] = initial;
+    var self = this;
+    ['data-trend', 'data-trend-30'].forEach(function (name) {
+      var initial = null;
+      try { initial = JSON.parse(card.getAttribute(name) || 'null'); } catch (e) { initial = null; }
+      if (initial && initial.days) self.cache[initial.days.length] = initial;
+    });
     this.bind();
-    if (this.cache[7]) this.show(7); else this.load(7);
+    var first = Number(card.getAttribute('data-initial-days')) === 30 ? 30 : 7;
+    if (this.cache[first]) this.show(first); else this.load(first);
   }
+
+  Chart.prototype.amount = function (value) {
+    return fullToman(value) + ' ' + (this.isCount ? this.noun : 'تومان');
+  };
 
   Chart.prototype.bind = function () {
     var self = this;
@@ -147,6 +173,7 @@
 
   Chart.prototype.load = function (days) {
     var self = this;
+    if (!this.endpoint) { this.card.classList.add('is-error'); return; }
     this.card.classList.add('is-loading');
     root.fetch(this.endpoint + '?days=' + days, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
       .then(function (response) { if (!response.ok) throw new Error('trend'); return response.json(); })
@@ -159,24 +186,24 @@
     this.card.classList.remove('is-error');
     var data = this.cache[this.days];
     if (!data) return;
-    if (this.total) this.total.textContent = fullToman(data.total) + ' تومان';
+    if (this.total) this.total.textContent = this.amount(data.total);
     if (this.delta) {
       var pct = data.change_pct;
       var label = this.days === 7 ? 'نسبت به هفتهٔ قبل' : 'نسبت به ماه قبل';
       this.delta.className = 'sales-delta' + (pct == null || pct === 0 ? ' flat' : pct > 0 ? ' up' : ' down');
-      this.delta.textContent = pct == null ? 'دورهٔ قبل فروشی نداشت' : (pct === 0 ? 'بدون تغییر ' : (pct > 0 ? '▲ ' : '▼ ')) + (pct === 0 ? '' : fa(Math.abs(pct)) + '٪ ') + label;
+      this.delta.textContent = pct == null ? this.prevNone : (pct === 0 ? 'بدون تغییر ' : (pct > 0 ? '▲ ' : '▼ ')) + (pct === 0 ? '' : fa(Math.abs(pct)) + '٪ ') + label;
     }
     this.card.classList.toggle('is-empty', !data.has_data);
     if (this.empty) this.empty.hidden = !!data.has_data;
-    this.plot.setAttribute('aria-label', 'نمودار فروش ' + (this.days === 7 ? '7' : '30') + ' روز اخیر؛ جمع ' + fullToman(data.total) + ' تومان');
+    this.plot.setAttribute('aria-label', this.title + ' ' + (this.days === 7 ? '7' : '30') + ' روز اخیر؛ جمع ' + this.amount(data.total));
     this.active = null;
     this.draw();
   };
 
   Chart.prototype.geometry = function (data, width, height) {
-    var peak = 0;
-    data.days.forEach(function (d) { peak = Math.max(peak, d.revenue); });
-    var scale = niceScale(peak);
+    var peak = 0, metric = this.metric;
+    data.days.forEach(function (d) { peak = Math.max(peak, d[metric]); });
+    var scale = this.isCount ? niceCountScale(peak) : niceScale(peak);
     var count = data.days.length;
     var xs = function (i) { return dayX(i, count, width); };
     var ys = function (v) { return height - PAD - (v / scale.max) * (height - PAD * 2); };
@@ -195,9 +222,10 @@
     for (i = 0; i <= SCALE_STEPS; i++) {
       var value = g.scale.step * i, top = g.y(value) + 'px';
       var line = el('div', 'sc-grid'); line.style.top = top; this.plot.appendChild(line);
-      var tick = el('span', 'sc-ytick', value ? compactToman(value) : '0'); tick.style.top = top; this.plot.appendChild(tick);
+      var tick = el('span', 'sc-ytick', value ? (this.isCount ? fullToman(value) : compactToman(value)) : '0'); tick.style.top = top; this.plot.appendChild(tick);
     }
-    var points = data.days.map(function (d, index) { return [g.x(index), g.y(d.revenue)]; });
+    var metric = this.metric;
+    var points = data.days.map(function (d, index) { return [g.x(index), g.y(d[metric])]; });
     var path = monotonePath(points);
     var svg = document.createElementNS(SVG_NS, 'svg');
     svg.setAttribute('class', 'sc-svg');
@@ -243,8 +271,12 @@
     var day = data.days[index];
     this.guide.style.left = p[0] + 'px';
     this.tip.textContent = '';
-    this.tip.appendChild(el('span', null, (this.days <= 7 ? day.weekday : dayLabel(day, this.days)) + ' · ' + fa(day.orders) + ' سفارش'));
-    this.tip.appendChild(el('b', null, fullToman(day.revenue) + ' تومان'));
+    var when = this.days <= 7 ? day.weekday : dayLabel(day, this.days);
+    var detail = this.isCount
+      ? (this.extraKey ? ' · ' + fa(day[this.extraKey]) + ' ' + this.extraNoun : '')
+      : ' · ' + fa(day.orders) + ' سفارش';
+    this.tip.appendChild(el('span', null, when + detail));
+    this.tip.appendChild(el('b', null, this.amount(day[this.metric])));
     var tipWidth = this.tip.offsetWidth, width = this.plot.clientWidth;
     this.tip.style.left = Math.min(Math.max(p[0], tipWidth / 2), width - tipWidth / 2) + 'px';
   };

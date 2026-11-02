@@ -1223,39 +1223,82 @@
       return panel.querySelector(':scope > .ui-modal-scroll') || panel;
     }
 
+    function isVisibleModalSave(save, panel){
+      if (!save || !panel || !panel.contains(save)) return false;
+      if (save.closest('[hidden]')) return false;
+      let node = save.parentElement;
+      while (node && node !== panel) {
+        if (node.hidden) return false;
+        node = node.parentElement;
+      }
+      return true;
+    }
+
+    function restorePinnedModalSaves(panel){
+      if (!panel) return;
+      panel.querySelectorAll(':scope > .ui-modal-sticky-save[data-save-home]').forEach((save) => {
+        const homeId = save.getAttribute('data-save-home');
+        const home = homeId ? document.getElementById(homeId) : null;
+        if (home && home.parentNode) home.replaceWith(save);
+        else {
+          const formId = save.getAttribute('data-save-form');
+          const form = formId ? document.getElementById(formId) : null;
+          if (form) form.appendChild(save);
+        }
+        save.removeAttribute('data-save-home');
+      });
+    }
+
+    /* Lift the visible primary save out of the scrollport into a real panel
+       footer. Avoids mid-form sticky gaps and keeps bottom content padded. */
+    function pinModalStickySave(modal){
+      const panel = modal && modal.querySelector('.ui-modal-panel');
+      if (!panel || panel.dataset.scrollShell !== '1') return;
+      restorePinnedModalSaves(panel);
+      const active = Array.from(panel.querySelectorAll('.ui-modal-sticky-save'))
+        .find((save) => isVisibleModalSave(save, panel));
+      if (!active) return;
+      const form = active.closest('form');
+      if (!form) return;
+      if (!form.id) {
+        form.id = 'ui-modal-form-' + Math.random().toString(36).slice(2, 10);
+      }
+      const slot = document.createElement('div');
+      slot.hidden = true;
+      slot.id = form.id + '-save-slot';
+      slot.setAttribute('data-ui-modal-save-slot', '1');
+      active.replaceWith(slot);
+      active.querySelectorAll('button[type="submit"], button.btn').forEach((btn) => {
+        btn.setAttribute('form', form.id);
+      });
+      active.setAttribute('data-save-home', slot.id);
+      active.setAttribute('data-save-form', form.id);
+      panel.appendChild(active);
+    }
+
     function ensureModalScrollShell(modal){
       const panel = modal && modal.querySelector('.ui-modal-panel');
-      if (!panel || panel.dataset.scrollShell === '1') return;
-      let scroll = null;
-      try {
-        scroll = panel.querySelector(':scope > .ui-modal-scroll');
-      } catch (e) {
-        scroll = Array.from(panel.children).find((c) => c.classList && c.classList.contains('ui-modal-scroll')) || null;
-      }
-      /* User-edit only: keep title/close outside the scrollport so the thumb
-         never paints over chrome. Every other modal wraps all children (pre-#586). */
-      const userEditOnly = modal && modal.id === 'modal-user-edit';
-      const keepOutsideScroll = (node) => {
-        if (!userEditOnly || !node || !node.classList) return false;
-        return node.classList.contains('ui-modal-head');
-      };
-      if (!scroll) {
-        scroll = document.createElement('div');
-        scroll.className = 'ui-modal-scroll';
-        if (userEditOnly) {
-          const toMove = [];
-          Array.from(panel.children).forEach((child) => {
-            if (!keepOutsideScroll(child)) toMove.push(child);
-          });
-          toMove.forEach((child) => scroll.appendChild(child));
-        } else {
-          while (panel.firstChild) scroll.appendChild(panel.firstChild);
+      if (!panel) return;
+      if (panel.dataset.scrollShell !== '1') {
+        let scroll = null;
+        try {
+          scroll = panel.querySelector(':scope > .ui-modal-scroll');
+        } catch (e) {
+          scroll = Array.from(panel.children).find((c) => c.classList && c.classList.contains('ui-modal-scroll')) || null;
         }
-        panel.appendChild(scroll);
+        /* Wrap all panel children; sticky frosted .ui-modal-head stays fixed
+           at the top of this scrollport while body content scrolls under it. */
+        if (!scroll) {
+          scroll = document.createElement('div');
+          scroll.className = 'ui-modal-scroll';
+          while (panel.firstChild) scroll.appendChild(panel.firstChild);
+          panel.appendChild(scroll);
+        }
+        /* Marks panel so CSS can put padding/gap on .ui-modal-scroll while the
+           outer panel keeps opaque chrome + overflow:hidden corner clip. */
+        panel.dataset.scrollShell = '1';
       }
-      /* Marks panel so CSS can put padding/gap on .ui-modal-scroll while the
-         outer panel keeps opaque chrome + overflow:hidden corner clip. */
-      panel.dataset.scrollShell = '1';
+      pinModalStickySave(modal);
     }
 
     function canScrollInside(el, deltaY){
@@ -1642,6 +1685,33 @@
     });
     /* Pre-wrap every modal so first open already clips the scrollbar to radius. */
     document.querySelectorAll('.ui-modal').forEach((el) => ensureModalScrollShell(el));
+
+    /* Payment method cards: show settings only while the matching toggle is on. */
+    function syncPaySettingsCards(root){
+      const scope = root && root.querySelectorAll ? root : document;
+      scope.querySelectorAll('[data-pay-settings-for]').forEach((card) => {
+        const key = card.getAttribute('data-pay-settings-for');
+        if (!key) return;
+        const form = card.closest('form') || scope;
+        const toggle = form.querySelector
+          ? form.querySelector('input[type="checkbox"][name="s_' + key + '"]')
+          : null;
+        if (!toggle) return;
+        card.hidden = !toggle.checked;
+      });
+    }
+    document.addEventListener('change', (e) => {
+      const t = e.target;
+      if (!t || t.type !== 'checkbox' || !t.name || t.name.slice(0, 2) !== 's_') return;
+      const form = t.closest('form');
+      if (!form || !form.querySelector('[data-pay-settings-for]')) return;
+      const key = t.name.slice(2);
+      form.querySelectorAll('[data-pay-settings-for="' + key + '"]').forEach((card) => {
+        card.hidden = !t.checked;
+      });
+    });
+    syncPaySettingsCards(document);
+
     document.addEventListener('click', (e) => {
       const openBtn = e.target.closest('[data-modal-open]');
       if (openBtn) {
@@ -1714,6 +1784,8 @@
         const match = panel.getAttribute('data-modal-tab-panel') === id;
         panel.hidden = !match;
       });
+      const modalRoot = tabBtn.closest('.ui-modal');
+      if (modalRoot) pinModalStickySave(modalRoot);
       try {
         const u = new URL(window.location.href);
         const inDomainModal = !!(
@@ -2984,7 +3056,50 @@
         if (styleVal === '') return { button_style: '' };
         return { button_style: styleVal };
       }
+      function optionsHtml(pairs, current) {
+        return pairs.map(function (o) {
+          return '<option value="' + o[0] + '"' + (current === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        }).join('');
+      }
+      /* API gateway row: the saved key is never sent to the browser, only has_secret. */
+      function pspRowHtml(item) {
+        const id = item.id || uid();
+        const saved = item.id ? ' data-pay-dest-saved' : '';
+        const provider = item.provider || 'zarinpal';
+        const keyHint = item.has_secret ? '•••••••• ذخیره شده؛ برای تغییر بنویسید' : 'وارد کنید';
+        return (
+          '<div class="pay-dest-row" data-pay-dest-row' + saved + ' data-pay-dest-id="' + attrEsc(id) + '">' +
+            '<div class="pay-dest-fields">' +
+              '<label>نام درگاه<input type="text" class="pay-dest-psp-name" maxlength="64" value="' + attrEsc(item.name) + '" autocomplete="off" /></label>' +
+              '<label>ارائه‌دهنده<select class="pay-dest-psp-provider">' +
+                optionsHtml([['zarinpal', 'زرین‌پال'], ['sunpay', 'سان‌پی (SunPay)'], ['mock', 'Mock (فقط تست محلی)']], provider) +
+              '</select></label>' +
+              '<label>مرچنت / کلید API<input type="password" class="pay-dest-psp-key" dir="ltr" value="" autocomplete="new-password" placeholder="' + attrEsc(keyHint) + '" /></label>' +
+              '<label>آدرس پایه (فقط سان‌پی)<input type="text" class="pay-dest-psp-url" dir="ltr" value="' + attrEsc(item.pay_url) + '" placeholder="https://pay.example.com" autocomplete="off" /></label>' +
+              '<label>روش درخواست سان‌پی<select class="pay-dest-psp-method">' +
+                optionsHtml([['GET', 'GET (مستند)'], ['POST', 'POST']], item.request_method || 'GET') +
+              '</select></label>' +
+              '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-sandbox"' + (item.sandbox ? ' checked' : '') + ' /> سندباکس زرین‌پال</label>' +
+              '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-enabled"' + (item.enabled === false ? '' : ' checked') + ' /> فعال</label>' +
+            '</div>' +
+            '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+          '</div>'
+        );
+      }
+      function pspEntry(row, rowId, idx) {
+        const val = (cls) => String((row.querySelector(cls) || {}).value || '').trim();
+        const checked = (cls) => Boolean((row.querySelector(cls) || {}).checked);
+        const name = val('.pay-dest-psp-name');
+        const key = val('.pay-dest-psp-key');
+        if (!name && !key && !row.hasAttribute('data-pay-dest-saved')) return null;
+        return {
+          id: rowId, name: name, provider: val('.pay-dest-psp-provider'), merchant_id: key,
+          pay_url: val('.pay-dest-psp-url'), request_method: val('.pay-dest-psp-method'),
+          sandbox: checked('.pay-dest-psp-sandbox'), enabled: checked('.pay-dest-psp-enabled'), sort: idx,
+        };
+      }
       function rowHtml(kind, item, inheritLabel) {
+        if (kind === 'psp') return pspRowHtml(item || {});
         const id = (item && item.id) || uid();
         const styleHtml = styleSelectHtml(storedStyleValue(item), inheritLabel);
         if (kind === 'cards') {
@@ -3041,6 +3156,9 @@
             const holder = String((row.querySelector('.pay-dest-card-holder') || {}).value || '').trim();
             if (!number) return;
             entries.push(Object.assign({ id: rowId, number: number, holder: holder, enabled: true, sort: idx }, stylePatch));
+          } else if (kind === 'psp') {
+            const entry = pspEntry(row, rowId, idx);
+            if (entry) entries.push(entry);
           } else if (kind === 'gateways') {
             const name = String((row.querySelector('.pay-dest-gw-name') || {}).value || '').trim();
             const link = String((row.querySelector('.pay-dest-gw-link') || {}).value || '').trim();
@@ -3097,9 +3215,7 @@
           }
         });
         root.addEventListener('input', () => sync(root));
-        root.addEventListener('change', (e) => {
-          if (e.target && e.target.classList && e.target.classList.contains('pay-dest-style')) sync(root);
-        });
+        root.addEventListener('change', () => sync(root));
       });
     })();
 

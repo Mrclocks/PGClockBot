@@ -55,6 +55,10 @@ _LEGACY_ALIASES: dict[str, str] = {
     "off": DEFAULT_COLOR_TAG,
 }
 
+# Stored values that list filters count as green or yellow (legacy palette and empty).
+LEGACY_GREEN_TAGS: tuple[str, ...] = ("blue", "violet", "pink", "slate", "")
+LEGACY_YELLOW_TAGS: tuple[str, ...] = ("amber",)
+
 # Kept for tests / callers that still import the name; unused in UI filters.
 FILTER_NONE = "_none"
 
@@ -131,6 +135,11 @@ def risk_mark(user: Any, *, shop_id: int | None) -> str:
     if (int(owner) if owner is not None else None) != (int(shop_id) if shop_id is not None else None):
         return ""
     return color_tag_meta(effective_color_tag(user)).emoji
+
+
+def tag_mark(tag: str | None) -> str:
+    """The colored circle for a tag already read for the viewing shop (see ``customer_marks``)."""
+    return color_tag_meta(tag).emoji
 
 
 def bot_tag_button_label(key: str | None) -> str:

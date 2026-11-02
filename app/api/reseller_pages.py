@@ -10,11 +10,26 @@ from urllib.parse import quote
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings, normalize_pg_base_url
 from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
+from app.services.miniapp_shop import (
+    PERMISSION as MINIAPP_PERMISSION,
+    STATE_NO_PERMISSION,
+    STATE_OPEN,
+    STATE_PLATFORM_OFF,
+    STATE_SETUP,
+    STATE_SHOP_OFF,
+    shop_miniapp_state,
+)
+from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
+from app.services.db_safe import rollback_quiet
+from app.services.platform_identity import is_explicit_owner_staff
+from app.services.reseller_capacity_view import allocation_view_for_shop
+from app.services.volume_allocation import apply_create_form_oversell, apply_oversell_switch, list_oversold_shop_ids
 from app.services.billing import require_positive_payg_rate
 from app.services.pasarguard import get_pg
 from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
@@ -31,12 +46,15 @@ from app.services.resellers import (
     list_applications,
     normalize_feature_perms,
     notify_reseller_revoked,
+    has_perm,
     parse_perms,
     provision_reseller,
     reject_application,
     revoke_reseller,
     with_shop_settings,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _q(msg: str) -> str:
@@ -97,6 +115,27 @@ def _redirect_reseller_edit(user_id: int, *, ok: str | None = None, err: str | N
     return RedirectResponse(f"/resellers?{'&'.join(qs)}", status_code=303)
 
 
+
+
+# The shop's Mini App state as the platform owner reads it on the reseller page.
+MINIAPP_STATUS_TEXT = {
+    STATE_SETUP: "خاموش — راه‌اندازی ربات فروشگاه کامل نشده یا نماینده غیرفعال است",
+    STATE_PLATFORM_OFF: "خاموش — «مینی‌اپ فروشگاه‌ها» در تنظیمات مینی‌اپ پلتفرم روشن نیست",
+    STATE_NO_PERMISSION: "خاموش — دسترسی «مینی‌اپ فروشگاه برای مشتریان» در همین صفحه داده نشده است",
+    STATE_SHOP_OFF: "خاموش — نماینده هنوز آن را در تنظیمات فروشگاه خود روشن نکرده است",
+    STATE_OPEN: "فعال — مشتری‌ها از دکمهٔ «Open» ربات فروشگاه وارد می‌شوند",
+}
+
+
+def _shop_miniapp_may_open(profile: ResellerProfile) -> bool:
+    """Whether the profile's own state lets its Mini App open (the platform and shop switches aside)."""
+    return bool(profile.is_active and has_perm(profile, MINIAPP_PERMISSION))
+
+
+def _resync_menu_if_miniapp_changed(profile: ResellerProfile, was_open: bool) -> None:
+    """The shop bot's «Open» button follows the permission and the shop's active state."""
+    if _shop_miniapp_may_open(profile) != was_open:
+        schedule_shop_menu_sync([int(profile.id)])
 
 
 def _feature_perms_from_form(form) -> str:
@@ -255,12 +294,13 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         search_q = ""
         try:
             from app.services.list_query import filter_by_search, normalize_search_q
+            from app.services.user_search import clean_handle
 
             search_q = normalize_search_q(request.query_params.get("q"))
             if search_q:
                 rows = filter_by_search(
                     rows,
-                    search_q,
+                    clean_handle(search_q),
                     lambda pair: (
                         pair[0].id,
                         pair[0].telegram_id,
@@ -304,7 +344,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             try:
                 await session.rollback()
             except Exception:
-                pass
+                logger.debug("resellers_page: ignored failure", exc_info=True)
         roles = []
         reseller_usage: dict = {}
         if owner_view:
@@ -355,6 +395,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             reseller_plans = await list_active_reseller_plans(session)
         except Exception:
             reseller_plans = []
+        oversold_shop_ids: list[int] = []
+        if owner_view:
+            try:
+                oversold_shop_ids = await list_oversold_shop_ids(session)
+            except SQLAlchemyError:
+                # The warning is optional; the list page still renders without it.
+                logging.getLogger(__name__).warning("oversold shop list failed", exc_info=True)
+                await rollback_quiet(session)
         return render(
             request,
             "resellers.html",
@@ -362,6 +410,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "staff": staff,
                 "rows": rows,
                 "reseller_usage": reseller_usage,
+                "oversold_shop_ids": oversold_shop_ids,
                 "tabs": _tabs("list"),
                 "tab": "list",
                 "feature_perms": FEATURE_PERMS,
@@ -474,6 +523,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             )
         except Exception as e:
             return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+        await apply_create_form_oversell(
+            session, int(user.id), form_value=form.get("allow_volume_oversell"),
+            actor_is_owner=is_explicit_owner_staff(staff),
+        )
 
         try:
             from app.bot import create_bot
@@ -488,7 +541,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             finally:
                 await bot.session.close()
         except Exception:
-            pass
+            logger.debug("reseller_create: ignored failure", exc_info=True)
         return RedirectResponse(
             f"/resellers?ok={_q('نماینده فعال شد — اطلاعات ورود (پاسارگارد + وب‌پنل) ارسال شد')}",
             status_code=303,
@@ -646,12 +699,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             if sub is not None:
                 plan = await session.get(ResellerPlan, int(sub.plan_id)) if sub.plan_id else None
                 exp = sub.expires_at
+                alloc = await allocation_view_for_shop(session, int(user_id))
                 pg_subscription = {
                     "expires_at": format_expire_short(exp) if exp else None,
                     **build_capacity_view(
                         sub,
                         current_capacity=is_current_capacity_plan(plan),
                         live=live_capacity_from_overview(pg_limits),
+                        allocation=alloc,
                     ),
                 }
         from app.services.color_tags import color_tags_for_ui
@@ -662,6 +717,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             "profile": profile,
             "feature_perms": FEATURE_PERMS,
             "selected_perms": perms,
+            "miniapp_status": MINIAPP_STATUS_TEXT[await shop_miniapp_state(session, profile)],
             "pg_roles": roles,
             "is_payg": is_payg(profile),
             "billing_txs": billing_txs,
@@ -677,6 +733,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             "flash_err": request.query_params.get("err"),
             "color_tags": color_tags_for_ui(),
             "pg_api_key_ready": False,
+            "owner_can_toggle_oversell": is_explicit_owner_staff(staff),
         }
         if (getattr(profile, "pg_api_key_enc", None) or "").strip():
             ctx["pg_api_key_ready"] = True
@@ -798,11 +855,19 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         if not user or not profile:
             return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
         perms = _feature_perms_from_form(form)
+        miniapp_before = _shop_miniapp_may_open(profile)
         profile.web_permissions = perms
         profile.bot_permissions = perms  # must stay identical
         profile.can_approve_receipts = "payments" in parse_perms(perms)
         profile.is_active = bool(form.get("is_active"))
         profile.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
+        # An unchecked switch is not posted; the marker says the switch was on the form.
+        apply_oversell_switch(
+            profile,
+            shown=bool(form.get("volume_oversell_shown")),
+            allow=bool(form.get("allow_volume_oversell")),
+            actor_is_owner=is_explicit_owner_staff(staff),
+        )
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         new_pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
         profile.pg_role_id = new_pg_role_id
@@ -882,6 +947,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 return _redirect_reseller_edit(user_id, err=str(e))
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
         await session.commit()
+        _resync_menu_if_miniapp_changed(profile, miniapp_before)
         return _redirect_reseller_edit(user_id, ok='ذخیره شد')
 
     @app.post("/resellers/{user_id}/billing-topup")
@@ -891,34 +957,43 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        """MVP: manual Billing credit by Super Admin only."""
+        """Manual increase or decrease of a reseller wallet (PAYG or fixed), Super Admin only."""
+        from app.services.bot_user_admin import parse_admin_wallet_amount, parse_admin_wallet_mode
+        from app.services.reseller_wallet import adjust_reseller_wallet, schedule_followups
+
+        user = await session.get(BotUser, user_id)
+        if user is None or await session.scalar(
+            select(ResellerProfile.id).where(ResellerProfile.user_id == user_id)
+        ) is None:
+            return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
         form = await request.form()
-        raw = str(form.get("amount") or "").strip().replace(",", "")
         note = str(form.get("note") or "").strip()
         try:
-            amount = int(float(raw))
-        except (TypeError, ValueError):
-            return _redirect_reseller_edit(user_id, err='مبلغ نامعتبر است')
-        if amount < 1000:
-            return _redirect_reseller_edit(user_id, err='حداقل شارژ ۱۰۰۰ تومان است')
-        from app.services.billing import credit_topup
-
-        actor = str(staff.get("username") or staff.get("role") or "admin")
+            amount = parse_admin_wallet_amount(str(form.get("amount") or "").replace(",", ""))
+            # Forms from before the decrease button carry no mode: they were always a charge.
+            mode = parse_admin_wallet_mode(str(form.get("mode") or "credit"))
+        except ValueError as e:
+            return _redirect_reseller_edit(user_id, err=str(e))
         nonce = str(form.get("nonce") or "").strip()
         if len(nonce) < 8:
             return _redirect_reseller_edit(user_id, err='فرم شارژ منقضی شده — صفحه را تازه کنید')
+        actor = str(staff.get("username") or staff.get("role") or "admin")
+        # The charge key keeps its earlier format so a form opened before the update stays a no-op.
+        key = (
+            f"manual:{user_id}:{amount}:{note}:{actor}:{nonce}"
+            if mode == "credit"
+            else f"manual-debit:{user_id}:{amount}:{note}:{actor}:{nonce}"
+        )
         try:
-            await credit_topup(
-                session,
-                int(user_id),
-                amount,
-                created_by=actor,
-                note=note or "شارژ دستی ادمین",
-                idempotency_key=f"manual:{user_id}:{amount}:{note}:{actor}:{nonce}",
+            change = await adjust_reseller_wallet(
+                session, user, amount, mode=mode, actor=actor, note=note, idempotency_key=key
             )
         except ValueError as e:
             return _redirect_reseller_edit(user_id, err=str(e))
-        return _redirect_reseller_edit(user_id, ok=f'شارژ کیف پول به مبلغ {amount:,} تومان ثبت شد')
+        schedule_followups(change)
+        if mode == "credit":
+            return _redirect_reseller_edit(user_id, ok=f'شارژ کیف پول به مبلغ {amount:,} تومان ثبت شد')
+        return _redirect_reseller_edit(user_id, ok=f'از کیف پول {amount:,} تومان کسر شد')
 
     @app.post("/resellers/{user_id}/subscription/adjust")
     async def reseller_subscription_adjust(
@@ -1739,7 +1814,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             try:
                 await session.rollback()
             except Exception:
-                pass
+                logger.debug("reseller_plan_delete: ignored failure", exc_info=True)
             return RedirectResponse(
                 f"/plans?err={_q(e.message)}#reseller-plans", status_code=303
             )

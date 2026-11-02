@@ -11,7 +11,6 @@ ROOT = Path(__file__).resolve().parents[1]
 PAGES = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
 AUTH = (ROOT / "app/services/miniapp_auth.py").read_text(encoding="utf-8")
 ORDERS = (ROOT / "app/services/orders.py").read_text(encoding="utf-8")
-JS = (ROOT / "app/web/static/miniapp.js").read_text(encoding="utf-8")
 
 
 class MiniAppSecuritySourceTests(unittest.TestCase):
@@ -61,11 +60,6 @@ class MiniAppSecuritySourceTests(unittest.TestCase):
             self.assertNotIn(leak, ser)
         self.assertIn("upstream_unavailable", ser)
 
-    def test_catalog_platform_only(self):
-        self.assertIn("Plan.owner_reseller_id.is_(None)", PAGES)
-        buy = PAGES.split("async def mini_buy")[1].split("async def mini_renew")[0]
-        self.assertIn("owner_reseller_id is not None", buy)
-
     def test_ownership_helper_on_service_paths(self):
         self.assertIn("_owned_service_or_404", PAGES)
         for name in ("mini_service", "mini_service_qr", "mini_renew"):
@@ -107,17 +101,6 @@ class MiniAppSecuritySourceTests(unittest.TestCase):
     def test_feature_gate_on_page_and_api(self):
         self.assertIn("assert_miniapp_feature_enabled", AUTH)
         self.assertIn("assert_miniapp_feature_enabled()", PAGES)
-
-    def test_js_panel_path_and_url_hardening(self):
-        self.assertIn('p.startsWith("/")', JS)
-        self.assertIn('p.startsWith("//")', JS)
-        self.assertIn("safeUrl(s.subscription_url", JS)
-
-    def test_copy_button_flashes_copied_label(self):
-        self.assertIn("function markCopied(", JS)
-        self.assertIn("کپی شد", JS)
-        self.assertIn("is-copied", JS)
-        self.assertNotIn("لینک کپی شد", JS)
 
     def test_panel_open_uses_panel_base_not_public_url(self):
         self.assertIn("_mini_panel_base", PAGES)

@@ -35,8 +35,10 @@ from app.services.users import (
     reset_shop_reseller_id,
     set_shop_reseller_id,
 )
+from app.services.chat_records import keeps_sent
 
 log = logging.getLogger(__name__)
+TOPUP_CALLBACK = "nv:w:topup"
 ACTIONS = ("renew", "duration", "volume")
 LABELS = {
     "renew": "تمدید خودکار",
@@ -280,6 +282,7 @@ def actions_for_exhaustion(
     ]
 
 
+@keeps_sent
 async def notify_once(
     session: AsyncSession,
     row: ServiceAutomation,
@@ -299,12 +302,13 @@ async def notify_once(
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
+                    *([[InlineKeyboardButton(text="➕ شارژ کیف پول", callback_data=TOPUP_CALLBACK)]] if code == "low_wallet" else []),
                     [
                         InlineKeyboardButton(
                             text="⚙️ تنظیمات خودکار سرویس",
                             callback_data=f"svc:auto:{service.id}",
                         ),
-                    ]
+                    ],
                 ]
             ),
         )

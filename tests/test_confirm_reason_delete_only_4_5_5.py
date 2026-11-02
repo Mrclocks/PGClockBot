@@ -30,6 +30,8 @@ class ConfirmReasonOnlyOnAccountDeletes(unittest.TestCase):
         "_reseller_edit_body.html",
         "_user_edit_body.html",
         "pg_admins.html",
+        # Not a delete: the message to trial users reuses the prompt as a text box (own label).
+        "trial_users.html",
     }
 
     def test_only_allowed_templates_set_data_confirm_reason(self):

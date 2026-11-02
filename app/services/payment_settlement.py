@@ -1,7 +1,7 @@
 """Payment Settlement Core — additive, fail-closed, tenant-isolated, idempotent.
 
 Channels:
-  - psp: Iranian/online gateway (mock gated by env / zarinpal / …)
+  - psp: Iranian/online gateway (mock gated by env / zarinpal / sunpay / …)
   - card_auto: signed webhook from card-confirm providers (per-tenant secret)
   - bbc: BezanBeCard card-to-card match (see ``bbc_settlement``)
 
@@ -16,15 +16,18 @@ import hmac
 import json
 import logging
 import secrets
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from sqlalchemy import select, update
+from sqlalchemy import case, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.services.db_safe import rollback_quiet
 from app.db.models import (
     BotUser,
     Order,
@@ -36,10 +39,18 @@ from app.db.models import (
 from app.services.orders import approve_payment
 from app.services.shop_scope import payment_shop_id
 from app.services.payment_providers import get_psp_adapter
-from app.services.payment_providers.base import CheckoutRequest
+from app.services.psp_gateways import PspGateway, choose_psp_gateway, find_psp_gateway
+from app.services.payment_providers.base import CheckoutRequest, VerifyResult
 from app.services.payment_providers.card_auto import (
     parse_card_auto_event,
     verify_signature,
+)
+from app.services.psp_settlement_review import (
+    REVIEW_IN_PROGRESS_MESSAGE,
+    is_in_review,
+    merge_verify_details,
+    send_to_review,
+    unusable_payment_reason,
 )
 from app.services.users import get_all_settings
 
@@ -49,6 +60,34 @@ CHANNEL_PSP = "psp"
 CHANNEL_CARD_AUTO = "card_auto"
 CHANNEL_BBC = "bbc"
 BBC_PROVIDER = "bezanbecard"
+
+# Shown on the Telegram PSP checkout message (above the open-gateway button).
+# Browser return to the panel domain often fails when the payer has VPN off
+# for the Iranian bank gateway — the bot + settlement poller are the real path.
+PSP_VPN_NOTICE = "⚠️ برای ورود به درگاه، VPN خود را خاموش کنید."
+PSP_BOT_RETURN_NOTICE = (
+    "✅ بعد از پرداخت موفق، صفحهٔ درگاه را ببندید و به همین چت ربات برگردید. "
+    "تأیید و تحویل خودکار است؛ لازم نیست منتظر باز شدن صفحهٔ سایت بمانید."
+)
+
+
+def with_psp_checkout_guidance(body: str) -> str:
+    """Append VPN + bot-primary return guidance once (works with custom templates)."""
+    text = (body or "").rstrip()
+    extras: list[str] = []
+    if PSP_VPN_NOTICE not in text:
+        extras.append(PSP_VPN_NOTICE)
+    if PSP_BOT_RETURN_NOTICE not in text:
+        extras.append(PSP_BOT_RETURN_NOTICE)
+    if not extras:
+        return text
+    suffix = "\n\n".join(extras)
+    return f"{text}\n\n{suffix}" if text else suffix
+
+
+def with_psp_vpn_notice(body: str) -> str:
+    """Backward-compatible alias for ``with_psp_checkout_guidance``."""
+    return with_psp_checkout_guidance(body)
 
 _OPEN_STATUSES = (
     SettlementStatus.CREATED.value,
@@ -62,8 +101,113 @@ def _public_base() -> str:
     return (cfg.public_base_url or cfg.webhook_url or "").rstrip("/")
 
 
+# Telegram button: gateway page (default, like 0.4.27) or panel /go/ hop.
+PSP_CHECKOUT_LINK_DIRECT = "direct"
+PSP_CHECKOUT_LINK_PANEL = "panel"
+
+
+def normalize_psp_checkout_link_mode(raw: str | None) -> str:
+    """``direct`` (default) or ``panel``; unknown values fall back to direct."""
+    mode = str(raw or "").strip().lower()
+    if mode in {PSP_CHECKOUT_LINK_PANEL, "go", "panel_go"}:
+        return PSP_CHECKOUT_LINK_PANEL
+    return PSP_CHECKOUT_LINK_DIRECT
+
+
+def _panel_go_checkout_url(settlement: PaymentSettlement) -> str:
+    """Panel-hosted ``/go/`` so referrer host matches the PSP callback host."""
+    raw = (settlement.checkout_url or "").strip()
+    token = (settlement.checkout_token or "").strip()
+    if not raw or not token or int(getattr(settlement, "id", 0) or 0) <= 0:
+        return raw
+    try:
+        from app.services.public_https import https_public_base
+
+        base = https_public_base() or _public_base()
+    except Exception:
+        base = _public_base()
+    base = (base or "").rstrip("/")
+    if not base.startswith("http://") and not base.startswith("https://"):
+        return raw
+    from urllib.parse import quote
+
+    return (
+        f"{base}/payments/settlement/go/{int(settlement.id)}"
+        f"?t={quote(token, safe='')}"
+    )
+
+
+def public_checkout_button_url(
+    settlement: PaymentSettlement,
+    *,
+    ui: dict[str, str] | None = None,
+    mode: str | None = None,
+) -> str:
+    """Telegram «ورود به درگاه» URL.
+
+    Default ``psp_checkout_link_mode=direct`` shows the PSP page
+    (e.g. ``payment.….ir/pay/…``). Set mode to ``panel`` to hop via panel
+    ``/go/`` when Shaparak needs matching referrer/callback hosts.
+    """
+    chosen = normalize_psp_checkout_link_mode(
+        mode if mode is not None else (ui or {}).get("psp_checkout_link_mode")
+    )
+    if chosen == PSP_CHECKOUT_LINK_PANEL:
+        return _panel_go_checkout_url(settlement)
+    return (settlement.checkout_url or "").strip()
+
+
 def _on(val: str | None) -> bool:
     return str(val or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def callback_indicates_user_abort(callback_params: dict[str, Any]) -> bool:
+    """True when the browser return clearly means the payer left without paying.
+
+    Missing flags are NOT an abort (and must not burn the settlement either —
+    see complete_psp_return). Used for messaging / tests only.
+    """
+    if not callback_params:
+        return False
+    # Zarinpal-style Status=OK / NOK
+    status = str(
+        callback_params.get("Status") or callback_params.get("status") or ""
+    ).strip().upper()
+    if status and status not in {"OK", "PAID", "SUCCESS"}:
+        return True
+    # SunPay-style success=1 / 0 (only when the key is present)
+    if "success" in callback_params:
+        raw = callback_params.get("success")
+        if raw is True:
+            return False
+        if raw is False:
+            return True
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            return int(raw) != 1
+        text = str(raw).strip().lower()
+        if text in {"1", "true", "yes", "ok", "success"}:
+            return False
+        return True
+    return False
+
+
+def callback_invoice_matches_settlement(
+    callback_params: dict[str, Any], *, settlement_id: int
+) -> None:
+    """When the gateway echoes invoice_id, it must equal our settlement row id."""
+    if "invoice_id" not in callback_params:
+        return
+    raw = callback_params.get("invoice_id")
+    if raw is None or str(raw).strip() == "":
+        return
+    if isinstance(raw, bool):
+        raise ValueError("شناسه فاکتور نامعتبر است")
+    try:
+        invoice_id = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("شناسه فاکتور نامعتبر است") from exc
+    if invoice_id != int(settlement_id):
+        raise ValueError("شناسه فاکتور با تسویه هم‌خوانی ندارد")
 
 
 def settlement_mock_allowed() -> bool:
@@ -261,14 +405,54 @@ async def _insert_settlement_race_safe(
         return raced
 
 
+def _checkout_to_keep(existing: PaymentSettlement) -> bool:
+    """True when the existing attempt is returned as is instead of a new link."""
+    if is_in_review(existing):
+        # A paid attempt waits for staff; a new link must not overwrite its record.
+        raise ValueError(REVIEW_IN_PROGRESS_MESSAGE)
+    if existing.status in {SettlementStatus.SETTLED.value, SettlementStatus.SETTLING.value}:
+        return True
+    return existing.status == SettlementStatus.AWAITING.value and bool(
+        (existing.checkout_url or "").strip()
+    )
+
+
+def _checkout_gateway(ui: dict, gateway_id: str | None) -> PspGateway:
+    gateway = choose_psp_gateway(ui, gateway_id)
+    if gateway.provider == "mock" and not settlement_mock_allowed():
+        raise ValueError(
+            "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را zarinpal یا sunpay بگذارید"
+        )
+    return gateway
+
+
+def _verify_gateway(ui: dict, settlement: PaymentSettlement) -> PspGateway:
+    """The gateway the checkout was created on; verifying with another merchant is never safe."""
+    gateway = find_psp_gateway(ui, settlement.gateway_id)
+    if gateway is None or gateway.provider != settlement.provider:
+        logger.warning(
+            "psp verify: gateway %s of settlement %s was removed or changed provider",
+            settlement.gateway_id,
+            settlement.id,
+        )
+        raise ValueError("درگاه این پرداخت در تنظیمات فروشگاه پیدا نشد")
+    return gateway
+
+
 async def create_psp_checkout(
     session: AsyncSession,
     payment: Payment,
     *,
     reseller_id: int | None = None,
     description: str = "",
+    gateway_id: str | None = None,
 ) -> PaymentSettlement:
-    """Create or reuse the single open PSP settlement for this payment (race-safe)."""
+    """Create or reuse the single open PSP settlement for this payment (race-safe).
+
+    ``gateway_id`` picks one of the shop's enabled gateways (the first when omitted). An
+    open checkout that already has a link is returned as is, whichever gateway it uses:
+    the customer may already be paying it.
+    """
     if payment.status != PaymentStatus.PENDING.value:
         raise ValueError("پرداخت قابل شروع درگاه نیست")
     if int(payment.amount) <= 0:
@@ -282,17 +466,28 @@ async def create_psp_checkout(
     if not _on(ui.get("pay_psp_enabled")):
         raise ValueError("پرداخت درگاه API غیرفعال است")
 
-    provider = str(ui.get("psp_provider") or "zarinpal").strip().lower() or "zarinpal"
-    if provider == "mock" and not settlement_mock_allowed():
-        raise ValueError(
-            "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را zarinpal بگذارید"
-        )
+    gateway = _checkout_gateway(ui, gateway_id)
+    provider = gateway.provider
 
-    base = _public_base()
-    if not base and provider != "mock":
-        raise ValueError("PUBLIC_BASE_URL برای بازگشت درگاه تنظیم نشده")
-    if not base:
-        base = "http://127.0.0.1:8000"
+    # SunPay requires a public https callback (same resolution as BezanBeCard).
+    # Zarinpal/mock keep the previous env-based base (http allowed for local/mock).
+    if provider == "sunpay":
+        from app.services.public_https import https_public_base
+        from app.services.payment_providers.sunpay import CUSTOMER_UNAVAILABLE
+
+        base = https_public_base()
+        if not base:
+            logger.warning(
+                "sunpay checkout refused: no https public base "
+                "(enable panel TLS or set PUBLIC_BASE_URL/WEBHOOK_URL to https)"
+            )
+            raise ValueError(CUSTOMER_UNAVAILABLE)
+    else:
+        base = _public_base()
+        if not base and provider != "mock":
+            raise ValueError("PUBLIC_BASE_URL برای بازگشت درگاه تنظیم نشده")
+        if not base:
+            base = "http://127.0.0.1:8000"
 
     idem = idem_key_psp(int(payment.id))
     existing = await _get_by_idem(session, idem)
@@ -302,17 +497,14 @@ async def create_psp_checkout(
         )
 
     if existing:
-        if existing.status == SettlementStatus.SETTLED.value:
-            return existing
-        if existing.status == SettlementStatus.SETTLING.value:
-            return existing
-        if existing.status == SettlementStatus.AWAITING.value and (existing.checkout_url or "").strip():
+        if _checkout_to_keep(existing):
             return existing
         # FAILED / CREATED without URL / stale → reuse same row (deterministic key).
         settlement = existing
         settlement.shop_owner_id = shop_owner_id
         settlement.tenant_key = tenant_key_for(shop_owner_id)
         settlement.provider = provider
+        settlement.gateway_id = gateway.id
         settlement.amount = int(payment.amount)
         settlement.status = SettlementStatus.CREATED.value
         settlement.error_message = None
@@ -328,6 +520,7 @@ async def create_psp_checkout(
             tenant_key=tenant_key_for(shop_owner_id),
             channel=CHANNEL_PSP,
             provider=provider,
+            gateway_id=gateway.id,
             status=SettlementStatus.CREATED.value,
             amount=int(payment.amount),
             currency="IRT",
@@ -371,7 +564,7 @@ async def create_psp_checkout(
             raise ValueError("ساخت تسویه همزمان ناموفق بود — دوباره تلاش کنید")
         settlement = inserted
 
-    adapter = get_psp_adapter(provider, ui=ui, public_base_url=base)
+    adapter = get_psp_adapter(provider, ui=gateway.adapter_settings(), public_base_url=base)
     token = settlement.checkout_token or secrets.token_urlsafe(24)
     settlement.checkout_token = token
     callback_url = f"{base}/payments/settlement/psp/{provider}/return/{int(settlement.id)}"
@@ -390,8 +583,11 @@ async def create_psp_checkout(
     try:
         result = await adapter.create_checkout(req)
     except Exception as exc:
+        from app.services.payment_providers.sunpay import SunPayGatewayError
+
         settlement.status = SettlementStatus.FAILED.value
-        settlement.error_message = str(exc)[:500]
+        detail = getattr(exc, "admin_detail", None) if isinstance(exc, SunPayGatewayError) else None
+        settlement.error_message = (str(detail or exc))[:500]
         await session.commit()
         raise
 
@@ -656,6 +852,38 @@ async def _revert_claim_to_awaiting(
     await session.refresh(settlement)
 
 
+async def _approved_but_undelivered(session: AsyncSession, payment: Payment) -> bool:
+    """True when approve_payment committed the money but its delivery then failed."""
+    await session.refresh(payment)
+    return payment.status == PaymentStatus.APPROVED.value
+
+
+async def _report_undelivered(session: AsyncSession, payment: Payment, error: str) -> None:
+    """Queue the order under failed deliveries and alert its shop's staff, who resume it.
+
+    Delivery is not retried automatically: a panel that failed mid-create may already
+    hold the user, and only a person can tell before a second user is created.
+    """
+    # Local imports: notifications and the bot pull in handler modules that import this one.
+    from app.bot import create_bot
+    from app.services.notifications import notify_approved_delivery_stuck
+    from app.services.ux20 import note_delivery_send_failure
+
+    order = await session.get(Order, int(payment.order_id)) if payment.order_id else None
+    await note_delivery_send_failure(session, order=order, payment=payment, error=error)
+    payer = await session.get(BotUser, int(payment.user_id)) if payment.user_id else None
+    bot = create_bot()
+    try:
+        await notify_approved_delivery_stuck(
+            bot, session, payment, getattr(payer, "telegram_id", None), error=error
+        )
+    except Exception:
+        # The failed-delivery queue still lists the order for staff.
+        logger.warning("undelivered payment notice failed payment=%s", payment.id, exc_info=True)
+    finally:
+        await bot.session.close()
+
+
 async def settle_and_approve(
     session: AsyncSession,
     settlement: PaymentSettlement,
@@ -722,16 +950,21 @@ async def settle_and_approve(
 
     try:
         await approve_payment(session, payment, reviewer_tg=reviewer_tg)
-    except ValueError as exc:
-        if "قبلاً تأیید شده" in str(exc):
+    except Exception as exc:
+        if isinstance(exc, ValueError) and "قبلاً تأیید شده" in str(exc):
             await _finalize_settled(session, settlement)
             await session.commit()
             await session.refresh(payment)
             return payment
-        await _revert_claim_to_awaiting(session, settlement, error=str(exc))
-        await session.commit()
-        raise
-    except Exception as exc:
+        await rollback_quiet(session)
+        await session.refresh(settlement)
+        if await _approved_but_undelivered(session, payment):
+            # The money is confirmed: settle it so the gateway is not asked again, and
+            # hand the unfinished delivery to staff instead of reporting a payment failure.
+            await _finalize_settled(session, settlement)
+            await session.commit()
+            await _report_undelivered(session, payment, str(exc))
+            return payment
         await _revert_claim_to_awaiting(session, settlement, error=str(exc))
         await session.commit()
         raise
@@ -789,6 +1022,8 @@ async def complete_psp_return(
         )
         await session.refresh(settlement)
         return settlement
+    if is_in_review(settlement):
+        return settlement
 
     if provider == "mock":
         # Token required while still open; settling/settled already consumed it.
@@ -798,43 +1033,32 @@ async def complete_psp_return(
         }:
             _require_mock_token(settlement, str(callback_params.get("token") or ""))
 
+    # No pay_psp_enabled check: the toggle stops new checkouts, but a customer who
+    # already paid an open checkout must still be verified and delivered.
     ui = await get_all_settings(session, reseller_id=settlement.shop_owner_id)
-    if not _on(ui.get("pay_psp_enabled")):
-        raise ValueError("پرداخت درگاه API غیرفعال است")
 
     base = _public_base() or "http://127.0.0.1:8000"
-    adapter = get_psp_adapter(provider, ui=ui, public_base_url=base)
-    external_ref = settlement.external_ref or str(
-        callback_params.get("Authority")
-        or callback_params.get("authority")
-        or callback_params.get("external_ref")
-        or ""
+    adapter = get_psp_adapter(
+        provider, ui=_verify_gateway(ui, settlement).adapter_settings(), public_base_url=base
     )
-    if not external_ref:
-        raise ValueError("شناسه تراکنش موجود نیست")
-    if settlement.external_ref and str(settlement.external_ref).lower() != str(external_ref).lower():
-        raise ValueError("شناسه تراکنش با تسویه هم‌خوانی ندارد")
+    callback_invoice_matches_settlement(
+        callback_params, settlement_id=int(settlement.id)
+    )
+    external_ref = _psp_return_external_ref(settlement, callback_params)
 
     # Real PSP: callback alone is never enough — adapter.verify talks to provider.
     verified = await adapter.verify(
         external_ref=external_ref,
         amount=int(settlement.amount),
         callback_params=callback_params,
+        expected_invoice_id=int(settlement.id),
     )
     if not verified.ok:
-        # Soft cancel (Status=NOK / user backed out) must NOT burn the settlement.
-        # Anyone can hit the public return URL with Status=NOK and otherwise
-        # permanently FAIL a pending checkout before the real payer finishes.
-        cb_status = str(
-            callback_params.get("Status") or callback_params.get("status") or ""
-        ).strip().upper()
-        if cb_status and cb_status != "OK":
-            raise ValueError(verified.message or "پرداخت توسط کاربر تکمیل نشد")
-        settlement.status = SettlementStatus.FAILED.value
-        settlement.error_message = (verified.message or "verify failed")[:500]
-        await session.commit()
-        raise ValueError(verified.message or "تأیید درگاه ناموفق بود")
+        await _handle_unverified_return(session, settlement, verified)
+        return settlement
 
+    if await _sent_paid_settlement_to_review(session, settlement, payment, verified):
+        return settlement
     paid_amount = verified.amount if verified.amount is not None else settlement.amount
     await settle_and_approve(
         session,
@@ -845,6 +1069,65 @@ async def complete_psp_return(
     )
     await session.refresh(settlement)
     return settlement
+
+
+def _psp_return_external_ref(
+    settlement: PaymentSettlement, callback_params: dict[str, Any]
+) -> str:
+    external_ref = settlement.external_ref or str(
+        callback_params.get("Authority")
+        or callback_params.get("authority")
+        or callback_params.get("token")
+        or callback_params.get("external_ref")
+        or ""
+    )
+    if not external_ref:
+        raise ValueError("شناسه تراکنش موجود نیست")
+    if settlement.external_ref and str(settlement.external_ref).lower() != str(external_ref).lower():
+        raise ValueError("شناسه تراکنش با تسویه هم‌خوانی ندارد")
+    return external_ref
+
+
+async def _handle_unverified_return(
+    session: AsyncSession, settlement: PaymentSettlement, verified: VerifyResult
+) -> None:
+    """Send a paid-but-unusable result to review; raise for anything retriable."""
+    if verified.review_reason:
+        await send_to_review(session, settlement, verified.review_reason, verified=verified)
+        return
+    # Public return URL is unauthenticated and settlement ids are sequential.
+    # Never mark FAILED here: missing params, user abort, network/timeout,
+    # or "not paid yet" must leave AWAITING so the real payer can finish and
+    # verify (read-only) can be retried. Only settle_and_approve amount/tenant
+    # mismatches permanently fail a settlement.
+    # Persist last error for admin visibility while staying AWAITING;
+    # the PSP poller retries verify without needing the browser return.
+    msg = (verified.message or "تأیید درگاه ناموفق بود")[:500]
+    if settlement.status == SettlementStatus.AWAITING.value:
+        settlement.error_message = msg
+        await session.commit()
+    raise ValueError(msg)
+
+
+async def _sent_paid_settlement_to_review(
+    session: AsyncSession,
+    settlement: PaymentSettlement,
+    payment: Payment,
+    verified: VerifyResult,
+) -> bool:
+    """Record the verified payment; hand it to staff when it can no longer be approved.
+
+    The gateway already holds the money, so a payment that was replaced or an order
+    that was paid, delivered or cancelled meanwhile must not loop through re-verify.
+    """
+    reason = await unusable_payment_reason(session, payment)
+    if reason is not None:
+        await send_to_review(session, settlement, reason, verified=verified)
+        return True
+    if verified.reference or verified.paid_at:
+        settlement.provider_payload = merge_verify_details(settlement.provider_payload, verified)
+        await session.commit()
+    return False
 
 
 async def handle_card_auto_webhook(
@@ -991,6 +1274,219 @@ async def mock_psp_pay(
     )
 
 
+PSP_POLL_BATCH = 40
+# Abandoned checkouts (closed tab, never paid) must age out; matches bbc late window.
+PSP_POLL_WINDOW = timedelta(hours=48)
+# Fresh checkouts are re-verified on every run; older ones back off so abandoned
+# checkouts cannot crowd new payers out of the batch or flood the gateway.
+PSP_POLL_BACKOFF: tuple[tuple[timedelta, timedelta], ...] = (
+    (timedelta(minutes=15), timedelta(0)),
+    (timedelta(hours=2), timedelta(minutes=3)),
+    (timedelta(hours=12), timedelta(minutes=15)),
+)
+PSP_POLL_BACKOFF_MAX = timedelta(minutes=45)
+_PSP_POLLABLE = frozenset({"sunpay", "zarinpal"})
+
+
+def _psp_poll_callback_params(settlement: PaymentSettlement) -> dict[str, Any] | None:
+    """Trusted server-side params so adapters will call the read-only verify API."""
+    provider = (settlement.provider or "").strip().lower()
+    token = (settlement.external_ref or "").strip()
+    if not token or provider not in _PSP_POLLABLE:
+        return None
+    if provider == "sunpay":
+        return {
+            "success": "1",
+            "token": token,
+            "invoice_id": str(int(settlement.id)),
+        }
+    # zarinpal
+    return {"Status": "OK", "Authority": token}
+
+
+# A claim older than this is not a settle in progress: approve and delivery have timeouts.
+PSP_SETTLING_STALE_AFTER = timedelta(minutes=10)
+
+
+async def _recover_one_stuck_settlement(
+    session: AsyncSession, settlement: PaymentSettlement
+) -> bool:
+    """Finish or reopen one stale SETTLING row. True when it became SETTLED."""
+    payment = await session.get(Payment, int(settlement.payment_id))
+    if payment is not None and payment.status == PaymentStatus.APPROVED.value:
+        # approve_payment committed (with the claim) but the process stopped before
+        # SETTLED: the money is accounted for, only the settlement and notice remain.
+        await _finalize_settled(session, settlement)
+        await session.commit()
+        logger.warning("psp settlement recovered as settled settlement=%s", settlement.id)
+        if settlement.status == SettlementStatus.SETTLED.value:
+            await deliver_psp_once(session, settlement)
+            return True
+        return False
+    # Nothing was approved: reopen so the next verify settles or reviews it.
+    await _revert_claim_to_awaiting(session, settlement, error="stale settling claim reopened")
+    await session.commit()
+    logger.warning("psp settlement reopened from stale claim settlement=%s", settlement.id)
+    return False
+
+
+async def recover_stuck_psp_settlements(
+    session: AsyncSession, *, limit: int = PSP_POLL_BATCH
+) -> int:
+    """Finish PSP rows left in SETTLING by a crash between approve and SETTLED."""
+    cutoff = datetime.now(timezone.utc) - PSP_SETTLING_STALE_AFTER
+    rows = (
+        await session.execute(
+            select(PaymentSettlement)
+            .where(
+                PaymentSettlement.channel == CHANNEL_PSP,
+                PaymentSettlement.status == SettlementStatus.SETTLING.value,
+                PaymentSettlement.updated_at < cutoff,
+            )
+            .order_by(PaymentSettlement.id.asc())
+            .limit(max(1, min(100, int(limit))))
+        )
+    ).scalars().all()
+    settled = 0
+    for settlement in rows:
+        try:
+            if await _recover_one_stuck_settlement(session, settlement):
+                settled += 1
+        except Exception:
+            logger.exception("psp stuck settlement recovery failed settlement=%s", settlement.id)
+            await rollback_quiet(session)
+    return settled
+
+
+async def claim_psp_delivery_notice(
+    session: AsyncSession, settlement: PaymentSettlement
+) -> bool:
+    """True for exactly one caller once SETTLED; that caller sends Telegram delivery."""
+    claimed = await session.execute(
+        update(PaymentSettlement)
+        .where(
+            PaymentSettlement.id == int(settlement.id),
+            PaymentSettlement.status == SettlementStatus.SETTLED.value,
+            PaymentSettlement.notified_at.is_(None),
+        )
+        .values(notified_at=datetime.now(timezone.utc))
+    )
+    await session.commit()
+    return claimed.rowcount == 1
+
+
+async def deliver_psp_once(session: AsyncSession, settlement: PaymentSettlement) -> None:
+    if not await claim_psp_delivery_notice(session, settlement):
+        return
+    payment = await session.get(Payment, int(settlement.payment_id))
+    if payment is None:
+        return
+    order = await session.get(Order, int(payment.order_id)) if payment.order_id else None
+    try:
+        await notify_after_settlement(session, payment, order)
+    except Exception:
+        logger.exception("psp delivery notice failed payment=%s", payment.id)
+
+
+def psp_poll_delay(age: timedelta) -> timedelta:
+    """Wait before the next re-verify of a checkout that is ``age`` old."""
+    for younger_than, delay in PSP_POLL_BACKOFF:
+        if age < younger_than:
+            return delay
+    return PSP_POLL_BACKOFF_MAX
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    # SQLite returns naive datetimes for timezone-aware columns; they are stored as UTC.
+    if value is None or value.tzinfo is not None:
+        return value
+    return value.replace(tzinfo=timezone.utc)
+
+
+async def _schedule_next_psp_check(
+    session: AsyncSession, settlement: PaymentSettlement, *, now: datetime
+) -> None:
+    """Commit the next check time before the gateway call, so a slow or failing
+    verify still moves the row back in the queue."""
+    created = _as_utc(settlement.created_at) or now
+    await session.execute(
+        update(PaymentSettlement)
+        .where(PaymentSettlement.id == int(settlement.id))
+        .values(next_check_at=now + psp_poll_delay(now - created))
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+
+
+async def _poll_one_psp_settlement(
+    session: AsyncSession, settlement: PaymentSettlement, *, now: datetime
+) -> bool:
+    """Re-verify one open PSP row. True when it became SETTLED in this pass."""
+    params = _psp_poll_callback_params(settlement)
+    if params is None:
+        return False
+    await _schedule_next_psp_check(session, settlement, now=now)
+    try:
+        updated = await complete_psp_return(
+            session,
+            provider=str(settlement.provider),
+            settlement_id=int(settlement.id),
+            callback_params=params,
+            reseller_id=settlement.shop_owner_id,
+        )
+    except ValueError:
+        logger.info("psp poll verify not ready settlement=%s", settlement.id)
+        return False
+    except Exception:
+        logger.exception("psp poll failed settlement=%s", settlement.id)
+        from app.services.db_safe import rollback_quiet
+
+        await rollback_quiet(session)
+        return False
+    if updated.status != SettlementStatus.SETTLED.value:
+        return False
+    await deliver_psp_once(session, updated)
+    return True
+
+
+async def poll_psp_settlements(session: AsyncSession, *, limit: int = PSP_POLL_BATCH) -> int:
+    """Primary verify path when the browser never reaches the panel return URL.
+
+    Re-verifies open sunpay/zarinpal settlements whose ``next_check_at`` is due,
+    never-checked rows first. Only rows created within ``PSP_POLL_WINDOW`` are
+    considered, and each check pushes the row back by ``psp_poll_delay``.
+    """
+    now = datetime.now(timezone.utc)
+    since = now - PSP_POLL_WINDOW
+    rows = (
+        await session.execute(
+            select(PaymentSettlement)
+            .where(
+                PaymentSettlement.channel == CHANNEL_PSP,
+                PaymentSettlement.status == SettlementStatus.AWAITING.value,
+                PaymentSettlement.external_ref.is_not(None),
+                PaymentSettlement.provider.in_(tuple(_PSP_POLLABLE)),
+                PaymentSettlement.created_at >= since,
+                or_(
+                    PaymentSettlement.next_check_at.is_(None),
+                    PaymentSettlement.next_check_at <= now,
+                ),
+            )
+            .order_by(
+                case((PaymentSettlement.next_check_at.is_(None), 0), else_=1),
+                PaymentSettlement.next_check_at.asc(),
+                PaymentSettlement.id.asc(),
+            )
+            .limit(max(1, min(100, int(limit))))
+        )
+    ).scalars().all()
+    settled = 0
+    for settlement in rows:
+        if await _poll_one_psp_settlement(session, settlement, now=now):
+            settled += 1
+    return settled
+
+
 async def notify_after_settlement(
     session: AsyncSession,
     payment: Payment,
@@ -1020,7 +1516,7 @@ async def notify_after_settlement(
                         session, order=order, payment=payment, error=str(send_exc)
                     )
                 except Exception:
-                    pass
+                    logger.debug("notify_after_settlement: ignored failure", exc_info=True)
             # Do not re-raise into callers that might confuse with payment failure —
             # financial approve already committed.
             logger.exception("settlement notify delivery failed payment=%s", payment.id)
@@ -1043,4 +1539,81 @@ async def notify_after_settlement(
             try:
                 await bot.session.close()
             except Exception:
-                pass
+                logger.debug("notify_after_settlement: ignored failure", exc_info=True)
+
+
+class PspCheckOutcome(str, Enum):
+    """What a customer's «بررسی پرداخت» tap found."""
+
+    SETTLED = "settled"
+    REVIEW = "review"
+    PENDING = "pending"
+    CLOSED = "closed"
+
+
+async def _owned_psp_settlement(
+    session: AsyncSession, *, settlement_id: int, user_id: int, shop_id: int | None
+) -> PaymentSettlement:
+    settlement = await session.get(PaymentSettlement, int(settlement_id))
+    payment = await session.get(Payment, int(settlement.payment_id)) if settlement else None
+    if (
+        settlement is None
+        or payment is None
+        or settlement.channel != CHANNEL_PSP
+        or int(payment.user_id) != int(user_id)
+        or not _shop_ids_equal(settlement.shop_owner_id, shop_id)
+    ):
+        raise ValueError("این پرداخت پیدا نشد")
+    return settlement
+
+
+# Each «بررسی پرداخت» tap may call the gateway; one check per settlement per window is enough.
+PSP_CHECK_THROTTLE_SECONDS = 10.0
+_PSP_CHECK_RECENT_LIMIT = 1000
+_recent_psp_checks: dict[int, float] = {}
+
+
+def claim_psp_check_slot(settlement_id: int) -> bool:
+    """False when this settlement was checked within the throttle window (bot and Mini App share it)."""
+    now = time.monotonic()
+    last = _recent_psp_checks.get(int(settlement_id))
+    if last is not None and now - last < PSP_CHECK_THROTTLE_SECONDS:
+        return False
+    if len(_recent_psp_checks) >= _PSP_CHECK_RECENT_LIMIT:
+        _recent_psp_checks.pop(next(iter(_recent_psp_checks)))
+    _recent_psp_checks[int(settlement_id)] = now
+    return True
+
+
+async def check_psp_payment(
+    session: AsyncSession, *, settlement_id: int, user_id: int, shop_id: int | None
+) -> PspCheckOutcome:
+    """Re-verify the customer's own open gateway payment now, as the poller would.
+
+    Only the payer, inside the settlement's shop, may trigger it. A settled payment
+    is delivered once (``deliver_psp_once``), whichever path settled it.
+    """
+    settlement = await _owned_psp_settlement(
+        session, settlement_id=settlement_id, user_id=user_id, shop_id=shop_id
+    )
+    params = _psp_poll_callback_params(settlement)
+    if settlement.status == SettlementStatus.AWAITING.value and params is not None:
+        try:
+            settlement = await complete_psp_return(
+                session,
+                provider=str(settlement.provider),
+                settlement_id=int(settlement.id),
+                callback_params=params,
+                reseller_id=settlement.shop_owner_id,
+            )
+        except ValueError:
+            logger.info("psp check not verified yet settlement=%s", settlement.id)
+            await session.refresh(settlement)
+    if settlement.status == SettlementStatus.SETTLED.value:
+        await deliver_psp_once(session, settlement)
+        return PspCheckOutcome.SETTLED
+    if is_in_review(settlement):
+        return PspCheckOutcome.REVIEW
+    if settlement.status in _OPEN_STATUSES:
+        return PspCheckOutcome.PENDING
+    return PspCheckOutcome.CLOSED

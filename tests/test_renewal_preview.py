@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
-import shutil
-import subprocess
 import tempfile
 import time
 import unittest
@@ -406,6 +404,21 @@ class MiniAppRenewalTests(RenewalFixture):
         self.assertEqual(retry.json()["wallet"], 800)
         self.assertEqual(len(self.pg.writes), 1)
 
+    async def test_api_retry_after_lost_response_succeeds_when_wallet_is_now_empty(self):
+        self.user.wallet_balance = 200
+        await self.session.commit()
+        quote = await self.quote()
+        body = {"service_id": 1, "plan_id": 1, "preview": quote}
+        first = await self.client.post("/api/mini/renew", json=body)
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["wallet"], 0)
+        retry = await self.client.post("/api/mini/renew", json=body)
+        self.assertEqual(retry.status_code, 200, retry.text)
+        self.assertEqual(retry.json()["order_id"], first.json()["order_id"])
+        self.assertEqual(retry.json()["wallet"], 0)
+        self.assertEqual(await self.session.scalar(select(func.count(Order.id))), 1)
+        self.assertEqual(len(self.pg.writes), 1)
+
     async def test_api_price_change_requires_new_preview_before_debit(self):
         quote = await self.quote()
         self.plan.price = 300
@@ -520,13 +533,3 @@ class RenewalMigrationTests(unittest.TestCase):
                 migration.downgrade()
             self.assertEqual({c["name"] for c in sa.inspect(conn).get_columns("orders")}, {"id", "service_id", "amount", "status", "note"})
         engine.dispose()
-
-
-class MiniAppRenewalJavascriptTests(unittest.TestCase):
-    @unittest.skipUnless(shutil.which("node"), "Node.js is required for browser-handler checks")
-    def test_preview_and_retry_handlers(self):
-        result = subprocess.run(
-            [shutil.which("node"), str(ROOT / "tests/miniapp_renewal_preview.test.cjs")],
-            capture_output=True, text=True, timeout=15,
-        )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

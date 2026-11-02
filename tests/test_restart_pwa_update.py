@@ -86,8 +86,8 @@ class UpdateWiringTests(unittest.TestCase):
     def test_pwa_tab_wired(self):
         from app.services.users import PANEL_SETTINGS_TABS, SETTINGS_TABS, TAB_SETTING_GROUPS
 
-        self.assertNotIn(("pwa", "وب‌اپ"), SETTINGS_TABS)
-        self.assertIn(("pwa", "وب‌اپ"), PANEL_SETTINGS_TABS)
+        self.assertNotIn(("pwa", "ظاهر و برند"), SETTINGS_TABS)
+        self.assertIn(("pwa", "ظاهر و برند"), PANEL_SETTINGS_TABS)
         self.assertEqual(TAB_SETTING_GROUPS.get("pwa"), [])
         self.assertTrue(Path("app/web/templates/_settings_pwa.html").is_file())
         self.assertTrue(Path("scripts/pgclockbot-ctl").is_file())

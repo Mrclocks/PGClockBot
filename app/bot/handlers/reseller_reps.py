@@ -34,6 +34,9 @@ from app.services.representative_unification import (
     assert_staff_can_manage_representatives,
 )
 from app.services import bot_feedback_texts as feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = Router(name="reseller_reps")
 
@@ -205,7 +208,7 @@ async def rrep_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     try:
         await callback.answer(feedback.CANCELLED_SHORT)
     except Exception:
-        pass
+        logger.debug("rrep_cancel: ignored failure", exc_info=True)
     if not callback.message:
         return
     # One step back: the customers group the flow was started from.
@@ -242,7 +245,7 @@ async def rrep_role(
         try:
             await callback.answer(feedback.NO_ACCESS, show_alert=True)
         except Exception:
-            pass
+            logger.debug("rrep_role: ignored failure", exc_info=True)
         return
     raw = (callback.data or "").split(":")
     try:
@@ -251,7 +254,7 @@ async def rrep_role(
         try:
             await callback.answer("نقش نامعتبر", show_alert=True)
         except Exception:
-            pass
+            logger.debug("rrep_role: ignored failure", exc_info=True)
         return
     data = await state.get_data()
     username = str(data.get(_USERNAME_KEY) or "").strip()
@@ -261,7 +264,7 @@ async def rrep_role(
         try:
             await callback.answer("این مرحله منقضی شده است؛ از اول شروع کنید", show_alert=True)
         except Exception:
-            pass
+            logger.debug("rrep_role: ignored failure", exc_info=True)
         return
     try:
         await provision_level2_child(
@@ -281,11 +284,11 @@ async def rrep_role(
         try:
             await session.rollback()
         except Exception:
-            pass
+            logger.debug("rrep_role: ignored failure", exc_info=True)
         try:
             await callback.answer(exc.message[:180], show_alert=True)
         except Exception:
-            pass
+            logger.debug("rrep_role: ignored failure", exc_info=True)
         if callback.message:
             await callback.message.answer(exc.message)
         return
@@ -293,16 +296,16 @@ async def rrep_role(
         try:
             await session.rollback()
         except Exception:
-            pass
+            logger.debug("rrep_role: ignored failure", exc_info=True)
         try:
             await callback.answer("ساخت نماینده انجام نشد", show_alert=True)
         except Exception:
-            pass
+            logger.debug("rrep_role: ignored failure", exc_info=True)
         return
     try:
         await callback.answer("نماینده ساخته شد")
     except Exception:
-        pass
+        logger.debug("rrep_role: ignored failure", exc_info=True)
     if callback.message:
         await callback.message.answer(
             "نماینده ساخته شد.",
