@@ -7,6 +7,7 @@ import secrets
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
+from urllib.parse import quote
 
 import httpx
 
@@ -64,6 +65,22 @@ def is_pg_permission_denied(exc: Exception) -> bool:
     even after a valid token — callers must not paint that as «قطع اتصال».
     """
     return isinstance(exc, PasarGuardError) and exc.status_code in (403, 404, 405)
+
+
+ADMIN_DIRECTORY_PAGE_SIZE = 100
+ADMIN_DIRECTORY_MAX_PAGES = 20
+
+
+class AdminDirectoryIncomplete(Exception):
+    """The admin list could not be read to its end, so absence is unproven."""
+
+
+def _is_admin_named(payload: Any, username: str) -> bool:
+    """True only for an admin record carrying exactly this username."""
+    if not isinstance(payload, dict):
+        return False
+    got = str(payload.get("username") or "").strip()
+    return bool(got) and got.lower() == username.strip().lower()
 
 
 def _pg_error_detail(body: Any) -> str | None:
@@ -654,74 +671,78 @@ class PasarGuardClient:
         would permanently revoke a legitimate staff member's web access just
         because PasarGuard was briefly down. Returns ``(gate, admin)`` where
         ``gate`` is one of ``"ok"``, ``"missing"``, ``"unreachable"``.
+
+        Only an exact (case-insensitive) username match is ever returned:
+        billing and access decisions are made on this record, so a similar
+        name returned by a substring search must never stand in for it.
         """
         username = (username or "").strip()
         if not username:
             return "missing", None
-        from urllib.parse import quote
-
-        enc = quote(username, safe="")
-        saw_transport_error = False
-
-        def _not_found(exc: Exception) -> bool:
-            return isinstance(exc, PasarGuardError) and exc.status_code == 404
-
-        def _username_matches(payload: dict | None) -> bool:
-            if not isinstance(payload, dict):
-                return False
-            got = str(payload.get("username") or "").strip()
-            return bool(got) and got.lower() == username.lower()
+        saw_unreachable = False
 
         # Own account first: no admins.read required. Never treat the token
         # holder's record as a *different* admin being looked up.
         try:
             current = await self.get_current_admin()
-            if _username_matches(current):
+            if _is_admin_named(current, username):
                 return "ok", current
         except Exception as exc:
             # 403/404/405: endpoint hidden or forbidden on this role/version.
             # Keep looking; do not flip a later confirmed-404 into unreachable.
-            status = getattr(exc, "status_code", None)
-            if not _not_found(exc) and status not in (403, 405):
-                saw_transport_error = True
+            if getattr(exc, "status_code", None) not in (403, 404, 405):
+                saw_unreachable = True
 
-        for path in (
-            f"/api/admin/by-username/{enc}",
-            f"/api/admin/{enc}",
-        ):
+        enc = quote(username, safe="")
+        for path in (f"/api/admin/by-username/{enc}", f"/api/admin/{enc}"):
             try:
                 data = await self.request("GET", path)
-                if isinstance(data, dict) and (
-                    str(data.get("username") or "").strip().lower() == username.lower()
-                    or data.get("id") is not None
-                ):
-                    # Strict identity when username is present
-                    got = str(data.get("username") or "").strip()
-                    if got and got.lower() != username.lower():
-                        continue
-                    return "ok", data
             except Exception as exc:
-                if not _not_found(exc):
-                    saw_transport_error = True
+                saw_unreachable = saw_unreachable or not is_pg_not_found(exc)
+                continue
+            if _is_admin_named(data, username):
+                return "ok", data
+
         try:
-            data = await self.request("GET", "/api/admins", params={"username": username, "limit": 20})
-            admins = as_list(data, "admins")
-            for a in admins:
-                if str(a.get("username") or "").lower() == username.lower():
-                    return "ok", a
-            if len(admins) == 1:
-                return "ok", admins[0]
+            found = await self._find_admin_in_directory(username)
         except Exception as exc:
-            if not _not_found(exc):
-                saw_transport_error = True
+            saw_unreachable = saw_unreachable or not is_pg_not_found(exc)
+            found = None
+        if found is not None:
+            return "ok", found
+        return ("unreachable" if saw_unreachable else "missing"), None
+
+    async def _find_admin_in_directory(self, username: str) -> dict | None:
+        """Exact match from ``/api/admins``; ``None`` only after a complete scan.
+
+        PasarGuard filters ``username`` as a substring, so the wanted admin can
+        sit behind similar names on a later page. A scan that cannot reach the
+        end raises ``AdminDirectoryIncomplete`` instead of claiming absence.
+        """
         try:
-            for a in await self.get_admins():
-                if str(a.get("username") or "").lower() == username.lower():
-                    return "ok", a
-        except Exception as exc:
-            if not _not_found(exc):
-                saw_transport_error = True
-        return ("unreachable" if saw_transport_error else "missing"), None
+            return await self._scan_admin_directory({"username": username}, username)
+        except PasarGuardError as exc:
+            if exc.status_code not in (400, 422):
+                raise
+        # Panel rejected the filter parameter: scan the plain list instead.
+        return await self._scan_admin_directory({}, username)
+
+    async def _scan_admin_directory(self, filters: dict[str, str], username: str) -> dict | None:
+        seen: set[str] = set()
+        for page in range(ADMIN_DIRECTORY_MAX_PAGES):
+            params = {**filters, "offset": page * ADMIN_DIRECTORY_PAGE_SIZE, "limit": ADMIN_DIRECTORY_PAGE_SIZE}
+            admins = as_list(await self.request("GET", "/api/admins", params=params), "admins")
+            match = next((admin for admin in admins if _is_admin_named(admin, username)), None)
+            if match is not None:
+                return match
+            if len(admins) < ADMIN_DIRECTORY_PAGE_SIZE:
+                return None
+            names = {str(admin.get("username") or "").strip().lower() for admin in admins}
+            if len(admins) > ADMIN_DIRECTORY_PAGE_SIZE or names <= seen:
+                # The panel ignored offset/limit; later pages would repeat this one.
+                raise AdminDirectoryIncomplete(username)
+            seen |= names
+        raise AdminDirectoryIncomplete(username)
 
     async def get_admin_roles(self) -> list[dict]:
         """Pasarguard admin roles (owner-defined access levels)."""

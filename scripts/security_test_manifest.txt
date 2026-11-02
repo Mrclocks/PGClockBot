@@ -99,6 +99,7 @@ tests/test_on_hold_addon_quotas.py
 tests/test_on_hold_service_display.py
 tests/test_owner_bypass_guards.py
 tests/test_order_delivery_scope.py
+tests/test_pg_admin_exact_lookup.py
 tests/test_pg_admin_web_gate.py
 tests/test_pg_groups_inbound_tag_allowlist.py
 tests/test_pg_outage_access_revoke.py
