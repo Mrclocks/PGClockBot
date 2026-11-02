@@ -532,8 +532,11 @@ class Ux20VersionTests(unittest.TestCase):
         self.assertIn("ارسال به تلگرام کاربر", html)
 
     def test_export_skips_secrets(self):
-        ux = Path("app/services/ux20.py").read_text(encoding="utf-8")
-        self.assertIn('skip = {"bot_token", "webhook_secret", "backup_telegram_bot_token"}', ux)
+        from app.services.ux20 import _is_secret_setting
+
+        for key in ("bot_token", "webhook_secret", "backup_telegram_bot_token"):
+            self.assertTrue(_is_secret_setting(key), key)
+        self.assertFalse(_is_secret_setting("welcome_text"))
         inbox = Path("app/services/panel_inbox.py").read_text(encoding="utf-8")
         self.assertIn("never includes bot tokens", inbox)
 
