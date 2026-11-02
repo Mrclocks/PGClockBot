@@ -436,6 +436,7 @@ class PasarGuardClient:
         auth: bool = True,
         use_cache: bool = True,
         resolve_api_base: bool = True,
+        cache_max_age: float | None = None,
         **kwargs: Any,
     ) -> Any:
         from app.services.pg_read_cache import cache_get, cache_put, invalidate_ident
@@ -446,7 +447,7 @@ class PasarGuardClient:
         if method_u != "GET":
             invalidate_ident(ident)
         elif use_cache:
-            cached = cache_get(ident, path, kwargs.get("params"))
+            cached = cache_get(ident, path, kwargs.get("params"), max_age=cache_max_age)
             if cached is not None:
                 return cached
         headers = kwargs.pop("headers", {})
@@ -484,8 +485,8 @@ class PasarGuardClient:
             cache_put(ident, path, kwargs.get("params"), payload)
         return payload
 
-    async def get_users(self, **params: Any) -> dict:
-        return await self.request("GET", "/api/users", params=params)
+    async def get_users(self, *, cache_max_age: float | None = None, **params: Any) -> dict:
+        return await self.request("GET", "/api/users", params=params, cache_max_age=cache_max_age)
 
     async def get_user_by_username(self, username: str) -> dict:
         return await self.request("GET", f"/api/user/by-username/{username}")
@@ -555,8 +556,8 @@ class PasarGuardClient:
     async def get_groups(self) -> Any:
         return await self.request("GET", "/api/groups")
 
-    async def get_groups_simple(self) -> list[dict]:
-        data = await self.request("GET", "/api/groups/simple")
+    async def get_groups_simple(self, *, cache_max_age: float | None = None) -> list[dict]:
+        data = await self.request("GET", "/api/groups/simple", cache_max_age=cache_max_age)
         return as_list(data, "groups")
 
     async def create_group(self, payload: dict) -> dict:
@@ -582,8 +583,8 @@ class PasarGuardClient:
     async def get_inbounds_details(self) -> Any:
         return await self.request("GET", "/api/inbounds/details")
 
-    async def get_hosts(self) -> list[dict]:
-        data = await self.request("GET", "/api/hosts")
+    async def get_hosts(self, *, cache_max_age: float | None = None) -> list[dict]:
+        data = await self.request("GET", "/api/hosts", cache_max_age=cache_max_age)
         return as_list(data, "hosts")
 
     async def get_host(self, host_id: int) -> dict:
@@ -606,8 +607,8 @@ class PasarGuardClient:
         data = await self.request("GET", "/api/admins")
         return as_list(data, "admins")
 
-    async def get_admins_simple(self) -> list[dict]:
-        data = await self.request("GET", "/api/admins/simple")
+    async def get_admins_simple(self, *, cache_max_age: float | None = None) -> list[dict]:
+        data = await self.request("GET", "/api/admins/simple", cache_max_age=cache_max_age)
         return as_list(data, "admins")
 
     async def get_current_admin(self) -> dict | None:
@@ -826,16 +827,16 @@ class PasarGuardClient:
             404,
         )
 
-    async def get_system_stats(self) -> dict:
-        data = await self.request("GET", "/api/system")
+    async def get_system_stats(self, *, cache_max_age: float | None = None) -> dict:
+        data = await self.request("GET", "/api/system", cache_max_age=cache_max_age)
         return data if isinstance(data, dict) else {"raw": data}
 
-    async def get_nodes(self) -> list[dict]:
-        data = await self.request("GET", "/api/nodes")
+    async def get_nodes(self, *, cache_max_age: float | None = None) -> list[dict]:
+        data = await self.request("GET", "/api/nodes", cache_max_age=cache_max_age)
         return as_list(data, "nodes")
 
-    async def get_nodes_simple(self) -> list[dict]:
-        data = await self.request("GET", "/api/nodes/simple")
+    async def get_nodes_simple(self, *, cache_max_age: float | None = None) -> list[dict]:
+        data = await self.request("GET", "/api/nodes/simple", cache_max_age=cache_max_age)
         return as_list(data, "nodes")
 
     async def get_nodes_realtime(self) -> Any:

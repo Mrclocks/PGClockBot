@@ -41,4 +41,10 @@ assert.equal(pts[0].split(',')[0], (300 / (live.SAMPLES - 1)).toFixed(1));
 
 assert.equal(live.badgeClass('ok'), 'badge connected');
 assert.equal(live.badgeClass('<x>'), 'badge neutral');
+assert.equal(live.backoffDelay(0), 0, 'a healthy poller keeps its normal pace');
+assert.equal(live.backoffDelay(1), live.POLL_MS);
+assert.equal(live.backoffDelay(2), live.POLL_MS * 2);
+assert.equal(live.backoffDelay(3), live.POLL_MS * 4);
+assert.equal(live.backoffDelay(50), live.MAX_BACKOFF_MS, 'backoff stops at the ceiling');
+assert.equal(live.backoffDelay(NaN), 0);
 console.log('overview-live ok');

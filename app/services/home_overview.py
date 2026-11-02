@@ -21,6 +21,11 @@ from app.db.models import (
     UserService,
 )
 from app.services.demo_users import non_demo_customer
+from app.services.pg_read_cache import (
+    DASHBOARD_COUNT_MAX_AGE_SEC,
+    NODE_LIST_MAX_AGE_SEC,
+    SYSTEM_SUMMARY_MAX_AGE_SEC,
+)
 from app.services.pasarguard import get_pg
 from app.services.service_scope import shop_services_clause
 from app.services.shop_membership import shop_member_clause
@@ -227,13 +232,14 @@ async def pg_home_bundle(*, include_nodes: bool = True) -> tuple[dict[str, Any],
         async def _no_nodes():
             return []
 
-        node_call = pg.get_nodes_simple() if include_nodes else _no_nodes()
+        node_call = pg.get_nodes_simple(cache_max_age=NODE_LIST_MAX_AGE_SEC) if include_nodes else _no_nodes()
+        # Home shows only counts, version and node health: tolerate short-lived copies.
         admins, groups, hosts, nodes, stats = await asyncio.gather(
-            pg.get_admins_simple(),
-            pg.get_groups_simple(),
-            pg.get_hosts(),
+            pg.get_admins_simple(cache_max_age=DASHBOARD_COUNT_MAX_AGE_SEC),
+            pg.get_groups_simple(cache_max_age=DASHBOARD_COUNT_MAX_AGE_SEC),
+            pg.get_hosts(cache_max_age=DASHBOARD_COUNT_MAX_AGE_SEC),
             node_call,
-            pg.get_system_stats(),
+            pg.get_system_stats(cache_max_age=SYSTEM_SUMMARY_MAX_AGE_SEC),
             return_exceptions=True,
         )
         # Token already proved reachability. 403 on admins/hosts/nodes is a
