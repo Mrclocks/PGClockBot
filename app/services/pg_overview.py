@@ -356,7 +356,8 @@ async def build_reseller_pg_overview(
                 return out
         admin = None
         try:
-            current = await pg.get_current_admin()
+            # Display only: during an outage the last good copy is shown and flagged.
+            current = await pg.get_current_admin(last_good_ok=True)
             if isinstance(current, dict):
                 got = str(current.get("username") or "").strip()
                 if not owner or (got and got.lower() == owner.lower()):
@@ -496,7 +497,8 @@ async def _owned_user_stats(pg, owner: str, *, fallback_total: int = 0) -> dict[
     try:
         # Prefer server-side admin filter when supported by PasarGuard.
         data = await pg.get_users(
-            admin=owner, limit=stats["sample_cap"], offset=0, cache_max_age=OWNED_USER_STATS_MAX_AGE_SEC
+            admin=owner, limit=stats["sample_cap"], offset=0,
+            cache_max_age=OWNED_USER_STATS_MAX_AGE_SEC, last_good_ok=True,
         )
         raw = data.get("users") if isinstance(data, dict) else data
         if isinstance(raw, list):

@@ -11,6 +11,7 @@ from typing import Any, Optional
 import httpx
 
 from app.config import get_settings, normalize_pg_subscription_path, pg_api_base_candidates
+from app.services.pg_read_cache import cache_get_last_good, last_good_notice_active, note_last_good_read
 from app.services.redact import redact
 from app.services.pg_read_resilience import DNS_CACHE_TTL_SEC, panel_read_request, reset_read_circuits, validate_panel_base
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
@@ -55,6 +56,13 @@ def is_pg_not_found(exc: BaseException) -> bool:
     (resource gone) is already true — not a transport/outage failure.
     """
     return isinstance(exc, PasarGuardError) and exc.status_code == 404
+
+
+def _is_panel_outage(exc: BaseException) -> bool:
+    """Unreachable panel or gateway error, as opposed to a definite answer."""
+    if isinstance(exc, PasarGuardError):
+        return exc.status_code in (502, 503, 504)
+    return isinstance(exc, (httpx.TransportError, TimeoutError))
 
 
 def is_pg_permission_denied(exc: Exception) -> bool:
@@ -428,6 +436,36 @@ class PasarGuardClient:
             return f"u:{user}@{base}:{self._cache_partition}"
         return f"owner@{base}:{self._cache_partition}"
 
+    async def _display_read(
+        self,
+        path: str,
+        *,
+        last_good_ok: bool,
+        cache_max_age: float | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        """GET for display; with ``last_good_ok``, an outage returns the last good answer.
+
+        The saved answer is this client's own (cache entries are per identity)
+        and at most LAST_GOOD_MAX_AGE_SEC old. Only web pages, whose notice says
+        it is not live, get it. Never pass ``last_good_ok`` for reads that
+        decide access or money.
+        """
+        extra: dict[str, Any] = {} if params is None else {"params": params}
+        try:
+            return await self.request("GET", path, cache_max_age=cache_max_age, **extra)
+        except (httpx.TransportError, TimeoutError, PasarGuardError) as exc:
+            # Bot and job callers have no notice to show, so they keep the error.
+            if not last_good_ok or not last_good_notice_active() or not _is_panel_outage(exc):
+                raise
+            saved = cache_get_last_good(self._read_cache_ident(), path, params)
+            if saved is None:
+                raise
+            payload, age = saved
+            note_last_good_read(age)
+            logger.info("PasarGuard unreachable; showing saved %s from %.0fs ago", path, age)
+            return payload
+
     async def request(
         self,
         method: str,
@@ -485,8 +523,10 @@ class PasarGuardClient:
             cache_put(ident, path, kwargs.get("params"), payload)
         return payload
 
-    async def get_users(self, *, cache_max_age: float | None = None, **params: Any) -> dict:
-        return await self.request("GET", "/api/users", params=params, cache_max_age=cache_max_age)
+    async def get_users(self, *, cache_max_age: float | None = None, last_good_ok: bool = False, **params: Any) -> dict:
+        return await self._display_read(
+            "/api/users", params=params, cache_max_age=cache_max_age, last_good_ok=last_good_ok
+        )
 
     async def get_user_by_username(self, username: str) -> dict:
         return await self.request("GET", f"/api/user/by-username/{username}")
@@ -556,8 +596,8 @@ class PasarGuardClient:
     async def get_groups(self) -> Any:
         return await self.request("GET", "/api/groups")
 
-    async def get_groups_simple(self, *, cache_max_age: float | None = None) -> list[dict]:
-        data = await self.request("GET", "/api/groups/simple", cache_max_age=cache_max_age)
+    async def get_groups_simple(self, *, cache_max_age: float | None = None, last_good_ok: bool = False) -> list[dict]:
+        data = await self._display_read("/api/groups/simple", cache_max_age=cache_max_age, last_good_ok=last_good_ok)
         return as_list(data, "groups")
 
     async def create_group(self, payload: dict) -> dict:
@@ -583,8 +623,8 @@ class PasarGuardClient:
     async def get_inbounds_details(self) -> Any:
         return await self.request("GET", "/api/inbounds/details")
 
-    async def get_hosts(self, *, cache_max_age: float | None = None) -> list[dict]:
-        data = await self.request("GET", "/api/hosts", cache_max_age=cache_max_age)
+    async def get_hosts(self, *, cache_max_age: float | None = None, last_good_ok: bool = False) -> list[dict]:
+        data = await self._display_read("/api/hosts", cache_max_age=cache_max_age, last_good_ok=last_good_ok)
         return as_list(data, "hosts")
 
     async def get_host(self, host_id: int) -> dict:
@@ -607,11 +647,11 @@ class PasarGuardClient:
         data = await self.request("GET", "/api/admins")
         return as_list(data, "admins")
 
-    async def get_admins_simple(self, *, cache_max_age: float | None = None) -> list[dict]:
-        data = await self.request("GET", "/api/admins/simple", cache_max_age=cache_max_age)
+    async def get_admins_simple(self, *, cache_max_age: float | None = None, last_good_ok: bool = False) -> list[dict]:
+        data = await self._display_read("/api/admins/simple", cache_max_age=cache_max_age, last_good_ok=last_good_ok)
         return as_list(data, "admins")
 
-    async def get_current_admin(self) -> dict | None:
+    async def get_current_admin(self, *, last_good_ok: bool = False) -> dict | None:
         """The authenticated admin's own account (``GET /api/admin``).
 
         PasarGuard's panel uses this for the signed-in user. It does **not**
@@ -622,7 +662,10 @@ class PasarGuardClient:
         errors propagate as ``PasarGuardError`` so callers can tell a missing
         route (404) from a real outage.
         """
-        data = await self.request("GET", "/api/admin")
+        if last_good_ok:
+            data = await self._display_read("/api/admin", last_good_ok=True)
+        else:
+            data = await self.request("GET", "/api/admin")
         if isinstance(data, dict):
             if data.get("username") or data.get("id") is not None or data.get("role"):
                 self._api_base_resolved = True
@@ -827,12 +870,12 @@ class PasarGuardClient:
             404,
         )
 
-    async def get_system_stats(self, *, cache_max_age: float | None = None) -> dict:
-        data = await self.request("GET", "/api/system", cache_max_age=cache_max_age)
+    async def get_system_stats(self, *, cache_max_age: float | None = None, last_good_ok: bool = False) -> dict:
+        data = await self._display_read("/api/system", cache_max_age=cache_max_age, last_good_ok=last_good_ok)
         return data if isinstance(data, dict) else {"raw": data}
 
-    async def get_nodes(self, *, cache_max_age: float | None = None) -> list[dict]:
-        data = await self.request("GET", "/api/nodes", cache_max_age=cache_max_age)
+    async def get_nodes(self, *, cache_max_age: float | None = None, last_good_ok: bool = False) -> list[dict]:
+        data = await self._display_read("/api/nodes", cache_max_age=cache_max_age, last_good_ok=last_good_ok)
         return as_list(data, "nodes")
 
     async def get_nodes_simple(self, *, cache_max_age: float | None = None) -> list[dict]:

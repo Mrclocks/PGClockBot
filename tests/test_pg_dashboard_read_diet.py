@@ -74,6 +74,9 @@ class ReadCacheMaxAgeTests(_PanelTestCase):
         pg_read_cache.cache_put("owner", "/api/hosts", None, [1])
         self.clock.now += pg_read_cache.MAX_ACCEPTED_AGE_SEC + 1
         self.assertIsNone(pg_read_cache.cache_get("owner", "/api/hosts", max_age=10_000))
+        # Kept a while longer only as the labelled outage fallback, then dropped.
+        self.clock.now = 5000.0 + pg_read_cache.LAST_GOOD_MAX_AGE_SEC + 1
+        self.assertIsNone(pg_read_cache.cache_get("owner", "/api/hosts", max_age=10_000))
         self.assertEqual(pg_read_cache._STORE, {})
 
     async def test_cached_copy_cannot_be_mutated_by_a_caller(self) -> None:
