@@ -102,6 +102,7 @@ tests/test_order_delivery_scope.py
 tests/test_pg_admin_web_gate.py
 tests/test_pg_groups_inbound_tag_allowlist.py
 tests/test_pg_outage_access_revoke.py
+tests/test_pg_access_safe_probe_error.py
 tests/test_pg_quota.py
 tests/test_pg_reseller_client_cache_key.py
 tests/test_pg_staff_reseller_parity.py
