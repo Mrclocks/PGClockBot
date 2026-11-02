@@ -14,10 +14,13 @@ from collections import Counter, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 
 WINDOW_SEC = 3600.0
+# Admins read clock times in Tehran time.
+DISPLAY_ZONE = ZoneInfo("Asia/Tehran")
 MAX_EVENTS = 2000
 MAX_LATENCIES = 500
 
@@ -96,6 +99,10 @@ def _percentile(values: list[float], fraction: float) -> int | None:
     return round(ordered[index])
 
 
+def _local_time(moment: float | None) -> str | None:
+    return None if moment is None else datetime.fromtimestamp(moment, DISPLAY_ZONE).strftime("%H:%M:%S")
+
+
 def _iso(moment: float | None) -> str | None:
     return None if moment is None else datetime.fromtimestamp(moment, timezone.utc).isoformat()
 
@@ -110,6 +117,8 @@ def snapshot(circuit: dict[str, Any] | None = None) -> dict[str, Any]:
         "reads": _stats.reads,
         "last_ok_at": _iso(_stats.last_ok_at),
         "last_failure_at": _iso(_stats.last_failure_at),
+        "last_ok_time": _local_time(_stats.last_ok_at),
+        "last_failure_time": _local_time(_stats.last_failure_at),
         "last_failure": KIND_LABELS.get(_stats.last_failure_kind or "", None),
         "latency_p50_ms": _percentile(recent_ms, 0.5),
         "latency_p95_ms": _percentile(recent_ms, 0.95),

@@ -112,7 +112,10 @@ class SnapshotTests(unittest.TestCase):
 
 class CardTests(unittest.TestCase):
     def _render(self, snap: dict) -> str:
+        from app.services.formatting import format_number
+
         env = Environment(loader=FileSystemLoader(str(TEMPLATES)), autoescape=True)
+        env.filters["num"] = format_number  # same filter the panel registers
         return env.get_template("_pg_link_health.html").render(pg_link_health=snap)
 
     def test_card_shows_causes_and_paused_circuit(self) -> None:
@@ -122,12 +125,31 @@ class CardTests(unittest.TestCase):
         html = self._render(health.snapshot({"paused": True, "retry_in_sec": 20, "pause_count": 2}))
         self.assertIn("سلامت ارتباط با پاسارگارد", html)
         self.assertIn(health.KIND_LABELS["timeout"], html)
-        self.assertIn(">20</bdi> ثانیه", html)
+        self.assertIn("ثانیه دیگر", html)
         self.assertIn("120 ms", html)
+
+    def test_times_are_shown_in_tehran_time(self) -> None:
+        health.reset()
+        moment = 1_800_000_000.0  # 2027-01-15 08:00:00 UTC
+        with patch.object(health, "time", SimpleNamespace(time=lambda: moment)):
+            health.record_success(0.05)
+            health.record_failure("gateway")
+            snap = health.snapshot()
+        self.assertEqual(snap["last_ok_time"], "11:30:00")
+        html = self._render(snap)
+        self.assertIn('<span dir="ltr">11:30:00</span> (تهران)', html)
+        self.assertNotIn("UTC", html)
+
+    def test_status_badge_sits_in_its_own_header_row(self) -> None:
+        health.reset()
+        health.record_success(0.05)
+        html = self._render(health.snapshot())
+        self.assertIn('class="home-periods-head link-health-head"', html)
+        self.assertNotIn('class="stat-top"', html)
 
     def test_empty_card_says_there_is_no_data_yet(self) -> None:
         health.reset()
-        self.assertIn("هنوز داده‌ای نیست", self._render(health.snapshot()))
+        self.assertIn("بدون داده", self._render(health.snapshot()))
 
 
 if __name__ == "__main__":
