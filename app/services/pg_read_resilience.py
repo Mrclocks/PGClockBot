@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 import time
 from collections import deque
 from collections.abc import Iterator
@@ -40,6 +41,12 @@ MAX_PANEL_STATES = 16
 TRANSIENT_READ_ERRORS = (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)
 READ_RETRY_DELAY_SEC = 0.2
 READ_RETRY_MIN_REMAINING_SEC = 0.5
+# A reverse proxy in front of PasarGuard often answers 502/503/504 for a
+# moment while the panel restarts or a worker recycles. GET only, once,
+# after a short random pause so many clients do not retry together.
+GATEWAY_RETRY_STATUSES = frozenset({502, 503, 504})
+GATEWAY_RETRY_DELAY_RANGE_SEC = (0.2, 0.6)
+_jitter = secrets.SystemRandom()
 PG_READ_UNAVAILABLE_MESSAGE = (
     "ارتباط با پاسارگارد کند یا قطع است؛ اطلاعات این بخش فعلاً در دسترس نیست. "
     "چند لحظه دیگر دوباره تلاش کنید."
@@ -222,15 +229,27 @@ async def _request_with_retry(
     deadline: float | None,
     kwargs: dict[str, Any],
 ) -> httpx.Response:
-    """Repeat a read once after a dropped connection, if the deadline leaves room."""
+    """Repeat a read once after a dropped connection or a gateway error, if the deadline leaves room."""
     try:
-        return await client.request(method, url, **kwargs)
+        response = await client.request(method, url, **kwargs)
     except TRANSIENT_READ_ERRORS:
-        if deadline is not None and deadline - time.monotonic() < READ_RETRY_DELAY_SEC + READ_RETRY_MIN_REMAINING_SEC:
+        if not _has_room(deadline, READ_RETRY_DELAY_SEC):
             raise
         logger.debug("PasarGuard read interrupted; retrying once", exc_info=True)
-    await asyncio.sleep(READ_RETRY_DELAY_SEC)
+        await asyncio.sleep(READ_RETRY_DELAY_SEC)
+        return await client.request(method, url, **kwargs)
+    if response.status_code not in GATEWAY_RETRY_STATUSES or method.upper() != "GET":
+        return response
+    delay = _jitter.uniform(*GATEWAY_RETRY_DELAY_RANGE_SEC)
+    if not _has_room(deadline, delay):
+        return response
+    logger.debug("PasarGuard gateway answered %s; retrying once", response.status_code)
+    await asyncio.sleep(delay)
     return await client.request(method, url, **kwargs)
+
+
+def _has_room(deadline: float | None, delay: float) -> bool:
+    return deadline is None or deadline - time.monotonic() >= delay + READ_RETRY_MIN_REMAINING_SEC
 
 
 async def panel_read_request(

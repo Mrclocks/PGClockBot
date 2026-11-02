@@ -94,7 +94,8 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(allowed)
         self.assertNotIn("private provider detail", message)
         revoke.assert_not_awaited()
-        self.assertEqual(calls, ["/api/admin"])
+        # One short retry of the gateway error, then no fallback lookups.
+        self.assertEqual(calls, ["/api/admin", "/api/admin"])
 
     async def test_failed_acl_never_reuses_cookie_or_owner_permissions(self) -> None:
         def offline(request: httpx.Request) -> httpx.Response:
@@ -124,7 +125,8 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         with resilience.web_read_budget():
             with self.assertRaises(resilience.PgReadUnavailable):
                 await second.get_current_admin()
-        self.assertEqual(len(calls), 1)
+        # The first shop's read and its one gateway retry; the second shop is not sent.
+        self.assertEqual(len(calls), 2)
 
     async def test_read_cache_isolated_between_shops_and_recreated_credentials(self) -> None:
         def response(name: str) -> Callable[[httpx.Request], httpx.Response]:

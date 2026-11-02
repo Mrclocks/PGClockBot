@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
 import json
 from collections.abc import Awaitable, Callable
@@ -62,6 +64,29 @@ def new_panel_http_client(base_url: str, *, timeout: httpx.Timeout = PG_HTTP_TIM
         follow_redirects=False,
         transport=httpx.AsyncHTTPTransport(retries=PG_CONNECT_RETRIES, limits=PG_HTTP_LIMITS),
     )
+
+
+# Renew a Bearer token this long before its exp claim.
+TOKEN_REFRESH_MARGIN_SEC = 120
+
+
+def jwt_expires_within(token: str, seconds: float) -> bool:
+    """Whether the JWT's ``exp`` is within ``seconds``; an unreadable token never counts as expiring.
+
+    Only the expiry is read (no signature check): it decides when to log in
+    again, never whether to trust the token.
+    """
+    parts = (token or "").split(".")
+    if len(parts) != 3:
+        return False
+    try:
+        claims = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
+    except (ValueError, binascii.Error):
+        return False
+    exp = claims.get("exp") if isinstance(claims, dict) else None
+    if isinstance(exp, bool) or not isinstance(exp, (int, float)):
+        return False
+    return exp - time.time() <= seconds
 
 
 def is_pg_transport_failure(exc: BaseException) -> bool:
@@ -362,8 +387,19 @@ class PasarGuardClient:
 
     @property
     def is_auth_ready(self) -> bool:
-        """True when this client can authorize requests (API key or Bearer token)."""
-        return bool(self._api_key) or bool(self._token)
+        """True when this client can authorize requests (API key or a Bearer token not about to expire).
+
+        Shop clients drop their password after login, so a cached client whose
+        token is about to expire is rebuilt instead of failing its next request.
+        """
+        if self._api_key:
+            return True
+        return bool(self._token) and not jwt_expires_within(self._token, TOKEN_REFRESH_MARGIN_SEC)
+
+    def _can_log_in_again(self) -> bool:
+        if self._login_username:
+            return bool(self._login_password)
+        return bool((self.settings.pg_username or "").strip() and (self.settings.pg_password or "").strip())
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -447,7 +483,10 @@ class PasarGuardClient:
             # Real requests use X-Api-Key via _headers — never Bearer with this client.
             return "__apikey__"
         if self._token:
-            return self._token
+            if not (jwt_expires_within(self._token, TOKEN_REFRESH_MARGIN_SEC) and self._can_log_in_again()):
+                return self._token
+            # Renew before PasarGuard starts answering 401, saving a failed round trip.
+            self._token = None
         await self._ensure_api_base()
         if self._login_username:
             username = self._login_username
