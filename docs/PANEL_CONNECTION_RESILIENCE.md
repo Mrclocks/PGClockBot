@@ -8,8 +8,9 @@ could also make the connection badge report success after the actual probe faile
 
 ## Request and connection limits
 
-`PanelConnectionMiddleware` establishes a two-second deadline for PasarGuard reads
-within each web request. API and Mini App requests keep their existing behavior.
+`PanelConnectionMiddleware` establishes one deadline for PasarGuard reads within
+each web request: `PG_WEB_READ_BUDGET_SEC`, four seconds by default, clamped to
+1-15 seconds (an invalid value falls back to the default). API and Mini App requests keep their existing behavior.
 The deadline is shared by DNS validation, token acquisition, API-root discovery,
 authorization reads and subsequent display reads. HTTP reads consume the remaining
 time rather than starting another full timeout for every fallback.
@@ -28,11 +29,17 @@ An unsuccessful API-root discovery remains retryable. A confirmed API root or
 valid current-admin response marks discovery complete, so an initial outage does
 not permanently keep API-key clients on a dashboard URL after the panel recovers.
 
-On a timeout, transport failure or server error, further web reads pause for ten
-seconds. Health is shared for the configured panel's origin, with at most eight
-concurrent reads and no waiting queue. After the pause, one read probes recovery.
-An older concurrent success cannot erase a newer failure. Forbidden or unsupported
-endpoints do not open the circuit. State is bounded to sixteen origins, including
+A timeout, transport failure, DNS failure or 502/503/504 answer fails the rest of
+that page's reads at once. Reads for everyone pause only after three such failures
+within thirty seconds, so one slow request does not hide PasarGuard from every
+shop. The first pause lasts five seconds; each failed recovery probe doubles it up
+to sixty seconds, and a successful read resets it. A request that started before
+the pause and fails late does not extend it. Other 5xx answers fail only that read.
+`/pg/metrics` polling honours a pause but never starts one. Health is shared for
+the configured panel's origin, with at most eight concurrent reads and no waiting
+queue. After the pause, one read probes recovery. An older concurrent success
+cannot erase a newer failure. Forbidden or unsupported endpoints do not open the
+circuit. State is bounded to sixteen origins, including
 temporary setup checks, and `reset_pg()` invalidates it after configuration changes.
 
 DNS validation runs in a worker thread before credentials are sent. Requests share
@@ -53,7 +60,7 @@ GET cache partitions now include an opaque identity for the actual client. A new
 client after credential rotation cannot reuse another client's cached account or
 role response, even when the panel username is unchanged. Successful web-access
 gate results keep their existing forty-five-second cache; temporary outage denials
-expire after the ten-second cooldown so access can recover sooner.
+expire after the first five-second pause so access can recover sooner.
 
 Password verification runs in worker threads for owner, reseller, staff and
 principal logins. Owner login captures the credential version before asynchronous

@@ -108,6 +108,8 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(admin)
 
     async def test_circuit_shares_health_but_never_shop_data(self) -> None:
+        # Pause mechanics: confirm the outage on the first failure.
+        self.enterContext(patch.object(resilience, "FAILURES_TO_PAUSE", 1))
         calls = []
 
         def respond(request: httpx.Request) -> httpx.Response:
@@ -172,6 +174,8 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, resilience.MAX_CONCURRENT_READS)
 
     async def test_only_one_read_probes_recovery_and_success_closes_circuit(self) -> None:
+        # Pause mechanics: confirm the outage on the first failure.
+        self.enterContext(patch.object(resilience, "FAILURES_TO_PAUSE", 1))
         now = [100.0]
         entered = asyncio.Event()
         release = asyncio.Event()
@@ -509,6 +513,8 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, ["/dashboard/openapi.json", "/dashboard/openapi.json", "/openapi.json"])
 
     async def test_older_success_does_not_resume_reads_after_another_request_fails(self) -> None:
+        # Pause mechanics: confirm the outage on the first failure.
+        self.enterContext(patch.object(resilience, "FAILURES_TO_PAUSE", 1))
         entered = asyncio.Event()
         release = asyncio.Event()
         calls = []
