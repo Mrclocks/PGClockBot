@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from urllib.parse import quote
 
 from fastapi import Depends, File, Form, Request, UploadFile
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, ChargeCode, Order
 from app.services.authz import authz_from_staff, can_shop
 from app.services.customer_marks import has_customer_notes_permission, save_marks
+from app.services.db_safe import rollback_quiet
 from app.services.gift_codes import gift_code_scope
 from app.services.staff_audit import actor_from_staff, add_staff_action
 from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope
@@ -24,6 +26,10 @@ from app.services.ux20 import (
     retry_delivery,
     shop_bundle_to_json,
 )
+
+logger = logging.getLogger(__name__)
+# A settings + plans export is a few hundred kilobytes at most.
+MAX_SHOP_BUNDLE_BYTES = 5 * 1024 * 1024
 
 
 def _gift_rules(form) -> dict:
@@ -299,9 +305,15 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         if not (is_platform_admin(staff) or can_shop(authz_from_staff(staff), "shop_settings")):
             return RedirectResponse("/home", status_code=303)
         rid = None if is_platform_admin(staff) else shop_owner_id(staff)
+        back = "/settings?tab=backup&" if is_platform_admin(staff) else "/shop-settings?"
         try:
-            raw = await file.read()
-            payload = json.loads(raw.decode("utf-8"))
+            raw = await file.read(MAX_SHOP_BUNDLE_BYTES + 1)
+            if len(raw) > MAX_SHOP_BUNDLE_BYTES:
+                raise ValueError("حجم فایل تنظیمات بیش از حد مجاز است")
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                raise ValueError("فایل انتخاب‌شده JSON معتبر خروجی تنظیمات نیست") from None
             stats = await import_shop_bundle(
                 session,
                 payload,
@@ -309,26 +321,21 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 replace_plans=(replace_plans or "").strip() in {"1", "on", "true"},
                 staff=staff,
             )
-            msg = f"وارد شد: {stats.get('settings', 0)} تنظیمات، {stats.get('plans', 0)} پلن"
-            if is_platform_admin(staff):
-                return RedirectResponse(
-                    f"/settings?tab=backup&ok={quote(msg)}",
-                    status_code=303,
-                )
-            return RedirectResponse(
-                f"/shop-settings?ok={quote(msg)}",
-                status_code=303,
+        except ValueError as exc:
+            await rollback_quiet(session)
+            return RedirectResponse(f"{back}err={quote(str(exc) or 'خطای ایمپورت')}", status_code=303)
+        except Exception:
+            await rollback_quiet(session)
+            logger.exception("shop settings import failed")
+            message = "ورود تنظیمات انجام نشد و چیزی تغییر نکرد؛ جزئیات در لاگ سرور ثبت شد."
+            return RedirectResponse(f"{back}err={quote(message)}", status_code=303)
+        msg = f"وارد شد: {stats.get('settings', 0)} تنظیمات، {stats.get('plans', 0)} پلن"
+        if stats.get("deleted") or stats.get("deactivated"):
+            msg += (
+                f"؛ پلن‌های قبلی: {stats.get('deleted', 0)} حذف شد و "
+                f"{stats.get('deactivated', 0)} که سابقهٔ فروش داشت غیرفعال شد"
             )
-        except Exception as exc:
-            if is_platform_admin(staff):
-                return RedirectResponse(
-                    f"/settings?tab=backup&err={quote(str(exc) or 'خطای ایمپورت')}",
-                    status_code=303,
-                )
-            return RedirectResponse(
-                f"/shop-settings?err={quote(str(exc) or 'خطای ایمپورت')}",
-                status_code=303,
-            )
+        return RedirectResponse(f"{back}ok={quote(msg)}", status_code=303)
 
     @app.get("/home/pg-health")
     async def home_pg_health(
