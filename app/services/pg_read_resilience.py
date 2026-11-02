@@ -16,6 +16,7 @@ import httpx
 
 from app.config import get_settings
 from app.py_compat import timeout as async_timeout
+from app.services import pg_link_health
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 
 logger = logging.getLogger(__name__)
@@ -161,7 +162,10 @@ def _pause_reads(state: _PanelState, reason: str, now: float) -> None:
     cooldown = min(READ_COOLDOWN_SEC * 2 ** (state.pause_count - 1), MAX_READ_COOLDOWN_SEC)
     state.blocked_until = now + cooldown
     state.recent_failures.clear()
-    logger.warning("PasarGuard web reads paused reason=%s retry_after=%ss", reason, cooldown)
+    logger.warning(
+        "PasarGuard web reads paused reason=%s retry_after=%ss recent=%s",
+        reason, cooldown, pg_link_health.summary_text(),
+    )
 
 
 def _mark_healthy(state: _PanelState) -> None:
@@ -198,6 +202,7 @@ async def validate_panel_base(base_url: str, *, protected: bool = True) -> str:
     except (TimeoutError, UnsafePgUrlError) as exc:
         if state.dns_task is not None and state.dns_task.done():
             state.dns_task = None
+        pg_link_health.record_failure("timeout" if isinstance(exc, TimeoutError) else "dns")
         _record_outage(state, budget, "unavailable")
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc
     finally:
@@ -221,15 +226,21 @@ async def panel_read_request(
         return await client.request(method, url, **kwargs)
     state = _panel_state(str(client.base_url))
     remaining, generation = _claim_read(state, budget)
+    started = time.monotonic()
     try:
         async with async_timeout(remaining):
             response = await client.request(method, url, **kwargs)
     except (TimeoutError, httpx.TransportError) as exc:
+        pg_link_health.record_failure(pg_link_health.failure_kind(exc))
         _record_outage(state, budget, "timeout" if isinstance(exc, (TimeoutError, httpx.TimeoutException)) else "unavailable")
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc
     finally:
         state.in_flight -= 1
         state.probing = False
+    if response.status_code >= 500:
+        pg_link_health.record_failure(pg_link_health.failure_kind(status_code=response.status_code))
+    else:
+        pg_link_health.record_success(time.monotonic() - started)
     if response.status_code in GATEWAY_OUTAGE_STATUSES:
         _record_outage(state, budget, "unavailable")
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE)
@@ -240,3 +251,16 @@ async def panel_read_request(
     if state.generation == generation:
         _mark_healthy(state)
     return response
+
+
+def circuit_status() -> dict[str, object]:
+    """Current pause state of the panel's read circuit, for the connection card."""
+    now = time.monotonic()
+    paused = [state for state in _STATES.values() if state.blocked_until > now]
+    pause_counts = [state.pause_count for state in _STATES.values()]
+    return {
+        "paused": bool(paused),
+        "retry_in_sec": max((round(state.blocked_until - now) for state in paused), default=0),
+        "pause_count": max(pause_counts, default=0),
+        "probing": any(state.probing for state in _STATES.values()),
+    }
