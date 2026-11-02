@@ -5,6 +5,7 @@ from __future__ import annotations
 from starlette.requests import Request
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.services.pg_read_cache import begin_last_good_notice
 from app.services.pg_read_resilience import finish_web_read_budget, web_read_budget
 
 # Automatic polling: honours a read pause but cannot start one for everyone.
@@ -28,6 +29,7 @@ class PanelConnectionMiddleware:
             return
         with web_read_budget(background=path in BACKGROUND_READ_PATHS) as budget:
             scope.setdefault("state", {})["pg_read_budget"] = budget
+            scope["state"]["pg_last_good"] = begin_last_good_notice()
 
             async def send_status(message: Message) -> None:
                 if message["type"] == "http.response.start" and budget.failure:

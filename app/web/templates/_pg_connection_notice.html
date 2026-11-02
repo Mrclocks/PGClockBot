@@ -1,8 +1,14 @@
 {% if request is defined and request.state is defined and request.state.pg_read_budget is defined and request.state.pg_read_budget.failure %}
+{% set last_good = request.state.pg_last_good if request.state.pg_last_good is defined else none %}
 <div class="flash warn home-update-banner" role="status">
   <div class="home-update-copy">
+    {% if last_good and last_good.age is not none %}
+    <strong>آخرین اطلاعات دریافت‌شده نمایش داده می‌شود</strong>
+    <span class="muted">ارتباط با پاسارگارد کند یا قطع است. بخشی از اعداد این صفحه مربوط به حدود <bdi dir="ltr">{{ last_good.minutes }}</bdi> دقیقه پیش است و ممکن است به‌روز نباشد.</span>
+    {% else %}
     <strong>اطلاعات پاسارگارد در دسترس نیست</strong>
     <span class="muted">ارتباط با پاسارگارد کند یا قطع است. بقیهٔ بخش‌های پنل کار می‌کنند؛ کمی بعد دوباره تلاش کنید.</span>
+    {% endif %}
   </div>
   <a class="btn btn-sm btn-ghost" href="{{ request.url.path.removesuffix('/body') }}">تلاش دوباره</a>
 </div>
