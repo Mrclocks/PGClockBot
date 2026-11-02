@@ -125,6 +125,25 @@ class CardTests(unittest.TestCase):
         self.assertIn(">20</bdi> ثانیه", html)
         self.assertIn("120 ms", html)
 
+    def test_times_are_shown_in_tehran_time(self) -> None:
+        health.reset()
+        moment = 1_800_000_000.0  # 2027-01-15 08:00:00 UTC
+        with patch.object(health, "time", SimpleNamespace(time=lambda: moment)):
+            health.record_success(0.05)
+            health.record_failure("gateway")
+            snap = health.snapshot()
+        self.assertEqual(snap["last_ok_time"], "11:30:00")
+        html = self._render(snap)
+        self.assertIn('<bdi dir="ltr">11:30:00</bdi> (تهران)', html)
+        self.assertNotIn("UTC", html)
+
+    def test_status_badge_sits_in_its_own_header_row(self) -> None:
+        health.reset()
+        health.record_success(0.05)
+        html = self._render(health.snapshot())
+        self.assertIn('<div class="link-health-head">', html)
+        self.assertNotIn('class="stat-top"', html)
+
     def test_empty_card_says_there_is_no_data_yet(self) -> None:
         health.reset()
         self.assertIn("هنوز داده‌ای نیست", self._render(health.snapshot()))

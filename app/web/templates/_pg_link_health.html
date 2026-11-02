@@ -2,7 +2,7 @@
 {% set health = pg_link_health %}
 {% set circuit = health.circuit or {} %}
 <section class="card" aria-label="سلامت ارتباط با پاسارگارد">
-  <div class="stat-top">
+  <div class="link-health-head">
     <h2>سلامت ارتباط با پاسارگارد</h2>
     {% if circuit.paused %}
     <span class="badge err">متوقف — تلاش دوباره تا <bdi dir="ltr">{{ circuit.retry_in_sec }}</bdi> ثانیه</span>
@@ -18,9 +18,9 @@
   <dl class="kv-list">
     <div><dt>زمان پاسخ معمول (میانه)</dt><dd>{% if health.latency_p50_ms is not none %}<bdi dir="ltr">{{ health.latency_p50_ms }} ms</bdi>{% else %}—{% endif %}</dd></div>
     <div><dt>کندترین پاسخ‌ها (۹۵٪)</dt><dd>{% if health.latency_p95_ms is not none %}<bdi dir="ltr">{{ health.latency_p95_ms }} ms</bdi>{% else %}—{% endif %}</dd></div>
-    <div><dt>آخرین پاسخ موفق</dt><dd><bdi dir="ltr">{{ health.last_ok_at[11:19] ~ ' UTC' if health.last_ok_at else '—' }}</bdi></dd></div>
+    <div><dt>آخرین پاسخ موفق</dt><dd>{% if health.last_ok_time %}<bdi dir="ltr">{{ health.last_ok_time }}</bdi> (تهران){% else %}—{% endif %}</dd></div>
     {% if health.last_failure %}
-    <div><dt>آخرین خطا</dt><dd>{{ health.last_failure }} — <bdi dir="ltr">{{ health.last_failure_at[11:19] }} UTC</bdi></dd></div>
+    <div><dt>آخرین خطا</dt><dd>{{ health.last_failure }} — <bdi dir="ltr">{{ health.last_failure_time }}</bdi> (تهران)</dd></div>
     {% endif %}
     {% for row in health.recent_failures %}
     <div><dt>{{ row.label }}</dt><dd><bdi dir="ltr">{{ row.count }}</bdi> در یک ساعت (<bdi dir="ltr">{{ row.total }}</bdi> از ابتدا)</dd></div>
