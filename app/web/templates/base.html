@@ -259,16 +259,16 @@
             <span>گزارش کارکنان</span>
           </a>
           {% endif %}
-          {% if is_owner or 'shop_settings' in perms %}
-          <a href="{% if is_owner %}/settings{% else %}/shop-settings{% endif %}" class="nav-item nav-item-bot {% if (path.startswith('/settings') and not is_panel_settings) or path.startswith('/shop-settings') or path.startswith('/message-variables') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V5H9"/><path d="M2 14h2M20 14h2"/><circle cx="9.5" cy="13.5" r="1.1"/><circle cx="14.5" cy="13.5" r="1.1"/><path d="M9.5 17h5"/></svg>
-            <span>تنظیمات</span>
-          </a>
-          {% endif %}
           {% if is_owner %}
           <a href="/connection-status" class="nav-item nav-item-bot {% if path.startswith('/connection-status') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
             <span>وضعیت اتصال</span>
+          </a>
+          {% endif %}
+          {% if is_owner or 'shop_settings' in perms %}
+          <a href="{% if is_owner %}/settings{% else %}/shop-settings{% endif %}" class="nav-item nav-item-bot {% if (path.startswith('/settings') and not is_panel_settings) or path.startswith('/shop-settings') or path.startswith('/message-variables') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V5H9"/><path d="M2 14h2M20 14h2"/><circle cx="9.5" cy="13.5" r="1.1"/><circle cx="14.5" cy="13.5" r="1.1"/><path d="M9.5 17h5"/></svg>
+            <span>تنظیمات</span>
           </a>
           {% endif %}
         </div>
