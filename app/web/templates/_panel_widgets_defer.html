@@ -68,9 +68,8 @@
     status.classList.add('warn');
     status.replaceChildren();
     var message = document.createElement('span');
-    message.textContent = error.message === 'widget-auth'
-      ? 'نشست یا دسترسی شما نیاز به بررسی دارد. برای ادامه دوباره وارد شوید.'
-      : 'دریافت آمار کامل نشد. سایر بخش‌های وب‌پنل در دسترس هستند.';
+    var online = typeof navigator === 'undefined' ? true : navigator.onLine;
+    message.textContent = PGClockPanelWidgetRequest.failureMessage(error, online);
     status.appendChild(message);
     var retry = document.createElement(error.message === 'widget-auth' ? 'a' : 'button');
     retry.className = 'btn btn-sm btn-ghost';

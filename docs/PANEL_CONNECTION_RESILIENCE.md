@@ -67,9 +67,13 @@ authorization checks. A small status message indicates that statistics are loadi
 The navigation clock is reserved for navigation and no longer covers the page
 while optional widgets load.
 
-Fragment reads have an eight-second browser deadline that includes downloading
-the response body. Timeout/failure leaves the visible shell available and offers a
-retry. Authentication redirects never inject a login page into the dashboard;
+Fragment reads have a fifteen-second browser deadline that includes downloading
+the response body; the server already bounds its PasarGuard reads, so the rest of
+the wait is the transfer over the viewer's own link. Timeout/failure leaves the
+visible shell available and offers a retry. The message names the failing side:
+the viewer's connection (the request never reached the panel, or the browser
+reports it is offline), a slow transfer (the deadline expired), the session, or
+the server. Authentication redirects never inject a login page into the dashboard;
 they offer an explicit login link. Fragments must match the existing dashboard
 root before replacement. Safe Persian notices describe unavailable panel data.
 
@@ -84,6 +88,19 @@ Failed or partial reads retain the last sample with a visible notice. A cached
 token alone no longer proves connectivity: a limited role can verify its own
 account when system statistics are forbidden. A bounded probe that could not run
 or finish reports an unknown state with an explanatory notice.
+
+## Weak servers and lossy links
+
+The web panel talks to PasarGuard server to server, so the viewer's own internet
+only affects how fast pages reach the browser. When PasarGuard often looks
+unavailable on a working panel, check the route between the two servers first:
+
+- Point `PG_BASE_URL` at the closest address of the panel (same data centre or a
+  private network address) instead of a public CDN hostname when possible.
+- Behind nginx or another reverse proxy, do not lower `keepalive_timeout` below a
+  few seconds, so reused connections are not closed just as a request is sent.
+- `/api/system` and `/api/nodes/realtime_stats` are the heaviest dashboard reads on
+  a small PasarGuard server. Their slowness affects only the dashboard widgets.
 
 ## Measured behavior
 
