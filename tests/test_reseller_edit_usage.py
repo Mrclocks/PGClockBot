@@ -22,14 +22,14 @@ def _limits(*, users_used: int = 10, traffic_used: int = 5 * GB) -> dict:
     }
 
 
-def _render(*, payg: bool, suspended: bool = False, pg_limits: dict | None = None) -> str:
+def _render(*, payg: bool, suspended: bool = False, pg_limits: dict | None = None, balance: int = 0) -> str:
     profile = SimpleNamespace(
         billing_suspended_at=datetime.now(timezone.utc) if suspended else None, billing_watermark_bytes=0,
         is_active=True, pg_admin_username="shop", billing_mode="payg" if payg else "fixed",
     )
     return templates.env.get_template("_reseller_edit_body.html").render(
         request=SimpleNamespace(url=SimpleNamespace(path="/resellers"), state=SimpleNamespace(), query_params={}),
-        user=SimpleNamespace(id=7, wallet_balance=0, full_name="r", username="r", telegram_id=1, role="reseller"),
+        user=SimpleNamespace(id=7, wallet_balance=balance, full_name="r", username="r", telegram_id=1, role="reseller"),
         profile=profile, is_payg=payg, topup_nonce="n" * 16, wallet_balance=0, billing_rate=1500,
         min_unsuspend=40_000, staff={"role": "admin"}, pg_limits=pg_limits,
     )
@@ -58,6 +58,13 @@ class ResellerEditUsageTests(unittest.TestCase):
     def test_exhausted_quota_is_called_out(self) -> None:
         self.assertIn("سقف تعداد کاربران پر شده است", _render(payg=False, pg_limits=_limits(users_used=20)))
         self.assertNotIn("سقف تعداد کاربران پر شده است", _render(payg=False, pg_limits=_limits()))
+
+    def test_delete_warning_keeps_the_balance_in_one_line_of_copy(self) -> None:
+        html = _render(payg=False, balance=450_000)
+        box = html.split("user-edit-wallet-delete-warn-amt")[1].split("</strong>")[0]
+        self.assertIn("450,000", box)
+        self.assertIn('<div class="flash-copy">', html.split("user-edit-wallet-delete-warn-amt")[0][-200:])
+        self.assertNotIn("user-edit-wallet-delete-warn", _render(payg=False, balance=0))
 
 
 if __name__ == "__main__":

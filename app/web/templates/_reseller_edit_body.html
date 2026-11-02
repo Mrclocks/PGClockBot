@@ -406,7 +406,12 @@
     <p class="muted">حساب، نمایندگی، ادمین پاسارگارد و همهٔ سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های او حذف می‌شود و برگشت ندارد. اگر دوباره به ربات پیام بدهد، حساب خالی جدیدی ساخته می‌شود.</p>
   </header>
   {% if (user.wallet_balance or 0) > 0 %}
-  <div class="flash warn">موجودی کیف پول: <span dir="ltr">{{ user.wallet_balance | money }}</span> تومان — با حذف کامل از بین می‌رود.</div>
+  <div class="flash warn user-edit-wallet-delete-warn" role="alert">
+    <div class="flash-copy">
+      <strong class="user-edit-wallet-delete-warn-amt">موجودی کیف پول: <span dir="ltr">{{ user.wallet_balance | money }}</span> تومان</strong>
+      <span class="user-edit-wallet-delete-warn-note">با حذف کامل کاربر این موجودی از بین می‌رود.</span>
+    </div>
+  </div>
   {% endif %}
   <form method="post" action="/resellers/{{ user.id }}/delete-user" class="form-stack"
         data-confirm="{% if (user.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | money }} تومان از بین می‌رود. {% endif %}کاربر کامل به‌همراه نمایندگی، ادمین پاسارگارد، سفارش‌ها و سرویس‌ها حذف شود؟ برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."
