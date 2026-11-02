@@ -40,6 +40,7 @@
   {% set _ = tiles.append({'name': 'نود', 'detail': node_detail, 'state': node_state, 'icon': 'nodes', 'href': '/pg/nodes'}) %}
   {% endif %}
   {{ status_tiles(tiles) }}
+  {% if pg_link_health %}{% include "_pg_link_health.html" %}{% endif %}
 
 
 

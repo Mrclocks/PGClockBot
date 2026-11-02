@@ -15,6 +15,8 @@ from app.services.authz import authz_from_staff, can_shop
 from app.services.dashboard_trend import empty_trend, own_account_summary, sales_trend
 from app.services.host_gauges import gauges_json, local_host_gauges
 from app.services.home_overview import build_home_overview, reseller_shop_summary
+from app.services import pg_link_health
+from app.services.pg_read_resilience import circuit_status
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 from app.services.secret_box import reveal_bot_token
 
@@ -636,6 +638,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "staff": staff,
                     "overview": overview,
                     "pg_health": pg_health,
+                    "pg_link_health": pg_link_health.snapshot(circuit_status()),
                     "funnel_enabled": funnel_enabled,
                     "funnel": funnel,
                     "periods": periods,
