@@ -58,7 +58,6 @@ KEY_LAST_KIND = "cleanup_purge_last_kind"
 DEFAULT_DAYS = 30
 MIN_DAYS = 1
 MAX_DAYS = 3650
-RULES_PATH = "/finance/cleanup/purge-rules"
 RUN_PATH = "/finance/cleanup/purge-run"
 # Rows deleted per run and shop; a larger backlog is finished by the next run.
 BATCH = 200
@@ -391,7 +390,6 @@ async def purge_panel_context(
         "ready": await count_purgeable(session, shop_id=shop_id, tags=rules.tags, days=rules.days),
         "auto_on": rules.auto,
         "last_run": _last_run_view(settings),
-        "rules_action": f"{RULES_PATH}?next={quote(return_to)}",
         "run_action": f"{RUN_PATH}?next={quote(return_to)}",
     }
 

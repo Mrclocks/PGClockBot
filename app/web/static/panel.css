@@ -12656,6 +12656,9 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   gap: var(--space-1);
 }
 .order-purge-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
   margin-top: var(--space-2);
   align-items: end;
 }
@@ -12667,8 +12670,22 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
 .order-purge-tag .ui-switch-copy .badge {
   flex: 0 0 auto;
 }
-@media (max-width: 420px) {
-  .order-purge-tags {
+@media (max-width: 640px) {
+  /* The automatic switch and the day count each take the full width on phones. */
+  .order-purge-options {
     grid-template-columns: 1fr;
+  }
+}
+.cleanup-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+@media (max-width: 640px) {
+  .cleanup-run-actions form,
+  .cleanup-run-actions .btn {
+    flex: 1 1 100%;
+    width: 100%;
   }
 }
