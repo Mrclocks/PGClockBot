@@ -24,7 +24,7 @@ from app.services.service_import import is_external_service
 from app.services.service_scope import customer_may_use_service, list_customer_services
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
-from app.services.service_live_info import fetch_live_service_info
+from app.services.service_live_info import fetch_live_service_info, with_stored_quota
 from app.services.service_renewals import RENEWAL_CURRENT, RENEWAL_LABELS, renewal_relation
 from app.services.wireguard_delivery import REASON_DISABLED, REASON_UNAVAILABLE, fetch_wireguard, has_wireguard
 from app.services.wireguard_send import send_wireguard_files
@@ -420,6 +420,8 @@ async def svc_view(
         from app.services.bot_user_admin import sync_service_quota_cache
         sync_service_quota_cache(svc, info=info)
         await session.commit()
+    # Display only, after the cache sync: saved values must never be written back as live.
+    info = with_stored_quota(info, svc)
     info.setdefault("username", svc.pg_username)
     text = format_message("📦 سرویس شما", service_card(info))
     if callback.message:
