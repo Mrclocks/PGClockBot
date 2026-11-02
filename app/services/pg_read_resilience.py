@@ -23,6 +23,11 @@ READ_COOLDOWN_SEC = 10.0
 DNS_CACHE_TTL_SEC = 60.0
 MAX_CONCURRENT_READS = 8
 MAX_PANEL_STATES = 16
+# A dropped keep-alive socket or a reset mid-read is usually gone on the next
+# try. Timeouts are not retried: they would only double the wait.
+TRANSIENT_READ_ERRORS = (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)
+READ_RETRY_DELAY_SEC = 0.2
+READ_RETRY_MIN_REMAINING_SEC = 0.5
 PG_READ_UNAVAILABLE_MESSAGE = (
     "ارتباط با پاسارگارد کند یا قطع است؛ اطلاعات این بخش فعلاً در دسترس نیست. "
     "چند لحظه دیگر دوباره تلاش کنید."
@@ -152,6 +157,24 @@ async def validate_panel_base(base_url: str, *, protected: bool = True) -> str:
         state.probing = False
 
 
+async def _request_with_retry(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    deadline: float | None,
+    kwargs: dict[str, Any],
+) -> httpx.Response:
+    """Repeat a read once after a dropped connection, if the deadline leaves room."""
+    try:
+        return await client.request(method, url, **kwargs)
+    except TRANSIENT_READ_ERRORS:
+        if deadline is not None and deadline - time.monotonic() < READ_RETRY_DELAY_SEC + READ_RETRY_MIN_REMAINING_SEC:
+            raise
+        logger.debug("PasarGuard read interrupted; retrying once", exc_info=True)
+    await asyncio.sleep(READ_RETRY_DELAY_SEC)
+    return await client.request(method, url, **kwargs)
+
+
 async def panel_read_request(
     client: httpx.AsyncClient,
     method: str,
@@ -165,12 +188,12 @@ async def panel_read_request(
     """
     budget = _BUDGET.get()
     if budget is None:
-        return await client.request(method, url, **kwargs)
+        return await _request_with_retry(client, method, url, None, kwargs)
     state = _panel_state(str(client.base_url))
     remaining, generation = _claim_read(state, budget)
     try:
         async with async_timeout(remaining):
-            response = await client.request(method, url, **kwargs)
+            response = await _request_with_retry(client, method, url, budget.deadline, kwargs)
     except (TimeoutError, httpx.TransportError) as exc:
         _pause_reads(state, budget, "timeout" if isinstance(exc, (TimeoutError, httpx.TimeoutException)) else "unavailable")
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc

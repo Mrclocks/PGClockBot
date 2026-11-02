@@ -185,7 +185,7 @@ async def resolve_platform_pg_capabilities(
     Auth: API key (X-Api-Key) preferred over password when either is provided.
     """
     from app.config import get_settings
-    from app.services.pasarguard import PasarGuardClient, PasarGuardError
+    from app.services.pasarguard import PasarGuardClient, PasarGuardError, new_panel_http_client
 
     settings = get_settings()
     env_username = getattr(settings, "pg_username", None)
@@ -249,15 +249,9 @@ async def resolve_platform_pg_capabilities(
                 except UnsafePgUrlError as exc:
                     empty["error"] = str(exc)
                     return empty
-                # Rebind httpx client base
-                import httpx
-
+                # Rebind the temporary client to the probed base before any request.
                 old = client._client
-                client._client = httpx.AsyncClient(
-                    base_url=client.base_url,
-                    timeout=30.0,
-                    follow_redirects=False,
-                )
+                client._client = new_panel_http_client(client.base_url)
                 try:
                     await old.aclose()
                 except Exception:

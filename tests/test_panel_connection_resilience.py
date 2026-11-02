@@ -241,8 +241,9 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(200, json={"access_token": "new-token"})
 
         send = AsyncMock(side_effect=slow)
-        probe = httpx.AsyncClient(base_url=client.base_url, transport=httpx.MockTransport(send))
-        with patch("app.services.pasarguard.httpx.AsyncClient", return_value=probe):
+        await client._client.aclose()
+        client._client = httpx.AsyncClient(base_url=client.base_url, transport=httpx.MockTransport(send))
+        with patch("app.services.pasarguard.new_panel_http_client", side_effect=AssertionError("new connection")):
             with resilience.web_read_budget(seconds=0.02):
                 with self.assertRaises(resilience.PgReadUnavailable):
                     await client.ensure_token()
@@ -491,12 +492,10 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
 
         client = await self.make_client(respond)
         client._api_base_resolved = False
-        http_client = httpx.AsyncClient
+        def probe_client(base_url: str, **kwargs: Any) -> httpx.AsyncClient:
+            return httpx.AsyncClient(base_url=base_url, transport=httpx.MockTransport(respond))
 
-        def probe_client(**kwargs: Any) -> httpx.AsyncClient:
-            return http_client(**kwargs, transport=httpx.MockTransport(respond))
-
-        with patch("app.services.pasarguard.httpx.AsyncClient", side_effect=probe_client):
+        with patch("app.services.pasarguard.new_panel_http_client", side_effect=probe_client):
             with resilience.web_read_budget():
                 await client._ensure_api_base()
             self.assertFalse(client._api_base_resolved)
