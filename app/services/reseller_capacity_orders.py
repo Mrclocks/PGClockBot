@@ -28,7 +28,7 @@ from app.services.reseller_capacity import (
     unit_offer,
 )
 from app.services.reseller_packs import pack_offer
-from app.services.reseller_shop_gates import assert_shop_active, assert_subscription_open
+from app.services.reseller_shop_gates import assert_shop_allows_capacity, assert_subscription_open
 from app.services.service_renewals import RenewalPendingReview
 from app.services.volume_allocation_cascade import assert_child_growth_fits
 
@@ -99,13 +99,12 @@ async def create_capacity_order(
     ref: int,
 ) -> Order:
     """A pending platform order for a pack (``ref`` = pack id) or a quick-buy (``ref`` = GB or users)."""
-    assert_shop_active(profile)
+    await assert_shop_allows_capacity(session, profile)
     if kind == KIND_PACK:
         offer = await pack_offer(session, user=user, profile=profile, plan=plan, pack_id=ref)
         note = format_note(KIND_PACK, ref, gb=offer.gb, users=offer.users)
     elif kind in {KIND_GB, KIND_USERS}:
         offer = unit_offer(profile, plan, kind, ref)
-        await assert_subscription_open(session, offer.uname)
         note = format_note(kind, ref)
     else:
         raise ValueError(INVALID_ORDER)

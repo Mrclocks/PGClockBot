@@ -33,7 +33,7 @@ from app.services.pg_admin_subscription import (
     renew_subscription,
 )
 from app.services.pg_quota import _as_int
-from app.services.reseller_shop_gates import assert_shop_active
+from app.services.reseller_shop_gates import assert_shop_allows_renew
 from app.services.resellers import normalize_feature_perms, parse_perms
 
 logger = logging.getLogger(__name__)
@@ -269,7 +269,8 @@ async def renew_package(
     customers' usage untouched). A package without time is not renewed: moving to it applies its
     capacity only.
     """
-    assert_shop_active(profile)
+    # Expiry flips is_active off; renew must still work. Soft-deactivate while open is refused.
+    await assert_shop_allows_renew(session, profile)
     if is_payg(profile):
         raise ValueError("پلن PAYG تمدید زمانی ندارد — از شارژ کیف پول استفاده کنید")
     uname = _pg_username(profile)

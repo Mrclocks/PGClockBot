@@ -43,13 +43,18 @@ def _back(*, ok: str = "", err: str = "") -> RedirectResponse:
 
 
 async def _owner_context(session: AsyncSession, staff: dict) -> tuple[BotUser, ResellerProfile]:
-    """The shop owner's active profile; staff sessions, other roles and inactive shops get a 403."""
+    """The shop owner's profile; staff sessions and other roles get a 403.
+
+    Do not require ``profile.is_active`` here: the expiry tick flips that flag off, and the
+    owner must still open this page to renew. Soft-deactivate while the clock is open is
+    enforced in ``renew_package`` / capacity services.
+    """
     if staff.get("role") != "reseller" or not staff.get("bot_user_id"):
         raise HTTPException(403, "این بخش فقط برای مالک فروشگاه است")
     owner_id = int(staff["bot_user_id"])
     profile = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == owner_id))
     owner = await session.get(BotUser, owner_id)
-    if profile is None or owner is None or not profile.is_active:
+    if profile is None or owner is None:
         raise HTTPException(403, "این بخش فقط برای مالک فروشگاه است")
     return owner, profile
 

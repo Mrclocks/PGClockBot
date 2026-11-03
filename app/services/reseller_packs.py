@@ -23,7 +23,7 @@ from app.services.reseller_shop_gates import (
     SHOP_INACTIVE,
     SUB_EXPIRED,
     SUB_NEEDS_ACTIVE,
-    assert_shop_active,
+    assert_shop_allows_capacity,
     assert_subscription_open,
 )
 
@@ -47,6 +47,7 @@ __all__ = (
     "PACK_NEEDS_SUBSCRIPTION",
     "PACK_NOT_FOR_PAYG",
     "SHOP_INACTIVE",
+    "assert_shop_allows_capacity",
     "assert_subscription_open",
     "buy_addon_pack",
     "pack_fits_plan",
@@ -86,7 +87,6 @@ async def pack_offer(
 
     ``profile`` must be the profile of ``user`` (the caller resolves both from the session).
     """
-    assert_shop_active(profile)
     if profile.user_id != user.id:
         raise ValueError(NO_PACK)
     if is_payg(profile):
@@ -96,6 +96,7 @@ async def pack_offer(
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
         raise ValueError(NO_PANEL_ADMIN)
+    await assert_shop_allows_capacity(session, profile)
     pack = await session.get(ResellerPlan, int(pack_id))
     if not pack_fits_plan(pack, plan):
         raise ValueError(NO_PACK)
@@ -103,7 +104,6 @@ async def pack_offer(
     if price <= 0:
         raise ValueError(PACK_BAD_PRICE)
     gb, users = _pack_amounts(pack)
-    await assert_subscription_open(session, uname)
     return CapacityOffer(uname=uname, gb=gb, users=users, price=price, reason=f"reseller_addon:{int(pack.id)}:{uname}")
 
 

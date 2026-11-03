@@ -1,4 +1,4 @@
-"""Phase 1 reseller safety: inactive shop, open subscription, and shared generation gates."""
+"""Phase 1 reseller safety: open subscription gates; renew allowed after expiry soft-lock."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from app.db.models import Base, BotUser, PgAdminSubscription, ResellerPlan, Rese
 from app.services.billing import GB
 from app.services.reseller_package import renew_package
 from app.services.reseller_packs import PACK_EXPIRED, buy_addon_pack
-from app.services.reseller_shop_gates import SHOP_INACTIVE, SUB_EXPIRED
+from app.services.reseller_shop_gates import SHOP_INACTIVE, SUB_EXPIRED, SUB_NEEDS_ACTIVE
 
 
 class Phase1SafetyGateTests(unittest.IsolatedAsyncioTestCase):
@@ -65,7 +65,7 @@ class Phase1SafetyGateTests(unittest.IsolatedAsyncioTestCase):
         await self.session.close()
         await self.engine.dispose()
 
-    async def test_inactive_shop_cannot_renew_or_buy_pack(self) -> None:
+    async def test_soft_deactivate_while_open_blocks_renew_and_pack(self) -> None:
         profile = await self.session.get(ResellerProfile, 1)
         profile.is_active = False
         await self.session.commit()
@@ -80,12 +80,33 @@ class Phase1SafetyGateTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(str(pack_err.exception), SHOP_INACTIVE)
 
-    async def test_expired_clock_blocks_pack_like_unit_extras(self) -> None:
-        sub = await self.session.get(PgAdminSubscription, 1)
-        if sub is None:
-            from sqlalchemy import select
+    async def test_expiry_soft_lock_still_allows_renew(self) -> None:
+        """expire_subscription flips is_active off; the owner must still be able to renew."""
+        from sqlalchemy import select
 
-            sub = await self.session.scalar(select(PgAdminSubscription))
+        profile = await self.session.get(ResellerProfile, 1)
+        profile.is_active = False
+        sub = await self.session.scalar(select(PgAdminSubscription))
+        sub.access_status = "expired"
+        sub.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+        await self.session.commit()
+        owner = await self.session.get(BotUser, 3)
+        result = await renew_package(self.session, owner=owner, profile=profile, plan_id=1, generation=0)
+        self.assertEqual(result["amount"], 100_000)
+        pack_err = None
+        plan = await self.session.get(ResellerPlan, 1)
+        try:
+            await buy_addon_pack(
+                self.session, user=owner, profile=profile, plan=plan, pack_id=11, generation=1,
+            )
+        except ValueError as exc:
+            pack_err = str(exc)
+        self.assertIn(pack_err, {PACK_EXPIRED, SUB_EXPIRED, SUB_NEEDS_ACTIVE, SHOP_INACTIVE})
+
+    async def test_expired_clock_blocks_pack_like_unit_extras(self) -> None:
+        from sqlalchemy import select
+
+        sub = await self.session.scalar(select(PgAdminSubscription))
         sub.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
         await self.session.commit()
         owner = await self.session.get(BotUser, 3)
@@ -95,7 +116,7 @@ class Phase1SafetyGateTests(unittest.IsolatedAsyncioTestCase):
             await buy_addon_pack(
                 self.session, user=owner, profile=profile, plan=plan, pack_id=11, generation=0,
             )
-        self.assertIn(str(caught.exception), {PACK_EXPIRED, SUB_EXPIRED})
+        self.assertIn(str(caught.exception), {PACK_EXPIRED, SUB_EXPIRED, SUB_NEEDS_ACTIVE})
 
 
 if __name__ == "__main__":

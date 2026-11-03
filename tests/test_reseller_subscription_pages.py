@@ -162,15 +162,27 @@ class MySubscriptionPageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(again["err"], [STALE_PURCHASE])
         self.assertEqual(await self.wallet(), 995_000)
 
-    async def test_inactive_owner_is_forbidden(self) -> None:
+    async def test_expired_soft_lock_still_opens_page_and_renews(self) -> None:
+        """Expiry flips is_active off; the owner must still open «اشتراک من» and renew."""
+        from datetime import datetime, timedelta, timezone
+
+        async with self.Session() as session:
+            (await session.get(ResellerProfile, 1)).is_active = False
+            sub = await session.scalar(select(PgAdminSubscription).where(PgAdminSubscription.pg_username == "shop3"))
+            sub.access_status = "expired"
+            sub.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+            await session.commit()
+        self.assertEqual((await self.client.get("/my-subscription")).status_code, 200)
+        self.assertIn("ok", await self.post("/renew", plan_id=1, generation=2))
+        self.assertEqual(await self.wallet(), 900_000)
+
+    async def test_soft_deactivate_while_open_refuses_renew(self) -> None:
         async with self.Session() as session:
             (await session.get(ResellerProfile, 1)).is_active = False
             await session.commit()
-        self.assertEqual((await self.client.get("/my-subscription")).status_code, 403)
-        self.assertEqual(
-            (await self.client.post("/my-subscription/extra", data={"kind": "gb", "amount": "5", "generation": "2"})).status_code,
-            403,
-        )
+        self.assertEqual((await self.client.get("/my-subscription")).status_code, 200)
+        err = await self.post("/renew", plan_id=1, generation=2)
+        self.assertIn("err", err)
         self.assertEqual(await self.wallet(), 1_000_000)
 
 
