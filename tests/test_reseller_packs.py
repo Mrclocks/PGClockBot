@@ -74,11 +74,15 @@ class PackTestBase(unittest.IsolatedAsyncioTestCase):
         self.live = {"data_limit": 100 * GB, "max_users": 10}
         self.pg = SimpleNamespace(
             get_admin=AsyncMock(side_effect=lambda _name: dict(self.live)), modify_admin=AsyncMock(return_value={}),
+            reset_admin_usage=AsyncMock(return_value={}), reset_user_by_id=AsyncMock(),
+            get_users=AsyncMock(return_value={"users": []}), set_disabled_by_id=AsyncMock(),
         )
         self.patches = [
             patch("app.services.pasarguard.get_pg", return_value=self.pg),
             patch("app.services.reseller_capacity.assert_child_growth_fits", AsyncMock()),
             patch("app.services.reseller_packs.assert_child_growth_fits", AsyncMock()),
+            patch("app.services.pg_admin_subscription.assert_child_growth_fits", AsyncMock()),
+            patch("app.services.billing_suspend._set_admin_enabled", AsyncMock()),
         ]
         for p in self.patches:
             p.start()
@@ -315,6 +319,27 @@ class MiniResellerApiTests(PackTestBase):
             await other.commit()
         data = (await self.client.get("/api/mini/reseller/subscription")).json()
         self.assertIn(HOSTILE, [p["name"] for p in data["packs"]], "returned verbatim as JSON; the page escapes it")
+
+    async def test_renewal_through_the_mini_app_refills_the_admin_only(self) -> None:
+        response = await self.client.post("/api/mini/reseller/renew", json={"generation": 0})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("دست‌نخورده", response.json()["message"])
+        self.assertEqual(response.json()["wallet"], 500_000)
+        self.pg.reset_admin_usage.assert_awaited_once_with("shop3")
+        self.pg.reset_user_by_id.assert_not_awaited()
+        repeated = await self.client.post("/api/mini/reseller/renew", json={"generation": 0})
+        self.assertEqual(repeated.status_code, 400, "the old screen cannot renew twice")
+
+    async def test_plan_without_time_has_no_renewal_and_says_why(self) -> None:
+        async with self.Session() as other:
+            (await other.get(ResellerPlan, 1)).duration_days = 0
+            await other.commit()
+        data = (await self.client.get("/api/mini/reseller/subscription")).json()
+        self.assertIsNone(data["renew_total"])
+        self.assertIn("زمان ندارد", data["renew_note"])
+        refused = await self.client.post("/api/mini/reseller/renew", json={"generation": 0})
+        self.assertEqual(refused.status_code, 400)
+        self.assertEqual((await self.state())[0], 1_000_000)
 
     async def test_extra_volume_purchase_uses_the_plan_rate(self) -> None:
         async with self.Session() as other:

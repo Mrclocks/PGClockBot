@@ -23,16 +23,20 @@ from app.db.models import BotUser, ResellerProfile
 from app.services import bot_feedback_texts as feedback
 from app.services.formatting import format_message, format_toman
 from app.services.redact import user_safe_error
+from app.services.pg_admin_subscription import plan_has_time
 from app.services.reseller_access import load_reseller_capacity_actor
 from app.services.reseller_package import (
+    MOVE_UNTIMED_EXPLAIN,
     RELATION_CURRENT,
     RELATION_DOWNGRADE,
+    RENEW_EXPLAIN,
     RELATION_UPGRADE,
     STALE_PAGE,
     PackageChoice,
     PackageOverview,
     package_overview,
     renew_package,
+    renewal_effect,
 )
 
 logger = logging.getLogger(__name__)
@@ -128,8 +132,7 @@ def _confirm_view(choice: PackageChoice, generation: int) -> tuple[str, InlineKe
         f"بستهٔ جدید: <b>{html.escape(str(choice.plan.name or ''))}</b> ({choice.label})\n"
         f"ظرفیت: {_capacity(choice)}\n"
         f"مبلغ: <b>{_money(total)}</b>\n\n"
-        "ظرفیت بستهٔ جدید همین حالا اعمال می‌شود، مدت آن از تاریخ انقضای فعلی اضافه می‌شود "
-        "و مصرف ترافیک کاربران صفر می‌شود. هزینه از کیف پول فروشگاه کسر می‌شود."
+        + (RENEW_EXPLAIN if plan_has_time(choice.plan) else MOVE_UNTIMED_EXPLAIN)
     )
     rows = [
         [InlineKeyboardButton(
@@ -145,13 +148,13 @@ def _confirm_view(choice: PackageChoice, generation: int) -> tuple[str, InlineKe
 
 def _done_text(result: dict) -> str:
     moved = f"بستهٔ جدید: <b>{html.escape(str(result.get('plan_name') or ''))}</b>\n" if result.get("changed") else ""
-    reset_failed = int(result.get("reset_err") or 0)
+    effect = renewal_effect(result)
+    warnings = "".join(f"\n⚠️ {html.escape(str(w))}" for w in result.get("warnings") or [])
     return format_message(
         "✅ تمدید انجام شد",
-        f"{moved}مبلغ: {_money(result.get('amount', 0))}\n"
-        f"صفر شدن مصرف کاربران: {int(result.get('reset_ok') or 0)}"
-        + (f" (ناموفق: {reset_failed})" if reset_failed else "")
-        + _expiry_line("انقضای جدید", result.get("expires_at")),
+        f"{moved}مبلغ: {_money(result.get('amount', 0))}\n{effect}"
+        + _expiry_line("انقضای جدید", result.get("expires_at"))
+        + warnings,
     )
 
 

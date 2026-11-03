@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -22,7 +23,9 @@ from app.db.models import (
     ResellerProfile,
 )
 from app.services.billing import GB, is_payg
+from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_toman
+from app.services.volume_allocation import is_hard_panel_rejection
 from app.services.volume_allocation_cascade import assert_child_growth_fits, assert_parent_has_room
 
 logger = logging.getLogger(__name__)
@@ -624,27 +627,137 @@ async def restore_subscription_access(
     return stats
 
 
-async def renew_subscription(
-    session: AsyncSession,
-    *,
-    sub: PgAdminSubscription,
-    plan: ResellerPlan,
-    payer: BotUser | None,
-    charge_wallet: bool = True,
-    reset_user_traffic: bool = True,
-) -> dict[str, Any]:
-    """Extend period, restore access, optionally charge wallet + reset traffic.
+RENEW_REFUSED = "پاسارگارد تمدید را نپذیرفت — مبلغ بازگردانده شد و چیزی تغییر نکرد"
+RENEW_UNKNOWN_WARNING = (
+    "پاسخ پاسارگارد برای اعمال تمدید نرسید. تمدید ثبت شده؛ دوباره تمدید نکنید. "
+    "اگر ظرفیت یا مصرف درست نشد با پشتیبانی تماس بگیرید."
+)
+NO_TIME_RENEWAL = "این پلن زمان ندارد و تمدید معنی ندارد؛ برای افزایش حجم یا کاربر بسته بخرید یا پلن را ارتقا دهید"
 
-    Early renew extends from max(now, expires_at). Amount is recomputed server-side.
+
+def plan_has_time(plan: ResellerPlan | None) -> bool:
+    """True when the plan sells a period; only such plans are renewed and refill the admin's volume."""
+    return plan is not None and int(getattr(plan, "duration_days", 0) or 0) > 0
+
+
+@dataclass(slots=True)
+class _RenewSnapshot:
+    """The subscription fields a renewal rewrites, kept so a refused renewal can put them back."""
+
+    plan_id: int | None
+    expires_at: datetime | None
+    base_gb: int
+    base_users: int
+    last_renewed_at: datetime | None
+    warn_sent_at: datetime | None
+    access_status: str
+    expired_at: datetime | None
+
+    @classmethod
+    def of(cls, sub: PgAdminSubscription) -> _RenewSnapshot:
+        return cls(
+            sub.plan_id, sub.expires_at, int(sub.base_gb or 0), int(sub.base_users or 0),
+            sub.last_renewed_at, sub.warn_sent_at, sub.access_status, sub.expired_at,
+        )
+
+    def restore(self, sub: PgAdminSubscription) -> None:
+        for name, value in asdict(self).items():
+            setattr(sub, name, value)
+
+
+class _RenewRefused(Exception):
+    """The panel definitely refused a renewal step, so nothing it sold was applied."""
+
+
+def _extend_period(sub: PgAdminSubscription, plan: ResellerPlan, now: datetime) -> None:
+    days = max(0, int(getattr(plan, "duration_days", 0) or 0))
+    if days > 0:
+        anchor = _as_aware(sub.expires_at) or now
+        sub.expires_at = max(anchor, now) + timedelta(days=days)
+    sub.plan_id = int(plan.id)
+    # current_capacity keeps the snapshot of the admin's live limits; its zero included_* never overwrite it.
+    if not is_current_capacity_plan(plan):
+        sub.base_gb = max(0, int(getattr(plan, "included_gb", 0) or 0))
+        sub.base_users = max(0, int(getattr(plan, "included_users", 0) or 0))
+    sub.last_renewed_at = now
+    sub.warn_sent_at = None
+    # Paid means active; the panel is reopened right after, and a failure there only warns.
+    sub.access_status = STATUS_ACTIVE
+    sub.expired_at = None
+
+
+async def _panel_step(name: str, uname: str, step, warnings: list[str]) -> bool:
+    """Run one panel call of a renewal: True if done, a refusal aborts it, an unanswered call warns."""
+    try:
+        await step()
+    except Exception as exc:
+        if is_hard_panel_rejection(exc):
+            logger.warning("renewal step %s refused admin=%s", name, uname, exc_info=True)
+            raise _RenewRefused from exc
+        logger.error("renewal step %s outcome unknown admin=%s", name, uname, exc_info=True)
+        if RENEW_UNKNOWN_WARNING not in warnings:
+            warnings.append(RENEW_UNKNOWN_WARNING)
+        return False
+    return True
+
+
+def _has_capacity_totals(sub: PgAdminSubscription) -> bool:
+    """False when every total is zero (unlimited or unread): pushing then would clear live limits."""
+    return any(
+        int(value or 0)
+        for value in (sub.base_gb, sub.base_users, sub.extra_gb_purchased, sub.extra_users_purchased)
+    )
+
+
+@dataclass(slots=True)
+class _PanelOutcome:
+    restored: dict[str, int]
+    usage_reset: bool
+
+
+async def _apply_renewal_on_panel(
+    session: AsyncSession, sub: PgAdminSubscription, warnings: list[str], *, refills_volume: bool,
+) -> _PanelOutcome:
+    """Refill the admin's volume (a new period only), push its limits and reopen access.
+
+    A customer's usage is never touched; only the admin's own counter is reset.
     """
-    if not is_subscription_plan(plan):
-        raise ValueError("تمدید فقط برای پلن اشتراک است")
-    if sub.access_status == STATUS_REVOKED:
-        raise ValueError("اشتراک لغو شده است")
-    if str(getattr(plan, "billing_mode", "") or "").lower() == "payg":
-        raise ValueError("پلن PAYG تمدید زمانی ندارد")
+    from app.services.pasarguard import get_pg
 
-    # Claim generation for idempotency under concurrent clicks
+    uname = normalize_pg_username(sub.pg_username)
+    usage_reset = refills_volume and await _panel_step(
+        "reset_usage", uname, lambda: get_pg().reset_admin_usage(uname), warnings,
+    )
+    if _has_capacity_totals(sub):
+        await _panel_step("capacity", uname, lambda: sync_pg_capacity_from_sub(session, sub), warnings)
+    restored = await restore_subscription_access(session, sub, commit=False)
+    if restored["errors"]:
+        warnings.append("بازگرداندن دسترسی ادمین یا کاربران کامل انجام نشد؛ در صورت مشکل با پشتیبانی تماس بگیرید.")
+    return _PanelOutcome(restored=restored, usage_reset=usage_reset)
+
+
+async def _undo_refused_renewal(
+    session: AsyncSession,
+    sub: PgAdminSubscription,
+    snapshot: _RenewSnapshot,
+    *,
+    payer: BotUser | None,
+    amount: int,
+) -> None:
+    """Put the subscription back and return the money; the generation stays spent so the old page is stale."""
+    await rollback_quiet(session)
+    fresh = await session.get(PgAdminSubscription, int(sub.id))
+    if fresh is not None:
+        snapshot.restore(fresh)
+    if payer is not None and amount > 0:
+        from app.services.wallet import credit_wallet
+
+        await credit_wallet(session, payer, amount, reason=f"reseller_renew_refund:{sub.pg_username}", commit=False)
+    await session.commit()
+
+
+async def _claim_renewal(session: AsyncSession, sub: PgAdminSubscription) -> None:
+    """Atomically take the generation the buyer saw; a concurrent or repeated renewal loses."""
     claimed = await session.execute(
         update(PgAdminSubscription)
         .where(
@@ -658,94 +771,67 @@ async def renew_subscription(
     if claimed.rowcount != 1:
         raise ValueError("تمدید هم‌زمان در حال انجام است — کمی بعد دوباره تلاش کنید")
     await session.refresh(sub)
+
+
+async def renew_subscription(
+    session: AsyncSession,
+    *,
+    sub: PgAdminSubscription,
+    plan: ResellerPlan,
+    payer: BotUser | None,
+    charge_wallet: bool = True,
+    moving: bool = False,
+) -> dict[str, Any]:
+    """Start the plan's next period: extend the time, refill the admin's volume, reopen access.
+
+    Early renewal extends from max(now, expires_at). The amount is recomputed here. The charge
+    and the new period are committed before the panel is called. If the panel refuses a step the
+    renewal is undone and the money returned; if it does not answer, the renewal stands and the
+    result carries a warning (no blind refund). A customer's usage is never reset. A plan with no
+    period cannot be renewed: it changes only through a pack or by moving to it (``moving``), and
+    moving to it neither extends the time nor refills the volume.
+    """
+    from app.services.wallet import debit_wallet
+
+    if not is_subscription_plan(plan):
+        raise ValueError("تمدید فقط برای پلن اشتراک است")
+    if sub.access_status == STATUS_REVOKED:
+        raise ValueError("اشتراک لغو شده است")
+    if str(getattr(plan, "billing_mode", "") or "").lower() == "payg":
+        raise ValueError("پلن PAYG تمدید زمانی ندارد")
+    timed = plan_has_time(plan)
+    if not timed and not moving:
+        raise ValueError(NO_TIME_RENEWAL)
+    if charge_wallet and payer is None:
+        raise ValueError("پرداخت‌کننده مشخص نیست")
+
+    await _claim_renewal(session, sub)
     if not is_current_capacity_plan(plan):
         # Checked before the charge; the parent stays locked until this renewal commits.
         await assert_child_growth_fits(
             session, pg_username=sub.pg_username,
             add_gb=max(0, int(getattr(plan, "included_gb", 0) or 0)) - int(sub.base_gb or 0),
         )
-
     invoice = compute_renew_invoice(plan, sub)
-    amount = int(invoice["total"])
+    amount = int(invoice["total"]) if charge_wallet else 0
     if charge_wallet:
-        if payer is None:
-            raise ValueError("پرداخت‌کننده مشخص نیست")
-        from app.services.wallet import debit_wallet
-
         await debit_wallet(
-            session,
-            payer,
-            amount,
-            reason=f"reseller_renew:{sub.pg_username}:g{sub.renew_generation}",
-            commit=False,
+            session, payer, amount, reason=f"reseller_renew:{sub.pg_username}:g{sub.renew_generation}", commit=False,
         )
+    snapshot = _RenewSnapshot.of(sub)
+    _extend_period(sub, plan, _utcnow())
+    await session.commit()
 
-    days = max(0, int(getattr(plan, "duration_days", 0) or 0))
-    now = _utcnow()
-    if days > 0:
-        anchor = _as_aware(sub.expires_at) or now
-        if anchor < now:
-            anchor = now
-        sub.expires_at = anchor + timedelta(days=days)
-    # Keep base from plan (subscription package definition).
-    # current_capacity keeps snapped SoT — never reset from included_*=0.
-    sub.plan_id = int(plan.id)
-    if not is_current_capacity_plan(plan):
-        sub.base_gb = max(0, int(getattr(plan, "included_gb", 0) or 0))
-        sub.base_users = max(0, int(getattr(plan, "included_users", 0) or 0))
-    sub.last_renewed_at = now
-    sub.warn_sent_at = None
-
+    warnings: list[str] = []
     try:
-        restore_stats = await restore_subscription_access(session, sub, commit=False)
-        # Skip PG push when totals are zero (unlimited / unread) so renew
-        # cannot clear live limits after a current_capacity grant.
-        if (
-            int(sub.base_gb or 0)
-            or int(sub.base_users or 0)
-            or int(sub.extra_gb_purchased or 0)
-            or int(sub.extra_users_purchased or 0)
-        ):
-            await sync_pg_capacity_from_sub(session, sub)
-        reset_ok = 0
-        reset_err = 0
-        if reset_user_traffic:
-            from app.services.billing_suspend import list_owned_user_ids
-            from app.services.pasarguard import get_pg
-
-            pg = get_pg()
-            for uid in await list_owned_user_ids(pg, sub.pg_username):
-                try:
-                    await pg.reset_user_by_id(uid)
-                    reset_ok += 1
-                except Exception:
-                    reset_err += 1
-                    logger.debug("renew reset user %s failed", uid, exc_info=True)
-    except Exception as e:
-        if charge_wallet and payer is not None and amount > 0:
-            from app.services.wallet import credit_wallet
-
-            await credit_wallet(
-                session,
-                payer,
-                amount,
-                reason=f"reseller_renew_refund:{sub.pg_username}:g{sub.renew_generation}",
-                commit=False,
-            )
-        await session.commit()
-        logger.exception("renew failed admin=%s", sub.pg_username)
-        if isinstance(e, ValueError) and str(e).strip():
-            raise ValueError(str(e)) from e
-        raise ValueError("تمدید ناموفق بود — در صورت کسر، مبلغ بازگردانده شد") from e
-
+        outcome = await _apply_renewal_on_panel(session, sub, warnings, refills_volume=timed)
+    except _RenewRefused:
+        await _undo_refused_renewal(session, sub, snapshot, payer=payer, amount=amount)
+        raise ValueError(RENEW_REFUSED) from None
     await session.commit()
     return {
-        "amount": amount,
-        "invoice": invoice,
-        "expires_at": sub.expires_at,
-        "restore": restore_stats,
-        "reset_ok": reset_ok,
-        "reset_err": reset_err,
+        "amount": amount, "invoice": invoice, "expires_at": sub.expires_at, "restore": outcome.restored,
+        "timed": timed, "usage_reset": outcome.usage_reset, "warnings": warnings,
     }
 
 

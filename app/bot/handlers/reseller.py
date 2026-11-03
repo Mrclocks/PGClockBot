@@ -1473,10 +1473,13 @@ async def res_renew(
 ):
     from app.services.reseller_capacity import plan_renew_price
     from app.services.pg_admin_subscription import (
+        NO_TIME_RENEWAL,
         compute_renew_invoice,
         format_renew_invoice_html,
         get_subscription,
+        plan_has_time,
     )
+    from app.services.reseller_package import RENEW_EXPLAIN
 
     owner_id, profile, plan, owner = await _capacity_context(
         session,
@@ -1492,11 +1495,13 @@ async def res_renew(
     invoice = compute_renew_invoice(plan, sub)
     price = int(invoice.get("total") or plan_renew_price(plan))
     generation = int(sub.renew_generation or 0) if sub else 0
+    timed = plan_has_time(plan)
     rows = [
-        [renew_button(price, int(plan.id), generation)],
+        [renew_button(price, int(plan.id), generation)] if timed else [],
         [change_button()],
         [kb.back_button(None, back_callback_for("res_renew"))],
     ]
+    rows = [row for row in rows if row]
     detail = format_renew_invoice_html(invoice, currency=get_settings().currency)
     exp = invoice.get("expires_at")
     exp_line = ""
@@ -1513,8 +1518,7 @@ async def res_renew(
                 "🔄 تمدید سرویس نماینده",
                 f"پلن: <b>{plan.name}</b>\n"
                 f"{detail}{exp_line}\n\n"
-                "با تمدید، دسترسی در صورت انقضا باز می‌شود و مصرف ترافیک کاربران صفر می‌شود.\n"
-                "هزینه از کیف پول فروشگاه کسر می‌شود.",
+                + (RENEW_EXPLAIN if timed else NO_TIME_RENEWAL),
             ),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )

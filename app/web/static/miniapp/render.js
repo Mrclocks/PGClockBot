@@ -942,7 +942,9 @@
   function resellerSubscriptionHtml(d) {
     const notice = d.unavailable ? `<div class="notice is-warn" role="status"><div class="notice-body"><span>${esc(d.unavailable)}</span></div></div>` : "";
     const renew = d.renew_total !== null && d.renew_total !== undefined && !d.is_payg
-      ? `<button type="button" class="btn block" data-action="res-renew">${icon("refresh", 18)} تمدید — <bdi>${esc(money(d.renew_total))}</bdi></button>` : "";
+      ? `<button type="button" class="btn block" data-action="res-renew">${icon("refresh", 18)} تمدید — <bdi>${esc(money(d.renew_total))}</bdi></button>
+        <p class="muted sm">مدت بسته اضافه و مصرف خود ادمین صفر می‌شود؛ مصرف مشتریان شما دست‌نخورده می‌ماند.</p>`
+      : (d.renew_note ? `<p class="muted sm">${esc(d.renew_note)}</p>` : "");
     return heroHtml({
       label: "موجودی کیف پول", value: money(d.wallet), aria: "کیف پول",
       footer: '<div class="btn-row"><button type="button" class="btn on-hero" data-action="topup">شارژ کیف پول</button></div>',

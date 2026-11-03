@@ -17,12 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, ResellerPlan, ResellerProfile
 from app.services.billing import GB, is_payg
 from app.services.pg_admin_subscription import (
+    NO_TIME_RENEWAL,
     PLAN_KIND_ADDON_VOLUME,
     STATUS_ACTIVE,
     compute_renew_invoice,
     get_subscription,
     is_subscription_plan,
     list_addon_plans,
+    plan_has_time,
     plan_kind_of,
 )
 from app.services.reseller_capacity import (
@@ -76,6 +78,7 @@ class SubscriptionOverview:
     usage: dict[str, int] | None
     renew_total: int | None
     renew_days: int
+    renew_note: str | None
     unavailable: str | None
     packs: list[PackRow] = field(default_factory=list)
     unit_gb: UnitOffer | None = None
@@ -152,8 +155,9 @@ async def build_overview(session: AsyncSession, *, user: BotUser, profile: Resel
         extra_users=int(sub.extra_users_purchased or 0) if sub else 0,
         generation=int(sub.renew_generation or 0) if sub else 0,
         usage=await _live_usage(uname),
-        renew_total=int(invoice["total"]) if invoice else None,
+        renew_total=int(invoice["total"]) if invoice and plan_has_time(plan) else None,
         renew_days=int(invoice["duration_days"]) if invoice else 0,
+        renew_note=NO_TIME_RENEWAL if invoice and not plan_has_time(plan) else None,
         unavailable=unavailable,
     )
     if unavailable is None and plan is not None:
