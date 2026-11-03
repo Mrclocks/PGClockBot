@@ -431,7 +431,12 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         body = str(form.get("body") or form.get("text") or "")
         try:
             await send_staff_dm(
-                session, user, body, shop_id=resolve_shop_scope_id(staff), actor=actor_label_from_staff(staff)
+                session,
+                user,
+                body,
+                shop_id=resolve_shop_scope_id(staff),
+                actor=actor_label_from_staff(staff),
+                sender_tg=int(staff.get("telegram_id") or 0),
             )
             await session.commit()
         except ValueError as e:
@@ -523,7 +528,12 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return _redirect_list_form(form, err="گیرنده‌ای در این فیلتر نیست")
         try:
             stats = await bulk_staff_dm(
-                session, targets, body, shop_id=resolve_shop_scope_id(staff), actor=actor_label_from_staff(staff)
+                session,
+                targets,
+                body,
+                shop_id=resolve_shop_scope_id(staff),
+                actor=actor_label_from_staff(staff),
+                sender_tg=int(staff.get("telegram_id") or 0),
             )
             await session.commit()
         except ValueError as e:
