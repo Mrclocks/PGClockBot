@@ -611,6 +611,7 @@ async def res_user_message_send(
             message.text or "",
             shop_id=int(owner_id),
             actor=bot_user_panel_label(db_user),
+            sender_tg=int(db_user.telegram_id or 0),
         )
         await session.commit()
         await message.answer(feedback.MESSAGE_SENT, reply_markup=_user_card_back(uid))

@@ -2562,6 +2562,7 @@ async def adm_users_message_send(
             message.text or "",
             shop_id=None,
             actor=bot_user_panel_label(db_user),
+            sender_tg=int(db_user.telegram_id or 0),
         )
         await session.commit()
         status = feedback.MESSAGE_SENT
