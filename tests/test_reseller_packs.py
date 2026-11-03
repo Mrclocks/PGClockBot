@@ -80,7 +80,7 @@ class PackTestBase(unittest.IsolatedAsyncioTestCase):
         self.patches = [
             patch("app.services.pasarguard.get_pg", return_value=self.pg),
             patch("app.services.reseller_capacity.assert_child_growth_fits", AsyncMock()),
-            patch("app.services.reseller_packs.assert_child_growth_fits", AsyncMock()),
+            
             patch("app.services.pg_admin_subscription.assert_child_growth_fits", AsyncMock()),
             patch("app.services.billing_suspend._set_admin_enabled", AsyncMock()),
         ]

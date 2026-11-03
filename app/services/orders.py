@@ -79,6 +79,7 @@ def is_mutation_order_note(note: str | None) -> bool:
         n.startswith("renew:")
         or n.startswith("reseller_app:")
         or n.startswith("svc_addon:")
+        or n.startswith("res_cap:")
     )
 
 
@@ -114,6 +115,10 @@ async def fulfill_paid_order(session: AsyncSession, order: Order) -> Order:
         from app.services.service_addons import apply_service_addon
 
         return await apply_service_addon(session, order)
+    if note.startswith("res_cap:"):
+        from app.services.reseller_capacity_orders import apply_capacity_order
+
+        return await apply_capacity_order(session, order)
     return await deliver_order(session, order)
 
 
@@ -1122,6 +1127,10 @@ async def manual_fulfill_unpaid_order(
 
         delivered = await apply_service_addon(session, order)
         return delivered, payment
+    if note_txt.startswith("res_cap:"):
+        from app.services.reseller_capacity_orders import apply_capacity_order
+
+        return await apply_capacity_order(session, order), payment
     delivered = await deliver_order(session, order)
     return delivered, payment
 
@@ -1138,6 +1147,8 @@ def wallet_purchase_reason(order: Order) -> str:
         return f"افزونه سرویس #{order.id}"
     if note.startswith("reseller_app:"):
         return f"هزینه نمایندگی #{order.id}"
+    if note.startswith("res_cap:"):
+        return f"ظرفیت نمایندگی #{order.id}"
     return f"خرید سفارش #{order.id}"
 
 

@@ -22,13 +22,7 @@ from app.services.pg_admin_subscription import (
     is_subscription_plan,
     plan_kind_of,
 )
-from app.services.reseller_capacity import (
-    ExtraPurchase,
-    apply_paid_extra,
-    users_raiser,
-    volume_raiser,
-)
-from app.services.volume_allocation_cascade import assert_child_growth_fits
+from app.services.reseller_capacity import CapacityOffer, buy_offer
 
 NO_PACK = "این بسته پیدا نشد یا برای پلن شما در دسترس نیست"
 PACK_NOT_FOR_PAYG = "خرید بسته برای پلن PAYG فعال نیست"
@@ -65,19 +59,17 @@ def _pack_amounts(pack: ResellerPlan) -> tuple[int, int]:
     return gb, users
 
 
-async def buy_addon_pack(
+async def pack_offer(
     session: AsyncSession,
     *,
     user: BotUser,
     profile: ResellerProfile,
     plan: ResellerPlan | None,
     pack_id: int,
-    generation: int,
-) -> dict[str, int | str]:
-    """Pay a catalog pack from the owner's wallet and raise the admin's live panel limit by it.
+) -> CapacityOffer:
+    """Validate that ``user`` may buy catalog pack ``pack_id`` now; raises ``ValueError`` (safe to show).
 
     ``profile`` must be the profile of ``user`` (the caller resolves both from the session).
-    Raises ``ValueError`` with a message that is safe to show.
     """
     if profile.user_id != user.id:
         raise ValueError(NO_PACK)
@@ -95,18 +87,31 @@ async def buy_addon_pack(
     if price <= 0:
         raise ValueError(PACK_BAD_PRICE)
     gb, users = _pack_amounts(pack)
+    await assert_subscription_open(session, uname)
+    return CapacityOffer(uname=uname, gb=gb, users=users, price=price, reason=f"reseller_addon:{int(pack.id)}:{uname}")
+
+
+async def assert_subscription_open(session: AsyncSession, uname: str) -> None:
+    """Only an active, unexpired subscription can take more capacity."""
     sub = await get_or_create_subscription(session, uname)
     if sub.access_status != STATUS_ACTIVE:
         raise ValueError(PACK_NEEDS_ACTIVE)
     expires = _aware(sub.expires_at)
     if expires is not None and expires <= datetime.now(timezone.utc):
         raise ValueError(PACK_EXPIRED)
-    # Before the charge and the panel call; the parent stays locked until this purchase commits.
-    await assert_child_growth_fits(session, pg_username=uname, add_gb=gb)
-    purchase = ExtraPurchase(
-        uname=uname, amount=price, gb=gb, users=users,
-        reason=f"reseller_addon:{int(pack.id)}:{uname}", generation=int(generation),
-    )
-    apply = volume_raiser(uname, gb) if gb else users_raiser(uname, users)
-    new_limit = await apply_paid_extra(session, user=user, purchase=purchase, apply=apply)
-    return {"pack": pack.name, "gb": gb, "users": users, "amount": price, "new_limit": new_limit}
+
+
+async def buy_addon_pack(
+    session: AsyncSession,
+    *,
+    user: BotUser,
+    profile: ResellerProfile,
+    plan: ResellerPlan | None,
+    pack_id: int,
+    generation: int,
+) -> dict[str, int | str]:
+    """Pay a catalog pack from the owner's wallet and raise the admin's live panel limit by it."""
+    offer = await pack_offer(session, user=user, profile=profile, plan=plan, pack_id=pack_id)
+    new_limit = await buy_offer(session, user=user, offer=offer, generation=int(generation))
+    pack = await session.get(ResellerPlan, int(pack_id))
+    return {"pack": pack.name, "gb": offer.gb, "users": offer.users, "amount": offer.price, "new_limit": new_limit}

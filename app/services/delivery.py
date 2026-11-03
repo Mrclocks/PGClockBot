@@ -40,6 +40,8 @@ def _plan_type_label(order) -> str:
     note = (getattr(order, "note", None) or "").strip()
     if note.startswith("svc_addon:"):
         return "بسته حجم/زمان"
+    if note.startswith("res_cap:"):
+        return "ظرفیت نمایندگی"
     if note.startswith("renew:"):
         return "تمدید"
     if note.startswith("reseller_app:") or note.startswith("reseller_renew:"):
@@ -472,6 +474,21 @@ async def _try_send_html(
             return False
 
 
+async def _deliver_capacity_order(bot: Bot, chat_id: int, order, reply_kb: Any) -> str:
+    from app.services.reseller_capacity_orders import describe, parse_note
+
+    parsed = parse_note(order.note)
+    text = format_message(
+        "✅ ظرفیت اضافه شد",
+        "\n".join(
+            [f"سفارش #{order.id}", f"افزایش: {describe(parsed)}" if parsed else "", "تاریخ انقضا تغییر نکرد."]
+        ).strip(),
+    )
+    if not await _try_send_html(bot, chat_id, text, reply_markup=reply_kb):
+        logger.debug("capacity delivery notify failed chat_id=%s", chat_id)
+    return text
+
+
 async def _deliver_addon_order(
     bot: Bot,
     chat_id: int,
@@ -722,6 +739,8 @@ async def send_delivery_to_user(
     note = str(order.note) if order and order.note else ""
     if note.startswith("svc_addon:"):
         return await _deliver_addon_order(bot, chat_id, session, order, reply_kb)
+    if note.startswith("res_cap:"):
+        return await _deliver_capacity_order(bot, chat_id, order, reply_kb)
     if note.startswith("reseller_app:"):
         return await _deliver_reseller_app_order(bot, chat_id, session, order, reply_kb)
     return await _deliver_subscription_order(

@@ -794,6 +794,22 @@ async def notify_pending_approval(
     )
 
 
+def _capacity_order_detail_lines(order: Order, note: str) -> tuple[str, list[str]]:
+    """Kind and kv lines for a reseller capacity order, from its frozen entitlement."""
+    from app.services.reseller_capacity_orders import describe, parse_note
+
+    label = "خرید ظرفیت نمایندگی"
+    lines = [kv_line("📝", "بابت", label)]
+    parsed = parse_note(note)
+    if parsed is not None:
+        lines.append(kv_line("➕", "مقدار افزایش", describe(parsed)))
+    if order.payment_method:
+        from app.services.payment_method_labels import payment_method_fa
+
+        lines.append(kv_line("💳", "روش", html.escape(payment_method_fa(order.payment_method))))
+    return label, lines
+
+
 async def _addon_order_detail_lines(
     session: AsyncSession, order: Order
 ) -> tuple[str, list[str]] | None:
@@ -808,6 +824,8 @@ async def _addon_order_detail_lines(
     )
 
     note = (order.note or "").strip()
+    if note.startswith("res_cap:"):
+        return _capacity_order_detail_lines(order, note)
     if not note.startswith("svc_addon:"):
         return None
     parsed = parse_addon_note(note)

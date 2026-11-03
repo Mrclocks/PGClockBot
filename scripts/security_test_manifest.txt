@@ -365,3 +365,4 @@ tests/test_reseller_packs.py
 tests/test_reseller_capacity_buy_bot.py
 tests/test_reseller_renewal.py
 tests/test_pasarguard_admin_reset.py
+tests/test_reseller_capacity_orders.py

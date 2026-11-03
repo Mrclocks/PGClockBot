@@ -11,6 +11,7 @@ import html
 import logging
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +30,15 @@ from app.services.reseller_capacity import (
     buy_extra_users,
     load_reseller_plan,
 )
+from app.services.reseller_capacity_orders import (
+    KIND_GB,
+    KIND_PACK,
+    KIND_USERS,
+    NOT_FOR_SHOP_BOT,
+    create_capacity_order,
+    describe,
+    parse_note,
+)
 from app.services.reseller_packs import buy_addon_pack
 
 logger = logging.getLogger(__name__)
@@ -36,6 +46,7 @@ logger = logging.getLogger(__name__)
 router = Router(name="reseller_capacity_buy")
 
 HUB = "res:addons"
+ORDER = "res:cap:o:"
 PACK_OK = "res:addon:ok:"
 GB_OK = "res:buy_gb_ok:"
 USERS_OK = "res:buy_users_ok:"
@@ -47,17 +58,27 @@ def _money(amount: int) -> str:
 
 
 def confirm_view(
-    *, title: str, lines: list[str], price: int, wallet: int, ok_callback: str, back_callback: str,
+    *,
+    title: str,
+    lines: list[str],
+    price: int,
+    wallet: int,
+    ok_callback: str,
+    back_callback: str,
+    order_callback: str | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
-    """The «are you sure» screen: what is bought, what it costs and what the wallet holds."""
+    """The «are you sure» screen: what is bought, what it costs and what the wallet holds.
+
+    ``order_callback`` adds «other payment methods» (an order paid like a plan); the platform bot only.
+    """
     body = "\n".join(lines) + (
         f"\n\nمبلغ: <b>{_money(price)}</b>\nموجودی کیف پول: <b>{_money(wallet)}</b>\n"
         "با تأیید، مبلغ همین حالا از کیف پول کسر و ظرفیت اعمال می‌شود."
     )
-    rows = [
-        [InlineKeyboardButton(text=f"✅ تأیید و پرداخت — {_money(price)}", callback_data=ok_callback)],
-        [kb.back_button(None, back_callback)],
-    ]
+    rows = [[InlineKeyboardButton(text=f"✅ پرداخت از کیف پول — {_money(price)}", callback_data=ok_callback)]]
+    if order_callback:
+        rows.append([InlineKeyboardButton(text="💳 سایر روش‌های پرداخت", callback_data=order_callback)])
+    rows.append([kb.back_button(None, back_callback)])
     return format_message(title, body), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -193,3 +214,52 @@ async def res_buy_users_pay(
         callback, "✅ کاربر اضافه خریداری شد",
         [f"تعداد: {result['users']}", f"سقف جدید: {result['max_users']}", f"مبلغ: {_money(int(result['amount']))}"],
     )
+
+
+def order_callback_for(kind: str, ref: int, *, is_reseller_bot: bool) -> str | None:
+    """The «other payment methods» button; a shop bot's payment methods belong to the shop, so it gets none."""
+    return None if is_reseller_bot else f"{ORDER}{kind}:{int(ref)}"
+
+
+@router.callback_query(F.data.startswith(ORDER))
+async def res_capacity_order(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
+    """Create the order for a confirmed purchase and show the payment methods, like a plan."""
+    from app.bot.menu_nav import present_order_pay
+
+    if is_reseller_bot:
+        await callback.answer(NOT_FOR_SHOP_BOT, show_alert=True)
+        return
+    parts = (callback.data or "").removeprefix(ORDER).split(":")
+    actor = await _actor(session, db_user, is_reseller_bot=False, reseller_owner_id=None)
+    if actor is None:
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
+        return
+    if len(parts) != 2 or parts[0] not in {KIND_PACK, KIND_GB, KIND_USERS} or not parts[1].isdigit() or not 0 < int(parts[1]) <= _ID_MAX:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    owner, profile, plan = actor
+    try:
+        order = await create_capacity_order(
+            session, user=owner, profile=profile, plan=plan, kind=parts[0], ref=int(parts[1]),
+        )
+    except ValueError as exc:
+        await callback.answer(user_safe_error(exc, limit=180), show_alert=True)
+        return
+    await callback.answer()
+    parsed = parse_note(order.note)
+    summary = format_message(
+        f"➕ ظرفیت نمایندگی — سفارش #{order.id}",
+        f"افزایش: {describe(parsed) if parsed else '—'}\nمبلغ: <b>{_money(int(order.amount))}</b>",
+    )
+    if callback.message:
+        await present_order_pay(
+            callback.message, session, db_user, order.id, state=state, summary=summary,
+            is_reseller_bot=False, reseller_owner_id=None,
+        )

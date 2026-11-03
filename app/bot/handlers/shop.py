@@ -1581,6 +1581,18 @@ async def navigate_order_pay_back(
             )
             return
 
+    if note.startswith("res_cap:"):
+        from app.bot.handlers.reseller import res_addons
+
+        await res_addons(
+            _PayBackCallback(message, "res:addons"),
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+
     if note.startswith("reseller_app:"):
         from app.bot.handlers.reseller import resapply_home
 
