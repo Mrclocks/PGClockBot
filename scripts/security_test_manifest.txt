@@ -193,6 +193,7 @@ tests/test_reseller_hub_in_place.py
 tests/test_panel_connection_resilience.py
 tests/test_panel_asset_cache.py
 tests/test_catalog_discounts.py
+tests/test_catalog_discounts_route_wired.py
 tests/test_inbox_dismissal_lifecycle.py
 tests/test_stale_menu_notice.py
 tests/test_restart_button.py

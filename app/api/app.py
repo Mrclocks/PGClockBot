@@ -1573,6 +1573,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_payment_void_pages(app, require_staff=require_staff, get_db=get_db)
     register_broadcast_queue_pages(app, require_admin=require_admin, get_db=get_db)
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_order_purge_pages(app, require_staff=require_staff, get_db=get_db)
     register_cleanup_settings_pages(app, require_staff=require_staff, get_db=get_db)
