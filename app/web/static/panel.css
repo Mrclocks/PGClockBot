@@ -7063,12 +7063,73 @@ td.byte-size {
   font-size: 12px;
   line-height: 1.45;
 }
-.payg-lifetime-note,
-.reseller-pg-admin-line {
-  margin: var(--space-2) 0 0;
+/* Reseller edit: usage/limits and wallet sections share the panel's stat-tile language. */
+.reseller-section-head {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+.reseller-usage-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+.reseller-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  padding: var(--space-0) var(--space-1_5);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--muted-fg);
   font-size: 12px;
-  line-height: 1.45;
-  text-align: right;
+  line-height: 1.6;
+}
+.reseller-chip code,
+.reseller-chip bdi {
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reseller-usage .pg-quota-banner { margin: 0 0 var(--space-2); }
+.reseller-usage-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding: var(--space-1_5) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+.reseller-usage-total span { color: var(--muted-fg); font-size: 12px; }
+.reseller-usage-total strong { font-size: 14px; font-weight: 650; }
+.reseller-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+.reseller-stat-grid > .stat { min-height: 76px; margin: 0; }
+.reseller-stat-grid > .stat strong { font-size: clamp(14px, 2.4vw, 18px); }
+.reseller-stat-grid > .stat strong span { color: inherit; font: inherit; }
+#reseller-wallet .reseller-stat-grid { grid-template-columns: minmax(0, 1fr); }
+.edit-section > .flash.err:has(.flash-copy) { margin: 0 0 var(--space-2); }
+@media (max-width: 560px) {
+  .reseller-stat-grid { grid-template-columns: minmax(0, 1fr); }
+  .reseller-stat-grid > .stat {
+    min-height: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .reseller-stat-grid > .stat strong { width: auto; text-align: left; }
 }
 .wallet-tx-list {
   list-style: none;
