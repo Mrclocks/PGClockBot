@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, ResellerPlan, ResellerProfile
+from app.db.models import BotUser, PgAdminSubscription, ResellerPlan, ResellerProfile
 from app.services.billing import GB, is_payg
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_toman
@@ -150,13 +150,41 @@ EXTRA_OUTCOME_UNKNOWN = (
 )
 
 
+STALE_PURCHASE = "این صفحه قدیمی است یا خرید دیگری همین حالا انجام شد؛ صفحه را دوباره باز کنید"
+
+
 @dataclass(slots=True)
-class _ExtraPurchase:
+class ExtraPurchase:
     uname: str
     amount: int
     gb: int
     users: int
     reason: str
+    # The subscription's ``renew_generation`` the buyer saw; None skips the check (older callers).
+    generation: int | None = None
+
+
+async def _claim_generation(session: AsyncSession, purchase: ExtraPurchase) -> None:
+    """Atomically move the subscription past the generation the buyer saw, so a repeated tap buys once.
+
+    The claim shares the transaction of the debit: it is committed with the charge or rolled back with it.
+    """
+    if purchase.generation is None:
+        return
+    from app.services.pg_admin_subscription import get_or_create_subscription
+
+    await get_or_create_subscription(session, purchase.uname)
+    claimed = await session.execute(
+        update(PgAdminSubscription)
+        .where(
+            PgAdminSubscription.pg_username == purchase.uname,
+            PgAdminSubscription.renew_generation == int(purchase.generation),
+        )
+        .values(renew_generation=PgAdminSubscription.renew_generation + 1)
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount != 1:
+        raise ValueError(STALE_PURCHASE)
 
 
 def _panel_rejected(exc: Exception) -> bool:
@@ -167,7 +195,7 @@ def _panel_rejected(exc: Exception) -> bool:
     return status is not None and 400 <= int(status) < 500
 
 
-async def _refund_extra(session: AsyncSession, user: BotUser, purchase: _ExtraPurchase) -> None:
+async def _refund_extra(session: AsyncSession, user: BotUser, purchase: ExtraPurchase) -> None:
     from app.services.pg_admin_subscription import get_subscription
     from app.services.wallet import credit_wallet
 
@@ -180,11 +208,11 @@ async def _refund_extra(session: AsyncSession, user: BotUser, purchase: _ExtraPu
     await session.commit()
 
 
-async def _apply_paid_extra(
+async def apply_paid_extra(
     session: AsyncSession,
     *,
     user: BotUser,
-    purchase: _ExtraPurchase,
+    purchase: ExtraPurchase,
     apply: Callable[[Any, dict], Awaitable[int]],
 ) -> int:
     """Charge and record the extra, commit, then raise the panel limit with ``apply``.
@@ -198,6 +226,7 @@ async def _apply_paid_extra(
     from app.services.pg_admin_subscription import record_unit_extra
     from app.services.wallet import debit_wallet
 
+    await _claim_generation(session, purchase)
     await debit_wallet(session, user, purchase.amount, reason=purchase.reason, commit=False)
     await record_unit_extra(session, pg_username=purchase.uname, gb=purchase.gb, users=purchase.users)
     await session.commit()
@@ -223,6 +252,35 @@ async def _apply_paid_extra(
         raise ValueError(EXTRA_OUTCOME_UNKNOWN) from exc
 
 
+def volume_raiser(uname: str, gb: int) -> Callable[[Any, dict], Awaitable[int]]:
+    """Panel write that adds ``gb`` to the admin's live data limit (an unlimited admin starts from zero)."""
+
+    async def raise_volume(pg, admin: dict) -> int:
+        current = _admin_data_limit(admin)
+        new_limit = (current if current > 0 else 0) + gb * GB
+        await pg.modify_admin(uname, {"data_limit": int(new_limit)})
+        return new_limit
+
+    return raise_volume
+
+
+def users_raiser(uname: str, count: int) -> Callable[[Any, dict], Awaitable[int]]:
+    """Panel write that adds ``count`` to the admin's live user cap."""
+
+    async def raise_users(pg, admin: dict) -> int:
+        new_max = _admin_max_users(admin) + count
+        overrides = (
+            dict(admin.get("permission_overrides") or {})
+            if isinstance(admin.get("permission_overrides"), dict)
+            else {}
+        )
+        overrides["max_users"] = int(new_max)
+        await pg.modify_admin(uname, {"permission_overrides": overrides, "max_users": int(new_max)})
+        return new_max
+
+    return raise_users
+
+
 async def buy_extra_gb(
     session: AsyncSession,
     *,
@@ -230,6 +288,7 @@ async def buy_extra_gb(
     profile: ResellerProfile,
     plan: ResellerPlan,
     gb: int,
+    generation: int | None = None,
 ) -> dict[str, Any]:
     if not plan_allows_buy_extra(plan):
         raise ValueError("این پلن امکان خرید حجم اضافه ندارد")
@@ -252,16 +311,10 @@ async def buy_extra_gb(
     total = price * gb_n
     # Before the charge and the panel call; the parent stays locked until this purchase commits.
     await assert_child_growth_fits(session, pg_username=uname, add_gb=gb_n)
-    purchase = _ExtraPurchase(uname=uname, amount=total, gb=gb_n, users=0, reason=f"reseller_extra_gb:{gb_n}:{uname}")
-
-    async def raise_volume(pg, admin: dict) -> int:
-        current = _admin_data_limit(admin)
-        # If unlimited (0), start from purchased amount
-        new_limit = (current if current > 0 else 0) + gb_n * GB
-        await pg.modify_admin(uname, {"data_limit": int(new_limit)})
-        return new_limit
-
-    new_limit = await _apply_paid_extra(session, user=user, purchase=purchase, apply=raise_volume)
+    purchase = ExtraPurchase(
+        uname=uname, amount=total, gb=gb_n, users=0, reason=f"reseller_extra_gb:{gb_n}:{uname}", generation=generation,
+    )
+    new_limit = await apply_paid_extra(session, user=user, purchase=purchase, apply=volume_raiser(uname, gb_n))
     return {"gb": gb_n, "amount": total, "data_limit": new_limit}
 
 
@@ -272,6 +325,7 @@ async def buy_extra_users(
     profile: ResellerProfile,
     plan: ResellerPlan,
     count: int,
+    generation: int | None = None,
 ) -> dict[str, Any]:
     if not plan_allows_buy_extra(plan):
         raise ValueError("این پلن امکان خرید کاربر اضافه ندارد")
@@ -292,22 +346,10 @@ async def buy_extra_users(
         raise ValueError("ادمین پاسارگارد برای این نماینده تنظیم نشده است")
 
     total = price * n
-    purchase = _ExtraPurchase(uname=uname, amount=total, gb=0, users=n, reason=f"reseller_extra_users:{n}:{uname}")
-
-    async def raise_users(pg, admin: dict) -> int:
-        new_max = _admin_max_users(admin) + n
-        overrides = (
-            dict(admin.get("permission_overrides") or {})
-            if isinstance(admin.get("permission_overrides"), dict)
-            else {}
-        )
-        overrides["max_users"] = int(new_max)
-        await pg.modify_admin(
-            uname, {"permission_overrides": overrides, "max_users": int(new_max)}
-        )
-        return new_max
-
-    new_max = await _apply_paid_extra(session, user=user, purchase=purchase, apply=raise_users)
+    purchase = ExtraPurchase(
+        uname=uname, amount=total, gb=0, users=n, reason=f"reseller_extra_users:{n}:{uname}", generation=generation,
+    )
+    new_max = await apply_paid_extra(session, user=user, purchase=purchase, apply=users_raiser(uname, n))
     return {"users": n, "amount": total, "max_users": new_max}
 
 
