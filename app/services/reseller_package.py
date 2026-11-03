@@ -54,12 +54,12 @@ USAGE_UNREADABLE = "مصرف فعلی از پنل خوانده نشد؛ کمی �
 PACKAGE_LIST_LIMIT = 30
 RENEW_EXPLAIN = (
     "با تمدید، مدت بسته از تاریخ انقضای فعلی اضافه می‌شود، دسترسی باز می‌شود و مصرف خود ادمین (حجم بسته) "
-    "صفر می‌شود. مصرف مشتریان شما دست‌نخورده می‌ماند. هزینه از کیف پول کسر می‌شود."
+    "صفر می‌شود. مصرف مشتریان شما دست‌نخورده می‌ماند."
 )
 MOVE_UNTIMED_EXPLAIN = (
-    "ظرفیت بستهٔ جدید همین حالا اعمال می‌شود. این بسته زمان ندارد، پس زمان و مصرف تغییری نمی‌کند. "
-    "هزینه از کیف پول کسر می‌شود."
+    "ظرفیت بستهٔ جدید همین حالا اعمال می‌شود. این بسته زمان ندارد، پس زمان و مصرف تغییری نمی‌کند."
 )
+WALLET_PAY_HINT = "با پرداخت از کیف پول، مبلغ همین حالا کسر و تمدید اعمال می‌شود."
 
 
 @dataclass(slots=True)
@@ -262,12 +262,14 @@ async def renew_package(
     profile: ResellerProfile,
     plan_id: int,
     generation: int,
+    charge_wallet: bool = True,
 ) -> dict:
     """Renew into ``plan_id`` (the current package or an allowed one), once per shown page.
 
     Renewing a timed package starts its next period (time extended, the admin's volume refilled,
     customers' usage untouched). A package without time is not renewed: moving to it applies its
-    capacity only.
+    capacity only. ``charge_wallet=False`` is for a paid platform order that already collected
+    the money through another method.
     """
     # Expiry flips is_active off; renew must still work. Soft-deactivate while open is refused.
     await assert_shop_allows_renew(session, profile)
@@ -286,7 +288,12 @@ async def renew_package(
     changed = current is None or int(target.id) != int(current.id)
     profile_id = int(profile.id)
     result = await renew_subscription(
-        session, sub=sub, plan=target, payer=owner, charge_wallet=True, moving=changed,
+        session,
+        sub=sub,
+        plan=target,
+        payer=owner if charge_wallet else None,
+        charge_wallet=charge_wallet,
+        moving=changed,
     )
     if changed:
         fresh = await session.get(ResellerProfile, profile_id)

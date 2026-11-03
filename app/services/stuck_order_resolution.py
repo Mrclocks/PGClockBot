@@ -228,6 +228,8 @@ def _order_kind(note: str) -> str:
         return "درخواست نمایندگی"
     if note.startswith("res_cap:"):
         return "ظرفیت نمایندگی"
+    if note.startswith("res_pkg:"):
+        return "تمدید بسته نمایندگی"
     return "خرید سرویس"
 
 
@@ -240,6 +242,8 @@ def _reason_text(order: Order, app: ResellerApplication | None) -> str:
             return "آخرین تلاش برای اعمال در پاسارگارد نتیجهٔ نامعلومی داشت"
         if note.startswith("res_cap:"):
             return "پرداخت شده ولی ظرفیت روی ادمین نماینده اعمال نشد"
+        if note.startswith("res_pkg:"):
+            return "پرداخت شده ولی تمدید بسته روی ادمین نماینده اعمال نشد"
         return "سرویسی که باید تمدید یا افزوده شود دیگر وجود ندارد (حذف یا لغو شده)"
     if order.status == OrderStatus.DELIVERING.value:
         return "ساخت سرویس شروع شد ولی تمام نشد"
