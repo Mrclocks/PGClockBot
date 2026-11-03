@@ -22,11 +22,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, PgAdminSubscription, ResellerPlan, ResellerProfile
 from app.services.billing import GB, is_payg
 from app.services.pg_admin_subscription import (
+    NO_TIME_RENEWAL,
     PLAN_KIND_SUBSCRIPTION,
     compute_renew_invoice,
     get_or_create_subscription,
     get_subscription,
     is_subscription_plan,
+    plan_has_time,
     plan_kind_of,
     renew_subscription,
 )
@@ -49,6 +51,14 @@ NEEDS_SUPPORT = "تغییر به این بسته با هماهنگی پشتیب�
 STALE_PAGE = "این صفحه قدیمی است یا تمدید دیگری همین حالا انجام شد؛ صفحه را دوباره باز کنید"
 USAGE_UNREADABLE = "مصرف فعلی از پنل خوانده نشد؛ کمی بعد دوباره تلاش کنید"
 PACKAGE_LIST_LIMIT = 30
+RENEW_EXPLAIN = (
+    "با تمدید، مدت بسته از تاریخ انقضای فعلی اضافه می‌شود، دسترسی باز می‌شود و مصرف خود ادمین (حجم بسته) "
+    "صفر می‌شود. مصرف مشتریان شما دست‌نخورده می‌ماند. هزینه از کیف پول کسر می‌شود."
+)
+MOVE_UNTIMED_EXPLAIN = (
+    "ظرفیت بستهٔ جدید همین حالا اعمال می‌شود. این بسته زمان ندارد، پس زمان و مصرف تغییری نمی‌کند. "
+    "هزینه از کیف پول کسر می‌شود."
+)
 
 
 @dataclass(slots=True)
@@ -201,7 +211,9 @@ async def package_overview(session: AsyncSession, profile: ResellerProfile) -> P
         plans.insert(0, current)
     for plan in plans:
         relation = package_relation(current, plan)
-        blocked = None if relation == RELATION_CURRENT else switch_blocker(current, plan)
+        blocked = NO_TIME_RENEWAL if relation == RELATION_CURRENT and not plan_has_time(plan) else (
+            None if relation == RELATION_CURRENT else switch_blocker(current, plan)
+        )
         if blocked is None and relation != RELATION_CURRENT and relation != RELATION_UPGRADE:
             blocked = usage_blocker(plan, sub, usage) if usage is not None else None
         choices.append(PackageChoice(plan=plan, relation=relation, invoice=compute_renew_invoice(plan, sub), blocked=blocked))
@@ -233,6 +245,15 @@ async def _assert_target_allowed(
         raise ValueError(blocked)
 
 
+def renewal_effect(result: dict) -> str:
+    """One sentence on what a finished renewal did to the volume, for every screen that reports it."""
+    if not result.get("timed"):
+        return "ظرفیت بستهٔ جدید اعمال شد؛ زمان و مصرف تغییری نکرد."
+    if result.get("usage_reset"):
+        return "مصرف ادمین صفر شد؛ مصرف کاربران شما دست‌نخورده ماند."
+    return "مصرف ادمین صفر نشد؛ برای بررسی با پشتیبانی تماس بگیرید."
+
+
 async def renew_package(
     session: AsyncSession,
     *,
@@ -241,7 +262,12 @@ async def renew_package(
     plan_id: int,
     generation: int,
 ) -> dict:
-    """Renew into ``plan_id`` (the current package or an allowed one), once per shown page."""
+    """Renew into ``plan_id`` (the current package or an allowed one), once per shown page.
+
+    Renewing a timed package starts its next period (time extended, the admin's volume refilled,
+    customers' usage untouched). A package without time is not renewed: moving to it applies its
+    capacity only.
+    """
     if is_payg(profile):
         raise ValueError("پلن PAYG تمدید زمانی ندارد — از شارژ کیف پول استفاده کنید")
     uname = _pg_username(profile)
@@ -257,7 +283,7 @@ async def renew_package(
     changed = current is None or int(target.id) != int(current.id)
     profile_id = int(profile.id)
     result = await renew_subscription(
-        session, sub=sub, plan=target, payer=owner, charge_wallet=True, reset_user_traffic=True,
+        session, sub=sub, plan=target, payer=owner, charge_wallet=True, moving=changed,
     )
     if changed:
         fresh = await session.get(ResellerProfile, profile_id)

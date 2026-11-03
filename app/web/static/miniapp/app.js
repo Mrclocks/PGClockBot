@@ -793,7 +793,7 @@
     const data = resubData();
     if (!data || data.renew_total === null || data.renew_total === undefined) return Promise.resolve();
     return resellerPurchase("resrenew", trigger, {
-      question: `تمدید اشتراک نمایندگی به مبلغ ${core.money(data.renew_total)} از کیف پول؟`,
+      question: `تمدید اشتراک نمایندگی به مبلغ ${core.money(data.renew_total)} از کیف پول؟ مدت اضافه و مصرف ادمین صفر می‌شود؛ مصرف مشتریان دست‌نخورده می‌ماند.`,
       path: "/api/mini/reseller/renew", body: {}, done: "تمدید انجام شد",
     });
   }

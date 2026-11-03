@@ -998,6 +998,29 @@ class PasarGuardClient:
             404,
         )
 
+    async def reset_admin_usage(self, username: str) -> dict:
+        """Zero the admin's own used traffic (its volume counter). Customers' usage is not touched."""
+        uname = (username or "").strip()
+        if not uname:
+            raise PasarGuardError("نام ادمین نامعتبر است", 400)
+        admin = await self.get_admin(uname)
+        if not admin:
+            raise PasarGuardError(f"ادمین «{uname}» در پاسارگارد یافت نشد", 404)
+        admin_id = admin.get("id")
+        exact = quote(str(admin.get("username") or uname).strip(), safe="")
+        paths = [f"/api/admin/by-username/{exact}/reset", f"/api/admin/{exact}/reset"]
+        if admin_id is not None:
+            paths.insert(0, f"/api/admin/by-id/{int(admin_id)}/reset")
+        last: PasarGuardError | None = None
+        for path in paths:
+            try:
+                return await self.request("POST", path)
+            except PasarGuardError as exc:
+                if exc.status_code not in (404, 405):
+                    raise
+                last = exc
+        raise last or PasarGuardError("مسیر ریست مصرف ادمین در دسترس نیست", 404)
+
     async def delete_admin(self, username: str) -> Any:
         """Delete admin — prefer by-id (case-safe)."""
         uname = (username or "").strip()

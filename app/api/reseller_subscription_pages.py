@@ -29,7 +29,7 @@ from app.services.reseller_capacity import (
     plan_extra_gb_price,
     plan_extra_user_price,
 )
-from app.services.reseller_package import package_overview, renew_package
+from app.services.reseller_package import package_overview, renew_package, renewal_effect
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,8 @@ def register_reseller_subscription_pages(app, *, render, require_staff, get_db) 
             await rollback_quiet(session)
             return _back(err=user_safe_error(exc, fallback="تمدید ناموفق بود"))
         moved = f" — بستهٔ جدید: {result['plan_name']}" if result.get("changed") else ""
-        return _back(ok=f"تمدید انجام شد{moved}")
+        warnings = "".join(f" ⚠️ {w}" for w in result.get("warnings") or [])
+        return _back(ok=f"تمدید انجام شد{moved} — {renewal_effect(result)}{warnings}")
 
     @app.post(f"{PAGE}/extra")
     async def my_subscription_extra(
