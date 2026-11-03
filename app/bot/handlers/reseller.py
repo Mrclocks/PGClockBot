@@ -1613,7 +1613,8 @@ async def res_buy_gb_go(
     if gb not in ALLOWED_EXTRA_GB:
         await callback.answer("مقدار مجاز نیست", show_alert=True)
         return
-    from app.bot.handlers.reseller_capacity_buy import GB_OK, confirm_view, current_generation
+    from app.bot.handlers.reseller_capacity_buy import GB_OK, confirm_view, current_generation, order_callback_for
+    from app.services.reseller_capacity_orders import KIND_GB
     from app.services.reseller_capacity import plan_allows_buy_extra, plan_extra_gb_price
 
     price = plan_extra_gb_price(plan) * gb
@@ -1624,6 +1625,7 @@ async def res_buy_gb_go(
         title="📦 تأیید خرید حجم اضافه", lines=[f"حجم اضافه: <b>{gb}</b> گیگابایت"], price=price,
         wallet=int(owner.wallet_balance or 0),
         ok_callback=f"{GB_OK}{gb}:{await current_generation(session, profile)}", back_callback="res:buy_gb",
+        order_callback=order_callback_for(KIND_GB, gb, is_reseller_bot=is_reseller_bot),
     )
     await callback.answer()
     if callback.message:
@@ -1705,7 +1707,8 @@ async def res_buy_users_go(
     if n not in ALLOWED_EXTRA_USERS:
         await callback.answer("مقدار مجاز نیست", show_alert=True)
         return
-    from app.bot.handlers.reseller_capacity_buy import USERS_OK, confirm_view, current_generation
+    from app.bot.handlers.reseller_capacity_buy import USERS_OK, confirm_view, current_generation, order_callback_for
+    from app.services.reseller_capacity_orders import KIND_USERS
     from app.services.reseller_capacity import plan_allows_buy_extra, plan_extra_user_price
 
     price = plan_extra_user_price(plan) * n
@@ -1716,6 +1719,7 @@ async def res_buy_users_go(
         title="👤 تأیید خرید کاربر اضافه", lines=[f"کاربر اضافه: <b>{n}</b>"], price=price,
         wallet=int(owner.wallet_balance or 0),
         ok_callback=f"{USERS_OK}{n}:{await current_generation(session, profile)}", back_callback="res:buy_users",
+        order_callback=order_callback_for(KIND_USERS, n, is_reseller_bot=is_reseller_bot),
     )
     await callback.answer()
     if callback.message:
@@ -1890,7 +1894,8 @@ async def res_addon_buy(
     if not uname:
         await callback.answer(feedback.PG_ADMIN_NOT_SET, show_alert=True)
         return
-    from app.bot.handlers.reseller_capacity_buy import PACK_OK, confirm_view
+    from app.bot.handlers.reseller_capacity_buy import PACK_OK, confirm_view, order_callback_for
+    from app.services.reseller_capacity_orders import KIND_PACK
     from app.services.reseller_packs import pack_fits_plan
 
     if not pack_fits_plan(addon, plan):
@@ -1907,6 +1912,7 @@ async def res_addon_buy(
         title="📦 تأیید خرید بسته", lines=lines, price=int(addon.price or 0),
         wallet=int(owner.wallet_balance or 0),
         ok_callback=f"{PACK_OK}{int(addon.id)}:{int(sub.renew_generation or 0)}", back_callback="res:addons",
+        order_callback=order_callback_for(KIND_PACK, int(addon.id), is_reseller_bot=is_reseller_bot),
     )
     await callback.answer()
     if callback.message:
