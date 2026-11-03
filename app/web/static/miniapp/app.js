@@ -334,7 +334,8 @@
 
   function openSheet(kind, title, bodyHtml, ctx) {
     state.sheetSeq += 1;
-    state.sheet = { kind, ...(ctx || {}) };
+    // ``kind`` is last: a context key of the same name must never replace the sheet's own kind.
+    state.sheet = { ...(ctx || {}), kind };
     els.sheetTitle.textContent = title;
     els.sheetBody.innerHTML = bodyHtml;
     els.sheet.hidden = false;
@@ -910,7 +911,7 @@
   async function showAddons(id, kind) {
     if (kind !== "volume" && kind !== "duration") return;
     const title = kind === "volume" ? "افزایش حجم" : "افزایش زمان";
-    const seq = openSheet("addons", title, R.loadingHtml(2), { serviceId: id, kind });
+    const seq = openSheet("addons", title, R.loadingHtml(2), { serviceId: id, addonKind: kind });
     state.addonPacks = [];
     try {
       const data = await core.api(`/api/mini/service/${id}/addons?kind=${encodeURIComponent(kind)}`);
@@ -927,7 +928,10 @@
     const sheet = state.sheet;
     const pack = state.addonPacks.find((p) => p.id === packId);
     const svc = detailRow(id);
-    if (!sheet || sheet.kind !== "addons" || sheet.serviceId !== id || !pack || !svc || pack.kind !== sheet.kind) return;
+    if (!sheet || sheet.kind !== "addons" || sheet.serviceId !== id || !pack || !svc || pack.kind !== sheet.addonKind) {
+      core.toast("این بسته دیگر معتبر نیست؛ فهرست را دوباره باز کنید", "err");
+      return;
+    }
     if (!commerce() || !features().walletPay) {
       core.toast("پرداخت با کیف پول مجاز نیست", "err");
       return;

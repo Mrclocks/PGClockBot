@@ -210,10 +210,10 @@
           <span dir="auto">{{ a.name }}</span>
           {% if a.description %}<br class="li-hide"><small class="muted li-hide">{{ a.description }}</small>{% endif %}
         </td>
-        <td class="col-hide-sm muted">{% if a.is_general %}عمومی{% elif a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
+        <td class="col-hide-sm muted">{% if a.is_general or not a.category_id %}عمومی{% elif plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
         <td class="li-sub">
           <span>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</span>
-          <span class="li-only">· {% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %} · {% if a.is_general %}عمومی{% elif a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}بدون برچسب{% endif %}</span>
+          <span class="li-only">· {% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %} · {% if a.is_general or not a.category_id %}عمومی{% elif plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</span>
         </td>
         <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
         <td class="mono li-value" dir="ltr">{{ a.price | money }}</td>
@@ -1138,7 +1138,7 @@
               {{ a.name }}
               {% if a.description %}<br><small class="muted">{{ a.description }}</small>{% endif %}
             </td>
-            <td class="col-hide-sm muted">{% if a.is_general %}عمومی{% elif a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
+            <td class="col-hide-sm muted">{% if a.is_general or not a.category_id %}عمومی{% elif plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
             <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
             <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
             <td class="mono" dir="ltr">{{ a.price | money }}</td>

@@ -157,9 +157,9 @@ class ServiceAddonScopeTests(unittest.TestCase):
         # A general pack fits every category and uncategorized services.
         self.assertTrue(pack_matches_service_category(general, None))
         self.assertTrue(pack_matches_service_category(general, 7))
-        # A pack that lost its category without being general matches nothing.
-        self.assertFalse(pack_matches_service_category(orphan, None))
-        self.assertFalse(pack_matches_service_category(orphan, 7))
+        # A pack without a category is offered everywhere, whatever its general flag says.
+        self.assertTrue(pack_matches_service_category(orphan, None))
+        self.assertTrue(pack_matches_service_category(orphan, 7))
 
     def test_note_parse_snapshot_and_legacy(self):
         self.assertEqual(
