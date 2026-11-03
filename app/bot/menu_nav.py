@@ -445,6 +445,35 @@ async def restore_main_reply(
     return ui
 
 
+async def acknowledge_receipt(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    text: str,
+    state: FSMContext | None,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+    order=None,
+) -> None:
+    """Confirm a receipt without re-sending the welcome/home screen.
+
+    Leaves the main reply keyboard and keeps the confirmation as a payment record.
+    """
+    from app.services.chat_records import keep_sent
+
+    await clear_checkout_nav(state)
+    main_kb, _ = await buyer_main_reply_keyboard(
+        session,
+        db_user,
+        order=order,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    with keep_sent():
+        await message.answer(text, reply_markup=main_kb)
+
+
 async def show_nav_keyboard(
     message: Message,
     session: AsyncSession,

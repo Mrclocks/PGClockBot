@@ -786,9 +786,11 @@ async def wallet_receipt_photo(
         file_unique_id=getattr(photo, "file_unique_id", None),
         user_tg_id=message.from_user.id if message.from_user else None,
     )
-    # Always leave payment/cancel keyboards — delivery already attaches main KB on auto-approve
+    # Receipt ack only — do not re-send welcome (restore_main_reply would glue the notice under it).
+    from app.bot.menu_nav import acknowledge_receipt, clear_checkout_nav
+
     if text:
-        await restore_main_reply(
+        await acknowledge_receipt(
             message,
             session,
             db_user,
@@ -796,10 +798,9 @@ async def wallet_receipt_photo(
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
+            order=await session.get(Order, payment.order_id) if payment.order_id else None,
         )
     else:
-        from app.bot.menu_nav import clear_checkout_nav
-
         await clear_checkout_nav(state)
 
 @router.message(WalletStates.waiting_receipt)
@@ -878,9 +879,10 @@ async def generic_receipt(
         file_unique_id=getattr(photo, "file_unique_id", None),
         user_tg_id=message.from_user.id if message.from_user else None,
     )
-    # Leave pay-method / cancel reply keyboards after receipt (success or pending review)
+    from app.bot.menu_nav import acknowledge_receipt, clear_checkout_nav
+
     if text:
-        await restore_main_reply(
+        await acknowledge_receipt(
             message,
             session,
             db_user,
@@ -888,10 +890,9 @@ async def generic_receipt(
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
+            order=await session.get(Order, payment.order_id) if payment.order_id else None,
         )
     else:
-        from app.bot.menu_nav import clear_checkout_nav
-
         await clear_checkout_nav(state)
 
 
