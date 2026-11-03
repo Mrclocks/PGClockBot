@@ -175,6 +175,32 @@ async def get_subscription(
     return result.scalar_one_or_none()
 
 
+async def profile_plan_id_for_admin(session: AsyncSession, pg_username: str) -> int | None:
+    """``ResellerProfile.plan_id`` for this panel admin, if any shop profile points at them."""
+    uname = normalize_pg_username(pg_username)
+    if not uname:
+        return None
+    plan_id = await session.scalar(
+        select(ResellerProfile.plan_id)
+        .where(
+            ResellerProfile.pg_admin_username == uname,
+            ResellerProfile.plan_id.is_not(None),
+        )
+        .order_by(ResellerProfile.id)
+        .limit(1)
+    )
+    return int(plan_id) if plan_id else None
+
+
+async def resolve_subscription_plan_id(
+    session: AsyncSession, sub: PgAdminSubscription
+) -> int | None:
+    """Subscription plan first; if the row never got one, the linked shop profile's plan."""
+    if sub.plan_id:
+        return int(sub.plan_id)
+    return await profile_plan_id_for_admin(session, sub.pg_username)
+
+
 async def get_or_create_subscription(
     session: AsyncSession, pg_username: str
 ) -> PgAdminSubscription:
@@ -184,7 +210,12 @@ async def get_or_create_subscription(
     sub = await get_subscription(session, uname)
     if sub:
         return sub
-    sub = PgAdminSubscription(pg_username=uname, access_status=STATUS_ACTIVE)
+    # New rows inherit the shop profile's plan so ceiling fallbacks and renewals have a plan_id.
+    sub = PgAdminSubscription(
+        pg_username=uname,
+        access_status=STATUS_ACTIVE,
+        plan_id=await profile_plan_id_for_admin(session, uname),
+    )
     session.add(sub)
     await session.flush()
     return sub

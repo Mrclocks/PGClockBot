@@ -42,12 +42,15 @@ from app.services.volume_allocation import (
     apply_oversell_switch,
     assert_volume_delta_allowed,
     build_allocation_snapshot,
+    ceiling_bytes_for_profile,
     hold_volume,
     list_oversold_shop_ids,
     release_volume_hold,
     set_shop_oversell,
+    subscription_ceiling_gb,
     sum_allocated_bytes,
     threshold_level,
+    volume_threshold_signals,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -284,6 +287,73 @@ class GateBehaviourTests(VolumeHarness):
         self.assertEqual(threshold_level(79 * GB, 100 * GB), 0)
         self.assertEqual(threshold_level(80 * GB, 100 * GB), 1)
         self.assertEqual(threshold_level(100 * GB, 100 * GB), 2)
+
+    def test_subscription_ceiling_uses_plan_when_base_missing(self) -> None:
+        self.assertEqual(subscription_ceiling_gb(base_gb=0, extra_gb=200, plan_included_gb=200), 400)
+        self.assertEqual(subscription_ceiling_gb(base_gb=200, extra_gb=200, plan_included_gb=200), 400)
+        self.assertEqual(subscription_ceiling_gb(base_gb=0, extra_gb=200, plan_included_gb=0), 200)
+
+    async def _attach_plan(self, shop: int, *, on_subscription: bool) -> None:
+        from app.db.models import ResellerPlan
+
+        async with self.Session() as session:
+            plan = ResellerPlan(
+                name="بسته 200 گیگ",
+                plan_kind="subscription",
+                billing_mode="fixed",
+                included_gb=200,
+                included_users=10,
+                is_active=True,
+            )
+            session.add(plan)
+            await session.flush()
+            sub = await session.scalar(
+                select(PgAdminSubscription).where(PgAdminSubscription.pg_username == f"admin{shop}")
+            )
+            profile = await session.scalar(
+                select(ResellerProfile).where(ResellerProfile.user_id == shop)
+            )
+            sub.base_gb = 0
+            if on_subscription:
+                sub.plan_id = int(plan.id)
+            else:
+                sub.plan_id = None
+                profile.plan_id = int(plan.id)
+            await session.commit()
+
+    async def test_zero_base_with_extras_uses_plan_included_as_ceiling(self) -> None:
+        """Regression: bought extras with base_gb still 0 must not keep the sales gate at extras only."""
+        shop = await self._shop(ceiling_gb=0, allow_oversell=False, extra_gb=200)
+        await self._attach_plan(shop, on_subscription=True)
+        async with self.Session() as session:
+            profile = await session.scalar(
+                select(ResellerProfile).where(ResellerProfile.user_id == shop)
+            )
+            ceiling = await ceiling_bytes_for_profile(session, profile)
+            self.assertEqual(ceiling, 400 * GB)
+            await self._service(shop, bytes_=255 * GB)
+            # 255 of 400 fits; without the plan fallback this was blocked at 200.
+            await assert_volume_delta_allowed(
+                session, shop_id=shop, delta_bytes=GB, audience="admin"
+            )
+            signals = await volume_threshold_signals(session)
+            mine = [s for s in signals if s.shop_id == shop]
+            self.assertEqual(len(mine), 1)
+            self.assertEqual(mine[0].count, 0, "255/400 is below 80%")
+            self.assertNotIn("200 گیگ", mine[0].text)
+
+    async def test_zero_base_falls_back_to_profile_plan_when_subscription_has_no_plan(self) -> None:
+        shop = await self._shop(ceiling_gb=0, allow_oversell=False, extra_gb=200)
+        await self._attach_plan(shop, on_subscription=False)
+        async with self.Session() as session:
+            profile = await session.scalar(
+                select(ResellerProfile).where(ResellerProfile.user_id == shop)
+            )
+            self.assertEqual(await ceiling_bytes_for_profile(session, profile), 400 * GB)
+            await self._service(shop, bytes_=255 * GB)
+            await assert_volume_delta_allowed(
+                session, shop_id=shop, delta_bytes=GB, audience="admin"
+            )
 
 
 class OversellSwitchTests(VolumeHarness):

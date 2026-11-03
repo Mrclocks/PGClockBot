@@ -246,6 +246,48 @@ async def raise_admin_limit(purchase: ExtraPurchase, apply: Callable[[Any, dict]
         raise PanelRaiseUnknown from exc
 
 
+async def ensure_base_gb_before_extra(session: AsyncSession, purchase: ExtraPurchase) -> None:
+    """Fill a missing ``base_gb`` from the live panel (or plan) before extras are recorded.
+
+    Without this, a shop whose panel already had capacity but whose subscription base stayed
+    at 0 would treat only the newly bought extras as its sales ceiling and keep blocking sales.
+    Live panel bytes already include previously bought extras; those are subtracted so base is
+    the pre-extra floor. Prefer the live panel over ``plan.included_gb`` when both are known.
+    """
+    from app.services.pg_admin_subscription import get_or_create_subscription
+    from app.services.pasarguard import get_pg
+
+    sub = await get_or_create_subscription(session, purchase.uname)
+    if int(sub.base_gb or 0) > 0:
+        return
+    extra = int(sub.extra_gb_purchased or 0)
+    live_gb = 0
+    try:
+        admin = await get_pg().get_admin(purchase.uname)
+    except Exception:
+        logger.warning(
+            "extra capacity: could not read panel to heal base_gb admin=%s",
+            purchase.uname,
+            exc_info=True,
+        )
+        admin = None
+    if isinstance(admin, dict) and admin:
+        live_bytes = _admin_data_limit(admin)
+        if live_bytes > 0:
+            live_gb = live_bytes // int(GB)
+    if live_gb > 0:
+        sub.base_gb = max(0, live_gb - extra)
+        return
+    from app.services.pg_admin_subscription import resolve_subscription_plan_id
+
+    plan_id = await resolve_subscription_plan_id(session, sub)
+    if plan_id:
+        plan = await session.get(ResellerPlan, int(plan_id))
+        included = int(getattr(plan, "included_gb", 0) or 0) if plan else 0
+        if included > 0:
+            sub.base_gb = included
+
+
 async def apply_paid_extra(
     session: AsyncSession,
     *,
@@ -265,6 +307,7 @@ async def apply_paid_extra(
 
     await _claim_generation(session, purchase)
     await debit_wallet(session, user, purchase.amount, reason=purchase.reason, commit=False)
+    await ensure_base_gb_before_extra(session, purchase)
     await record_unit_extra(session, pg_username=purchase.uname, gb=purchase.gb, users=purchase.users)
     await session.commit()
 

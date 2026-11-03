@@ -21,11 +21,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
-from sqlalchemy import Select, delete, func, or_, select, update
+from sqlalchemy import Select, case, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.db.models import OrgPrincipal, PgAdminSubscription, ResellerProfile, UserService, VolumeHold
+from app.db.models import OrgPrincipal, PgAdminSubscription, ResellerPlan, ResellerProfile, UserService, VolumeHold
 from app.services.billing import BILLING_MODE_PAYG, GB, is_payg
 from app.services.formatting import format_bytes
 from app.services.org_principals import DEPTH_TWO, STATUS_ACTIVE
@@ -105,15 +105,50 @@ async def lock_reseller_profile(session: AsyncSession, shop_id: int) -> Reseller
     )
 
 
+def subscription_ceiling_gb(
+    *,
+    base_gb: int,
+    extra_gb: int,
+    plan_included_gb: int = 0,
+) -> int:
+    """Sales ceiling in GB: recorded base (or plan included when base was never snapshotted) plus extras.
+
+    A shop can have a live panel limit and bought extras while ``base_gb`` stayed 0 (failed snapshot,
+    plan with zero included_*, or a renew that cleared base). Counting only extras would keep the
+    sales gate at the add-on size and block sales even though the panel has room.
+    """
+    base = max(0, int(base_gb or 0))
+    if base <= 0:
+        base = max(0, int(plan_included_gb or 0))
+    return base + max(0, int(extra_gb or 0))
+
+
+async def _included_gb_for_plan(session: AsyncSession, plan_id: int | None) -> int:
+    if not plan_id:
+        return 0
+    included = await session.scalar(
+        select(ResellerPlan.included_gb).where(ResellerPlan.id == int(plan_id))
+    )
+    return max(0, int(included or 0))
+
+
 async def ceiling_bytes_for_profile(session: AsyncSession, profile: ResellerProfile) -> int | None:
     """The shop's ceiling in bytes; None when it has none (no subscription, or unlimited)."""
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
         return None
-    sub = await session.scalar(select(PgAdminSubscription).where(PgAdminSubscription.pg_username == uname))
+    sub = await session.scalar(
+        select(PgAdminSubscription).where(PgAdminSubscription.pg_username == uname)
+    )
     if sub is None:
         return None
-    total_gb = int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0)
+    # Subscription plan first; if the row never stored one, the shop profile's plan.
+    plan_id = int(sub.plan_id or 0) or int(profile.plan_id or 0) or None
+    total_gb = subscription_ceiling_gb(
+        base_gb=int(sub.base_gb or 0),
+        extra_gb=int(sub.extra_gb_purchased or 0),
+        plan_included_gb=await _included_gb_for_plan(session, plan_id),
+    )
     return total_gb * int(GB) if total_gb > 0 else None
 
 
@@ -175,7 +210,17 @@ def child_ceilings_query(parent_shop_ids: list[int]) -> Select[Any]:
     """
     child, parent = aliased(OrgPrincipal), aliased(OrgPrincipal)
     child_profile, parent_profile = aliased(ResellerProfile), aliased(ResellerProfile)
-    total_gb = func.coalesce(PgAdminSubscription.base_gb, 0) + func.coalesce(PgAdminSubscription.extra_gb_purchased, 0)
+    sub_plan, profile_plan = aliased(ResellerPlan), aliased(ResellerPlan)
+    # Subscription plan first; otherwise the child's shop profile plan (same as the gate).
+    included_gb = case(
+        (PgAdminSubscription.plan_id.is_not(None), func.coalesce(sub_plan.included_gb, 0)),
+        else_=func.coalesce(profile_plan.included_gb, 0),
+    )
+    effective_base = case(
+        (func.coalesce(PgAdminSubscription.base_gb, 0) > 0, func.coalesce(PgAdminSubscription.base_gb, 0)),
+        else_=included_gb,
+    )
+    total_gb = effective_base + func.coalesce(PgAdminSubscription.extra_gb_purchased, 0)
     return (
         select(parent_profile.user_id, child_profile.user_id, total_gb)
         .select_from(child)
@@ -183,6 +228,8 @@ def child_ceilings_query(parent_shop_ids: list[int]) -> Select[Any]:
         .join(parent_profile, parent_profile.id == parent.reseller_profile_id)
         .join(child_profile, child_profile.id == child.reseller_profile_id)
         .outerjoin(PgAdminSubscription, PgAdminSubscription.pg_username == child_profile.pg_admin_username)
+        .outerjoin(sub_plan, sub_plan.id == PgAdminSubscription.plan_id)
+        .outerjoin(profile_plan, profile_plan.id == child_profile.plan_id)
         .where(
             child.depth == DEPTH_TWO,
             child.status == STATUS_ACTIVE,
@@ -408,7 +455,10 @@ async def gated_allocations(session: AsyncSession, *, limit: int = GATED_SHOPS_B
     profiles = (
         await session.execute(
             select(
-                ResellerProfile.user_id, ResellerProfile.pg_admin_username, ResellerProfile.external_allocated_bytes
+                ResellerProfile.user_id,
+                ResellerProfile.pg_admin_username,
+                ResellerProfile.external_allocated_bytes,
+                ResellerProfile.plan_id,
             )
             .where(
                 ResellerProfile.is_active.is_(True),
@@ -422,18 +472,44 @@ async def gated_allocations(session: AsyncSession, *, limit: int = GATED_SHOPS_B
     ).all()
     if not profiles:
         return []
+    unames = {str(u).strip() for _, u, _, _ in profiles}
+    profile_plan_by_uname = {
+        str(uname).strip(): int(plan_id)
+        for _, uname, _, plan_id in profiles
+        if uname and plan_id
+    }
     subs = (
         await session.execute(
-            select(PgAdminSubscription.pg_username, PgAdminSubscription.base_gb, PgAdminSubscription.extra_gb_purchased)
-            .where(PgAdminSubscription.pg_username.in_({str(u).strip() for _, u, _ in profiles}))
+            select(
+                PgAdminSubscription.pg_username,
+                PgAdminSubscription.base_gb,
+                PgAdminSubscription.extra_gb_purchased,
+                PgAdminSubscription.plan_id,
+            ).where(PgAdminSubscription.pg_username.in_(unames))
         )
     ).all()
-    ceiling_by_uname = {
-        str(uname): (int(base or 0) + int(extra or 0)) * int(GB)
-        for uname, base, extra in subs
-        if int(base or 0) + int(extra or 0) > 0
-    }
-    shop_ids = [int(sid) for sid, _, _ in profiles]
+    plan_ids = {int(pid) for *_, pid in subs if pid} | set(profile_plan_by_uname.values())
+    included_by_id: dict[int, int] = {}
+    if plan_ids:
+        included_by_id = {
+            int(pid): max(0, int(included or 0))
+            for pid, included in (
+                await session.execute(
+                    select(ResellerPlan.id, ResellerPlan.included_gb).where(ResellerPlan.id.in_(plan_ids))
+                )
+            ).all()
+        }
+    ceiling_by_uname: dict[str, int] = {}
+    for uname, base, extra, sub_plan_id in subs:
+        plan_id = int(sub_plan_id or 0) or profile_plan_by_uname.get(str(uname).strip(), 0)
+        total = subscription_ceiling_gb(
+            base_gb=int(base or 0),
+            extra_gb=int(extra or 0),
+            plan_included_gb=included_by_id.get(int(plan_id), 0) if plan_id else 0,
+        )
+        if total > 0:
+            ceiling_by_uname[str(uname)] = total * int(GB)
+    shop_ids = [int(sid) for sid, _, _, _ in profiles]
     service_sums = dict(
         (
             await session.execute(
@@ -458,7 +534,7 @@ async def gated_allocations(session: AsyncSession, *, limit: int = GATED_SHOPS_B
     )
     child_gb = await child_ceiling_gb_by_parent(session, shop_ids)
     out: list[tuple[int, int, int]] = []
-    for sid, uname, external in profiles:
+    for sid, uname, external, _plan_id in profiles:
         ceiling = ceiling_by_uname.get(str(uname).strip())
         if ceiling is not None:
             allocated = (

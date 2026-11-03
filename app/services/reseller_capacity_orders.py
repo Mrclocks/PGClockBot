@@ -23,6 +23,7 @@ from app.services.reseller_capacity import (
     CapacityOffer,
     PanelRaiseRefused,
     PanelRaiseUnknown,
+    ensure_base_gb_before_extra,
     raise_admin_limit,
     revert_extras,
     unit_offer,
@@ -159,6 +160,7 @@ async def apply_capacity_order(session: AsyncSession, order: Order) -> Order:
     try:
         offer = await _offer_for_paid_order(session, order, parsed)
         purchase = offer.purchase()
+        await ensure_base_gb_before_extra(session, purchase)
         await record_unit_extra(session, pg_username=offer.uname, gb=offer.gb, users=offer.users)
         await session.commit()
     except Exception:
