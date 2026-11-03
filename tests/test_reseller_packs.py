@@ -152,6 +152,11 @@ class PackPurchaseTests(PackTestBase):
             await session.commit()
         await self.buy(11)
         self.pg.modify_admin.assert_awaited_once_with("shop3", {"data_limit": 700 * GB})
+        async with self.Session() as session:
+            sub = await session.scalar(select(PgAdminSubscription).where(PgAdminSubscription.pg_username == "shop3"))
+            # Live 500 GB was the pre-extra floor; extras stay separate so the sales ceiling is 700.
+            self.assertEqual(int(sub.base_gb or 0), 500)
+            self.assertEqual(int(sub.extra_gb_purchased or 0), 200)
 
     async def test_repeated_tap_with_the_same_generation_buys_once(self) -> None:
         await self.buy(11, generation=0)

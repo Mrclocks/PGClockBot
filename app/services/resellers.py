@@ -1430,18 +1430,18 @@ async def format_reseller_my_service_card(session: AsyncSession, profile) -> str
         block.append(kv_line("⚠️", "ظرفیت زنده", err))
 
     if sub is not None:
+        from app.services.volume_allocation import subscription_ceiling_gb
+
         base = int(getattr(sub, "base_gb", 0) or 0)
         extra = int(getattr(sub, "extra_gb_purchased", 0) or 0)
-        if base or extra:
-            total = base + extra
-            block.append(
-                kv_line(
-                    "🗂",
-                    "سقف اشتراک",
-                    f"{total} گیگ" if total else "—",
-                )
-            )
+        plan_included = int(getattr(plan, "included_gb", 0) or 0) if plan is not None else 0
+        total = subscription_ceiling_gb(base_gb=base, extra_gb=extra, plan_included_gb=plan_included)
+        if total:
+            block.append(kv_line("🗂", "سقف اشتراک", f"{total} گیگ"))
             if extra:
+                shown_base = base if base > 0 else plan_included
+                if shown_base > 0:
+                    block.append(kv_line("📌", "سقف پایه", f"{shown_base} گیگ"))
                 block.append(kv_line("➕", "حجم اضافه خریداری‌شده", f"{extra} گیگ"))
         exp = getattr(sub, "expires_at", None)
         if exp is not None:

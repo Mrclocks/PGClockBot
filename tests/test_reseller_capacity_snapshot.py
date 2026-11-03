@@ -222,6 +222,19 @@ class RepairTests(DbCase):
         again = await self.run_repair(admins)
         self.assertEqual(again.fixed, 0)
 
+    async def test_repair_subtracts_purchased_extras_from_live_base(self):
+        await self.seed()
+        async with self.Session() as session:
+            row = await session.scalar(
+                select(subs.PgAdminSubscription).where(subs.PgAdminSubscription.pg_username == "zero1")
+            )
+            row.extra_gb_purchased = 200
+            await session.commit()
+        report = await self.run_repair({"zero1": {"data_limit": 400 * GB, "max_users": 10}})
+        self.assertEqual(report.fixed, 1)
+        fixed = await self.subscription("zero1")
+        self.assertEqual((fixed.base_gb, fixed.extra_gb_purchased, fixed.base_users), (200, 200, 10))
+
 
 class RepairRouteTests(RoutesHarness):
     async def post(self, session_payload: dict):
