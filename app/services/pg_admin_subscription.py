@@ -344,9 +344,18 @@ async def _assert_owner_capacity_budget(
     from app.services.pasarguard import get_pg
 
     pg = get_pg()
-    admin = await pg.get_admin(owner_username)
+    try:
+        admin = await pg.get_admin(owner_username)
+    except Exception as exc:
+        logger.warning(
+            "owner capacity budget: install admin unreadable (%s)", owner_username, exc_info=True,
+        )
+        raise ValueError(
+            "سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید"
+        ) from exc
     if not isinstance(admin, dict) or not admin:
-        return
+        # Fail closed: an unread owner must not allow unbounded child capacity growth.
+        raise ValueError("سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید")
     role = admin.get("role") if isinstance(admin.get("role"), dict) else None
     limits = merge_role_limits(admin, role)
     owner_gb_limit_bytes = max(
@@ -674,6 +683,9 @@ def _extend_period(sub: PgAdminSubscription, plan: ResellerPlan, now: datetime) 
     if days > 0:
         anchor = _as_aware(sub.expires_at) or now
         sub.expires_at = max(anchor, now) + timedelta(days=days)
+    else:
+        # Moving to an untimed package must not keep a stale clock that the expiry tick can cut.
+        sub.expires_at = None
     sub.plan_id = int(plan.id)
     # current_capacity keeps the snapshot of the admin's live limits; its zero included_* never overwrite it.
     if not is_current_capacity_plan(plan):
