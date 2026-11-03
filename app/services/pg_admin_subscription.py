@@ -596,13 +596,17 @@ async def expire_subscription(
 
     uname = normalize_pg_username(sub.pg_username)
     pg = get_pg()
+    cut_ids: list[int] = []
 
     async def _abort_if_renewed() -> bool:
         if await _expire_claim_still_held(session, sub_id, claimed_at):
             return False
         stats["aborted"] = 1
         try:
-            await restore_subscription_access(session, sub, commit=False)
+            # Include users cut in this run: they are not yet on expiry_disabled_user_ids.
+            await restore_subscription_access(
+                session, sub, commit=False, also_enable_user_ids=cut_ids,
+            )
             await session.commit()
         except Exception:
             logger.exception("expire: restore after renew race failed admin=%s", uname)
@@ -621,7 +625,6 @@ async def expire_subscription(
     if await _abort_if_renewed():
         return stats
 
-    cut_ids: list[int] = []
     try:
         owned = await list_owned_user_ids(pg, uname)
     except Exception:
@@ -633,7 +636,9 @@ async def expire_subscription(
         if not await _expire_claim_still_held(session, sub_id, claimed_at):
             stats["aborted"] = 1
             try:
-                await restore_subscription_access(session, sub, commit=False)
+                await restore_subscription_access(
+                    session, sub, commit=False, also_enable_user_ids=cut_ids,
+                )
                 await session.commit()
             except Exception:
                 logger.exception("expire: restore after renew race failed admin=%s", uname)
@@ -666,8 +671,13 @@ async def restore_subscription_access(
     sub: PgAdminSubscription,
     *,
     commit: bool = False,
+    also_enable_user_ids: list[int] | None = None,
 ) -> dict[str, int]:
-    """Re-enable PG admin + previously cut users + web logins."""
+    """Re-enable PG admin + previously cut users + web logins.
+
+    ``also_enable_user_ids`` covers users disabled in the current expire pass before they
+    were written to ``expiry_disabled_user_ids`` (renew race mid-cut).
+    """
     from app.services.billing_suspend import _set_admin_enabled
     from app.services.pasarguard import get_pg
 
@@ -683,7 +693,13 @@ async def restore_subscription_access(
         logger.exception("restore: enable admin failed %s", uname)
         stats["errors"] += 1
 
-    for uid in _parse_id_list(sub.expiry_disabled_user_ids):
+    restore_ids = set(_parse_id_list(sub.expiry_disabled_user_ids))
+    for uid in also_enable_user_ids or []:
+        try:
+            restore_ids.add(int(uid))
+        except (TypeError, ValueError):
+            continue
+    for uid in sorted(restore_ids):
         try:
             await pg.set_disabled_by_id(uid, False)
             stats["users_restored"] += 1

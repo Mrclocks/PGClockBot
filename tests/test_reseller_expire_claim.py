@@ -104,6 +104,36 @@ class ExpireClaimTests(unittest.IsolatedAsyncioTestCase):
             sub = await session.get(PgAdminSubscription, 1)
             self.assertEqual(sub.access_status, STATUS_ACTIVE)
 
+    async def test_abort_mid_cut_re_enables_users_cut_this_run(self) -> None:
+        """Users disabled before expiry_disabled_user_ids is written must still be restored."""
+        self.pg.get_users = AsyncMock(return_value={"users": [{"id": 9}, {"id": 10}]})
+        disabled: list[tuple[int, bool]] = []
+
+        async def track_disable(uid: int, value: bool) -> dict:
+            disabled.append((int(uid), bool(value)))
+            return {}
+
+        self.pg.set_disabled_by_id = AsyncMock(side_effect=track_disable)
+
+        async with self.Session() as session:
+            sub = await session.get(PgAdminSubscription, 1)
+            # After the first user is cut, a concurrent renew clears the expire claim.
+            calls = {"n": 0}
+
+            async def held_after_first_cut(sess, sub_id, claimed_at):
+                calls["n"] += 1
+                # Pre-cut checks pass; after first disable the next ownership check fails.
+                return calls["n"] <= 3
+
+            with patch(
+                "app.services.pg_admin_subscription._expire_claim_still_held",
+                side_effect=held_after_first_cut,
+            ):
+                outcome = await expire_subscription(session, sub, commit=True)
+            self.assertEqual(outcome.get("aborted"), 1)
+            self.assertIn((9, True), disabled)
+            self.assertIn((9, False), disabled, "in-flight cut must be re-enabled on abort")
+
 
 if __name__ == "__main__":
     unittest.main()
