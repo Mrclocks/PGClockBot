@@ -133,17 +133,16 @@ def category_ids_equal(a: int | None, b: int | None) -> bool:
 def pack_matches_service_category(
     pack: ServiceAddonPack | None, service_category_id: int | None
 ) -> bool:
-    """A general pack fits every category of its shop; any other pack only its own.
+    """A pack without a category fits every category of its shop; a categorised pack only its own.
 
-    Cross-category purchase of a category pack stays fail-closed, and a pack that is
-    neither general nor tied to a category (its category was removed) matches nothing.
+    «Without a category» is decided by ``category_id`` alone, so a pack whose category was
+    removed (or whose ``is_general`` flag was never set) is still offered everywhere instead of
+    vanishing. Cross-category purchase of a category pack stays fail-closed.
     """
     if not pack:
         return False
-    if pack.is_general:
+    if pack.is_general or pack.category_id is None:
         return True
-    if pack.category_id is None:
-        return False
     return category_ids_equal(
         int(pack.category_id),
         int(service_category_id) if service_category_id is not None else None,
@@ -156,8 +155,8 @@ def prefer_category_packs(packs: list[ServiceAddonPack]) -> list[ServiceAddonPac
     The category pack is the shop's price for that category, so customers never see
     two prices for the same bundle. The input order is kept.
     """
-    specific = {(pack.kind, float(pack.amount)) for pack in packs if not pack.is_general}
-    return [pack for pack in packs if not pack.is_general or (pack.kind, float(pack.amount)) not in specific]
+    specific = {(pack.kind, float(pack.amount)) for pack in packs if pack.category_id is not None}
+    return [pack for pack in packs if pack.category_id is not None or (pack.kind, float(pack.amount)) not in specific]
 
 
 async def service_plan_category_id(
@@ -243,7 +242,7 @@ async def list_shop_packs(
     if kind:
         q = q.where(ServiceAddonPack.kind == kind)
     if service_category_id is not ...:
-        fits = ServiceAddonPack.is_general.is_(True)
+        fits = or_(ServiceAddonPack.is_general.is_(True), ServiceAddonPack.category_id.is_(None))
         if service_category_id is not None:
             fits = or_(fits, ServiceAddonPack.category_id == int(service_category_id))
         q = q.where(fits)

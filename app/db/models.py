@@ -181,10 +181,9 @@ class Plan(Base):
 class ServiceAddonPack(Base):
     """Customer add-on packs: extra volume (GB) or duration (days) on an existing service.
 
-    ``is_general`` packs apply to every plan category of the shop. Otherwise
-    ``category_id`` ties the pack to the plan category of the service's sales
-    plan, so VIP and economy packs can be priced differently. A pack that is
-    neither general nor tied to a category matches nothing.
+    A pack without a category (``is_general`` or no ``category_id``) applies to every plan
+    category of the shop. Otherwise ``category_id`` ties the pack to the plan category of the
+    service's sales plan, so VIP and economy packs can be priced differently.
     """
 
     __tablename__ = "service_addon_packs"

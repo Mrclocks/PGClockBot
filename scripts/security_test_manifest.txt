@@ -366,3 +366,5 @@ tests/test_reseller_capacity_buy_bot.py
 tests/test_reseller_renewal.py
 tests/test_pasarguard_admin_reset.py
 tests/test_reseller_capacity_orders.py
+# Mini App service packs: ownership of the service and who sees which pack.
+tests/test_mini_addon_packs.py
