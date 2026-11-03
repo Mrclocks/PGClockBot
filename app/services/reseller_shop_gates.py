@@ -83,8 +83,3 @@ async def assert_shop_allows_renew(session: AsyncSession, profile: ResellerProfi
     if _clock_is_due(sub):
         return
     raise ValueError(SHOP_INACTIVE)
-
-
-# Back-compat alias: capacity paths that already open-checked should use assert_shop_allows_capacity.
-async def assert_shop_active(session: AsyncSession, profile: ResellerProfile) -> None:
-    await assert_shop_allows_capacity(session, profile)
