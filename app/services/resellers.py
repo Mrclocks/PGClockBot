@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -782,8 +782,14 @@ _OPEN_APPLICATION_STATUSES = frozenset(
     {
         ResellerApplicationStatus.PENDING_PAYMENT.value,
         ResellerApplicationStatus.AWAITING_APPROVAL.value,
+        # In-flight approve still blocks a second application from the same user.
+        ResellerApplicationStatus.PROVISIONING.value,
     }
 )
+
+# Stuck ``provisioning`` may be reclaimed only after this lease (AGENTS.md lease+expiry).
+PROVISION_LEASE = timedelta(minutes=5)
+ALREADY_RESELLER = "این کاربر از قبل نماینده فعال دارد"
 
 # Order statuses that mean the linked reseller-app checkout is dead.
 _DEAD_ORDER_STATUSES = frozenset(
@@ -1064,8 +1070,13 @@ async def provision_reseller(
     share_pg_panel_url: bool | None = None,
     pg_role_id: int | None = None,
     panel_base_url: str = "",
+    reuse_existing: bool = False,
 ) -> dict:
-    """Activate reseller: PG admin + web panel creds + optional bot-token setup link."""
+    """Activate reseller: PG admin + web panel creds + optional bot-token setup link.
+
+    Manual grant paths keep ``reuse_existing=False`` so an already-active shop raises
+    instead of silently returning without secrets. Approve retries pass ``True``.
+    """
     from app.services.pasarguard import get_pg
     from app.services.pg_admin_subscription import (
         assert_new_admin_fits_owner_budget,
@@ -1127,7 +1138,9 @@ async def provision_reseller(
         )
     )
     if already_provisioned:
-        # Retry / double submit: never create another PG admin for the same shop owner.
+        if not reuse_existing:
+            raise ValueError(ALREADY_RESELLER)
+        # Approve retry / double submit: never create another PG admin for the same shop owner.
         pg_username = (existing.pg_admin_username or "").strip() or None
         if plan is not None and pg_username and is_subscription_plan(plan):
             from app.services.pg_admin_subscription import get_subscription
@@ -2113,10 +2126,11 @@ async def _claim_application_for_approve(
 ) -> ResellerApplication:
     """Atomically move an open application into ``provisioning`` before any panel call.
 
-    A second concurrent approve sees ``provisioning`` / ``approved`` and does not create
-    another PasarGuard admin. A stuck ``provisioning`` row with no shop profile yet may be
-    reclaimed so the operator can finish after a failure.
+    A second concurrent approve sees a fresh ``provisioning`` lease and gets
+    ``APP_IN_PROGRESS``. A stuck ``provisioning`` row with no shop profile may be
+    reclaimed only after ``PROVISION_LEASE`` (lease + expiry).
     """
+    now = datetime.now(timezone.utc)
     claimed = await session.execute(
         update(ResellerApplication)
         .where(
@@ -2131,6 +2145,7 @@ async def _claim_application_for_approve(
         .values(
             status=ResellerApplicationStatus.PROVISIONING.value,
             reviewed_by=reviewer_tg,
+            updated_at=now,
         )
         .execution_options(synchronize_session=False)
     )
@@ -2150,14 +2165,18 @@ async def _claim_application_for_approve(
         profile = await get_reseller_profile(session, int(app.user_id))
         if profile is not None and (profile.pg_admin_username or "").strip():
             raise ValueError(APP_ALREADY_DONE)
-        # Incomplete provision: reclaim so a retry can finish without a second claim race.
+        lease_before = now - PROVISION_LEASE
         reclaimed = await session.execute(
             update(ResellerApplication)
             .where(
                 ResellerApplication.id == int(app_id),
                 ResellerApplication.status == ResellerApplicationStatus.PROVISIONING.value,
+                or_(
+                    ResellerApplication.updated_at.is_(None),
+                    ResellerApplication.updated_at <= lease_before,
+                ),
             )
-            .values(reviewed_by=reviewer_tg)
+            .values(reviewed_by=reviewer_tg, updated_at=now)
             .execution_options(synchronize_session=False)
         )
         if reclaimed.rowcount != 1:
@@ -2177,7 +2196,7 @@ async def _creds_from_existing_profile(
 ) -> dict:
     """Build an approve response when the shop was already provisioned (no plaintext secrets)."""
     return await provision_reseller(
-        session, user=user, plan=plan, panel_base_url=panel_base_url,
+        session, user=user, plan=plan, panel_base_url=panel_base_url, reuse_existing=True,
     )
 
 
@@ -2223,10 +2242,11 @@ async def approve_application(
             user=user,
             plan=plan,
             panel_base_url=panel_base_url,
+            reuse_existing=True,
         )
     except Exception:
         # Leave ``provisioning`` for retry when the panel outcome is unknown; reclaim
-        # only when no shop profile was written (see ``_claim_application_for_approve``).
+        # only after PROVISION_LEASE when no shop profile was written.
         logger.exception("approve_application provision failed app_id=%s", app_id)
         raise
 

@@ -17,7 +17,12 @@ from app.db.models import (
     ResellerProfile,
 )
 from app.services.billing import GB
-from app.services.resellers import approve_application, provision_reseller
+from app.services.resellers import (
+    ALREADY_RESELLER,
+    APP_IN_PROGRESS,
+    approve_application,
+    provision_reseller,
+)
 
 
 class FakePasarGuard:
@@ -106,7 +111,10 @@ class ApproveIdempotentTests(unittest.IsolatedAsyncioTestCase):
             plan = await session.get(ResellerPlan, 1)
             first = await provision_reseller(session, user=user, plan=plan)
             self.assertEqual(self.pg.create_calls, 1)
-            again = await provision_reseller(session, user=user, plan=plan)
+            with self.assertRaises(ValueError) as grant_err:
+                await provision_reseller(session, user=user, plan=plan)
+            self.assertEqual(str(grant_err.exception), ALREADY_RESELLER)
+            again = await provision_reseller(session, user=user, plan=plan, reuse_existing=True)
             self.assertEqual(self.pg.create_calls, 1)
             self.assertTrue(again.get("already_provisioned"))
             self.assertEqual(again.get("pg_username"), first.get("pg_username"))
@@ -116,6 +124,25 @@ class ApproveIdempotentTests(unittest.IsolatedAsyncioTestCase):
                 )
             ).scalars().all()
             self.assertEqual(len(profiles), 1)
+
+    async def test_fresh_provisioning_lease_blocks_second_approve(self) -> None:
+        from datetime import datetime, timezone
+
+        async with self.Session() as session:
+            session.add_all([
+                BotUser(id=10, telegram_id=100, referral_code="u10", role="user", wallet_balance=0),
+                ResellerApplication(
+                    id=2, user_id=10, plan_id=1,
+                    status=ResellerApplicationStatus.PROVISIONING.value,
+                    updated_at=datetime.now(timezone.utc),
+                ),
+            ])
+            await session.commit()
+            stuck = await session.get(ResellerApplication, 2)
+            with self.assertRaises(ValueError) as caught:
+                await approve_application(session, stuck, reviewer_tg=2)
+            self.assertEqual(str(caught.exception), APP_IN_PROGRESS)
+            self.assertEqual(self.pg.create_calls, 0)
 
 
 if __name__ == "__main__":
