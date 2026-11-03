@@ -11,6 +11,7 @@ from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.cleanup_settings import SAVE_PATH as CLEANUP_SAVE_PATH
 from app.services.order_purge import purge_panel_context
 from app.db.models import BotUser, Order, Payment, Plan
 from app.services.authz import authz_from_staff, can_shop
@@ -149,7 +150,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
 
         search_q = normalize_search_q(request.query_params.get("q"))
         open_settings = (request.query_params.get("settings") or "").strip()
-        if open_settings not in {"payment", "billing", "cleanup", "purge"}:
+        if open_settings == "purge":
+            open_settings = "cleanup"  # the deletion rules moved into the cleanup tab
+        if open_settings not in {"payment", "billing", "cleanup"}:
             open_settings = ""
         if open_settings == "billing" and not can_billing_settings:
             open_settings = "payment" if can_finance_settings else ""
@@ -236,16 +239,14 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 ctx["billing_settings_action"] = (
                     f"/settings?tab=billing&next={quote(next_base + '&settings=billing')}"
                 )
-                ctx["cleanup_settings_action"] = (
-                    f"/settings?tab=cleanup&next={quote(next_base + '&settings=cleanup')}"
-                )
+                ctx["cleanup_settings_action"] = f"{CLEANUP_SAVE_PATH}?next={quote(next_base + '&settings=cleanup')}"
                 ctx["finance_pending_action"] = (
                     "/settings/cancel-pending-orders?next="
                     + quote(next_base + "&settings=cleanup")
                 )
                 ctx["cleanup_status"] = await cleanup_status(session, ctx["values"], reseller_id=None)
                 ctx["purge"] = await purge_panel_context(
-                    session, staff, ctx["values"], return_to=next_base + "&settings=purge"
+                    session, staff, ctx["values"], return_to=next_base + "&settings=cleanup"
                 )
             else:
                 rid = shop_owner_id(staff)
@@ -256,9 +257,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                     )
                     ctx["can_billing_settings"] = False
                     ctx["can_pending_orders"] = True
-                    ctx["cleanup_settings_action"] = (
-                        f"/shop-settings?tab=cleanup&next={quote(next_base + '&settings=cleanup')}"
-                    )
+                    ctx["cleanup_settings_action"] = f"{CLEANUP_SAVE_PATH}?next={quote(next_base + '&settings=cleanup')}"
                     ctx["finance_pending_action"] = (
                         "/shop-settings/cancel-pending-orders?next="
                         + quote(next_base + "&settings=cleanup")
@@ -267,7 +266,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                         session, ctx["values"], reseller_id=int(rid)
                     )
                     ctx["purge"] = await purge_panel_context(
-                        session, staff, ctx["values"], return_to=next_base + "&settings=purge"
+                        session, staff, ctx["values"], return_to=next_base + "&settings=cleanup"
                     )
                 # else: leave values={} — fail-closed / degraded, no Owner fallback
 
