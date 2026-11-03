@@ -1,4 +1,4 @@
-"""Phase 5: owner budget fails closed; untimed move clears expires_at."""
+"""Phase 5: owner budget fails closed on growth; untimed move clears expires_at."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from app.services.pg_admin_subscription import (
     STATUS_ACTIVE,
     _assert_owner_capacity_budget,
     _extend_period,
+    record_unit_extra,
     renew_subscription,
 )
 
@@ -46,10 +47,11 @@ class Phase5FailClosedTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ValueError) as caught:
                     await _assert_owner_capacity_budget(
                         session, target_pg_username="shop3", next_total_gb=20, next_total_users=5,
+                        previous_total_gb=10, previous_total_users=5,
                     )
             self.assertIn("خوانده نشد", str(caught.exception))
 
-    async def test_empty_owner_admin_blocks_capacity_growth(self) -> None:
+    async def test_empty_owner_admin_blocks_new_capacity(self) -> None:
         async with self.Session() as session:
             pg = SimpleNamespace(get_admin=AsyncMock(return_value={}))
             with (
@@ -59,6 +61,7 @@ class Phase5FailClosedTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ValueError):
                     await _assert_owner_capacity_budget(
                         session, target_pg_username="shop3", next_total_gb=1, next_total_users=1,
+                        previous_total_gb=0, previous_total_users=0,
                     )
 
     async def test_unreadable_owner_allows_same_capacity_renew(self) -> None:
@@ -77,7 +80,28 @@ class Phase5FailClosedTests(unittest.IsolatedAsyncioTestCase):
             ):
                 await _assert_owner_capacity_budget(
                     session, target_pg_username="shop3", next_total_gb=10, next_total_users=5,
+                    previous_total_gb=10, previous_total_users=5,
                 )
+
+    async def test_record_unit_extra_blocks_growth_when_owner_unreadable(self) -> None:
+        """Regression: budget must use pre-flush previous totals, not the already-written row."""
+        async with self.Session() as session:
+            session.add(
+                PgAdminSubscription(
+                    pg_username="shop3", plan_id=1, access_status=STATUS_ACTIVE,
+                    base_gb=10, base_users=5, extra_gb_purchased=0,
+                )
+            )
+            await session.commit()
+            pg = SimpleNamespace(get_admin=AsyncMock(side_effect=TimeoutError("down")))
+            with (
+                patch("app.config.get_settings", return_value=SimpleNamespace(pg_username="owner")),
+                patch("app.services.pasarguard.get_pg", return_value=pg),
+                patch("app.services.pg_admin_subscription.assert_parent_has_room", AsyncMock()),
+            ):
+                with self.assertRaises(ValueError) as caught:
+                    await record_unit_extra(session, pg_username="shop3", gb=50)
+            self.assertIn("خوانده نشد", str(caught.exception))
 
     def test_extend_period_clears_clock_for_untimed_plan(self) -> None:
         sub = PgAdminSubscription(
@@ -109,11 +133,9 @@ class Phase5FailClosedTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ])
             await session.commit()
-            sub = await session.get(PgAdminSubscription, 1)
-            if sub is None:
-                from sqlalchemy import select
+            from sqlalchemy import select
 
-                sub = await session.scalar(select(PgAdminSubscription))
+            sub = await session.scalar(select(PgAdminSubscription))
             plan = await session.get(ResellerPlan, 2)
             owner = await session.get(BotUser, 3)
             pg = SimpleNamespace(
