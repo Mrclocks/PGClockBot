@@ -12468,6 +12468,9 @@ html[data-theme="light"] .sc-tip { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+@media (max-width: 640px) {
+  .settings-reset-btn { width: 100%; justify-content: center; min-height: 44px; }
+}
 
 /* Guide photo/video upload: the profile-photo upload box, at a lower height. */
 .upload-box.upload-box--compact {
