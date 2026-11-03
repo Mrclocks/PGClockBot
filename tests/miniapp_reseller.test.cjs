@@ -95,6 +95,22 @@ test("a declined confirmation buys nothing", async () => {
   assert.equal(posts.length, 0);
 });
 
+test("a plan without time shows why there is no renewal and offers no renew button", async () => {
+  const note = "این پلن زمان ندارد";
+  const env = await boot("reseller", () => subscription({ renew_total: null, renew_note: note }), []);
+  env.mini.app.go("subscription");
+  await settle();
+  const html = env.element("root").innerHTML;
+  assert.ok(html.includes(note) && !html.includes('data-action="res-renew"'));
+});
+
+test("the renew button says customers' usage is untouched", async () => {
+  const env = await boot("reseller", () => subscription(), []);
+  env.mini.app.go("subscription");
+  await settle();
+  assert.ok(env.element("root").innerHTML.includes("مصرف مشتریان شما دست‌نخورده"));
+});
+
 test("a customer cannot open the subscription screen", async () => {
   const env = await boot("user", () => subscription(), []);
   env.mini.app.go("subscription");

@@ -22,7 +22,7 @@ from app.services.miniapp_shop import mini_scope
 from app.services.redact import user_safe_error
 from app.services.reseller_capacity import buy_extra_gb, buy_extra_users, load_reseller_plan
 from app.services.reseller_packs import buy_addon_pack
-from app.services.reseller_package import renew_package
+from app.services.reseller_package import renew_package, renewal_effect
 from app.services.reseller_subscription_overview import build_overview
 from app.services.wallet import get_wallet_balance
 
@@ -115,9 +115,10 @@ def register_miniapp_reseller(app: FastAPI, *, get_db) -> None:
         if not profile.plan_id:
             raise HTTPException(400, "هنوز پلن نمایندگی (اشتراک) ندارید")
         try:
-            await renew_package(
+            result = await renew_package(
                 session, owner=user, profile=profile, plan_id=int(profile.plan_id), generation=body.generation,
             )
         except ValueError as exc:
             raise await _refused(session, exc) from None
-        return await _done(session, user, "تمدید انجام شد")
+        warnings = "".join(f" ⚠️ {w}" for w in result.get("warnings") or [])
+        return await _done(session, user, f"تمدید انجام شد. {renewal_effect(result)}{warnings}")

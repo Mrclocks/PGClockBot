@@ -363,3 +363,5 @@ tests/test_shop_bot_customer_tools.py
 # Reseller capacity packs: wallet, tenancy, generation claim and Mini App role gating.
 tests/test_reseller_packs.py
 tests/test_reseller_capacity_buy_bot.py
+tests/test_reseller_renewal.py
+tests/test_pasarguard_admin_reset.py

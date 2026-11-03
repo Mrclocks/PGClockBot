@@ -2256,7 +2256,6 @@ def register_pg_pages(
                 plan=plan,
                 payer=None,
                 charge_wallet=False,
-                reset_user_traffic=True,
             )
         except ValueError as e:
             return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
@@ -2265,7 +2264,7 @@ def register_pg_pages(
         exp = result.get("expires_at")
         exp_s = exp.strftime("%Y-%m-%d") if exp is not None else "بدون انقضا"
         return RedirectResponse(
-            f"/pg/admins?ok={_q(f'اشتراک «{pg_u}» تمدید شد — انقضا: {exp_s}')}",
+            f"/pg/admins?ok={_q(f'اشتراک «{pg_u}» تمدید شد — انقضا: {exp_s}؛ مصرف ادمین صفر شد و مصرف کاربران دست‌نخورده ماند' + (' — ' + ' '.join(result.get('warnings') or []) if result.get('warnings') else ''))}",
             status_code=303,
         )
 
