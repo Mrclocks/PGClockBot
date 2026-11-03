@@ -85,6 +85,7 @@
   // Screens below a tab: where Back goes, its label, and which tab stays highlighted.
   const SUB_VIEWS = new Map([
     ["service", { parent: "services", tab: "services", label: "سرویس‌ها" }],
+    ["subscription", { parent: "services", tab: "services", label: "سرویس‌ها" }],
     ["support", { parent: "account", tab: "account", label: "حساب" }],
     ["club", { parent: "account", tab: "account", label: "حساب" }],
     ["ticket", { parent: "support", tab: "account", label: "پشتیبانی" }],
@@ -112,6 +113,7 @@
   function viewAllowed(view) {
     // The server decides who reviews; the screen shows its answer (including a refusal).
     if (view === "review") return persona() === "admin" || persona() === "reseller";
+    if (view === "subscription") return persona() === "reseller" && commerce();
     if (VIEW_SECTIONS.has(view) && !can(VIEW_SECTIONS.get(view))) return false;
     if (SUB_VIEWS.has(view)) return commerce();
     return ((state.me && state.me.nav) || []).some((n) => n.id === view);
@@ -146,6 +148,7 @@
     guides: () => core.api("/api/mini/guides"),
     club: () => core.api("/api/mini/club"),
     review: () => core.api("/api/mini/review"),
+    resub: () => core.api("/api/mini/reseller/subscription"),
   };
 
   const inflight = new Map();
@@ -260,6 +263,8 @@
     if (state.serviceId) state.details.delete(state.serviceId);
     state.ticketId = next === "ticket" ? Number(options.ticketId) || null : null;
     if (state.ticketId) state.tickets.delete(state.ticketId);
+    // Purchases carry the generation of the load, so each visit reads the package again.
+    if (next === "subscription") invalidate("resub");
     state.then = options.then || null;
     if (next === "service" && !state.serviceId) state.view = "services";
     if (next === "ticket" && !state.ticketId) state.view = "support";
@@ -443,6 +448,7 @@
       + R.noticeBannerHtml(brand().notice)
       + R.shortcutsHtml(customerShortcuts(home))
       + (persona() === "reseller" ? shopPeekHtml() : "")
+      + subscriptionCardHtml()
       + myServicesHtml(home);
   }
 
@@ -535,6 +541,7 @@
   function servicesViewHtml() {
     const q = (state.services && state.services.q) || "";
     return viewHead("سرویس‌ها")
+      + subscriptionCardHtml()
       + `<label class="search-field">${R.icon("search", 18)}<span class="visually-hidden">جست‌وجوی نام سرویس</span>
           <input type="search" data-input="service-search" maxlength="64" placeholder="جست‌وجوی نام سرویس" value="${core.esc(q)}" dir="auto"></label>
         <div id="svc-list">${serviceListHtml()}</div>`;
@@ -718,6 +725,79 @@
     if (state.view === "ticket" && state.ticketId === id) renderView();
   }
 
+  /** A reseller who is also a customer finds the shop package next to their services. */
+  function subscriptionCardHtml() {
+    if (persona() !== "reseller") return "";
+    return `<section class="card" aria-label="اشتراک نمایندگی">
+      <div class="card-head"><h2 class="card-title">اشتراک نمایندگی</h2>
+        <button type="button" class="link-btn" data-action="goto" data-view="subscription">مشاهده</button></div>
+      <p class="muted sm">ظرفیت حجم و کاربر، زمان باقی‌مانده، تمدید و خرید بسته.</p>
+    </section>`;
+  }
+
+  function subscriptionViewHtml() {
+    const r = resource("resub");
+    return viewHead("اشتراک نمایندگی") + (settled(r, 3, "retry") || R.resellerSubscriptionHtml(r.data));
+  }
+
+  /** Re-read the subscription and the wallet after a purchase, or after a lost response. */
+  async function refreshSubscription() {
+    invalidate("resub");
+    await reloadMe().catch((err) => core.toast(err.message, "err"));
+    renderView();
+  }
+
+  function resubData() {
+    const r = state.resources.resub;
+    return r && r.status === "ready" ? r.data : null;
+  }
+
+  /** Confirm, then POST one purchase carrying the generation the screen was loaded with. */
+  async function resellerPurchase(key, trigger, { question, path, body, done }) {
+    const data = resubData();
+    if (!data || persona() !== "reseller") return;
+    await guarded(key, trigger, async () => {
+      if (!(await core.confirmAction(question))) return;
+      try {
+        const res = await core.api(path, { method: "POST", body: { ...body, generation: data.generation } });
+        core.toast(res.message || done);
+      } catch (err) {
+        core.toast(err.status === 0 ? UNKNOWN_OUTCOME : err.message, "err");
+      }
+      await refreshSubscription();
+    });
+  }
+
+  function buyResellerPack(packId, trigger) {
+    const data = resubData();
+    const pack = data && (data.packs || []).find((p) => p.id === packId);
+    if (!pack) return Promise.resolve();
+    return resellerPurchase("respack", trigger, {
+      question: `خرید بستهٔ «${pack.name}» به مبلغ ${core.money(pack.price)} از کیف پول؟ تاریخ انقضا تغییر نمی‌کند.`,
+      path: "/api/mini/reseller/pack", body: { pack_id: packId }, done: "بسته اعمال شد",
+    });
+  }
+
+  function buyResellerExtra(kind, amount, trigger) {
+    const data = resubData();
+    const offer = data && (kind === "gb" ? data.unit_gb : kind === "users" ? data.unit_users : null);
+    if (!offer || !(offer.options || []).includes(amount)) return Promise.resolve();
+    const unit = kind === "gb" ? "گیگ حجم" : "کاربر";
+    return resellerPurchase("resextra", trigger, {
+      question: `خرید ${core.num(amount)} ${unit} به مبلغ ${core.money(offer.unit_price * amount)} از کیف پول؟`,
+      path: "/api/mini/reseller/extra", body: { kind, amount }, done: "ظرفیت اضافه شد",
+    });
+  }
+
+  function renewResellerPackage(trigger) {
+    const data = resubData();
+    if (!data || data.renew_total === null || data.renew_total === undefined) return Promise.resolve();
+    return resellerPurchase("resrenew", trigger, {
+      question: `تمدید اشتراک نمایندگی به مبلغ ${core.money(data.renew_total)} از کیف پول؟`,
+      path: "/api/mini/reseller/renew", body: {}, done: "تمدید انجام شد",
+    });
+  }
+
   const VIEW_RENDERERS = {
     home: () => (commerce() ? customerHomeHtml() : adminHomeHtml()),
     services: servicesViewHtml,
@@ -729,6 +809,7 @@
     club: clubViewHtml,
     review: reviewViewHtml,
     ticket: ticketViewHtml,
+    subscription: subscriptionViewHtml,
   };
 
   function renderView() {
@@ -1466,6 +1547,9 @@
     automation: (el) => showAutomation(intAttr(el, "data-id")),
     cancellation: (el) => showCancellation(intAttr(el, "data-id")),
     buy: (el) => buyPlan(intAttr(el, "data-id"), el),
+    "res-pack-buy": (el) => buyResellerPack(intAttr(el, "data-pack"), el),
+    "res-extra-buy": (el) => buyResellerExtra(el.getAttribute("data-kind"), intAttr(el, "data-amount"), el),
+    "res-renew": (el) => renewResellerPackage(el),
     "open-panel": (el) => openPanelPath(el.getAttribute("data-path")),
     "services-more": () => loadServices(false),
     "activity-more": () => {

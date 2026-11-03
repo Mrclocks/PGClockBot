@@ -893,12 +893,70 @@
     return `<div class="error-box" role="alert"><p>${esc(message)}</p>${button}${code}</div>`;
   }
 
+  /* ---------- reseller subscription ---------- */
+
+  function capacityText(base, extra, unit) {
+    return base || extra ? `${num(base + extra)} ${unit}${extra ? ` (${num(extra)} اضافه)` : ""}` : "نامحدود";
+  }
+
+  function resellerUsageHtml(d) {
+    const u = d.usage;
+    if (!u) return '<p class="muted sm">مصرف فعلی از پنل خوانده نشد.</p>';
+    return `<p class="muted sm">مصرف فعلی: ${esc(num(u.users))} کاربر · ${esc(num(u.used_gb))} گیگ</p>`;
+  }
+
+  function resellerStatusCardHtml(d) {
+    const state = d.status === "active" && !d.unavailable ? "فعال" : "نیازمند تمدید";
+    const left = d.days_left === null || d.days_left === undefined ? "بدون انقضا" : `${num(d.days_left)} روز مانده`;
+    return `<section class="card" aria-label="وضعیت اشتراک">
+      <div class="card-head"><h2 class="card-title">${esc(d.plan_name || "بدون پلن")}</h2>${badge(state, d.unavailable ? "warn" : "ok")}</div>
+      <p>${icon("clock", 16)} ${esc(d.is_payg ? "پرداخت به‌ازای مصرف" : left)}</p>
+      <p>${icon("svc", 16)} حجم: <bdi>${esc(capacityText(d.base_gb, d.extra_gb, "گیگ"))}</bdi></p>
+      <p>${icon("users", 16)} کاربر: <bdi>${esc(capacityText(d.base_users, d.extra_users, "کاربر"))}</bdi></p>
+      ${resellerUsageHtml(d)}
+    </section>`;
+  }
+
+  function resellerPackLabel(p) {
+    return [p.gb ? `+${num(p.gb)} گیگ` : "", p.users ? `+${num(p.users)} کاربر` : ""].filter(Boolean).join(" ");
+  }
+
+  function resellerPacksHtml(packs) {
+    if (!packs || !packs.length) return "";
+    return `<section class="card" aria-label="بسته‌های آماده"><h2 class="card-title">بسته‌های آماده</h2>
+      <div class="plan-list">${packs.map((p) => `<button type="button" class="plan-option" data-action="res-pack-buy" data-pack="${Number(p.id) || 0}">
+        <span class="plan-meta"><strong>${esc(p.name)}</strong><span class="muted sm">${esc(resellerPackLabel(p))}</span>${p.description ? `<span class="muted sm">${esc(p.description)}</span>` : ""}</span>
+        <span class="plan-price"><bdi>${esc(money(p.price))}</bdi></span>
+      </button>`).join("")}</div></section>`;
+  }
+
+  function resellerUnitHtml(title, kind, unitLabel, offer) {
+    if (!offer) return "";
+    return `<section class="card" aria-label="${esc(title)}"><h2 class="card-title">${esc(title)}</h2>
+      <p class="muted sm">نرخ: <bdi>${esc(money(offer.unit_price))}</bdi> برای هر ${esc(unitLabel)}</p>
+      <div class="btn-row">${(offer.options || []).map((n) => `<button type="button" class="btn ghost sm" data-action="res-extra-buy" data-kind="${esc(kind)}" data-amount="${Number(n) || 0}">${esc(num(n))} ${esc(unitLabel)}</button>`).join("")}</div>
+    </section>`;
+  }
+
+  /** The reseller's own package: capacity, time, wallet, renewal and the packs they can buy. */
+  function resellerSubscriptionHtml(d) {
+    const notice = d.unavailable ? `<div class="notice is-warn" role="status"><div class="notice-body"><span>${esc(d.unavailable)}</span></div></div>` : "";
+    const renew = d.renew_total !== null && d.renew_total !== undefined && !d.is_payg
+      ? `<button type="button" class="btn block" data-action="res-renew">${icon("refresh", 18)} تمدید — <bdi>${esc(money(d.renew_total))}</bdi></button>` : "";
+    return heroHtml({
+      label: "موجودی کیف پول", value: money(d.wallet), aria: "کیف پول",
+      footer: '<div class="btn-row"><button type="button" class="btn on-hero" data-action="topup">شارژ کیف پول</button></div>',
+    }) + notice + resellerStatusCardHtml(d) + (renew ? `<section class="card">${renew}</section>` : "")
+      + resellerPacksHtml(d.packs) + resellerUnitHtml("حجم اضافه", "gb", "گیگ", d.unit_gb)
+      + resellerUnitHtml("کاربر اضافه", "users", "کاربر", d.unit_users);
+  }
+
   root.PGMini.render = Object.freeze({
     icon, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
     brandHeaderHtml, noticeBannerHtml, shortcutsHtml, panelShortcutsHtml, heroHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, discountedCheckoutHtml, giftFormHtml, renewPlansHtml,
     renewPreviewHtml, addonPacksHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
     backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, reviewQueueHtml, reviewSheetHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, navHtml, loadingHtml, emptyHtml,
-    errorHtml,
+    errorHtml, resellerSubscriptionHtml,
   });
 })(typeof window === "object" ? window : globalThis);

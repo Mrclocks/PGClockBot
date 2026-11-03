@@ -1590,8 +1590,6 @@ async def res_buy_gb_go(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.reseller_capacity import buy_extra_gb
-
     owner_id, profile, plan, owner = await _capacity_context(
         session,
         db_user,
@@ -1611,24 +1609,21 @@ async def res_buy_gb_go(
     if gb not in ALLOWED_EXTRA_GB:
         await callback.answer("مقدار مجاز نیست", show_alert=True)
         return
-    try:
-        result = await buy_extra_gb(
-            session, user=owner, profile=profile, plan=plan, gb=gb
-        )
-    except ValueError as e:
-        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
+    from app.bot.handlers.reseller_capacity_buy import GB_OK, confirm_view, current_generation
+    from app.services.reseller_capacity import plan_allows_buy_extra, plan_extra_gb_price
+
+    price = plan_extra_gb_price(plan) * gb
+    if not plan_allows_buy_extra(plan) or price <= 0:
+        await callback.answer("این پلن خرید حجم اضافه ندارد", show_alert=True)
         return
-    await callback.answer("خرید شد")
+    text, markup = confirm_view(
+        title="📦 تأیید خرید حجم اضافه", lines=[f"حجم اضافه: <b>{gb}</b> گیگابایت"], price=price,
+        wallet=int(owner.wallet_balance or 0),
+        ok_callback=f"{GB_OK}{gb}:{await current_generation(session, profile)}", back_callback="res:buy_gb",
+    )
+    await callback.answer()
     if callback.message:
-        await safe_edit_text(
-            callback.message,
-            format_message(
-                "✅ حجم اضافه خریداری شد",
-                f"مقدار: {result['gb']} گیگابایت\n"
-                f"مبلغ: {format_toman(result['amount'], get_settings().currency)}",
-            ),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "res:addons")]]),
-        )
+        await safe_edit_text(callback.message, text, reply_markup=markup)
 
 
 @router.callback_query(F.data == "res:buy_users")
@@ -1687,8 +1682,6 @@ async def res_buy_users_go(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.reseller_capacity import buy_extra_users
-
     owner_id, profile, plan, owner = await _capacity_context(
         session,
         db_user,
@@ -1708,25 +1701,21 @@ async def res_buy_users_go(
     if n not in ALLOWED_EXTRA_USERS:
         await callback.answer("مقدار مجاز نیست", show_alert=True)
         return
-    try:
-        result = await buy_extra_users(
-            session, user=owner, profile=profile, plan=plan, count=n
-        )
-    except ValueError as e:
-        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
+    from app.bot.handlers.reseller_capacity_buy import USERS_OK, confirm_view, current_generation
+    from app.services.reseller_capacity import plan_allows_buy_extra, plan_extra_user_price
+
+    price = plan_extra_user_price(plan) * n
+    if not plan_allows_buy_extra(plan) or price <= 0:
+        await callback.answer("این پلن خرید کاربر اضافه ندارد", show_alert=True)
         return
-    await callback.answer("خرید شد")
+    text, markup = confirm_view(
+        title="👤 تأیید خرید کاربر اضافه", lines=[f"کاربر اضافه: <b>{n}</b>"], price=price,
+        wallet=int(owner.wallet_balance or 0),
+        ok_callback=f"{USERS_OK}{n}:{await current_generation(session, profile)}", back_callback="res:buy_users",
+    )
+    await callback.answer()
     if callback.message:
-        await safe_edit_text(
-            callback.message,
-            format_message(
-                "✅ کاربر اضافه خریداری شد",
-                f"تعداد: {result['users']}\n"
-                f"سقف جدید: {result['max_users']}\n"
-                f"مبلغ: {format_toman(result['amount'], get_settings().currency)}",
-            ),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "res:addons")]]),
-        )
+        await safe_edit_text(callback.message, text, reply_markup=markup)
 
 
 @router.callback_query(F.data == "res:addons")
@@ -1864,7 +1853,6 @@ async def res_addon_buy(
 ):
     from app.db.models import ResellerPlan
     from app.services.pg_admin_subscription import (
-        apply_addon_plan,
         get_or_create_subscription,
         is_addon_plan,
         is_subscription_plan,
@@ -1898,24 +1886,24 @@ async def res_addon_buy(
     if not uname:
         await callback.answer(feedback.PG_ADMIN_NOT_SET, show_alert=True)
         return
-    try:
-        sub = await get_or_create_subscription(session, uname)
-        result = await apply_addon_plan(
-            session, sub=sub, addon_plan=addon, payer=owner, charge_wallet=True
-        )
-    except ValueError as e:
-        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
+    from app.bot.handlers.reseller_capacity_buy import PACK_OK, confirm_view
+    from app.services.reseller_packs import pack_fits_plan
+
+    if not pack_fits_plan(addon, plan):
+        await callback.answer("این بسته برای پلن شما در دسترس نیست", show_alert=True)
         return
-    await callback.answer("خرید شد")
+    sub = await get_or_create_subscription(session, uname)
+    lines = [f"<b>{html.escape(str(addon.name or ''))}</b>"]
+    if int(addon.addon_gb or 0):
+        lines.append(f"حجم اضافه: {int(addon.addon_gb)} گیگابایت")
+    if int(addon.addon_users or 0):
+        lines.append(f"کاربر اضافه: {int(addon.addon_users)}")
+    lines.append("تاریخ انقضا تغییر نمی‌کند.")
+    text, markup = confirm_view(
+        title="📦 تأیید خرید بسته", lines=lines, price=int(addon.price or 0),
+        wallet=int(owner.wallet_balance or 0),
+        ok_callback=f"{PACK_OK}{int(addon.id)}:{int(sub.renew_generation or 0)}", back_callback="res:addons",
+    )
+    await callback.answer()
     if callback.message:
-        await safe_edit_text(
-            callback.message,
-            format_message(
-                "✅ بسته اعمال شد",
-                f"حجم اضافه کل: {result['extra_gb']} گیگابایت\n"
-                f"کاربر اضافه کل: {result['extra_users']}\n"
-                f"مبلغ: {format_toman(result['amount'], get_settings().currency)}\n"
-                "تاریخ انقضا تغییر نکرد.",
-            ),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "res:addons")]]),
-        )
+        await safe_edit_text(callback.message, text, reply_markup=markup)

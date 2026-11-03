@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -749,91 +749,6 @@ async def renew_subscription(
     }
 
 
-async def apply_addon_plan(
-    session: AsyncSession,
-    *,
-    sub: PgAdminSubscription,
-    addon_plan: ResellerPlan,
-    payer: BotUser | None,
-    charge_wallet: bool = True,
-) -> dict[str, Any]:
-    """Purchase an addon_volume / addon_users plan onto an active subscription."""
-    kind = plan_kind_of(addon_plan)
-    if kind not in {PLAN_KIND_ADDON_VOLUME, PLAN_KIND_ADDON_USERS}:
-        raise ValueError("این پلن بستهٔ اضافه نیست")
-    if not bool(getattr(addon_plan, "is_active", False)):
-        raise ValueError("بسته غیرفعال است")
-    if sub.access_status != STATUS_ACTIVE:
-        raise ValueError("فقط اشتراک فعال می‌تواند بسته اضافه بخرد — ابتدا تمدید کنید")
-    if _as_aware(sub.expires_at) is not None and _as_aware(sub.expires_at) <= _utcnow():
-        raise ValueError("اشتراک منقضی است — ابتدا تمدید کنید")
-
-    add_gb = max(0, int(getattr(addon_plan, "addon_gb", 0) or 0))
-    add_users = max(0, int(getattr(addon_plan, "addon_users", 0) or 0))
-    if kind == PLAN_KIND_ADDON_VOLUME:
-        if add_gb <= 0:
-            raise ValueError("مقدار حجم بسته نامعتبر است")
-        add_users = 0
-    else:
-        if add_users <= 0:
-            raise ValueError("تعداد کاربر بسته نامعتبر است")
-        add_gb = 0
-
-    # Checked before the charge; the parent stays locked until this purchase commits.
-    await assert_child_growth_fits(session, pg_username=sub.pg_username, add_gb=add_gb)
-    price = max(0, int(getattr(addon_plan, "price", 0) or 0))
-    if charge_wallet:
-        if payer is None:
-            raise ValueError("پرداخت‌کننده مشخص نیست")
-        if price <= 0:
-            raise ValueError("قیمت بسته نامعتبر است")
-        from app.services.wallet import debit_wallet
-
-        await debit_wallet(
-            session,
-            payer,
-            price,
-            reason=f"reseller_addon:{addon_plan.id}:{sub.pg_username}",
-            commit=False,
-        )
-
-    sub.extra_gb_purchased = int(sub.extra_gb_purchased or 0) + add_gb
-    sub.extra_users_purchased = int(sub.extra_users_purchased or 0) + add_users
-    try:
-        await _assert_owner_capacity_budget(
-            session,
-            target_pg_username=sub.pg_username,
-            next_total_gb=int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0),
-            next_total_users=int(sub.base_users or 0) + int(sub.extra_users_purchased or 0),
-        )
-        await sync_pg_capacity_from_sub(session, sub)
-    except Exception as e:
-        if charge_wallet and payer is not None and price > 0:
-            from app.services.wallet import credit_wallet
-
-            await credit_wallet(
-                session,
-                payer,
-                price,
-                reason=f"reseller_addon_refund:{addon_plan.id}:{sub.pg_username}",
-                commit=False,
-            )
-        await session.commit()
-        if isinstance(e, ValueError) and str(e).strip():
-            raise ValueError(str(e)) from e
-        raise ValueError("اعمال بسته در پاسارگارد ناموفق بود — مبلغ بازگردانده شد") from e
-
-    await session.commit()
-    return {
-        "amount": price,
-        "added_gb": add_gb,
-        "added_users": add_users,
-        "extra_gb": int(sub.extra_gb_purchased or 0),
-        "extra_users": int(sub.extra_users_purchased or 0),
-        "expires_at": sub.expires_at,
-    }
-
-
 async def record_unit_extra(
     session: AsyncSession,
     *,
@@ -944,33 +859,45 @@ async def _notify_expired(session: AsyncSession, sub: PgAdminSubscription) -> No
     logger.info("subscription expired admin=%s", sub.pg_username)
 
 
+ADDON_LIST_LIMIT = 60
+
+
+def _prefer_category_addons(packs: list[ResellerPlan]) -> list[ResellerPlan]:
+    """Drop a general pack when a categorised pack offers the same kind and amount; keep the order."""
+
+    def bundle(pack: ResellerPlan) -> tuple[str, int]:
+        kind = plan_kind_of(pack)
+        return kind, int(pack.addon_gb or 0) if kind == PLAN_KIND_ADDON_VOLUME else int(pack.addon_users or 0)
+
+    specific = {bundle(pack) for pack in packs if pack.category_id is not None}
+    return [pack for pack in packs if pack.category_id is not None or bundle(pack) not in specific]
+
+
 async def list_addon_plans(
     session: AsyncSession,
     *,
     kind: str | None = None,
     category_id: int | None | object = ...,
 ) -> list[ResellerPlan]:
-    """Active reseller capacity packs. Optional strict ``category_id`` filter.
+    """Active reseller capacity packs.
 
-    Omit ``category_id`` for the full catalog (admin lists). Pass an int/None
-    to match packs priced for that subscription-plan category.
+    Omit ``category_id`` for the full catalog (admin lists). Pass the subscription-plan category
+    to get what a plan of that category may buy: its own packs plus the packs without a category,
+    which fit every category (``None`` means a plan without a category: general packs only). A
+    general pack is hidden when a pack of the category sells the same bundle.
     """
-    q = select(ResellerPlan).where(
-        ResellerPlan.is_active.is_(True),
-        ResellerPlan.plan_kind.in_([PLAN_KIND_ADDON_VOLUME, PLAN_KIND_ADDON_USERS]),
-    )
-    if kind in {PLAN_KIND_ADDON_VOLUME, PLAN_KIND_ADDON_USERS}:
-        q = select(ResellerPlan).where(
-            ResellerPlan.is_active.is_(True),
-            ResellerPlan.plan_kind == kind,
-        )
+    kinds = [kind] if kind in {PLAN_KIND_ADDON_VOLUME, PLAN_KIND_ADDON_USERS} else [
+        PLAN_KIND_ADDON_VOLUME, PLAN_KIND_ADDON_USERS,
+    ]
+    q = select(ResellerPlan).where(ResellerPlan.is_active.is_(True), ResellerPlan.plan_kind.in_(kinds))
     if category_id is not ...:
-        if category_id is None:
-            q = q.where(ResellerPlan.category_id.is_(None))
-        else:
-            q = q.where(ResellerPlan.category_id == int(category_id))
-    q = q.order_by(ResellerPlan.sort_order, ResellerPlan.id)
-    return list((await session.execute(q)).scalars().all())
+        fits = ResellerPlan.category_id.is_(None)
+        if category_id is not None:
+            fits = or_(fits, ResellerPlan.category_id == int(category_id))
+        q = q.where(fits)
+    q = q.order_by(ResellerPlan.sort_order, ResellerPlan.id).limit(ADDON_LIST_LIMIT)
+    packs = list((await session.execute(q)).scalars().all())
+    return _prefer_category_addons(packs) if category_id is not ... else packs
 
 
 async def list_subscription_plans(session: AsyncSession) -> list[ResellerPlan]:
