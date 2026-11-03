@@ -333,7 +333,12 @@ async def _assert_owner_capacity_budget(
     next_total_gb: int,
     next_total_users: int,
 ) -> None:
-    """Do not oversell child-admin capacity beyond the installer's live PG budget."""
+    """Do not oversell child-admin capacity beyond the installer's live PG budget.
+
+    If the owner admin cannot be read: refuse only when this call **grows** the target's
+    capacity (extras, upgrades, new provision). Same-or-smaller totals (typical renew)
+    still proceed so a temporary panel outage does not freeze every shop renewal.
+    """
     from app.config import get_settings
     from app.services.pg_quota import _as_int, merge_role_limits
 
@@ -342,29 +347,6 @@ async def _assert_owner_capacity_budget(
         return
 
     from app.services.pasarguard import get_pg
-
-    pg = get_pg()
-    try:
-        admin = await pg.get_admin(owner_username)
-    except Exception as exc:
-        logger.warning(
-            "owner capacity budget: install admin unreadable (%s)", owner_username, exc_info=True,
-        )
-        raise ValueError(
-            "سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید"
-        ) from exc
-    if not isinstance(admin, dict) or not admin:
-        # Fail closed: an unread owner must not allow unbounded child capacity growth.
-        raise ValueError("سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید")
-    role = admin.get("role") if isinstance(admin.get("role"), dict) else None
-    limits = merge_role_limits(admin, role)
-    owner_gb_limit_bytes = max(
-        0, _as_int(limits.get("data_limit")) or _as_int(admin.get("data_limit")) or 0
-    )
-    owner_gb_limit = int(owner_gb_limit_bytes / GB) if owner_gb_limit_bytes > 0 else 0
-    owner_user_limit = max(
-        0, _as_int(limits.get("max_users")) or _as_int(admin.get("max_users")) or 0
-    )
 
     rows = list(
         (
@@ -375,9 +357,49 @@ async def _assert_owner_capacity_budget(
             )
         ).scalars().all()
     )
+    target = normalize_pg_username(target_pg_username)
+    current_gb = 0
+    current_users = 0
+    for row in rows:
+        uname = normalize_pg_username(getattr(row, "pg_username", None))
+        if uname == target:
+            current_gb = int(getattr(row, "base_gb", 0) or 0) + int(
+                getattr(row, "extra_gb_purchased", 0) or 0
+            )
+            current_users = int(getattr(row, "base_users", 0) or 0) + int(
+                getattr(row, "extra_users_purchased", 0) or 0
+            )
+            break
+    growing = int(next_total_gb) > current_gb or int(next_total_users) > current_users
+
+    pg = get_pg()
+    try:
+        admin = await pg.get_admin(owner_username)
+    except Exception as exc:
+        logger.warning(
+            "owner capacity budget: install admin unreadable (%s)", owner_username, exc_info=True,
+        )
+        if growing:
+            raise ValueError(
+                "سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید"
+            ) from exc
+        return
+    if not isinstance(admin, dict) or not admin:
+        if growing:
+            raise ValueError("سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید")
+        return
+    role = admin.get("role") if isinstance(admin.get("role"), dict) else None
+    limits = merge_role_limits(admin, role)
+    owner_gb_limit_bytes = max(
+        0, _as_int(limits.get("data_limit")) or _as_int(admin.get("data_limit")) or 0
+    )
+    owner_gb_limit = int(owner_gb_limit_bytes / GB) if owner_gb_limit_bytes > 0 else 0
+    owner_user_limit = max(
+        0, _as_int(limits.get("max_users")) or _as_int(admin.get("max_users")) or 0
+    )
+
     sold_gb = 0
     sold_users = 0
-    target = normalize_pg_username(target_pg_username)
     if target not in {normalize_pg_username(getattr(row, "pg_username", None)) for row in rows}:
         # An admin about to be created has no subscription row yet; it still sells its capacity.
         sold_gb += max(0, int(next_total_gb))

@@ -61,6 +61,24 @@ class Phase5FailClosedTests(unittest.IsolatedAsyncioTestCase):
                         session, target_pg_username="shop3", next_total_gb=1, next_total_users=1,
                     )
 
+    async def test_unreadable_owner_allows_same_capacity_renew(self) -> None:
+        async with self.Session() as session:
+            session.add(
+                PgAdminSubscription(
+                    pg_username="shop3", plan_id=1, access_status=STATUS_ACTIVE,
+                    base_gb=10, base_users=5,
+                )
+            )
+            await session.commit()
+            pg = SimpleNamespace(get_admin=AsyncMock(side_effect=TimeoutError("down")))
+            with (
+                patch("app.config.get_settings", return_value=SimpleNamespace(pg_username="owner")),
+                patch("app.services.pasarguard.get_pg", return_value=pg),
+            ):
+                await _assert_owner_capacity_budget(
+                    session, target_pg_username="shop3", next_total_gb=10, next_total_users=5,
+                )
+
     def test_extend_period_clears_clock_for_untimed_plan(self) -> None:
         sub = PgAdminSubscription(
             pg_username="shop3", plan_id=1, access_status=STATUS_ACTIVE,
