@@ -992,6 +992,8 @@ class PgAdminSubscription(Base):
 class ResellerApplicationStatus(str, Enum):
     PENDING_PAYMENT = "pending_payment"
     AWAITING_APPROVAL = "awaiting_approval"
+    # Claimed for provision; prevents a second approve from creating another PG admin.
+    PROVISIONING = "provisioning"
     APPROVED = "approved"
     REJECTED = "rejected"
     CANCELLED = "cancelled"
