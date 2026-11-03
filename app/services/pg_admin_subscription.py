@@ -529,36 +529,99 @@ async def _set_web_active_for_pg_admin(
     )
 
 
+async def _expire_claim_still_held(session: AsyncSession, sub_id: int, claimed_expired_at: datetime) -> bool:
+    """True when this expire claim still owns the row (a concurrent renew clears ``expired_at``)."""
+    row = await session.get(PgAdminSubscription, int(sub_id))
+    if row is None or row.access_status != STATUS_EXPIRED or row.expired_at is None:
+        return False
+    left = _as_aware(row.expired_at)
+    right = _as_aware(claimed_expired_at)
+    return left is not None and right is not None and left == right
+
+
 async def expire_subscription(
     session: AsyncSession,
     sub: PgAdminSubscription,
     *,
     commit: bool = True,
 ) -> dict[str, int]:
-    """Disable web + PG admin + cut owned users. Idempotent when already expired."""
+    """Disable web + PG admin + cut owned users.
+
+    Claims the due active row atomically (``ACTIVE`` + ``expires_at <= now`` → ``EXPIRED``)
+    and commits that claim before any panel call, so a concurrent renew that extends
+    ``expires_at`` wins the race. If renew takes the row back mid-panel, expiry aborts and
+    restores access instead of leaving a paid period cut.
+    """
     from app.services.billing_suspend import _set_admin_enabled, list_owned_user_ids
     from app.services.pasarguard import get_pg
 
-    stats = {"users_cut": 0, "already": 0, "errors": 0}
+    stats = {"users_cut": 0, "already": 0, "errors": 0, "skipped": 0, "aborted": 0}
     if sub.access_status == STATUS_REVOKED:
         return stats
     if sub.access_status == STATUS_EXPIRED and sub.expired_at:
         stats["already"] = 1
-        # Still ensure web is off
         await _set_web_active_for_pg_admin(session, sub.pg_username, active=False)
         if commit:
             await session.commit()
         return stats
 
+    now = _utcnow()
+    sub_id = int(sub.id)
+    claimed = await session.execute(
+        update(PgAdminSubscription)
+        .where(
+            PgAdminSubscription.id == sub_id,
+            PgAdminSubscription.access_status == STATUS_ACTIVE,
+            PgAdminSubscription.expires_at.is_not(None),
+            PgAdminSubscription.expires_at <= now,
+        )
+        .values(access_status=STATUS_EXPIRED, expired_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount != 1:
+        # Renew extended the clock, or another worker claimed first.
+        await session.refresh(sub)
+        stats["skipped"] = 1
+        if commit:
+            await session.commit()
+        return stats
+
+    # Publish the claim before any network call (renew reads the same row).
+    await session.commit()
+    await session.refresh(sub)
+    claimed_at = sub.expired_at
+    if claimed_at is None:
+        stats["skipped"] = 1
+        return stats
+
     uname = normalize_pg_username(sub.pg_username)
     pg = get_pg()
-    cut_ids: list[int] = []
+
+    async def _abort_if_renewed() -> bool:
+        if await _expire_claim_still_held(session, sub_id, claimed_at):
+            return False
+        stats["aborted"] = 1
+        try:
+            await restore_subscription_access(session, sub, commit=False)
+            await session.commit()
+        except Exception:
+            logger.exception("expire: restore after renew race failed admin=%s", uname)
+            stats["errors"] += 1
+        return True
+
+    if await _abort_if_renewed():
+        return stats
+
     try:
         await _set_admin_enabled(pg, uname, enabled=False)
     except Exception:
         logger.exception("expire: disable admin failed %s", uname)
         stats["errors"] += 1
 
+    if await _abort_if_renewed():
+        return stats
+
+    cut_ids: list[int] = []
     try:
         owned = await list_owned_user_ids(pg, uname)
     except Exception:
@@ -567,6 +630,15 @@ async def expire_subscription(
         stats["errors"] += 1
 
     for uid in owned:
+        if not await _expire_claim_still_held(session, sub_id, claimed_at):
+            stats["aborted"] = 1
+            try:
+                await restore_subscription_access(session, sub, commit=False)
+                await session.commit()
+            except Exception:
+                logger.exception("expire: restore after renew race failed admin=%s", uname)
+                stats["errors"] += 1
+            return stats
         try:
             await pg.set_disabled_by_id(uid, True)
             cut_ids.append(uid)
@@ -575,11 +647,13 @@ async def expire_subscription(
             stats["errors"] += 1
             logger.debug("expire cut user %s failed", uid, exc_info=True)
 
+    if await _abort_if_renewed():
+        return stats
+
+    await session.refresh(sub)
     existing = _parse_id_list(sub.expiry_disabled_user_ids)
     merged = sorted(set(existing) | set(cut_ids))
     sub.expiry_disabled_user_ids = _dump_id_list(merged) if merged else None
-    sub.access_status = STATUS_EXPIRED
-    sub.expired_at = _utcnow()
     await _set_web_active_for_pg_admin(session, uname, active=False)
     await session.flush()
     if commit:
@@ -863,48 +937,61 @@ async def record_unit_extra(
     return sub
 
 
+EXPIRY_TICK_LIMIT = 100
+
+
 async def run_subscription_expiry_tick(session: AsyncSession) -> dict[str, int]:
-    """Scheduler: expire due subscriptions; skip PAYG-linked plans."""
+    """Scheduler: expire due subscriptions; skip PAYG-linked plans.
+
+    Processes at most ``EXPIRY_TICK_LIMIT`` due rows per tick. Each expiry claims and
+    commits on its own so a renew cannot be overwritten by a stale in-memory row.
+    """
     now = _utcnow()
     result = await session.execute(
-        select(PgAdminSubscription).where(
+        select(PgAdminSubscription)
+        .where(
             PgAdminSubscription.access_status == STATUS_ACTIVE,
             PgAdminSubscription.expires_at.is_not(None),
             PgAdminSubscription.expires_at <= now,
         )
+        .order_by(PgAdminSubscription.id)
+        .limit(EXPIRY_TICK_LIMIT)
     )
     due = list(result.scalars().all())
-    stats = {"expired": 0, "skipped_payg": 0, "errors": 0, "warned": 0}
+    stats = {
+        "expired": 0, "skipped_payg": 0, "skipped": 0, "aborted": 0, "errors": 0, "warned": 0,
+    }
 
     # Warnings (active, within WARN_DAYS_BEFORE)
     warn_before = now + timedelta(days=WARN_DAYS_BEFORE)
     warn_q = await session.execute(
-        select(PgAdminSubscription).where(
+        select(PgAdminSubscription)
+        .where(
             PgAdminSubscription.access_status == STATUS_ACTIVE,
             PgAdminSubscription.expires_at.is_not(None),
             PgAdminSubscription.expires_at > now,
             PgAdminSubscription.expires_at <= warn_before,
             PgAdminSubscription.warn_sent_at.is_(None),
         )
+        .order_by(PgAdminSubscription.id)
+        .limit(EXPIRY_TICK_LIMIT)
     )
     for sub in warn_q.scalars().all():
         sub.warn_sent_at = now
         stats["warned"] += 1
-        # Notification best-effort (bot may not be available here)
         try:
             await _notify_expiry_warning(session, sub)
         except Exception:
             logger.debug("expiry warn notify failed %s", sub.pg_username, exc_info=True)
+    await session.commit()
 
     for sub in due:
-        # Skip if current plan is PAYG
         plan = None
         if sub.plan_id:
             plan = await session.get(ResellerPlan, int(sub.plan_id))
         if plan is not None and str(getattr(plan, "billing_mode", "") or "").lower() == "payg":
             stats["skipped_payg"] += 1
             continue
-        # Also skip if linked reseller profile is PAYG
         rp = (
             await session.execute(
                 select(ResellerProfile).where(
@@ -916,17 +1003,24 @@ async def run_subscription_expiry_tick(session: AsyncSession) -> dict[str, int]:
             stats["skipped_payg"] += 1
             continue
         try:
-            await expire_subscription(session, sub, commit=False)
-            stats["expired"] += 1
-            try:
-                await _notify_expired(session, sub)
-            except Exception:
-                logger.debug("expired notify failed %s", sub.pg_username, exc_info=True)
+            # Expire commits its own claim; never batch-commit over a renewed row.
+            outcome = await expire_subscription(session, sub, commit=True)
+            if outcome.get("skipped"):
+                stats["skipped"] += 1
+            elif outcome.get("aborted"):
+                stats["aborted"] += 1
+            elif outcome.get("already"):
+                stats["expired"] += 1
+            else:
+                stats["expired"] += 1
+                try:
+                    await _notify_expired(session, sub)
+                except Exception:
+                    logger.debug("expired notify failed %s", sub.pg_username, exc_info=True)
         except Exception:
             stats["errors"] += 1
             logger.exception("expire tick failed admin=%s", sub.pg_username)
 
-    await session.commit()
     return stats
 
 
