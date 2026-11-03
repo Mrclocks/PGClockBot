@@ -856,6 +856,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
         perms = _feature_perms_from_form(form)
         miniapp_before = _shop_miniapp_may_open(profile)
+        was_active = bool(profile.is_active)
         profile.web_permissions = perms
         profile.bot_permissions = perms  # must stay identical
         profile.can_approve_receipts = "payments" in parse_perms(perms)
@@ -947,9 +948,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 return _redirect_reseller_edit(user_id, err=str(e))
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
         await session.commit()
-        from app.services.reseller_bots import sync_reseller_bot_runtime
+        if was_active != bool(profile.is_active):
+            from app.services.reseller_bots import sync_reseller_bot_runtime
 
-        await sync_reseller_bot_runtime(profile)
+            await sync_reseller_bot_runtime(profile)
         _resync_menu_if_miniapp_changed(profile, miniapp_before)
         return _redirect_reseller_edit(user_id, ok='ذخیره شد')
 
