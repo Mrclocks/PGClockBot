@@ -416,7 +416,32 @@ async def buy_offer(
     """Pay ``offer`` from the owner's wallet and raise the admin's live limit; returns the new limit."""
     # Before the charge and the panel call; the parent stays locked until this purchase commits.
     await assert_child_growth_fits(session, pg_username=offer.uname, add_gb=offer.gb)
-    return await apply_paid_extra(session, user=user, purchase=offer.purchase(generation), apply=offer.raiser())
+    new_limit = await apply_paid_extra(
+        session, user=user, purchase=offer.purchase(generation), apply=offer.raiser(),
+    )
+    try:
+        from app.services.reseller_purchase_notify import (
+            notify_capacity_wallet_purchase,
+            pack_name_for_offer_reason,
+        )
+
+        pack_name = await pack_name_for_offer_reason(session, offer.reason)
+        await notify_capacity_wallet_purchase(
+            session,
+            buyer=user,
+            amount=int(offer.price),
+            gb=int(offer.gb),
+            users=int(offer.users),
+            pack_name=pack_name,
+        )
+    except Exception:
+        logger.warning(
+            "capacity purchase owner notify failed user=%s reason=%s",
+            getattr(user, "id", None),
+            offer.reason,
+            exc_info=True,
+        )
+    return new_limit
 
 
 async def buy_extra_gb(

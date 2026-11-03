@@ -299,4 +299,22 @@ async def renew_package(
         fresh = await session.get(ResellerProfile, profile_id)
         fresh.plan_id = int(target.id)
         await session.commit()
-    return {**result, "plan_name": target.name, "changed": changed}
+    out = {**result, "plan_name": target.name, "changed": changed}
+    try:
+        from app.services.reseller_purchase_notify import notify_package_wallet_renew
+
+        await notify_package_wallet_renew(
+            session,
+            buyer=owner,
+            amount=int(out.get("amount") or 0),
+            plan_name=target.name,
+            changed=changed,
+        )
+    except Exception:
+        logger.warning(
+            "package renew owner notify failed user=%s plan=%s",
+            getattr(owner, "id", None),
+            getattr(target, "id", None),
+            exc_info=True,
+        )
+    return out
