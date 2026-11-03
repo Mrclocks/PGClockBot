@@ -392,3 +392,22 @@ async def start_reseller_bot_for_profile(profile_id: int) -> bool:
     if not mgr:
         return False
     return await mgr.restart_reseller_profile(profile_id)
+
+
+async def sync_reseller_bot_runtime(profile: ResellerProfile) -> None:
+    """Stop or start the dedicated shop bot to match ``profile.is_active`` after a commit.
+
+    Soft-deactivate must clear the token lookup cache and cancel polling so updates are
+    not handled on a stale ``bot._pgclock_reseller`` cache. Reactivate restarts when a
+    token and completed setup are present (same rule as ``start_all``).
+    """
+    clear_reseller_token_cache()
+    mgr = get_reseller_bot_manager()
+    if mgr is None:
+        return
+    profile_id = int(profile.id)
+    if not bool(profile.is_active):
+        await mgr.stop_reseller(profile_id)
+        return
+    if profile.bot_token and profile.setup_completed_at:
+        await mgr.restart_reseller_profile(profile_id)
