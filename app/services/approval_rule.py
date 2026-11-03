@@ -16,7 +16,7 @@ MINUTES_KEY = "auto_approve_after_minutes"
 MAX_AMOUNT_KEY = "auto_approve_after_max_amount"
 RETURNING_ONLY_KEY = "auto_approve_after_returning_only"
 MAX_MINUTES = 24 * 60
-MUTATION_NOTE_PREFIXES = ("renew:", "svc_addon:", "reseller_app:", "res_cap:")
+MUTATION_NOTE_PREFIXES = ("renew:", "svc_addon:", "reseller_app:", "res_cap:", "res_pkg:")
 TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 
 

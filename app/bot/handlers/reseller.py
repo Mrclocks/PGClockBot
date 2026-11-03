@@ -1480,7 +1480,8 @@ async def res_renew(
         get_subscription,
         plan_has_time,
     )
-    from app.services.reseller_package import RENEW_EXPLAIN
+    from app.bot.handlers.reseller_package import order_callback_for
+    from app.services.reseller_package import RENEW_EXPLAIN, WALLET_PAY_HINT
 
     owner_id, profile, plan, owner = await _capacity_context(
         session,
@@ -1497,12 +1498,14 @@ async def res_renew(
     price = int(invoice.get("total") or plan_renew_price(plan))
     generation = int(sub.renew_generation or 0) if sub else 0
     timed = plan_has_time(plan)
-    rows = [
-        [renew_button(price, int(plan.id), generation)] if timed else [],
-        [change_button()],
-        [kb.back_button(None, back_callback_for("res_renew"))],
-    ]
-    rows = [row for row in rows if row]
+    rows: list[list] = []
+    if timed:
+        rows.append([renew_button(price, int(plan.id), generation)])
+        other = order_callback_for(int(plan.id), generation, is_reseller_bot=is_reseller_bot)
+        if other:
+            rows.append([InlineKeyboardButton(text="💳 سایر روش‌های پرداخت", callback_data=other)])
+    rows.append([change_button()])
+    rows.append([kb.back_button(None, back_callback_for("res_renew"))])
     detail = format_renew_invoice_html(invoice, currency=get_settings().currency)
     exp = invoice.get("expires_at")
     exp_line = ""
@@ -1511,6 +1514,7 @@ async def res_renew(
             exp_line = f"\nانقضای فعلی: <b>{exp.strftime('%Y-%m-%d %H:%M')}</b> UTC"
         except Exception:
             exp_line = ""
+    explain = (RENEW_EXPLAIN + f"\n{WALLET_PAY_HINT}") if timed else NO_TIME_RENEWAL
     await callback.answer()
     if callback.message:
         await safe_edit_text(
@@ -1519,7 +1523,7 @@ async def res_renew(
                 "🔄 تمدید سرویس نماینده",
                 f"پلن: <b>{plan.name}</b>\n"
                 f"{detail}{exp_line}\n\n"
-                + (RENEW_EXPLAIN if timed else NO_TIME_RENEWAL),
+                + explain,
             ),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )

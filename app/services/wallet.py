@@ -78,6 +78,8 @@ def _payment_activity_reason(payment: Payment) -> str:
         return f"هزینه نمایندگی #{oid} ({method})"
     if note.startswith("res_cap:"):
         return f"ظرفیت نمایندگی #{oid} ({method})"
+    if note.startswith("res_pkg:"):
+        return f"تمدید بسته نمایندگی #{oid} ({method})"
     return f"خرید سفارش #{oid} ({method})"
 
 

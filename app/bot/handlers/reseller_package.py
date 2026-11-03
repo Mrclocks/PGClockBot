@@ -2,6 +2,7 @@
 
 Thin handlers over ``app.services.reseller_package``. Every pay button carries the
 subscription's renew generation, so a double tap or an old message renews at most once.
+On the platform bot, «other payment methods» creates a frozen order settled like a plan.
 Screens are edited in place and each has a back button to the previous one.
 """
 
@@ -12,6 +13,7 @@ import logging
 from datetime import datetime
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +21,7 @@ from app.bot import keyboards as kb
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
-from app.db.models import BotUser, ResellerProfile
+from app.db.models import BotUser, ResellerPlan, ResellerProfile
 from app.services import bot_feedback_texts as feedback
 from app.services.formatting import format_message, format_toman
 from app.services.redact import user_safe_error
@@ -32,12 +34,14 @@ from app.services.reseller_package import (
     RENEW_EXPLAIN,
     RELATION_UPGRADE,
     STALE_PAGE,
+    WALLET_PAY_HINT,
     PackageChoice,
     PackageOverview,
     package_overview,
     renew_package,
     renewal_effect,
 )
+from app.services.reseller_package_orders import NOT_FOR_SHOP_BOT, create_package_order
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +50,7 @@ router = Router(name="reseller_package")
 LIST = "res:pkg"
 VIEW = "res:pkg:v:"
 PAY = "res:pkg:ok:"
+ORDER = "res:pkg:o:"
 RENEW_SCREEN = "res:renew"
 RELATION_ICONS = {RELATION_CURRENT: "🔄", RELATION_UPGRADE: "⬆️", RELATION_DOWNGRADE: "⬇️"}
 _ID_MAX = 2**31 - 1
@@ -93,12 +98,20 @@ def _parse_ids(data: str, prefix: str) -> tuple[int, int] | None:
 
 
 def renew_button(price: int, plan_id: int, generation: int) -> InlineKeyboardButton:
-    """«تمدید» on the renew screen: pays the current package once for this generation."""
-    return InlineKeyboardButton(text=f"✅ تمدید — {_money(price)}", callback_data=f"{PAY}{plan_id}:{generation}")
+    """Wallet pay on the renew screen: charges the current package once for this generation."""
+    return InlineKeyboardButton(
+        text=f"✅ پرداخت از کیف پول — {_money(price)}",
+        callback_data=f"{PAY}{plan_id}:{generation}",
+    )
 
 
 def change_button() -> InlineKeyboardButton:
     return InlineKeyboardButton(text="🔁 ارتقا یا تغییر بسته", callback_data=LIST)
+
+
+def order_callback_for(plan_id: int, generation: int, *, is_reseller_bot: bool) -> str | None:
+    """«Other payment methods»; a shop bot's methods belong to the shop, so it gets none."""
+    return None if is_reseller_bot else f"{ORDER}{int(plan_id)}:{int(generation)}"
 
 
 def _list_view(overview: PackageOverview) -> tuple[str, InlineKeyboardMarkup]:
@@ -126,21 +139,29 @@ def _list_view(overview: PackageOverview) -> tuple[str, InlineKeyboardMarkup]:
     return format_message("🔁 ارتقا یا تغییر بسته", body), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _confirm_view(choice: PackageChoice, generation: int) -> tuple[str, InlineKeyboardMarkup]:
+def _confirm_view(
+    choice: PackageChoice,
+    generation: int,
+    *,
+    order_callback: str | None = None,
+) -> tuple[str, InlineKeyboardMarkup]:
     total = int(choice.invoice.get("total", 0) or 0)
     body = (
         f"بستهٔ جدید: <b>{html.escape(str(choice.plan.name or ''))}</b> ({choice.label})\n"
         f"ظرفیت: {_capacity(choice)}\n"
         f"مبلغ: <b>{_money(total)}</b>\n\n"
         + (RENEW_EXPLAIN if plan_has_time(choice.plan) else MOVE_UNTIMED_EXPLAIN)
+        + f"\n{WALLET_PAY_HINT}"
     )
     rows = [
         [InlineKeyboardButton(
-            text=f"✅ پرداخت و {choice.label} — {_money(total)}",
+            text=f"✅ پرداخت از کیف پول — {_money(total)}",
             callback_data=f"{PAY}{int(choice.plan.id)}:{generation}",
         )],
-        [kb.back_button(None, LIST)],
     ]
+    if order_callback:
+        rows.append([InlineKeyboardButton(text="💳 سایر روش‌های پرداخت", callback_data=order_callback)])
+    rows.append([kb.back_button(None, LIST)])
     return format_message(f"{RELATION_ICONS.get(choice.relation, '🔁')} {choice.label} بسته", body), InlineKeyboardMarkup(
         inline_keyboard=rows,
     )
@@ -213,7 +234,13 @@ async def res_package_view(
         return
     await callback.answer()
     if callback.message:
-        text, markup = _confirm_view(choice, overview.generation)
+        text, markup = _confirm_view(
+            choice,
+            overview.generation,
+            order_callback=order_callback_for(
+                int(choice.plan.id), overview.generation, is_reseller_bot=is_reseller_bot,
+            ),
+        )
         await safe_edit_text(callback.message, text, reply_markup=markup)
 
 
@@ -243,4 +270,56 @@ async def res_package_pay(
             callback.message,
             _done_text(result),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, back_callback_for("res_renew"))]]),
+        )
+
+
+@router.callback_query(F.data.startswith(ORDER))
+async def res_package_order(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
+    """Create the renew/upgrade order and show platform payment methods."""
+    from app.bot.menu_nav import present_order_pay
+
+    if is_reseller_bot:
+        await callback.answer(NOT_FOR_SHOP_BOT, show_alert=True)
+        return
+    actor = await _owner(session, db_user, is_reseller_bot=False, reseller_owner_id=None)
+    ids = _parse_ids(callback.data or "", ORDER)
+    if actor is None:
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
+        return
+    if ids is None:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    owner, profile = actor
+    plan_id, generation = ids
+    try:
+        order = await create_package_order(
+            session, owner=owner, profile=profile, plan_id=plan_id, generation=generation,
+        )
+    except ValueError as exc:
+        await callback.answer(user_safe_error(exc, limit=180), show_alert=True)
+        return
+    await callback.answer()
+    target = await session.get(ResellerPlan, plan_id)
+    plan_label = html.escape(str(target.name if target is not None else plan_id))
+    summary = format_message(
+        f"🔄 تمدید بسته نمایندگی — سفارش #{order.id}",
+        f"بسته: <b>{plan_label}</b>\nمبلغ: <b>{_money(int(order.amount))}</b>",
+    )
+    if callback.message:
+        await present_order_pay(
+            callback.message,
+            session,
+            db_user,
+            order.id,
+            state=state,
+            summary=summary,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
         )

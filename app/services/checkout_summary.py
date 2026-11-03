@@ -16,7 +16,7 @@ from app.services.catalog_pricing import active_discounts, price_html, product_t
 from app.services.formatting import format_message, format_plan_duration_days, format_toman, info_block, kv_line
 from app.services.orders import CUSTOM_ORDER_NOTE
 
-_SERVICE_NOTES = ("renew:", "svc_addon:", "reseller_app:", "res_cap:")
+_SERVICE_NOTES = ("renew:", "svc_addon:", "reseller_app:", "res_cap:", "res_pkg:")
 
 
 def _is_new_purchase(order: Order) -> bool:
