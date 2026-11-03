@@ -824,7 +824,7 @@ async def on_user_referred(
 
 async def _is_first_delivered_purchase(session: AsyncSession, order: Order) -> bool:
     note = (order.note or "").strip()
-    if note.startswith("renew:") or note.startswith("reseller_app:"):
+    if note.startswith(("renew:", "reseller_app:", "res_cap:")):
         return False
     prior = (
         await session.execute(
@@ -843,7 +843,7 @@ async def _is_first_delivered_purchase(session: AsyncSession, order: Order) -> b
 async def on_order_delivered(session: AsyncSession, order: Order) -> None:
     """Award purchase / referral points after successful delivery. Idempotent."""
     note = (order.note or "").strip()
-    if note.startswith("reseller_app:"):
+    if note.startswith(("reseller_app:", "res_cap:")):
         return
     # Prefer already-loaded relationships; never trigger async lazy-load (xd2s).
     user = order.__dict__.get("user")
