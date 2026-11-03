@@ -947,6 +947,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 return _redirect_reseller_edit(user_id, err=str(e))
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
         await session.commit()
+        from app.services.reseller_bots import sync_reseller_bot_runtime
+
+        await sync_reseller_bot_runtime(profile)
         _resync_menu_if_miniapp_changed(profile, miniapp_before)
         return _redirect_reseller_edit(user_id, ok='ذخیره شد')
 
@@ -1171,6 +1174,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             profile.is_active = False
             user.role = Role.ADMIN.value
             await session.commit()
+            from app.services.reseller_bots import sync_reseller_bot_runtime
+
+            await sync_reseller_bot_runtime(profile)
             await notify_account_edit(
                 session,
                 user=user,
@@ -1192,6 +1198,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         profile.is_active = True
         user.role = Role.RESELLER.value
         await session.commit()
+        from app.services.reseller_bots import sync_reseller_bot_runtime
+
+        await sync_reseller_bot_runtime(profile)
         await notify_account_edit(
             session,
             user=user,
