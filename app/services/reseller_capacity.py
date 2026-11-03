@@ -278,8 +278,11 @@ async def ensure_base_gb_before_extra(session: AsyncSession, purchase: ExtraPurc
     if live_gb > 0:
         sub.base_gb = max(0, live_gb - extra)
         return
-    if sub.plan_id:
-        plan = await session.get(ResellerPlan, int(sub.plan_id))
+    from app.services.pg_admin_subscription import resolve_subscription_plan_id
+
+    plan_id = await resolve_subscription_plan_id(session, sub)
+    if plan_id:
+        plan = await session.get(ResellerPlan, int(plan_id))
         included = int(getattr(plan, "included_gb", 0) or 0) if plan else 0
         if included > 0:
             sub.base_gb = included
