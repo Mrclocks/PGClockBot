@@ -147,6 +147,10 @@ def _total_gb(sub: PgAdminSubscription | None) -> int:
     return int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0) if sub is not None else 0
 
 
+def _total_users(sub: PgAdminSubscription | None) -> int:
+    return int(sub.base_users or 0) + int(sub.extra_users_purchased or 0) if sub is not None else 0
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -323,6 +327,8 @@ async def assert_new_admin_fits_owner_budget(session: AsyncSession, plan: Resell
         target_pg_username=pg_username,
         next_total_gb=max(0, int(getattr(plan, "included_gb", 0) or 0)),
         next_total_users=max(0, int(getattr(plan, "included_users", 0) or 0)),
+        previous_total_gb=0,
+        previous_total_users=0,
     )
 
 
@@ -332,8 +338,18 @@ async def _assert_owner_capacity_budget(
     target_pg_username: str,
     next_total_gb: int,
     next_total_users: int,
+    previous_total_gb: int,
+    previous_total_users: int,
 ) -> None:
-    """Do not oversell child-admin capacity beyond the installer's live PG budget."""
+    """Do not oversell child-admin capacity beyond the installer's live PG budget.
+
+    ``previous_total_*`` must be the caller's pre-change totals (before any flush). Growth
+    detection must not re-read the row after ``record_unit_extra`` has already written the
+    new extras — that would treat growth as "same capacity" and skip the fail-closed path.
+
+    If the owner admin cannot be read: refuse only when this call **grows** capacity.
+    Same-or-smaller totals (typical renew) still proceed.
+    """
     from app.config import get_settings
     from app.services.pg_quota import _as_int, merge_role_limits
 
@@ -343,9 +359,25 @@ async def _assert_owner_capacity_budget(
 
     from app.services.pasarguard import get_pg
 
+    growing = int(next_total_gb) > int(previous_total_gb) or int(next_total_users) > int(
+        previous_total_users
+    )
+
     pg = get_pg()
-    admin = await pg.get_admin(owner_username)
+    try:
+        admin = await pg.get_admin(owner_username)
+    except Exception as exc:
+        logger.warning(
+            "owner capacity budget: install admin unreadable (%s)", owner_username, exc_info=True,
+        )
+        if growing:
+            raise ValueError(
+                "سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید"
+            ) from exc
+        return
     if not isinstance(admin, dict) or not admin:
+        if growing:
+            raise ValueError("سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید")
         return
     role = admin.get("role") if isinstance(admin.get("role"), dict) else None
     limits = merge_role_limits(admin, role)
@@ -366,9 +398,9 @@ async def _assert_owner_capacity_budget(
             )
         ).scalars().all()
     )
+    target = normalize_pg_username(target_pg_username)
     sold_gb = 0
     sold_users = 0
-    target = normalize_pg_username(target_pg_username)
     if target not in {normalize_pg_username(getattr(row, "pg_username", None)) for row in rows}:
         # An admin about to be created has no subscription row yet; it still sells its capacity.
         sold_gb += max(0, int(next_total_gb))
@@ -453,6 +485,7 @@ async def start_or_refresh_subscription(
     if str(getattr(plan, "billing_mode", "") or "").lower() == "payg" and not preserve:
         sub = await get_or_create_subscription(session, pg_username)
         previous_gb = _total_gb(sub)
+        previous_users = _total_users(sub)
         sub.plan_id = int(plan.id)
         sub.access_status = STATUS_ACTIVE
         sub.expires_at = None
@@ -471,6 +504,7 @@ async def start_or_refresh_subscription(
     base_gb, base_users = await _resolve_base()
     sub = await get_or_create_subscription(session, pg_username)
     previous_gb = _total_gb(sub)
+    previous_users = _total_users(sub)
     now = _utcnow()
     days = max(0, int(getattr(plan, "duration_days", 0) or 0))
     sub.plan_id = int(plan.id)
@@ -497,6 +531,8 @@ async def start_or_refresh_subscription(
             target_pg_username=sub.pg_username,
             next_total_gb=int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0),
             next_total_users=int(sub.base_users or 0) + int(sub.extra_users_purchased or 0),
+            previous_total_gb=previous_gb,
+            previous_total_users=previous_users,
         )
     # current_capacity: SoT mirrors live PG — sync only when extras need push,
     # never when totals are zero (would clear unlimited / unread limits).
@@ -764,6 +800,9 @@ def _extend_period(sub: PgAdminSubscription, plan: ResellerPlan, now: datetime) 
     if days > 0:
         anchor = _as_aware(sub.expires_at) or now
         sub.expires_at = max(anchor, now) + timedelta(days=days)
+    else:
+        # Moving to an untimed package must not keep a stale clock that the expiry tick can cut.
+        sub.expires_at = None
     sub.plan_id = int(plan.id)
     # current_capacity keeps the snapshot of the admin's live limits; its zero included_* never overwrite it.
     if not is_current_capacity_plan(plan):
@@ -938,6 +977,7 @@ async def record_unit_extra(
         return None
     sub = await get_or_create_subscription(session, uname)
     previous_gb = _total_gb(sub)
+    previous_users = _total_users(sub)
     if gb:
         sub.extra_gb_purchased = int(sub.extra_gb_purchased or 0) + max(0, int(gb))
     if users:
@@ -949,6 +989,8 @@ async def record_unit_extra(
         target_pg_username=sub.pg_username,
         next_total_gb=int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0),
         next_total_users=int(sub.base_users or 0) + int(sub.extra_users_purchased or 0),
+        previous_total_gb=previous_gb,
+        previous_total_users=previous_users,
     )
     return sub
 
@@ -1153,6 +1195,7 @@ async def admin_adjust_reseller_subscription(
             sub.expires_at = cur_exp + timedelta(days=days_n)
 
     previous_gb = _total_gb(sub)
+    previous_users = _total_users(sub)
     if gb_n != 0:
         base = max(0, int(sub.base_gb or 0))
         extra = max(0, int(sub.extra_gb_purchased or 0))
@@ -1173,6 +1216,8 @@ async def admin_adjust_reseller_subscription(
         target_pg_username=sub.pg_username,
         next_total_gb=int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0),
         next_total_users=int(sub.base_users or 0) + int(sub.extra_users_purchased or 0),
+        previous_total_gb=previous_gb,
+        previous_total_users=previous_users,
     )
     try:
         await sync_pg_capacity_from_sub(session, sub)
