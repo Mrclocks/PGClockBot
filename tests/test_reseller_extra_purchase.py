@@ -54,33 +54,45 @@ class ExtraPurchaseTests(unittest.IsolatedAsyncioTestCase):
             p.stop()
         await self.engine.dispose()
 
-    async def buy(self, kind: str, amount: int) -> dict:
+    async def buy(self, kind: str, amount: int, *, generation: int | None = None) -> dict:
         async with self.Session() as session:
             user = await session.get(BotUser, 3)
             profile = await session.get(ResellerProfile, 1)
             plan = await session.get(ResellerPlan, 1)
+            sub = await session.scalar(select(PgAdminSubscription))
+            gen = int(sub.renew_generation or 0) if generation is None else int(generation)
             if kind == "gb":
-                return await buy_extra_gb(session, user=user, profile=profile, plan=plan, gb=amount)
-            return await buy_extra_users(session, user=user, profile=profile, plan=plan, count=amount)
+                return await buy_extra_gb(
+                    session, user=user, profile=profile, plan=plan, gb=amount, generation=gen,
+                )
+            return await buy_extra_users(
+                session, user=user, profile=profile, plan=plan, count=amount, generation=gen,
+            )
 
-    async def state(self) -> tuple[int, int, int, int]:
+    async def state(self) -> tuple[int, int, int, int, int]:
         async with self.Session() as session:
             wallet = int((await session.get(BotUser, 3)).wallet_balance)
             sub = await session.scalar(select(PgAdminSubscription))
             rows = len(list(await session.scalars(select(WalletTransaction))))
-            return wallet, int(sub.extra_gb_purchased or 0), int(sub.extra_users_purchased or 0), rows
+            return (
+                wallet,
+                int(sub.extra_gb_purchased or 0),
+                int(sub.extra_users_purchased or 0),
+                rows,
+                int(sub.renew_generation or 0),
+            )
 
     async def test_success_charges_and_records_once(self) -> None:
         result = await self.buy("gb", 5)
         self.assertEqual(result["data_limit"], 105 * GB)
-        self.assertEqual(await self.state(), (95_000, 5, 0, 1))
+        self.assertEqual(await self.state(), (95_000, 5, 0, 1, 1))
 
     async def test_panel_refusal_refunds_and_forgets_the_extra(self) -> None:
         self.pg.modify_admin = AsyncMock(side_effect=PasarGuardError("bad", 422))
         with self.assertRaises(ValueError) as caught:
             await self.buy("users", 5)
         self.assertEqual(str(caught.exception), EXTRA_FAILED_REFUNDED)
-        self.assertEqual(await self.state(), (100_000, 0, 0, 2))
+        self.assertEqual(await self.state(), (100_000, 0, 0, 2, 1))
 
     async def test_unreadable_admin_refunds_before_any_write(self) -> None:
         self.pg.get_admin = AsyncMock(side_effect=httpx.ConnectTimeout("down"))
@@ -95,7 +107,7 @@ class ExtraPurchaseTests(unittest.IsolatedAsyncioTestCase):
                 self.pg.modify_admin = AsyncMock(side_effect=error)
                 before = await self.state()
                 with self.assertRaises(ValueError) as caught:
-                    await self.buy("gb", 1)
+                    await self.buy("gb", 1, generation=before[4])
                 self.assertEqual(str(caught.exception), EXTRA_OUTCOME_UNKNOWN)
                 after = await self.state()
                 self.assertEqual((after[0], after[1]), (before[0] - 1_000, before[1] + 1), "no blind refund")
@@ -105,7 +117,38 @@ class ExtraPurchaseTests(unittest.IsolatedAsyncioTestCase):
         await self.buy("gb", 50)
         with self.assertRaises(ValueError):
             await self.buy("gb", 1)
-        self.assertEqual(await self.state(), (0, 100, 0, 2))
+        self.assertEqual((await self.state())[:4], (0, 100, 0, 2))
+
+    async def test_expired_subscription_cannot_buy_unit_extras(self) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        from app.services.reseller_shop_gates import SUB_EXPIRED
+
+        async with self.Session() as session:
+            sub = await session.scalar(select(PgAdminSubscription))
+            sub.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+            await session.commit()
+        with self.assertRaises(ValueError) as caught:
+            await self.buy("gb", 1)
+        self.assertEqual(str(caught.exception), SUB_EXPIRED)
+        self.assertEqual((await self.state())[:3], (100_000, 0, 0))
+
+    async def test_inactive_shop_cannot_buy_unit_extras(self) -> None:
+        from app.services.reseller_shop_gates import SHOP_INACTIVE
+
+        async with self.Session() as session:
+            (await session.get(ResellerProfile, 1)).is_active = False
+            await session.commit()
+        with self.assertRaises(ValueError) as caught:
+            await self.buy("gb", 1)
+        self.assertEqual(str(caught.exception), SHOP_INACTIVE)
+        self.assertEqual((await self.state())[:3], (100_000, 0, 0))
+
+    async def test_stale_generation_buys_once(self) -> None:
+        await self.buy("gb", 1, generation=0)
+        with self.assertRaises(ValueError):
+            await self.buy("gb", 1, generation=0)
+        self.assertEqual((await self.state())[:3], (99_000, 1, 0))
 
 
 if __name__ == "__main__":

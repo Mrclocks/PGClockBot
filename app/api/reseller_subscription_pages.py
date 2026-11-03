@@ -43,7 +43,12 @@ def _back(*, ok: str = "", err: str = "") -> RedirectResponse:
 
 
 async def _owner_context(session: AsyncSession, staff: dict) -> tuple[BotUser, ResellerProfile]:
-    """The shop owner's account and profile; staff sessions and other roles get a 403."""
+    """The shop owner's profile; staff sessions and other roles get a 403.
+
+    Do not require ``profile.is_active`` here: the expiry tick flips that flag off, and the
+    owner must still open this page to renew. Soft-deactivate while the clock is open is
+    enforced in ``renew_package`` / capacity services.
+    """
     if staff.get("role") != "reseller" or not staff.get("bot_user_id"):
         raise HTTPException(403, "این بخش فقط برای مالک فروشگاه است")
     owner_id = int(staff["bot_user_id"])
@@ -57,6 +62,12 @@ async def _owner_context(session: AsyncSession, staff: dict) -> tuple[BotUser, R
 def _valid_id(value: int) -> int:
     if not 0 < int(value) <= _ID_MAX:
         raise ValueError("بسته نامعتبر است")
+    return int(value)
+
+
+def _valid_generation(value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0 or value > _ID_MAX:
+        raise ValueError("صفحه قدیمی است؛ دوباره باز کنید")
     return int(value)
 
 
@@ -100,7 +111,8 @@ def register_reseller_subscription_pages(app, *, render, require_staff, get_db) 
         owner, profile = await _owner_context(session, staff)
         try:
             result = await renew_package(
-                session, owner=owner, profile=profile, plan_id=_valid_id(plan_id), generation=int(generation),
+                session, owner=owner, profile=profile, plan_id=_valid_id(plan_id),
+                generation=_valid_generation(int(generation)),
             )
         except ValueError as exc:
             await rollback_quiet(session)
@@ -113,6 +125,7 @@ def register_reseller_subscription_pages(app, *, render, require_staff, get_db) 
     async def my_subscription_extra(
         kind: str = Form(...),
         amount: int = Form(...),
+        generation: int = Form(...),
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
@@ -121,10 +134,15 @@ def register_reseller_subscription_pages(app, *, render, require_staff, get_db) 
         if kind not in {"gb", "users"} or current is None:
             return _back(err="درخواست نامعتبر است")
         try:
+            gen = _valid_generation(int(generation))
             if kind == "gb":
-                await buy_extra_gb(session, user=owner, profile=profile, plan=current, gb=int(amount))
+                await buy_extra_gb(
+                    session, user=owner, profile=profile, plan=current, gb=int(amount), generation=gen,
+                )
             else:
-                await buy_extra_users(session, user=owner, profile=profile, plan=current, count=int(amount))
+                await buy_extra_users(
+                    session, user=owner, profile=profile, plan=current, count=int(amount), generation=gen,
+                )
         except ValueError as exc:
             await rollback_quiet(session)
             return _back(err=user_safe_error(exc, fallback="خرید ناموفق بود"))
