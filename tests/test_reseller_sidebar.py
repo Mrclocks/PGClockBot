@@ -41,6 +41,12 @@ class ResellerSidebarTests(unittest.TestCase):
         self.assertNotIn("اشتراک من", nav["bot"] + nav["web"])
         self.assertIn("نمایندگان", nav["bot"])
 
+    def test_settings_is_the_last_bot_item(self) -> None:
+        owner = sidebar(staff={"role": "admin", "permissions": []}, identity={"kind": "owner"}, is_owner=True)
+        self.assertEqual(owner["bot"][-2:], ["وضعیت اتصال", "تنظیمات"])
+        shop = sidebar(staff=RESELLER, identity={"kind": "reseller"})
+        self.assertEqual(shop["bot"][-1], "تنظیمات")
+
 
 if __name__ == "__main__":
     unittest.main()
