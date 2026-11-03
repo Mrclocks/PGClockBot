@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -1117,6 +1117,44 @@ async def provision_reseller(
     # One username + password for Pasarguard admin AND bot web panel (when both created).
     from app.services.secret_box import encrypt_secret
 
+    existing = await get_reseller_profile(session, int(user.id))
+    already_provisioned = bool(
+        existing
+        and existing.is_active
+        and (
+            (do_pg and (existing.pg_admin_username or "").strip())
+            or (not do_pg and setup_is_complete(existing))
+        )
+    )
+    if already_provisioned:
+        # Retry / double submit: never create another PG admin for the same shop owner.
+        pg_username = (existing.pg_admin_username or "").strip() or None
+        if plan is not None and pg_username and is_subscription_plan(plan):
+            from app.services.pg_admin_subscription import get_subscription
+
+            # Only finish a missing period; do not refresh/reset an already-running one.
+            if await get_subscription(session, pg_username) is None:
+                await _start_new_subscription(session, plan, existing, pg_username)
+        base = (panel_base_url or "").rstrip("/") or await get_reseller_panel_base_url(session)
+        pg_panel = await get_reseller_pg_panel_base_url(session) if share_pg else ""
+        return {
+            "profile": existing,
+            "pg_username": pg_username,
+            "pg_password": None,
+            "pg_panel_url": pg_panel,
+            "share_pg_panel_url": share_pg,
+            "web_username": existing.web_username,
+            "web_password": None,
+            "panel_username": existing.web_username or pg_username,
+            "panel_password": None,
+            "unified_credentials": bool(do_pg and do_web and existing.web_username and pg_username),
+            "panel_url": base,
+            "permissions": existing.web_permissions or perms,
+            "plan_name": (plan.name if plan else None) or None,
+            "billing_mode": plan_billing,
+            "already_provisioned": True,
+        }
+
     shared_username = None
     shared_password = None
     if do_pg or do_web:
@@ -2062,6 +2100,87 @@ def bot_needs_setup(profile: ResellerProfile | None) -> bool:
     return not bool((profile.bot_token or "").strip())
 
 
+APP_IN_PROGRESS = "این درخواست در حال آماده‌سازی است — چند لحظه دیگر دوباره تلاش کنید"
+APP_ALREADY_DONE = "این درخواست قبلاً تأیید شده است"
+APP_NOT_APPROVABLE = "این درخواست قابل تأیید نیست"
+
+
+async def _claim_application_for_approve(
+    session: AsyncSession,
+    app_id: int,
+    *,
+    reviewer_tg: int | None,
+) -> ResellerApplication:
+    """Atomically move an open application into ``provisioning`` before any panel call.
+
+    A second concurrent approve sees ``provisioning`` / ``approved`` and does not create
+    another PasarGuard admin. A stuck ``provisioning`` row with no shop profile yet may be
+    reclaimed so the operator can finish after a failure.
+    """
+    claimed = await session.execute(
+        update(ResellerApplication)
+        .where(
+            ResellerApplication.id == int(app_id),
+            ResellerApplication.status.in_(
+                (
+                    ResellerApplicationStatus.AWAITING_APPROVAL.value,
+                    ResellerApplicationStatus.PENDING_PAYMENT.value,
+                )
+            ),
+        )
+        .values(
+            status=ResellerApplicationStatus.PROVISIONING.value,
+            reviewed_by=reviewer_tg,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount == 1:
+        await session.commit()
+        app = await session.get(ResellerApplication, int(app_id))
+        if app is None:
+            raise ValueError(APP_NOT_APPROVABLE)
+        return app
+
+    app = await session.get(ResellerApplication, int(app_id))
+    if app is None:
+        raise ValueError(APP_NOT_APPROVABLE)
+    if app.status == ResellerApplicationStatus.APPROVED.value:
+        raise ValueError(APP_ALREADY_DONE)
+    if app.status == ResellerApplicationStatus.PROVISIONING.value:
+        profile = await get_reseller_profile(session, int(app.user_id))
+        if profile is not None and (profile.pg_admin_username or "").strip():
+            raise ValueError(APP_ALREADY_DONE)
+        # Incomplete provision: reclaim so a retry can finish without a second claim race.
+        reclaimed = await session.execute(
+            update(ResellerApplication)
+            .where(
+                ResellerApplication.id == int(app_id),
+                ResellerApplication.status == ResellerApplicationStatus.PROVISIONING.value,
+            )
+            .values(reviewed_by=reviewer_tg)
+            .execution_options(synchronize_session=False)
+        )
+        if reclaimed.rowcount != 1:
+            raise ValueError(APP_IN_PROGRESS)
+        await session.commit()
+        await session.refresh(app)
+        return app
+    raise ValueError(APP_NOT_APPROVABLE)
+
+
+async def _creds_from_existing_profile(
+    session: AsyncSession,
+    *,
+    user: BotUser,
+    plan: ResellerPlan,
+    panel_base_url: str,
+) -> dict:
+    """Build an approve response when the shop was already provisioned (no plaintext secrets)."""
+    return await provision_reseller(
+        session, user=user, plan=plan, panel_base_url=panel_base_url,
+    )
+
+
 async def approve_application(
     session: AsyncSession,
     app: ResellerApplication,
@@ -2070,28 +2189,54 @@ async def approve_application(
     panel_base_url: str = "",
     admin_note: str | None = None,
 ) -> dict:
-    if app.status not in {
-        ResellerApplicationStatus.AWAITING_APPROVAL.value,
-        ResellerApplicationStatus.PENDING_PAYMENT.value,
-    }:
-        raise ValueError("این درخواست قابل تأیید نیست")
+    """Approve a reseller application once: claim → provision → mark approved."""
     user = await session.get(BotUser, app.user_id)
     plan = await session.get(ResellerPlan, app.plan_id)
     if not user or not plan:
         raise ValueError("کاربر یا پلن یافت نشد")
-    if app.status == ResellerApplicationStatus.PENDING_PAYMENT.value and plan.price > 0:
+    if (
+        app.status == ResellerApplicationStatus.PENDING_PAYMENT.value
+        and int(plan.price or 0) > 0
+    ):
         raise ValueError("هنوز پرداخت این درخواست تکمیل نشده")
 
-    creds = await provision_reseller(
-        session,
-        user=user,
-        plan=plan,
-        panel_base_url=panel_base_url,
-    )
-    app.status = ResellerApplicationStatus.APPROVED.value
-    app.reviewed_by = reviewer_tg
+    app_id = int(app.id)
+    try:
+        await _claim_application_for_approve(session, app_id, reviewer_tg=reviewer_tg)
+    except ValueError as exc:
+        if str(exc) != APP_ALREADY_DONE:
+            raise
+        fresh = await session.get(ResellerApplication, app_id)
+        if fresh is not None and fresh.status != ResellerApplicationStatus.APPROVED.value:
+            fresh.status = ResellerApplicationStatus.APPROVED.value
+            fresh.reviewed_by = reviewer_tg
+            if admin_note:
+                fresh.admin_note = admin_note
+            await session.commit()
+        return await _creds_from_existing_profile(
+            session, user=user, plan=plan, panel_base_url=panel_base_url,
+        )
+
+    try:
+        creds = await provision_reseller(
+            session,
+            user=user,
+            plan=plan,
+            panel_base_url=panel_base_url,
+        )
+    except Exception:
+        # Leave ``provisioning`` for retry when the panel outcome is unknown; reclaim
+        # only when no shop profile was written (see ``_claim_application_for_approve``).
+        logger.exception("approve_application provision failed app_id=%s", app_id)
+        raise
+
+    fresh = await session.get(ResellerApplication, app_id)
+    if fresh is None:
+        raise ValueError(APP_NOT_APPROVABLE)
+    fresh.status = ResellerApplicationStatus.APPROVED.value
+    fresh.reviewed_by = reviewer_tg
     if admin_note:
-        app.admin_note = admin_note
+        fresh.admin_note = admin_note
     await session.commit()
     return creds
 
