@@ -14,6 +14,7 @@ from app.db.models import BotUser, PgAdminSubscription, ResellerPlan, ResellerPr
 from app.services.billing import GB, is_payg
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_toman
+from app.services.reseller_shop_gates import assert_shop_active, assert_subscription_open
 from app.services.volume_allocation_cascade import assert_child_growth_fits
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 # Whitelist quantities exposed in Telegram buttons — reject forged callback amounts.
 ALLOWED_EXTRA_GB = frozenset({1, 5, 10, 50})
 ALLOWED_EXTRA_USERS = frozenset({1, 5, 10, 20})
+GENERATION_REQUIRED = "این صفحه قدیمی است؛ صفحه را دوباره باز کنید و خرید را تکرار کنید"
 
 
 def plan_allows_buy_extra(plan: ResellerPlan | None) -> bool:
@@ -330,7 +332,11 @@ UNIT_TEXTS = {
 
 
 def unit_offer(profile: ResellerProfile, plan: ResellerPlan | None, kind: str, amount: object) -> CapacityOffer:
-    """Validate a quick-buy of ``amount`` GB or users; raises ``ValueError`` with a message that is safe to show."""
+    """Validate a quick-buy of ``amount`` GB or users; raises ``ValueError`` with a message that is safe to show.
+
+    Does not check subscription clock or shop activity — callers that take money must
+    ``assert_shop_active`` and ``assert_subscription_open`` (wallet extras and capacity orders).
+    """
     if kind not in UNIT_TEXTS:
         raise ValueError("نوع خرید نامعتبر است")
     noun, allowed, price_of, reason = UNIT_TEXTS[kind]
@@ -354,6 +360,13 @@ def unit_offer(profile: ResellerProfile, plan: ResellerPlan | None, kind: str, a
     )
 
 
+def _require_generation(generation: object) -> int:
+    """Wallet extras always claim a generation so a double tap cannot charge twice."""
+    if isinstance(generation, bool) or not isinstance(generation, int) or generation < 0:
+        raise ValueError(GENERATION_REQUIRED)
+    return int(generation)
+
+
 async def buy_offer(
     session: AsyncSession, *, user: BotUser, offer: CapacityOffer, generation: int | None = None,
 ) -> int:
@@ -370,10 +383,15 @@ async def buy_extra_gb(
     profile: ResellerProfile,
     plan: ResellerPlan,
     gb: int,
-    generation: int | None = None,
+    generation: int,
 ) -> dict[str, Any]:
+    """Buy unit GB from the shop wallet; ``generation`` is required (bot, web, Mini App)."""
+    assert_shop_active(profile)
     offer = unit_offer(profile, plan, "gb", gb)
-    new_limit = await buy_offer(session, user=user, offer=offer, generation=generation)
+    await assert_subscription_open(session, offer.uname)
+    new_limit = await buy_offer(
+        session, user=user, offer=offer, generation=_require_generation(generation),
+    )
     return {"gb": offer.gb, "amount": offer.price, "data_limit": new_limit}
 
 
@@ -384,10 +402,15 @@ async def buy_extra_users(
     profile: ResellerProfile,
     plan: ResellerPlan,
     count: int,
-    generation: int | None = None,
+    generation: int,
 ) -> dict[str, Any]:
+    """Buy unit user slots from the shop wallet; ``generation`` is required (bot, web, Mini App)."""
+    assert_shop_active(profile)
     offer = unit_offer(profile, plan, "users", count)
-    new_max = await buy_offer(session, user=user, offer=offer, generation=generation)
+    await assert_subscription_open(session, offer.uname)
+    new_max = await buy_offer(
+        session, user=user, offer=offer, generation=_require_generation(generation),
+    )
     return {"users": offer.users, "amount": offer.price, "max_users": new_max}
 
 

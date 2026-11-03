@@ -140,12 +140,38 @@ class MySubscriptionPageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.wallet(), 1_000_000)
 
     async def test_extras_use_the_allowed_amounts(self) -> None:
-        self.assertIn("ok", await self.post("/extra", kind="gb", amount=5))
+        self.assertIn("ok", await self.post("/extra", kind="gb", amount=5, generation=2))
         self.assertEqual(await self.wallet(), 995_000)
-        for data in ({"kind": "gb", "amount": 7}, {"kind": "users", "amount": 3}, {"kind": "root", "amount": 5}):
+        gen = int((await self.sub()).renew_generation or 0)
+        for data in (
+            {"kind": "gb", "amount": 7, "generation": gen},
+            {"kind": "users", "amount": 3, "generation": gen},
+            {"kind": "root", "amount": 5, "generation": gen},
+        ):
             with self.subTest(data=data):
                 self.assertIn("err", await self.post("/extra", **data))
         self.assertEqual(await self.wallet(), 995_000)
+
+    async def test_extras_require_generation_and_buy_once(self) -> None:
+        from app.services.reseller_capacity import STALE_PURCHASE
+
+        missing = await self.client.post("/my-subscription/extra", data={"kind": "gb", "amount": "5"})
+        self.assertEqual(missing.status_code, 422)
+        self.assertIn("ok", await self.post("/extra", kind="gb", amount=5, generation=2))
+        again = await self.post("/extra", kind="gb", amount=5, generation=2)
+        self.assertEqual(again["err"], [STALE_PURCHASE])
+        self.assertEqual(await self.wallet(), 995_000)
+
+    async def test_inactive_owner_is_forbidden(self) -> None:
+        async with self.Session() as session:
+            (await session.get(ResellerProfile, 1)).is_active = False
+            await session.commit()
+        self.assertEqual((await self.client.get("/my-subscription")).status_code, 403)
+        self.assertEqual(
+            (await self.client.post("/my-subscription/extra", data={"kind": "gb", "amount": "5", "generation": "2"})).status_code,
+            403,
+        )
+        self.assertEqual(await self.wallet(), 1_000_000)
 
 
 if __name__ == "__main__":

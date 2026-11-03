@@ -439,7 +439,7 @@ class PathGateTests(VolumeHarness):
                 ),
             ):
                 await buy_extra_gb(
-                    session, user=user, profile=profile, plan=plan, gb=1
+                    session, user=user, profile=profile, plan=plan, gb=1, generation=0,
                 )
             pg.modify_admin.assert_awaited()
 

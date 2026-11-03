@@ -60,7 +60,7 @@ class PaygSuspendHelpersTests(unittest.IsolatedAsyncioTestCase):
         user = MagicMock(id=1, wallet_balance=1_000_000)
         with self.assertRaises(ValueError):
             await buy_extra_gb(
-                AsyncMock(), user=user, profile=profile, plan=plan, gb=999_999
+                AsyncMock(), user=user, profile=profile, plan=plan, gb=999_999, generation=0,
             )
 
 

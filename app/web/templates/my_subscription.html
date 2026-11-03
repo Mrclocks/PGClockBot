@@ -100,6 +100,7 @@
           data-confirm="حجم اضافه با گیگی {{ extras.gb_price | money }} تومان از کیف پول خریده شود؟" data-confirm-title="خرید حجم اضافه" data-confirm-label="خرید">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="kind" value="gb">
+      <input type="hidden" name="generation" value="{{ ov.generation }}">
       <label class="form-field">
         <span class="form-field-label">حجم اضافه (گیگی <bdi dir="ltr">{{ extras.gb_price | money }}</bdi> تومان)</span>
         <select name="amount">
@@ -114,6 +115,7 @@
           data-confirm="کاربر اضافه با هر نفر {{ extras.user_price | money }} تومان از کیف پول خریده شود؟" data-confirm-title="خرید کاربر اضافه" data-confirm-label="خرید">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="kind" value="users">
+      <input type="hidden" name="generation" value="{{ ov.generation }}">
       <label class="form-field">
         <span class="form-field-label">کاربر اضافه (هر نفر <bdi dir="ltr">{{ extras.user_price | money }}</bdi> تومان)</span>
         <select name="amount">

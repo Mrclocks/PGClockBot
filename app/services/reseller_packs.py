@@ -8,30 +8,50 @@ repeated tap or an old screen buys once.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ResellerPlan, ResellerProfile
 from app.services.billing import is_payg
 from app.services.pg_admin_subscription import (
     PLAN_KIND_ADDON_VOLUME,
-    STATUS_ACTIVE,
-    get_or_create_subscription,
     is_addon_plan,
     is_subscription_plan,
     plan_kind_of,
 )
 from app.services.reseller_capacity import CapacityOffer, buy_offer
+from app.services.reseller_shop_gates import (
+    SHOP_INACTIVE,
+    SUB_EXPIRED,
+    SUB_NEEDS_ACTIVE,
+    assert_shop_active,
+    assert_subscription_open,
+)
 
 NO_PACK = "این بسته پیدا نشد یا برای پلن شما در دسترس نیست"
 PACK_NOT_FOR_PAYG = "خرید بسته برای پلن PAYG فعال نیست"
 PACK_NEEDS_SUBSCRIPTION = "اول یک پلن نمایندگی (اشتراک) بخرید"
-PACK_NEEDS_ACTIVE = "فقط اشتراک فعال می‌تواند بسته اضافه بخرد — ابتدا تمدید کنید"
-PACK_EXPIRED = "اشتراک منقضی است — ابتدا تمدید کنید"
+# Stable aliases for callers/tests that imported the pack-module names.
+PACK_NEEDS_ACTIVE = SUB_NEEDS_ACTIVE
+PACK_EXPIRED = SUB_EXPIRED
 PACK_BAD_AMOUNT = "مقدار بسته نامعتبر است"
 PACK_BAD_PRICE = "قیمت بسته نامعتبر است"
 NO_PANEL_ADMIN = "ادمین پاسارگارد برای این نماینده تنظیم نشده است"
+
+__all__ = (
+    "NO_PACK",
+    "NO_PANEL_ADMIN",
+    "PACK_BAD_AMOUNT",
+    "PACK_BAD_PRICE",
+    "PACK_EXPIRED",
+    "PACK_NEEDS_ACTIVE",
+    "PACK_NEEDS_SUBSCRIPTION",
+    "PACK_NOT_FOR_PAYG",
+    "SHOP_INACTIVE",
+    "assert_subscription_open",
+    "buy_addon_pack",
+    "pack_fits_plan",
+    "pack_offer",
+)
 
 
 def pack_fits_plan(pack: ResellerPlan | None, plan: ResellerPlan | None) -> bool:
@@ -41,11 +61,6 @@ def pack_fits_plan(pack: ResellerPlan | None, plan: ResellerPlan | None) -> bool
     if pack.category_id is None:
         return True
     return plan.category_id is not None and int(pack.category_id) == int(plan.category_id)
-
-
-def _aware(value: datetime | None) -> datetime | None:
-    # SQLite returns naive datetimes for timezone-aware columns; they are stored as UTC.
-    return value if value is None or value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 def _pack_amounts(pack: ResellerPlan) -> tuple[int, int]:
@@ -71,6 +86,7 @@ async def pack_offer(
 
     ``profile`` must be the profile of ``user`` (the caller resolves both from the session).
     """
+    assert_shop_active(profile)
     if profile.user_id != user.id:
         raise ValueError(NO_PACK)
     if is_payg(profile):
@@ -89,16 +105,6 @@ async def pack_offer(
     gb, users = _pack_amounts(pack)
     await assert_subscription_open(session, uname)
     return CapacityOffer(uname=uname, gb=gb, users=users, price=price, reason=f"reseller_addon:{int(pack.id)}:{uname}")
-
-
-async def assert_subscription_open(session: AsyncSession, uname: str) -> None:
-    """Only an active, unexpired subscription can take more capacity."""
-    sub = await get_or_create_subscription(session, uname)
-    if sub.access_status != STATUS_ACTIVE:
-        raise ValueError(PACK_NEEDS_ACTIVE)
-    expires = _aware(sub.expires_at)
-    if expires is not None and expires <= datetime.now(timezone.utc):
-        raise ValueError(PACK_EXPIRED)
 
 
 async def buy_addon_pack(
