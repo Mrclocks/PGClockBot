@@ -388,3 +388,4 @@ tests/test_mini_addon_packs.py
 tests/test_pg_link_watchdog.py
 tests/test_pg_link_alerts.py
 tests/test_pg_link_health_persist.py
+tests/test_pg_stop_missing_user_poll.py

@@ -23,12 +23,12 @@ from app.services.connection_monitor_claims import (
     release_cycle_targets,
     release_monitor_cycle,
 )
-from app.services.connection_monitor_panel import read_monitor_catalog
+from app.services.connection_monitor_panel import mark_monitor_user_missing, read_monitor_catalog
 from app.services.connection_monitor_snapshots import complete_monitor_target, invalidate_monitor_evidence
 from app.services.connection_monitor_sync import load_cycle_inputs, reconcile_monitor_plans
 from app.services.connection_monitor_types import MonitorConfigError, MonitorConfigPlan
 from app.services.connection_probe import probe_client, probe_control, probe_proxy
-from app.services.connection_status_types import ConnectionStatus, ObservationKind, ProbeObservation
+from app.services.connection_status_types import ConnectionStatus, MonitorReason, ObservationKind, ProbeObservation
 from app.services.pasarguard import PasarGuardError
 from app.services.xray_probe import XrayBatch, run_xray_batch
 from app.services.xray_probe_process import finish_cleanup
@@ -40,6 +40,7 @@ WORK_SECONDS = 45
 PROXY_CONCURRENCY = 4
 LEASE_CLEANUP_SECONDS = 1
 PANEL_ACCOUNT_CODES = frozenset({"panel_timeout", "panel_unavailable", "panel_denied"})
+MISSING_USER_CODES = frozenset({"user_missing", "not_found"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +154,21 @@ async def run_monitor_cycle(sessions: async_sessionmaker[AsyncSession], binary: 
         await _record_issue(sessions, cycle, status=ConnectionStatus.NOT_READY, reason="core_unavailable")
         return MonitorCycleResult(True, reason="core_unavailable")
     except MonitorAccountError as exc:
+        if exc.code in MISSING_USER_CODES:
+            try:
+                async with sessions() as session:
+                    await mark_monitor_user_missing(
+                        session, state_id=cycle.state_id, now=datetime.now(timezone.utc),
+                    )
+            except Exception:
+                logger.warning(
+                    "Monitoring could not disable missing panel user state=%s",
+                    cycle.state_id,
+                    exc_info=True,
+                )
+            reason = MonitorReason.USER_MISSING.value
+            await _record_issue(sessions, cycle, status=ConnectionStatus.PAUSED, reason=reason)
+            return MonitorCycleResult(True, reason=reason)
         if exc.code in PANEL_ACCOUNT_CODES:
             status, reason = ConnectionStatus.UNKNOWN, "catalog_unavailable"
         else:
