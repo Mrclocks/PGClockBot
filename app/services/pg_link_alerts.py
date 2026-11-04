@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -130,85 +130,104 @@ async def _ensure_setting_row(session: AsyncSession, key: str, default: str = "0
     clear_settings_cache(0)
 
 
+async def _begin_claim_transaction(session: AsyncSession, keys: tuple[str, ...]) -> None:
+    """Serialize claim writers: SQLite BEGIN IMMEDIATE; Postgres row locks."""
+    if session.in_transaction():
+        await session.rollback()
+    conn = await session.connection()
+    if conn.dialect.name == "sqlite":
+        await conn.execute(text("BEGIN IMMEDIATE"))
+        return
+    await session.execute(
+        select(Setting.id).where(Setting.key.in_(keys)).with_for_update()
+    )
+
+
+async def _setting_value(session: AsyncSession, key: str) -> str:
+    return str(await session.scalar(select(Setting.value).where(Setting.key == key)) or "")
+
+
 async def _claim_down(session: AsyncSession, *, now: datetime) -> bool:
     """Atomically claim the down notification. True when a down message may be sent.
 
-    Concurrent pause-alert + watchdog callers race on ``DOWN_NOTIFIED_KEY``:
-    ``UPDATE ... WHERE value != '1'`` so only one rowcount wins.
+    One exclusive transaction owns the outage/notified transition so the circuit
+    pause-alert task and the watchdog cannot both send «قطع».
     """
-    await _ensure_setting_row(session, OUTAGE_ACTIVE_KEY, "0")
-    await _ensure_setting_row(session, DOWN_NOTIFIED_KEY, "0")
-    await _ensure_setting_row(session, LAST_DOWN_SENT_KEY, "")
-
-    # Mark outage active (idempotent); reset notified when entering a fresh outage.
-    was_outage = _truthy(await get_setting(session, OUTAGE_ACTIVE_KEY, "0"))
-    await session.execute(
-        update(Setting).where(Setting.key == OUTAGE_ACTIVE_KEY).values(value="1")
-    )
-    if not was_outage:
+    keys = (OUTAGE_ACTIVE_KEY, DOWN_NOTIFIED_KEY, LAST_DOWN_SENT_KEY)
+    for key in keys:
+        await _ensure_setting_row(session, key, "0" if key != LAST_DOWN_SENT_KEY else "")
+    await _begin_claim_transaction(session, keys)
+    try:
+        was_outage = _truthy(await _setting_value(session, OUTAGE_ACTIVE_KEY))
         await session.execute(
-            update(Setting).where(Setting.key == DOWN_NOTIFIED_KEY).values(value="0")
+            update(Setting).where(Setting.key == OUTAGE_ACTIVE_KEY).values(value="1")
         )
-    await session.commit()
-    clear_settings_cache(0)
+        if not was_outage:
+            await session.execute(
+                update(Setting).where(Setting.key == DOWN_NOTIFIED_KEY).values(value="0")
+            )
 
-    last = _parse_iso(await get_setting(session, LAST_DOWN_SENT_KEY, ""))
-    if last is not None and (now - last).total_seconds() < THROTTLE_SEC:
-        # Outage is marked; stay silent while the throttle window holds.
-        return False
+        last = _parse_iso(await _setting_value(session, LAST_DOWN_SENT_KEY))
+        if last is not None and (now - last).total_seconds() < THROTTLE_SEC:
+            await session.commit()
+            clear_settings_cache(0)
+            return False
 
-    claimed = await session.execute(
-        update(Setting)
-        .where(Setting.key == DOWN_NOTIFIED_KEY, Setting.value != "1")
-        .values(value="1")
-        .execution_options(synchronize_session=False)
-    )
-    if claimed.rowcount != 1:
+        claimed = await session.execute(
+            update(Setting)
+            .where(Setting.key == DOWN_NOTIFIED_KEY, Setting.value != "1")
+            .values(value="1")
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount != 1:
+            await session.commit()
+            clear_settings_cache(0)
+            return False
+        await session.execute(
+            update(Setting).where(Setting.key == LAST_DOWN_SENT_KEY).values(value=_iso(now))
+        )
         await session.commit()
         clear_settings_cache(0)
-        return False
-    await session.execute(
-        update(Setting).where(Setting.key == LAST_DOWN_SENT_KEY).values(value=_iso(now))
-    )
-    await session.commit()
-    clear_settings_cache(0)
-    return True
+        return True
+    except Exception:
+        await session.rollback()
+        raise
 
 
 async def _claim_up(session: AsyncSession, *, now: datetime) -> bool:
-    """Atomically clear outage; True when a recovery message must be sent once.
-
-    ``UPDATE OUTAGE_ACTIVE '1'→'0'`` is the single-winner claim so pause-alert
-    and watchdog cannot both emit «برقرار شد».
-    """
-    await _ensure_setting_row(session, OUTAGE_ACTIVE_KEY, "0")
-    await _ensure_setting_row(session, DOWN_NOTIFIED_KEY, "0")
-    await _ensure_setting_row(session, LAST_UP_SENT_KEY, "")
-
-    notified = _truthy(await get_setting(session, DOWN_NOTIFIED_KEY, "0"))
-    cleared = await session.execute(
-        update(Setting)
-        .where(Setting.key == OUTAGE_ACTIVE_KEY, Setting.value == "1")
-        .values(value="0")
-        .execution_options(synchronize_session=False)
-    )
-    if cleared.rowcount != 1:
+    """Atomically clear outage; True when a recovery message must be sent once."""
+    keys = (OUTAGE_ACTIVE_KEY, DOWN_NOTIFIED_KEY, LAST_UP_SENT_KEY)
+    for key in keys:
+        await _ensure_setting_row(session, key, "0" if key != LAST_UP_SENT_KEY else "")
+    await _begin_claim_transaction(session, keys)
+    try:
+        notified = _truthy(await _setting_value(session, DOWN_NOTIFIED_KEY))
+        cleared = await session.execute(
+            update(Setting)
+            .where(Setting.key == OUTAGE_ACTIVE_KEY, Setting.value == "1")
+            .values(value="0")
+            .execution_options(synchronize_session=False)
+        )
+        if cleared.rowcount != 1:
+            await session.commit()
+            clear_settings_cache(0)
+            return False
+        await session.execute(
+            update(Setting).where(Setting.key == DOWN_NOTIFIED_KEY).values(value="0")
+        )
+        if not notified:
+            await session.commit()
+            clear_settings_cache(0)
+            return False
+        await session.execute(
+            update(Setting).where(Setting.key == LAST_UP_SENT_KEY).values(value=_iso(now))
+        )
         await session.commit()
         clear_settings_cache(0)
-        return False
-    await session.execute(
-        update(Setting).where(Setting.key == DOWN_NOTIFIED_KEY).values(value="0")
-    )
-    if not notified:
-        await session.commit()
-        clear_settings_cache(0)
-        return False
-    await session.execute(
-        update(Setting).where(Setting.key == LAST_UP_SENT_KEY).values(value=_iso(now))
-    )
-    await session.commit()
-    clear_settings_cache(0)
-    return True
+        return True
+    except Exception:
+        await session.rollback()
+        raise
 
 
 async def decide_link_alert(
