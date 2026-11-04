@@ -204,6 +204,12 @@ def _pause_reads(state: _PanelState, reason: str, now: float) -> None:
         "PasarGuard web reads paused reason=%s retry_after=%ss recent=%s",
         reason, cooldown, pg_link_health.summary_text(),
     )
+    try:
+        from app.services.pg_link_alerts import schedule_circuit_pause_alert
+
+        schedule_circuit_pause_alert(reason if reason in pg_link_health.KIND_LABELS else None)
+    except Exception:
+        logger.debug("PasarGuard link alert schedule after pause failed", exc_info=True)
 
 
 def _mark_healthy(state: _PanelState) -> None:

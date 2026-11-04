@@ -1132,6 +1132,7 @@ DEFAULT_SETTINGS = {
     ),
     "admin_daily_report_enabled": "1",
     "pg_link_watchdog_enabled": "1",
+    "pg_link_alerts_enabled": "1",
     "admin_daily_report_hour": "0",
     "admin_daily_report_last": "",
     "admin_daily_report_template": "",
@@ -1515,6 +1516,12 @@ SETTING_GROUPS = {
             "پایش خودکار ارتباط با پاسارگارد",
             "toggle",
             "هر دقیقه یک خواندن سبک برای بازیابی ارتباط؛ در صورت قطع مکرر کلاینت HTTP بازسازی می‌شود. پیش‌فرض روشن است.",
+        ),
+        (
+            "pg_link_alerts_enabled",
+            "اعلان قطع و برقراری ارتباط پاسارگارد",
+            "toggle",
+            "به مالک تلگرام اطلاع می‌دهد وقتی لینک قطع یا دوباره برقرار می‌شود. حداکثر یک پیام از هر نوع در ۱۵ دقیقه. پیش‌فرض روشن است.",
         ),
     ],
     "گزارش و عملیات": [

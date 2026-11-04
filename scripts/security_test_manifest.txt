@@ -386,3 +386,4 @@ tests/test_mini_addon_packs.py
 
 # PasarGuard link watchdog job: heal, one rebuild, lock and disable.
 tests/test_pg_link_watchdog.py
+tests/test_pg_link_alerts.py
