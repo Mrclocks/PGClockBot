@@ -2953,7 +2953,7 @@ async def adm_users_services(
         return
     from app.services.staff_cards import format_services_list_header
 
-    lines = [format_services_list_header(user_id), ""]
+    lines = [format_services_list_header(user_id, subject="کاربر"), ""]
     for snap in snaps[:15]:
         lines.append(snapshot_telegram_lines(snap))
         lines.append("")

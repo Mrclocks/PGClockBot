@@ -1256,30 +1256,41 @@ async def detach_local_services_for_pg_user(
     return len(svc_ids)
 
 
+def _snapshot_plan(service: Any) -> Any:
+    """Plan already on the instance — never sync-lazy-load in async (MissingGreenlet)."""
+    data = getattr(service, "__dict__", None)
+    if isinstance(data, dict) and "plan" in data:
+        return data.get("plan")
+    # Non-ORM stubs (e.g. SimpleNamespace) expose plan as a normal attribute.
+    if not hasattr(service, "_sa_instance_state"):
+        return getattr(service, "plan", None)
+    return None
+
+
 def snapshot_telegram_lines(snap: ServiceSnapshot) -> str:
     """Pretty Telegram HTML for one live service snapshot (staff screens)."""
     svc = snap.service
-    # Prefer the eagerly loaded plan; never trigger a sync lazy-load in async.
-    plan = svc.__dict__.get("plan")
-    plan_name = html.escape(plan.name) if plan is not None and plan.name else "—"
-    username = copyable(svc.pg_username) if svc.pg_username else "—"
+    plan = _snapshot_plan(svc)
+    plan_name = html.escape(plan.name) if plan is not None and getattr(plan, "name", None) else "—"
+    username_raw = getattr(svc, "pg_username", None)
+    username = copyable(username_raw) if username_raw else "—"
     rows = [
         kv_line("👤", "نام‌کاربری", username),
         kv_line("📋", "پلن", plan_name),
-        kv_line("📶", "وضعیت", html.escape(snap.status_fa)),
+        kv_line("📶", "وضعیت", html.escape(str(snap.status_fa))),
         kv_line(
             "📦",
             "حجم",
-            f"{html.escape(snap.volume_text)} · مانده {html.escape(snap.remain_gb_text)}",
+            f"{html.escape(str(snap.volume_text))} · مانده {html.escape(str(snap.remain_gb_text))}",
         ),
         kv_line(
             "📅",
             "انقضا",
-            f"{html.escape(snap.expire_text)} · مانده {html.escape(snap.time_label)}",
+            f"{html.escape(str(snap.expire_text))} · مانده {html.escape(str(snap.time_label))}",
         ),
     ]
     if snap.subscription_url:
         rows.append(kv_line("🔗", "لینک", copyable(snap.subscription_url)))
     if snap.error:
-        rows.append(f"⚠️ {html.escape(snap.error)}")
+        rows.append(f"⚠️ {html.escape(str(snap.error))}")
     return format_message(f"📦 سرویس #{svc.id}", info_block(rows))

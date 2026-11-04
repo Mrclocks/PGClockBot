@@ -60,11 +60,15 @@ class BotUserAdminServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("selectinload(UserService.plan)", fn)
         self.assertNotIn("session.get(UserService", fn)
         self.assertIn("snapshot_telegram_lines", src)
-        # Card reads plan.name — must stay compatible with eager-loaded plan
+        # Card reads plan without sync lazy-load (MissingGreenlet after commit).
         lines_fn = src.split("def snapshot_telegram_lines", 1)[1].split(
             "\ndef ", 1
         )[0]
-        self.assertIn("svc.plan", lines_fn)
+        self.assertIn("_snapshot_plan", lines_fn)
+        self.assertIn("_snapshot_plan", src)
+        helper = src.split("def _snapshot_plan", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn('"plan"', helper)
+        self.assertIn("_sa_instance_state", helper)
 
 
 class UserEditUiTests(unittest.TestCase):

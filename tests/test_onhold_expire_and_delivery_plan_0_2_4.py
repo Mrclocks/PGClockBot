@@ -99,9 +99,9 @@ class OnHoldAddonApplyTests(unittest.IsolatedAsyncioTestCase):
         from app.services.formatting import format_expire_short, parse_expire
 
         aware = datetime.now(timezone.utc) + timedelta(days=5)
-        naive = datetime.utcnow() + timedelta(days=5)
+        naive = datetime(2099, 1, 2, 3, 4, 5)  # naive → treated as UTC
         self.assertEqual(parse_expire(aware), aware.astimezone(timezone.utc))
-        self.assertEqual(parse_expire(naive).tzinfo, timezone.utc)
+        self.assertEqual(parse_expire(naive), naive.replace(tzinfo=timezone.utc))
         self.assertIn("روز", format_expire_short(aware))
         self.assertNotEqual(format_expire_short(aware), "—")
 

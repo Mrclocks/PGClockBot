@@ -107,8 +107,9 @@ def format_subscription_owner_card(
     return format_message("🔎 صاحب اشتراک", info_block(rows))
 
 
-def format_services_list_header(user_id: int) -> str:
-    return rtl_text(f"📦 <b>سرویس‌های مشتری #{int(user_id)}</b>")
+def format_services_list_header(user_id: int, *, subject: str = "مشتری") -> str:
+    label = (subject or "مشتری").strip() or "مشتری"
+    return rtl_text(f"📦 <b>سرویس‌های {html.escape(label)} #{int(user_id)}</b>")
 
 
 def format_adjust_prompt(service_id: int, *, days: int, gb: float) -> str:

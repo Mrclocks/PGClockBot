@@ -7,10 +7,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.orm import selectinload
 
 from app.bot.handlers import reseller_customer_services as handler
 from app.db.models import Base, BotUser, Plan, ResellerProfile, Role, UserService
+from app.services import bot_feedback_texts as feedback
 from app.services.bot_user_admin import ServiceSnapshot
 from app.services.staff_cards import format_staff_customer_card
 
@@ -59,10 +62,14 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
         shop = BotUser(id=2, telegram_id=1002, referral_code="shop2", role=Role.RESELLER.value)
         other = BotUser(id=3, telegram_id=1003, referral_code="shop3", role=Role.RESELLER.value)
+        limited = BotUser(id=9, telegram_id=1009, referral_code="lim", role=Role.USER.value)
         customer = BotUser(
             id=4, telegram_id=1004, referral_code="c4", role=Role.USER.value, reseller_id=2, full_name="Sara"
         )
-        self.session.add_all([shop, other, customer])
+        foreign = BotUser(
+            id=5, telegram_id=1005, referral_code="c5", role=Role.USER.value, reseller_id=3, full_name="Other"
+        )
+        self.session.add_all([shop, other, limited, customer, foreign])
         await self.session.flush()
         self.session.add(
             ResellerProfile(
@@ -70,6 +77,15 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
                 is_active=True,
                 web_permissions="dashboard",
                 bot_permissions="dashboard",
+            )
+        )
+        self.session.add(
+            ResellerProfile(
+                user_id=3,
+                is_active=True,
+                # Empty CSV = intentional deny-all (no dashboard injection).
+                web_permissions="",
+                bot_permissions="",
             )
         )
         self.session.add(Plan(id=1, name="Gold", price=100, duration_days=30, data_limit_gb=10))
@@ -96,7 +112,9 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
         )
         await self.session.commit()
         self.shop = shop
+        self.other_shop = other
         self.customer = customer
+        self.foreign = foreign
 
     async def asyncTearDown(self) -> None:
         await self.session.close()
@@ -106,18 +124,15 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
     def _callback(self, data: str) -> MagicMock:
         return MagicMock(data=data, answer=AsyncMock(), message=MagicMock())
 
-    async def test_services_list_is_shop_scoped_and_offers_per_service_buttons(self) -> None:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
+    async def _snap_for(self, service_id: int) -> ServiceSnapshot:
         svc = (
             await self.session.execute(
                 select(UserService)
-                .where(UserService.id == 11)
+                .where(UserService.id == service_id)
                 .options(selectinload(UserService.plan))
             )
         ).scalar_one()
-        snap = ServiceSnapshot(
+        return ServiceSnapshot(
             service=svc,
             pg=None,
             status_fa="فعال",
@@ -129,6 +144,9 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
             expire_text="—",
             subscription_url=None,
         )
+
+    async def test_services_list_is_shop_scoped_and_offers_per_service_buttons(self) -> None:
+        snap = await self._snap_for(11)
         callback = self._callback(f"res:svcs:{self.customer.id}")
         edit = AsyncMock()
         with patch.object(handler, "safe_edit_text", edit), patch(
@@ -163,8 +181,64 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
             )
         edit.assert_not_awaited()
         callback.answer.assert_awaited()
-        alert = callback.answer.await_args
-        self.assertTrue(alert.kwargs.get("show_alert") or True)
+        self.assertTrue(callback.answer.await_args.kwargs.get("show_alert"))
+        alert_text = callback.answer.await_args.args[0] if callback.answer.await_args.args else ""
+        self.assertTrue(alert_text)  # safe error, not empty
+
+    async def test_foreign_customer_card_services_are_denied(self) -> None:
+        callback = self._callback(f"res:svcs:{self.foreign.id}")
+        edit = AsyncMock()
+        with patch.object(handler, "safe_edit_text", edit):
+            await handler.res_user_services(
+                callback,
+                self.session,
+                self.shop,
+                is_reseller_bot=True,
+                reseller_owner_id=self.shop.id,
+            )
+        edit.assert_not_awaited()
+        self.assertTrue(callback.answer.await_args.kwargs.get("show_alert"))
+        self.assertEqual(callback.answer.await_args.args[0], feedback.NO_ACCESS)
+
+    async def test_staff_without_dashboard_cannot_open_services(self) -> None:
+        """Empty shop permissions deny dashboard (and therefore service control)."""
+        callback = self._callback(f"res:svcs:{self.foreign.id}")
+        edit = AsyncMock()
+        with patch.object(handler, "safe_edit_text", edit):
+            await handler.res_user_services(
+                callback,
+                self.session,
+                self.other_shop,
+                is_reseller_bot=True,
+                reseller_owner_id=self.other_shop.id,
+            )
+        edit.assert_not_awaited()
+        self.assertEqual(callback.answer.await_args.args[0], feedback.NO_ACCESS)
+        self.assertTrue(callback.answer.await_args.kwargs.get("show_alert"))
+
+    async def test_renew_loads_the_service_with_this_shop_id(self) -> None:
+        callback = self._callback(f"res:svcrenew:{self.customer.id}:11")
+        edit = AsyncMock()
+        owned = AsyncMock(return_value=await self.session.get(UserService, 11))
+        with patch.object(handler, "safe_edit_text", edit), patch(
+            "app.services.bot_user_admin.get_owned_service", owned
+        ), patch(
+            "app.services.bot_user_admin.admin_renew_service", AsyncMock()
+        ), patch(
+            "app.services.bot_user_admin.service_snapshot",
+            AsyncMock(return_value=await self._snap_for(11)),
+        ):
+            await handler.res_user_service_renew(
+                callback,
+                self.session,
+                self.shop,
+                is_reseller_bot=True,
+                reseller_owner_id=self.shop.id,
+            )
+        owned.assert_awaited()
+        self.assertEqual(owned.await_args.kwargs.get("shop_id"), 2)
+        self.assertEqual(owned.await_args.kwargs.get("bot_user_id"), 4)
+        self.assertEqual(owned.await_args.kwargs.get("service_id"), 11)
 
     async def test_customer_card_shows_service_manage_button(self) -> None:
         from app.bot.handlers import reseller as res_handler
