@@ -232,6 +232,217 @@ class ResellerCarryRenewalTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(EXTRAS_CLEARED_WARN, warnings)
         self.assertTrue(any("زمان" in w for w in warnings))
 
+    async def test_second_renew_stays_cleared_and_charges_again(self):
+        panel = AsyncMock(
+            return_value=SimpleNamespace(restored={"ok": 1, "errors": 0}, usage_reset=True)
+        )
+        with (
+            patch("app.services.pg_admin_subscription._utcnow", return_value=NOW),
+            patch("app.services.pg_admin_subscription._apply_renewal_on_panel", panel),
+            patch(
+                "app.services.volume_allocation_cascade.assert_child_growth_fits",
+                AsyncMock(),
+            ),
+        ):
+            await renew_subscription(
+                self.session,
+                sub=self.sub,
+                plan=self.plan,
+                payer=self.owner,
+                charge_wallet=True,
+            )
+            await renew_subscription(
+                self.session,
+                sub=self.sub,
+                plan=self.plan,
+                payer=self.owner,
+                charge_wallet=True,
+            )
+        await self.session.refresh(self.sub)
+        await self.session.refresh(self.owner)
+        self.assertEqual(self.sub.extra_gb_purchased, 0)
+        self.assertEqual(self.sub.extra_users_purchased, 0)
+        self.assertEqual(int(self.sub.renew_generation or 0), 2)
+        self.assertEqual(self.owner.wallet_balance, 800_000)
+        expires = self.sub.expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        self.assertEqual(expires, NOW + timedelta(days=30))
+
+    async def test_panel_capacity_sync_uses_base_after_extras_cleared(self):
+        from app.services.pg_admin_subscription import _apply_renewal_on_panel, _extend_period
+
+        _extend_period(self.sub, self.plan, NOW)
+        self.assertEqual(self.sub.extra_gb_purchased, 0)
+        self.assertEqual(self.sub.extra_users_purchased, 0)
+        self.assertEqual(self.sub.base_gb, 100)
+        self.assertEqual(self.sub.base_users, 10)
+
+        sync = AsyncMock()
+        restore = AsyncMock(return_value={"ok": 1, "errors": 0})
+        with (
+            patch(
+                "app.services.pg_admin_subscription.sync_pg_capacity_from_sub",
+                sync,
+            ),
+            patch(
+                "app.services.pg_admin_subscription.restore_subscription_access",
+                restore,
+            ),
+            patch(
+                "app.services.pasarguard.get_pg",
+                return_value=SimpleNamespace(reset_admin_usage=AsyncMock()),
+            ),
+        ):
+            outcome = await _apply_renewal_on_panel(
+                self.session, self.sub, [], refills_volume=True
+            )
+        sync.assert_awaited_once()
+        called_sub = sync.await_args.args[1]
+        self.assertEqual(
+            int(called_sub.base_gb or 0) + int(called_sub.extra_gb_purchased or 0),
+            100,
+        )
+        self.assertEqual(
+            int(called_sub.base_users or 0) + int(called_sub.extra_users_purchased or 0),
+            10,
+        )
+        self.assertTrue(outcome.usage_reset)
+
+    async def test_current_capacity_renew_preserves_base_while_clearing_extras(self):
+        from app.services.pg_admin_subscription import PLAN_KIND_CURRENT_CAPACITY
+
+        self.plan.plan_kind = PLAN_KIND_CURRENT_CAPACITY
+        self.plan.included_gb = 0
+        self.plan.included_users = 0
+        self.sub.base_gb = 250
+        self.sub.base_users = 40
+        await self.session.commit()
+
+        panel = AsyncMock(
+            return_value=SimpleNamespace(restored={"ok": 1, "errors": 0}, usage_reset=True)
+        )
+        with (
+            patch("app.services.pg_admin_subscription._utcnow", return_value=NOW),
+            patch("app.services.pg_admin_subscription._apply_renewal_on_panel", panel),
+            patch(
+                "app.services.volume_allocation_cascade.assert_child_growth_fits",
+                AsyncMock(),
+            ),
+        ):
+            await renew_subscription(
+                self.session,
+                sub=self.sub,
+                plan=self.plan,
+                payer=self.owner,
+                charge_wallet=True,
+            )
+        await self.session.refresh(self.sub)
+        self.assertEqual(self.sub.base_gb, 250)
+        self.assertEqual(self.sub.base_users, 40)
+        self.assertEqual(self.sub.extra_gb_purchased, 0)
+        self.assertEqual(self.sub.extra_users_purchased, 0)
+
+    async def test_renew_does_not_touch_another_reseller_subscription(self):
+        other_owner = BotUser(
+            id=9, telegram_id=9009, referral_code="own9", wallet_balance=500_000
+        )
+        other_plan = ResellerPlan(
+            id=2,
+            name="دیگر",
+            price=50_000,
+            renew_price=50_000,
+            billing_mode="fixed",
+            plan_kind="subscription",
+            duration_days=30,
+            included_gb=50,
+            included_users=5,
+            carry_remaining_period=True,
+            keep_extras_on_renew=True,
+            is_active=True,
+        )
+        other_sub = PgAdminSubscription(
+            id=2,
+            pg_username="shop9",
+            plan_id=2,
+            access_status="active",
+            expires_at=NOW + timedelta(days=20),
+            base_gb=50,
+            base_users=5,
+            extra_gb_purchased=7,
+            extra_users_purchased=2,
+            renew_generation=3,
+        )
+        self.session.add_all([other_owner, other_plan, other_sub])
+        await self.session.commit()
+
+        panel = AsyncMock(
+            return_value=SimpleNamespace(restored={"ok": 1, "errors": 0}, usage_reset=True)
+        )
+        with (
+            patch("app.services.pg_admin_subscription._utcnow", return_value=NOW),
+            patch("app.services.pg_admin_subscription._apply_renewal_on_panel", panel),
+            patch(
+                "app.services.volume_allocation_cascade.assert_child_growth_fits",
+                AsyncMock(),
+            ),
+        ):
+            await renew_subscription(
+                self.session,
+                sub=self.sub,
+                plan=self.plan,
+                payer=self.owner,
+                charge_wallet=True,
+            )
+        await self.session.refresh(other_sub)
+        await self.session.refresh(other_owner)
+        self.assertEqual(other_sub.extra_gb_purchased, 7)
+        self.assertEqual(other_sub.extra_users_purchased, 2)
+        self.assertEqual(int(other_sub.renew_generation or 0), 3)
+        self.assertEqual(other_owner.wallet_balance, 500_000)
+        expires = other_sub.expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        self.assertEqual(expires, NOW + timedelta(days=20))
+
+    async def test_renew_package_blocks_when_live_users_exceed_post_clear_cap(self):
+        from app.db.models import ResellerProfile
+        from app.services.reseller_package import AdminUsage, renew_package
+
+        profile = ResellerProfile(
+            id=1,
+            user_id=3,
+            plan_id=1,
+            pg_admin_username="shop3",
+            is_active=True,
+        )
+        self.session.add(profile)
+        await self.session.commit()
+
+        with (
+            patch(
+                "app.services.reseller_package.assert_shop_allows_renew",
+                AsyncMock(),
+            ),
+            patch(
+                "app.services.reseller_package.read_admin_usage",
+                AsyncMock(return_value=AdminUsage(users=12, used_bytes=0)),
+            ),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                await renew_package(
+                    self.session,
+                    owner=self.owner,
+                    profile=profile,
+                    plan_id=1,
+                    generation=0,
+                )
+        self.assertIn("کاربر", str(ctx.exception))
+        await self.session.refresh(self.sub)
+        await self.session.refresh(self.owner)
+        self.assertEqual(self.sub.extra_gb_purchased, 25)
+        self.assertEqual(self.owner.wallet_balance, 1_000_000)
+
 
 if __name__ == "__main__":
     unittest.main()
