@@ -136,6 +136,26 @@ class MissingUserPollTests(MonitorDatabaseCase):
         self.assertTrue(shop.enabled)
         self.assertIsNone(cycle)
 
+    async def test_transient_not_found_does_not_disable_platform_monitor(self) -> None:
+        """A setup/blip 404 mapped to not_found must not silence all polling."""
+        state_id = await self._seed_platform(enabled=True)
+        binary = XrayBinary(Path("/synthetic/xray"), "0" * 64)
+
+        async def not_found_catalog(account: MonitorAccount):
+            raise MonitorAccountError("not_found")
+
+        with patch("app.services.connection_monitor_worker.read_monitor_catalog", side_effect=not_found_catalog), \
+             patch("app.services.connection_monitor_worker.finish_cleanup", AsyncMock()), \
+             patch("app.services.connection_monitor_worker.mark_monitor_user_missing", AsyncMock()) as mark:
+            result = await run_monitor_cycle(self.Session, binary)
+        self.assertTrue(result.claimed)
+        self.assertEqual(result.reason, "account_unavailable")
+        self.assertNotEqual(result.reason, MonitorReason.USER_MISSING.value)
+        mark.assert_not_awaited()
+        async with self.Session() as session:
+            platform = await session.get(ConnectionMonitorState, state_id)
+        self.assertTrue(platform.enabled)
+
     async def test_restored_user_can_be_re_enabled(self) -> None:
         from sqlalchemy import update
 

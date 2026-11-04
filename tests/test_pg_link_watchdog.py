@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.services import pg_link_health as health
 from app.services import pg_link_watchdog as watchdog
 from app.services import pg_read_resilience as resilience
+from app.services.pasarguard import PasarGuardError
 from app.services.users import set_setting
 
 
@@ -41,6 +42,9 @@ class WatchdogTests(unittest.IsolatedAsyncioTestCase):
         self.panel._headers = AsyncMock(return_value={"Authorization": "Bearer t"})
         self.panel._ensure_safe_target = AsyncMock(return_value=None)
         self.panel._client = self.http
+        self.panel._api_key = None
+        self.panel._token = "jwt-token"
+        self.panel.request = self._request  # type: ignore[method-assign]
 
     async def asyncTearDown(self) -> None:
         await self.http.aclose()
@@ -55,6 +59,23 @@ class WatchdogTests(unittest.IsolatedAsyncioTestCase):
         if isinstance(self.answer, Exception):
             raise self.answer
         return httpx.Response(int(self.answer), json={"ok": True})
+
+    async def _request(self, method: str, path: str, **kwargs):
+        """Mimic PasarGuardClient.request: 401 clears JWT and retries once."""
+        kwargs.pop("use_cache", None)
+        kwargs.pop("auth", None)
+        kwargs.pop("resolve_api_base", None)
+        kwargs.pop("cache_max_age", None)
+        headers = kwargs.pop("headers", {})
+        headers.update(await self.panel._headers())
+        resp = await self.panel._http().request(method, path, headers=headers, **kwargs)
+        if resp.status_code == 401 and self.panel._token is not None:
+            self.panel._token = None
+            headers.update(await self.panel._headers())
+            resp = await self.panel._http().request(method, path, headers=headers, **kwargs)
+        if resp.status_code >= 400:
+            raise PasarGuardError(f"{method} {path} failed ({resp.status_code})", resp.status_code, resp.text)
+        return resp.json()
 
     async def _tick(self):
         async with self.Session() as session:
@@ -77,6 +98,47 @@ class WatchdogTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.ran)
         self.assertFalse(result.ok)
         self.assertEqual(result.failure_kind, "connect")
+
+    async def test_probe_uses_client_request_not_private_http(self) -> None:
+        request_mock = AsyncMock(return_value={"ok": True})
+        self.panel.request = request_mock
+        result = await self._tick()
+        self.assertTrue(result.ok)
+        request_mock.assert_awaited()
+        kwargs = request_mock.await_args.kwargs
+        self.assertFalse(kwargs.get("use_cache", True))
+        self.assertIs(kwargs.get("timeout"), watchdog.WATCHDOG_TIMEOUT)
+        # Private transport must not be the probe entry point.
+        self.panel._http.assert_not_called()
+
+    async def test_http_401_relogs_through_request_then_succeeds(self) -> None:
+        responses = [401, 200]
+        self.calls = 0
+
+        def flaky(request: httpx.Request) -> httpx.Response:
+            self.calls += 1
+            code = responses.pop(0)
+            return httpx.Response(code, json={"ok": code == 200})
+
+        await self.http.aclose()
+        self.http = httpx.AsyncClient(
+            base_url="https://panel.example",
+            transport=httpx.MockTransport(flaky),
+        )
+        self.panel._http = MagicMock(return_value=self.http)
+        self.panel._client = self.http
+        header_calls = {"n": 0}
+
+        async def headers() -> dict[str, str]:
+            header_calls["n"] += 1
+            return {"Authorization": f"Bearer round-{header_calls['n']}"}
+
+        self.panel._headers = headers
+        result = await self._tick()
+        self.assertTrue(result.ok)
+        self.assertEqual(self.calls, 2)
+        self.assertEqual(header_calls["n"], 2)
+        self.assertIsNone(self.panel._token)
 
     async def test_consecutive_failures_trigger_exactly_one_rebuild_then_backoff(self) -> None:
         self.answer = httpx.ConnectError("down")

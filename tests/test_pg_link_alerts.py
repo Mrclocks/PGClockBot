@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -120,6 +121,33 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
         result = await self._notify(is_down=True)
         self.assertIsNone(result)
         self.assertEqual(self.sent, [])
+
+    async def test_concurrent_down_claims_send_only_one_alert(self) -> None:
+        """Pause-alert task and watchdog must not both emit «قطع»."""
+        gate = asyncio.Event()
+
+        async def staggered_notify(session_factory=self.Session):
+            await gate.wait()
+            async with session_factory() as session:
+                return await alerts.notify_link_health_change(
+                    session, is_down=True, failure_kind="connect", now=self.now,
+                )
+
+        tasks = [asyncio.create_task(staggered_notify()) for _ in range(8)]
+        gate.set()
+        results = await asyncio.gather(*tasks)
+        self.assertEqual(sum(1 for r in results if r == alerts.ALERT_DOWN), 1)
+        self.assertEqual(len(self.sent), 1)
+
+    async def test_schedule_pause_alert_retains_task_reference(self) -> None:
+        alerts._pause_alert_tasks.clear()
+        with patch.object(alerts, "notify_link_health_change", new=AsyncMock(return_value=alerts.ALERT_DOWN)):
+            with patch("app.db.session.SessionLocal", self.Session):
+                alerts.schedule_circuit_pause_alert("timeout")
+                self.assertEqual(len(alerts._pause_alert_tasks), 1)
+                task = next(iter(alerts._pause_alert_tasks))
+                await task
+        self.assertEqual(len(alerts._pause_alert_tasks), 0)
 
     async def test_retry_after_is_honoured(self) -> None:
         self._send_patch.stop()

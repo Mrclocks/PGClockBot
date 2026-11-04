@@ -60,25 +60,29 @@ async def watchdog_enabled(session: AsyncSession) -> bool:
     return _truthy(await get_setting(session, SETTING_KEY, SETTING_DEFAULT))
 
 
+def _failure_kind_from_exc(exc: BaseException) -> str:
+    if isinstance(exc, PasarGuardError):
+        return pg_link_health.failure_kind(status_code=exc.status_code)
+    return pg_link_health.failure_kind(exc)
+
+
 async def _probe() -> tuple[bool, str | None]:
-    """Authenticated GET that bypasses the read circuit so a pause can heal."""
+    """Authenticated GET via ``request()`` (401 re-login + rebuild hooks).
+
+    No web_read_budget, so ``panel_read_request`` takes the budgetless path and
+    does not reject while the circuit is paused — then we force-heal on success.
+    """
     client = get_pg()
-    await client._ensure_safe_target(protected=False)
-    headers = await client._headers()
     started = time.monotonic()
     try:
-        response = await client._http().request(
+        await client.request(
             "GET",
             "/api/system",
-            headers=headers,
+            use_cache=False,
             timeout=WATCHDOG_TIMEOUT,
         )
-    except (httpx.HTTPError, TimeoutError) as exc:
-        kind = pg_link_health.failure_kind(exc)
-        pg_link_health.record_failure(kind)
-        return False, kind
-    if response.status_code >= 400:
-        kind = pg_link_health.failure_kind(status_code=response.status_code)
+    except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
+        kind = _failure_kind_from_exc(exc)
         pg_link_health.record_failure(kind)
         return False, kind
     pg_link_health.record_success(time.monotonic() - started)
@@ -100,12 +104,8 @@ async def run_watchdog_tick(session: AsyncSession) -> WatchdogTickResult:
 
         try:
             ok, kind = await _probe()
-        except PasarGuardError as exc:
-            kind = pg_link_health.failure_kind(status_code=exc.status_code)
-            pg_link_health.record_failure(kind)
-            ok = False
         except Exception as exc:
-            kind = pg_link_health.failure_kind(exc)
+            kind = _failure_kind_from_exc(exc)
             pg_link_health.record_failure(kind)
             logger.warning("PasarGuard link watchdog probe failed kind=%s", kind, exc_info=True)
             ok = False
