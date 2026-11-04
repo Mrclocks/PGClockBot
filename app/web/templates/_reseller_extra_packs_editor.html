@@ -62,19 +62,22 @@
       <div class="form-row extra-pack-row" data-extra-pack-row>
         <label class="form-field">مقدار
           <input name="extra_user_amount" type="number" min="1" max="100000" step="1" inputmode="numeric" dir="ltr"
-                 value="{{ row.amount }}" aria-label="تعداد کاربر بسته" required />
+                 value="{{ row.amount }}" aria-label="تعداد کاربر بسته"
+                 {% if packs_are_hidden %}disabled{% else %}required{% endif %} />
         </label>
         <div class="plan-color-field">
           <div class="btn-color-card plan-color-card">
             <span class="btn-color-label">رنگ دکمه</span>
-            <select name="extra_user_style" class="btn-color-select" data-tone="{{ cur_tone }}" aria-label="رنگ دکمه بسته کاربر">
+            <select name="extra_user_style" class="btn-color-select" data-tone="{{ cur_tone }}" aria-label="رنگ دکمه بسته کاربر"
+                    {% if packs_are_hidden %}disabled{% endif %}>
               {% for opt_val, opt_label, opt_tone in style_opts %}
               <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
               {% endfor %}
             </select>
           </div>
         </div>
-        <button type="button" class="btn btn-sm btn-ghost" data-extra-pack-remove aria-label="حذف بسته کاربر">حذف</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-extra-pack-remove aria-label="حذف بسته کاربر"
+                {% if packs_are_hidden %}disabled{% endif %}>حذف</button>
       </div>
       {% endfor %}
     </div>
