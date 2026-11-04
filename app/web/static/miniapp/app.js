@@ -14,6 +14,7 @@
   const LEGACY_VIEWS = new Map([["wallet", "account"]]);
   const UNKNOWN_OUTCOME = "نتیجهٔ درخواست مشخص نشد. پیش از تلاش دوباره، سرویس‌ها و تراکنش‌ها را بررسی کنید.";
   const RENEW_UNKNOWN_OUTCOME = "نتیجهٔ تمدید مشخص نشد. دوباره «تأیید» را بزنید؛ این تمدید فقط یک بار انجام می‌شود.";
+  const ADDON_UNKNOWN_OUTCOME = "نتیجهٔ افزایش مشخص نشد. دوباره «تأیید» را بزنید؛ این خرید فقط یک بار انجام می‌شود.";
 
   const els = {};
   const state = {
@@ -29,6 +30,7 @@
     selectedPlanId: null,
     activityLimit: ACTIVITY_PAGE,
     renewPreview: null,
+    addonPreview: null,
     topupCurrent: null,
     checkout: null,
     addonPacks: [],
@@ -913,6 +915,7 @@
     const title = kind === "volume" ? "افزایش حجم" : "افزایش زمان";
     const seq = openSheet("addons", title, R.loadingHtml(2), { serviceId: id, addonKind: kind });
     state.addonPacks = [];
+    state.addonPreview = null;
     try {
       const data = await core.api(`/api/mini/service/${id}/addons?kind=${encodeURIComponent(kind)}`);
       if (seq !== state.sheetSeq) return;
@@ -924,11 +927,10 @@
     }
   }
 
-  async function buyAddon(id, packId, trigger) {
+  async function previewAddon(id, packId) {
     const sheet = state.sheet;
     const pack = state.addonPacks.find((p) => p.id === packId);
-    const svc = detailRow(id);
-    if (!sheet || sheet.kind !== "addons" || sheet.serviceId !== id || !pack || !svc || pack.kind !== sheet.addonKind) {
+    if (!sheet || sheet.kind !== "addons" || sheet.serviceId !== id || !pack || pack.kind !== sheet.addonKind) {
       core.toast("این بسته دیگر معتبر نیست؛ فهرست را دوباره باز کنید", "err");
       return;
     }
@@ -936,18 +938,64 @@
       core.toast("پرداخت با کیف پول مجاز نیست", "err");
       return;
     }
+    const seq = state.sheetSeq;
+    state.addonPreview = null;
+    setSheetBody(seq, R.loadingHtml(2));
+    try {
+      const preview = await core.api(`/api/mini/service/${id}/addon-preview?pack_id=${packId}`);
+      if (seq !== state.sheetSeq) return;
+      if (preview.kind && preview.kind !== sheet.addonKind) {
+        throw new Error("نوع بسته با بخش انتخاب‌شده مطابقت ندارد؛ دوباره تلاش کنید");
+      }
+      state.addonPreview = {
+        serviceId: id,
+        packId,
+        kind: pack.kind,
+        terms: preview.terms,
+        price: preview.price,
+        requestKey: preview.request_key,
+      };
+      setSheetBody(seq, R.addonPreviewHtml(preview, id, packId, pack.kind));
+    } catch (err) {
+      setSheetBody(
+        seq,
+        R.errorHtml(err.message)
+          + `<button type="button" class="btn ghost block" data-action="addons" data-id="${id}" data-kind="${pack.kind}">انتخاب بسته</button>`,
+      );
+    }
+  }
+
+  async function confirmAddon(id, packId, trigger) {
+    const preview = state.addonPreview;
+    const sheet = state.sheet;
+    if (
+      !preview
+      || preview.serviceId !== id
+      || preview.packId !== packId
+      || !sheet
+      || sheet.kind !== "addons"
+      || sheet.serviceId !== id
+      || preview.kind !== sheet.addonKind
+      || !commerce()
+    ) {
+      return;
+    }
     await guarded("addon:" + id, trigger, async () => {
-      const label = pack.kind === "volume" ? "افزایش حجم" : "افزایش زمان";
-      const ok = await core.confirmAction(`${label} سرویس «${svc.username}» با بستهٔ «${pack.name}» (+${pack.amount_label}) به مبلغ ${core.money(pack.price)} از کیف پول؟`);
-      if (!ok) return;
       try {
         const res = await core.api("/api/mini/addon", {
-          method: "POST", body: { service_id: id, pack_id: packId, kind: pack.kind, price: pack.price },
+          method: "POST",
+          body: {
+            service_id: id,
+            pack_id: packId,
+            kind: preview.kind,
+            preview: { terms: preview.terms, price: preview.price, request_key: preview.requestKey },
+          },
         });
         await afterPurchase(res.message || "بسته اضافه شد", { serviceId: id });
       } catch (err) {
-        core.toast(err.status === 0 ? UNKNOWN_OUTCOME : err.message, "err");
-        if (err.status === 0) await showFreshState({ serviceId: id });
+        // Keep the preview: a retry re-sends its request key, which the server
+        // applies at most once, so a lost response can never charge twice.
+        core.toast(err.status === 0 ? ADDON_UNKNOWN_OUTCOME : err.message, "err");
       }
     });
   }
@@ -1547,7 +1595,8 @@
     "preview-renew": (el) => previewRenew(intAttr(el, "data-id"), intAttr(el, "data-plan")),
     "confirm-renew": (el) => confirmRenew(intAttr(el, "data-id"), intAttr(el, "data-plan"), el),
     addons: (el) => showAddons(intAttr(el, "data-id"), el.getAttribute("data-kind")),
-    "buy-addon": (el) => buyAddon(intAttr(el, "data-id"), intAttr(el, "data-pack"), el),
+    "preview-addon": (el) => previewAddon(intAttr(el, "data-id"), intAttr(el, "data-pack")),
+    "confirm-addon": (el) => confirmAddon(intAttr(el, "data-id"), intAttr(el, "data-pack"), el),
     automation: (el) => showAutomation(intAttr(el, "data-id")),
     cancellation: (el) => showCancellation(intAttr(el, "data-id")),
     buy: (el) => buyPlan(intAttr(el, "data-id"), el),
