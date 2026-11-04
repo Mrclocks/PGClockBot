@@ -10,6 +10,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.auth import is_platform_admin
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, ResellerPlan, ResellerPlanExtraPack
 from app.services import bot_feedback_texts as feedback
@@ -42,6 +43,7 @@ _STYLE_LABELS = {
     "success": "سبز",
     "danger": "قرمز",
 }
+_ID_MAX = 2**31 - 1
 
 
 class ExtraPackStates(StatesGroup):
@@ -49,7 +51,18 @@ class ExtraPackStates(StatesGroup):
 
 
 def _is_admin(user: BotUser) -> bool:
-    return (user.role or "") == "admin"
+    """Same gate as admin_plans: platform admin (role or ADMIN_IDS), not sticky role alone."""
+    return is_platform_admin(user)
+
+
+def _parse_positive_id(raw: str | None) -> int | None:
+    text = (raw or "").strip()
+    if not text.isdigit():
+        return None
+    value = int(text)
+    if value <= 0 or value > _ID_MAX:
+        return None
+    return value
 
 
 def _kind_label(kind: str) -> str:
@@ -157,6 +170,15 @@ async def _require_plan(
     return await session.get(ResellerPlan, int(plan_id))
 
 
+async def _pack_from_callback_suffix(
+    session: AsyncSession, callback: CallbackQuery
+) -> ResellerPlanExtraPack | None:
+    pack_id = _parse_positive_id((callback.data or "").rsplit(":", 1)[-1])
+    if pack_id is None:
+        return None
+    return await session.get(ResellerPlanExtraPack, pack_id)
+
+
 @router.callback_query(F.data.startswith("adm:resx:l:"))
 async def extrapacks_home(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
@@ -164,7 +186,11 @@ async def extrapacks_home(
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
-    plan = await _require_plan(session, int(callback.data.rsplit(":", 1)[-1]))
+    plan_id = _parse_positive_id((callback.data or "").rsplit(":", 1)[-1])
+    if plan_id is None:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    plan = await _require_plan(session, plan_id)
     if plan is None:
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
@@ -190,8 +216,12 @@ async def extrapacks_kind(
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     parts = (callback.data or "").split(":")
-    plan = await _require_plan(session, int(parts[3]))
-    kind = parts[4]
+    plan_id = _parse_positive_id(parts[3] if len(parts) > 3 else None)
+    kind = parts[4] if len(parts) > 4 else ""
+    if plan_id is None or kind not in {KIND_GB, KIND_USERS}:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    plan = await _require_plan(session, plan_id)
     if plan is None:
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
@@ -212,7 +242,11 @@ async def extrapacks_view(
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
-    pack = await session.get(ResellerPlanExtraPack, int(callback.data.rsplit(":", 1)[-1]))
+    pack_id = _parse_positive_id((callback.data or "").rsplit(":", 1)[-1])
+    if pack_id is None:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    pack = await session.get(ResellerPlanExtraPack, pack_id)
     if pack is None:
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
@@ -243,7 +277,11 @@ async def extrapacks_add_ask(
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     parts = (callback.data or "").split(":")
-    plan_id, kind = int(parts[3]), parts[4]
+    plan_id = _parse_positive_id(parts[3] if len(parts) > 3 else None)
+    kind = parts[4] if len(parts) > 4 else ""
+    if plan_id is None or kind not in {KIND_GB, KIND_USERS}:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
     plan = await _require_plan(session, plan_id)
     if plan is None or not plan.allow_buy_extra:
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
@@ -274,9 +312,9 @@ async def extrapacks_edit_ask(
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
-    pack = await session.get(ResellerPlanExtraPack, int(callback.data.rsplit(":", 1)[-1]))
+    pack = await _pack_from_callback_suffix(session, callback)
     if pack is None:
-        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     await state.set_state(ExtraPackStates.amount)
     await state.update_data(
@@ -365,9 +403,9 @@ async def extrapacks_color_menu(
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
-    pack = await session.get(ResellerPlanExtraPack, int(callback.data.rsplit(":", 1)[-1]))
+    pack = await _pack_from_callback_suffix(session, callback)
     if pack is None:
-        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     await callback.answer()
     if callback.message:
@@ -389,8 +427,9 @@ async def extrapacks_color_set(
     if len(parts) != 5:
         await callback.answer(feedback.INVALID, show_alert=True)
         return
-    pack = await session.get(ResellerPlanExtraPack, int(parts[3]))
+    pack_id = _parse_positive_id(parts[3])
     code = parts[4]
+    pack = await session.get(ResellerPlanExtraPack, pack_id) if pack_id else None
     if pack is None or code not in _STYLE_CODES:
         await callback.answer(feedback.INVALID, show_alert=True)
         return
@@ -416,9 +455,9 @@ async def extrapacks_del_ask(
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
-    pack = await session.get(ResellerPlanExtraPack, int(callback.data.rsplit(":", 1)[-1]))
+    pack = await _pack_from_callback_suffix(session, callback)
     if pack is None:
-        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     await callback.answer()
     if callback.message:
@@ -451,9 +490,9 @@ async def extrapacks_del_ok(
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
-    pack = await session.get(ResellerPlanExtraPack, int(callback.data.rsplit(":", 1)[-1]))
+    pack = await _pack_from_callback_suffix(session, callback)
     if pack is None:
-        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     plan_id, kind = int(pack.plan_id), pack.kind
     await session.delete(pack)

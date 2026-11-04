@@ -258,6 +258,14 @@ def telegram_style_kwargs(style: str | None) -> dict[str, str]:
     return {"style": style} if style else {}
 
 
+def stair_purchase_button_text(*, kind: str, amount: int, price_text: str) -> str:
+    """Plain Telegram caption for a unit stair: emoji, amount+unit, price."""
+    kind_n = parse_pack_kind(kind)
+    emoji = "📦" if kind_n == KIND_GB else "👥"
+    unit = "گیگ" if kind_n == KIND_GB else "کاربر"
+    return f"{emoji} {int(amount)} {unit} — {price_text}"
+
+
 def _form_getlist(form: object, key: str) -> list[str]:
     if hasattr(form, "getlist"):
         return [str(v) for v in form.getlist(key)]  # type: ignore[attr-defined]

@@ -28,7 +28,6 @@ from app.services.reseller_capacity import (
     buy_extra_users,
     load_reseller_plan,
 )
-from app.services.reseller_plan_extra_packs import KIND_GB, KIND_USERS, active_amounts_for_plan
 from app.services.reseller_capacity_orders import (
     KIND_GB,
     KIND_PACK,
@@ -39,6 +38,10 @@ from app.services.reseller_capacity_orders import (
     parse_note,
 )
 from app.services.reseller_packs import buy_addon_pack
+from app.services.reseller_plan_extra_packs import (
+    active_amounts_for_plan,
+    get_pack_for_plan,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -185,8 +188,6 @@ async def res_buy_gb_pay(
         return
     gb = parsed[0]
     if _ok_uses_pack_id(callback.data or "", GB_OK):
-        from app.services.reseller_plan_extra_packs import get_pack_for_plan
-
         pack = await get_pack_for_plan(session, plan_id=int(plan.id), pack_id=parsed[0])
         if pack is None or pack.kind != KIND_GB or not pack.is_active:
             await callback.answer("مقدار مجاز نیست", show_alert=True)
@@ -227,8 +228,6 @@ async def res_buy_users_pay(
         return
     count = parsed[0]
     if _ok_uses_pack_id(callback.data or "", USERS_OK):
-        from app.services.reseller_plan_extra_packs import get_pack_for_plan
-
         pack = await get_pack_for_plan(session, plan_id=int(plan.id), pack_id=parsed[0])
         if pack is None or pack.kind != KIND_USERS or not pack.is_active:
             await callback.answer("مقدار مجاز نیست", show_alert=True)
