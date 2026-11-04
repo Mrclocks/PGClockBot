@@ -96,6 +96,7 @@ tests/test_bot_profile_photo.py
 tests/test_bot_appearance_menu_button.py
 tests/test_renewal_preview.py
 tests/test_plan_carry_remaining_quota.py
+tests/test_reseller_plan_carry_on_renew.py
 tests/test_on_hold_addon_quotas.py
 tests/test_on_hold_service_display.py
 tests/test_owner_bypass_guards.py

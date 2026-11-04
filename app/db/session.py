@@ -332,6 +332,18 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             sync_conn.execute(
                 sql_text("ALTER TABLE reseller_plans ADD COLUMN is_system BOOLEAN DEFAULT 0")
             )
+        if "carry_remaining_period" not in pcols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE reseller_plans ADD COLUMN carry_remaining_period BOOLEAN DEFAULT 1"
+                )
+            )
+        if "keep_extras_on_renew" not in pcols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE reseller_plans ADD COLUMN keep_extras_on_renew BOOLEAN DEFAULT 1"
+                )
+            )
 
     if not insp.has_table("pg_admin_subscriptions"):
         sync_conn.execute(
