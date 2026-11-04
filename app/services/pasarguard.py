@@ -17,7 +17,13 @@ import httpx
 from app.config import get_settings, normalize_pg_subscription_path, pg_api_base_candidates
 from app.services.pg_read_cache import cache_get_last_good, last_good_notice_active, note_last_good_read
 from app.services.redact import redact
-from app.services.pg_read_resilience import DNS_CACHE_TTL_SEC, panel_read_request, reset_read_circuits, validate_panel_base
+from app.services.pg_read_resilience import (
+    DNS_CACHE_TTL_SEC,
+    note_successful_panel_contact,
+    panel_read_request,
+    reset_read_circuits,
+    validate_panel_base,
+)
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 
 logger = logging.getLogger(__name__)
@@ -27,7 +33,11 @@ async def _mutation_request(
     client: httpx.AsyncClient, method: str, url: str, **kwargs: Any
 ) -> httpx.Response:
     """Keep mutation timeouts and unknown outcomes independent of web reads."""
-    return await client.request(method, url, **kwargs)
+    response = await client.request(method, url, **kwargs)
+    # A real HTTP answer means the link works; heal an expired read pause only.
+    if response.status_code < 500:
+        note_successful_panel_contact(str(client.base_url))
+    return response
 
 
 # Read/write keep the old 30 s ceiling so slow panel writes do not turn into

@@ -32,6 +32,7 @@ KIND_LABELS = {
     "gateway": "خطای پراکسی (502/503/504)",
     "server_error": "خطای خود پاسارگارد (5xx)",
 }
+BUDGET_EXHAUSTION_LABEL = "بودجه‌ی زمانی صفحه تمام شد"
 _DNS_HINTS = ("name or service not known", "temporary failure in name resolution", "getaddrinfo", "nodename nor servname")
 
 
@@ -41,6 +42,9 @@ class _LinkStats:
     events: deque[tuple[float, str]] = field(default_factory=lambda: deque(maxlen=MAX_EVENTS))
     latencies: deque[tuple[float, float]] = field(default_factory=lambda: deque(maxlen=MAX_LATENCIES))
     totals: Counter[str] = field(default_factory=Counter)
+    # Page-budget timeouts are not panel outages; keep a separate bounded counter.
+    budget_events: deque[float] = field(default_factory=lambda: deque(maxlen=MAX_EVENTS))
+    budget_total: int = 0
     reads: int = 0
     last_ok_at: float | None = None
     last_failure_at: float | None = None
@@ -90,6 +94,18 @@ def latest_failure_kind() -> str | None:
     return _stats.last_failure_kind
 
 
+def record_budget_exhaustion() -> None:
+    """Count a page-budget timeout separately from panel outages."""
+    now = time.time()
+    _stats.budget_events.append(now)
+    _stats.budget_total += 1
+
+
+def recent_budget_exhaustions(window_sec: float = WINDOW_SEC) -> int:
+    cutoff = time.time() - window_sec
+    return sum(1 for moment in _stats.budget_events if moment >= cutoff)
+
+
 def recent_failures(window_sec: float = WINDOW_SEC) -> Counter[str]:
     cutoff = time.time() - window_sec
     return Counter(kind for moment, kind in _stats.events if moment >= cutoff)
@@ -133,6 +149,9 @@ def snapshot(circuit: dict[str, Any] | None = None) -> dict[str, Any]:
             if recent[kind] or _stats.totals[kind]
         ],
         "recent_failure_count": sum(recent.values()),
+        "budget_exhaustion_count": recent_budget_exhaustions(),
+        "budget_exhaustion_total": _stats.budget_total,
+        "budget_exhaustion_label": BUDGET_EXHAUSTION_LABEL,
         "circuit": circuit or {"paused": False, "retry_in_sec": 0, "pause_count": 0},
     }
 

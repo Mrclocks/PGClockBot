@@ -53,6 +53,9 @@
         {% else %}
         <div><dt>خطا</dt><dd>ندارد</dd></div>
         {% endfor %}
+        {% if health.budget_exhaustion_count %}
+        <div><dt>{{ health.budget_exhaustion_label }}</dt><dd>{{ health.budget_exhaustion_count | num }}</dd></div>
+        {% endif %}
       </dl>
     </article>
   </div>
