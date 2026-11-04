@@ -130,6 +130,29 @@ class ExtraPackServiceTests(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             self.assertEqual(await active_amounts_for_plan(session, int(a.id), KIND_GB), frozenset())
 
+    async def test_ensure_default_integrity_error_keeps_outer_session(self) -> None:
+        """A seed race must roll back only the savepoint, not pending plan edits."""
+        from sqlalchemy.exc import IntegrityError
+        from unittest.mock import patch
+
+        async with self.Session() as session:
+            a, _b = await self._two_plans(session)
+            await session.commit()
+            a.name = "kept-after-seed-race"
+            session.add(a)
+
+            async def boom(*_args, **_kwargs):
+                raise IntegrityError("stmt", {}, Exception("unique"))
+
+            with patch.object(session, "flush", new=boom):
+                rows = await ensure_default_packs(session, a)
+            self.assertEqual(rows, [])
+            # Outer pending change must still be flushable after the nested abort.
+            await session.flush()
+            self.assertEqual(
+                (await session.get(ResellerPlan, int(a.id))).name, "kept-after-seed-race"
+            )
+
     async def test_unit_offer_uses_plan_whitelist(self) -> None:
         async with self.Session() as session:
             a, _b = await self._two_plans(session)

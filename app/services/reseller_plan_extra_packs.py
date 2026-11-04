@@ -169,34 +169,33 @@ async def buyable_packs_for_plan(
 async def ensure_default_packs(session: AsyncSession, plan: ResellerPlan) -> list[ResellerPlanExtraPack]:
     """Seed default stairs when the plan has no pack rows yet. Idempotent.
 
-    Concurrent callers may race the unique (plan_id, kind, amount) constraint; on
-    conflict the session is rolled back quietly and the existing rows are returned.
+    Concurrent callers may race the unique (plan_id, kind, amount) constraint.
+    Inserts run inside a savepoint so a conflict rolls back only this seed, not
+    the caller's pending plan/form changes on the same session.
     """
     from sqlalchemy.exc import IntegrityError
-
-    from app.services.db_safe import rollback_quiet
 
     if plan.id is None:
         await session.flush()
     if await has_any_pack(session, int(plan.id)):
         return await list_packs(session, int(plan.id))
     created: list[ResellerPlanExtraPack] = []
-    for kind, amounts in _DEFAULTS.items():
-        for index, amount in enumerate(amounts):
-            row = ResellerPlanExtraPack(
-                plan_id=int(plan.id),
-                kind=kind,
-                amount=int(amount),
-                button_style=None,
-                sort_order=index,
-                is_active=True,
-            )
-            session.add(row)
-            created.append(row)
     try:
-        await session.flush()
+        async with session.begin_nested():
+            for kind, amounts in _DEFAULTS.items():
+                for index, amount in enumerate(amounts):
+                    row = ResellerPlanExtraPack(
+                        plan_id=int(plan.id),
+                        kind=kind,
+                        amount=int(amount),
+                        button_style=None,
+                        sort_order=index,
+                        is_active=True,
+                    )
+                    session.add(row)
+                    created.append(row)
+            await session.flush()
     except IntegrityError:
-        await rollback_quiet(session)
         return await list_packs(session, int(plan.id))
     return created
 

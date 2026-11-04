@@ -157,13 +157,21 @@ def pack_matches_service(
     *,
     service_plan_id: int | None,
     service_category_id: int | None,
+    plan_catalog_exclusive: bool = False,
 ) -> bool:
-    """Whether ``pack`` may be bought for a service of this plan/category."""
+    """Whether ``pack`` may be bought for a service of this plan/category.
+
+    When ``plan_catalog_exclusive`` is true (the sales plan has any plan-scoped
+    pack rows), only a pack whose ``plan_id`` equals ``service_plan_id`` matches —
+    general and category packs are refused even if a client posts their id directly.
+    """
     if not pack:
         return False
     pack_plan = getattr(pack, "plan_id", None)
     if pack_plan is not None:
         return service_plan_id is not None and int(pack_plan) == int(service_plan_id)
+    if plan_catalog_exclusive:
+        return False
     return pack_matches_service_category(pack, service_category_id)
 
 
@@ -591,11 +599,19 @@ async def create_addon_order(
     if await service_shop_id(session, service) != shop_rid:
         raise ValueError("سرویس این فروشگاه نیست")
 
-    # Fail closed: plan-scoped packs only on that plan; else category/general rules.
+    # Fail closed: when the plan has a scoped catalog, only those packs; else
+    # category/general rules. Direct pack_id posts cannot bypass the exclusive list.
     svc_cat = await service_plan_category_id(session, service)
     svc_plan = int(service.plan_id) if getattr(service, "plan_id", None) else None
+    exclusive = bool(
+        svc_plan
+        and await plan_has_scoped_packs(session, plan_id=svc_plan, reseller_id=shop_rid)
+    )
     if not pack_matches_service(
-        pack, service_plan_id=svc_plan, service_category_id=svc_cat
+        pack,
+        service_plan_id=svc_plan,
+        service_category_id=svc_cat,
+        plan_catalog_exclusive=exclusive,
     ):
         raise ValueError(
             "این بسته برای پلن این سرویس نیست — بسته متناسب با همان سرویس را انتخاب کنید"

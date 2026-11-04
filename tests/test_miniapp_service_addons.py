@@ -189,6 +189,11 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(bad.status_code, 400)
         self.assertIn("پلن", bad.text)
 
+        # Direct general pack_id must not bypass the exclusive plan catalog.
+        general_bypass = await self.buy(1, kind="volume")
+        self.assertEqual(general_bypass.status_code, 400)
+        self.assertIn("پلن", general_bypass.text)
+
     async def test_foreign_service_is_rejected_before_checkout(self):
         self.assertEqual((await self.buy(service_id=20)).status_code, 404)
         self.assertEqual((await self.client.get("/api/mini/service/20/addons")).status_code, 404)

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.models import Base, BotUser, Plan, ServiceAddonPack, UserService
 from app.services.service_addons import (
+    create_addon_order,
     list_packs_for_service,
     pack_matches_service,
 )
@@ -40,6 +41,14 @@ class PackMatchTests(unittest.TestCase):
         )
         self.assertTrue(
             pack_matches_service(pack, service_plan_id=1, service_category_id=None)
+        )
+        self.assertFalse(
+            pack_matches_service(
+                pack,
+                service_plan_id=1,
+                service_category_id=None,
+                plan_catalog_exclusive=True,
+            )
         )
 
 
@@ -100,6 +109,51 @@ class PlanScopedListTests(unittest.IsolatedAsyncioTestCase):
             packs_b = await list_packs_for_service(session, svc_b)
             self.assertEqual([p.name for p in packs_a], ["only-a"])
             self.assertEqual([p.name for p in packs_b], ["general"])
+
+    async def test_direct_general_pack_id_refused_when_plan_has_scoped_catalog(self) -> None:
+        async with self.Session() as session:
+            session.add_all(
+                [
+                    BotUser(id=1, telegram_id=1, referral_code="a", wallet_balance=10_000),
+                    Plan(id=1, name="A", price=1000, duration_days=30),
+                    ServiceAddonPack(
+                        id=1,
+                        name="general",
+                        kind="volume",
+                        amount=5,
+                        price=800,
+                        is_general=True,
+                    ),
+                    ServiceAddonPack(
+                        id=2,
+                        name="only-a",
+                        kind="volume",
+                        amount=10,
+                        price=900,
+                        plan_id=1,
+                        is_general=False,
+                    ),
+                    UserService(
+                        id=10,
+                        bot_user_id=1,
+                        plan_id=1,
+                        pg_username="u1",
+                        pg_user_id=1,
+                    ),
+                ]
+            )
+            await session.commit()
+            service = await session.get(UserService, 10)
+            general = await session.get(ServiceAddonPack, 1)
+            plan_pack = await session.get(ServiceAddonPack, 2)
+            with self.assertRaises(ValueError):
+                await create_addon_order(
+                    session, user_id=1, service=service, pack=general, commit=False
+                )
+            order = await create_addon_order(
+                session, user_id=1, service=service, pack=plan_pack, commit=False
+            )
+            self.assertEqual(order.amount, 900)
 
     async def test_inactive_plan_packs_do_not_fall_back_to_general(self) -> None:
         async with self.Session() as session:
