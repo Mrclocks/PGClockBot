@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.api.miniapp_feeds import register_miniapp_feeds
 from app.api.miniapp_pages import register_miniapp_pages
 from app.db.models import (
-    Base, BotUser, Order, Payment, ServiceAddonPack, UserService,
+    Base, BotUser, Order, Payment, Plan, ServiceAddonPack, UserService,
 )
 from app.services.notifications import (
     _pending_order_detail_lines, notify_new_order, notify_new_subscription,
@@ -151,6 +151,43 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(pack.name, text)
                 self.assertIn("افزایش حجم" if pack.kind == "volume" else "افزایش زمان", text)
         self.assertEqual(self.bot.session.close.await_count, 2)
+
+    async def test_plan_scoped_pack_can_be_bought_from_mini_app(self):
+        """List shows plan packs via list_packs_for_service; checkout must use pack_matches_service."""
+        plan = Plan(id=50, name="VIP", price=1000, duration_days=30)
+        plan_pack = ServiceAddonPack(
+            id=50,
+            name="فقط VIP",
+            kind="volume",
+            amount=3,
+            price=500,
+            plan_id=50,
+            is_general=False,
+        )
+        other_plan_pack = ServiceAddonPack(
+            id=51,
+            name="پلن دیگر",
+            kind="volume",
+            amount=4,
+            price=500,
+            plan_id=99,
+            is_general=False,
+        )
+        self.svc.plan_id = 50
+        self.session.add_all([plan, Plan(id=99, name="Other", price=1, duration_days=1), plan_pack, other_plan_pack])
+        await self.session.commit()
+
+        catalog = await self.client.get("/api/mini/service/10/addons?kind=volume")
+        self.assertEqual(catalog.status_code, 200)
+        self.assertEqual([p["id"] for p in catalog.json()["packs"]], [50])
+
+        ok = await self.buy(50, kind="volume")
+        self.assertEqual(ok.status_code, 200, ok.text)
+        self.assertEqual(ok.json()["wallet"], 9500)
+
+        bad = await self.buy(51, kind="volume")
+        self.assertEqual(bad.status_code, 400)
+        self.assertIn("پلن", bad.text)
 
     async def test_foreign_service_is_rejected_before_checkout(self):
         self.assertEqual((await self.buy(service_id=20)).status_code, 404)

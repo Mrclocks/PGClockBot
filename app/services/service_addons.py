@@ -301,6 +301,24 @@ async def list_packs_for_plan(
     return packs
 
 
+async def plan_has_scoped_packs(
+    session: AsyncSession,
+    *,
+    plan_id: int,
+    reseller_id: int | None = None,
+) -> bool:
+    """True when the plan has at least one plan-scoped pack row (active or not)."""
+    from app.services.users import current_shop_reseller_id
+
+    rid = reseller_id if reseller_id is not None else current_shop_reseller_id()
+    q = select(ServiceAddonPack.id).where(ServiceAddonPack.plan_id == int(plan_id)).limit(1)
+    if rid:
+        q = q.where(ServiceAddonPack.owner_reseller_id == int(rid))
+    else:
+        q = q.where(ServiceAddonPack.owner_reseller_id.is_(None))
+    return (await session.scalar(q)) is not None
+
+
 async def list_packs_for_service(
     session: AsyncSession,
     service: UserService,
@@ -310,23 +328,24 @@ async def list_packs_for_service(
 ) -> list[ServiceAddonPack]:
     """Packs purchasable for one service.
 
-    If the service's sales plan has any plan-scoped packs, only those are offered.
+    If the service's sales plan has any plan-scoped pack rows (even inactive), only
+    that plan's active packs are offered — never fall back to general/category.
     Otherwise the legacy category/general catalog is used.
     """
     from app.services.service_automation import service_shop_id
 
     shop_rid = await service_shop_id(session, service)
     plan_id = int(service.plan_id) if getattr(service, "plan_id", None) else None
-    if plan_id:
-        plan_packs = await list_packs_for_plan(
+    if plan_id and await plan_has_scoped_packs(
+        session, plan_id=plan_id, reseller_id=shop_rid
+    ):
+        return await list_packs_for_plan(
             session,
             plan_id=plan_id,
             reseller_id=shop_rid,
             active_only=active_only,
             kind=kind,
         )
-        if plan_packs:
-            return plan_packs
     cat_id = await service_plan_category_id(session, service)
     return await list_shop_packs(
         session,

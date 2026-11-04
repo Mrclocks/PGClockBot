@@ -195,6 +195,24 @@ class ExtraPackFormApplyTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([(p.amount, p.button_style) for p in gb], [(2, "primary"), (8, "danger")])
             self.assertEqual([(p.amount, p.button_style) for p in users], [(4, None)])
 
+    def test_form_pairs_style_with_amount_before_dedupe(self) -> None:
+        from app.services.reseller_plan_extra_packs import packs_payload_from_form
+
+        class Form(dict):
+            def getlist(self, key):
+                val = self.get(key, [])
+                return list(val) if isinstance(val, (list, tuple)) else [val]
+
+        form = Form(
+            {
+                "extra_gb_amount": ["5", "5", "10"],
+                "extra_gb_style": ["danger", "primary", "success"],
+            }
+        )
+        amounts, styles = packs_payload_from_form(form, KIND_GB)
+        self.assertEqual(amounts, [5, 10])
+        self.assertEqual(styles, ["danger", "success"])
+
 
 class ExtraPackMigrationTests(unittest.TestCase):
     def test_upgrade_twice_and_downgrade(self) -> None:

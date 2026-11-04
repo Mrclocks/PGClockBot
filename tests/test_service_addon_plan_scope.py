@@ -101,6 +101,44 @@ class PlanScopedListTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([p.name for p in packs_a], ["only-a"])
             self.assertEqual([p.name for p in packs_b], ["general"])
 
+    async def test_inactive_plan_packs_do_not_fall_back_to_general(self) -> None:
+        async with self.Session() as session:
+            session.add_all(
+                [
+                    BotUser(id=1, telegram_id=1, referral_code="a"),
+                    Plan(id=1, name="A", price=1000, duration_days=30),
+                    ServiceAddonPack(
+                        id=1,
+                        name="general",
+                        kind="volume",
+                        amount=5,
+                        price=800,
+                        is_general=True,
+                    ),
+                    ServiceAddonPack(
+                        id=2,
+                        name="off",
+                        kind="volume",
+                        amount=10,
+                        price=900,
+                        plan_id=1,
+                        is_general=False,
+                        is_active=False,
+                    ),
+                    UserService(
+                        id=10,
+                        bot_user_id=1,
+                        plan_id=1,
+                        pg_username="u1",
+                        pg_user_id=1,
+                    ),
+                ]
+            )
+            await session.commit()
+            svc = await session.get(UserService, 10)
+            packs = await list_packs_for_service(session, svc)
+            self.assertEqual(packs, [])
+
 
 class MigrationTests(unittest.TestCase):
     def test_upgrade_twice_and_downgrade(self) -> None:

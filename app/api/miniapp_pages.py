@@ -714,7 +714,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         from app.services.service_addons import (
             create_addon_order,
             kind_label,
-            pack_matches_service_category,
+            pack_matches_service,
             pack_matches_shop,
             service_plan_category_id,
         )
@@ -742,8 +742,11 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         if kind is not None and pack.kind != kind:
             raise HTTPException(400, "نوع بسته با بخش انتخاب‌شده مطابقت ندارد")
         svc_cat = await service_plan_category_id(session, svc)
-        if not pack_matches_service_category(pack, svc_cat):
-            raise HTTPException(400, "این بسته برای دستهٔ پلن این سرویس نیست")
+        svc_plan = int(svc.plan_id) if getattr(svc, "plan_id", None) else None
+        if not pack_matches_service(
+            pack, service_plan_id=svc_plan, service_category_id=svc_cat
+        ):
+            raise HTTPException(400, "این بسته برای پلن این سرویس نیست")
         await session.refresh(user)
         quote = await quote_product(session, pack, shop_id=shop_id)
         if quote.price > await _scope_wallet(session, user, request):
