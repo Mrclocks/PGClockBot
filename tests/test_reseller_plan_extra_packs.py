@@ -151,6 +151,51 @@ class ExtraPackServiceTests(unittest.IsolatedAsyncioTestCase):
                 unit_offer(profile, a, KIND_GB, 25)
 
 
+class ExtraPackFormApplyTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+
+    async def asyncTearDown(self) -> None:
+        await self.engine.dispose()
+
+    async def test_apply_form_replaces_packs_with_styles(self) -> None:
+        from app.services.reseller_plan_extra_packs import apply_extra_packs_from_form, list_packs
+
+        class Form(dict):
+            def getlist(self, key):
+                val = self.get(key, [])
+                return list(val) if isinstance(val, (list, tuple)) else [val]
+
+        async with self.Session() as session:
+            plan = ResellerPlan(
+                name="F",
+                price=1,
+                allow_buy_extra=True,
+                extra_gb_price=100,
+                plan_kind="subscription",
+                billing_mode="fixed",
+            )
+            session.add(plan)
+            await session.flush()
+            form = Form(
+                {
+                    "extra_gb_amount": ["2", "8"],
+                    "extra_gb_style": ["primary", "danger"],
+                    "extra_user_amount": ["4"],
+                    "extra_user_style": ["inherit"],
+                }
+            )
+            await apply_extra_packs_from_form(session, plan, form)
+            await session.commit()
+            gb = await list_packs(session, int(plan.id), kind=KIND_GB, active_only=True)
+            users = await list_packs(session, int(plan.id), kind=KIND_USERS, active_only=True)
+            self.assertEqual([(p.amount, p.button_style) for p in gb], [(2, "primary"), (8, "danger")])
+            self.assertEqual([(p.amount, p.button_style) for p in users], [(4, None)])
+
+
 class ExtraPackMigrationTests(unittest.TestCase):
     def test_upgrade_twice_and_downgrade(self) -> None:
         from alembic.migration import MigrationContext

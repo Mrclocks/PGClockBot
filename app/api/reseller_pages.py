@@ -1469,8 +1469,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         session.add(plan)
         await session.flush()
         from app.services.billing import sync_plan_billing_rate
+        from app.services.reseller_plan_extra_packs import apply_extra_packs_from_form
 
         await sync_plan_billing_rate(session, plan)
+        try:
+            await apply_extra_packs_from_form(session, plan, form)
+        except ValueError as e:
+            await session.rollback()
+            return RedirectResponse(
+                f"/plans?err={_q(str(e))}#reseller-plans",
+                status_code=303,
+            )
         await session.commit()
         return RedirectResponse(f"/plans?ok={_q('پلن نمایندگی ذخیره شد')}#reseller-plans", status_code=303)
 
@@ -1503,15 +1512,18 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             if x.strip()
         }
         snap = await load_staff_limit_snapshot(staff, session=session)
-        from app.services.button_styles import PLAN_BUTTON_STYLE_OPTIONS
+        from app.services.button_styles import ITEM_BUTTON_STYLE_OPTIONS, PLAN_BUTTON_STYLE_OPTIONS
         from app.services.plan_categories import (
             AUDIENCE_RESELLERS,
             list_categories,
         )
+        from app.services.reseller_plan_extra_packs import KIND_GB, KIND_USERS, list_packs
 
         plan_categories = await list_categories(
             session, staff, audience=AUDIENCE_RESELLERS
         )
+        gb_packs = await list_packs(session, int(plan.id), kind=KIND_GB, active_only=True)
+        user_packs = await list_packs(session, int(plan.id), kind=KIND_USERS, active_only=True)
 
         return render(
             request,
@@ -1527,6 +1539,13 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "pg_limit_cards": limit_snapshot_cards(snap),
                 "pg_roles": roles,
                 "groups": groups,
+                "pack_style_options": ITEM_BUTTON_STYLE_OPTIONS,
+                "extra_gb_packs": [
+                    {"amount": int(p.amount), "button_style": p.button_style} for p in gb_packs
+                ],
+                "extra_user_packs": [
+                    {"amount": int(p.amount), "button_style": p.button_style} for p in user_packs
+                ],
                 "plan_group_ids": plan_group_ids,
                 "plan_style_options": PLAN_BUTTON_STYLE_OPTIONS,
                 "plan_categories": plan_categories,
@@ -1599,8 +1618,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
 
             plan.name = CURRENT_CAPACITY_PLAN_NAME
             from app.services.billing import sync_plan_billing_rate
+            from app.services.reseller_plan_extra_packs import apply_extra_packs_from_form
 
             await sync_plan_billing_rate(session, plan)
+            try:
+                await apply_extra_packs_from_form(session, plan, form)
+            except ValueError as e:
+                await session.rollback()
+                return RedirectResponse(
+                    f"/resellers/plans/{plan_id}/edit?err={_q(str(e))}",
+                    status_code=303,
+                )
             await session.commit()
             return RedirectResponse(
                 f"/plans?ok={_q('پلن ظرفیت فعلی ذخیره شد')}#reseller-plans",
@@ -1780,8 +1808,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 status_code=303,
             )
         from app.services.billing import sync_plan_billing_rate
+        from app.services.reseller_plan_extra_packs import apply_extra_packs_from_form
 
         await sync_plan_billing_rate(session, plan)
+        try:
+            await apply_extra_packs_from_form(session, plan, form)
+        except ValueError as e:
+            await session.rollback()
+            return RedirectResponse(
+                f"/resellers/plans/{plan_id}/edit?err={_q(str(e))}",
+                status_code=303,
+            )
         await session.commit()
         return RedirectResponse(
             f"/plans?ok={_q('پلن نمایندگی ذخیره شد')}#reseller-plans", status_code=303

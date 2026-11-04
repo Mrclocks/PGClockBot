@@ -256,3 +256,47 @@ def resolve_extra_pack_button_style(
 
 def telegram_style_kwargs(style: str | None) -> dict[str, str]:
     return {"style": style} if style else {}
+
+
+def _form_getlist(form: object, key: str) -> list[str]:
+    if hasattr(form, "getlist"):
+        return [str(v) for v in form.getlist(key)]  # type: ignore[attr-defined]
+    raw = form.get(key) if hasattr(form, "get") else None  # type: ignore[attr-defined]
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple)):
+        return [str(v) for v in raw]
+    return [str(raw)]
+
+
+def packs_payload_from_form(form: object, kind: str) -> tuple[list[int], list[str | None]]:
+    """Read ordered amounts + styles for one kind from a multipart/form body."""
+    kind_n = parse_pack_kind(kind)
+    amount_key = "extra_gb_amount" if kind_n == KIND_GB else "extra_user_amount"
+    style_key = "extra_gb_style" if kind_n == KIND_GB else "extra_user_style"
+    raw_amounts = _form_getlist(form, amount_key)
+    raw_styles = _form_getlist(form, style_key)
+    amounts = normalize_amount_list(kind_n, raw_amounts) if raw_amounts else []
+    if not raw_amounts:
+        return [], []
+    # Styles may be shorter when a row was half-submitted; pad with inherit.
+    styles: list[str | None] = []
+    for index, _amount in enumerate(amounts):
+        raw = raw_styles[index] if index < len(raw_styles) else "inherit"
+        styles.append(parse_pack_button_style(raw))
+    return amounts, styles
+
+
+async def apply_extra_packs_from_form(
+    session: AsyncSession, plan: ResellerPlan, form: object
+) -> None:
+    """Persist pack editors for a plan that allows buy-extra; otherwise leave rows alone."""
+    if not bool(getattr(plan, "allow_buy_extra", False)):
+        return
+    has_fields = bool(_form_getlist(form, "extra_gb_amount") or _form_getlist(form, "extra_user_amount"))
+    if not has_fields:
+        await ensure_default_packs(session, plan)
+        return
+    for kind in (KIND_GB, KIND_USERS):
+        amounts, styles = packs_payload_from_form(form, kind)
+        await replace_kind_packs(session, plan, kind, amounts, button_styles=styles)

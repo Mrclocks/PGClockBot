@@ -429,6 +429,7 @@
 </div>
 {% endif %}
 
+<script src="/static/reseller-extra-packs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 <script src="/static/plans-tabs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 
 {# —— Unified plan modal —— #}
@@ -891,7 +892,7 @@
 
         <div id="reseller-buy-extra-block">
         <div class="ui-switch-list">
-          {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=false, help='فقط اشتراک ثابت — در ربات پله‌های ۱/۵/۱۰… نمایش داده می‌شود؛ برای PAYG لازم نیست', id='reseller-allow-buy-extra') }}
+          {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=false, help='فقط اشتراک ثابت — بسته‌های همین پلن در ربات و اشتراک من دیده می‌شوند؛ برای PAYG لازم نیست', id='reseller-allow-buy-extra') }}
         </div>
 
         <div class="form-row" id="reseller-extra-prices" hidden>
@@ -902,6 +903,10 @@
             <input name="extra_user_price" id="reseller-extra-user-price" type="number" data-money min="0" value="0" />
           </label>
         </div>
+        {% set packs_editor_id = 'reseller-extra-packs' %}
+        {% set packs_hidden = true %}
+        {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
+        {% include "_reseller_extra_packs_editor.html" %}
         </div>{# /reseller-buy-extra-block #}
 
         <label class="form-field" id="reseller-role-field">نقش پاسارگارد (الزامی)
@@ -1250,11 +1255,18 @@
 
   function syncResellerExtras(){
     const prices = document.getElementById('reseller-extra-prices');
+    const packs = document.getElementById('reseller-extra-packs');
     const sw = document.querySelector('#reseller-plan-form input[name="allow_buy_extra"]');
     const renewMode = document.getElementById('reseller-renew-pricing-mode');
     if (!prices) return;
     const on = sw ? !!sw.checked : false;
     prices.hidden = !on;
+    if (window.ResellerExtraPacks && packs) {
+      if (on) window.ResellerExtraPacks.seedDefaultsIfEmpty(packs);
+      window.ResellerExtraPacks.setEditorVisible(packs, on);
+    } else if (packs) {
+      packs.hidden = !on;
+    }
     if (renewMode) {
       const fixedOpt = renewMode.querySelector('option[value="fixed"]');
       if (on) {
