@@ -1,7 +1,9 @@
 """ResellerPlan switches for leftover period and purchased extras on renew.
 
-Revision ID: 0085_reseller_plan_carry_on_renew
-Revises: 0084_plan_carry_remaining_quota
+Revision ID: 0087_reseller_plan_carry_on_renew
+Revises: 0086_plan_carry_remaining_quota
+
+Numbering yields 0084/0085 to the reseller extra-packs stack (#1129–#1133).
 
 Existing packages keep both switches on so renewals still extend from a future
 expiry and keep bought extras until an owner turns them off. Idempotent on
@@ -15,8 +17,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0085_reseller_plan_carry_on_renew"
-down_revision: Union[str, None] = "0084_plan_carry_remaining_quota"
+revision: str = "0087_reseller_plan_carry_on_renew"
+down_revision: Union[str, None] = "0086_plan_carry_remaining_quota"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

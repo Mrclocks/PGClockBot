@@ -65,7 +65,7 @@ class ResellerCarryMigrationTests(unittest.TestCase):
 
         spec = importlib.util.spec_from_file_location(
             "reseller_carry_mig",
-            ROOT / "alembic/versions/0085_reseller_plan_carry_on_renew.py",
+            ROOT / "alembic/versions/0087_reseller_plan_carry_on_renew.py",
         )
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
@@ -177,6 +177,60 @@ class ResellerCarryRenewalTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.sub.extra_users_purchased, 0)
         self.assertEqual(result["amount"], 100_000)
         self.assertEqual(self.owner.wallet_balance, 900_000)
+
+    async def test_refused_panel_renew_restores_cleared_extras(self):
+        from app.services.pg_admin_subscription import RENEW_REFUSED, _RenewRefused
+
+        async def refuse(*_a, **_k):
+            raise _RenewRefused()
+
+        with (
+            patch("app.services.pg_admin_subscription._utcnow", return_value=NOW),
+            patch(
+                "app.services.pg_admin_subscription._apply_renewal_on_panel",
+                AsyncMock(side_effect=refuse),
+            ),
+            patch(
+                "app.services.volume_allocation_cascade.assert_child_growth_fits",
+                AsyncMock(),
+            ),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                await renew_subscription(
+                    self.session,
+                    sub=self.sub,
+                    plan=self.plan,
+                    payer=self.owner,
+                    charge_wallet=True,
+                )
+        self.assertEqual(str(ctx.exception), RENEW_REFUSED)
+        await self.session.refresh(self.sub)
+        await self.session.refresh(self.owner)
+        self.assertEqual(self.sub.extra_gb_purchased, 25)
+        self.assertEqual(self.sub.extra_users_purchased, 3)
+        self.assertEqual(self.owner.wallet_balance, 1_000_000)
+
+    async def test_usage_blocker_when_cleared_extras_leave_shop_over_capacity(self):
+        from app.services.reseller_package import AdminUsage, usage_blocker
+
+        blocked = usage_blocker(
+            self.plan,
+            self.sub,
+            AdminUsage(users=12, used_bytes=0),
+        )
+        self.assertIsNotNone(blocked)
+        self.assertIn("کاربر", blocked or "")
+
+    def test_confirm_warnings_mention_cleared_extras(self):
+        from app.services.reseller_package import (
+            EXTRAS_CLEARED_WARN,
+            renew_confirm_warnings_from_invoice,
+        )
+
+        invoice = compute_renew_invoice(self.plan, self.sub)
+        warnings = renew_confirm_warnings_from_invoice(self.plan, invoice)
+        self.assertIn(EXTRAS_CLEARED_WARN, warnings)
+        self.assertTrue(any("زمان" in w for w in warnings))
 
 
 if __name__ == "__main__":

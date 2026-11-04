@@ -71,8 +71,9 @@
             <span class="muted li-hide">{{ c.blocked }}</span>
             {% else %}
             {% call row_actions() %}
+            {% set renew_base = ('تمدید «' ~ c.plan.name ~ '» با ' ~ (c.invoice.total | money) ~ ' تومان از کیف پول؟') if c.relation == 'current' else ('تغییر به «' ~ c.plan.name ~ '» و پرداخت ' ~ (c.invoice.total | money) ~ ' تومان از کیف پول؟ ظرفیت بستهٔ جدید همین حالا اعمال می‌شود.') %}
             <form method="post" action="/my-subscription/renew"
-                  data-confirm="{{ ('تمدید «' ~ c.plan.name ~ '» با ' ~ (c.invoice.total | money) ~ ' تومان از کیف پول؟') if c.relation == 'current' else ('تغییر به «' ~ c.plan.name ~ '» و پرداخت ' ~ (c.invoice.total | money) ~ ' تومان از کیف پول؟ ظرفیت بستهٔ جدید همین حالا اعمال می‌شود.') }}"
+                  data-confirm="{{ renew_base }}{% if c.invoice.cleared_extra_gb or c.invoice.cleared_extra_users %} توجه: حجم/کاربر اضافهٔ خریداری‌شده با این تمدید پاک می‌شود و در مبلغ تمدید حساب نمی‌شود.{% endif %}{% if c.plan.duration_days and not c.invoice.carry_remaining_period %} زمان باقی‌مانده منتقل نمی‌شود؛ دوره از همین الان شروع می‌شود.{% endif %}"
                   data-confirm-title="{{ 'تمدید بسته' if c.relation == 'current' else c.label ~ ' بسته' }}"
                   data-confirm-label="پرداخت و تمدید">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

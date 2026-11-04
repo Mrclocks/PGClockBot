@@ -29,6 +29,7 @@ from app.services.pg_admin_subscription import (
     get_subscription,
     is_subscription_plan,
     plan_has_time,
+    plan_keeps_extras_on_renew,
     plan_kind_of,
     renew_subscription,
 )
@@ -53,13 +54,16 @@ STALE_PAGE = "این صفحه قدیمی است یا تمدید دیگری هم�
 USAGE_UNREADABLE = "مصرف فعلی از پنل خوانده نشد؛ کمی بعد دوباره تلاش کنید"
 PACKAGE_LIST_LIMIT = 30
 RENEW_EXPLAIN = (
-    "با تمدید، مدت بسته از تاریخ انقضای فعلی اضافه می‌شود، دسترسی باز می‌شود و مصرف خود ادمین (حجم بسته) "
-    "صفر می‌شود. مصرف مشتریان شما دست‌نخورده می‌ماند."
+    "با تمدید، دسترسی باز می‌شود و مصرف خود ادمین (حجم بسته) صفر می‌شود. "
+    "مصرف مشتریان شما دست‌نخورده می‌ماند. انتقال زمان و حفظ ظرفیت اضافه را تنظیمات بسته مشخص می‌کند."
 )
 MOVE_UNTIMED_EXPLAIN = (
     "ظرفیت بستهٔ جدید همین حالا اعمال می‌شود. این بسته زمان ندارد، پس زمان و مصرف تغییری نمی‌کند."
 )
 WALLET_PAY_HINT = "با پرداخت از کیف پول، مبلغ همین حالا کسر و تمدید اعمال می‌شود."
+EXTRAS_CLEARED_WARN = (
+    "توجه: حجم/کاربر اضافهٔ خریداری‌شده با این تمدید پاک می‌شود و در مبلغ تمدید حساب نمی‌شود."
+)
 
 
 @dataclass(slots=True)
@@ -98,13 +102,39 @@ class PackageOverview:
 
 
 def _limits(plan: ResellerPlan, sub: PgAdminSubscription | None) -> tuple[int, int]:
-    """(users, gb) the shop would have on ``plan`` with its bought extras; 0 = unlimited."""
+    """(users, gb) after renewing onto ``plan``; 0 = unlimited.
+
+    Bought extras count only when the target plan keeps them on renew.
+    """
     users = max(0, int(plan.included_users or 0))
     gb = max(0, int(plan.included_gb or 0))
-    if sub is not None:
+    if sub is not None and plan_keeps_extras_on_renew(plan):
         users = users + int(sub.extra_users_purchased or 0) if users else 0
         gb = gb + int(sub.extra_gb_purchased or 0) if gb else 0
     return users, gb
+
+
+def renew_confirm_warnings_from_invoice(plan: ResellerPlan, invoice: dict) -> list[str]:
+    """Warnings shown before the owner pays, from a server-side renew invoice."""
+    warnings: list[str] = []
+    if int(invoice.get("cleared_extra_gb") or 0) or int(invoice.get("cleared_extra_users") or 0):
+        warnings.append(EXTRAS_CLEARED_WARN)
+    if plan_has_time(plan) and not bool(invoice.get("carry_remaining_period", True)):
+        warnings.append("زمان باقی‌مانده منتقل نمی‌شود؛ دوره از همین الان شروع می‌شود.")
+    return warnings
+
+
+def renew_confirm_warnings(plan: ResellerPlan, sub: PgAdminSubscription | None) -> list[str]:
+    """Warnings shown before the owner pays for a renew into ``plan``."""
+    return renew_confirm_warnings_from_invoice(plan, compute_renew_invoice(plan, sub))
+
+
+def renew_confirm_text(plan: ResellerPlan, invoice: dict, *, base: str) -> str:
+    """``base`` plus any renew-policy warnings for web confirm dialogs."""
+    extra = renew_confirm_warnings_from_invoice(plan, invoice)
+    if not extra:
+        return base
+    return base + " " + " ".join(extra)
 
 
 def _rank(value: int) -> float:
@@ -215,8 +245,9 @@ async def package_overview(session: AsyncSession, profile: ResellerProfile) -> P
         blocked = NO_TIME_RENEWAL if relation == RELATION_CURRENT and not plan_has_time(plan) else (
             None if relation == RELATION_CURRENT else switch_blocker(current, plan)
         )
-        if blocked is None and relation != RELATION_CURRENT and relation != RELATION_UPGRADE:
-            blocked = usage_blocker(plan, sub, usage) if usage is not None else None
+        # Post-renew capacity (extras dropped when the target plan does not keep them).
+        if blocked is None and usage is not None:
+            blocked = usage_blocker(plan, sub, usage)
         choices.append(PackageChoice(plan=plan, relation=relation, invoice=compute_renew_invoice(plan, sub), blocked=blocked))
     choices.sort(key=lambda c: (c.relation != RELATION_CURRENT, c.blocked is not None))
     return PackageOverview(
@@ -232,15 +263,22 @@ async def _assert_target_allowed(
     if relation == RELATION_CURRENT:
         if not is_subscription_plan(target):
             raise ValueError("تمدید فقط برای پلن اشتراک است")
+    else:
+        blocked = switch_blocker(current, target)
+        if blocked:
+            raise ValueError(blocked)
+    clears_extras = not plan_keeps_extras_on_renew(target) and (
+        int(sub.extra_gb_purchased or 0) > 0 or int(sub.extra_users_purchased or 0) > 0
+    )
+    may_shrink = clears_extras or relation in (RELATION_DOWNGRADE, RELATION_OTHER)
+    if not may_shrink and relation == RELATION_UPGRADE:
         return
-    blocked = switch_blocker(current, target)
-    if blocked:
-        raise ValueError(blocked)
-    if relation == RELATION_UPGRADE:
-        return
+    # Same-plan renew that drops extras, or a smaller/other package, must fit live usage.
     usage = await read_admin_usage(uname)
     if usage is None:
-        raise ValueError(USAGE_UNREADABLE)
+        if may_shrink:
+            raise ValueError(USAGE_UNREADABLE)
+        return
     blocked = usage_blocker(target, sub, usage)
     if blocked:
         raise ValueError(blocked)
