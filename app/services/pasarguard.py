@@ -398,6 +398,14 @@ class PasarGuardClient:
         self._client = new_panel_http_client(self.base_url)
         self._http_rebuild = HttpRebuildState()
 
+    def _rebuild_tracker(self) -> HttpRebuildState:
+        """Lazy init so test doubles built with ``__new__`` still work."""
+        state = getattr(self, "_http_rebuild", None)
+        if state is None:
+            state = HttpRebuildState()
+            self._http_rebuild = state
+        return state
+
     @property
     def uses_api_key(self) -> bool:
         return bool(self._api_key)
@@ -678,7 +686,7 @@ class PasarGuardClient:
                     resp = await send_request(self._http(), method, path, headers=headers, **kwargs)
         except Exception as exc:
             note_http_transport_failure(
-                self, self._http_rebuild, exc, kind=failure_kind(exc)
+                self, self._rebuild_tracker(), exc, kind=failure_kind(exc)
             )
             raise
         if resp.status_code >= 400:
@@ -692,7 +700,7 @@ class PasarGuardClient:
                 resp.status_code,
                 resp.text,
             )
-        note_http_success(self._http_rebuild)
+        note_http_success(self._rebuild_tracker())
         if resp.status_code == 204 or not resp.content:
             return None
         content_type = resp.headers.get("content-type", "")
