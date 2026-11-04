@@ -40,7 +40,10 @@ WORK_SECONDS = 45
 PROXY_CONCURRENCY = 4
 LEASE_CLEANUP_SECONDS = 1
 PANEL_ACCOUNT_CODES = frozenset({"panel_timeout", "panel_unavailable", "panel_denied"})
-MISSING_USER_CODES = frozenset({"user_missing", "not_found"})
+# Only a confirmed deleted monitor user stops platform polling. A transient
+# panel 404 mapped to ``not_found`` (wrong username at setup, blip, etc.) must
+# not disable the whole monitor.
+MISSING_USER_CODES = frozenset({"user_missing"})
 
 
 @dataclass(frozen=True, slots=True)
