@@ -14,15 +14,21 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.db.models import Setting
 from app.services import pg_link_health
 from app.services.formatting import format_message, info_block, kv_line
 from app.services.pg_read_resilience import circuit_status
-from app.services.users import get_setting, set_setting
+from app.services.users import clear_settings_cache, get_setting, set_setting
 
 logger = logging.getLogger(__name__)
+
+# Keep strong refs so pause-alert tasks are not GC'd before they run.
+_pause_alert_tasks: set[asyncio.Task[None]] = set()
 
 SETTING_KEY = "pg_link_alerts_enabled"
 SETTING_DEFAULT = "1"
@@ -110,44 +116,98 @@ async def alerts_enabled(session: AsyncSession) -> bool:
     return _truthy(await get_setting(session, SETTING_KEY, SETTING_DEFAULT))
 
 
+async def _ensure_setting_row(session: AsyncSession, key: str, default: str = "0") -> None:
+    """Insert the settings row if missing so atomic UPDATEs have a target."""
+    exists = await session.scalar(select(Setting.id).where(Setting.key == key))
+    if exists is not None:
+        return
+    session.add(Setting(key=key, value=default))
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Concurrent insert won the unique key.
+        await session.rollback()
+    clear_settings_cache(0)
+
+
 async def _claim_down(session: AsyncSession, *, now: datetime) -> bool:
-    """Persist outage + throttle claim. True when a down message may be sent."""
-    outage = _truthy(await get_setting(session, OUTAGE_ACTIVE_KEY, "0"))
-    notified = _truthy(await get_setting(session, DOWN_NOTIFIED_KEY, "0"))
+    """Atomically claim the down notification. True when a down message may be sent.
+
+    Concurrent pause-alert + watchdog callers race on ``DOWN_NOTIFIED_KEY``:
+    ``UPDATE ... WHERE value != '1'`` so only one rowcount wins.
+    """
+    await _ensure_setting_row(session, OUTAGE_ACTIVE_KEY, "0")
+    await _ensure_setting_row(session, DOWN_NOTIFIED_KEY, "0")
+    await _ensure_setting_row(session, LAST_DOWN_SENT_KEY, "")
+
+    # Mark outage active (idempotent); reset notified when entering a fresh outage.
+    was_outage = _truthy(await get_setting(session, OUTAGE_ACTIVE_KEY, "0"))
+    await session.execute(
+        update(Setting).where(Setting.key == OUTAGE_ACTIVE_KEY).values(value="1")
+    )
+    if not was_outage:
+        await session.execute(
+            update(Setting).where(Setting.key == DOWN_NOTIFIED_KEY).values(value="0")
+        )
+    await session.commit()
+    clear_settings_cache(0)
+
     last = _parse_iso(await get_setting(session, LAST_DOWN_SENT_KEY, ""))
-
-    if not outage:
-        await set_setting(session, OUTAGE_ACTIVE_KEY, "1")
-        await set_setting(session, DOWN_NOTIFIED_KEY, "0")
-        notified = False
-
-    if notified:
-        return False
     if last is not None and (now - last).total_seconds() < THROTTLE_SEC:
-        # Still mark the outage so recovery can run once we eventually notify,
-        # or stay silent for throttled flaps that never notified.
-        if not outage:
-            # already written above
-            pass
+        # Outage is marked; stay silent while the throttle window holds.
         return False
 
-    await set_setting(session, OUTAGE_ACTIVE_KEY, "1")
-    await set_setting(session, DOWN_NOTIFIED_KEY, "1")
-    await set_setting(session, LAST_DOWN_SENT_KEY, _iso(now))
+    claimed = await session.execute(
+        update(Setting)
+        .where(Setting.key == DOWN_NOTIFIED_KEY, Setting.value != "1")
+        .values(value="1")
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount != 1:
+        await session.commit()
+        clear_settings_cache(0)
+        return False
+    await session.execute(
+        update(Setting).where(Setting.key == LAST_DOWN_SENT_KEY).values(value=_iso(now))
+    )
+    await session.commit()
+    clear_settings_cache(0)
     return True
 
 
 async def _claim_up(session: AsyncSession, *, now: datetime) -> bool:
-    """Clear outage; True when a recovery message must be sent once for it."""
-    outage = _truthy(await get_setting(session, OUTAGE_ACTIVE_KEY, "0"))
-    if not outage:
-        return False
+    """Atomically clear outage; True when a recovery message must be sent once.
+
+    ``UPDATE OUTAGE_ACTIVE '1'→'0'`` is the single-winner claim so pause-alert
+    and watchdog cannot both emit «برقرار شد».
+    """
+    await _ensure_setting_row(session, OUTAGE_ACTIVE_KEY, "0")
+    await _ensure_setting_row(session, DOWN_NOTIFIED_KEY, "0")
+    await _ensure_setting_row(session, LAST_UP_SENT_KEY, "")
+
     notified = _truthy(await get_setting(session, DOWN_NOTIFIED_KEY, "0"))
-    await set_setting(session, OUTAGE_ACTIVE_KEY, "0")
-    await set_setting(session, DOWN_NOTIFIED_KEY, "0")
-    if not notified:
+    cleared = await session.execute(
+        update(Setting)
+        .where(Setting.key == OUTAGE_ACTIVE_KEY, Setting.value == "1")
+        .values(value="0")
+        .execution_options(synchronize_session=False)
+    )
+    if cleared.rowcount != 1:
+        await session.commit()
+        clear_settings_cache(0)
         return False
-    await set_setting(session, LAST_UP_SENT_KEY, _iso(now))
+    await session.execute(
+        update(Setting).where(Setting.key == DOWN_NOTIFIED_KEY).values(value="0")
+    )
+    if not notified:
+        await session.commit()
+        clear_settings_cache(0)
+        return False
+    await session.execute(
+        update(Setting).where(Setting.key == LAST_UP_SENT_KEY).values(value=_iso(now))
+    )
+    await session.commit()
+    clear_settings_cache(0)
     return True
 
 
@@ -280,4 +340,6 @@ def schedule_circuit_pause_alert(failure_kind: str | None = None) -> None:
         except Exception:
             logger.warning("PasarGuard link alert after circuit pause failed", exc_info=True)
 
-    loop.create_task(_run())
+    task = loop.create_task(_run(), name="pg-link-pause-alert")
+    _pause_alert_tasks.add(task)
+    task.add_done_callback(_pause_alert_tasks.discard)
