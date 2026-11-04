@@ -241,6 +241,15 @@ def note_successful_panel_contact(base_url: str) -> None:
         _mark_healthy(state)
 
 
+def force_mark_circuit_healthy(base_url: str) -> None:
+    """Watchdog/manual recovery: clear a pause after a verified successful probe."""
+    try:
+        state = _panel_state(base_url)
+    except PgReadUnavailable:
+        return
+    _mark_healthy(state)
+
+
 def _consume_dns_result(task: asyncio.Task[str], state: _PanelState) -> None:
     # A request may time out while libc is still resolving in a worker thread.
     # Retrieve late failures; future requests can reuse this same lookup.
