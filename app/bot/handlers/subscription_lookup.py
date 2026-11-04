@@ -21,9 +21,14 @@ from app.bot.nav_input import CancelEntry, ask_text, finish_text_step, register_
 from app.config import get_settings
 from app.db.models import BotUser, Role
 from app.services import bot_feedback_texts as feedback
-from app.services.formatting import format_bytes, format_expire_short, format_toman
+from app.bot.handlers.reseller_customer_services import (
+    manage_service_button,
+    may_manage_customer_services,
+)
+from app.services.formatting import format_bytes, format_expire_short, format_toman, kv_line
 from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import has_bot_perm
+from app.services.staff_cards import format_subscription_owner_card
 from app.services.subscription_lookup import SubscriptionMatch, find_service_by_link, link_token
 from app.services.user_search import MIN_QUERY_LENGTH, clean_handle, search_bot_users, service_owner_clause
 from app.services.users_ops import scoped_users_where
@@ -98,13 +103,13 @@ def _quota_lines(match: SubscriptionMatch) -> list[str]:
 
 
 async def build_result(
-    session: AsyncSession, match: SubscriptionMatch, *, shop_id: int | None
+    session: AsyncSession,
+    match: SubscriptionMatch,
+    *,
+    shop_id: int | None,
+    may_manage_services: bool = False,
 ) -> tuple[str, InlineKeyboardMarkup]:
     """Owner and service summary from stored data only (no panel call) with the action buttons."""
-    from app.bot.handlers.reseller_customer_services import manage_service_button
-    from app.services.formatting import kv_line
-    from app.services.staff_cards import format_subscription_owner_card
-
     owner, service = match.owner, match.service
     balance = await get_wallet_balance(session, owner, shop_id=shop_id)
     quota = []
@@ -134,10 +139,9 @@ async def build_result(
             rows.append([InlineKeyboardButton(text="⚙️ مدیریت سرویس", callback_data=f"adm:users:svc:{owner.id}:{service.id}")])
         again, back = PLATFORM_ASK, PLATFORM_BACK
     else:
-        rows = [
-            [InlineKeyboardButton(text="👤 پروفایل مشتری", callback_data=f"res:user:{owner.id}")],
-            [manage_service_button(int(owner.id), int(service.id))],
-        ]
+        rows = [[InlineKeyboardButton(text="👤 پروفایل مشتری", callback_data=f"res:user:{owner.id}")]]
+        if may_manage_services:
+            rows.append([manage_service_button(int(owner.id), int(service.id))])
         again, back = ASK_CALLBACK, SHOP_BACK
     rows.append([InlineKeyboardButton(text="🔎 جستجوی دوباره", callback_data=again)])
     markup = with_inline_back(InlineKeyboardMarkup(inline_keyboard=rows), await get_all_settings(session), back)
@@ -145,12 +149,18 @@ async def build_result(
 
 
 async def staff_lookup(
-    session: AsyncSession, raw: str | None, *, shop_id: int | None
+    session: AsyncSession,
+    raw: str | None,
+    *,
+    shop_id: int | None,
+    may_manage_services: bool = False,
 ) -> tuple[str, InlineKeyboardMarkup]:
     """The result card for ``raw``, or the not-found text with a way back."""
     match = await find_service_by_link(session, raw, shop_id=shop_id)
     if match is not None:
-        return await build_result(session, match, shop_id=shop_id)
+        return await build_result(
+            session, match, shop_id=shop_id, may_manage_services=may_manage_services
+        )
     back = PLATFORM_BACK if shop_id is None else SHOP_BACK
     again = PLATFORM_ASK if shop_id is None else ASK_CALLBACK
     rows = [[InlineKeyboardButton(text="🔎 جستجوی دوباره", callback_data=again)]]
@@ -199,11 +209,17 @@ async def staff_reseller_search(session: AsyncSession, raw: str | None) -> tuple
 
 
 async def staff_search(
-    session: AsyncSession, raw: str | None, *, shop_id: int | None
+    session: AsyncSession,
+    raw: str | None,
+    *,
+    shop_id: int | None,
+    may_manage_services: bool = False,
 ) -> tuple[str, InlineKeyboardMarkup]:
     """A subscription link finds its owner; anything else searches the shop's customers."""
     if link_token(raw):
-        return await staff_lookup(session, raw, shop_id=shop_id)
+        return await staff_lookup(
+            session, raw, shop_id=shop_id, may_manage_services=may_manage_services
+        )
     return await staff_user_search(session, raw, shop_id=shop_id)
 
 
@@ -219,12 +235,26 @@ async def shop_scope(
     session: AsyncSession, db_user: BotUser, *, is_reseller_bot: bool, reseller_owner_id: int | None
 ) -> int | None:
     """The shop id of an operator holding ``dashboard``; None when not allowed."""
+    owner_id, _profile, _may = await shop_staff_context(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    return owner_id
+
+
+async def shop_staff_context(
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+) -> tuple[int | None, object | None, bool]:
+    """Shop id for search (``dashboard``), plus whether service manage is allowed."""
     owner_id, profile = await load_reseller_actor(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if owner_id and profile and has_bot_perm(profile, PERMISSION):
-        return int(owner_id)
-    return None
+        return int(owner_id), profile, may_manage_customer_services(profile)
+    return None, None, False
 
 
 @router.callback_query(F.data == ASK_CALLBACK)
@@ -251,12 +281,16 @@ async def receive_link(
         message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     ):
         return
-    shop_id = await shop_scope(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    shop_id, _profile, may_manage = await shop_staff_context(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
     if shop_id is None:
         await state.clear()
         await message.answer(feedback.NO_ACCESS_REPLY)
         return
-    text, markup = await staff_search(session, message.text, shop_id=shop_id)
+    text, markup = await staff_search(
+        session, message.text, shop_id=shop_id, may_manage_services=may_manage
+    )
     await state.set_state(None)
     await finish_text_step(message, state, text=text, inline=markup)
     if link_token(message.text):

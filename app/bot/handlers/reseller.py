@@ -461,7 +461,10 @@ async def res_user_view(
         await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
-    from app.bot.handlers.reseller_customer_services import services_button
+    from app.bot.handlers.reseller_customer_services import (
+        may_manage_customer_services,
+        services_button,
+    )
     from app.services.staff_cards import format_staff_customer_card
     from app.services.users_ops import (
         bot_user_alert_flags,
@@ -500,8 +503,9 @@ async def res_user_view(
         rows_kb.append(
             [InlineKeyboardButton(text="✉️ پیام", callback_data=f"res:usermsg:{user.id}")]
         )
-    if ops.service_count > 0:
+    if ops.service_count > 0 and may_manage_customer_services(profile):
         rows_kb.append([services_button(int(user.id))])
+    if ops.service_count > 0:
         rows_kb.append(
             [
                 InlineKeyboardButton(

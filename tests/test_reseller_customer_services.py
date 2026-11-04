@@ -75,17 +75,17 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
             ResellerProfile(
                 user_id=2,
                 is_active=True,
-                web_permissions="dashboard",
-                bot_permissions="dashboard",
+                web_permissions="dashboard,customer_services",
+                bot_permissions="dashboard,customer_services",
             )
         )
         self.session.add(
             ResellerProfile(
                 user_id=3,
                 is_active=True,
-                # Empty CSV = intentional deny-all (no dashboard injection).
-                web_permissions="",
-                bot_permissions="",
+                # dashboard without customer_services → can search, not manage services.
+                web_permissions="dashboard",
+                bot_permissions="dashboard",
             )
         )
         self.session.add(Plan(id=1, name="Gold", price=100, duration_days=30, data_limit_gb=10))
@@ -149,9 +149,8 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
         snap = await self._snap_for(11)
         callback = self._callback(f"res:svcs:{self.customer.id}")
         edit = AsyncMock()
-        with patch.object(handler, "safe_edit_text", edit), patch(
-            "app.services.bot_user_admin.list_service_snapshots",
-            AsyncMock(return_value=[snap]),
+        with patch.object(handler, "safe_edit_text", edit), patch.object(
+            handler, "list_service_snapshots", AsyncMock(return_value=[snap])
         ) as listed:
             await handler.res_user_services(
                 callback,
@@ -200,8 +199,8 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(callback.answer.await_args.kwargs.get("show_alert"))
         self.assertEqual(callback.answer.await_args.args[0], feedback.NO_ACCESS)
 
-    async def test_staff_without_dashboard_cannot_open_services(self) -> None:
-        """Empty shop permissions deny dashboard (and therefore service control)."""
+    async def test_staff_without_customer_services_cannot_open_services(self) -> None:
+        """``dashboard`` alone is not enough — ``customer_services`` is required."""
         callback = self._callback(f"res:svcs:{self.foreign.id}")
         edit = AsyncMock()
         with patch.object(handler, "safe_edit_text", edit):
@@ -220,12 +219,13 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
         callback = self._callback(f"res:svcrenew:{self.customer.id}:11")
         edit = AsyncMock()
         owned = AsyncMock(return_value=await self.session.get(UserService, 11))
-        with patch.object(handler, "safe_edit_text", edit), patch(
-            "app.services.bot_user_admin.get_owned_service", owned
-        ), patch(
-            "app.services.bot_user_admin.admin_renew_service", AsyncMock()
-        ), patch(
-            "app.services.bot_user_admin.service_snapshot",
+        with patch.object(handler, "safe_edit_text", edit), patch.object(
+            handler, "get_owned_service", owned
+        ), patch.object(
+            handler, "admin_renew_service", AsyncMock()
+        ), patch.object(
+            handler,
+            "service_snapshot",
             AsyncMock(return_value=await self._snap_for(11)),
         ):
             await handler.res_user_service_renew(

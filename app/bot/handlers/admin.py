@@ -29,6 +29,11 @@ from app.services.formatting import (
     format_toman,
     order_status_fa,
 )
+from app.services.staff_cards import (
+    format_adjust_prompt,
+    format_services_list_header,
+    format_staff_customer_card,
+)
 from app.services.orders import (
     approve_payment,
     fulfill_paid_order,
@@ -2426,8 +2431,6 @@ async def _user_card(
     from app.services.color_tags import bot_tag_button_label, effective_color_tag
 
     tag_line = bot_tag_button_label(effective_color_tag(user))
-    from app.services.staff_cards import format_staff_customer_card
-
     text = format_staff_customer_card(
         flags=flags,
         display_name=user.full_name or user.username or "—",
@@ -2951,8 +2954,6 @@ async def adm_users_services(
                 ),
             )
         return
-    from app.services.staff_cards import format_services_list_header
-
     lines = [format_services_list_header(user_id, subject="کاربر"), ""]
     for snap in snaps[:15]:
         lines.append(snapshot_telegram_lines(snap))
@@ -3313,8 +3314,6 @@ async def adm_users_service_adjust(
         await state.update_data(**{adj_key: {"days": days, "gb": gb}})
         await callback.answer()
 
-    from app.services.staff_cards import format_adjust_prompt
-
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -3371,8 +3370,6 @@ async def adm_svc_adjust_days_entered(
     await state.set_state(None)
     await state.update_data(**{adj_key: {"days": days, "gb": gb}})
     # The adjuster replaces the prompt in place; the menu keyboard never changed.
-    from app.services.staff_cards import format_adjust_prompt
-
     await finish_text_step(
         message,
         state,
@@ -3426,8 +3423,6 @@ async def adm_svc_adjust_gb_entered(
     days = int(stored.get("days") or 0)
     await state.set_state(None)
     await state.update_data(**{adj_key: {"days": days, "gb": gb}})
-    from app.services.staff_cards import format_adjust_prompt
-
     # The adjuster replaces the prompt in place; the menu keyboard never changed.
     await finish_text_step(
         message,
