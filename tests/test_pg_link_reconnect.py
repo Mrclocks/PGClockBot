@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
 
+from app.api.pg_link_pages import DENIED_MESSAGE
 from app.services import pg_link_health as health
 from app.services import pg_link_reconnect as reconnect
 from app.services import pg_read_resilience as resilience
@@ -43,6 +44,17 @@ class _FakePanel:
 
     async def _ensure_safe_target(self, *, protected: bool = True) -> None:
         return None
+
+    async def get_system_probe(self, *, timeout: httpx.Timeout) -> httpx.Response:
+        await self._ensure_safe_target(protected=True)
+        headers = await self._headers()
+        return await resilience.panel_read_request(
+            self._http(),
+            "GET",
+            "/api/system",
+            headers=headers,
+            timeout=timeout,
+        )
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -144,6 +156,47 @@ class ReconnectServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(message, health.KIND_LABELS["gateway"])
         self.assertNotIn(HOSTILE, message)
 
+    async def test_http_401_maps_to_auth_without_polluting_link_health(self) -> None:
+        before = health.snapshot()["recent_failure_count"]
+        self.answer = 401
+        result = await self._run()
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_kind, "auth")
+        _key, message = reconnect.flash_for_result(result)
+        self.assertEqual(message, health.KIND_LABELS["auth"])
+        self.assertEqual(health.snapshot()["recent_failure_count"], before)
+
+    async def test_http_403_maps_to_auth_without_polluting_link_health(self) -> None:
+        before = health.snapshot()["recent_failure_count"]
+        self.answer = 403
+        result = await self._run()
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_kind, "auth")
+        _key, message = reconnect.flash_for_result(result)
+        self.assertEqual(message, health.KIND_LABELS["auth"])
+        self.assertEqual(health.snapshot()["recent_failure_count"], before)
+
+    async def test_http_404_maps_to_client_error_without_polluting_link_health(self) -> None:
+        before = health.snapshot()["recent_failure_count"]
+        self.answer = 404
+        result = await self._run()
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_kind, "client_error")
+        _key, message = reconnect.flash_for_result(result)
+        self.assertEqual(message, health.KIND_LABELS["client_error"])
+        self.assertEqual(health.snapshot()["recent_failure_count"], before)
+
+    async def test_http_503_maps_to_gateway_and_is_counted(self) -> None:
+        before = health.snapshot()["recent_failure_count"]
+        self.answer = 503
+        result = await self._run()
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_kind, "gateway")
+        snap = health.snapshot()
+        self.assertGreater(snap["recent_failure_count"], before)
+        counts = {row["kind"]: row["count"] for row in snap["recent_failures"]}
+        self.assertGreaterEqual(counts.get("gateway", 0), 1)
+
     async def test_rate_limit_does_not_call_panel(self) -> None:
         first = await self._run()
         self.assertTrue(first.ok)
@@ -159,12 +212,12 @@ class ReconnectServiceTests(unittest.IsolatedAsyncioTestCase):
         gate = asyncio.Event()
         release = asyncio.Event()
 
-        async def slow_headers() -> dict[str, str]:
+        async def slow_probe(*, timeout: httpx.Timeout) -> httpx.Response:
             gate.set()
             await release.wait()
-            return {"Authorization": "Bearer test"}
+            return await _FakePanel.get_system_probe(self.panel, timeout=timeout)
 
-        self.panel._headers = slow_headers  # type: ignore[method-assign]
+        self.panel.get_system_probe = slow_probe  # type: ignore[method-assign]
 
         async def one() -> reconnect.ReconnectResult:
             with (
@@ -229,9 +282,9 @@ class RouteAuthzTests(unittest.IsolatedAsyncioTestCase):
         )
 
         async def require_admin() -> dict:
-            from app.services.platform_identity import is_explicit_owner_staff
-
-            if self.staff.get("role") != "admin" or not is_explicit_owner_staff(self.staff):
+            # Mirror production role gate only; owner check lives in the route
+            # so the denied-flash path is reachable for non-owner admins.
+            if self.staff.get("role") != "admin":
                 raise HTTPException(status_code=403, detail="forbidden")
             return self.staff
 
@@ -295,11 +348,19 @@ class RouteAuthzTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("12 ms", location)
         self.reconnect_mock.assert_awaited_once()
 
+    async def test_non_owner_admin_gets_denied_flash_and_skips_panel(self) -> None:
+        self.staff = {"role": "admin", "username": "legacy-admin"}  # no owner principal
+        response = await self._post()
+        self.assertEqual(response.status_code, 303)
+        location = unquote(response.headers["location"])
+        self.assertTrue(location.startswith("/home?err="))
+        self.assertIn(DENIED_MESSAGE, location)
+        self.reconnect_mock.assert_not_awaited()
+
     async def test_reseller_staff_and_anonymous_are_forbidden(self) -> None:
         cases = [
             {"role": "reseller", "bot_user_id": 9, "permissions": [reconnect.PG_LINK_RECONNECT_PERMISSION]},
             {"role": "pg_staff", "permissions": [reconnect.PG_LINK_RECONNECT_PERMISSION]},
-            {"role": "admin", "username": "legacy-admin"},  # no owner principal
             {},
         ]
         for staff in cases:
@@ -342,9 +403,9 @@ class HostileLoginFailureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_login_error_flash_stays_safe(self) -> None:
         panel = MagicMock()
-        panel._ensure_safe_target = AsyncMock(return_value=None)
-        panel._headers = AsyncMock(side_effect=PasarGuardError(HOSTILE, status_code=502, body=HOSTILE))
-        panel._http = MagicMock()
+        panel.get_system_probe = AsyncMock(
+            side_effect=PasarGuardError(HOSTILE, status_code=502, body=HOSTILE)
+        )
 
         with (
             patch.object(reconnect, "reset_pg"),
@@ -358,6 +419,23 @@ class HostileLoginFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(message, health.KIND_LABELS["gateway"])
         self.assertNotIn("SECRET", message)
         self.assertNotIn("evil.example", message)
+
+    async def test_login_401_maps_to_auth(self) -> None:
+        panel = MagicMock()
+        panel.get_system_probe = AsyncMock(
+            side_effect=PasarGuardError("login rejected", status_code=401, body="bad creds")
+        )
+
+        with (
+            patch.object(reconnect, "reset_pg"),
+            patch.object(reconnect, "get_pg", return_value=panel),
+        ):
+            result = await reconnect.reconnect_panel()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_kind, "auth")
+        _key, message = reconnect.flash_for_result(result)
+        self.assertEqual(message, health.KIND_LABELS["auth"])
 
 
 if __name__ == "__main__":

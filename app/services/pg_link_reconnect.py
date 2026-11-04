@@ -16,7 +16,7 @@ import httpx
 
 from app.services import pg_link_health
 from app.services.pasarguard import PasarGuardError, get_pg, reset_pg
-from app.services.pg_read_resilience import PgReadUnavailable, panel_read_request, web_read_budget
+from app.services.pg_read_resilience import PgReadUnavailable, web_read_budget
 from app.services.security_policy import UnsafePgUrlError
 
 logger = logging.getLogger(__name__)
@@ -84,19 +84,13 @@ async def _probe_system() -> ReconnectResult:
     client = get_pg()
     started = time.monotonic()
     try:
-        await client._ensure_safe_target(protected=True)
-        headers = await client._headers()
         with web_read_budget(seconds=RECONNECT_BUDGET_SEC):
-            response = await panel_read_request(
-                client._http(),
-                "GET",
-                "/api/system",
-                headers=headers,
-                timeout=RECONNECT_TIMEOUT,
-            )
+            response = await client.get_system_probe(timeout=RECONNECT_TIMEOUT)
         if response.status_code >= 400:
+            # 4xx: panel answered — reconnect result carries the kind; do not
+            # pollute link-health failure counters (panel_read_request already
+            # skips them). 5xx that did not raise still maps for the flash.
             kind = pg_link_health.failure_kind(status_code=response.status_code)
-            pg_link_health.record_failure(kind)
             return ReconnectResult(ok=False, latency_ms=None, failure_kind=kind)
     except (PgReadUnavailable, PasarGuardError, httpx.HTTPError, TimeoutError, UnsafePgUrlError) as exc:
         kind = _failure_kind_from_exc(exc)

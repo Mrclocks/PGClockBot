@@ -31,6 +31,8 @@ KIND_LABELS = {
     "dropped": "اتصال وسط کار قطع شد",
     "gateway": "خطای پراکسی (502/503/504)",
     "server_error": "خطای خود پاسارگارد (5xx)",
+    "auth": "ورود به پاسارگارد رد شد (نام کاربری/رمز یا API key)",
+    "client_error": "پاسخ نامعتبر از پاسارگارد (4xx)",
 }
 _DNS_HINTS = ("name or service not known", "temporary failure in name resolution", "getaddrinfo", "nodename nor servname")
 
@@ -58,7 +60,13 @@ def reset() -> None:
 def failure_kind(exc: BaseException | None = None, status_code: int | None = None) -> str:
     """Name the cause of a failed read."""
     if status_code is not None:
-        return "gateway" if status_code in (502, 503, 504) else "server_error"
+        if status_code in (502, 503, 504):
+            return "gateway"
+        if status_code in (401, 403):
+            return "auth"
+        if 400 <= status_code < 500:
+            return "client_error"
+        return "server_error"
     if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
         return "timeout"
     if isinstance(exc, httpx.ConnectError):

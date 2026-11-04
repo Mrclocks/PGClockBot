@@ -281,8 +281,9 @@ async def panel_read_request(
         state.probing = False
     if response.status_code >= 500:
         pg_link_health.record_failure(pg_link_health.failure_kind(status_code=response.status_code))
-    else:
+    elif response.status_code < 400:
         pg_link_health.record_success(time.monotonic() - started)
+    # 4xx: the panel answered; reconnect/caller maps the status — do not pollute stats.
     if response.status_code in GATEWAY_OUTAGE_STATUSES:
         _record_outage(state, budget, "unavailable")
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE)
