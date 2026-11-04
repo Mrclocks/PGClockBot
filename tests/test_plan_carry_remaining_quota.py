@@ -67,7 +67,7 @@ class CarryRemainingMigrationTests(unittest.TestCase):
         from alembic.operations import Operations
 
         spec = importlib.util.spec_from_file_location(
-            "carry_mig", ROOT / "alembic/versions/0084_plan_carry_remaining_quota.py"
+            "carry_mig", ROOT / "alembic/versions/0086_plan_carry_remaining_quota.py"
         )
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
