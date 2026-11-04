@@ -572,6 +572,22 @@ class PanelAlertState(Base):
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class PgLinkHealthState(Base):
+    """Single platform row: last known PasarGuard link-health summary across restarts."""
+
+    __tablename__ = "pg_link_health_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    pause_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    kind_totals_24h: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
 class VolumeHold(Base):
     """Volume a shop has promised but not yet recorded on a service, while a panel call runs.
 

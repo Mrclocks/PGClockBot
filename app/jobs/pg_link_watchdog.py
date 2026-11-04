@@ -5,8 +5,10 @@ from __future__ import annotations
 import logging
 
 from app.db.session import SessionLocal
+from app.services import pg_link_health
 from app.services.pg_link_alerts import evaluate_after_watchdog
 from app.services.pg_link_watchdog import run_watchdog_tick
+from app.services.pg_read_resilience import circuit_status
 
 logger = logging.getLogger(__name__)
 
@@ -33,5 +35,11 @@ async def run_pg_link_watchdog() -> None:
                 )
         except Exception:
             logger.warning("PasarGuard link alert after watchdog failed", exc_info=True)
+        try:
+            async with SessionLocal() as session:
+                pause_count = int(circuit_status().get("pause_count") or 0)
+                await pg_link_health.maybe_persist_link_health(session, pause_count=pause_count)
+        except Exception:
+            logger.warning("PasarGuard link-health persist after watchdog failed", exc_info=True)
     except Exception:
         logger.warning("PasarGuard link watchdog job failed", exc_info=True)
