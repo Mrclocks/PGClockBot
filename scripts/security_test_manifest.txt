@@ -344,6 +344,7 @@ tests/test_panel_brand.py
 tests/test_user_search_folding.py
 # Shop bot: void button only for a shop holding payment_void; customer card lists only the shop's services.
 tests/test_shop_customer_card.py
+tests/test_reseller_customer_services.py
 # Shop Mini App: permission default for new shops and the reason a shop cannot switch it on.
 tests/test_shop_miniapp_defaults.py
 # Cleanup tab deletion: own shop only, chosen tags only, never money in flight, from the root.

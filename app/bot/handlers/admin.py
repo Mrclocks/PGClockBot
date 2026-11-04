@@ -2272,7 +2272,7 @@ async def adm_users_list(callback: CallbackQuery, session: AsyncSession, db_user
         f"👥 <b>لیست کاربران</b>\n"
         f"صفحه {page + 1} از {max(1, (total + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE)}"
         f" · {total} نفر\n"
-        f"<i>🔔 اعلان · ⏰ انقضا · 📉 حجم — جزئیات در وب‌پنل /users</i>"
+        f"<i>🔔 اعلان · ⏰ انقضا · 📉 حجم کم</i>"
     )
     if callback.message:
         from app.bot.nav_inline import with_inline_back
@@ -2415,7 +2415,6 @@ async def _user_card(
     by = await load_services_by_user_ids(session, [int(user.id)], shop_id=None)
     ops = build_user_ops_row(user, by.get(int(user.id), []))
     flags = risk_mark(user, shop_id=None) + bot_user_alert_flags(ops)
-    blocked = "بله 🚫" if user.is_blocked else "خیر"
     alert_line = ""
     if ops.has_alert:
         bits = []
@@ -2423,21 +2422,23 @@ async def _user_card(
             bits.append(f"انقضا {ops.expire_text}")
         if ops.low_volume:
             bits.append(f"حجم {ops.volume_text}")
-        alert_line = "\n🔔 اعلان: " + " · ".join(bits) if bits else "\n🔔 اعلان فعال"
+        alert_line = "🔔 اعلان: " + " · ".join(bits) if bits else "🔔 اعلان فعال"
     from app.services.color_tags import bot_tag_button_label, effective_color_tag
 
     tag_line = bot_tag_button_label(effective_color_tag(user))
-    text = (
-        f"{flags} <b>{html.escape(user.full_name or user.username or '—')}</b>\n\n"
-        f"آیدی تلگرام: <code>{user.telegram_id}</code>\n"
-        f"یوزرنیم: @{html.escape(user.username or '—')}\n"
-        f"نقش: {html.escape(user.role)}\n"
-        f"تگ ریسک: {html.escape(tag_line)}\n"
-        f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
-        f"سرویس‌ها: {ops.service_count}\n"
-        f"مسدود: {blocked}"
-        f"{alert_line}\n\n"
-        f"<i>وب‌پنل: /users?uid={user.id}</i>"
+    from app.services.staff_cards import format_staff_customer_card
+
+    text = format_staff_customer_card(
+        flags=flags,
+        display_name=user.full_name or user.username or "—",
+        telegram_id=int(user.telegram_id),
+        username=user.username,
+        wallet_text=format_toman(user.wallet_balance, get_settings().currency),
+        service_count=int(ops.service_count),
+        is_blocked=bool(user.is_blocked),
+        role=user.role,
+        risk_tag=tag_line,
+        alert_line=alert_line.strip(),
     )
     if confirm_delete:
         text += (
@@ -2950,7 +2951,9 @@ async def adm_users_services(
                 ),
             )
         return
-    lines = [f"📦 <b>سرویس‌های کاربر #{user_id}</b>", ""]
+    from app.services.staff_cards import format_services_list_header
+
+    lines = [format_services_list_header(user_id), ""]
     for snap in snaps[:15]:
         lines.append(snapshot_telegram_lines(snap))
         lines.append("")
@@ -3310,15 +3313,12 @@ async def adm_users_service_adjust(
         await state.update_data(**{adj_key: {"days": days, "gb": gb}})
         await callback.answer()
 
-    text = (
-        f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\n"
-        f"روز: <b>{days}</b> · گیگ: <b>{gb}</b>\n"
-        "مثبت = افزایش، منفی = کاهش. برای ورود دستی روی عدد بزنید."
-    )
+    from app.services.staff_cards import format_adjust_prompt
+
     if callback.message:
         await safe_edit_text(
             callback.message,
-            text,
+            format_adjust_prompt(service_id, days=days, gb=gb),
             reply_markup=kb.admin_user_service_adjust_keyboard(
                 user_id, service_id, days=days, gb=gb
             ),
@@ -3371,10 +3371,12 @@ async def adm_svc_adjust_days_entered(
     await state.set_state(None)
     await state.update_data(**{adj_key: {"days": days, "gb": gb}})
     # The adjuster replaces the prompt in place; the menu keyboard never changed.
+    from app.services.staff_cards import format_adjust_prompt
+
     await finish_text_step(
         message,
         state,
-        text=f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\nروز: <b>{days}</b> · گیگ: <b>{gb}</b>",
+        text=format_adjust_prompt(service_id, days=days, gb=gb),
         inline=kb.admin_user_service_adjust_keyboard(user_id, service_id, days=days, gb=gb),
     )
 
@@ -3424,11 +3426,13 @@ async def adm_svc_adjust_gb_entered(
     days = int(stored.get("days") or 0)
     await state.set_state(None)
     await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+    from app.services.staff_cards import format_adjust_prompt
+
     # The adjuster replaces the prompt in place; the menu keyboard never changed.
     await finish_text_step(
         message,
         state,
-        text=f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\nروز: <b>{days}</b> · گیگ: <b>{gb}</b>",
+        text=format_adjust_prompt(service_id, days=days, gb=gb),
         inline=kb.admin_user_service_adjust_keyboard(user_id, service_id, days=days, gb=gb),
     )
 

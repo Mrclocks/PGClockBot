@@ -6,7 +6,6 @@ a link of another shop answers exactly like an unknown one. The typed link is de
 """
 from __future__ import annotations
 
-import html
 import logging
 
 from aiogram import F, Router
@@ -43,13 +42,15 @@ PLATFORM_ASK = "adm:users:search"
 NOT_FOUND_TEXT = "اشتراکی با این لینک در فروشگاه شما پیدا نشد."
 SEARCH_PROMPT = (
     "🔎 <b>جستجوی کاربر</b>\n"
-    "می‌توانید با این‌ها جستجو کنید:\n"
+    "━━━━━━━━━━━━\n"
+    "یکی از این‌ها را بفرستید:\n\n"
     "• نام یا بخشی از نام\n"
     "• یوزرنیم تلگرام، مثلاً <code>@username</code>\n"
-    "• آیدی عددی تلگرام، مثلاً <code>123456789</code>، یا چند رقم آخر آن (حداقل ۴ رقم)\n"
+    "• آیدی عددی تلگرام، مثلاً <code>123456789</code>\n"
+    "  (یا حداقل ۴ رقم آخر آیدی)\n"
     "• نام‌کاربری سرویس (حداقل ۳ حرف)\n"
-    "• لینک اشتراک یا توکن آن (پیام شما پس از جستجو پاک می‌شود)\n\n"
-    "متن جستجو را بفرستید:"
+    "• لینک اشتراک یا توکن آن\n"
+    "  <i>(پیام شما پس از جستجو پاک می‌شود)</i>"
 )
 USER_NOT_FOUND_TEXT = "مشتری‌ای با این نام، یوزرنیم یا آیدی پیدا نشد."
 RESELLER_NOT_FOUND_TEXT = "نماینده‌ای با این نام، یوزرنیم یا آیدی پیدا نشد."
@@ -57,11 +58,11 @@ RESELLER_ASK = "adm:resellers:search"
 RESELLER_BACK = "nv:adm:resellers"
 RESELLER_SEARCH_PROMPT = (
     "🔎 <b>جستجوی نماینده</b>\n"
-    "می‌توانید با این‌ها جستجو کنید:\n"
+    "━━━━━━━━━━━━\n"
+    "یکی از این‌ها را بفرستید:\n\n"
     "• نام یا بخشی از نام\n"
     "• یوزرنیم تلگرام، مثلاً <code>@username</code>\n"
-    "• آیدی عددی تلگرام، مثلاً <code>123456789</code>\n\n"
-    "متن جستجو را بفرستید:"
+    "• آیدی عددی تلگرام، مثلاً <code>123456789</code>"
 )
 SHORT_QUERY_TEXT = "حداقل دو نویسه از نام یا یوزرنیم را بفرستید."
 MORE_RESULTS_NOTE = "\n<i>نتایج بیشتری هست؛ جستجو را دقیق‌تر کنید.</i>"
@@ -76,10 +77,6 @@ STATUS_LABELS = {
 
 class LookupStates(StatesGroup):
     link = State()
-
-
-def _plain(user: BotUser) -> str:
-    return html.escape(user.full_name or user.username or str(user.telegram_id))
 
 
 def _status(match: SubscriptionMatch) -> str:
@@ -104,20 +101,32 @@ async def build_result(
     session: AsyncSession, match: SubscriptionMatch, *, shop_id: int | None
 ) -> tuple[str, InlineKeyboardMarkup]:
     """Owner and service summary from stored data only (no panel call) with the action buttons."""
+    from app.bot.handlers.reseller_customer_services import manage_service_button
+    from app.services.formatting import kv_line
+    from app.services.staff_cards import format_subscription_owner_card
+
     owner, service = match.owner, match.service
     balance = await get_wallet_balance(session, owner, shop_id=shop_id)
-    lines = [
-        "🔎 <b>صاحب اشتراک</b>",
-        f"مشتری: <b>{_plain(owner)}</b>" + (f" (@{html.escape(owner.username)})" if owner.username else ""),
-        f"آیدی تلگرام: <code>{owner.telegram_id}</code>",
-        f"کیف پول: {format_toman(balance, get_settings().currency)}",
-        f"مسدود: {'بله 🚫' if owner.is_blocked else 'خیر'}",
-        "",
-        f"سرویس: <code>{html.escape(service.pg_username)}</code> (#{service.id})",
-        f"پلن: {html.escape(match.plan_name) if match.plan_name else '—'}",
-        f"وضعیت: {_status(match)}",
-        *_quota_lines(match),
-    ]
+    quota = []
+    for line in _quota_lines(match):
+        if line.startswith("انقضا:"):
+            quota.append(kv_line("📅", "انقضا", line.split(":", 1)[1].strip()))
+        elif line.startswith("حجم:"):
+            quota.append(kv_line("📦", "حجم", line.split(":", 1)[1].strip()))
+        else:
+            quota.append(line)
+    text = format_subscription_owner_card(
+        display_name=owner.full_name or owner.username or str(owner.telegram_id),
+        username=owner.username,
+        telegram_id=int(owner.telegram_id),
+        wallet_text=format_toman(balance, get_settings().currency),
+        is_blocked=bool(owner.is_blocked),
+        service_username=service.pg_username,
+        service_id=int(service.id),
+        plan_name=match.plan_name,
+        status_text=_status(match),
+        quota_lines=quota,
+    )
     if shop_id is None:
         # The platform cards refuse a customer attributed to a shop, so offer them only when they work.
         rows = [[InlineKeyboardButton(text="👤 پروفایل مشتری", callback_data=f"adm:users:view:{owner.id}")]]
@@ -125,11 +134,14 @@ async def build_result(
             rows.append([InlineKeyboardButton(text="⚙️ مدیریت سرویس", callback_data=f"adm:users:svc:{owner.id}:{service.id}")])
         again, back = PLATFORM_ASK, PLATFORM_BACK
     else:
-        rows = [[InlineKeyboardButton(text="👤 پروفایل مشتری", callback_data=f"res:user:{owner.id}")]]
+        rows = [
+            [InlineKeyboardButton(text="👤 پروفایل مشتری", callback_data=f"res:user:{owner.id}")],
+            [manage_service_button(int(owner.id), int(service.id))],
+        ]
         again, back = ASK_CALLBACK, SHOP_BACK
     rows.append([InlineKeyboardButton(text="🔎 جستجوی دوباره", callback_data=again)])
     markup = with_inline_back(InlineKeyboardMarkup(inline_keyboard=rows), await get_all_settings(session), back)
-    return "\n".join(lines), markup
+    return text, markup
 
 
 async def staff_lookup(

@@ -422,7 +422,7 @@ async def res_users_list(
         f"👥 <b>مشتریان من</b>\n"
         f"صفحه {page + 1} از {max(1, (total + RES_USERS_PAGE - 1) // RES_USERS_PAGE)}"
         f" · {total} نفر\n"
-        f"<i>🔔 اعلان · ⏰ انقضا · 📉 حجم — جزئیات در وب‌پنل /users</i>"
+        f"<i>🔔 اعلان · ⏰ انقضا · 📉 حجم کم</i>"
     )
     if not users:
         text += "\n\nهنوز مشتری ثبت‌شده‌ای ندارید. لینک ربات فروشگاه را برای مشتری‌ها بفرستید."
@@ -461,20 +461,18 @@ async def res_user_view(
         await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
-    from app.services.formatting import copyable
+    from app.bot.handlers.reseller_customer_services import services_button
+    from app.services.staff_cards import format_staff_customer_card
     from app.services.users_ops import (
         bot_user_alert_flags,
         build_user_ops_row,
         load_services_by_user_ids,
     )
-
     from app.services.wallet import get_wallet_balance
 
     by = await load_services_by_user_ids(session, [int(user.id)], shop_id=int(owner_id))
     ops = build_user_ops_row(user, by.get(int(user.id), []))
     flags = tag_mark((await marks_of(session, int(owner_id), user)).tag) + bot_user_alert_flags(ops)
-    blocked = "بله" if user.is_blocked else "خیر"
-    display = html.escape(user.full_name or user.username or "—")
     alert_line = ""
     if ops.has_alert:
         bits = []
@@ -483,20 +481,19 @@ async def res_user_view(
         if ops.low_volume:
             bits.append(f"حجم {ops.volume_text}")
         if bits:
-            alert_line = "\n🔔 " + " · ".join(bits)
+            alert_line = "🔔 " + " · ".join(bits)
     shop_bal = await get_wallet_balance(session, user, shop_id=owner_id)
-    summary = service_lines(by.get(int(user.id), []))
-    service_block = "\n\n" + "\n".join(summary) if summary else ""
-    text = (
-        f"{flags} <b>{display}</b>\n\n"
-        f"آیدی: {copyable(user.telegram_id)}\n"
-        f"یوزرنیم: {copyable('@' + user.username) if user.username else '—'}\n"
-        f"کیف پول فروشگاه: {format_toman(shop_bal, get_settings().currency)}\n"
-        f"سرویس‌ها: {ops.service_count}\n"
-        f"مسدود: {blocked}"
-        f"{alert_line}"
-        f"{service_block}\n\n"
-        f"<i>وب‌پنل: /users?uid={user.id}</i>"
+    text = format_staff_customer_card(
+        flags=flags,
+        display_name=user.full_name or user.username or "—",
+        telegram_id=int(user.telegram_id),
+        username=user.username,
+        wallet_text=format_toman(shop_bal, get_settings().currency),
+        service_count=int(ops.service_count),
+        is_blocked=bool(user.is_blocked),
+        wallet_label="کیف پول فروشگاه",
+        alert_line=alert_line,
+        service_summary=service_lines(by.get(int(user.id), [])),
     )
     rows_kb: list[list[InlineKeyboardButton]] = []
     if not user.is_blocked:
@@ -504,6 +501,7 @@ async def res_user_view(
             [InlineKeyboardButton(text="✉️ پیام", callback_data=f"res:usermsg:{user.id}")]
         )
     if ops.service_count > 0:
+        rows_kb.append([services_button(int(user.id))])
         rows_kb.append(
             [
                 InlineKeyboardButton(

@@ -91,7 +91,10 @@ class ResultCardTests(LookupCase):
         self.assertNotIn(SHOP_TOKEN, text)
         self.assertIn("300", text.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")).replace(",", "").replace("٬", ""))
         self.assertNotIn("900", text.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")).replace(",", "").replace("٬", ""))
-        self.assertEqual(self.buttons(markup), ["res:user:4", bot.ASK_CALLBACK, bot.SHOP_BACK])
+        self.assertEqual(
+            self.buttons(markup),
+            ["res:user:4", "res:svc:4:11", bot.ASK_CALLBACK, bot.SHOP_BACK],
+        )
 
     async def test_platform_card_offers_service_management_only_for_platform_customers(self):
         _, markup = await self.card(URL.format(PLATFORM_TOKEN), None)
