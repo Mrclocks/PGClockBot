@@ -15,6 +15,7 @@ from app.services.service_addons import (
     create_addon_order,
     list_packs_for_service,
     pack_matches_service,
+    pack_purchase_button_text,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,6 +51,20 @@ class PackMatchTests(unittest.TestCase):
                 plan_catalog_exclusive=True,
             )
         )
+
+    def test_purchase_button_skips_redundant_name(self) -> None:
+        pack = ServiceAddonPack(
+            name="۱۰ گیگ", kind="volume", amount=10, price=1, is_general=True
+        )
+        text = pack_purchase_button_text(pack, price_text="۱٬۰۰۰ تومان")
+        self.assertEqual(text, "📦 10 گیگ — ۱٬۰۰۰ تومان")
+        self.assertEqual(text.count("گیگ"), 1)
+        named = ServiceAddonPack(
+            name="بسته ویژه", kind="volume", amount=10, price=1, is_general=True
+        )
+        named_text = pack_purchase_button_text(named, price_text="۱٬۰۰۰ تومان")
+        self.assertIn("بسته ویژه", named_text)
+        self.assertIn("10 گیگ", named_text)
 
 
 class PlanScopedListTests(unittest.IsolatedAsyncioTestCase):
@@ -110,7 +125,73 @@ class PlanScopedListTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([p.name for p in packs_a], ["only-a"])
             self.assertEqual([p.name for p in packs_b], ["general"])
 
-    async def test_direct_general_pack_id_refused_when_plan_has_scoped_catalog(self) -> None:
+    async def test_volume_scoped_plan_still_offers_general_duration(self) -> None:
+        """Exclusivity is per kind: volume-only scoped rows must not hide duration."""
+        async with self.Session() as session:
+            session.add_all(
+                [
+                    BotUser(id=1, telegram_id=1, referral_code="a", wallet_balance=10_000),
+                    Plan(id=1, name="A", price=1000, duration_days=30),
+                    ServiceAddonPack(
+                        id=1,
+                        name="general-vol",
+                        kind="volume",
+                        amount=5,
+                        price=800,
+                        is_general=True,
+                    ),
+                    ServiceAddonPack(
+                        id=2,
+                        name="general-time",
+                        kind="duration",
+                        amount=7,
+                        price=700,
+                        is_general=True,
+                    ),
+                    ServiceAddonPack(
+                        id=3,
+                        name="plan-vol",
+                        kind="volume",
+                        amount=10,
+                        price=900,
+                        plan_id=1,
+                        is_general=False,
+                    ),
+                    UserService(
+                        id=10,
+                        bot_user_id=1,
+                        plan_id=1,
+                        pg_username="u1",
+                        pg_user_id=1,
+                    ),
+                ]
+            )
+            await session.commit()
+            service = await session.get(UserService, 10)
+            vol = await list_packs_for_service(session, service, kind="volume")
+            dur = await list_packs_for_service(session, service, kind="duration")
+            self.assertEqual([p.name for p in vol], ["plan-vol"])
+            self.assertEqual([p.name for p in dur], ["general-time"])
+            all_packs = await list_packs_for_service(session, service)
+            self.assertEqual([p.name for p in all_packs], ["plan-vol", "general-time"])
+
+            general_vol = await session.get(ServiceAddonPack, 1)
+            general_time = await session.get(ServiceAddonPack, 2)
+            plan_vol = await session.get(ServiceAddonPack, 3)
+            with self.assertRaises(ValueError):
+                await create_addon_order(
+                    session, user_id=1, service=service, pack=general_vol, commit=False
+                )
+            time_order = await create_addon_order(
+                session, user_id=1, service=service, pack=general_time, commit=False
+            )
+            self.assertEqual(time_order.amount, 700)
+            vol_order = await create_addon_order(
+                session, user_id=1, service=service, pack=plan_vol, commit=False
+            )
+            self.assertEqual(vol_order.amount, 900)
+
+    async def test_direct_general_pack_id_refused_when_kind_is_scoped(self) -> None:
         async with self.Session() as session:
             session.add_all(
                 [
@@ -190,7 +271,7 @@ class PlanScopedListTests(unittest.IsolatedAsyncioTestCase):
             )
             await session.commit()
             svc = await session.get(UserService, 10)
-            packs = await list_packs_for_service(session, svc)
+            packs = await list_packs_for_service(session, svc, kind="volume")
             self.assertEqual(packs, [])
 
 

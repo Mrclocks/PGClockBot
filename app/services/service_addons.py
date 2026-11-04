@@ -20,6 +20,7 @@ from app.db.models import (
     ServiceAddonPack,
     UserService,
 )
+from app.services.numbers import to_fa_digits
 from app.services.plans_catalog import require_catalog_owner_id
 from app.services.provision_gate import ProvisionError, hold_limit_change, new_hold_key
 from app.services.volume_allocation import (
@@ -161,9 +162,11 @@ def pack_matches_service(
 ) -> bool:
     """Whether ``pack`` may be bought for a service of this plan/category.
 
-    When ``plan_catalog_exclusive`` is true (the sales plan has any plan-scoped
-    pack rows), only a pack whose ``plan_id`` equals ``service_plan_id`` matches —
-    general and category packs are refused even if a client posts their id directly.
+    When ``plan_catalog_exclusive`` is true for the pack's *kind* (the sales plan
+    has plan-scoped rows of that kind), only a pack whose ``plan_id`` equals
+    ``service_plan_id`` matches — general and category packs of that kind are
+    refused even if a client posts their id directly. Other kinds stay on the
+    legacy category/general path.
     """
     if not pack:
         return False
@@ -217,6 +220,38 @@ def format_amount_label(kind: str, amount: float) -> str:
 
 def amount_label(pack: ServiceAddonPack) -> str:
     return format_amount_label(pack.kind, float(pack.amount))
+
+
+_PACK_BTN_NAME_MAX = 28
+
+
+def _pack_name_redundant(name: str, amount: str) -> bool:
+    """True when the pack name restates the amount (e.g. «۱۰ گیگ» vs «10 گیگ»)."""
+
+    def norm(text: str) -> str:
+        t = "".join(str(text).split()).replace("گیگابایت", "گیگ").lower()
+        return to_fa_digits(t)
+
+    n, a = norm(name), norm(amount)
+    if not n or n == a:
+        return True
+    # Digits-only core equal (ignore unit words).
+    n_digits = re.sub(r"[^\d۰-۹]", "", n)
+    a_digits = re.sub(r"[^\d۰-۹]", "", a)
+    return bool(n_digits) and n_digits == a_digits and (
+        "گیگ" in n or "روز" in n or "گیگ" in a or "روز" in a
+    )
+
+
+def pack_purchase_button_text(pack: ServiceAddonPack, *, price_text: str) -> str:
+    """Plain Telegram button caption: emoji, amount, price; skip a redundant name."""
+    emoji = "📦" if pack.kind == KIND_VOLUME else "⏱"
+    amount = amount_label(pack)
+    raw_name = (pack.name or "").strip().replace("\n", " ").replace("\r", "")
+    if raw_name and not _pack_name_redundant(raw_name, amount):
+        name = raw_name if len(raw_name) <= _PACK_BTN_NAME_MAX else raw_name[: _PACK_BTN_NAME_MAX - 1] + "…"
+        return f"{emoji} {name} · {amount} — {price_text}"
+    return f"{emoji} {amount} — {price_text}"
 
 
 async def list_packs(
@@ -314,12 +349,21 @@ async def plan_has_scoped_packs(
     *,
     plan_id: int,
     reseller_id: int | None = None,
+    kind: str | None = None,
 ) -> bool:
-    """True when the plan has at least one plan-scoped pack row (active or not)."""
+    """True when the plan has at least one plan-scoped pack row (active or not).
+
+    Pass ``kind`` (volume/duration) to scope the check to that kind only — exclusivity
+    is per kind so a plan with only volume rows still offers general duration packs.
+    """
     from app.services.users import current_shop_reseller_id
 
     rid = reseller_id if reseller_id is not None else current_shop_reseller_id()
     q = select(ServiceAddonPack.id).where(ServiceAddonPack.plan_id == int(plan_id)).limit(1)
+    if kind is not None:
+        if kind not in VALID_KINDS:
+            raise ValueError("نوع بسته نامعتبر است")
+        q = q.where(ServiceAddonPack.kind == kind)
     if rid:
         q = q.where(ServiceAddonPack.owner_reseller_id == int(rid))
     else:
@@ -336,32 +380,55 @@ async def list_packs_for_service(
 ) -> list[ServiceAddonPack]:
     """Packs purchasable for one service.
 
-    If the service's sales plan has any plan-scoped pack rows (even inactive), only
-    that plan's active packs are offered — never fall back to general/category.
-    Otherwise the legacy category/general catalog is used.
+    Exclusivity is per kind: if the sales plan has any plan-scoped rows of kind X
+    (even inactive), only that plan's active X packs are offered for X. Kind Y
+    without scoped rows still uses the legacy category/general catalog.
     """
     from app.services.service_automation import service_shop_id
 
     shop_rid = await service_shop_id(session, service)
     plan_id = int(service.plan_id) if getattr(service, "plan_id", None) else None
-    if plan_id and await plan_has_scoped_packs(
-        session, plan_id=plan_id, reseller_id=shop_rid
-    ):
-        return await list_packs_for_plan(
+    cat_id = await service_plan_category_id(session, service)
+
+    async def _for_kind(k: str) -> list[ServiceAddonPack]:
+        if plan_id and await plan_has_scoped_packs(
+            session, plan_id=plan_id, reseller_id=shop_rid, kind=k
+        ):
+            return await list_packs_for_plan(
+                session,
+                plan_id=plan_id,
+                reseller_id=shop_rid,
+                active_only=active_only,
+                kind=k,
+            )
+        return await list_shop_packs(
             session,
-            plan_id=plan_id,
             reseller_id=shop_rid,
             active_only=active_only,
-            kind=kind,
+            kind=k,
+            service_category_id=cat_id,
         )
-    cat_id = await service_plan_category_id(session, service)
-    return await list_shop_packs(
-        session,
-        reseller_id=shop_rid,
-        active_only=active_only,
-        kind=kind,
-        service_category_id=cat_id,
-    )
+
+    if kind is not None:
+        if kind not in VALID_KINDS:
+            raise ValueError("نوع بسته نامعتبر است")
+        return await _for_kind(kind)
+    out: list[ServiceAddonPack] = []
+    for k in (KIND_VOLUME, KIND_DURATION):
+        out.extend(await _for_kind(k))
+    return out
+
+
+async def available_addon_kinds_for_service(
+    session: AsyncSession,
+    service: UserService,
+) -> list[str]:
+    """Kinds that currently have at least one active purchasable pack for ``service``."""
+    kinds: list[str] = []
+    for k in (KIND_VOLUME, KIND_DURATION):
+        if await list_packs_for_service(session, service, kind=k, active_only=True):
+            kinds.append(k)
+    return kinds
 
 
 async def get_owned_pack(
@@ -599,13 +666,18 @@ async def create_addon_order(
     if await service_shop_id(session, service) != shop_rid:
         raise ValueError("سرویس این فروشگاه نیست")
 
-    # Fail closed: when the plan has a scoped catalog, only those packs; else
-    # category/general rules. Direct pack_id posts cannot bypass the exclusive list.
+    # Fail closed per kind: scoped catalog for pack.kind blocks general/category
+    # packs of that kind; other kinds keep legacy rules.
     svc_cat = await service_plan_category_id(session, service)
     svc_plan = int(service.plan_id) if getattr(service, "plan_id", None) else None
     exclusive = bool(
         svc_plan
-        and await plan_has_scoped_packs(session, plan_id=svc_plan, reseller_id=shop_rid)
+        and await plan_has_scoped_packs(
+            session,
+            plan_id=svc_plan,
+            reseller_id=shop_rid,
+            kind=pack.kind,
+        )
     )
     if not pack_matches_service(
         pack,

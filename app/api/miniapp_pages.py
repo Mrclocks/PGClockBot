@@ -746,8 +746,9 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         svc_plan = int(svc.plan_id) if getattr(svc, "plan_id", None) else None
         exclusive = bool(
             svc_plan
+            and pack.kind in ("volume", "duration")
             and await plan_has_scoped_packs(
-                session, plan_id=svc_plan, reseller_id=shop_id
+                session, plan_id=svc_plan, reseller_id=shop_id, kind=pack.kind
             )
         )
         if not pack_matches_service(

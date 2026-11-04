@@ -189,10 +189,35 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(bad.status_code, 400)
         self.assertIn("پلن", bad.text)
 
-        # Direct general pack_id must not bypass the exclusive plan catalog.
+        # Direct general volume pack_id must not bypass the exclusive volume catalog.
         general_bypass = await self.buy(1, kind="volume")
         self.assertEqual(general_bypass.status_code, 400)
         self.assertIn("پلن", general_bypass.text)
+
+    async def test_volume_scoped_plan_still_lists_and_buys_general_duration(self):
+        plan = Plan(id=60, name="Mix", price=1000, duration_days=30)
+        plan_vol = ServiceAddonPack(
+            id=60,
+            name="حجم پلن",
+            kind="volume",
+            amount=3,
+            price=400,
+            plan_id=60,
+            is_general=False,
+        )
+        self.svc.plan_id = 60
+        self.session.add_all([plan, plan_vol])
+        await self.session.commit()
+
+        vol_list = await self.client.get("/api/mini/service/10/addons?kind=volume")
+        self.assertEqual([p["id"] for p in vol_list.json()["packs"]], [60])
+        dur_list = await self.client.get("/api/mini/service/10/addons?kind=duration")
+        self.assertEqual([p["id"] for p in dur_list.json()["packs"]], [2])
+
+        ok_time = await self.buy(2, kind="duration")
+        self.assertEqual(ok_time.status_code, 200, ok_time.text)
+        bad_vol = await self.buy(1, kind="volume")
+        self.assertEqual(bad_vol.status_code, 400)
 
     async def test_foreign_service_is_rejected_before_checkout(self):
         self.assertEqual((await self.buy(service_id=20)).status_code, 404)
