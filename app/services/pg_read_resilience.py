@@ -36,11 +36,14 @@ GATEWAY_OUTAGE_STATUSES = frozenset({502, 503, 504})
 DNS_CACHE_TTL_SEC = 60.0
 MAX_CONCURRENT_READS = 8
 MAX_PANEL_STATES = 16
-# Page budgets (default ~4s) fire before httpx's 30s timeout. A TimeoutError
-# from async_timeout is a real panel outage only when THIS read was allowed to
-# wait at least this long; shorter remainders mean earlier reads of the same
-# page already consumed the shared budget.
+# Page budgets (default ~4s, configurable down to PG_WEB_READ_BUDGET_MIN_SEC=1s)
+# fire before httpx's 30s timeout. A TimeoutError from async_timeout is a real
+# panel outage when THIS read was the first consumer of the page budget, or
+# when its claimed wait met the derived threshold (capped here; scaled down for
+# short configured budgets so a 1s page can still pause the circuit).
 MIN_OUTAGE_WAIT_SEC = 2.0
+# Slack so scheduling jitter does not hide a first-of-page claim as "consumed".
+_FIRST_READ_SLACK_SEC = 0.05
 # A dropped keep-alive socket or a reset mid-read is usually gone on the next
 # try. Timeouts are not retried: they would only double the wait.
 TRANSIENT_READ_ERRORS = (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)
@@ -65,6 +68,9 @@ class PgReadUnavailable(httpx.TimeoutException):
 @dataclass(slots=True)
 class ReadBudget:
     deadline: float
+    # Full allowance for this page (seconds); used to scale the outage threshold
+    # and to recognise the first read before any of the budget was spent.
+    allowed_sec: float
     failure: str | None = None
     # Once the panel looked unreachable, further reads of this page fail fast.
     origin_down: bool = False
@@ -100,7 +106,11 @@ def web_read_budget(*, seconds: float | None = None, background: bool = False) -
     parent = _BUDGET.get()
     if parent is None:
         allowed = configured_read_budget_sec() if seconds is None else seconds
-        budget = ReadBudget(time.monotonic() + allowed, background=background)
+        budget = ReadBudget(
+            deadline=time.monotonic() + allowed,
+            allowed_sec=float(allowed),
+            background=background,
+        )
     else:
         budget = parent
     token = _BUDGET.set(budget)
@@ -148,9 +158,29 @@ def _clear_probe_lease(state: _PanelState) -> None:
     state.probe_until = 0.0
 
 
-def _budget_timeout_is_outage(claimed_remaining: float) -> bool:
-    """True when the claimed wait was long enough to count as a panel outage."""
-    return claimed_remaining >= MIN_OUTAGE_WAIT_SEC
+def _outage_wait_threshold(allowed_sec: float) -> float:
+    """Scale the outage floor with the page budget (never above MIN_OUTAGE_WAIT_SEC)."""
+    return min(MIN_OUTAGE_WAIT_SEC, max(0.0, allowed_sec) / 2.0)
+
+
+def _budget_timeout_is_outage(claimed_remaining: float, budget: ReadBudget) -> bool:
+    """True when the claimed wait was a fair panel test, not leftover page budget.
+
+    - First read of the page (claimed remaining ≈ full allowance) always counts,
+      even when PG_WEB_READ_BUDGET_SEC is below MIN_OUTAGE_WAIT_SEC.
+    - Later reads count when remaining >= min(2s, allowance/2) so a short
+      configured budget can still pause the circuit, while a straggler with a
+      tiny leftover does not.
+    """
+    allowed = max(0.0, budget.allowed_sec)
+    if allowed <= 0.0:
+        return False
+    # Relative slack: absolute 50ms would treat every claim on a 50ms leftover
+    # budget as "first read".
+    first_read_floor = max(allowed - _FIRST_READ_SLACK_SEC, allowed * 0.9)
+    if claimed_remaining >= first_read_floor:
+        return True
+    return claimed_remaining >= _outage_wait_threshold(allowed)
 
 
 def _claim_read(state: _PanelState, budget: ReadBudget) -> tuple[float, int, bool]:
@@ -279,7 +309,7 @@ async def validate_panel_base(base_url: str, *, protected: bool = True) -> str:
     except TimeoutError as exc:
         if state.dns_task is not None and state.dns_task.done():
             state.dns_task = None
-        if _budget_timeout_is_outage(remaining):
+        if _budget_timeout_is_outage(remaining, budget):
             pg_link_health.record_failure("timeout")
             _record_outage(state, budget, "timeout", is_probe=is_probe)
         else:
@@ -357,7 +387,7 @@ async def panel_read_request(
         # Classify by how long THIS read was claimed to wait, not by exception type.
         # Default page budget (~4s) fires before httpx's 30s timeout against a
         # panel that accepts the connection but never answers.
-        if _budget_timeout_is_outage(remaining):
+        if _budget_timeout_is_outage(remaining, budget):
             pg_link_health.record_failure("timeout")
             _record_outage(state, budget, "timeout", is_probe=is_probe)
         else:

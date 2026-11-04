@@ -67,7 +67,7 @@ class CircuitHealTests(unittest.IsolatedAsyncioTestCase):
         started_gen = state.generation
         # A straggler from before the outage bumps generation after the pause expires.
         self.clock.now = state.blocked_until + 0.01
-        budget = resilience.ReadBudget(self.clock.now + 4.0)
+        budget = resilience.ReadBudget(deadline=self.clock.now + 4.0, allowed_sec=4.0)
         resilience._record_outage(state, budget, "unavailable", is_probe=False)
         self.assertNotEqual(state.generation, started_gen)
         self.assertFalse(resilience.circuit_status()["paused"])
@@ -102,8 +102,10 @@ class CircuitHealTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(200, json={})
 
         self.answers["/slow"] = slow
-        # Tiny budget so async_timeout fires as bare TimeoutError.
-        with resilience.web_read_budget(seconds=0.001) as budget:
+        # Leftover after earlier reads of this page — not a dedicated short page
+        # budget (a first-of-page claim that times out is a real outage).
+        with resilience.web_read_budget(seconds=1.0) as budget:
+            budget.deadline = self.clock.now + 0.001
             with self.assertRaises(resilience.PgReadUnavailable):
                 await resilience.panel_read_request(self.client, "GET", "/slow")
         self.assertEqual(budget.failure, "timeout")
@@ -121,7 +123,7 @@ class CircuitHealTests(unittest.IsolatedAsyncioTestCase):
         pause_count = state.pause_count
         self.clock.now = paused_until + 0.01
         # Straggler (not the recovery probe) fails after expiry.
-        budget = resilience.ReadBudget(self.clock.now + 4.0)
+        budget = resilience.ReadBudget(deadline=self.clock.now + 4.0, allowed_sec=4.0)
         resilience._record_outage(state, budget, "unavailable", is_probe=False)
         # Not enough fresh failures yet to re-pause; must not treat as failed probe.
         self.assertEqual(state.pause_count, pause_count)
@@ -284,19 +286,40 @@ class CircuitHealTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.pause_count, pause_count + 1)
         self.assertGreater(state.blocked_until, self.clock.now)
 
-        # Unfair probe: tiny remaining → exhaustion only; pause state otherwise unchanged.
+        # Unfair probe: earlier work on this page left a tiny remainder → exhaustion only.
         self.clock.now = state.blocked_until + 0.01
         pause_count = state.pause_count
         blocked_at = state.blocked_until
         gen = state.generation
-        with patch.object(resilience, "MIN_OUTAGE_WAIT_SEC", 0.5):
-            with resilience.web_read_budget(seconds=0.05):
-                with self.assertRaises(resilience.PgReadUnavailable):
-                    await resilience.panel_read_request(self.client, "GET", "/probe")
+        with resilience.web_read_budget(seconds=1.0) as budget:
+            budget.deadline = self.clock.now + 0.05  # well under allowance/2
+            with self.assertRaises(resilience.PgReadUnavailable):
+                await resilience.panel_read_request(self.client, "GET", "/probe")
         self.assertEqual(state.pause_count, pause_count)
         self.assertEqual(state.blocked_until, blocked_at)
         self.assertEqual(state.generation, gen)
         self.assertGreaterEqual(health.recent_budget_exhaustions(), 1)
+
+    async def test_short_configured_budget_still_pauses_on_unresponsive_panel(self) -> None:
+        """PG_WEB_READ_BUDGET_MIN_SEC is 1s; a fixed 2s floor must not hide outages."""
+        hang = asyncio.Event()
+
+        async def never(_request: httpx.Request) -> httpx.Response:
+            await hang.wait()
+            return httpx.Response(200, json={})
+
+        self.answers["/hang"] = never
+        # Default MIN_OUTAGE_WAIT_SEC stays 2.0 — the bug was treating every
+        # claim under a 1s page budget as exhaustion because remaining < 2.
+        for _ in range(resilience.FAILURES_TO_PAUSE):
+            with resilience.web_read_budget(seconds=1.0):
+                with self.assertRaises(resilience.PgReadUnavailable):
+                    await resilience.panel_read_request(self.client, "GET", "/hang")
+        status = resilience.circuit_status()
+        self.assertTrue(status["paused"])
+        self.assertEqual(status["pause_count"], 1)
+        self.assertEqual(health.recent_failures().get("timeout", 0), resilience.FAILURES_TO_PAUSE)
+        self.assertEqual(health.recent_budget_exhaustions(), 0)
 
     async def test_straggler_does_not_clear_live_probe_lease(self) -> None:
         """A non-probe finishing must not clear a live probe lease."""
