@@ -247,26 +247,26 @@ async def raise_admin_limit(purchase: ExtraPurchase, apply: Callable[[Any, dict]
 
 
 async def ensure_base_gb_before_extra(session: AsyncSession, purchase: ExtraPurchase) -> None:
-    """Fill a missing ``base_gb`` from the live panel (or plan) before extras are recorded.
+    """Align the subscription total with the live panel (or plan) before extras are recorded.
 
-    Without this, a shop whose panel already had capacity but whose subscription base stayed
-    at 0 would treat only the newly bought extras as its sales ceiling and keep blocking sales.
-    Live panel bytes already include previously bought extras; those are subtracted so base is
-    the pre-extra floor. Prefer the live panel over ``plan.included_gb`` when both are known.
+    Capacity already on the panel but missing from ``base_gb`` / ``extra_gb_purchased`` would
+    otherwise leave the sales gate on the old package size. Live wins when readable; otherwise a
+    still-zero base falls back to ``plan.included_gb``.
     """
-    from app.services.pg_admin_subscription import get_or_create_subscription
+    from app.services.pg_admin_subscription import (
+        get_or_create_subscription,
+        raise_subscription_total_to_live,
+        resolve_subscription_plan_id,
+    )
     from app.services.pasarguard import get_pg
 
     sub = await get_or_create_subscription(session, purchase.uname)
-    if int(sub.base_gb or 0) > 0:
-        return
-    extra = int(sub.extra_gb_purchased or 0)
     live_gb = 0
     try:
         admin = await get_pg().get_admin(purchase.uname)
     except Exception:
         logger.warning(
-            "extra capacity: could not read panel to heal base_gb admin=%s",
+            "extra capacity: could not read panel to heal capacity admin=%s",
             purchase.uname,
             exc_info=True,
         )
@@ -276,10 +276,10 @@ async def ensure_base_gb_before_extra(session: AsyncSession, purchase: ExtraPurc
         if live_bytes > 0:
             live_gb = live_bytes // int(GB)
     if live_gb > 0:
-        sub.base_gb = max(0, live_gb - extra)
+        raise_subscription_total_to_live(sub, live_gb)
         return
-    from app.services.pg_admin_subscription import resolve_subscription_plan_id
-
+    if int(sub.base_gb or 0) > 0:
+        return
     plan_id = await resolve_subscription_plan_id(session, sub)
     if plan_id:
         plan = await session.get(ResellerPlan, int(plan_id))
@@ -302,7 +302,11 @@ async def apply_paid_extra(
     error keeps the purchase, because the panel may already have applied it, and the
     next capacity sync from the subscription applies it again.
     """
-    from app.services.pg_admin_subscription import record_unit_extra
+    from app.services.pg_admin_subscription import (
+        get_subscription,
+        raise_subscription_total_to_live,
+        record_unit_extra,
+    )
     from app.services.wallet import debit_wallet
 
     await _claim_generation(session, purchase)
@@ -312,12 +316,17 @@ async def apply_paid_extra(
     await session.commit()
 
     try:
-        return await raise_admin_limit(purchase, apply)
+        new_limit = await raise_admin_limit(purchase, apply)
     except PanelRaiseRefused as exc:
         await _refund_extra(session, user, purchase)
         raise ValueError(str(exc)) from exc
     except PanelRaiseUnknown as exc:
         raise ValueError(EXTRA_OUTCOME_UNKNOWN) from exc
+    if purchase.gb and new_limit:
+        sub = await get_subscription(session, purchase.uname)
+        if sub is not None and raise_subscription_total_to_live(sub, int(new_limit) // int(GB)):
+            await session.commit()
+    return new_limit
 
 
 def volume_raiser(uname: str, gb: int) -> Callable[[Any, dict], Awaitable[int]]:

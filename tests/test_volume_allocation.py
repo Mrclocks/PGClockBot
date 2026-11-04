@@ -355,6 +355,34 @@ class GateBehaviourTests(VolumeHarness):
                 session, shop_id=shop, delta_bytes=GB, audience="admin"
             )
 
+    async def test_live_panel_capacity_raises_sales_ceiling_when_extras_were_not_recorded(self) -> None:
+        """Bought volume on the panel must lift the gate even if extra_gb_purchased stayed 0."""
+        shop = await self._shop(ceiling_gb=200, allow_oversell=False, extra_gb=0)
+        await self._service(shop, bytes_=255 * GB)
+        async with self.Session() as session:
+            # Without a live raise, 255 already exceeds the 200 package ceiling.
+            with self.assertRaises(VolumeAllocationError):
+                await assert_volume_delta_allowed(
+                    session, shop_id=shop, delta_bytes=GB, audience="admin"
+                )
+            profile = await session.scalar(
+                select(ResellerProfile).where(ResellerProfile.user_id == shop)
+            )
+            with patch(
+                "app.services.pg_admin_subscription.read_live_pg_admin_capacity",
+                new=AsyncMock(return_value=(400, 10)),
+            ):
+                ceiling = await ceiling_bytes_for_profile(session, profile)
+                self.assertEqual(ceiling, 400 * GB)
+                sub = await session.scalar(
+                    select(PgAdminSubscription).where(PgAdminSubscription.pg_username == f"admin{shop}")
+                )
+                self.assertEqual(int(sub.base_gb or 0), 200)
+                self.assertEqual(int(sub.extra_gb_purchased or 0), 200)
+                await assert_volume_delta_allowed(
+                    session, shop_id=shop, delta_bytes=GB, audience="admin"
+                )
+
 
 class OversellSwitchTests(VolumeHarness):
     async def _allow(self, shop_id: int) -> bool:
