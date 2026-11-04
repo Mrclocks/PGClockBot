@@ -216,7 +216,7 @@
       <div class="svc-item-ops">
 {% if can_pg_update %}
         <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/renew" class="form-stack"
-              data-confirm="سرویس با پلن انتخابی تمدید شود؟ مصرف ریست می‌شود."
+              data-confirm="سرویس با پلن انتخابی تمدید شود؟ تمدید دستی ادمین همیشه از الان شروع می‌شود و مصرف ریست می‌شود (سوییچ انتقال مانده فقط برای تمدید مشتری است)."
               data-confirm-title="تمدید با پلن"
               data-confirm-label="تمدید">
           <div class="user-edit-inline-row">
