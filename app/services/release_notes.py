@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.33": [
+        "نماینده: سقف فروش حجم بعد از خرید ظرفیت با سقف زنده پنل هم‌راستا می‌شود و دیگر روی پایهٔ قدیمی پکیج گیر نمی‌کند (#1127)",
+        "مایگریشن: ندارد",
+        "ریستور: backup/dev-pre-v0.5.33 (commit b4b41e27)",
+    ],
     "0.5.32": [
         "نماینده: سقف فروش حجم، پایهٔ پلن را هم حساب می‌کند وقتی base_gb صفر مانده و حجم اضافه خریده شده (#1125)",
         "نماینده: تمدید/ارتقای بسته با روش‌های پرداخت تنظیم‌شده (نه فقط کیف پول) (#1123)",
