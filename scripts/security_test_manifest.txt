@@ -378,3 +378,4 @@ tests/test_reseller_capacity_orders.py
 tests/test_reseller_package_orders.py
 # Mini App service packs: ownership of the service and who sees which pack.
 tests/test_mini_addon_packs.py
+tests/test_service_addon_plan_scope.py

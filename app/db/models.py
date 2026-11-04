@@ -181,9 +181,9 @@ class Plan(Base):
 class ServiceAddonPack(Base):
     """Customer add-on packs: extra volume (GB) or duration (days) on an existing service.
 
-    A pack without a category (``is_general`` or no ``category_id``) applies to every plan
-    category of the shop. Otherwise ``category_id`` ties the pack to the plan category of the
-    service's sales plan, so VIP and economy packs can be priced differently.
+    Scope (narrowest wins at purchase time):
+    - ``plan_id`` set → only services of that sales plan see the pack.
+    - else ``category_id`` / ``is_general`` → category or shop-wide (legacy).
     """
 
     __tablename__ = "service_addon_packs"
@@ -204,6 +204,14 @@ class ServiceAddonPack(Base):
         nullable=True,
         index=True,
     )
+    # When set, the pack is exclusive to this sales plan (overrides category/general listing).
+    plan_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("plans.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    # NULL = inherit plan button style; "" = Telegram default; primary|success|danger
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     is_general: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
