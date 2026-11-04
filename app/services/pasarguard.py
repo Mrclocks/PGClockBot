@@ -1269,6 +1269,12 @@ def reset_pg() -> None:
     _pg_staff_cache = {}
     _pg_principal_cache = {}
     reset_read_circuits()
+    try:
+        from app.services.pg_access import clear_platform_pg_capability_cache
+
+        clear_platform_pg_capability_cache()
+    except Exception:
+        logger.debug("reset_pg: capability cache clear failed", exc_info=True)
 
 
 def invalidate_pg_principal_cache(principal_id: int | None) -> None:
