@@ -12763,8 +12763,18 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   flex-wrap: wrap;
 }
 .link-health-head > h2 { margin: 0; }
-.link-health-head > .badge {
+.link-health-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+}
+.link-health-actions > .badge {
   flex: 0 0 auto;
   width: auto;
   white-space: nowrap;
+}
+.link-health-reconnect {
+  display: inline-flex;
+  margin: 0;
 }

@@ -85,6 +85,11 @@ def record_failure(kind: str) -> None:
     _stats.last_failure_kind = kind
 
 
+def latest_failure_kind() -> str | None:
+    """Most recent recorded failure kind key (not the Persian label)."""
+    return _stats.last_failure_kind
+
+
 def recent_failures(window_sec: float = WINDOW_SEC) -> Counter[str]:
     cutoff = time.time() - window_sec
     return Counter(kind for moment, kind in _stats.events if moment >= cutoff)
