@@ -36,6 +36,11 @@ GATEWAY_OUTAGE_STATUSES = frozenset({502, 503, 504})
 DNS_CACHE_TTL_SEC = 60.0
 MAX_CONCURRENT_READS = 8
 MAX_PANEL_STATES = 16
+# Page budgets (default ~4s) fire before httpx's 30s timeout. A TimeoutError
+# from async_timeout is a real panel outage only when THIS read was allowed to
+# wait at least this long; shorter remainders mean earlier reads of the same
+# page already consumed the shared budget.
+MIN_OUTAGE_WAIT_SEC = 2.0
 # A dropped keep-alive socket or a reset mid-read is usually gone on the next
 # try. Timeouts are not retried: they would only double the wait.
 TRANSIENT_READ_ERRORS = (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)
@@ -141,6 +146,11 @@ def _probe_lease_active(state: _PanelState, now: float) -> bool:
 def _clear_probe_lease(state: _PanelState) -> None:
     state.probing = False
     state.probe_until = 0.0
+
+
+def _budget_timeout_is_outage(claimed_remaining: float) -> bool:
+    """True when the claimed wait was long enough to count as a panel outage."""
+    return claimed_remaining >= MIN_OUTAGE_WAIT_SEC
 
 
 def _claim_read(state: _PanelState, budget: ReadBudget) -> tuple[float, int, bool]:
@@ -269,9 +279,13 @@ async def validate_panel_base(base_url: str, *, protected: bool = True) -> str:
     except TimeoutError as exc:
         if state.dns_task is not None and state.dns_task.done():
             state.dns_task = None
-        # Page budget ran out while waiting for DNS — not a panel outage.
-        pg_link_health.record_budget_exhaustion()
-        budget.failure = "timeout"
+        if _budget_timeout_is_outage(remaining):
+            pg_link_health.record_failure("timeout")
+            _record_outage(state, budget, "timeout", is_probe=is_probe)
+        else:
+            # Earlier reads of this page left too little wait for a fair test.
+            pg_link_health.record_budget_exhaustion()
+            budget.failure = "timeout"
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc
     except UnsafePgUrlError as exc:
         if state.dns_task is not None and state.dns_task.done():
@@ -281,7 +295,8 @@ async def validate_panel_base(base_url: str, *, protected: bool = True) -> str:
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc
     finally:
         state.in_flight -= 1
-        _clear_probe_lease(state)
+        if is_probe:
+            _clear_probe_lease(state)
 
 
 async def _request_with_retry(
@@ -339,9 +354,17 @@ async def panel_read_request(
         _record_outage(state, budget, "timeout", is_probe=is_probe)
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc
     except TimeoutError as exc:
-        # Shared page budget ran out — fail this read, do not pause the panel.
-        pg_link_health.record_budget_exhaustion()
-        budget.failure = "timeout"
+        # Classify by how long THIS read was claimed to wait, not by exception type.
+        # Default page budget (~4s) fires before httpx's 30s timeout against a
+        # panel that accepts the connection but never answers.
+        if _budget_timeout_is_outage(remaining):
+            pg_link_health.record_failure("timeout")
+            _record_outage(state, budget, "timeout", is_probe=is_probe)
+        else:
+            # Unfair wait (earlier reads consumed the page budget): exhaustion only.
+            # An unfair recovery probe must not double the cooldown or heal.
+            pg_link_health.record_budget_exhaustion()
+            budget.failure = "timeout"
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc
     except httpx.TransportError as exc:
         pg_link_health.record_failure(pg_link_health.failure_kind(exc))
@@ -349,11 +372,14 @@ async def panel_read_request(
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc
     finally:
         state.in_flight -= 1
-        _clear_probe_lease(state)
+        # Only the read that claimed the probe lease may clear it.
+        if is_probe:
+            _clear_probe_lease(state)
     if response.status_code >= 500:
         pg_link_health.record_failure(pg_link_health.failure_kind(status_code=response.status_code))
-    else:
+    elif response.status_code < 400:
         pg_link_health.record_success(time.monotonic() - started)
+    # 4xx: the panel answered; reconnect/caller maps the status — do not pollute stats.
     if response.status_code in GATEWAY_OUTAGE_STATUSES:
         _record_outage(state, budget, "unavailable", is_probe=is_probe)
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE)
