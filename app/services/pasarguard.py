@@ -1063,6 +1063,18 @@ class PasarGuardClient:
             404,
         )
 
+    async def get_system_probe(self, *, timeout: httpx.Timeout) -> httpx.Response:
+        """Authenticated GET /api/system for a manual reconnect health probe."""
+        await self._ensure_safe_target(protected=True)
+        headers = await self._headers()
+        return await panel_read_request(
+            self._http(),
+            "GET",
+            "/api/system",
+            headers=headers,
+            timeout=timeout,
+        )
+
     async def get_system_stats(self, *, cache_max_age: float | None = None, last_good_ok: bool = False) -> dict:
         data = await self._display_read("/api/system", cache_max_age=cache_max_age, last_good_ok=last_good_ok)
         return data if isinstance(data, dict) else {"raw": data}

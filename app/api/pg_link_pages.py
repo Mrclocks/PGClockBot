@@ -17,6 +17,7 @@ from app.services.pg_link_reconnect import (
 
 RECONNECT_PATH = "/pg-link/reconnect"
 HOME = "/home"
+DENIED_MESSAGE = "دسترسی لازم برای ارتباط مجدد را ندارید"
 
 
 def _flash_redirect(*, ok: str | None = None, err: str | None = None) -> RedirectResponse:
@@ -37,7 +38,7 @@ def register_pg_link_pages(app: FastAPI, *, require_admin: Callable) -> None:
     @router.post(RECONNECT_PATH)
     async def pg_link_reconnect(staff: dict = Depends(require_admin)) -> RedirectResponse:
         if not _owner_may_reconnect(staff):
-            return RedirectResponse(HOME, status_code=303)
+            return _flash_redirect(err=DENIED_MESSAGE)
         result = await reconnect_panel()
         key, message = flash_for_result(result)
         if key == "ok":
