@@ -169,7 +169,7 @@ async def apply_capacity_order(session: AsyncSession, order: Order) -> Order:
         await session.commit()
         raise
     try:
-        await raise_admin_limit(purchase, offer.raiser())
+        new_limit = await raise_admin_limit(purchase, offer.raiser())
     except PanelRaiseRefused as exc:
         await revert_extras(session, purchase)
         await _set_state(session, order_id, expected=OrderStatus.DELIVERING.value, status=OrderStatus.PAID.value, pending=False)
@@ -177,6 +177,13 @@ async def apply_capacity_order(session: AsyncSession, order: Order) -> Order:
         raise ValueError(NOT_APPLIED) from exc
     except PanelRaiseUnknown as exc:
         raise CapacityPendingReview from exc
+    if offer.gb and new_limit:
+        from app.services.billing import GB
+        from app.services.pg_admin_subscription import get_subscription, raise_subscription_total_to_live
+
+        sub = await get_subscription(session, offer.uname)
+        if sub is not None:
+            raise_subscription_total_to_live(sub, int(new_limit) // int(GB))
     await _set_state(session, order_id, expected=OrderStatus.DELIVERING.value, status=OrderStatus.DELIVERED.value, pending=False)
     await session.commit()
     await session.refresh(order)

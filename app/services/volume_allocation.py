@@ -133,7 +133,12 @@ async def _included_gb_for_plan(session: AsyncSession, plan_id: int | None) -> i
 
 
 async def ceiling_bytes_for_profile(session: AsyncSession, profile: ResellerProfile) -> int | None:
-    """The shop's ceiling in bytes; None when it has none (no subscription, or unlimited)."""
+    """The shop's ceiling in bytes; None when it has none (no subscription, or unlimited).
+
+    Before reading the local total, best-effort syncs it up to the admin's live panel limit so a
+    capacity purchase that raised PasarGuard but lagged in ``extra_gb_purchased`` still lifts the
+    sales gate. Panel failures leave the local total unchanged.
+    """
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
         return None
@@ -142,6 +147,19 @@ async def ceiling_bytes_for_profile(session: AsyncSession, profile: ResellerProf
     )
     if sub is None:
         return None
+    # Deferred: pg_admin_subscription imports is_hard_panel_rejection from this module.
+    from app.services.pg_admin_subscription import (
+        PgCapacityUnreadable,
+        raise_subscription_total_to_live,
+        read_live_pg_admin_capacity,
+    )
+
+    try:
+        live_gb, _live_users = await read_live_pg_admin_capacity(uname)
+        if raise_subscription_total_to_live(sub, live_gb):
+            await session.flush()
+    except PgCapacityUnreadable:
+        pass
     # Subscription plan first; if the row never stored one, the shop profile's plan.
     plan_id = int(sub.plan_id or 0) or int(profile.plan_id or 0) or None
     total_gb = subscription_ceiling_gb(

@@ -151,6 +151,28 @@ def _total_users(sub: PgAdminSubscription | None) -> int:
     return int(sub.base_users or 0) + int(sub.extra_users_purchased or 0) if sub is not None else 0
 
 
+def raise_subscription_total_to_live(sub: PgAdminSubscription, live_gb: int) -> bool:
+    """Raise recorded base/extras so their sum covers the live panel GB. Never lowers.
+
+    Bought capacity often lands on the panel first; if ``extra_gb_purchased`` was not written
+    (or ``base_gb`` stayed 0), the sales gate would keep the old package size. When ``base_gb``
+    is already set, growth beyond it is stored as extras; when base is still 0, live minus any
+    existing extras becomes the base. Returns True when the row changed.
+    """
+    live = max(0, int(live_gb or 0))
+    if live <= 0:
+        return False
+    base = max(0, int(sub.base_gb or 0))
+    extra = max(0, int(sub.extra_gb_purchased or 0))
+    if base + extra >= live:
+        return False
+    if base <= 0:
+        sub.base_gb = max(0, live - extra)
+    else:
+        sub.extra_gb_purchased = live - base
+    return True
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
