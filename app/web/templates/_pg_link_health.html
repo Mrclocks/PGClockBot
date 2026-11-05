@@ -59,5 +59,9 @@
       </dl>
     </article>
   </div>
+  {% if health.from_prior_boot %}
+  <p class="muted link-health-note">{{ health.prior_boot_note }}</p>
+  {% else %}
   <p class="muted link-health-note">آمار همین سرور از آخرین راه‌اندازی؛ با هر ری‌استارت از صفر شروع می‌شود.</p>
+  {% endif %}
 </section>
