@@ -380,7 +380,9 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
     off until shop purchases are opened. Loyalty points appear only while this shop's club
     is on, and only for that shop's purse.
     """
-    from app.services.loyalty import loyalty_enabled, points_balance
+    # Reuse the already-loaded shop ui for the club switch (one settings read, not a
+    # second loyalty_enabled query). points_balance runs only while the club is on.
+    from app.services.loyalty import points_balance
 
     ui = await get_all_settings(session, reseller_id=scope.shop_id)
     try:
@@ -399,7 +401,7 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
         "checkout": await checkout_options(session, user, scope),
     }
     shop_id = scope.shop_id
-    if await loyalty_enabled(session, reseller_id=shop_id):
+    if on(ui.get("loyalty_enabled")):
         out["loyalty_enabled"] = True
         out["points"] = await points_balance(session, user, shop_id)
     return out

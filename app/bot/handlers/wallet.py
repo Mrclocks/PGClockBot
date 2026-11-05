@@ -53,10 +53,14 @@ async def build_wallet_home_text(
     db_user: BotUser,
     ui: dict,
 ) -> str:
-    """Customer wallet hub HTML: balance, and this shop's points while loyalty is on."""
+    """Customer wallet hub HTML: balance, and this shop's points while loyalty is on.
+
+    Loyalty on/off must come from the same ``ui`` dict used for ``wallet_hub_keyboard``
+    (shop-scoped ``get_all_settings``), not a second settings read.
+    """
     from app.services.formatting import format_number, format_toman, kv_line
-    from app.services.loyalty import loyalty_enabled, points_balance
-    from app.services.users import current_shop_reseller_id
+    from app.services.loyalty import points_balance
+    from app.services.users import current_shop_reseller_id, on
     from app.services.wallet import wallet_balance_for_context
 
     shop_id = current_shop_reseller_id()
@@ -68,11 +72,23 @@ async def build_wallet_home_text(
             f"<b>{format_toman(bal, get_settings().currency)}</b>",
         ),
     ]
-    if await loyalty_enabled(session, reseller_id=shop_id):
+    if on(ui.get("loyalty_enabled")):
         pts = await points_balance(session, db_user, shop_id)
         lines.append(kv_line("⭐", "امتیاز", f"<b>{format_number(pts)}</b>"))
     lines.extend(["", screen_caption(ui, "c.wallet")])
     return format_message(screen_title_html(ui, "c.wallet"), "\n".join(lines))
+
+
+async def load_wallet_home(
+    session: AsyncSession, db_user: BotUser
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Shop-scoped wallet hub text + keyboard from one settings load."""
+    from app.bot.nav_inline import wallet_hub_keyboard
+    from app.services.users import current_shop_reseller_id, get_all_settings
+
+    ui = await get_all_settings(session, reseller_id=current_shop_reseller_id())
+    text = await build_wallet_home_text(session, db_user, ui)
+    return text, wallet_hub_keyboard(ui)
 
 
 async def prompt_gift_code(
@@ -214,14 +230,9 @@ async def wallet_gift_code(
 @router.callback_query(F.data == "wallet:home")
 async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
-    ui = await get_all_settings(session)
-    text = await build_wallet_home_text(session, db_user, ui)
+    text, markup = await load_wallet_home(session, db_user)
     if callback.message:
-        from app.bot.nav_inline import wallet_hub_keyboard
-
-        await safe_edit_text(
-            callback.message, text, reply_markup=wallet_hub_keyboard(ui)
-        )
+        await safe_edit_text(callback.message, text, reply_markup=markup)
 
 @router.callback_query(F.data == "wallet:tx")
 async def wallet_tx(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):

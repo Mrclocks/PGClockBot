@@ -488,16 +488,13 @@ async def open_wallet_home(
     *,
     push: bool = True,
 ) -> None:
-    from app.bot.handlers.wallet import build_wallet_home_text
-    from app.bot.nav_inline import present_inline_only, wallet_hub_keyboard
+    from app.bot.handlers.wallet import load_wallet_home
+    from app.bot.nav_inline import present_inline_only
 
-    ui = await get_all_settings(session)
-    text = await build_wallet_home_text(session, db_user, ui)
+    text, markup = await load_wallet_home(session, db_user)
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_WALLET, push=push)
-    await present_inline_only(
-        message, text=text, inline=wallet_hub_keyboard(ui)
-    )
+    await present_inline_only(message, text=text, inline=markup)
     return
 
 async def open_wallet_topup(

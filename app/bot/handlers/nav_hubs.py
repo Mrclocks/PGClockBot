@@ -118,17 +118,14 @@ async def nv_wallet_home(
     db_user: BotUser,
     state: FSMContext,
 ):
-    from app.bot.handlers.wallet import build_wallet_home_text
-    from app.bot.nav_inline import safe_edit_inline, wallet_hub_keyboard
+    from app.bot.handlers.wallet import load_wallet_home
+    from app.bot.nav_inline import safe_edit_inline
 
     await callback.answer()
     if not callback.message:
         return
-    ui = await get_all_settings(session)
-    text = await build_wallet_home_text(session, db_user, ui)
-    ok = await safe_edit_inline(
-        callback.message, text, reply_markup=wallet_hub_keyboard(ui)
-    )
+    text, markup = await load_wallet_home(session, db_user)
+    ok = await safe_edit_inline(callback.message, text, reply_markup=markup)
     if not ok:
         from app.bot.handlers.reply_nav import open_wallet_home
         await open_wallet_home(callback.message, session, db_user, state, push=False)
