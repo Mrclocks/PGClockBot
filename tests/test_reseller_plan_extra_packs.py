@@ -130,6 +130,29 @@ class ExtraPackServiceTests(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             self.assertEqual(await active_amounts_for_plan(session, int(a.id), KIND_GB), frozenset())
 
+    async def test_ensure_default_integrity_error_keeps_outer_session(self) -> None:
+        """A seed race must roll back only the savepoint, not pending plan edits."""
+        from sqlalchemy.exc import IntegrityError
+        from unittest.mock import patch
+
+        async with self.Session() as session:
+            a, _b = await self._two_plans(session)
+            await session.commit()
+            a.name = "kept-after-seed-race"
+            session.add(a)
+
+            async def boom(*_args, **_kwargs):
+                raise IntegrityError("stmt", {}, Exception("unique"))
+
+            with patch.object(session, "flush", new=boom):
+                rows = await ensure_default_packs(session, a)
+            self.assertEqual(rows, [])
+            # Outer pending change must still be flushable after the nested abort.
+            await session.flush()
+            self.assertEqual(
+                (await session.get(ResellerPlan, int(a.id))).name, "kept-after-seed-race"
+            )
+
     async def test_unit_offer_uses_plan_whitelist(self) -> None:
         async with self.Session() as session:
             a, _b = await self._two_plans(session)
@@ -194,6 +217,24 @@ class ExtraPackFormApplyTests(unittest.IsolatedAsyncioTestCase):
             users = await list_packs(session, int(plan.id), kind=KIND_USERS, active_only=True)
             self.assertEqual([(p.amount, p.button_style) for p in gb], [(2, "primary"), (8, "danger")])
             self.assertEqual([(p.amount, p.button_style) for p in users], [(4, None)])
+
+    def test_form_pairs_style_with_amount_before_dedupe(self) -> None:
+        from app.services.reseller_plan_extra_packs import packs_payload_from_form
+
+        class Form(dict):
+            def getlist(self, key):
+                val = self.get(key, [])
+                return list(val) if isinstance(val, (list, tuple)) else [val]
+
+        form = Form(
+            {
+                "extra_gb_amount": ["5", "5", "10"],
+                "extra_gb_style": ["danger", "primary", "success"],
+            }
+        )
+        amounts, styles = packs_payload_from_form(form, KIND_GB)
+        self.assertEqual(amounts, [5, 10])
+        self.assertEqual(styles, ["danger", "success"])
 
 
 class ExtraPackMigrationTests(unittest.TestCase):

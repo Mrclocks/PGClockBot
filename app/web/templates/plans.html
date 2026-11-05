@@ -1091,6 +1091,15 @@
             <option value="duration">زمان (روز)</option>
           </select>
         </label>
+        <label class="form-field">پلن اختصاصی (اختیاری)
+          <select name="plan_id" id="service-addon-plan">
+            <option value="">— بدون پلن (عمومی / دسته) —</option>
+            {% for p in plans or [] %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+          </select>
+          <small class="muted">اگر پلن انتخاب شود، بسته فقط روی سرویس‌های همان پلن دیده می‌شود و دسته نادیده گرفته می‌شود. با تعریف بستهٔ مخصوص این پلن برای یک نوع (حجم یا زمان)، بسته‌های عمومی همان نوع برای این پلن مخفی می‌شوند؛ نوع دیگر اگر بستهٔ مخصوص نداشته باشد همچنان عمومی/دسته‌ای می‌ماند.</small>
+        </label>
         <label class="form-field">دسته‌ی بسته
           <select name="category_id" id="service-addon-category" data-plan-category-select data-category-audience="users">
             <option value="">عمومی (همه‌ی دسته‌ها)</option>
@@ -1102,6 +1111,12 @@
           </select>
           <small class="muted">پیش‌فرض «عمومی» است و برای همهٔ سرویس‌ها دیده می‌شود. با انتخاب برچسب، فقط سرویس‌های همان دسته این بسته را می‌بینند.</small>
         </label>
+        {% set plan_button_style = 'inherit' %}
+        {% set button_style_name = 'button_style' %}
+        {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
+        {% set plan_style_options = pack_style_options %}
+        {% set plan_color_hint = 'رنگ دکمه این بسته در ربات؛ «ارث» یعنی رنگ پلن سرویس.' %}
+        {% include "_plan_button_style_field.html" %}
         <label class="form-field">مقدار
           <input name="amount" id="service-addon-amount" type="number" min="0.1" step="0.1" required placeholder="۱۰" />
           <small class="muted" id="service-addon-amount-hint">برای حجم می‌تواند اعشار باشد؛ برای زمان عدد صحیح روز</small>
