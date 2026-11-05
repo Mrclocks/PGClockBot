@@ -26,8 +26,17 @@ class NameRulesTests(unittest.TestCase):
             with self.assertRaises(ValueError, msg=repr(raw)):
                 naming.normalize_service_name(raw)
 
-    def test_the_clear_word_removes_the_name(self) -> None:
-        self.assertIsNone(naming.normalize_service_name(naming.CLEAR_WORD))
+    def test_a_random_name_follows_the_rules(self) -> None:
+        for _ in range(20):
+            name = naming.random_service_name()
+            self.assertEqual(naming.normalize_service_name(name), name)
+
+    def test_the_step_is_needed_until_a_name_is_stored(self) -> None:
+        order = Order(id=1, user_id=1, plan_id=1, amount=10, quantity=1, status=OrderStatus.PENDING.value)
+        self.assertFalse(naming.needs_service_name({}, order))
+        self.assertTrue(naming.needs_service_name(ENABLED, order))
+        order.requested_username = "ali"
+        self.assertFalse(naming.needs_service_name(ENABLED, order))
 
     def test_the_name_is_offered_only_when_enabled_for_a_single_new_order(self) -> None:
         order = Order(id=1, user_id=1, plan_id=1, amount=10, quantity=1, status=OrderStatus.PENDING.value)
@@ -121,13 +130,16 @@ class StoredNameTests(NameFixture):
         self.assertEqual(username, "clk_ali")
         self.assertEqual(order.requested_username, "ali")
 
-    async def test_a_username_already_in_use_is_refused(self) -> None:
+    async def test_a_username_already_in_use_gets_a_random_ending(self) -> None:
         self.session.add(UserService(bot_user_id=self.other.id, pg_username="CLK_ali"))
         await self.session.commit()
         order = await self.order(self.buyer)
 
-        with self.assertRaisesRegex(ValueError, naming.NAME_TAKEN):
-            await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
+        with patch("app.services.orders._random_alnum", return_value="x7k2"):
+            username = await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
+
+        self.assertEqual(username, "clk_ali_x7k2")
+        self.assertEqual(order.requested_username, "ali_x7k2")
 
     async def test_a_similar_but_different_name_is_free(self) -> None:
         self.session.add(UserService(bot_user_id=self.other.id, pg_username="clk_ali"))
@@ -138,12 +150,23 @@ class StoredNameTests(NameFixture):
             await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="mali"), "clk_mali"
         )
 
-    async def test_another_open_order_holding_the_name_blocks_it(self) -> None:
+    async def test_a_name_held_by_another_open_order_gets_a_random_ending(self) -> None:
         await self.order(self.other, requested_username="ali")
         order = await self.order(self.buyer)
 
-        with self.assertRaisesRegex(ValueError, naming.NAME_TAKEN):
-            await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
+        await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
+
+        self.assertRegex(order.requested_username, r"^ali_[a-z0-9]{4}$")
+
+    async def test_a_long_taken_name_stays_within_the_limit(self) -> None:
+        wanted = "a" * naming.MAX_LENGTH
+        await self.order(self.other, requested_username=wanted)
+        order = await self.order(self.buyer)
+
+        await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw=wanted)
+
+        self.assertLessEqual(len(order.requested_username), naming.MAX_LENGTH)
+        self.assertNotEqual(order.requested_username, wanted)
 
     async def test_someone_elses_or_a_paid_order_cannot_be_renamed(self) -> None:
         theirs = await self.order(self.other)
@@ -152,12 +175,6 @@ class StoredNameTests(NameFixture):
         for order in (theirs, paid):
             with self.assertRaisesRegex(ValueError, naming.ORDER_LOCKED):
                 await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
-
-    async def test_the_clear_word_brings_back_the_generated_name(self) -> None:
-        order = await self.order(self.buyer, requested_username="ali")
-
-        self.assertIsNone(await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="-"))
-        self.assertIsNone(order.requested_username)
 
     async def test_delivery_creates_the_service_with_the_chosen_name(self) -> None:
         order = await self.order(self.buyer, status=OrderStatus.PAID.value, requested_username="ali")
@@ -183,13 +200,13 @@ class StoredNameTests(NameFixture):
             )
         )
         with patch("app.services.orders.get_pg", return_value=pg), patch(
-            "app.services.orders._random_alnum", return_value="a1b2c3d4"
+            "app.services.orders._random_alnum", return_value="x7k2"
         ):
             delivered = await deliver_order(self.session, order)
 
         self.assertEqual(delivered.status, OrderStatus.DELIVERED.value)
         service = await self.session.get(UserService, delivered.service_id)
-        self.assertEqual(service.pg_username, "clk_a1b2c3d4")
+        self.assertEqual(service.pg_username, "clk_ali_x7k2")
 
 
 class NameStepHandlerTests(NameFixture):
@@ -212,6 +229,67 @@ class NameStepHandlerTests(NameFixture):
             await handler.service_name_entered(message, state, self.session, self.buyer)
         return message, state, shown
 
+    async def test_typed_cancel_leaves_the_step_without_naming(self) -> None:
+        from app.bot.handlers import custom_service_name as handler
+
+        order = await self.order(self.buyer)
+        with patch.object(handler, "restore_main_reply", AsyncMock()) as home:
+            _message, state, shown = await self.enter(order, "❌ انصراف")
+
+        shown.assert_not_awaited()
+        state.clear.assert_awaited()
+        home.assert_awaited_once()
+        await self.session.refresh(order)
+        self.assertIsNone(order.requested_username)
+
+    async def test_the_random_button_names_the_order_and_opens_payment(self) -> None:
+        from unittest.mock import MagicMock
+
+        from app.bot.handlers import custom_service_name as handler
+
+        order = await self.order(self.buyer)
+        callback = MagicMock(data=f"pay:namernd:{order.id}", answer=AsyncMock(), message=MagicMock())
+        state = MagicMock(set_state=AsyncMock())
+        with (
+            patch.object(handler, "is_customer_order_in_current_shop", return_value=True),
+            patch.object(handler, "get_all_settings", AsyncMock(return_value=ENABLED)),
+            patch.object(handler, "present_order_pay", AsyncMock()) as shown,
+        ):
+            await handler.random_service_name_chosen(callback, state, self.session, self.buyer)
+
+        shown.assert_awaited_once()
+        await self.session.refresh(order)
+        self.assertRegex(order.requested_username, r"^[a-z][a-z0-9]{7}$")
+
+    async def test_the_payment_screen_asks_for_the_name_first(self) -> None:
+        from unittest.mock import MagicMock
+
+        from app.bot import menu_nav
+
+        order = await self.order(self.buyer)
+        state = MagicMock(set_state=AsyncMock(), update_data=AsyncMock(), get_data=AsyncMock(return_value={}))
+        with (
+            patch.object(menu_nav, "get_all_settings", AsyncMock(return_value=ENABLED)),
+            patch.object(menu_nav, "set_nav_level", AsyncMock()),
+            patch("app.bot.nav_inline.present_inline_only", AsyncMock()) as shown,
+        ):
+            await menu_nav.present_order_pay(
+                MagicMock(), self.session, self.buyer, order.id, state=state, summary="S",
+                is_reseller_bot=False, reseller_owner_id=None,
+            )
+            markup = shown.await_args.kwargs["inline"]
+            buttons = [b.callback_data for row in markup.inline_keyboard for b in row]
+            self.assertEqual(buttons, [f"pay:namernd:{order.id}", f"pay:back:{order.id}"])
+
+            order.requested_username = "ali"
+            await self.session.commit()
+            await menu_nav.present_order_pay(
+                MagicMock(), self.session, self.buyer, order.id, state=state, summary="S",
+                is_reseller_bot=False, reseller_owner_id=None,
+            )
+            buttons = [b.callback_data for row in shown.await_args.kwargs["inline"].inline_keyboard for b in row]
+            self.assertNotIn(f"pay:namernd:{order.id}", buttons)
+
     async def test_an_invalid_name_keeps_the_step_open(self) -> None:
         message, state, shown = await self.enter(await self.order(self.buyer), "علی")
 
@@ -225,7 +303,8 @@ class NameStepHandlerTests(NameFixture):
         _message, _state, shown = await self.enter(order, "ali")
 
         shown.assert_awaited_once()
-        self.assertIn("clk_ali", shown.await_args.kwargs["summary"])
+        summary = shown.await_args.kwargs["summary"]
+        self.assertEqual(summary.count("clk_ali"), 1)
         await self.session.refresh(order)
         self.assertEqual(order.requested_username, "ali")
 

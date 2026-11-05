@@ -225,11 +225,20 @@ async def _reseller_pg_link(
 DEFAULT_USERNAME_PATTERN = "{prefix}_{random}{suffix}"
 # PasarGuard answers 409 when the username exists; nothing is created.
 USERNAME_TAKEN_STATUS = 409
+# Longest buyer-chosen name; a taken name keeps this length after its random ending.
+CHOSEN_NAME_MAX_LENGTH = 20
+CHOSEN_NAME_ENDING_LENGTH = 4
 
 
 def _random_alnum(length: int = 8) -> str:
     alphabet = string.ascii_lowercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def chosen_name_variant(name: str) -> str:
+    """The buyer's name with a short random ending, for when the name is taken."""
+    keep = CHOSEN_NAME_MAX_LENGTH - CHOSEN_NAME_ENDING_LENGTH - 1
+    return f"{name[:keep]}_{_random_alnum(CHOSEN_NAME_ENDING_LENGTH)}"
 
 
 def _sanitize_naming_username(raw: str | None, *, fallback: str) -> str:
@@ -2362,7 +2371,7 @@ async def deliver_order(
             pg_user, username = await create_with_name_fallback(
                 lambda name: _create_panel_user(name, note),
                 username,
-                regenerate=(lambda: _username(None)) if chosen_name else None,
+                regenerate=(lambda: _username(chosen_name_variant(chosen_name))) if chosen_name else None,
             )
             pg_uid = pg_user.get("id")
             if pg_uid:
@@ -2476,7 +2485,7 @@ async def create_with_name_fallback(
     *,
     regenerate: Callable[[], Awaitable[str]] | None,
 ) -> tuple[dict, str]:
-    """Create the panel user; a chosen name the panel already holds falls back to a generated one.
+    """Create the panel user; a chosen name the panel already holds gets a random ending.
 
     Returns the panel reply and the username actually used. The panel answers 409 before
     creating anything, so the second call cannot duplicate a user, and a paid order is
@@ -2487,7 +2496,7 @@ async def create_with_name_fallback(
     except PasarGuardError as exc:
         if regenerate is None or exc.status_code != USERNAME_TAKEN_STATUS:
             raise
-        logger.info("chosen service name taken on the panel; using a generated one")
+        logger.info("chosen service name taken on the panel; adding a random ending")
     generated = await regenerate()
     return await create(generated), generated
 

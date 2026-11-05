@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Order, Plan
 from app.services.catalog_pricing import active_discounts, price_html, product_target, quote_price
 from app.services.formatting import copyable, format_message, format_plan_duration_days, format_toman, info_block, kv_line
+from app.services.custom_service_name import preview_username
 from app.services.orders import CUSTOM_ORDER_NOTE
 
 _SERVICE_NOTES = ("renew:", "svc_addon:", "reseller_app:", "res_cap:", "res_pkg:")
@@ -60,7 +61,8 @@ async def checkout_summary(
     plan = await session.get(Plan, int(order.plan_id)) if order.plan_id else None
     lines = await _plan_lines(session, plan, order, currency) if plan is not None and _is_new_purchase(order) else []
     if order.requested_username:
-        lines.append(kv_line("✏️", "نام سرویس", copyable(order.requested_username)))
+        username = await preview_username(session, order, order.requested_username)
+        lines.append(kv_line("✏️", "نام سرویس", copyable(username)))
     discount = int(order.discount_amount or 0)
     if discount > 0:
         lines.append(kv_line("🏷", "تخفیف", f"−{format_toman(discount, currency)}"))

@@ -8,8 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.service_name_step import show_service_name_step
 from app.db.models import BotUser, Order, UserService
-from app.services.custom_service_name import offers_custom_name
+from app.services.custom_service_name import needs_service_name
 from app.services.service_scope import shop_services_clause
 from app.services.staff_free_checkout import may_take_order_free
 from app.services.users import current_shop_reseller_id, get_all_settings
@@ -580,6 +581,9 @@ async def present_order_pay(
     else:
         body = prompt
     order = await session.get(Order, int(order_id))
+    if needs_service_name(ui, order):
+        await show_service_name_step(message, state, int(order_id), summary=summary)
+        return
     staff_free = await may_take_order_free(
         session,
         db_user,
@@ -590,7 +594,5 @@ async def present_order_pay(
     await present_inline_only(
         message,
         text=body,
-        inline=kb.pay_methods(
-            int(order_id), ui, staff_free=staff_free, service_name=offers_custom_name(ui, order)
-        ),
+        inline=kb.pay_methods(int(order_id), ui, staff_free=staff_free),
     )
