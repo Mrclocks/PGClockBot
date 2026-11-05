@@ -53,6 +53,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("service_import", "تأیید افزودن سرویس قبلی"),
     ("orders_purge", "حذف کامل سفارش‌ها و پرداخت‌ها"),
     ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
+    ("free_checkout", "دریافت رایگان سفارش خود توسط مدیران فروشگاه"),
 ]
 
 DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import,miniapp,customer_notes,gift_codes"
