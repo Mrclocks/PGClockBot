@@ -8,6 +8,7 @@ VPN quota/links are live from PasarGuard through ``UserService.pg_user_id``.
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import time
 from dataclasses import dataclass
@@ -21,11 +22,15 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import BotUser, BotUserShop, Plan, Role, UserService, WalletTransaction
 from app.services.formatting import (
+    copyable,
     expire_remaining_days,
     format_bytes,
     format_bytes_ratio,
     format_expire_short,
+    format_message,
+    info_block,
     is_on_hold_status,
+    kv_line,
     on_hold_expire_duration_seconds,
     status_label_plain,
     time_remaining_label,
@@ -930,14 +935,20 @@ async def admin_renew_service(
     reset_traffic: bool = True,
     staff: dict | None = None,
 ) -> ServiceSnapshot:
-    """Admin renew: set expire from now + days and optional data limit (from plan or args)."""
+    """Admin renew: always a fresh period from now (does not follow plan carry).
+
+    Customer paid renewals, Mini App and automation use ``Plan.carry_remaining_quota``.
+    Staff renew from the users page stays the historical start-from-now + optional
+    traffic reset so operators are not surprised after an upgrade.
+    """
+    next_plan_id: int | None = None
     if plan is not None:
         if plan.is_trial:
             raise ValueError("پلن تست برای تمدید مجاز نیست")
         days = int(plan.duration_days or 0) or days
         if plan.data_limit_gb is not None:
             data_limit_gb = float(plan.data_limit_gb)
-        service.plan_id = int(plan.id)
+        next_plan_id = int(plan.id)
 
     if days is not None:
         days_n = int(days)
@@ -955,7 +966,10 @@ async def admin_renew_service(
     else:
         data_limit_bytes = None
 
-    return await admin_set_service_quota(
+    # Apply plan_id only after the panel write succeeds. ``_modify_with_hold`` may
+    # commit on a hard rejection; mutating beforehand could persist a plan change
+    # without the renew.
+    snap = await admin_set_service_quota(
         session,
         service,
         data_limit_bytes=data_limit_bytes,
@@ -964,6 +978,11 @@ async def admin_renew_service(
         activate=True,
         staff=staff,
     )
+    if next_plan_id is not None and service.plan_id != next_plan_id:
+        service.plan_id = next_plan_id
+        await session.commit()
+        snap = await service_snapshot(session, service)
+    return snap
 
 
 async def admin_extend_service(
@@ -1251,17 +1270,41 @@ async def detach_local_services_for_pg_user(
     return len(svc_ids)
 
 
+def _snapshot_plan(service: Any) -> Any:
+    """Plan already on the instance — never sync-lazy-load in async (MissingGreenlet)."""
+    data = getattr(service, "__dict__", None)
+    if isinstance(data, dict) and "plan" in data:
+        return data.get("plan")
+    # Non-ORM stubs (e.g. SimpleNamespace) expose plan as a normal attribute.
+    if not hasattr(service, "_sa_instance_state"):
+        return getattr(service, "plan", None)
+    return None
+
+
 def snapshot_telegram_lines(snap: ServiceSnapshot) -> str:
+    """Pretty Telegram HTML for one live service snapshot (staff screens)."""
     svc = snap.service
-    plan_name = svc.plan.name if svc.plan else "—"
-    lines = [
-        f"📦 سرویس #{svc.id} · {plan_name}",
-        f"وضعیت: {snap.status_fa}",
-        f"حجم: {snap.volume_text} (مانده {snap.remain_gb_text})",
-        f"زمان: {snap.expire_text} · مانده {snap.time_label}",
+    plan = _snapshot_plan(svc)
+    plan_name = html.escape(plan.name) if plan is not None and getattr(plan, "name", None) else "—"
+    username_raw = getattr(svc, "pg_username", None)
+    username = copyable(username_raw) if username_raw else "—"
+    rows = [
+        kv_line("👤", "نام‌کاربری", username),
+        kv_line("📋", "پلن", plan_name),
+        kv_line("📶", "وضعیت", html.escape(str(snap.status_fa))),
+        kv_line(
+            "📦",
+            "حجم",
+            f"{html.escape(str(snap.volume_text))} · مانده {html.escape(str(snap.remain_gb_text))}",
+        ),
+        kv_line(
+            "📅",
+            "انقضا",
+            f"{html.escape(str(snap.expire_text))} · مانده {html.escape(str(snap.time_label))}",
+        ),
     ]
     if snap.subscription_url:
-        lines.append(f"لینک: {snap.subscription_url}")
+        rows.append(kv_line("🔗", "لینک", copyable(snap.subscription_url)))
     if snap.error:
-        lines.append(f"⚠️ {snap.error}")
-    return "\n".join(lines)
+        rows.append(f"⚠️ {html.escape(str(snap.error))}")
+    return format_message(f"📦 سرویس #{svc.id}", info_block(rows))

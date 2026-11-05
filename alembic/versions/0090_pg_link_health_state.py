@@ -1,7 +1,7 @@
 """Persist PasarGuard link-health summary across restarts.
 
-Revision ID: 0084_pg_link_health_state
-Revises: 0083_shop_customer_marks
+Revision ID: 0090_pg_link_health_state
+Revises: 0089_addon_request_key
 
 Single platform row (id=1) holds last_ok / last_failure / pause_count and JSON
 per-kind totals for the last 24h. Idempotent; downgrade drops the table and
@@ -15,8 +15,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0084_pg_link_health_state"
-down_revision: Union[str, None] = "0083_shop_customer_marks"
+revision: str = "0090_pg_link_health_state"
+down_revision: Union[str, None] = "0089_addon_request_key"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

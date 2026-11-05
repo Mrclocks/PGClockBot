@@ -112,7 +112,9 @@ class TypedStepTests(SearchCase):
         message = AsyncMock()
         message.text = text
         user = SimpleNamespace(id=9, telegram_id=777)
-        with patch.object(bot, "shop_scope", AsyncMock(return_value=2)), patch.object(bot, "finish_text_step", AsyncMock()) as finish:
+        with patch.object(
+            bot, "shop_staff_context", AsyncMock(return_value=(2, object(), True))
+        ), patch.object(bot, "finish_text_step", AsyncMock()) as finish:
             await bot.receive_link(message, AsyncMock(), self.session, user, is_reseller_bot=False, reseller_owner_id=None)
         return message, finish
 
