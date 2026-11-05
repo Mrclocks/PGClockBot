@@ -20,6 +20,7 @@ from app.services.support_contacts import (
 from app.services.users import DEFAULT_SETTINGS, on
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 from app.services import bot_feedback_texts as feedback
+from app.services.staff_cards import SERVICE_BUTTON_LIMIT
 
 # Default order for user menu items (drag-and-drop in web panel edits menu_order)
 # guide/faq removed from keyboard — keep texts available via /help if needed.
@@ -2331,7 +2332,7 @@ def admin_user_services_keyboard(
     user_id: int, service_ids: list[int]
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
-    for sid in service_ids[:20]:
+    for sid in service_ids[:SERVICE_BUTTON_LIMIT]:
         rows.append(
             [
                 InlineKeyboardButton(

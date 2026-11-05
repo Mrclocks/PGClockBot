@@ -6,7 +6,12 @@ import unittest
 from types import SimpleNamespace
 
 from app.services.bot_user_admin import ServiceSnapshot, snapshot_telegram_lines
-from app.services.staff_cards import TELEGRAM_TEXT_LIMIT, format_services_list, format_services_list_header
+from app.services.staff_cards import (
+    SERVICE_BUTTON_LIMIT,
+    TELEGRAM_TEXT_LIMIT,
+    format_services_list,
+    format_services_list_header,
+)
 
 LINK = "https://sub.example-panel.com:2096/sub/Y2xrX3NhcwgNMTA3LDE3MzAwMDAwMDA.MTA3.joziaNayocXGLc"
 
@@ -69,5 +74,30 @@ class ServiceListLimitTests(unittest.TestCase):
         self.assertIn("clk_customer_7", snapshot_telegram_lines(snap, with_link=False))
 
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_services_without_a_button_are_counted_with_how_to_find_them(self) -> None:
+        entries = [snapshot_telegram_lines(snapshot(sid), with_link=False) for sid in range(1, 4)]
+
+        text = format_services_list(format_services_list_header(4), entries, without_button=80)
+
+        self.assertIn("… و 80 سرویس دیگر که دکمه ندارد", text)
+        self.assertNotIn("از دکمه‌های زیر باز کنید", text, "every listed service is shown, none is hidden")
+
+    def test_both_kinds_of_left_out_services_get_their_own_line(self) -> None:
+        entries = [snapshot_telegram_lines(snapshot(sid)) for sid in range(1, SERVICE_BUTTON_LIMIT + 1)]
+
+        text = format_services_list(format_services_list_header(4), entries, without_button=80)
+
+        self.assertLessEqual(telegram_length(text), TELEGRAM_TEXT_LIMIT)
+        self.assertIn("سرویس دیگر؛ از دکمه‌های زیر باز کنید", text)
+        self.assertIn("… و 80 سرویس دیگر که دکمه ندارد", text)
+
+
+class ServiceListKeyboardLimitTests(unittest.TestCase):
+    def test_a_hundred_services_stay_within_the_button_limit(self) -> None:
+        from app.bot import keyboards as kb
+        from app.bot.handlers import reseller_customer_services as shop
+
+        ids = list(range(1, 101))
+        for markup in (kb.admin_user_services_keyboard(4, ids), shop._services_keyboard(4, ids)):
+            buttons = [b for row in markup.inline_keyboard for b in row]
+            self.assertEqual(len(buttons), SERVICE_BUTTON_LIMIT + 1, "service buttons plus back")
