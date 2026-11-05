@@ -73,6 +73,15 @@ class MiniCheckoutOptionsTests(ShopPurchaseTests):
         [order] = await self.orders()
         self.assertEqual(order.requested_username, "ali")
 
+    async def test_a_name_that_is_not_text_is_refused_before_any_order_exists(self) -> None:
+        await self.grant("custom_service_name")
+        for name in (12345, ["ali"], {"name": "ali"}, True):
+            with self.subTest(name=name):
+                body = {"plan_id": SHOP_PLAN, "price": 5_000, "service_name": name}
+                self.assertEqual((await self.post("/api/mini/buy", body)).status_code, 400)
+        self.assertEqual(await self.orders(), [])
+        self.assertEqual(await self.purses(), (50_000, 7_000))
+
     async def test_a_name_is_ignored_where_it_is_not_required(self) -> None:
         await self.grant("")
         response = await self.post("/api/mini/buy", {"plan_id": SHOP_PLAN, "price": 5_000, "service_name": "ali"})
@@ -89,6 +98,12 @@ class MiniCheckoutOptionsTests(ShopPurchaseTests):
     async def test_a_shop_bot_admin_cannot_take_an_order_free(self) -> None:
         await self.grant("free_checkout", staff=True)
         response = await self.post("/api/mini/buy", {"plan_id": SHOP_PLAN, "mode": "staff_free"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(await self.orders(), [])
+
+    async def test_the_owner_cannot_take_an_order_free_without_the_permission(self) -> None:
+        await self.grant("")
+        response = await self.as_owner("POST", "/api/mini/buy", {"plan_id": SHOP_PLAN, "mode": "staff_free"})
         self.assertEqual(response.status_code, 403)
         self.assertEqual(await self.orders(), [])
 
