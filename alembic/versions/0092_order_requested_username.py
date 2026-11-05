@@ -3,7 +3,7 @@
 Revision ID: 0092_order_requested_username
 Revises: 0091_plan_customer_extra_rates
 
-``orders`` gains a nullable ``requested_username``. Delivery puts it in place of the
+``orders`` gains a nullable, indexed ``requested_username``. Delivery puts it in place of the
 naming pattern's ``{random}`` part. Existing orders keep NULL (generated names).
 Idempotent; the downgrade drops the column and keeps every row.
 """
@@ -22,6 +22,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 TABLE = "orders"
 COLUMN = "requested_username"
+# The name step looks up open orders holding a name; without it each lookup scans orders.
+INDEX = "ix_orders_requested_username"
 
 
 def _has_column(bind: sa.Connection) -> bool:
@@ -31,15 +33,25 @@ def _has_column(bind: sa.Connection) -> bool:
     return COLUMN in {column["name"] for column in inspector.get_columns(TABLE)}
 
 
+def _has_index(bind: sa.Connection) -> bool:
+    return INDEX in {index["name"] for index in sa.inspect(bind).get_indexes(TABLE)}
+
+
 def upgrade() -> None:
     bind = op.get_bind()
-    if not sa.inspect(bind).has_table(TABLE) or _has_column(bind):
+    if not sa.inspect(bind).has_table(TABLE):
         return
-    op.add_column(TABLE, sa.Column(COLUMN, sa.String(32), nullable=True))
+    if not _has_column(bind):
+        op.add_column(TABLE, sa.Column(COLUMN, sa.String(32), nullable=True))
+    if not _has_index(bind):
+        op.create_index(INDEX, TABLE, [COLUMN])
 
 
 def downgrade() -> None:
-    if not _has_column(op.get_bind()):
+    bind = op.get_bind()
+    if not _has_column(bind):
         return
+    if _has_index(bind):
+        op.drop_index(INDEX, table_name=TABLE)
     with op.batch_alter_table(TABLE) as batch:
         batch.drop_column(COLUMN)

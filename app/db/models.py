@@ -264,7 +264,7 @@ class Order(Base):
     payment_method: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     discount_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # Name the buyer chose for the new service; fills the naming pattern's {random} part.
-    requested_username: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    requested_username: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Purchased terms and an absolute target, persisted before panel mutation.
     renewal_snapshot: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
