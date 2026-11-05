@@ -128,6 +128,39 @@ def _filter_staff_groups(items, staff) -> list:
         return []
     return filter_groups_for_staff(items, staff or {})
 
+
+async def _load_staff_groups(pg, staff, state: FSMContext | None = None) -> list:
+    """Filtered groups for this staff; reuse FSM cache when present."""
+    if state is not None:
+        data = await state.get_data()
+        cached = data.get("pg_groups_cache")
+        if isinstance(cached, list):
+            return cached
+    try:
+        raw = await pg.get_groups_simple()
+    except Exception:
+        raw = []
+    groups = _filter_staff_groups(raw, staff)
+    if state is not None:
+        await state.update_data(pg_groups_cache=groups)
+    return groups
+
+
+async def _begin_custom_create_username(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(pg_create_mode="custom")
+    await state.set_state(PgUserStates.create_username)
+    from app.bot.nav_input import ask_text
+
+    await ask_text(
+        callback,
+        state,
+        prompt="نام کاربری جدید را بفرستید (۳–۳۲ حرف انگلیسی/عدد/_):",
+        cancel_code="adm_pg_u",
+        return_to="adm:pg:create",
+        fsm_state=PgUserStates.create_username,
+        edit=True,
+    )
+
 _PAGE_RE = re.compile(r"^adm:pg:users:p:(\d+)$")
 _SETTPL_RE = re.compile(r"^adm:pg:settpl:(\d+)$")
 _TOGGRP_RE = re.compile(r"^adm:pg:toggrp:(\d+)$")
@@ -1114,6 +1147,11 @@ async def pg_create_custom_groups(
     await callback.answer()
     await state.clear()
     await state.update_data(pg_create_mode="custom", pg_template_id=None, pg_selected_groups=[])
+    groups = await _load_staff_groups(gate.pg_client, gate.staff, state)
+    if not groups:
+        # Panel may already bind groups to this admin; skip a blank picker.
+        await _begin_custom_create_username(callback, state)
+        return
     await _show_create_group_picker(callback, state, pg=gate.pg_client, staff=gate.staff)
 
 async def _show_create_group_picker(
@@ -1122,14 +1160,7 @@ async def _show_create_group_picker(
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
     edit_uid = data.get("pg_edit_uid")
-    groups = data.get("pg_groups_cache")
-    if not isinstance(groups, list):
-        try:
-            groups = await pg.get_groups_simple()
-        except Exception:
-            groups = []
-        groups = _filter_staff_groups(groups, staff)
-        await state.update_data(pg_groups_cache=groups)
+    groups = await _load_staff_groups(pg, staff, state)
     rows: list[list[InlineKeyboardButton]] = []
     prefix = "adm:pg:edgrp" if edit_uid else "adm:pg:toggrp"
     for g in groups[:25]:
@@ -1151,16 +1182,10 @@ async def _show_create_group_picker(
         )
     done_cb = "adm:pg:edgrpdone" if edit_uid else "adm:pg:grpdone"
     back_cb = f"adm:pg:u:{edit_uid}:edit" if edit_uid else "adm:pg:create"
-    # Groups are optional for custom create/edit; always offer continue.
     confirm_label = (
         f"✅ تأیید ({len(selected)})" if selected else "✅ ادامه بدون گروه"
     )
-    if rows:
-        rows.append([InlineKeyboardButton(text=confirm_label, callback_data=done_cb)])
-    else:
-        rows.append(
-            [InlineKeyboardButton(text="✅ ادامه بدون گروه", callback_data=done_cb)]
-        )
+    rows.append([InlineKeyboardButton(text=confirm_label, callback_data=done_cb)])
     rows.append([kb.back_button(None, back_cb)])
     text = (
         "📁 گروه‌ها اختیاری‌اند (چندتایی):\n"
@@ -1244,19 +1269,7 @@ async def pg_create_grpdone(
         await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         return
     await callback.answer()
-    await state.update_data(pg_create_mode="custom")
-    await state.set_state(PgUserStates.create_username)
-    from app.bot.nav_input import ask_text
-
-    await ask_text(
-        callback,
-        state,
-        prompt="نام کاربری جدید را بفرستید (۳–۳۲ حرف انگلیسی/عدد/_):",
-        cancel_code="adm_pg_u",
-        return_to="adm:pg:create",
-        fsm_state=PgUserStates.create_username,
-        edit=True,
-    )
+    await _begin_custom_create_username(callback, state)
 
 @router.message(PgUserStates.create_username)
 async def pg_create_username(
@@ -1954,6 +1967,13 @@ async def pg_edit_groups_start(
     if not gate.allowed:
         return
     uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
+    groups = await _load_staff_groups(gate.pg_client, gate.staff, state)
+    if not groups:
+        await callback.answer(
+            "گروه قابل انتخابی ندارید؛ گروه‌های فعلی کاربر حفظ می‌شود.",
+            show_alert=True,
+        )
+        return
     await callback.answer()
     selected = user_group_ids(gate.pg_user if isinstance(gate.pg_user, dict) else {})
     await state.update_data(pg_edit_uid=uid, pg_selected_groups=selected)
@@ -2043,7 +2063,6 @@ async def pg_edit_grpdone(
         payload = sanitize_pg_user_write_payload(
             build_user_modify_payload(
                 username=str(uname) if uname else None,
-                # Empty selection must not send [] — that clears panel-assigned groups.
                 group_ids=selected or None,
                 status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
             )

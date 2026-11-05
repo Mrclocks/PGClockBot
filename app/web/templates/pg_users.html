@@ -220,16 +220,16 @@
           <input name="hwid_limit" type="number" min="0" step="1" placeholder="مثلاً 2" inputmode="numeric" />
           <small class="muted">خالی = طبق سقف نقش (در صورت وجود) یا نامحدود</small>
         </label>
+        {% if groups %}
         <div class="form-field">
           <span class="form-field-label">گروه‌های پاسارگارد (اختیاری)</span>
           <div class="ui-switch-grid">
             {% for g in groups %}
             {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
-            {% else %}
-            <span class="muted">گروهی در دسترس نیست — می‌توانید بدون گروه بسازید.</span>
             {% endfor %}
           </div>
         </div>
+        {% endif %}
       </div>
 
       <div id="pg-user-mode-template" class="form-stack" {% if default_mode != 'template' %}style="display:none"{% endif %}>
@@ -288,16 +288,16 @@
         <input id="pg-edit-hwid" name="hwid_limit" type="number" min="0" step="1" placeholder="مثلاً 2" inputmode="numeric" />
         <small class="muted">۰ یا خالی = نامحدود</small>
       </label>
+      {% if groups %}
       <div class="form-field">
-        <span class="form-field-label">گروه‌ها (اختیاری — خالی = بدون تغییر)</span>
+        <span class="form-field-label">گروه‌ها (اختیاری)</span>
         <div class="ui-switch-grid" id="pg-edit-groups">
           {% for g in groups %}
           {{ switch_chip('edit_group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
-          {% else %}
-          <span class="muted">گروهی در دسترس نیست — حجم و مدت بدون گروه ذخیره می‌شود.</span>
           {% endfor %}
         </div>
       </div>
+      {% endif %}
       <div class="actions">
         <button class="btn" type="submit">ذخیره</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
