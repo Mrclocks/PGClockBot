@@ -361,20 +361,33 @@
           <button type="submit" class="btn ghost">اعمال</button></span></label>
       </form>`}
       ${enough ? "" : lowBalanceHtml(f)}
-      <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "دریافت سرویس تست" : "پرداخت از کیف پول"}</button>
+      <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "ادامه دریافت تست" : "ادامه پرداخت"}</button>
     </section>`;
+  }
+
+  function buyConfirmHtml(plan) {
+    if (!plan) return emptyHtml("پلن انتخاب نشده است.");
+    const pid = Number(plan.id) || 0;
+    const confirmLabel = plan.is_trial ? "تأیید و دریافت سرویس تست" : "تأیید و پرداخت از کیف پول";
+    return `<div class="sum-row"><span class="muted">پلن</span><strong>${esc(plan.name)}</strong></div>
+      <div class="sum-row is-total"><span>مبلغ</span><span>${priceHtml(plan)}</span></div>
+      <p class="sm">${esc(planMetaText(plan))}</p>
+      <div class="btn-col">
+        <button type="button" class="btn block" data-action="confirm-buy" data-id="${pid}">${esc(confirmLabel)}</button>
+        <button type="button" class="btn ghost block" data-action="close-sheet">انصراف</button>
+      </div>`;
   }
 
   function discountedCheckoutHtml(checkout, plan, wallet) {
     const enough = Number(checkout.amount) <= (Number(wallet) || 0);
     return `<section class="card" aria-label="خلاصهٔ سفارش با تخفیف">
-      <div class="sum-row"><span class="muted">پلن</span><span>${esc(plan ? plan.name : "")}</span></div>
+      <div class="sum-row"><span class="muted">پلن</span><strong>${esc(plan ? plan.name : "")}</strong></div>
       <div class="sum-row"><span class="muted">قیمت</span><s>${esc(money(checkout.original_amount))}</s></div>
       <div class="sum-row"><span class="muted">تخفیف <bdi dir="ltr">${esc(checkout.code)}</bdi></span><span class="is-plus tx-amt"><span aria-hidden="true">−</span><bdi>${esc(money(checkout.discount))}</bdi></span></div>
-      <div class="sum-row is-total"><span>قابل پرداخت</span><span>${esc(money(checkout.amount))}</span></div>
+      <div class="sum-row is-total"><span>مبلغ</span><span>${esc(money(checkout.amount))}</span></div>
       ${enough ? "" : lowBalanceHtml()}
       <div class="btn-col">
-        <button type="button" class="btn block" data-action="checkout-pay"${enough ? "" : " disabled"}>پرداخت از کیف پول</button>
+        <button type="button" class="btn block" data-action="checkout-pay"${enough ? "" : " disabled"}>تأیید و پرداخت از کیف پول</button>
         <button type="button" class="btn ghost block" data-action="checkout-cancel">حذف کد و انصراف</button>
       </div>
     </section>`;
@@ -972,7 +985,7 @@
   root.PGMini.render = Object.freeze({
     icon, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
     brandHeaderHtml, noticeBannerHtml, shortcutsHtml, panelShortcutsHtml, heroHtml,
-    attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, discountedCheckoutHtml, giftFormHtml, renewPlansHtml,
+    attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, buyConfirmHtml, discountedCheckoutHtml, giftFormHtml, renewPlansHtml,
     renewPreviewHtml, addonPacksHtml, addonPreviewHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
     backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, reviewQueueHtml, reviewSheetHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml, resellerSubscriptionHtml,

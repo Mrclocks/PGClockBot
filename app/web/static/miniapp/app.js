@@ -359,6 +359,7 @@
     state.sheet = null;
     state.sheetSeq += 1;
     state.renewPreview = null;
+    state.addonPreview = null;
     state.topupCurrent = null;
     dropReviewImage();
     els.sheet.hidden = true;
@@ -1256,12 +1257,20 @@
 
   /* ---------- purchases ---------- */
 
-  async function buyPlan(planId, trigger) {
+  function showBuyConfirm(planId) {
     const plan = selectedPlan();
     if (!plan || plan.id !== planId || !commerce()) return;
+    const title = plan.is_trial ? "تأیید دریافت" : "تأیید خرید";
+    openSheet("buy-confirm", title, R.buyConfirmHtml(plan), { planId });
+  }
+
+  async function confirmBuy(planId, trigger) {
+    const plan = selectedPlan();
+    const sheet = state.sheet;
+    if (!plan || plan.id !== planId || !sheet || sheet.kind !== "buy-confirm" || sheet.planId !== planId || !commerce()) {
+      return;
+    }
     await guarded("buy", trigger, async () => {
-      const ok = await core.confirmAction(`خرید «${plan.name}» به مبلغ ${core.money(plan.price)} از کیف پول؟`);
-      if (!ok) return;
       try {
         const res = await core.api("/api/mini/buy", { method: "POST", body: { plan_id: planId, price: plan.price } });
         await afterPurchase(res.message || "خرید انجام شد", { view: "services" });
@@ -1486,9 +1495,8 @@
   async function payCheckout(trigger) {
     const checkout = state.checkout;
     if (!checkout || !commerce()) return;
+    // The discounted summary card is the renew-style confirm surface; no native dialog.
     await guarded("checkout-pay", trigger, async () => {
-      const ok = await core.confirmAction(`پرداخت ${core.money(checkout.amount)} از کیف پول با کد «${checkout.code}»؟`);
-      if (!ok) return;
       try {
         const res = await core.api(`/api/mini/checkout/${checkout.order_id}/pay`, { method: "POST", body: {} });
         state.checkout = null;
@@ -1599,7 +1607,8 @@
     "confirm-addon": (el) => confirmAddon(intAttr(el, "data-id"), intAttr(el, "data-pack"), el),
     automation: (el) => showAutomation(intAttr(el, "data-id")),
     cancellation: (el) => showCancellation(intAttr(el, "data-id")),
-    buy: (el) => buyPlan(intAttr(el, "data-id"), el),
+    buy: (el) => showBuyConfirm(intAttr(el, "data-id")),
+    "confirm-buy": (el) => confirmBuy(intAttr(el, "data-id"), el),
     "res-pack-buy": (el) => buyResellerPack(intAttr(el, "data-pack"), el),
     "res-extra-buy": (el) => buyResellerExtra(el.getAttribute("data-kind"), intAttr(el, "data-amount"), el),
     "res-renew": (el) => renewResellerPackage(el),
