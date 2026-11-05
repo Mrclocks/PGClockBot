@@ -389,6 +389,8 @@ tests/test_campaign_broad_audiences.py
 tests/test_shop_bot_customer_tools.py
 # Delivered staff notices: shop bots get res:user only; platform service buttons stay platform-only.
 tests/test_staff_notify_view_user.py
+# Settlement review notices never offer payrev approve; shop delivery alerts omit platform panel URLs.
+tests/test_staff_notify_action_buttons.py
 
 # Reseller capacity packs: wallet, tenancy, generation claim and Mini App role gating.
 tests/test_reseller_packs.py
