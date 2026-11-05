@@ -664,8 +664,19 @@ def _merge_markups(*parts: InlineKeyboardMarkup | None) -> InlineKeyboardMarkup 
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
-def _panel_url_markup(label: str, path: str) -> InlineKeyboardMarkup | None:
-    """HTTPS panel deep-link button, or None when PUBLIC_BASE_URL is not https."""
+def _panel_url_markup(
+    label: str,
+    path: str,
+    *,
+    shop_id: int | None = None,
+) -> InlineKeyboardMarkup | None:
+    """HTTPS panel deep-link for platform staff only.
+
+    Shop bots do not share the platform finance pages, so a shop-scoped notice
+    never gets a panel URL (even when PUBLIC_BASE_URL is https).
+    """
+    if shop_id is not None:
+        return None
     base = str(getattr(get_settings(), "public_base_url", "") or "").rstrip("/")
     if not base.startswith("https://"):
         return None
@@ -823,7 +834,7 @@ async def notify_pending_approval(
     shop_id = _payment_customer_shop_id(payment, order)
     markup = _merge_markups(
         _approval_markup(payment_id=payment.id),
-        _customer_markup(user_id=payment.user_id, service_id=None, shop_id=shop_id),
+        customer_markup(user_id=payment.user_id, service_id=None, shop_id=shop_id),
     )
     # A shop's wallet top-up is reviewed by that shop; only the platform's own top-ups are platform-only.
     await _dispatch_dual_notify(
@@ -1077,7 +1088,7 @@ async def notify_new_order(
         session,
         "notify_new_order",
         text,
-        markup=_customer_markup(
+        markup=customer_markup(
             user_id=order.user_id,
             service_id=None,
             shop_id=order.reseller_id,
@@ -1360,8 +1371,12 @@ async def notify_settlement_review(
     reason: str,
     title: str = "⚠️ پرداخت «بزن به کارت» نیاز به بررسی دارد",
 ) -> int:
-    """Staff of the payment's shop (platform admins for the platform): an automatic
-    payment needs a person. Never approves or rejects anything itself."""
+    """Tell staff an automatic settlement needs a person — never approve from this notice.
+
+    ``payrev:ok`` on a still-pending payment would call ``execute_payment_approve`` and
+    could credit a mismatched BBC/PSP amount. This notice only opens the customer card;
+    staff resolve the settlement from the finance review queue.
+    """
     # Local import: app.bot imports the handler modules, which import this module.
     from app.bot import create_bot
 
@@ -1375,10 +1390,8 @@ async def notify_settlement_review(
     if payment.order_id:
         lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
     text = format_message(title, info_block(lines) + f"\n\n{reason}")
-    markup = _merge_markups(
-        _approval_markup(payment_id=payment.id),
-        _customer_markup(user_id=payment.user_id, service_id=None, shop_id=shop_id),
-    )
+    # No payment= : avoid remember_review_message / commit mid-notice for a non-receipt flow.
+    markup = customer_markup(user_id=payment.user_id, service_id=None, shop_id=shop_id)
     bot = create_bot()
     try:
         # The settlement's shop is passed as the explicit scope, so shop events never reach platform admins.
@@ -1388,7 +1401,6 @@ async def notify_settlement_review(
             "notify_pending_approval",
             text,
             markup=markup,
-            payment=payment,
             ticket_reseller_id=shop_id,
         )
     finally:
@@ -1421,8 +1433,12 @@ async def notify_stars_delivery_failed(
     order = await session.get(Order, payment.order_id) if payment.order_id else None
     shop_id = _payment_customer_shop_id(payment, order)
     markup = _merge_markups(
-        _panel_url_markup("بررسی تحویل‌های ناموفق", "/finance?tab=delivery"),
-        _customer_markup(user_id=payment.user_id, service_id=None, shop_id=shop_id),
+        _panel_url_markup(
+            "بررسی تحویل‌های ناموفق",
+            "/finance?tab=delivery",
+            shop_id=shop_id,
+        ),
+        customer_markup(user_id=payment.user_id, service_id=None, shop_id=shop_id),
     )
     # A delivery failure, not a review request: no approve buttons to keep in sync.
     return await _dispatch_dual_notify(
@@ -1443,7 +1459,11 @@ async def notify_wireguard_missing(bot: Bot, session: AsyncSession, detail: str)
         session,
         "notify_panel_delivery_failures",
         text,
-        markup=_panel_url_markup("بررسی تحویل‌های ناموفق", "/finance?tab=delivery"),
+        markup=_panel_url_markup(
+            "بررسی تحویل‌های ناموفق",
+            "/finance?tab=delivery",
+            shop_id=None,
+        ),
         shop=False,
     )
 
