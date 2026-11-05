@@ -522,6 +522,11 @@ def progress_bar(used: float, total: float | None, width: int = 10) -> str:
 def parse_expire(value: Any) -> Optional[datetime]:
     if value is None:
         return None
+    if isinstance(value, datetime):
+        # Stored quota_expire_at / panel timestamps already as datetime.
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
     if isinstance(value, (int, float)):
         ts = int(value)
         if ts <= 0:

@@ -1525,12 +1525,38 @@ def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
         rows.append(
             [
                 InlineKeyboardButton(
+                    text=("✅ " if getattr(plan, "carry_remaining_period", True) else "⬜️ ")
+                    + "انتقال زمان مانده",
+                    callback_data=f"adm:resplan:flag:carryperiod:{pid}",
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=("✅ " if getattr(plan, "keep_extras_on_renew", True) else "⬜️ ")
+                    + "حفظ اضافه در تمدید",
+                    callback_data=f"adm:resplan:flag:keepextras:{pid}",
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
                     text=("✅ " if plan.allow_buy_extra else "⬜️ ") + "خرید حجم/کاربر اضافه",
                     callback_data=f"adm:resplan:flag:buyextra:{pid}",
                 )
             ]
         )
         if plan.allow_buy_extra or plan_allows_buy_extra(plan):
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text="📦 بسته‌های حجم/کاربر",
+                        callback_data=f"adm:resx:l:{pid}",
+                    )
+                ]
+            )
             rows.append(
                 [
                     InlineKeyboardButton(
@@ -1600,7 +1626,9 @@ async def resplan_toggle(callback: CallbackQuery, session: AsyncSession, db_user
             reply_markup=_resplan_detail_keyboard(plan),
         )
 
-@router.callback_query(F.data.regexp(r"^adm:resplan:flag:(pgadmin|sharepg|buyextra):\d+$"))
+@router.callback_query(
+    F.data.regexp(r"^adm:resplan:flag:(pgadmin|sharepg|buyextra|carryperiod|keepextras):\d+$")
+)
 @require_bot_owner_handler
 async def resplan_flag_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
@@ -1624,9 +1652,22 @@ async def resplan_flag_toggle(callback: CallbackQuery, session: AsyncSession, db
         plan.allow_buy_extra = not bool(plan.allow_buy_extra)
         if plan.allow_buy_extra:
             plan.renew_pricing_mode = "from_capacity"
+            from app.services.reseller_plan_extra_packs import ensure_default_packs
+
+            await ensure_default_packs(session, plan)
         else:
             plan.extra_gb_price = 0
             plan.extra_user_price = 0
+    elif flag == "carryperiod":
+        if not is_subscription_plan(plan) or reseller_plan_mode_of(plan) == "payg":
+            await callback.answer("انتقال زمان فقط برای اشتراک ثابت است", show_alert=True)
+            return
+        plan.carry_remaining_period = not bool(getattr(plan, "carry_remaining_period", True))
+    elif flag == "keepextras":
+        if not is_subscription_plan(plan) or reseller_plan_mode_of(plan) == "payg":
+            await callback.answer("حفظ اضافه فقط برای اشتراک ثابت است", show_alert=True)
+            return
+        plan.keep_extras_on_renew = not bool(getattr(plan, "keep_extras_on_renew", True))
     elif flag == "pgadmin":
         plan.create_pg_admin = not bool(plan.create_pg_admin)
         if not plan.create_pg_admin:
