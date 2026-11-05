@@ -57,9 +57,11 @@
     wrap.className = "extra-pack-row";
     wrap.setAttribute("data-extra-pack-row", "");
     wrap.innerHTML =
+      `<div class="extra-pack-fields">` +
       `<input name="${amountName}" class="extra-pack-amount" type="number" min="1" max="100000" step="1" ` +
       `inputmode="numeric" dir="ltr" value="${Number(amount) || 1}" aria-label="${amountLabel}" placeholder="مقدار" required />` +
       `<select name="${styleName}" class="btn-color-select extra-pack-style" data-tone="default" aria-label="${styleLabel}">${styleOptionsHtml}</select>` +
+      `</div>` +
       `<button type="button" class="btn btn-danger btn-sm extra-pack-remove" data-extra-pack-remove aria-label="${removeLabel}">حذف</button>`;
     const select = wrap.querySelector("select");
     if (select) {

@@ -25,17 +25,19 @@
       {% set cur = 'inherit' if row.button_style is none else (row.button_style or '') %}
       {% set cur_tone = 'default' if cur in ('inherit', '') else cur %}
       <div class="extra-pack-row" data-extra-pack-row>
-        <input name="extra_gb_amount" class="extra-pack-amount" type="number" min="1" max="100000" step="1"
-               inputmode="numeric" dir="ltr" value="{{ row.amount }}"
-               aria-label="مقدار حجم بسته" placeholder="مقدار"
-               {% if packs_are_hidden %}disabled{% else %}required{% endif %} />
-        <select name="extra_gb_style" class="btn-color-select extra-pack-style" data-tone="{{ cur_tone }}"
-                aria-label="رنگ دکمه بسته حجم"
-                {% if packs_are_hidden %}disabled{% endif %}>
-          {% for opt_val, opt_label, opt_tone in style_opts %}
-          <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
-          {% endfor %}
-        </select>
+        <div class="extra-pack-fields">
+          <input name="extra_gb_amount" class="extra-pack-amount" type="number" min="1" max="100000" step="1"
+                 inputmode="numeric" dir="ltr" value="{{ row.amount }}"
+                 aria-label="مقدار حجم بسته" placeholder="مقدار"
+                 {% if packs_are_hidden %}disabled{% else %}required{% endif %} />
+          <select name="extra_gb_style" class="btn-color-select extra-pack-style" data-tone="{{ cur_tone }}"
+                  aria-label="رنگ دکمه بسته حجم"
+                  {% if packs_are_hidden %}disabled{% endif %}>
+            {% for opt_val, opt_label, opt_tone in style_opts %}
+            <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
         <button type="button" class="btn btn-danger btn-sm extra-pack-remove"
                 data-extra-pack-remove aria-label="حذف بسته حجم"
                 {% if packs_are_hidden %}disabled{% endif %}>حذف</button>
@@ -55,17 +57,19 @@
       {% set cur = 'inherit' if row.button_style is none else (row.button_style or '') %}
       {% set cur_tone = 'default' if cur in ('inherit', '') else cur %}
       <div class="extra-pack-row" data-extra-pack-row>
-        <input name="extra_user_amount" class="extra-pack-amount" type="number" min="1" max="100000" step="1"
-               inputmode="numeric" dir="ltr" value="{{ row.amount }}"
-               aria-label="تعداد کاربر بسته" placeholder="مقدار"
-               {% if packs_are_hidden %}disabled{% else %}required{% endif %} />
-        <select name="extra_user_style" class="btn-color-select extra-pack-style" data-tone="{{ cur_tone }}"
-                aria-label="رنگ دکمه بسته کاربر"
-                {% if packs_are_hidden %}disabled{% endif %}>
-          {% for opt_val, opt_label, opt_tone in style_opts %}
-          <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
-          {% endfor %}
-        </select>
+        <div class="extra-pack-fields">
+          <input name="extra_user_amount" class="extra-pack-amount" type="number" min="1" max="100000" step="1"
+                 inputmode="numeric" dir="ltr" value="{{ row.amount }}"
+                 aria-label="تعداد کاربر بسته" placeholder="مقدار"
+                 {% if packs_are_hidden %}disabled{% else %}required{% endif %} />
+          <select name="extra_user_style" class="btn-color-select extra-pack-style" data-tone="{{ cur_tone }}"
+                  aria-label="رنگ دکمه بسته کاربر"
+                  {% if packs_are_hidden %}disabled{% endif %}>
+            {% for opt_val, opt_label, opt_tone in style_opts %}
+            <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
         <button type="button" class="btn btn-danger btn-sm extra-pack-remove"
                 data-extra-pack-remove aria-label="حذف بسته کاربر"
                 {% if packs_are_hidden %}disabled{% endif %}>حذف</button>

@@ -12799,8 +12799,9 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   gap: var(--space-1);
 }
 .extra-pack-row {
+  /* Desktop: [amount|style equal] + delete. Fields share one nested 1fr|1fr grid. */
   display: grid;
-  grid-template-columns: 6.5rem minmax(9rem, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2);
@@ -12810,30 +12811,31 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   box-sizing: border-box;
   width: 100%;
 }
-/* User-plan rows also carry an absolute price field. */
-.extra-pack-row:has(.extra-pack-price) {
-  grid-template-columns: 6rem 7rem minmax(8rem, 1fr) auto;
+.extra-pack-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-2);
+  min-width: 0;
+  width: 100%;
 }
-.extra-pack-row > .extra-pack-amount,
-.extra-pack-row > .extra-pack-price,
-.extra-pack-row > .extra-pack-style,
-.extra-pack-row > .extra-pack-remove {
-  width: auto;
+.extra-pack-fields > .extra-pack-amount,
+.extra-pack-fields > .extra-pack-style {
+  width: 100%;
   max-width: none;
   min-width: 0;
   margin: 0;
   box-sizing: border-box;
 }
-.extra-pack-row > .extra-pack-amount,
-.extra-pack-row > .extra-pack-price {
-  width: 100%;
-}
-.extra-pack-row > .extra-pack-style {
-  width: 100%;
+.extra-pack-fields > .extra-pack-style {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .extra-pack-row > .extra-pack-remove {
+  width: auto;
+  margin: 0;
   justify-self: stretch;
   white-space: nowrap;
+  box-sizing: border-box;
 }
 .extra-packs-kind > .pay-dest-add-row {
   margin-top: 2px;
@@ -12842,14 +12844,12 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   display: none !important;
 }
 @media (max-width: 640px) {
-  .extra-pack-row,
-  .extra-pack-row:has(.extra-pack-price) {
+  /* Mobile: amount | style equal on one row; delete full-width under them. */
+  .extra-pack-row {
     grid-template-columns: 1fr;
   }
-  .extra-pack-row > .extra-pack-amount,
-  .extra-pack-row > .extra-pack-price,
-  .extra-pack-row > .extra-pack-style,
   .extra-pack-row > .extra-pack-remove {
     width: 100%;
+    justify-self: stretch;
   }
 }
