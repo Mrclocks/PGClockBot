@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -166,6 +167,24 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("res:svc:4:11", buttons)
         self.assertIn("res:user:4", buttons)
         self.assertNotIn("وب‌پنل", edit.await_args.args[1])
+
+    async def test_services_list_fits_one_telegram_message_without_links(self) -> None:
+        snap = replace(await self._snap_for(11), subscription_url="https://sub.example/" + "x" * 90)
+        callback = self._callback(f"res:svcs:{self.customer.id}")
+        edit = AsyncMock()
+        with patch.object(handler, "safe_edit_text", edit), patch.object(
+            handler, "list_service_snapshots", AsyncMock(return_value=[snap] * 30)
+        ):
+            await handler.res_user_services(
+                callback,
+                self.session,
+                self.shop,
+                is_reseller_bot=True,
+                reseller_owner_id=self.shop.id,
+            )
+        text = edit.await_args.args[1]
+        self.assertLessEqual(len(text.encode("utf-16-le")) // 2, 4096)
+        self.assertNotIn("sub.example", text)
 
     async def test_another_shops_service_cannot_be_opened(self) -> None:
         callback = self._callback(f"res:svc:{self.customer.id}:12")

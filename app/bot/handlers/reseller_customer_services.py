@@ -48,7 +48,11 @@ from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import has_bot_perm
 from app.services.service_import import admin_delete_pg_flag, is_external_service
 from app.services.shop_membership import is_shop_customer
-from app.services.staff_cards import format_adjust_prompt, format_services_list_header
+from app.services.staff_cards import (
+    format_adjust_prompt,
+    format_services_list,
+    format_services_list_header,
+)
 
 logger = logging.getLogger(__name__)
 router = Router(name="reseller_customer_services")
@@ -260,14 +264,14 @@ async def res_user_services(
                 ),
             )
         return
-    lines = [format_services_list_header(target.user_id), ""]
-    for snap in snaps[:15]:
-        lines.append(snapshot_telegram_lines(snap))
-        lines.append("")
+    text = format_services_list(
+        format_services_list_header(target.user_id),
+        [snapshot_telegram_lines(snap, with_link=False) for snap in snaps],
+    )
     if callback.message:
         await safe_edit_text(
             callback.message,
-            "\n".join(lines).strip(),
+            text,
             reply_markup=_services_keyboard(target.user_id, [s.service.id for s in snaps]),
         )
 

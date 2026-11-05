@@ -17,6 +17,9 @@ from app.services.formatting import (
     rtl_text,
 )
 
+# Longest text Telegram accepts in one message.
+TELEGRAM_TEXT_LIMIT = 4096
+
 
 def role_label_fa(role: str | None) -> str:
     """Persian label for a BotUser.role value."""
@@ -110,6 +113,32 @@ def format_subscription_owner_card(
 def format_services_list_header(user_id: int, *, subject: str = "مشتری") -> str:
     label = (subject or "مشتری").strip() or "مشتری"
     return rtl_text(f"📦 <b>سرویس‌های {html.escape(label)} #{int(user_id)}</b>")
+
+
+def _telegram_length(text: str) -> int:
+    # Telegram counts UTF-16 code units; markup is counted too, which keeps this on the safe side.
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _more_services_note(count: int) -> str:
+    return "\n\n" + rtl_text(f"… و {count} سرویس دیگر؛ از دکمه‌های زیر باز کنید.")
+
+
+def format_services_list(header: str, entries: Sequence[str]) -> str:
+    """Service entries under a header, cut before Telegram's message length limit.
+
+    Entries that do not fit are counted in one closing line; every service still has
+    its own button on the list screen.
+    """
+    shown: list[str] = []
+    for index, entry in enumerate(entries):
+        remaining = len(entries) - index - 1
+        candidate = "\n\n".join([header, *shown, entry])
+        note = _more_services_note(remaining) if remaining else ""
+        if _telegram_length(candidate + note) > TELEGRAM_TEXT_LIMIT:
+            return "\n\n".join([header, *shown]) + _more_services_note(len(entries) - index)
+        shown.append(entry)
+    return "\n\n".join([header, *shown])
 
 
 def format_adjust_prompt(service_id: int, *, days: int, gb: float) -> str:
