@@ -234,6 +234,8 @@ tests/test_shop_isolation_dashboards.py
 tests/test_service_shop_review_page.py
 tests/test_shop_points.py
 tests/test_shop_points_migration.py
+# Customer wallet hub/miniapp: shop loyalty flag + that shop's points purse only.
+tests/test_wallet_show_points.py
 tests/test_shop_isolation_remaining.py
 tests/test_shop_isolation_review_fixes.py
 tests/test_wheel_state_per_shop.py
