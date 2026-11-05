@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, Plan
 from app.services.formatting import format_message, info_block, kv_line
-from app.services.notifications import _customer_markup, _dispatch_dual_notify
+from app.services.notifications import customer_markup, _dispatch_dual_notify
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ async def notify_trial_claimed(bot: Bot, session: AsyncSession, *, order: Order,
     if row is None or not row.is_trial:
         return 0
     text = trial_claimed_text(user=user, plan_name=row.name, order_id=int(order.id))
-    markup = _customer_markup(
+    markup = customer_markup(
         user_id=int(user.id),
         service_id=order.service_id,
         shop_id=order.reseller_id,
