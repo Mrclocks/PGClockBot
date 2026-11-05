@@ -44,6 +44,7 @@
       <div><dt>تگ ریسک</dt><dd><span class="badge badge-risk-tag" style="--tag-color: {{ card.risk_tag.hex }}">{{ card.risk_tag.title_fa }}</span></dd></div>
       {% endif %}
       <div><dt>کیف پول</dt><dd><bdi dir="ltr">{{ card.wallet_balance | money }}</bdi> تومان</dd></div>
+      <div><dt>امتیاز</dt><dd><bdi dir="ltr">{{ card.points_balance | num }}</bdi></dd></div>
       <div><dt>خرید موفق</dt><dd><bdi dir="ltr">{{ card.paid_total | money }}</bdi> تومان · {{ card.paid_count | num }} سفارش</dd></div>
       <div><dt>عضویت</dt><dd>{{ card.joined }}</dd></div>
     </dl>

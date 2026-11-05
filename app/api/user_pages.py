@@ -20,6 +20,7 @@ from app.services.bot_user_admin import (
 )
 from app.services.customer_marks import marks_for_staff, may_edit_private_marks
 from app.services.shop_customer_block import shop_block_form_context
+from app.services.shop_points_adjust import shop_points_form_context
 from app.services.shop_wallet_adjust import shop_wallet_form_context
 from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
 from app.services.pg_access import staff_user_actions
@@ -247,6 +248,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return loaded
         user = loaded
 
+        from app.services.loyalty import points_balance
         from app.services.shop_scope import resolve_shop_scope_id
         from app.services.wallet import get_wallet_balance
 
@@ -258,6 +260,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         display_wallet = await get_wallet_balance(
             session, user, shop_id=shop_scope
         )
+        display_points = await points_balance(session, user, shop_scope)
 
         can_view_services = may_manage_customer_services(staff)
         snaps = (
@@ -285,11 +288,14 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "show_private_marks": True,
             "can_edit_private_marks": await may_edit_private_marks(session, staff, user),
             "display_wallet": display_wallet,
+            "display_points": display_points,
             "services": snaps,
             "can_view_services": can_view_services,
             "wallet_txs": wallet_txs,
             "wallet_nonce": secrets.token_hex(8),
+            "points_nonce": secrets.token_hex(8),
             **shop_wallet_form_context(staff),
+            **shop_points_form_context(staff),
             **(await shop_block_form_context(session, staff, user)),
             "plans": plans,
             "format_toman": format_toman,
@@ -425,6 +431,99 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         else:
             ok = f"از کیف پول {amount:,} تومان کسر شد"
         return _redirect_user(user_id, ok=ok)
+
+    @app.post("/users/{user_id}/points-adjust")
+    async def user_points_adjust(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Platform owner: adjust the customer's platform points purse (shop_id=None)."""
+        from app.services.loyalty import admin_adjust_points, points_balance
+        from app.services.notifications import actor_label_from_staff
+        from app.services.shop_manual_adjust import ManualAdjustError, parse_reason, parse_request_key
+
+        if not is_explicit_owner_staff(staff):
+            return RedirectResponse("/home", status_code=303)
+        loaded = await _require_scoped_user(session, staff, user_id)
+        if isinstance(loaded, RedirectResponse):
+            return loaded
+        user = loaded
+        form = await request.form()
+        mode = str(form.get("mode") or "").strip()
+        raw_points = str(form.get("points") or "").strip().replace(",", "").replace("٬", "")
+        try:
+            request_key = parse_request_key(form.get("nonce"))
+            reason = parse_reason(form.get("reason"))
+        except ManualAdjustError as exc:
+            return _redirect_user(user_id, err=str(exc))
+        if mode not in {"credit", "debit"}:
+            return _redirect_user(user_id, err="نوع تغییر نامعتبر است")
+        if not raw_points.isdigit() or len(raw_points) > 12:
+            return _redirect_user(user_id, err="امتیاز نامعتبر است")
+        points = int(raw_points)
+        if points < 1:
+            return _redirect_user(user_id, err="امتیاز باید مثبت باشد")
+        delta = points if mode == "credit" else -points
+        try:
+            await admin_adjust_points(
+                session,
+                user,
+                delta,
+                reason=reason,
+                admin_identity=str(actor_label_from_staff(staff) or "admin"),
+                shop_id=None,
+                request_key=request_key,
+            )
+        except ValueError as exc:
+            return _redirect_user(user_id, err=str(exc))
+        balance = await points_balance(session, user, None)
+        verb = "افزوده شد" if mode == "credit" else "کسر شد"
+        return _redirect_user(user_id, ok=f"{points:,} امتیاز {verb} · مانده: {balance:,}")
+
+    @app.post("/users/{user_id}/shop-points")
+    async def user_shop_points_adjust(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_ops),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Shop staff: adjust this customer's points in the staff member's own shop."""
+        from app.services.shop_manual_adjust import ManualAdjustError
+        from app.services.shop_points_adjust import (
+            adjust_shop_points,
+            parse_points_request,
+            points_adjust_shop,
+        )
+
+        try:
+            points_adjust_shop(staff)
+        except PermissionError:
+            return RedirectResponse("/home", status_code=303)
+        loaded = await _require_scoped_user(session, staff, user_id)
+        if isinstance(loaded, RedirectResponse):
+            return loaded
+        form = await request.form()
+        try:
+            change = await adjust_shop_points(
+                session,
+                staff=staff,
+                request=parse_points_request(
+                    raw_customer_id=str(user_id),
+                    raw_points=form.get("points"),
+                    direction=form.get("mode"),
+                    reason=form.get("reason"),
+                    request_key=form.get("nonce"),
+                ),
+            )
+        except ManualAdjustError as exc:
+            return _redirect_user(user_id, err=str(exc))
+        verb = "افزوده شد" if change.direction == "credit" else "کسر شد"
+        return _redirect_user(
+            user_id,
+            ok=f"{change.points:,} امتیاز {verb} · مانده: {change.balance_after:,}",
+        )
 
     @app.post("/users/{user_id}/message")
     async def user_staff_message(
