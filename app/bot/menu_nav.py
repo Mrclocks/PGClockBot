@@ -581,7 +581,7 @@ async def present_order_pay(
     else:
         body = prompt
     order = await session.get(Order, int(order_id))
-    if needs_service_name(ui, order):
+    if await needs_service_name(session, order):
         await show_service_name_step(message, state, int(order_id), summary=summary)
         return
     staff_free = await may_take_order_free(

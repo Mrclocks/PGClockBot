@@ -1,6 +1,7 @@
 """The buyer names a new service before paying.
 
-When the shop turns on ``custom_service_name_enabled``, choosing a plan leads to a
+When the platform grants a shop ``custom_service_name`` (or turns on
+``custom_service_name_enabled`` for its own bot), choosing a plan leads to a
 required name step (a typed name or «🎲 اسم تصادفی») before the payment screen. The
 name is stored on the order and takes the place of the naming pattern's ``{random}``
 part at delivery, so the shop's prefix and suffix stay. A name already in use gets a
@@ -24,9 +25,12 @@ from app.services.orders import (
     generate_pg_username,
     is_mutation_order_note,
 )
-from app.services.users import on
+from app.services.resellers import get_reseller_profile, has_perm
+from app.services.users import get_all_settings, on
 
+# Platform bot switch (main bot settings); shops use the permission below.
 SETTING_KEY = "custom_service_name_enabled"
+PERMISSION = "custom_service_name"
 MIN_LENGTH = 3
 MAX_LENGTH = CHOSEN_NAME_MAX_LENGTH
 # A free variant is found in one or two tries; the bound only stops a pathological loop.
@@ -47,11 +51,9 @@ ORDER_LOCKED = "نام این سفارش دیگر قابل تغییر نیست."
 NO_FREE_NAME = "برای این نام جای خالی پیدا نشد؛ نام دیگری بفرستید."
 
 
-def offers_custom_name(ui: dict, order: Order | None) -> bool:
-    """Whether this order goes through the name step."""
+def _is_nameable(order: Order | None) -> bool:
     return (
-        on(ui.get(SETTING_KEY))
-        and isinstance(order, Order)
+        isinstance(order, Order)
         and order.plan_id is not None
         and int(order.quantity or 1) == 1
         and not is_mutation_order_note(order.note)
@@ -59,9 +61,24 @@ def offers_custom_name(ui: dict, order: Order | None) -> bool:
     )
 
 
-def needs_service_name(ui: dict, order: Order | None) -> bool:
+async def offers_custom_name(session: AsyncSession, order: Order | None) -> bool:
+    """Whether this order goes through the name step.
+
+    A shop order follows the shop's ``custom_service_name`` permission, which the
+    platform grants next to ``free_checkout``; a platform order follows the platform
+    bot setting.
+    """
+    if not _is_nameable(order):
+        return False
+    if order.reseller_id is None:
+        return on((await get_all_settings(session, reseller_id=None)).get(SETTING_KEY))
+    profile = await get_reseller_profile(session, int(order.reseller_id))
+    return bool(profile and profile.is_active and has_perm(profile, PERMISSION))
+
+
+async def needs_service_name(session: AsyncSession, order: Order | None) -> bool:
     """The name step is required and has not been answered yet."""
-    return offers_custom_name(ui, order) and not order.requested_username
+    return await offers_custom_name(session, order) and not order.requested_username
 
 
 def normalize_service_name(raw: str | None) -> str:

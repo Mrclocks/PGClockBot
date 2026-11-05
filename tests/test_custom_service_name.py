@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db import Base
-from app.db.models import BotUser, Order, OrderStatus, Plan, UserService
+from app.db.models import BotUser, Order, OrderStatus, Plan, ResellerProfile, UserService
 from app.services import custom_service_name as naming
 from app.services.orders import create_with_name_fallback, deliver_order, generate_pg_username
 from app.services.pasarguard import PasarGuardError
@@ -30,27 +30,6 @@ class NameRulesTests(unittest.TestCase):
         for _ in range(20):
             name = naming.random_service_name()
             self.assertEqual(naming.normalize_service_name(name), name)
-
-    def test_the_step_is_needed_until_a_name_is_stored(self) -> None:
-        order = Order(id=1, user_id=1, plan_id=1, amount=10, quantity=1, status=OrderStatus.PENDING.value)
-        self.assertFalse(naming.needs_service_name({}, order))
-        self.assertTrue(naming.needs_service_name(ENABLED, order))
-        order.requested_username = "ali"
-        self.assertFalse(naming.needs_service_name(ENABLED, order))
-
-    def test_the_name_is_offered_only_when_enabled_for_a_single_new_order(self) -> None:
-        order = Order(id=1, user_id=1, plan_id=1, amount=10, quantity=1, status=OrderStatus.PENDING.value)
-        self.assertFalse(naming.offers_custom_name({}, order))
-        self.assertTrue(naming.offers_custom_name(ENABLED, order))
-        for changed in (
-            {"quantity": 3},
-            {"note": "renew:5"},
-            {"status": OrderStatus.PAID.value},
-            {"plan_id": None},
-        ):
-            other = Order(**{**dict(id=1, user_id=1, plan_id=1, amount=10, quantity=1,
-                                    status=OrderStatus.PENDING.value), **changed})
-            self.assertFalse(naming.offers_custom_name(ENABLED, other), changed)
 
 
 class NamingPatternTests(unittest.IsolatedAsyncioTestCase):
@@ -119,6 +98,50 @@ class NameFixture(unittest.IsolatedAsyncioTestCase):
         self.session.add(order)
         await self.session.commit()
         return order
+
+
+class NameStepSwitchTests(NameFixture):
+    async def shop(self, permissions: str) -> int:
+        owner = BotUser(telegram_id=9100, username="shop", referral_code="s1", role="reseller")
+        self.session.add(owner)
+        await self.session.flush()
+        self.session.add(
+            ResellerProfile(user_id=owner.id, is_active=True, web_permissions=permissions, bot_permissions=permissions)
+        )
+        await self.session.commit()
+        return owner.id
+
+    async def test_a_shop_order_follows_the_shop_permission(self) -> None:
+        granted = await self.shop("dashboard,custom_service_name")
+        order = await self.order(self.buyer, reseller_id=granted)
+        self.assertTrue(await naming.offers_custom_name(self.session, order))
+        self.assertTrue(await naming.needs_service_name(self.session, order))
+        order.requested_username = "ali"
+        self.assertFalse(await naming.needs_service_name(self.session, order))
+
+    async def test_a_shop_without_the_permission_has_no_name_step(self) -> None:
+        shop_id = await self.shop("dashboard")
+        order = await self.order(self.buyer, reseller_id=shop_id)
+        with patch("app.services.custom_service_name.get_all_settings", AsyncMock(return_value=ENABLED)):
+            # The platform bot switch does not turn the step on inside a shop.
+            self.assertFalse(await naming.offers_custom_name(self.session, order))
+
+    async def test_a_platform_order_follows_the_platform_switch(self) -> None:
+        order = await self.order(self.buyer)
+        with patch("app.services.custom_service_name.get_all_settings", AsyncMock(return_value={})):
+            self.assertFalse(await naming.offers_custom_name(self.session, order))
+        with patch("app.services.custom_service_name.get_all_settings", AsyncMock(return_value=ENABLED)):
+            self.assertTrue(await naming.offers_custom_name(self.session, order))
+
+    async def test_only_single_new_unpaid_orders_get_the_step(self) -> None:
+        with patch("app.services.custom_service_name.get_all_settings", AsyncMock(return_value=ENABLED)):
+            for fields in (
+                {"quantity": 3},
+                {"note": "renew:5"},
+                {"status": OrderStatus.PAID.value},
+            ):
+                order = await self.order(self.buyer, **fields)
+                self.assertFalse(await naming.offers_custom_name(self.session, order), fields)
 
 
 class StoredNameTests(NameFixture):
@@ -252,7 +275,7 @@ class NameStepHandlerTests(NameFixture):
         state = MagicMock(set_state=AsyncMock())
         with (
             patch.object(handler, "is_customer_order_in_current_shop", return_value=True),
-            patch.object(handler, "get_all_settings", AsyncMock(return_value=ENABLED)),
+            patch("app.services.custom_service_name.get_all_settings", AsyncMock(return_value=ENABLED)),
             patch.object(handler, "present_order_pay", AsyncMock()) as shown,
         ):
             await handler.random_service_name_chosen(callback, state, self.session, self.buyer)
@@ -269,7 +292,8 @@ class NameStepHandlerTests(NameFixture):
         order = await self.order(self.buyer)
         state = MagicMock(set_state=AsyncMock(), update_data=AsyncMock(), get_data=AsyncMock(return_value={}))
         with (
-            patch.object(menu_nav, "get_all_settings", AsyncMock(return_value=ENABLED)),
+            patch.object(menu_nav, "get_all_settings", AsyncMock(return_value={})),
+            patch("app.services.custom_service_name.get_all_settings", AsyncMock(return_value=ENABLED)),
             patch.object(menu_nav, "set_nav_level", AsyncMock()),
             patch("app.bot.nav_inline.present_inline_only", AsyncMock()) as shown,
         ):

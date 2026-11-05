@@ -19,7 +19,6 @@ from app.services.checkout_summary import checkout_summary
 from app.services.custom_service_name import offers_custom_name, random_service_name, set_service_name
 from app.services.orders import is_customer_order_in_current_shop
 from app.services.redact import user_safe_error
-from app.services.users import get_all_settings
 
 router = Router(name="custom_service_name")
 
@@ -60,9 +59,7 @@ async def random_service_name_chosen(
     reseller_owner_id: int | None = None,
 ) -> None:
     order = await session.get(Order, int((callback.data or "").rsplit(":", 1)[-1]))
-    if not is_customer_order_in_current_shop(order, db_user.id) or not offers_custom_name(
-        await get_all_settings(session), order
-    ):
+    if not is_customer_order_in_current_shop(order, db_user.id) or not await offers_custom_name(session, order):
         await callback.answer(ORDER_GONE, show_alert=True)
         return
     try:
