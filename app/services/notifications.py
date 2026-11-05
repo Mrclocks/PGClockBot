@@ -716,7 +716,17 @@ async def notify_new_subscription(
     else:
         title = "🆕 اشتراک جدید"
     text = format_message(title, info_block(lines))
-    markup = _approval_markup(order_id=order.id) if needs_approval else None
+    if needs_approval:
+        markup = _approval_markup(order_id=order.id)
+    else:
+        # Delivered notices open the customer card (and the service card on the platform bot).
+        note_raw = (order.note or "").strip()
+        is_agency_fee = note_raw.startswith("reseller_app:")
+        markup = _customer_markup(
+            user_id=order.user_id,
+            service_id=None if is_agency_fee else order.service_id,
+            shop_id=order.reseller_id,
+        )
     await _dispatch_dual_notify(
         bot,
         session,
@@ -1070,6 +1080,11 @@ async def notify_wallet_topup_ok(
         session,
         "notify_wallet_topup",
         text,
+        markup=_customer_markup(
+            user_id=payment.user_id,
+            service_id=None,
+            shop_id=None,
+        ),
         payment=payment,
         shop=False,
     )
