@@ -12814,19 +12814,33 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
 .extra-pack-fields {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
   gap: var(--space-2);
   min-width: 0;
   width: 100%;
 }
+/* Amount + enhanced color select share one baseline.
+   panel.js wraps <select> in .ui-select (default margin-top: space-1);
+   zero that here so the toggle lines up with the number input. */
 .extra-pack-fields > .extra-pack-amount,
-.extra-pack-fields > .extra-pack-style {
+.extra-pack-fields > .extra-pack-style,
+.extra-pack-fields > .ui-select {
   width: 100%;
   max-width: none;
   min-width: 0;
   margin: 0;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
   box-sizing: border-box;
+  align-self: center;
 }
-.extra-pack-fields > .extra-pack-style {
+.extra-pack-fields > .ui-select .ui-select-toggle {
+  width: 100%;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+}
+.extra-pack-fields > .extra-pack-style,
+.extra-pack-fields > .ui-select .ui-select-label {
   overflow: hidden;
   text-overflow: ellipsis;
 }
