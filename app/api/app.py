@@ -2796,25 +2796,41 @@ def create_api_app(lifespan=None) -> FastAPI:
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
 
-        session.add(
-            Plan(
-                name=name.strip(),
-                price=price,
-                duration_days=days,
-                data_limit_gb=gb,
-                pg_template_id=tpl,
-                pg_group_ids=group_csv,
-                pg_username_prefix=uname_prefix,
-                pg_username_suffix=uname_suffix,
-                pg_username_pattern=uname_pattern,
-                button_style=button_style,
-                category_id=category_id,
-                owner_reseller_id=owner_id,
-                description=description or None,
-                carry_remaining_quota=bool(form.get("carry_remaining_quota")),
-                is_active=True,
-            )
+        plan = Plan(
+            name=name.strip(),
+            price=price,
+            duration_days=days,
+            data_limit_gb=gb,
+            pg_template_id=tpl,
+            pg_group_ids=group_csv,
+            pg_username_prefix=uname_prefix,
+            pg_username_suffix=uname_suffix,
+            pg_username_pattern=uname_pattern,
+            button_style=button_style,
+            category_id=category_id,
+            owner_reseller_id=owner_id,
+            description=description or None,
+            carry_remaining_quota=bool(form.get("carry_remaining_quota")),
+            is_active=True,
         )
+        from app.services.service_addons import (
+            apply_plan_extra_rates_from_form,
+            replace_plan_scoped_packs_from_form,
+        )
+
+        try:
+            apply_plan_extra_rates_from_form(plan, form)
+        except ValueError as e:
+            return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
+        session.add(plan)
+        await session.flush()
+        try:
+            await replace_plan_scoped_packs_from_form(
+                session, staff, plan_id=int(plan.id), form=form
+            )
+        except ValueError as e:
+            await session.rollback()
+            return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
         await session.commit()
         return RedirectResponse(
             f"/plans?ok={quote('پلن ذخیره شد')}",
@@ -3137,15 +3153,47 @@ def create_api_app(lifespan=None) -> FastAPI:
         cats = []
         if is_platform_admin(staff) or rid:
             cats = await list_categories(session, staff, active_only=False)
+        from app.services.button_styles import (
+            ITEM_BUTTON_STYLE_OPTIONS,
+            PLAN_BUTTON_STYLE_OPTIONS,
+        )
+        from app.services.service_addons import (
+            KIND_DURATION,
+            KIND_VOLUME,
+            list_packs_for_plan,
+            plan_duration_months_for_form,
+        )
+
+        plan_packs = await list_packs_for_plan(
+            session, plan_id=int(plan.id), reseller_id=rid, active_only=False
+        )
+        plan_vol_packs = [
+            {"amount": int(p.amount), "button_style": p.button_style}
+            for p in plan_packs
+            if p.kind == KIND_VOLUME
+        ]
+        plan_dur_packs = [
+            {
+                "amount": plan_duration_months_for_form(p),
+                "button_style": p.button_style,
+            }
+            for p in plan_packs
+            if p.kind == KIND_DURATION
+        ]
         ctx = await _plans_context(
             session,
             request,
             staff,
-            {"plan": plan, "values": values, "plan_categories": cats},
+            {
+                "plan": plan,
+                "values": values,
+                "plan_categories": cats,
+                "plan_vol_packs": plan_vol_packs,
+                "plan_dur_packs": plan_dur_packs,
+            },
         )
-        from app.services.button_styles import PLAN_BUTTON_STYLE_OPTIONS
-
         ctx["plan_style_options"] = PLAN_BUTTON_STYLE_OPTIONS
+        ctx["pack_style_options"] = ITEM_BUTTON_STYLE_OPTIONS
         return render(request, "plan_edit.html", ctx)
 
     @app.post("/plans/{plan_id}/edit")
@@ -3254,6 +3302,22 @@ def create_api_app(lifespan=None) -> FastAPI:
                 allow_inactive_id=plan.category_id,
             )
         except (ShopScopeError, ValueError) as e:
+            return RedirectResponse(
+                f"/plans/{plan_id}/edit?err={quote(str(e))}",
+                status_code=303,
+            )
+        try:
+            from app.services.service_addons import (
+                apply_plan_extra_rates_from_form,
+                replace_plan_scoped_packs_from_form,
+            )
+
+            apply_plan_extra_rates_from_form(plan, form)
+            await replace_plan_scoped_packs_from_form(
+                session, staff, plan_id=int(plan.id), form=form
+            )
+        except ValueError as e:
+            await session.rollback()
             return RedirectResponse(
                 f"/plans/{plan_id}/edit?err={quote(str(e))}",
                 status_code=303,

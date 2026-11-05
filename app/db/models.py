@@ -179,6 +179,16 @@ class Plan(Base):
     carry_remaining_quota: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true")
     )
+    # Plan-scoped customer extra stairs (volume GB / duration months), like reseller fixed.
+    allow_buy_extra: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    extra_gb_price: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0")
+    )  # toman per extra GB
+    extra_month_price: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0")
+    )  # toman per extra month (stored packs use days = months * 30)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
