@@ -41,21 +41,30 @@ def _item_style(ui: dict, item_style: str | None = None) -> str | None:
     return style_or_none(ui, "guides", fallback="primary")
 
 
+def _list_callback(svc_id: int | None, audience: str) -> str:
+    base = f"guide:list:{int(svc_id or 0)}"
+    return f"{base}:reseller" if audience == "reseller" else base
+
+
 def guides_list_keyboard(
     items: list[dict],
     ui: dict,
     *,
     svc_id: int | None = None,
     back_callback: str | None = None,
+    audience: str = "user",
 ) -> InlineKeyboardMarkup:
     buttons: list[InlineKeyboardButton] = []
     prefix = f"guide:open:{svc_id}:" if svc_id else "guide:open:0:"
     for g in items[: kb.LIST_BUTTON_CAP]:
         gid = str(g.get("id") or "")
         title = str(g.get("title") or "آموزش")[:64]
+        open_cb = f"{prefix}{gid}"
+        if audience == "reseller":
+            open_cb = f"{open_cb}:reseller"
         kwargs: dict = {
             "text": title,
-            "callback_data": f"{prefix}{gid}"[:64],
+            "callback_data": open_cb[:64],
         }
         st = _item_style(ui, g.get("style") or g.get("button_style"))
         if st:
@@ -75,6 +84,7 @@ def guide_detail_keyboard(
     *,
     svc_id: int | None = None,
     sub_url: str | None = None,
+    audience: str = "user",
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if guide.get("deep_link"):
@@ -83,8 +93,7 @@ def guide_detail_keyboard(
             label = kb._label_or(ui, "btn_guide_open_link", "🔗 باز کردن لینک اشتراک").strip()[:64]
             rows.append([kb._ikb(label, url=url, ui=ui, label_key="btn_guide_open_link")])
     rows.extend([InlineKeyboardButton(text=link["label"][:64], url=link["url"])] for link in guide.get("links") or [])
-    back = f"guide:list:{int(svc_id or 0)}"
-    rows.append([kb.back_button(ui, back)])
+    rows.append([kb.back_button(ui, _list_callback(svc_id, audience))])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -101,13 +110,6 @@ def delivery_guides_keyboard(ui: dict, *, audience: str = "user") -> InlineKeybo
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(**kwargs)]])
 
 
-async def _audience_for_user(session: AsyncSession, db_user: BotUser) -> str:
-    role = (getattr(db_user, "role", None) or "").lower()
-    if role == "reseller":
-        return "reseller"
-    return "user"
-
-
 async def show_guides_list(
     target: Message | CallbackQuery,
     session: AsyncSession,
@@ -117,7 +119,8 @@ async def show_guides_list(
     audience: str | None = None,
 ) -> None:
     ui = await get_all_settings(session)
-    aud = audience or await _audience_for_user(session, db_user)
+    # Default user: service/VPN surfaces. Pass audience="reseller" only for panel onboarding.
+    aud = "reseller" if audience == "reseller" else "user"
     items = guides_for_audience(await get_connection_guides(session), aud)
     text = format_message(
         "📘 آموزش اتصال",
@@ -125,7 +128,11 @@ async def show_guides_list(
         if items
         else "هنوز آموزشی تعریف نشده است.",
     )
-    markup = guides_list_keyboard(items, ui, svc_id=svc_id) if items else kb.back_home(ui)
+    markup = (
+        guides_list_keyboard(items, ui, svc_id=svc_id, audience=aud)
+        if items
+        else kb.back_home(ui)
+    )
     if isinstance(target, CallbackQuery):
         await target.answer()
         if target.message:
@@ -162,15 +169,18 @@ async def guide_open_cb(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
 ):
     parts = (callback.data or "").split(":")
-    # guide:open:{svc_id}:{guide_id}
+    # guide:open:{svc_id}:{guide_id}[:audience]
     svc_id = 0
-    gid = ""
+    audience = "user"
     try:
         svc_id = int(parts[2]) if len(parts) > 2 else 0
     except (TypeError, ValueError):
         svc_id = 0
-    if len(parts) > 3:
-        gid = ":".join(parts[3:])
+    rest = parts[3:]
+    if rest and rest[-1] in {"user", "reseller"}:
+        audience = rest[-1]
+        rest = rest[:-1]
+    gid = ":".join(rest)
     ui = await get_all_settings(session)
     items = await get_connection_guides(session)
     guide = next((g for g in items if str(g.get("id")) == gid and g.get("enabled", True)), None)
@@ -188,7 +198,9 @@ async def guide_open_cb(
     if not callback.message:
         return
     text = format_message(f"📘 {title}", body)
-    markup = guide_detail_keyboard(guide, ui, svc_id=svc_id, sub_url=sub_url)
+    markup = guide_detail_keyboard(
+        guide, ui, svc_id=svc_id, sub_url=sub_url, audience=audience
+    )
     rid = current_shop_reseller_id()
     cache = await load_file_id_cache(session, reseller_id=rid)
     album = media_to_send(guide, bot_id=callback.bot.id, cache=cache, reseller_id=rid)
