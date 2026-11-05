@@ -354,6 +354,8 @@ tests/test_bulk_grant_miniapp.py
 tests/test_customer_notes_permission.py
 # Staff free checkout: owner / shop operator with free_checkout only, own new orders, one zero claim.
 tests/test_staff_free_checkout.py
+# Chosen service name: own unpaid order only, unique per shop, delivery never blocked by it.
+tests/test_custom_service_name.py
 # Gift codes: own gift_codes key, own shop only; migration 0077 keeps current access.
 tests/test_gift_codes_permission.py
 # Shop staff action log: written with the change, read only by the shop it belongs to.

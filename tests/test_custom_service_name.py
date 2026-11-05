@@ -1,0 +1,259 @@
+"""Buyer-chosen service name: validation, availability, storage and delivery."""
+
+from __future__ import annotations
+
+import unittest
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.db import Base
+from app.db.models import BotUser, Order, OrderStatus, Plan, UserService
+from app.services import custom_service_name as naming
+from app.services.orders import create_with_name_fallback, deliver_order, generate_pg_username
+from app.services.pasarguard import PasarGuardError
+
+ENABLED = {naming.SETTING_KEY: "1"}
+
+
+class NameRulesTests(unittest.TestCase):
+    def test_a_valid_name_is_lower_cased(self) -> None:
+        self.assertEqual(naming.normalize_service_name("  @Ali_22 "), "ali_22")
+
+    def test_invalid_names_are_refused(self) -> None:
+        for raw in ("ab", "1ali", "علی", "ali-22", "ali 22", "a" * 21, "", None):
+            with self.assertRaises(ValueError, msg=repr(raw)):
+                naming.normalize_service_name(raw)
+
+    def test_the_clear_word_removes_the_name(self) -> None:
+        self.assertIsNone(naming.normalize_service_name(naming.CLEAR_WORD))
+
+    def test_the_name_is_offered_only_when_enabled_for_a_single_new_order(self) -> None:
+        order = Order(id=1, user_id=1, plan_id=1, amount=10, quantity=1, status=OrderStatus.PENDING.value)
+        self.assertFalse(naming.offers_custom_name({}, order))
+        self.assertTrue(naming.offers_custom_name(ENABLED, order))
+        for changed in (
+            {"quantity": 3},
+            {"note": "renew:5"},
+            {"status": OrderStatus.PAID.value},
+            {"plan_id": None},
+        ):
+            other = Order(**{**dict(id=1, user_id=1, plan_id=1, amount=10, quantity=1,
+                                    status=OrderStatus.PENDING.value), **changed})
+            self.assertFalse(naming.offers_custom_name(ENABLED, other), changed)
+
+
+class NamingPatternTests(unittest.IsolatedAsyncioTestCase):
+    async def name(self, pattern: str | None, chosen: str | None) -> str:
+        plan = SimpleNamespace(data_limit_gb=30, pg_username_prefix="vip", pg_username_suffix="_x",
+                               pg_username_pattern=pattern)
+        with patch("app.services.users.get_all_settings", AsyncMock(return_value={})), patch(
+            "app.services.orders._random_alnum", return_value="a1b2c3d4"
+        ):
+            return await generate_pg_username(AsyncMock(), user_id=7, plan=plan, chosen_name=chosen)
+
+    async def test_the_chosen_name_takes_the_random_part(self) -> None:
+        self.assertEqual(await self.name("{prefix}_{random}{suffix}", "ali"), "vip_ali_x")
+
+    async def test_a_pattern_without_random_still_carries_the_name(self) -> None:
+        self.assertEqual(await self.name("{prefix}_{id}", "ali"), "vip_ali_x")
+
+    async def test_without_a_chosen_name_nothing_changes(self) -> None:
+        self.assertEqual(await self.name("{prefix}_{id}", None), "vip_7")
+
+
+class NameFallbackTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_taken_name_falls_back_to_a_generated_one(self) -> None:
+        create = AsyncMock(side_effect=[PasarGuardError("User already exists", status_code=409), {"id": 1}])
+        regenerate = AsyncMock(return_value="clk_a1b2c3d4")
+
+        result = await create_with_name_fallback(create, "clk_ali", regenerate=regenerate)
+
+        self.assertEqual(result, ({"id": 1}, "clk_a1b2c3d4"))
+        self.assertEqual([call.args[0] for call in create.await_args_list], ["clk_ali", "clk_a1b2c3d4"])
+
+    async def test_other_panel_errors_are_not_retried(self) -> None:
+        create = AsyncMock(side_effect=PasarGuardError("bad group", status_code=400))
+        with self.assertRaises(PasarGuardError):
+            await create_with_name_fallback(create, "clk_ali", regenerate=AsyncMock())
+        create.assert_awaited_once()
+
+    async def test_a_generated_name_is_never_retried(self) -> None:
+        create = AsyncMock(side_effect=PasarGuardError("User already exists", status_code=409))
+        with self.assertRaises(PasarGuardError):
+            await create_with_name_fallback(create, "clk_a1b2c3d4", regenerate=None)
+        create.assert_awaited_once()
+
+
+class NameFixture(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
+        self.buyer = BotUser(telegram_id=9001, username="buyer", referral_code="b1")
+        self.other = BotUser(telegram_id=9002, username="other", referral_code="b2")
+        self.plan = Plan(name="Monthly", price=100, pg_template_id=1, data_limit_gb=30)
+        self.session.add_all([self.buyer, self.other, self.plan])
+        await self.session.commit()
+        patcher = patch("app.services.users.get_all_settings", AsyncMock(return_value={}))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    async def asyncTearDown(self) -> None:
+        await self.session.close()
+        await self.engine.dispose()
+
+    async def order(self, user: BotUser, **fields) -> Order:
+        order = Order(user_id=user.id, plan_id=self.plan.id, amount=100, **fields)
+        self.session.add(order)
+        await self.session.commit()
+        return order
+
+
+class StoredNameTests(NameFixture):
+    async def test_the_name_is_stored_and_the_final_username_returned(self) -> None:
+        order = await self.order(self.buyer)
+
+        username = await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="Ali")
+
+        self.assertEqual(username, "clk_ali")
+        self.assertEqual(order.requested_username, "ali")
+
+    async def test_a_username_already_in_use_is_refused(self) -> None:
+        self.session.add(UserService(bot_user_id=self.other.id, pg_username="CLK_ali"))
+        await self.session.commit()
+        order = await self.order(self.buyer)
+
+        with self.assertRaisesRegex(ValueError, naming.NAME_TAKEN):
+            await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
+
+    async def test_a_similar_but_different_name_is_free(self) -> None:
+        self.session.add(UserService(bot_user_id=self.other.id, pg_username="clk_ali"))
+        await self.session.commit()
+        order = await self.order(self.buyer)
+
+        self.assertEqual(
+            await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="mali"), "clk_mali"
+        )
+
+    async def test_another_open_order_holding_the_name_blocks_it(self) -> None:
+        await self.order(self.other, requested_username="ali")
+        order = await self.order(self.buyer)
+
+        with self.assertRaisesRegex(ValueError, naming.NAME_TAKEN):
+            await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
+
+    async def test_someone_elses_or_a_paid_order_cannot_be_renamed(self) -> None:
+        theirs = await self.order(self.other)
+        paid = await self.order(self.buyer, status=OrderStatus.PAID.value)
+
+        for order in (theirs, paid):
+            with self.assertRaisesRegex(ValueError, naming.ORDER_LOCKED):
+                await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
+
+    async def test_the_clear_word_brings_back_the_generated_name(self) -> None:
+        order = await self.order(self.buyer, requested_username="ali")
+
+        self.assertIsNone(await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="-"))
+        self.assertIsNone(order.requested_username)
+
+    async def test_delivery_creates_the_service_with_the_chosen_name(self) -> None:
+        order = await self.order(self.buyer, status=OrderStatus.PAID.value, requested_username="ali")
+        pg = SimpleNamespace(
+            create_user_from_template=AsyncMock(return_value={"id": 5, "subscription_url": "https://x/sub/t"})
+        )
+        with patch("app.services.orders.get_pg", return_value=pg):
+            delivered = await deliver_order(self.session, order)
+
+        self.assertEqual(delivered.status, OrderStatus.DELIVERED.value)
+        self.assertEqual(pg.create_user_from_template.call_args.args[0]["username"], "clk_ali")
+        service = await self.session.get(UserService, delivered.service_id)
+        self.assertEqual(service.pg_username, "clk_ali")
+
+    async def test_delivery_still_succeeds_when_the_panel_already_holds_the_name(self) -> None:
+        order = await self.order(self.buyer, status=OrderStatus.PAID.value, requested_username="ali")
+        pg = SimpleNamespace(
+            create_user_from_template=AsyncMock(
+                side_effect=[
+                    PasarGuardError("User already exists", status_code=409),
+                    {"id": 6, "subscription_url": "https://x/sub/u"},
+                ]
+            )
+        )
+        with patch("app.services.orders.get_pg", return_value=pg), patch(
+            "app.services.orders._random_alnum", return_value="a1b2c3d4"
+        ):
+            delivered = await deliver_order(self.session, order)
+
+        self.assertEqual(delivered.status, OrderStatus.DELIVERED.value)
+        service = await self.session.get(UserService, delivered.service_id)
+        self.assertEqual(service.pg_username, "clk_a1b2c3d4")
+
+
+class NameStepHandlerTests(NameFixture):
+    async def enter(self, order: Order, text: str):
+        from unittest.mock import MagicMock
+
+        from app.bot.handlers import custom_service_name as handler
+
+        state = MagicMock(
+            get_data=AsyncMock(return_value={handler.ORDER_KEY: order.id}),
+            set_state=AsyncMock(),
+            update_data=AsyncMock(),
+            clear=AsyncMock(),
+        )
+        message = MagicMock(text=text, answer=AsyncMock())
+        with (
+            patch.object(handler, "is_customer_order_in_current_shop", return_value=True),
+            patch.object(handler, "present_order_pay", AsyncMock()) as shown,
+        ):
+            await handler.service_name_entered(message, state, self.session, self.buyer)
+        return message, state, shown
+
+    async def test_an_invalid_name_keeps_the_step_open(self) -> None:
+        message, state, shown = await self.enter(await self.order(self.buyer), "علی")
+
+        shown.assert_not_awaited()
+        state.set_state.assert_not_awaited()
+        self.assertIn("حروف انگلیسی", message.answer.await_args.args[0])
+
+    async def test_a_valid_name_returns_to_the_payment_screen(self) -> None:
+        order = await self.order(self.buyer)
+
+        _message, _state, shown = await self.enter(order, "ali")
+
+        shown.assert_awaited_once()
+        self.assertIn("clk_ali", shown.await_args.kwargs["summary"])
+        await self.session.refresh(order)
+        self.assertEqual(order.requested_username, "ali")
+
+
+class RequestedUsernameMigrationTests(unittest.TestCase):
+    def test_upgrade_twice_and_downgrade_keep_existing_orders(self) -> None:
+        import importlib.util
+        from pathlib import Path
+
+        import sqlalchemy as sa
+        from alembic.migration import MigrationContext
+        from alembic.operations import Operations
+
+        path = Path(__file__).resolve().parents[1] / "alembic/versions/0084_order_requested_username.py"
+        spec = importlib.util.spec_from_file_location("requested_username_migration", path)
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+        engine = sa.create_engine("sqlite:///:memory:")
+        with engine.begin() as conn:
+            conn.execute(sa.text("CREATE TABLE orders (id INTEGER PRIMARY KEY, amount INTEGER)"))
+            conn.execute(sa.text("INSERT INTO orders VALUES (1, 500)"))
+            with Operations.context(MigrationContext.configure(conn)):
+                migration.upgrade()
+                migration.upgrade()
+                self.assertEqual(conn.execute(sa.text("SELECT requested_username FROM orders")).scalar(), None)
+                migration.downgrade()
+                columns = {column["name"] for column in sa.inspect(conn).get_columns("orders")}
+                self.assertNotIn("requested_username", columns)
+                self.assertEqual(conn.execute(sa.text("SELECT amount FROM orders")).scalar(), 500)
+                migration.downgrade()
+        engine.dispose()

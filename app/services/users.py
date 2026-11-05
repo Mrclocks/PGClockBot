@@ -1071,6 +1071,7 @@ DEFAULT_SETTINGS = {
     "pay_bbc_enabled": "0",
     "pay_card_auto_enabled": "0",
     "pay_discount_enabled": "1",
+    "custom_service_name_enabled": "0",
     # JSON list of API gateways (see psp_gateways.py); empty = the single psp_* gateway below.
     "psp_gateways": "[]",
     "psp_provider": "zarinpal",
@@ -1660,6 +1661,12 @@ SETTING_GROUPS = {
         ("pay_crypto_enabled", "رمزارز", "toggle", ""),
         ("pay_stars_enabled", "استارز تلگرام", "toggle", "پرداخت درون‌برنامه‌ای با ⭐"),
         ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),
+        (
+            "custom_service_name_enabled",
+            "نام دلخواه سرویس",
+            "toggle",
+            "خریدار هنگام پرداخت نام سرویس را انتخاب می‌کند؛ پیشوند و پسوند نام‌گذاری حفظ می‌شود",
+        ),
         ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
         ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
     ],

@@ -120,7 +120,7 @@ class PresentOrderPayInlineTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("روش پرداخت", args[0])
         self.assertNotIn("کیبورد پایین", args[0])
         self.assertIs(kwargs.get("reply_markup"), pay_kb)
-        pay_methods.assert_called_once_with(99, unittest.mock.ANY, staff_free=False)
+        pay_methods.assert_called_once_with(99, unittest.mock.ANY, staff_free=False, service_name=False)
         show_nav.assert_not_awaited()
 
     async def test_stale_classic_still_uses_inline_pay(self):

@@ -1490,15 +1490,24 @@ def _pay_method_button(
 
 
 STAFF_FREE_BUTTON_TEXT = "🎁 دریافت رایگان (مدیر)"
+SERVICE_NAME_BUTTON_TEXT = "✏️ نام دلخواه سرویس"
 
 
 def pay_methods(
-    order_id: int, ui: dict | None = None, *, staff_free: bool = False
+    order_id: int,
+    ui: dict | None = None,
+    *,
+    staff_free: bool = False,
+    service_name: bool = False,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if staff_free:
         rows.append(
             [InlineKeyboardButton(text=STAFF_FREE_BUTTON_TEXT, callback_data=f"pay:staff:{order_id}")]
+        )
+    if service_name:
+        rows.append(
+            [InlineKeyboardButton(text=SERVICE_NAME_BUTTON_TEXT, callback_data=f"pay:name:{order_id}")]
         )
     if on(_t(ui, "pay_wallet_enabled")):
         rows.append([_pay_method_button(ui, order_id, "wallet", "success")])

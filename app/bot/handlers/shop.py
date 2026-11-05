@@ -2695,6 +2695,7 @@ def _register_shop_cancel_codes() -> None:
     register_cancel_code("c_gb", CancelEntry(reopen=_reopen_custom_gb))
     register_cancel_code("c_days", CancelEntry(reopen=_reopen_custom_days))
     register_cancel_code("pay_disc", CancelEntry(reopen=_reopen_order_pay))
+    register_cancel_code("pay_name", CancelEntry(reopen=_reopen_order_pay))
     register_cancel_code("pay_rcpt", CancelEntry(reopen=_reopen_order_pay))
     register_cancel_code("pay_wait", CancelEntry(reopen=_reopen_order_pay))
 
