@@ -513,8 +513,17 @@ async def _process_locked(session, row, service, user, bot) -> None:
         # for review, avoiding a refund followed by another capacity purchase.
         try:
             if action == "renew":
+                from app.services.service_renewals import plan_carries_remaining_quota
+
+                # Modern renewals freeze carry in renewal_snapshot and ignore
+                # reset_traffic. Legacy auto orders without a snapshot still
+                # honor the plan flag here.
                 order = await apply_renewal(
-                    session, order, service, choice, reset_traffic=True
+                    session,
+                    order,
+                    service,
+                    choice,
+                    reset_traffic=not plan_carries_remaining_quota(choice),
                 )
             else:
                 order = await apply_service_addon(session, order)

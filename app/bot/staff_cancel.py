@@ -418,6 +418,7 @@ def register_staff_cancel_codes() -> None:
     register_cancel_code("rs_pln", CancelEntry(reopen=reopen_reseller_plans))
     register_cancel_code("rs_set", CancelEntry(reopen=reopen_reseller_settings))
     register_cancel_code("rs_msg", CancelEntry(reopen=reopen_reseller_user_msg))
+    register_cancel_code("rs_svc", CancelEntry(reopen=reopen_reseller_user_msg))
     register_cancel_code("loy_stf", CancelEntry(reopen=reopen_loyalty_staff))
     register_cancel_code("adm_cap", CancelEntry(reopen=reopen_reseller_cap_adjust))
 
