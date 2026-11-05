@@ -283,16 +283,21 @@ def build_user_create_payload(
 ) -> dict[str, Any]:
     """Payload compatible with current PasarGuard UserCreate schema.
 
-    ``group_ids`` may be empty — custom volume/time create does not require groups.
+    When ``group_ids`` is None or empty the key is omitted so a limited panel
+    admin can receive whatever groups the panel assigns by default. Callers
+    that intentionally choose groups must pass a non-empty list (and enforce
+    their allow-list before calling).
     """
     from datetime import datetime, timezone
 
     payload: dict[str, Any] = {
         "username": username,
         "status": status,
-        "group_ids": list(group_ids or []),
         "proxy_settings": {},
     }
+    chosen = [int(g) for g in (group_ids or []) if int(g) > 0]
+    if chosen:
+        payload["group_ids"] = chosen
     if data_limit is not None:
         payload["data_limit"] = int(data_limit)
     if expire_ts is not None:

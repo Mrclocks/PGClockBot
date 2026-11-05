@@ -1508,7 +1508,7 @@ async def pg_create_days(
     payload = sanitize_pg_user_write_payload(
         build_user_create_payload(
             username=uname,
-            group_ids=groups,
+            group_ids=groups or None,
             data_limit=data_limit if gb > 0 else 0,
             expire_ts=expire_ts if days > 0 else 0,
             note=f"telegram admin · {db_user.telegram_id}",
