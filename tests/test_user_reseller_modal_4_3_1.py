@@ -48,7 +48,7 @@ class PendingOrderCleanupTests(unittest.TestCase):
     def test_legacy_cancel_keys_stay_off_settings_tabs(self):
         from app.services.users import DEFAULT_SETTINGS, TAB_SETTING_GROUPS, keys_for_tab
 
-        # Soft-cancel defaults remain so migrate_soft_cancel_to_purge can read them;
+        # Soft-cancel defaults remain so disable_all_legacy_soft_cancel can read them;
         # the finance cleanup modal no longer edits these fields.
         self.assertIn("pending_order_cleanup_enabled", DEFAULT_SETTINGS)
         self.assertIn("pending_order_ttl_hours", DEFAULT_SETTINGS)
@@ -56,16 +56,15 @@ class PendingOrderCleanupTests(unittest.TestCase):
         self.assertNotIn("pending_order_cleanup_enabled", keys_for_tab("cleanup"))
         self.assertNotIn("pending_order_cleanup_enabled", keys_for_tab("payment"))
 
-    def test_soft_cancel_job_and_routes_are_gone(self):
-        orders = (ROOT / "app/services/orders.py").read_text(encoding="utf-8")
-        self.assertIn("async def cancel_stale_pending_orders", orders)
-        sched = (ROOT / "app/jobs/scheduler.py").read_text(encoding="utf-8")
-        self.assertNotIn("pending_order_cleanup", sched)
-        self.assertNotIn("cleanup_stale_pending_orders", sched)
-        api = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertNotIn("/settings/cancel-pending-orders", api)
-        shop = (ROOT / "app/api/shop_settings.py").read_text(encoding="utf-8")
-        self.assertNotIn("/shop-settings/cancel-pending-orders", shop)
+    def test_soft_cancel_is_not_an_operational_scheduler_job(self):
+        from app.jobs import scheduler as jobs
+
+        from tests.test_scheduler_background_jobs import OPERATIONS
+
+        self.assertNotIn("pending_order_cleanup", OPERATIONS)
+        self.assertIn("order_purge", OPERATIONS)
+        self.assertTrue(hasattr(jobs, "run_auto_order_purge"))
+        self.assertFalse(hasattr(jobs, "cleanup_stale_pending_orders"))
 
 
 class RoleAndReasonUiTests(unittest.TestCase):

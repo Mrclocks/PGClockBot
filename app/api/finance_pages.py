@@ -157,9 +157,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             open_settings = "payment" if can_finance_settings else ""
         if open_settings and not can_finance_settings:
             open_settings = ""
-        if open_settings == "cleanup" and staff.get("role") != "admin" and not (
-            can_shop(authz, "shop_settings") or can_shop(authz, "orders_purge")
-        ):
+        if open_settings == "cleanup" and staff.get("role") != "admin" and not can_shop(authz, "orders_purge"):
             open_settings = ""
 
         ctx: dict = {

@@ -21,8 +21,6 @@ from app.services.stale_order_cleanup import (
     StaleOrderPolicy,
     cancellable_statuses,
     clamp_hours,
-    policy_from_settings,
-    record_cleanup_run,
     scope_to_shop,
     stale_orders_clause,
 )
@@ -1583,35 +1581,6 @@ async def cancel_stale_pending_orders(
 
     if cancelled:
         await session.commit()
-    return cancelled
-
-
-async def cancel_stale_pending_for_settings(
-    session: AsyncSession,
-    *,
-    reseller_id: int | None = None,
-    force: bool = False,
-) -> int:
-    """Cancel stale pending orders from legacy ``pending_order_*`` settings.
-
-    The hourly scheduler and panel routes that called this are gone; soft-cancel
-    is folded into tag purge by ``migrate_soft_cancel_to_purge``. Kept for tests
-    and one-off forced runs (``force=True`` ignores the enabled switch).
-    """
-    from app.services.users import get_all_settings, on
-
-    ui = await get_all_settings(session, reseller_id=reseller_id)
-    if not force and not on(ui.get("pending_order_cleanup_enabled", "0")):
-        return 0
-    policy = policy_from_settings(ui)
-    cancelled = await cancel_stale_pending_orders(
-        session,
-        older_than_hours=policy.hours,
-        reseller_id=reseller_id,
-        include_awaiting_approval=policy.approval_hours is not None,
-        approval_older_than_hours=policy.approval_hours,
-    )
-    await record_cleanup_run(session, cancelled=cancelled, reseller_id=reseller_id)
     return cancelled
 
 

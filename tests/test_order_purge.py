@@ -58,8 +58,8 @@ class TagAndScopeTests(unittest.TestCase):
     def test_scope(self):
         self.assertIsNone(purge_scope(OWNER))
         self.assertEqual(purge_scope(_reseller(SHOP_A)), SHOP_A)
-        self.assertEqual(purge_scope(_reseller(SHOP_A, ["shop_settings"])), SHOP_A)
         for staff in (
+            _reseller(SHOP_A, ["shop_settings"]),
             _reseller(SHOP_A, ["orders"]),
             {"role": "pg_staff", "permissions": ["orders_purge"]},
             _reseller(0),
@@ -310,12 +310,13 @@ class PurgeRouteTests(PurgeDbHarness):
         values = await self._settings(SHOP_A)
         self.assertNotEqual(values.get(KEY_TAGS), "order:cancelled")
 
-    async def test_shop_settings_can_save_cleanup_rules(self):
+    async def test_shop_settings_alone_cannot_save_cleanup_rules(self):
         self.staff = _reseller(SHOP_A, ["shop_settings"])
         response = await self._save(days="10", **{"t_order:cancelled": "1", "auto": "1"})
-        self.assertIn("ok=", response.headers["location"])
+        self.assertEqual(response.headers["location"], "/home")
         values = await self._settings(SHOP_A)
-        self.assertEqual((values[KEY_TAGS], values[KEY_AUTO], values[KEY_DAYS]), ("order:cancelled", "1", "10"))
+        self.assertNotEqual(values.get(KEY_TAGS), "order:cancelled")
+        self.assertNotEqual(values.get(KEY_AUTO), "1")
 
     async def test_run_now(self):
         from app.db.models import Order
@@ -371,67 +372,21 @@ class CleanupTabTemplateTests(PurgeDbHarness):
         self.assertIn("حذف از پایگاه الان", html)
         self.assertIn("برای همیشه از پایگاه داده حذف", html)
 
-    async def test_without_cleanup_permission_shows_access_note(self):
+    async def test_without_orders_purge_shows_access_note(self):
         async with self.Session() as session:
-            self.assertIsNone(await purge_panel_context(session, _reseller(SHOP_A, ["orders"]), {}, return_to="/x"))
+            self.assertIsNone(await purge_panel_context(session, _reseller(SHOP_A, ["shop_settings"]), {}, return_to="/x"))
         html = await self._render(None)
         self.assertNotIn('name="t_', html)
         self.assertNotIn("purge-run", html)
-        self.assertIn("تنظیمات فروشگاه", html)
+        self.assertIn("حذف سفارش‌ها و پرداخت‌ها", html)
 
 
-class SoftCancelMigrationTests(PurgeDbHarness):
-    """Legacy soft-cancel must fold into tag purge and then stop cancelling on its own."""
+class SoftCancelDisableTests(PurgeDbHarness):
+    """Hourly purge only turns soft-cancel off; it must not opt the shop into permanent delete."""
 
-    async def test_enabled_soft_cancel_becomes_tag_purge_and_stops_cancelling(self):
-        from app.services.cleanup_settings import migrate_soft_cancel_to_purge
-        from app.services.orders import cancel_stale_pending_for_settings
-        from app.services.users import get_all_settings, set_settings_bulk
-
-        async with self.Session() as session:
-            await set_settings_bulk(
-                session,
-                {
-                    "pending_order_cleanup_enabled": "1",
-                    "pending_order_ttl_hours": "48",
-                    "pending_order_cleanup_awaiting_approval": "1",
-                    "pending_order_approval_ttl_hours": "72",
-                },
-                reseller_id=SHOP_A,
-            )
-            self.assertTrue(await migrate_soft_cancel_to_purge(session, SHOP_A))
-            values = await get_all_settings(session, reseller_id=SHOP_A)
-        self.assertEqual(values["pending_order_cleanup_enabled"], "0")
-        self.assertEqual(values[KEY_AUTO], "1")
-        self.assertEqual(values[KEY_DAYS], "2")
-        self.assertEqual(
-            values[KEY_TAGS],
-            "order:awaiting_approval,order:awaiting_receipt,order:pending,order:rejected",
-        )
-        async with self.Session() as session:
-            await self._order("pending", payment_status="pending")
-            # Soft-cancel stays off after migration, so the legacy helper is a no-op.
-            self.assertEqual(await cancel_stale_pending_for_settings(session, reseller_id=SHOP_A), 0)
-            self.assertFalse(await migrate_soft_cancel_to_purge(session, SHOP_A))
-
-    async def test_disabled_soft_cancel_is_left_alone(self):
-        from app.services.cleanup_settings import migrate_soft_cancel_to_purge
-        from app.services.users import get_all_settings, set_settings_bulk
-
-        async with self.Session() as session:
-            await set_settings_bulk(
-                session,
-                {"pending_order_cleanup_enabled": "0", "pending_order_ttl_hours": "24"},
-                reseller_id=SHOP_A,
-            )
-            self.assertFalse(await migrate_soft_cancel_to_purge(session, SHOP_A))
-            values = await get_all_settings(session, reseller_id=SHOP_A)
-        self.assertNotEqual(values.get(KEY_TAGS), "order:pending,order:awaiting_receipt,order:rejected")
-        self.assertNotEqual(values.get(KEY_AUTO), "1")
-
-    async def test_auto_purge_migrates_before_deleting(self):
+    async def test_auto_purge_disables_soft_cancel_without_enabling_tag_delete(self):
         from app.db.models import Order
-        from app.services.users import set_settings_bulk
+        from app.services.users import get_all_settings, set_settings_bulk
 
         await self._order("pending", payment_status="pending")
         async with self.Session() as session:
@@ -440,16 +395,29 @@ class SoftCancelMigrationTests(PurgeDbHarness):
                 {"pending_order_cleanup_enabled": "1", "pending_order_ttl_hours": "1"},
                 reseller_id=SHOP_A,
             )
-            # 1 hour → 1 day; the seeded order is 60 days old, so purge deletes it after migration.
             deleted = await auto_purge_all_shops(session)
-        self.assertGreaterEqual(deleted, 1)
-        self.assertEqual(await self._count(Order, Order.reseller_id == SHOP_A), 0)
-        async with self.Session() as session:
-            from app.services.users import get_all_settings
-
             values = await get_all_settings(session, reseller_id=SHOP_A)
+        self.assertEqual(deleted, 0)
         self.assertEqual(values["pending_order_cleanup_enabled"], "0")
-        self.assertEqual(values[KEY_AUTO], "1")
+        self.assertNotEqual(values.get(KEY_AUTO), "1")
+        self.assertFalse(bool(str(values.get(KEY_TAGS) or "").strip()))
+        self.assertEqual(await self._count(Order, Order.reseller_id == SHOP_A), 1)
+
+    async def test_panel_context_does_not_write_settings(self):
+        from app.services.users import get_all_settings, set_settings_bulk
+
+        async with self.Session() as session:
+            await set_settings_bulk(
+                session,
+                {"pending_order_cleanup_enabled": "1", "pending_order_ttl_hours": "48"},
+                reseller_id=None,
+            )
+            before = await get_all_settings(session, reseller_id=None)
+            await purge_panel_context(session, OWNER, before, return_to="/finance")
+            after = await get_all_settings(session, reseller_id=None)
+        self.assertEqual(after["pending_order_cleanup_enabled"], "1")
+        self.assertEqual(before.get(KEY_TAGS), after.get(KEY_TAGS))
+        self.assertEqual(before.get(KEY_AUTO), after.get(KEY_AUTO))
 
 
 if __name__ == "__main__":

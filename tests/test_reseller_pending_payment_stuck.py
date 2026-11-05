@@ -41,7 +41,7 @@ class SourceContractTests(unittest.TestCase):
         )[0]
         self.assertIn("cancel_application_for_order", cancel_fn)
         stale = src.split("async def cancel_stale_pending_orders", 1)[1].split(
-            "async def cancel_stale_pending_for_settings", 1
+            "async def attach_receipt", 1
         )[0]
         # Released through the shared helper (also used by the purge).
         self.assertIn("release_unpaid_order_holds", stale)

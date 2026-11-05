@@ -90,7 +90,7 @@ class TrialReleaseSourceTests(unittest.TestCase):
         self.assertIn("async def _release_trial_claim_for_order", src)
         stale = src[
             src.find("async def cancel_stale_pending_orders") : src.find(
-                "async def cancel_stale_pending_for_settings"
+                "async def attach_receipt"
             )
         ]
         # The stale cancel releases holds through the shared helper (also used by the purge).
