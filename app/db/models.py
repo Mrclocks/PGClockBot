@@ -234,6 +234,13 @@ class ServiceAddonPack(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+# Orders whose chosen service name is still held: unpaid, paid, or being delivered.
+OPEN_NAMED_ORDER_SQL = (
+    "requested_username IS NOT NULL AND status IN "
+    "('pending', 'rejected', 'awaiting_receipt', 'paid', 'delivering')"
+)
+
+
 class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
@@ -244,6 +251,15 @@ class Order(Base):
             "uq_orders_service_quota_mutation", "service_id", unique=True,
             sqlite_where=text("service_mutation_pending = true"),
             postgresql_where=text("service_mutation_pending = true"),
+        ),
+        # One open order per shop may hold a chosen service name (platform orders: shop 0).
+        Index(
+            "uq_orders_open_requested_username",
+            text("coalesce(reseller_id, 0)"),
+            "requested_username",
+            unique=True,
+            sqlite_where=text(OPEN_NAMED_ORDER_SQL),
+            postgresql_where=text(OPEN_NAMED_ORDER_SQL),
         ),
     )
 
