@@ -821,6 +821,29 @@ async def resolve_bot_principal_bridge(
     )
 
 
+async def shop_bot_panel_staff(
+    session: AsyncSession,
+    *,
+    profile: ResellerProfile,
+    db_user: BotUser,
+) -> dict[str, Any] | None:
+    """Web-shaped staff for an operator of this shop's bot, with the shop's live panel role.
+
+    Service changes made from the shop bot pass this to the same helpers as the web
+    panel, so the PasarGuard users.* rights and local safety limits apply in both.
+    """
+    resolution = await resolve_bot_principal_bridge(
+        session,
+        db_user=db_user,
+        is_reseller_bot=True,
+        reseller_profile_id=int(profile.id),
+        reseller_owner_id=int(profile.user_id),
+    )
+    if resolution is None:
+        return None
+    return dict(resolution.staff)
+
+
 async def bot_pg_client_for_resolution(
     session: AsyncSession,
     resolution: BotPrincipalResolution,

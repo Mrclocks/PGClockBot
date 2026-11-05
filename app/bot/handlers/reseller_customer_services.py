@@ -29,6 +29,7 @@ from app.bot.nav_input import ask_text, finish_text_step, try_legacy_cancel
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.db.models import BotUser, Plan, ResellerProfile
 from app.services import bot_feedback_texts as feedback
+from app.services.bot_principal_identity import shop_bot_panel_staff
 from app.services.bot_user_admin import (
     MAX_EXTEND_DAYS,
     MAX_EXTEND_GB,
@@ -219,6 +220,19 @@ async def _resolve_target(
     )
 
 
+async def _panel_staff(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    target: ShopServiceTarget,
+) -> dict | None:
+    """The shop's panel role for a service change; answers the callback when it is missing."""
+    staff = await shop_bot_panel_staff(session, profile=target.profile, db_user=db_user)
+    if staff is None:
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
+    return staff
+
+
 async def _fail_uncertain(callback: CallbackQuery, session: AsyncSession, *, sid: int, op: str) -> None:
     await rollback_quiet(session)
     logger.warning("shop service %s uncertain sid=%s", op, sid, exc_info=True)
@@ -386,7 +400,10 @@ async def res_user_service_renew(
         if plan is None:
             await callback.answer("پلن این سرویس مشخص نیست", show_alert=True)
             return
-        await admin_renew_service(session, svc, plan=plan, reset_traffic=True)
+        staff = await _panel_staff(callback, session, db_user, target)
+        if staff is None:
+            return
+        await admin_renew_service(session, svc, plan=plan, reset_traffic=True, staff=staff)
         snap = await service_snapshot(session, svc)
     except ValueError as exc:
         await _fail_known(callback, session, exc)
@@ -487,8 +504,11 @@ async def res_user_service_delete(
             shop_id=target.owner_id,
         )
         detach_only = is_external_service(svc) and not explicit_pg
+        staff = await _panel_staff(callback, session, db_user, target)
+        if staff is None:
+            return
         await admin_delete_service(
-            session, svc, delete_pg=admin_delete_pg_flag(svc, explicit=explicit_pg)
+            session, svc, delete_pg=admin_delete_pg_flag(svc, explicit=explicit_pg), staff=staff
         )
     except ValueError as exc:
         await _fail_known(callback, session, exc)
@@ -580,6 +600,7 @@ async def _adj_confirm(
     callback: CallbackQuery,
     state: FSMContext,
     session: AsyncSession,
+    db_user: BotUser,
     *,
     target: ShopServiceTarget,
     adj_key: str,
@@ -594,7 +615,10 @@ async def _adj_confirm(
             service_id=target.service_id,
             shop_id=target.owner_id,
         )
-        await admin_extend_service(session, svc, extra_days=days, extra_gb=gb)
+        staff = await _panel_staff(callback, session, db_user, target)
+        if staff is None:
+            return
+        await admin_extend_service(session, svc, extra_days=days, extra_gb=gb, staff=staff)
         snap = await service_snapshot(session, svc)
     except ValueError as exc:
         await _fail_known(callback, session, exc)
@@ -664,7 +688,7 @@ async def res_user_service_adjust(
         return
     elif action == "confirm":
         await _adj_confirm(
-            callback, state, session, target=target, adj_key=adj_key, days=days, gb=gb
+            callback, state, session, db_user, target=target, adj_key=adj_key, days=days, gb=gb
         )
         return
     else:
