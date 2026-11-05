@@ -1,7 +1,7 @@
 """Idempotent Mini App addon preview keys on orders.
 
-Revision ID: 0084_addon_request_key
-Revises: 0083_shop_customer_marks
+Revision ID: 0089_addon_request_key
+Revises: 0088_customer_services_permission
 
 Adds ``addon_request_key`` so a lost Mini App response can safely retry the same
 volume/time purchase without creating a second order (mirrors renewal_request_key).
@@ -14,8 +14,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0084_addon_request_key"
-down_revision: Union[str, None] = "0083_shop_customer_marks"
+revision: str = "0089_addon_request_key"
+down_revision: Union[str, None] = "0088_customer_services_permission"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

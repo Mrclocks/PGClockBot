@@ -2666,6 +2666,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "plan_style_options": __import__(
                     "app.services.button_styles", fromlist=["PLAN_BUTTON_STYLE_OPTIONS"]
                 ).PLAN_BUTTON_STYLE_OPTIONS,
+                "pack_style_options": __import__(
+                    "app.services.button_styles", fromlist=["ITEM_BUTTON_STYLE_OPTIONS"]
+                ).ITEM_BUTTON_STYLE_OPTIONS,
                 "category_style_options": __import__(
                     "app.services.button_styles",
                     fromlist=["CATEGORY_BUTTON_STYLE_OPTIONS"],
@@ -2804,6 +2807,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 category_id=category_id,
                 owner_reseller_id=owner_id,
                 description=description or None,
+                carry_remaining_quota=bool(form.get("carry_remaining_quota")),
                 is_active=True,
             )
         )
@@ -3227,6 +3231,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         plan.sort_order = sort_order
         plan.pg_template_id = tpl
         plan.pg_group_ids = group_csv
+        plan.carry_remaining_quota = bool(form.get("carry_remaining_quota"))
         from app.services.orders import parse_naming_form
         from app.services.button_styles import parse_plan_button_style_form
         from app.services.plan_categories import resolve_category_for_plan_write

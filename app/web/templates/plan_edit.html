@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch_chip, page_title %}
+{% from "macros.html" import switch, switch_chip, page_title %}
 {% block title %}ویرایش پلن{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -102,6 +102,10 @@
     {% set plan_button_style = plan.button_style or '' %}
     {% endif %}
     {% include "_plan_button_style_field.html" %}
+
+    <div class="ui-switch-list">
+      {{ switch('carry_remaining_quota', 'انتقال مانده حجم و زمان در تمدید', checked=plan.carry_remaining_quota, help='روشن: مانده حجم و زمان سرویس به تمدید، ارتقا یا تنزل اضافه می‌شود. خاموش: دوره جدید فقط مطابق حجم و مدت همین پلن اعمال می‌شود.') }}
+    </div>
 
     <div class="actions">
       <button class="btn" type="submit">ذخیره تغییرات</button>

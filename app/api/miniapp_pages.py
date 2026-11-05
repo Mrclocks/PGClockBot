@@ -753,6 +753,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             create_addon_order,
             kind_label,
             pack_matches_shop,
+
         )
 
         user = await load_mini_user(session, request)
