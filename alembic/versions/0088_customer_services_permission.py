@@ -1,7 +1,7 @@
 """Shop service control gets its own permission key, ``customer_services``.
 
-Revision ID: 0084_customer_services_permission
-Revises: 0083_shop_customer_marks
+Revision ID: 0088_customer_services_permission
+Revises: 0087_reseller_plan_carry_on_renew
 
 Bot and web staff who already had ``dashboard`` (the previous gate for the users
 list) keep access to live service info/edit by gaining ``customer_services``.
@@ -16,8 +16,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0084_customer_services_permission"
-down_revision: Union[str, None] = "0083_shop_customer_marks"
+revision: str = "0088_customer_services_permission"
+down_revision: Union[str, None] = "0087_reseller_plan_carry_on_renew"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
