@@ -26,7 +26,7 @@ from app.services.reseller_capacity import (
     ensure_base_gb_before_extra,
     raise_admin_limit,
     revert_extras,
-    unit_offer,
+    unit_offer_for_plan,
 )
 from app.services.reseller_packs import pack_offer
 from app.services.reseller_shop_gates import assert_shop_allows_capacity, assert_subscription_open
@@ -105,7 +105,7 @@ async def create_capacity_order(
         offer = await pack_offer(session, user=user, profile=profile, plan=plan, pack_id=ref)
         note = format_note(KIND_PACK, ref, gb=offer.gb, users=offer.users)
     elif kind in {KIND_GB, KIND_USERS}:
-        offer = unit_offer(profile, plan, kind, ref)
+        offer = await unit_offer_for_plan(session, profile, plan, kind, ref)
         note = format_note(kind, ref)
     else:
         raise ValueError(INVALID_ORDER)

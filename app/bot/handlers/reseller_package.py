@@ -145,12 +145,17 @@ def _confirm_view(
     *,
     order_callback: str | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
+    from app.services.reseller_package import renew_confirm_warnings_from_invoice
+
     total = int(choice.invoice.get("total", 0) or 0)
+    warn_lines = renew_confirm_warnings_from_invoice(choice.plan, choice.invoice)
+    warn_block = "".join(f"\n⚠️ {html.escape(w)}" for w in warn_lines)
     body = (
         f"بستهٔ جدید: <b>{html.escape(str(choice.plan.name or ''))}</b> ({choice.label})\n"
         f"ظرفیت: {_capacity(choice)}\n"
         f"مبلغ: <b>{_money(total)}</b>\n\n"
         + (RENEW_EXPLAIN if plan_has_time(choice.plan) else MOVE_UNTIMED_EXPLAIN)
+        + warn_block
         + f"\n{WALLET_PAY_HINT}"
     )
     rows = [
