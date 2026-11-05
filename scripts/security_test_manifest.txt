@@ -223,6 +223,7 @@ tests/test_shop_isolation_tickets.py
 tests/test_shop_isolation_order_payment.py
 tests/test_shop_isolation_service_ops.py
 tests/test_shop_isolation_customer_services.py
+tests/test_reseller_service_panel_acl.py
 tests/test_service_shop_scope_migration.py
 tests/test_shop_attribution_keeps_platform_customers.py
 tests/test_shop_membership.py
