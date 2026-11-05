@@ -102,9 +102,13 @@ def delivery_guides_keyboard(ui: dict, *, audience: str = "user") -> InlineKeybo
 
 
 async def _audience_for_user(session: AsyncSession, db_user: BotUser) -> str:
-    role = (getattr(db_user, "role", None) or "").lower()
-    if role == "reseller":
-        return "reseller"
+    """Default guide audience for service/customer surfaces.
+
+    Always ``user``: a reseller buying or viewing their own VPN service must see
+    service-usage guides. Reseller/panel guides are only opened when a caller
+    passes ``audience="reseller"`` explicitly (e.g. after panel credentials).
+    """
+    _ = (session, db_user)
     return "user"
 
 

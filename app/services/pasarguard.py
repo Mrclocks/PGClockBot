@@ -274,20 +274,23 @@ def _field_errors_detail(fields: dict[str, Any]) -> str | None:
 def build_user_create_payload(
     *,
     username: str,
-    group_ids: list[int],
+    group_ids: list[int] | None = None,
     data_limit: int | None = None,
     expire_ts: int | None = None,
     hwid_limit: int | None = None,
     note: str | None = None,
     status: str = "active",
 ) -> dict[str, Any]:
-    """Payload compatible with current PasarGuard UserCreate schema."""
+    """Payload compatible with current PasarGuard UserCreate schema.
+
+    ``group_ids`` may be empty — custom volume/time create does not require groups.
+    """
     from datetime import datetime, timezone
 
     payload: dict[str, Any] = {
         "username": username,
         "status": status,
-        "group_ids": group_ids,
+        "group_ids": list(group_ids or []),
         "proxy_settings": {},
     }
     if data_limit is not None:

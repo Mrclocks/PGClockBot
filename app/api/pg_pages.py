@@ -749,9 +749,9 @@ def register_pg_pages(
                 if not ids:
                     # also accept comma field if present
                     ids = parse_group_ids(str(form.get("group_ids") or ""))
-                if not ids:
-                    return _pg_form_err("حداقل یک گروه انتخاب کنید", modal="create")
-                if not groups_allowed_for_staff(staff, ids):
+                # Groups are optional for custom create (PasarGuard accepts empty).
+                # When any are chosen, they must still sit inside the staff allow-list.
+                if ids and not groups_allowed_for_staff(staff, ids):
                     return _pg_form_err("یکی از گروه‌های انتخاب‌شده مجاز نیست", modal="create")
 
                 gb_raw = str(form.get("data_limit_gb") or "").strip()
@@ -861,9 +861,9 @@ def register_pg_pages(
             return RedirectResponse(f"/pg/users?err={_q('اجازه ویرایش ندارید')}", status_code=303)
         form = await request.form()
         ids = parse_group_ids_from_form(form, prefix="edit_group_")
-        if not ids:
-            return _pg_form_err("حداقل یک گروه انتخاب کنید", modal="edit", uid=user_id)
-        if not groups_allowed_for_staff(staff, ids):
+        # Empty selection keeps the user's current groups (omit from payload).
+        # Non-empty must pass the staff allow-list.
+        if ids and not groups_allowed_for_staff(staff, ids):
             return _pg_form_err("یکی از گروه‌های انتخاب‌شده مجاز نیست", modal="edit", uid=user_id)
 
         gb_raw = str(form.get("data_limit_gb") or "").strip()
@@ -922,7 +922,7 @@ def register_pg_pages(
             # PasarGuard does not allow changing username after create
             payload = build_user_modify_payload(
                 username=None,
-                group_ids=ids,
+                group_ids=ids or None,
                 data_limit=data_limit,
                 expire_ts=expire_ts,
                 hwid_limit=hwid_limit if hwid_changed else None,

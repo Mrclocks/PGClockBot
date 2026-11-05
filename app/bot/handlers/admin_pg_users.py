@@ -1151,21 +1151,21 @@ async def _show_create_group_picker(
         )
     done_cb = "adm:pg:edgrpdone" if edit_uid else "adm:pg:grpdone"
     back_cb = f"adm:pg:u:{edit_uid}:edit" if edit_uid else "adm:pg:create"
+    # Groups are optional for custom create/edit; always offer continue.
+    confirm_label = (
+        f"✅ تأیید ({len(selected)})" if selected else "✅ ادامه بدون گروه"
+    )
     if rows:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"✅ تأیید ({len(selected)})",
-                    callback_data=done_cb,
-                )
-            ]
-        )
+        rows.append([InlineKeyboardButton(text=confirm_label, callback_data=done_cb)])
     else:
-        rows.append([InlineKeyboardButton(text=feedback.NO_GROUPS, callback_data=back_cb)])
+        rows.append(
+            [InlineKeyboardButton(text="✅ ادامه بدون گروه", callback_data=done_cb)]
+        )
     rows.append([kb.back_button(None, back_cb)])
     text = (
-        "📁 گروه‌ها را انتخاب کنید (چندتایی):\n"
-        f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}"
+        "📁 گروه‌ها اختیاری‌اند (چندتایی):\n"
+        f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}\n"
+        "بدون گروه هم می‌توانید ادامه دهید."
     )
     if callback.message:
         await safe_edit_text(
@@ -1238,12 +1238,9 @@ async def pg_create_grpdone(
         return
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
-    if not selected:
-        await callback.answer(feedback.PICK_AT_LEAST_ONE_GROUP, show_alert=True)
-        return
     from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
-    if not catalog_groups_allowed(gate.staff, selected):
+    if selected and not catalog_groups_allowed(gate.staff, selected):
         await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         return
     await callback.answer()
@@ -1496,13 +1493,13 @@ async def pg_create_days(
     uname = data.get("pg_create_username")
     groups = [int(x) for x in (data.get("pg_selected_groups") or [])]
     gb = float(data.get("pg_create_gb") or 0)
-    if not uname or not groups:
+    if not uname:
         await state.clear()
         await message.answer("اطلاعات این مرحله کامل نیست. دوباره شروع کنید.")
         return
     from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
-    if not catalog_groups_allowed(gate.staff, groups):
+    if groups and not catalog_groups_allowed(gate.staff, groups):
         await state.clear()
         await message.answer(feedback.ACTION_NOT_ALLOWED)
         return
@@ -2035,12 +2032,9 @@ async def pg_edit_grpdone(
     if not uid:
         await callback.answer("کاربر نامعتبر", show_alert=True)
         return
-    if not selected:
-        await callback.answer(feedback.PICK_AT_LEAST_ONE_GROUP, show_alert=True)
-        return
     from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
-    if not catalog_groups_allowed(gate.staff, selected):
+    if selected and not catalog_groups_allowed(gate.staff, selected):
         await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         return
     try:

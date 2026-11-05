@@ -221,12 +221,12 @@
           <small class="muted">خالی = طبق سقف نقش (در صورت وجود) یا نامحدود</small>
         </label>
         <div class="form-field">
-          <span class="form-field-label">گروه‌های پاسارگارد (حداقل یکی)</span>
+          <span class="form-field-label">گروه‌های پاسارگارد (اختیاری)</span>
           <div class="ui-switch-grid">
             {% for g in groups %}
             {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
             {% else %}
-            <span class="muted">گروهی در دسترس نیست.</span>
+            <span class="muted">گروهی در دسترس نیست — می‌توانید بدون گروه بسازید.</span>
             {% endfor %}
           </div>
         </div>
@@ -289,12 +289,12 @@
         <small class="muted">۰ یا خالی = نامحدود</small>
       </label>
       <div class="form-field">
-        <span class="form-field-label">گروه‌ها (حداقل یکی)</span>
+        <span class="form-field-label">گروه‌ها (اختیاری — خالی = بدون تغییر)</span>
         <div class="ui-switch-grid" id="pg-edit-groups">
           {% for g in groups %}
           {{ switch_chip('edit_group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
           {% else %}
-          <span class="muted">گروهی در دسترس نیست.</span>
+          <span class="muted">گروهی در دسترس نیست — حجم و مدت بدون گروه ذخیره می‌شود.</span>
           {% endfor %}
         </div>
       </div>
@@ -375,13 +375,6 @@
         if (unameEl) unameEl.focus();
         return;
       }
-      if (mode && mode.value === 'custom') {
-        const chips = form.querySelectorAll('input[name^="group_"]:checked');
-        if (!chips.length) {
-          e.preventDefault();
-          showFormErr(createErr, 'حداقل یک گروه انتخاب کنید');
-        }
-      }
     });
   }
 
@@ -407,13 +400,6 @@
       });
       if (editErr && !editErr.dataset.keep) {
         showFormErr(editErr, '');
-      }
-    });
-    editForm.addEventListener('submit', function(e){
-      const chips = editForm.querySelectorAll('input[name^="edit_group_"]:checked');
-      if (!chips.length) {
-        e.preventDefault();
-        showFormErr(editErr, 'حداقل یک گروه انتخاب کنید');
       }
     });
   }
