@@ -274,22 +274,30 @@ def _field_errors_detail(fields: dict[str, Any]) -> str | None:
 def build_user_create_payload(
     *,
     username: str,
-    group_ids: list[int],
+    group_ids: list[int] | None = None,
     data_limit: int | None = None,
     expire_ts: int | None = None,
     hwid_limit: int | None = None,
     note: str | None = None,
     status: str = "active",
 ) -> dict[str, Any]:
-    """Payload compatible with current PasarGuard UserCreate schema."""
+    """Payload compatible with current PasarGuard UserCreate schema.
+
+    When ``group_ids`` is None or empty the key is omitted so a limited panel
+    admin can receive whatever groups the panel assigns by default. Callers
+    that intentionally choose groups must pass a non-empty list (and enforce
+    their allow-list before calling).
+    """
     from datetime import datetime, timezone
 
     payload: dict[str, Any] = {
         "username": username,
         "status": status,
-        "group_ids": group_ids,
         "proxy_settings": {},
     }
+    chosen = [int(g) for g in (group_ids or []) if int(g) > 0]
+    if chosen:
+        payload["group_ids"] = chosen
     if data_limit is not None:
         payload["data_limit"] = int(data_limit)
     if expire_ts is not None:
