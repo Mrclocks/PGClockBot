@@ -129,10 +129,11 @@ class MenuRendersTitleTests(unittest.IsolatedAsyncioTestCase):
 
         ui = dict(DEFAULT_SETTINGS)
         ui[title_setting_key("c.wallet")] = "💰 حساب من"
+        ui["loyalty_enabled"] = "0"
         with (
-            patch.object(reply_nav, "get_all_settings", AsyncMock(return_value=ui)),
+            # open_wallet_home loads settings inside load_wallet_home (users.get_all_settings).
+            patch("app.services.users.get_all_settings", AsyncMock(return_value=ui)),
             patch("app.services.wallet.wallet_balance_for_context", AsyncMock(return_value=0)),
-            patch("app.services.loyalty.loyalty_enabled", AsyncMock(return_value=False)),
             patch("app.bot.nav_inline.present_inline_only", AsyncMock()) as present,
         ):
             await reply_nav.open_wallet_home(MagicMock(), MagicMock(), MagicMock(id=1), None)

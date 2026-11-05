@@ -126,15 +126,15 @@ class OpenWalletInlineTests(unittest.IsolatedAsyncioTestCase):
         ui = {"nav_mode": "inline"}
 
         with (
+            # Settings are loaded inside load_wallet_home, not reply_nav.
             patch(
-                "app.bot.handlers.reply_nav.get_all_settings",
+                "app.services.users.get_all_settings",
                 AsyncMock(return_value=ui),
             ),
             patch(
                 "app.services.wallet.wallet_balance_for_context",
                 AsyncMock(return_value=0),
             ),
-            patch("app.services.loyalty.loyalty_enabled", AsyncMock(return_value=False)),
             patch("app.config.get_settings") as gs,
         ):
             gs.return_value.currency = "IRT"
