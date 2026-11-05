@@ -304,36 +304,6 @@ async def run_reseller_billing_tick() -> None:
             logger.exception("billing tick failed")
 
 
-async def cleanup_stale_pending_orders() -> None:
-    """Hourly: cancel unpaid pending orders past TTL (platform + shops)."""
-    async with SessionLocal() as session:
-        try:
-            from app.services.orders import cancel_stale_pending_for_settings
-
-            total = await cancel_stale_pending_for_settings(session, reseller_id=None)
-            shop_ids = list(
-                (
-                    await session.execute(
-                        select(ResellerProfile.user_id).where(
-                            ResellerProfile.is_active.is_(True)
-                        )
-                    )
-                ).scalars().all()
-            )
-            for rid in shop_ids:
-                try:
-                    n = await cancel_stale_pending_for_settings(
-                        session, reseller_id=int(rid)
-                    )
-                    total += n
-                except Exception:
-                    logger.exception("pending order cleanup failed for shop %s", rid)
-            if total:
-                logger.info("pending order cleanup cancelled=%s", total)
-        except Exception:
-            logger.exception("pending order cleanup failed")
-
-
 async def run_auto_order_purge() -> None:
     """Hourly: delete the order and payment rows each shop chose for automatic deletion."""
     async with SessionLocal() as session:
@@ -828,7 +798,6 @@ def start_background_scheduler() -> None:
     jobs = (
         ("billing_tick", run_reseller_billing_tick, {"minutes": 1}, 120),
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
-        ("pending_order_cleanup", cleanup_stale_pending_orders, {"hours": 1}, 3600),
         ("order_purge", run_auto_order_purge, {"hours": 1}, 3600),
         ("scheduled_receipt_approval", run_scheduled_receipt_approvals, {"seconds": 60}, 90),
         ("crypto_rate_refresh", run_crypto_rate_refresh, {"seconds": 60}, 90),

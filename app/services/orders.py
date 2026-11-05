@@ -18,15 +18,6 @@ from sqlalchemy.orm import selectinload
 
 from app.services.custom_plans import discard_unsold_custom_plan
 from app.services.funnel_events import STEP_DELIVERED, STEP_RECEIPT, record_order_funnel
-from app.services.stale_order_cleanup import (
-    StaleOrderPolicy,
-    cancellable_statuses,
-    clamp_hours,
-    policy_from_settings,
-    record_cleanup_run,
-    scope_to_shop,
-    stale_orders_clause,
-)
 from app.services.catalog_pricing import PriceTarget, active_discounts, annotate_prices, assert_expected_price, displayed_quote, quote_price, quote_product, sale_price
 from app.db.models import (
     BotUser,
@@ -1560,94 +1551,6 @@ async def release_unpaid_order_holds(session: AsyncSession, order: Order, *, rea
         from app.services.resellers import cancel_application_for_order
 
         await cancel_application_for_order(session, order, reason=reason, commit=False)
-
-
-async def cancel_stale_pending_orders(
-    session: AsyncSession,
-    *,
-    older_than_hours: int,
-    reseller_id: int | None = None,
-    include_awaiting_approval: bool = False,
-    approval_older_than_hours: int | None = None,
-    limit: int = 500,
-) -> int:
-    """Cancel unpaid/abandoned orders older than TTL. Returns count cancelled.
-
-    Uses CANCELLED (not REJECTED) so orders leave the payable set and cannot be
-    completed later. Concurrent approve/pay wins via conditional UPDATE. Orders
-    waiting for receipt approval use ``approval_older_than_hours`` (default: the same TTL).
-    """
-    hours = clamp_hours(older_than_hours, 1)
-    approval_hours = None
-    if include_awaiting_approval:
-        approval_hours = clamp_hours(approval_older_than_hours or hours, hours)
-    policy = StaleOrderPolicy(hours=hours, approval_hours=approval_hours)
-    statuses = cancellable_statuses(policy)
-
-    q = (
-        select(Order)
-        .where(stale_orders_clause(policy))
-        .order_by(Order.id.asc())
-        .limit(max(1, min(2000, int(limit or 500))))
-    )
-    q = scope_to_shop(q, reseller_id)
-
-    orders = list((await session.execute(q)).scalars().all())
-    cancelled = 0
-    for order in orders:
-        order_id = int(order.id)
-        with session.no_autoflush:
-            claim = await session.execute(
-                update(Order)
-                .where(
-                    Order.id == order_id,
-                    Order.status.in_(tuple(statuses)),
-                )
-                .values(status=OrderStatus.CANCELLED.value)
-                .execution_options(synchronize_session=False)
-            )
-        if claim.rowcount != 1:
-            continue
-        # Reject sibling pending payments
-        pend = await session.execute(
-            select(Payment).where(
-                Payment.order_id == order_id,
-                Payment.status == PaymentStatus.PENDING.value,
-            )
-        )
-        for pay in pend.scalars().all():
-            pay.status = PaymentStatus.REJECTED.value
-            pay.review_note = pay.review_note or "auto-cancelled stale pending order"
-        await release_unpaid_order_holds(session, order, reason="auto-cancelled stale pending order")
-        cancelled += 1
-
-    if cancelled:
-        await session.commit()
-    return cancelled
-
-
-async def cancel_stale_pending_for_settings(
-    session: AsyncSession,
-    *,
-    reseller_id: int | None = None,
-    force: bool = False,
-) -> int:
-    """Read shop/platform settings, cancel stale pending orders and record the run."""
-    from app.services.users import get_all_settings, on
-
-    ui = await get_all_settings(session, reseller_id=reseller_id)
-    if not force and not on(ui.get("pending_order_cleanup_enabled", "0")):
-        return 0
-    policy = policy_from_settings(ui)
-    cancelled = await cancel_stale_pending_orders(
-        session,
-        older_than_hours=policy.hours,
-        reseller_id=reseller_id,
-        include_awaiting_approval=policy.approval_hours is not None,
-        approval_older_than_hours=policy.approval_hours,
-    )
-    await record_cleanup_run(session, cancelled=cancelled, reseller_id=reseller_id)
-    return cancelled
 
 
 async def attach_receipt(

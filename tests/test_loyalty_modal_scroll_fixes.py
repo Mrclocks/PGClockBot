@@ -170,11 +170,7 @@ class ModalScrollLockTests(unittest.TestCase):
         domain = (
             ROOT / "app/web/templates/_domain_settings_form.html"
         ).read_text(encoding="utf-8")
-        pending = (
-            ROOT / "app/web/templates/_settings_pending_orders.html"
-        ).read_text(encoding="utf-8")
         self.assertIn("ui-modal-sticky-save", domain)
-        self.assertNotIn("ui-modal-sticky-save", pending)
         js = JS.read_text(encoding="utf-8")
         self.assertIn('panel.dataset.scrollShell = \'1\'', js)
         self.assertIn("corner clip", js)

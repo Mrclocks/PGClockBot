@@ -12708,7 +12708,7 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   box-shadow: 0 5px 14px color-mix(in srgb, var(--preview) 22%, transparent);
 }
 
-/* Cleanup tab: status-tag delete switches in two columns */
+/* Cleanup tab: clear status tags, age, auto or run-now */
 .order-purge-title {
   margin: var(--space-2) 0 var(--space-1);
   font-size: 0.9em;
@@ -12723,19 +12723,24 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-1);
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
   align-items: end;
 }
 .order-purge-tag .ui-switch-copy {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-0);
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
 }
 .order-purge-tag .ui-switch-copy .badge {
   flex: 0 0 auto;
+  width: fit-content;
+}
+.order-purge-tag .ui-switch-copy small {
+  color: var(--muted-fg);
+  line-height: 1.35;
 }
 @media (max-width: 640px) {
-  /* The automatic switch and the day count each take the full width on phones. */
+  .order-purge-tags,
   .order-purge-options {
     grid-template-columns: 1fr;
   }

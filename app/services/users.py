@@ -827,6 +827,8 @@ DEFAULT_SETTINGS = {
     "pending_order_approval_ttl_hours": "72",
     "pending_order_cleanup_last_run": "",
     "pending_order_cleanup_last_count": "0",
+    # One-shot banner after soft-cancel is retired by the hourly purge job.
+    "cleanup_soft_cancel_retired_notice": "0",
     "card_pay_text": (
         "مبلغ قابل پرداخت: <b>{amount}</b>\n"
         "شماره کارت: <code>{card}</code>\n"
@@ -1680,32 +1682,6 @@ SETTING_GROUPS = {
         ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
         ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
     ],
-    "پاکسازی سفارش‌های معلق": [
-        (
-            "pending_order_cleanup_enabled",
-            "لغو خودکار سفارش‌های معلق",
-            "toggle",
-            "هر ساعت سفارش‌های پرداخت‌نشده‌ای که از مهلت گذشته‌اند لغو می‌شوند",
-        ),
-        (
-            "pending_order_ttl_hours",
-            "مهلت سفارش پرداخت‌نشده (ساعت)",
-            "number",
-            "سفارش‌های در انتظار پرداخت یا رسید که قدیمی‌تر از این مقدار باشند لغو می‌شوند (۱ تا ۷۲۰)",
-        ),
-        (
-            "pending_order_cleanup_awaiting_approval",
-            "لغو سفارش‌های منتظر تأیید رسید",
-            "toggle",
-            "مشتری رسید فرستاده و منتظر تأیید ادمین است؛ فقط اگر بخواهید بعد از مهلت جداگانهٔ زیر لغو شود روشن کنید",
-        ),
-        (
-            "pending_order_approval_ttl_hours",
-            "مهلت سفارش منتظر تأیید (ساعت)",
-            "number",
-            "فقط وقتی گزینهٔ بالا روشن است اعمال می‌شود (۱ تا ۷۲۰)",
-        ),
-    ],
     "کارت به کارت": [
         (
             "payment_cards",
@@ -2024,7 +2000,6 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "forcejoin": ["کانال اجباری"],
     "terms": ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"],
     "billing": ["مدیریت PAYG"],
-    "cleanup": ["پاکسازی سفارش‌های معلق"],
     "notifications": ["هشدار سرویس کاربر", "گزارش و عملیات", "سلامت ارتباط پاسارگارد"],
     "daily_report": ["گزارش روزانه"],
     "backup": ["بکاپ زمان‌بندی", "ارسال بکاپ به تلگرام"],

@@ -190,7 +190,6 @@ class PaymentSettingsModalUxTests(unittest.TestCase):
             tab_groups=tab_groups,
             groups=groups,
             values=values,
-            show_pending_orders=False,
             style_options=[],
         )
         self.assertIn('data-pay-settings-for="pay_card_enabled" hidden', html)
@@ -205,7 +204,6 @@ class PaymentSettingsModalUxTests(unittest.TestCase):
             tab_groups=tab_groups,
             groups=groups,
             values=values,
-            show_pending_orders=False,
             style_options=[],
         )
         self.assertIn('data-pay-settings-for="pay_card_enabled"', html_on)
