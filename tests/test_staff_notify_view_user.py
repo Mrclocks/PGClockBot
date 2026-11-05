@@ -126,19 +126,18 @@ class StaffNotifyViewUserTests(unittest.IsolatedAsyncioTestCase):
         await notify_new_subscription(
             None, self.session, order=order, user_tg_id=None, plan_name="پلن ترکیبی"
         )
-        self.assertEqual(
-            _callbacks(self.dispatch.await_args.kwargs["markup"]),
-            ["res:user:1"],
-        )
+        callbacks = _callbacks(self.dispatch.await_args.kwargs["markup"])
+        self.assertEqual(callbacks, ["res:user:1"])
+        self.assertFalse(any(c.startswith("adm:users:svc:") for c in callbacks))
+        self.assertFalse(any(c.startswith("adm:users:view:") for c in callbacks))
         self.assertIn("🔄 تمدید اشتراک", self.dispatch.await_args.args[3])
 
     async def test_agency_fee_subscription_has_user_without_service(self) -> None:
         order = await self.session.get(Order, 40)
         await notify_new_subscription(None, self.session, order=order, user_tg_id=None)
-        self.assertEqual(
-            _callbacks(self.dispatch.await_args.kwargs["markup"]),
-            ["adm:users:view:1"],
-        )
+        callbacks = _callbacks(self.dispatch.await_args.kwargs["markup"])
+        self.assertEqual(callbacks, ["adm:users:view:1"])
+        self.assertFalse(any(c.startswith("adm:users:svc:") for c in callbacks))
 
     async def test_needs_approval_keeps_order_review_buttons(self) -> None:
         order = await self.session.get(Order, 38)
@@ -146,8 +145,10 @@ class StaffNotifyViewUserTests(unittest.IsolatedAsyncioTestCase):
             None, self.session, order=order, user_tg_id=None, needs_approval=True
         )
         callbacks = _callbacks(self.dispatch.await_args.kwargs["markup"])
-        self.assertTrue(any(c.startswith("ordrev:") for c in callbacks))
+        self.assertTrue(any(c.startswith("ordrev:ok:") for c in callbacks))
+        self.assertTrue(any(c.startswith("ordrev:no:") for c in callbacks))
         self.assertNotIn("adm:users:view:1", callbacks)
+        self.assertFalse(any(c.startswith("adm:users:svc:") for c in callbacks))
 
     async def test_platform_wallet_topup_opens_user(self) -> None:
         payment = await self.session.get(Payment, 7)
@@ -178,10 +179,9 @@ class StaffNotifyViewUserTests(unittest.IsolatedAsyncioTestCase):
                 order=await self.session.get(Order, 42),
                 user=await self.session.get(BotUser, 1),
             )
-        self.assertEqual(
-            _callbacks(self.dispatch.await_args.kwargs["markup"]),
-            ["res:user:1"],
-        )
+        callbacks = _callbacks(self.dispatch.await_args.kwargs["markup"])
+        self.assertEqual(callbacks, ["res:user:1"])
+        self.assertFalse(any(c.startswith("adm:users:svc:") for c in callbacks))
 
 
 if __name__ == "__main__":
