@@ -49,6 +49,7 @@ NAME_RULES = (
 )
 ORDER_LOCKED = "نام این سفارش دیگر قابل تغییر نیست."
 NO_FREE_NAME = "برای این نام جای خالی پیدا نشد؛ نام دیگری بفرستید."
+NAME_REQUIRED = "نام سرویس را وارد کنید."
 
 
 def _is_nameable(order: Order | None) -> bool:
@@ -61,19 +62,23 @@ def _is_nameable(order: Order | None) -> bool:
     )
 
 
-async def offers_custom_name(session: AsyncSession, order: Order | None) -> bool:
-    """Whether this order goes through the name step.
+async def name_step_enabled(session: AsyncSession, shop_id: int | None) -> bool:
+    """Whether purchases in this shop (None: the platform) require a service name.
 
-    A shop order follows the shop's ``custom_service_name`` permission, which the
-    platform grants next to ``free_checkout``; a platform order follows the platform
-    bot setting.
+    A shop follows its ``custom_service_name`` permission, which the platform grants
+    next to ``free_checkout``; the platform follows its own bot setting.
     """
+    if shop_id is None:
+        return on((await get_all_settings(session, reseller_id=None)).get(SETTING_KEY))
+    profile = await get_reseller_profile(session, int(shop_id))
+    return bool(profile and profile.is_active and has_perm(profile, PERMISSION))
+
+
+async def offers_custom_name(session: AsyncSession, order: Order | None) -> bool:
+    """Whether this order goes through the name step."""
     if not _is_nameable(order):
         return False
-    if order.reseller_id is None:
-        return on((await get_all_settings(session, reseller_id=None)).get(SETTING_KEY))
-    profile = await get_reseller_profile(session, int(order.reseller_id))
-    return bool(profile and profile.is_active and has_perm(profile, PERMISSION))
+    return await name_step_enabled(session, int(order.reseller_id) if order.reseller_id else None)
 
 
 async def needs_service_name(session: AsyncSession, order: Order | None) -> bool:
@@ -158,3 +163,16 @@ async def set_service_name(session: AsyncSession, order: Order, *, buyer_id: int
     await session.commit()
     await session.refresh(order)
     return username
+
+
+async def name_order_at_checkout(session: AsyncSession, order: Order, *, buyer_id: int, raw: str | None) -> None:
+    """Checkout outside the bot (Mini App): store the name when this order requires one.
+
+    Fails before payment when the name is required and missing or invalid; an order
+    that is already named, or needs no name, is left as it is.
+    """
+    if not await needs_service_name(session, order):
+        return
+    if not (raw or "").strip():
+        raise ValueError(NAME_REQUIRED)
+    await set_service_name(session, order, buyer_id=buyer_id, raw=raw)
