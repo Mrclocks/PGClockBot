@@ -38,6 +38,11 @@
       <span class="badge {{ 'ok' if page.settings.enabled else 'neutral' }}">{{ 'روشن' if page.settings.enabled else 'خاموش' }}</span>
     </div>
     <p class="muted">بعد از ثبت کاربر تست و انتخاب کانفیگ‌ها، تست‌ها را روشن کنید. بررسی تقریباً هر دقیقه انجام می‌شود و «تازه‌سازی» فقط آخرین نتیجه را نشان می‌دهد.</p>
+    {% if page.stop_reason %}
+    <div class="flash warn" role="status">
+      <div class="flash-copy">{{ reason_labels.get(page.stop_reason, 'پایش متوقف شد.') }}</div>
+    </div>
+    {% endif %}
     {% if not binary_configured %}
     <div class="flash warn" role="status">
       <div class="flash-copy">

@@ -362,6 +362,11 @@ tests/test_customer_notes_permission.py
 tests/test_gift_codes_permission.py
 # PasarGuard link reconnect: owner-only, CSRF, rate limit; never leak exception text.
 tests/test_pg_link_reconnect.py
+# PasarGuard read circuit: heal under concurrency, probe lease, budget exhaustion.
+tests/test_pg_read_circuit_heal.py
+tests/test_pg_read_breaker_threshold.py
+# PasarGuard HTTP client rebuild after repeated transport failures.
+tests/test_pg_http_rebuild.py
 # Shop staff action log: written with the change, read only by the shop it belongs to.
 tests/test_staff_audit.py
 # Manual shop wallet changes by shop staff: own shop purse only, capped, once per request.
@@ -386,5 +391,11 @@ tests/test_reseller_capacity_orders.py
 tests/test_reseller_package_orders.py
 # Mini App service packs: ownership of the service and who sees which pack.
 tests/test_mini_addon_packs.py
+# PasarGuard link watchdog job: heal, one rebuild, lock and disable.
+tests/test_pg_link_watchdog.py
+tests/test_pg_link_alerts.py
+tests/test_pg_link_health_persist.py
+tests/test_pg_stop_missing_user_poll.py
+tests/test_pg_cache_capability_probe.py
 tests/test_service_addon_plan_scope.py
 tests/test_svc_addon_kind_picker.py
