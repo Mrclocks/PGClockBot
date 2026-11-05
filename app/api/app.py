@@ -2666,6 +2666,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "plan_style_options": __import__(
                     "app.services.button_styles", fromlist=["PLAN_BUTTON_STYLE_OPTIONS"]
                 ).PLAN_BUTTON_STYLE_OPTIONS,
+                "pack_style_options": __import__(
+                    "app.services.button_styles", fromlist=["ITEM_BUTTON_STYLE_OPTIONS"]
+                ).ITEM_BUTTON_STYLE_OPTIONS,
                 "category_style_options": __import__(
                     "app.services.button_styles",
                     fromlist=["CATEGORY_BUTTON_STYLE_OPTIONS"],

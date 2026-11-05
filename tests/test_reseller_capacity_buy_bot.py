@@ -26,6 +26,7 @@ class ConfirmScreenTests(unittest.IsolatedAsyncioTestCase):
         owner = SimpleNamespace(id=5, wallet_balance=12_345)
         profile = SimpleNamespace(pg_admin_username="shop5")
         buy = AsyncMock()
+        allowed = frozenset({1, 5, 10, 50, 20})
         with (
             patch.object(reseller, "_capacity_context", new=AsyncMock(return_value=(5, profile, _plan(), owner))),
             patch.object(reseller, "safe_edit_text", new=edit),
@@ -34,6 +35,10 @@ class ConfirmScreenTests(unittest.IsolatedAsyncioTestCase):
             patch("app.services.reseller_capacity.buy_extra_users", new=buy),
             patch("app.services.reseller_packs.buy_addon_pack", new=buy),
             patch("app.services.reseller_capacity.plan_allows_buy_extra", return_value=True),
+            patch(
+                "app.services.reseller_plan_extra_packs.active_amounts_for_plan",
+                new=AsyncMock(return_value=allowed),
+            ),
         ):
             await handler(callback, MagicMock(), SimpleNamespace(id=5))
         return edit, buy
@@ -74,6 +79,11 @@ class PayHandlerTests(unittest.IsolatedAsyncioTestCase):
             patch.object(reseller_capacity_buy, "_actor", new=AsyncMock(return_value=(owner, profile, _plan()))),
             patch.object(reseller_capacity_buy, "safe_edit_text", new=AsyncMock()),
             patch.object(reseller_capacity_buy, target, new=buy),
+            patch.object(
+                reseller_capacity_buy,
+                "active_amounts_for_plan",
+                new=AsyncMock(return_value=frozenset({1, 5, 10, 50, 20})),
+            ),
         ):
             await handler(callback, MagicMock(), SimpleNamespace(id=5))
         return callback, buy

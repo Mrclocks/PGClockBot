@@ -90,43 +90,44 @@
   </div>
 </div>
 
-{% if extras %}
+{% if extras and (extras.gb_price or extras.user_price) %}
+<p class="muted">ظرفیت اضافه تا پایان دوره می‌ماند و در تمدید بعدی هم حساب می‌شود. هر نوع را جدا بخرید.</p>
+{% if extras.gb_price and extras.gb_options %}
 <div class="card">
-  {{ card_title('payments', 'خرید ظرفیت اضافه') }}
-  <p class="muted">ظرفیت اضافه تا پایان دوره می‌ماند و در تمدید بعدی هم حساب می‌شود.</p>
-  <div class="form-row">
-    {% if extras.gb_price %}
-    <form method="post" action="/my-subscription/extra" class="form-stack"
-          data-confirm="حجم اضافه با گیگی {{ extras.gb_price | money }} تومان از کیف پول خریده شود؟" data-confirm-title="خرید حجم اضافه" data-confirm-label="خرید">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="kind" value="gb">
-      <input type="hidden" name="generation" value="{{ ov.generation }}">
-      <label class="form-field">
-        <span class="form-field-label">حجم اضافه (گیگی <bdi dir="ltr">{{ extras.gb_price | money }}</bdi> تومان)</span>
-        <select name="amount">
-          {% for n in extras.gb_options %}<option value="{{ n }}">{{ n }} گیگ — {{ (n * extras.gb_price) | money }} تومان</option>{% endfor %}
-        </select>
-      </label>
-      <button type="submit" class="btn btn-sm">خرید حجم</button>
-    </form>
-    {% endif %}
-    {% if extras.user_price %}
-    <form method="post" action="/my-subscription/extra" class="form-stack"
-          data-confirm="کاربر اضافه با هر نفر {{ extras.user_price | money }} تومان از کیف پول خریده شود؟" data-confirm-title="خرید کاربر اضافه" data-confirm-label="خرید">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="kind" value="users">
-      <input type="hidden" name="generation" value="{{ ov.generation }}">
-      <label class="form-field">
-        <span class="form-field-label">کاربر اضافه (هر نفر <bdi dir="ltr">{{ extras.user_price | money }}</bdi> تومان)</span>
-        <select name="amount">
-          {% for n in extras.user_options %}<option value="{{ n }}">{{ n }} کاربر — {{ (n * extras.user_price) | money }} تومان</option>{% endfor %}
-        </select>
-      </label>
-      <button type="submit" class="btn btn-sm">خرید کاربر</button>
-    </form>
-    {% endif %}
-  </div>
+  {{ card_title('payments', '📦 حجم اضافه') }}
+  <form method="post" action="/my-subscription/extra" class="form-stack"
+        data-confirm="حجم اضافه با گیگی {{ extras.gb_price | money }} تومان از کیف پول خریده شود؟" data-confirm-title="خرید حجم اضافه" data-confirm-label="خرید">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="kind" value="gb">
+    <input type="hidden" name="generation" value="{{ ov.generation }}">
+    <label class="form-field">
+      <span class="form-field-label">نرخ هر گیگ: <bdi dir="ltr">{{ extras.gb_price | money }}</bdi> تومان — یک پله انتخاب کنید</span>
+      <select name="amount">
+        {% for n in extras.gb_options %}<option value="{{ n }}">{{ n }} گیگ — {{ (n * extras.gb_price) | money }} تومان</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-sm">خرید حجم</button>
+  </form>
 </div>
+{% endif %}
+{% if extras.user_price and extras.user_options %}
+<div class="card">
+  {{ card_title('payments', '👥 کاربر اضافه') }}
+  <form method="post" action="/my-subscription/extra" class="form-stack"
+        data-confirm="کاربر اضافه با هر نفر {{ extras.user_price | money }} تومان از کیف پول خریده شود؟" data-confirm-title="خرید کاربر اضافه" data-confirm-label="خرید">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="kind" value="users">
+    <input type="hidden" name="generation" value="{{ ov.generation }}">
+    <label class="form-field">
+      <span class="form-field-label">نرخ هر کاربر: <bdi dir="ltr">{{ extras.user_price | money }}</bdi> تومان — یک پله انتخاب کنید</span>
+      <select name="amount">
+        {% for n in extras.user_options %}<option value="{{ n }}">{{ n }} کاربر — {{ (n * extras.user_price) | money }} تومان</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-sm">خرید کاربر</button>
+  </form>
+</div>
+{% endif %}
 {% endif %}
 {% endif %}
 {% endblock %}
