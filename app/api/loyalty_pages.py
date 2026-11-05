@@ -587,20 +587,32 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 f"/loyalty?tab=transactions&err={quote(e.message)}", status_code=303
             )
         admin_id = str(staff.get("username") or staff.get("telegram_id") or staff.get("id") or "admin")
+        shop_id = _shop_scope(staff)
         try:
-            await admin_adjust_points(
+            change = await admin_adjust_points(
                 session,
                 user,
                 int(delta),
                 reason=reason,
                 admin_identity=admin_id,
-                shop_id=_shop_scope(staff),
+                shop_id=shop_id,
                 request_key=request_key,
             )
         except ValueError as e:
             return RedirectResponse(
                 f"/loyalty?tab=transactions&err={quote(str(e)[:200])}", status_code=303
             )
+        from app.services.manual_adjust_notices import schedule_points_notice
+
+        schedule_points_notice(
+            user_id=int(user.id),
+            mode="credit" if int(delta) > 0 else "debit",
+            points=abs(int(delta)),
+            balance=int(change.tx.balance_after),
+            note=str(reason).strip(),
+            shop_id=shop_id,
+            replayed=change.replayed,
+        )
         return RedirectResponse(
             f"/loyalty?tab=transactions&saved=1&msg={quote('تعدیل ثبت شد')}",
             status_code=303,

@@ -228,10 +228,11 @@ class AdminWalletAdjustUiContractTests(unittest.TestCase):
         self.assertIn("mode=mode", pages)
 
     def test_bot_has_credit_and_debit_entry(self):
-        admin = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        self.assertIn("adm_users_wallet_debit_ask", admin)
-        self.assertIn("admin_wallet_mode", admin)
-        ask = admin.split("async def _adm_users_wallet_adjust_ask", 1)[1].split(
+        wallet = Path("app/bot/handlers/admin_wallet_adjust.py").read_text(encoding="utf-8")
+        self.assertIn("adm_users_wallet_debit_ask", wallet)
+        self.assertIn("admin_wallet_mode", wallet)
+        self.assertIn("user_wallet_reason", wallet)
+        ask = wallet.split("async def _adm_users_wallet_adjust_ask", 1)[1].split(
             "async def ", 1
         )[0]
         self.assertNotIn("منفی = کسر", ask)

@@ -107,7 +107,7 @@
     <p class="muted">مبلغ را وارد کنید، سپس افزایش یا کاهش را بزنید. موجودی منفی مجاز نیست.</p>
   </header>
   {% from "_wallet_adjust_form.html" import wallet_adjust_form %}
-  {{ wallet_adjust_form('/users/' ~ user.id ~ '/wallet-credit', 'موجودی کیف پول این کاربر مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟', nonce=wallet_nonce) }}
+  {{ wallet_adjust_form('/users/' ~ user.id ~ '/wallet-credit', 'موجودی کیف پول این کاربر مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟', nonce=wallet_nonce, note_label='علت', note_required=true) }}
 </section>
 
 {% endif %}

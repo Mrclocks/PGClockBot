@@ -249,7 +249,8 @@ class UserPageResellerWalletTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_a_payg_reseller_changed_from_the_user_page_uses_the_billing_ledger(self) -> None:
         response = self.client.post(
-            f"/users/{PAYG_SHOP}/wallet-credit", data={"amount": "5000", "mode": "debit", "nonce": "n" * 16},
+            f"/users/{PAYG_SHOP}/wallet-credit",
+            data={"amount": "5000", "mode": "debit", "note": "کاهش دستی تست", "nonce": "n" * 16},
             follow_redirects=False,
         )
         self.assertEqual(response.status_code, 303)
@@ -290,10 +291,10 @@ class BotConfirmTextTests(unittest.TestCase):
     def text(self, amount: int, mode: str, *, payg: bool) -> str:
         from types import SimpleNamespace
 
-        from app.bot.handlers.admin import _reseller_wallet_confirm_text
+        from app.bot.handlers.admin_wallet_adjust import _reseller_wallet_confirm_text
 
         user = SimpleNamespace(full_name="<i>shop</i>", telegram_id=1, wallet_balance=50_000)
-        return _reseller_wallet_confirm_text(user, amount, mode, payg=payg)
+        return _reseller_wallet_confirm_text(user, amount, mode, payg=payg, reason="تعدیل دستی تست")
 
     def test_emptying_a_payg_wallet_warns_before_applying(self) -> None:
         self.assertIn("قطع می‌شوند", self.text(50_000, "debit", payg=True))

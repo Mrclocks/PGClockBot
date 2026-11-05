@@ -278,11 +278,12 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
             )
             with self.assertRaises(ValueError):
                 await admin_adjust_points(session, u, 5, reason="  ", admin_identity="admin", shop_id=None, request_key="k1")
-            tx = await admin_adjust_points(
+            change = await admin_adjust_points(
                 session, u, 5, reason="جبران دستی", admin_identity="admin",
                 shop_id=None, request_key="k2",
             )
-            self.assertEqual(tx.tx_type, "adjust")
+            self.assertFalse(change.replayed)
+            self.assertEqual(change.tx.tx_type, "adjust")
             await session.refresh(u)
             self.assertEqual(u.points_balance, 15)
 

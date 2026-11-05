@@ -48,6 +48,7 @@ _RESELLER_HUB_BACK = "nv:res:home"
 FREE_TEXT_INPUT_STATES: frozenset[str] = frozenset(
     {
         "AdminStates:user_message",
+        "AdminStates:user_wallet_reason",
         "AdminStates:ticket_reply",
         "AdminStates:broadcast_text",
         "AdminStates:revoke_reseller_reason",
