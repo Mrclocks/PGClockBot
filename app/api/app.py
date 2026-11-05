@@ -1419,6 +1419,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    from app.api.pg_link_pages import register_pg_link_pages
+
+    register_pg_link_pages(app, require_admin=require_admin)
     register_dashboard_trend_pages(app, require_staff=require_staff, get_db=get_db)
     register_bot_overview_pages(
         app, render=render, require_perm=require_perm, require_admin=require_admin, get_db=get_db
