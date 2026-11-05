@@ -54,7 +54,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("service_import", "تأیید افزودن سرویس قبلی"),
     ("orders_purge", "حذف کامل سفارش‌ها و پرداخت‌ها"),
     ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
-    ("free_checkout", "دریافت رایگان سفارش خود توسط مدیران فروشگاه"),
+    ("free_checkout", "دریافت رایگان سفارش خود توسط مالک فروشگاه"),
     # Owner-only: reconnect the platform PasarGuard link (never grant to shops).
     ("pg_link.reconnect", "ارتباط مجدد با پاسارگارد"),
 ]
