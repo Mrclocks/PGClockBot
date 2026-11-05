@@ -453,7 +453,7 @@ class MigrationTests(unittest.TestCase):
 
         spec = importlib.util.spec_from_file_location(
             "plan_customer_extra_rates",
-            ROOT / "alembic/versions/0090_plan_customer_extra_rates.py",
+            ROOT / "alembic/versions/0091_plan_customer_extra_rates.py",
         )
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None

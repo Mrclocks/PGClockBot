@@ -1,7 +1,7 @@
 """Add Plan customer extra unit rates and buy-extra switch.
 
-Revision ID: 0090_plan_customer_extra_rates
-Revises: 0089_addon_request_key
+Revision ID: 0091_plan_customer_extra_rates
+Revises: 0090_pg_link_health_state
 
 Mirrors reseller fixed-plan stairs for customer fixed plans: allow_buy_extra,
 extra_gb_price (toman/GB), extra_month_price (toman/month). Idempotent on
@@ -15,8 +15,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0090_plan_customer_extra_rates"
-down_revision: Union[str, None] = "0089_addon_request_key"
+revision: str = "0091_plan_customer_extra_rates"
+down_revision: Union[str, None] = "0090_pg_link_health_state"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
