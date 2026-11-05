@@ -393,5 +393,6 @@ tests/test_reseller_package_orders.py
 tests/test_mini_addon_packs.py
 # PasarGuard link watchdog job: heal, one rebuild, lock and disable.
 tests/test_pg_link_watchdog.py
+tests/test_pg_link_alerts.py
 tests/test_service_addon_plan_scope.py
 tests/test_svc_addon_kind_picker.py

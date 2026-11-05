@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from app.db.session import SessionLocal
+from app.services.pg_link_alerts import evaluate_after_watchdog
 from app.services.pg_link_watchdog import run_watchdog_tick
 
 logger = logging.getLogger(__name__)
@@ -17,5 +18,20 @@ async def run_pg_link_watchdog() -> None:
             result = await run_watchdog_tick(session)
         if result.rebuilt:
             logger.warning("PasarGuard link watchdog rebuilt HTTP client kind=%s", result.failure_kind)
+        # Alerts run after the probe session closes; notify never breaks the job.
+        try:
+            async with SessionLocal() as session:
+                watchdog_ok: bool | None
+                if not result.ran:
+                    watchdog_ok = None
+                else:
+                    watchdog_ok = bool(result.ok)
+                await evaluate_after_watchdog(
+                    session,
+                    watchdog_ok=watchdog_ok,
+                    failure_kind=result.failure_kind,
+                )
+        except Exception:
+            logger.warning("PasarGuard link alert after watchdog failed", exc_info=True)
     except Exception:
         logger.warning("PasarGuard link watchdog job failed", exc_info=True)
