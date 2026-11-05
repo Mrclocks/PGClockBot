@@ -402,4 +402,4 @@ def _render_user_page(render, user, rows) -> str:
         "client": ("127.0.0.1", 1), "server": ("x.test", 443), "state": {},
     })
     template = render.__globals__["templates"].env.get_template("_user_edit_body.html")
-    return template.render(request=request, user=user, services=rows, can_pg_delete=True)
+    return template.render(request=request, user=user, services=rows, can_pg_delete=True, can_view_services=True)
