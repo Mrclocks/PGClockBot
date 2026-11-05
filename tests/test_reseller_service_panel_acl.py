@@ -139,6 +139,24 @@ class ShopBotServicePanelAclTests(unittest.IsolatedAsyncioTestCase):
         renew.assert_awaited_once()
         self.assertIs(renew.await_args.kwargs["staff"], staff)
 
+    async def test_renew_changes_nothing_when_the_shop_panel_role_cannot_be_resolved(self) -> None:
+        renew = AsyncMock()
+        callback = self.callback(f"res:svcrenew:{CUSTOMER_ID}:{SOLD_SERVICE_ID}")
+        state = self.fsm()
+        with (
+            self.with_panel_staff(None),
+            patch.object(handler, "admin_renew_service", renew),
+            patch.object(handler, "safe_edit_text", AsyncMock()),
+        ):
+            await handler.res_user_service_renew(
+                callback, state, self.session, self.shop, is_reseller_bot=True, reseller_owner_id=SHOP_ID
+            )
+
+        renew.assert_not_awaited()
+        self.assertEqual(callback.answer.await_args.args[0], feedback.NO_ACCESS)
+        busy = {key for key in await state.get_data() if key.startswith("rsvcbusy:")}
+        self.assertEqual(busy, set(), "the in-flight flag is released")
+
     async def test_extend_is_refused_when_the_panel_role_cannot_update(self) -> None:
         panel = MagicMock(
             get_user_by_id=AsyncMock(return_value={"data_limit": 0, "expire": None}),
