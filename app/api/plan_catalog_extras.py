@@ -147,11 +147,15 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
         description: str = Form(""),
         sort_order: int = Form(0),
         category_id: str = Form(""),
+        plan_id: str = Form(""),
+        button_style: str = Form("inherit"),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.service_addons import create_pack
 
+        plan_raw = str(plan_id or "").strip()
+        resolved_plan = int(plan_raw) if plan_raw.isdigit() else None
         try:
             await create_pack(
                 session,
@@ -162,7 +166,9 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
                 price=price,
                 description=description,
                 sort_order=sort_order,
-                category_id=category_id,
+                category_id=category_id if resolved_plan is None else ...,
+                plan_id=resolved_plan,
+                button_style=button_style,
             )
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(

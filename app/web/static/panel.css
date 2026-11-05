@@ -12778,3 +12778,30 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   display: inline-flex;
   margin: 0;
 }
+
+/* Reseller plan extra-pack editor (per-plan GB/user stairs). */
+.extra-packs-editor {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.extra-packs-kind {
+  display: grid;
+  gap: var(--space-2);
+}
+.extra-packs-kind-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.extra-packs-rows {
+  display: grid;
+  gap: var(--space-2);
+}
+.extra-pack-row {
+  align-items: end;
+}
+.extra-pack-row .plan-color-field {
+  min-width: 10rem;
+}
