@@ -86,7 +86,7 @@ class PgLinkHealthStateMigrationTests(unittest.TestCase):
 
         spec = importlib.util.spec_from_file_location(
             "pg_link_health_state_migration",
-            ROOT / "alembic/versions/0084_pg_link_health_state.py",
+            ROOT / "alembic/versions/0090_pg_link_health_state.py",
         )
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None

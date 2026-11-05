@@ -14,14 +14,22 @@ from app.db.models import BotUser, PgAdminSubscription, ResellerPlan, ResellerPr
 from app.services.billing import GB, is_payg
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_toman
+from app.services.reseller_plan_extra_packs import (
+    DEFAULT_EXTRA_GB_AMOUNTS,
+    DEFAULT_EXTRA_USER_AMOUNTS,
+    KIND_GB,
+    KIND_USERS,
+    active_amounts_for_plan,
+)
 from app.services.reseller_shop_gates import assert_shop_allows_capacity
 from app.services.volume_allocation_cascade import assert_child_growth_fits
 
 logger = logging.getLogger(__name__)
 
-# Whitelist quantities exposed in Telegram buttons — reject forged callback amounts.
-ALLOWED_EXTRA_GB = frozenset({1, 5, 10, 50})
-ALLOWED_EXTRA_USERS = frozenset({1, 5, 10, 20})
+# Historic default stairs (also seeded onto plans). Prefer per-plan packs via
+# ``active_amounts_for_plan`` for purchase validation.
+ALLOWED_EXTRA_GB = frozenset(DEFAULT_EXTRA_GB_AMOUNTS)
+ALLOWED_EXTRA_USERS = frozenset(DEFAULT_EXTRA_USER_AMOUNTS)
 GENERATION_REQUIRED = "این صفحه قدیمی است؛ صفحه را دوباره باز کنید و خرید را تکرار کنید"
 
 
@@ -378,26 +386,40 @@ class CapacityOffer:
 
 
 UNIT_TEXTS = {
-    "gb": ("حجم", ALLOWED_EXTRA_GB, plan_extra_gb_price, "reseller_extra_gb"),
-    "users": ("کاربر", ALLOWED_EXTRA_USERS, plan_extra_user_price, "reseller_extra_users"),
+    KIND_GB: ("حجم", plan_extra_gb_price, "reseller_extra_gb"),
+    KIND_USERS: ("کاربر", plan_extra_user_price, "reseller_extra_users"),
 }
 
 
-def unit_offer(profile: ResellerProfile, plan: ResellerPlan | None, kind: str, amount: object) -> CapacityOffer:
+def unit_offer(
+    profile: ResellerProfile,
+    plan: ResellerPlan | None,
+    kind: str,
+    amount: object,
+    *,
+    allowed_amounts: frozenset[int] | None = None,
+) -> CapacityOffer:
     """Validate a quick-buy of ``amount`` GB or users; raises ``ValueError`` with a message that is safe to show.
+
+    ``allowed_amounts`` must be the active stairs for this plan (from
+    ``active_amounts_for_plan``). When omitted, only the historic defaults are
+    accepted — callers that have a session should pass the plan's list.
 
     Does not check subscription clock or shop activity — callers that take money must
     ``assert_shop_allows_capacity`` (wallet extras and capacity orders).
     """
     if kind not in UNIT_TEXTS:
         raise ValueError("نوع خرید نامعتبر است")
-    noun, allowed, price_of, reason = UNIT_TEXTS[kind]
+    noun, price_of, reason = UNIT_TEXTS[kind]
     if not plan_allows_buy_extra(plan):
         raise ValueError(f"این پلن امکان خرید {noun} اضافه ندارد")
     if is_payg(profile):
         raise ValueError(f"خرید {noun} اضافه برای پلن PAYG فعال نیست")
     if isinstance(amount, bool) or not isinstance(amount, int):
         raise ValueError(f"مقدار {noun} نامعتبر است")
+    allowed = allowed_amounts if allowed_amounts is not None else (
+        ALLOWED_EXTRA_GB if kind == KIND_GB else ALLOWED_EXTRA_USERS
+    )
     if amount not in allowed:
         raise ValueError(f"مقدار {noun} مجاز نیست")
     unit_price = price_of(plan)
@@ -407,9 +429,29 @@ def unit_offer(profile: ResellerProfile, plan: ResellerPlan | None, kind: str, a
     if not uname:
         raise ValueError("ادمین پاسارگارد برای این نماینده تنظیم نشده است")
     return CapacityOffer(
-        uname=uname, gb=amount if kind == "gb" else 0, users=amount if kind == "users" else 0,
+        uname=uname, gb=amount if kind == KIND_GB else 0, users=amount if kind == KIND_USERS else 0,
         price=unit_price * amount, reason=f"{reason}:{amount}:{uname}",
     )
+
+
+async def unit_offer_for_plan(
+    session: AsyncSession,
+    profile: ResellerProfile,
+    plan: ResellerPlan | None,
+    kind: str,
+    amount: object,
+) -> CapacityOffer:
+    """Like ``unit_offer`` but loads this plan's pack whitelist from the database."""
+    try:
+        plan_id = int(getattr(plan, "id", 0) or 0) if plan is not None else 0
+    except (TypeError, ValueError):
+        plan_id = 0
+    allowed = (
+        await active_amounts_for_plan(session, plan_id, kind)
+        if plan_id > 0
+        else (ALLOWED_EXTRA_GB if kind == KIND_GB else ALLOWED_EXTRA_USERS)
+    )
+    return unit_offer(profile, plan, kind, amount, allowed_amounts=allowed)
 
 
 def _require_generation(generation: object) -> int:
@@ -464,7 +506,7 @@ async def buy_extra_gb(
 ) -> dict[str, Any]:
     """Buy unit GB from the shop wallet; ``generation`` is required (bot, web, Mini App)."""
     await assert_shop_allows_capacity(session, profile)
-    offer = unit_offer(profile, plan, "gb", gb)
+    offer = await unit_offer_for_plan(session, profile, plan, KIND_GB, gb)
     new_limit = await buy_offer(
         session, user=user, offer=offer, generation=_require_generation(generation),
     )
@@ -482,7 +524,7 @@ async def buy_extra_users(
 ) -> dict[str, Any]:
     """Buy unit user slots from the shop wallet; ``generation`` is required (bot, web, Mini App)."""
     await assert_shop_allows_capacity(session, profile)
-    offer = unit_offer(profile, plan, "users", count)
+    offer = await unit_offer_for_plan(session, profile, plan, KIND_USERS, count)
     new_max = await buy_offer(
         session, user=user, offer=offer, generation=_require_generation(generation),
     )
