@@ -176,6 +176,7 @@
 </section>
 
 {% endif %}
+{% if can_view_services|default(false) %}
 <section class="edit-section" id="user-services">
   <header class="edit-section-head">
     <h3>سرویس‌ها</h3>
@@ -290,6 +291,7 @@
   </ul>
   {% endif %}
 </section>
+{% endif %}
 
 {% if wallet_txs %}
 <section class="edit-section">

@@ -30,6 +30,7 @@ from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.db.models import BotUser, Plan, ResellerProfile
 from app.services import bot_feedback_texts as feedback
 from app.services.bot_user_admin import (
+    CUSTOMER_SERVICES_PERMISSION,
     MAX_EXTEND_DAYS,
     MAX_EXTEND_GB,
     admin_delete_service,
@@ -53,7 +54,7 @@ from app.services.staff_cards import format_adjust_prompt, format_services_list_
 logger = logging.getLogger(__name__)
 router = Router(name="reseller_customer_services")
 
-PERMISSION = "customer_services"
+PERMISSION = CUSTOMER_SERVICES_PERMISSION
 CANCEL_CODE = "rs_svc"
 PREFIX = "res"
 UNKNOWN_OUTCOME = (
