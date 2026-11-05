@@ -17,6 +17,11 @@ from app.services.formatting import (
     rtl_text,
 )
 
+# Longest text Telegram accepts in one message.
+TELEGRAM_TEXT_LIMIT = 4096
+# Services that get their own button on a staff list screen (both keyboards use it).
+SERVICE_BUTTON_LIMIT = 20
+
 
 def role_label_fa(role: str | None) -> str:
     """Persian label for a BotUser.role value."""
@@ -110,6 +115,37 @@ def format_subscription_owner_card(
 def format_services_list_header(user_id: int, *, subject: str = "مشتری") -> str:
     label = (subject or "مشتری").strip() or "مشتری"
     return rtl_text(f"📦 <b>سرویس‌های {html.escape(label)} #{int(user_id)}</b>")
+
+
+def _telegram_length(text: str) -> int:
+    # Telegram counts UTF-16 code units; markup is counted too, which keeps this on the safe side.
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _more_services_note(with_button: int, without_button: int) -> str:
+    lines = []
+    if with_button:
+        lines.append(f"… و {with_button} سرویس دیگر؛ از دکمه‌های زیر باز کنید.")
+    if without_button:
+        lines.append(f"… و {without_button} سرویس دیگر که دکمه ندارد؛ با جستجوی نام سرویس پیدا کنید.")
+    return "\n\n" + rtl_text("\n".join(lines)) if lines else ""
+
+
+def format_services_list(header: str, entries: Sequence[str], *, without_button: int = 0) -> str:
+    """Service entries under a header, cut before Telegram's message length limit.
+
+    ``entries`` are the services that have a button on the list screen; ``without_button``
+    counts the customer's further services that have none. Both are summed up in one
+    closing note, each with how to reach them.
+    """
+    shown: list[str] = []
+    for index, entry in enumerate(entries):
+        remaining = len(entries) - index - 1
+        candidate = "\n\n".join([header, *shown, entry])
+        if _telegram_length(candidate + _more_services_note(remaining, without_button)) > TELEGRAM_TEXT_LIMIT:
+            return "\n\n".join([header, *shown]) + _more_services_note(len(entries) - index, without_button)
+        shown.append(entry)
+    return "\n\n".join([header, *shown]) + _more_services_note(0, without_button)
 
 
 def format_adjust_prompt(service_id: int, *, days: int, gb: float) -> str:

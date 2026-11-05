@@ -50,7 +50,12 @@ from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import has_bot_perm
 from app.services.service_import import admin_delete_pg_flag, is_external_service
 from app.services.shop_membership import is_shop_customer
-from app.services.staff_cards import format_adjust_prompt, format_services_list_header
+from app.services.staff_cards import (
+    format_adjust_prompt,
+    SERVICE_BUTTON_LIMIT,
+    format_services_list,
+    format_services_list_header,
+)
 
 logger = logging.getLogger(__name__)
 router = Router(name="reseller_customer_services")
@@ -120,7 +125,7 @@ def may_manage_customer_services(profile: ResellerProfile | None) -> bool:
 def _services_keyboard(user_id: int, service_ids: list[int]) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(text=f"سرویس #{sid}", callback_data=f"{PREFIX}:svc:{user_id}:{sid}")]
-        for sid in service_ids[:20]
+        for sid in service_ids[:SERVICE_BUTTON_LIMIT]
     ]
     rows.append([kb.back_button(None, f"{PREFIX}:user:{user_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -296,14 +301,15 @@ async def res_user_services(
                 ),
             )
         return
-    lines = [format_services_list_header(target.user_id), ""]
-    for snap in snaps[:15]:
-        lines.append(snapshot_telegram_lines(snap))
-        lines.append("")
+    text = format_services_list(
+        format_services_list_header(target.user_id),
+        [snapshot_telegram_lines(snap, with_link=False) for snap in snaps[:SERVICE_BUTTON_LIMIT]],
+        without_button=max(0, len(snaps) - SERVICE_BUTTON_LIMIT),
+    )
     if callback.message:
         await safe_edit_text(
             callback.message,
-            "\n".join(lines).strip(),
+            text,
             reply_markup=_services_keyboard(target.user_id, [s.service.id for s in snaps]),
         )
 

@@ -31,6 +31,8 @@ from app.services.formatting import (
 )
 from app.services.staff_cards import (
     format_adjust_prompt,
+    SERVICE_BUTTON_LIMIT,
+    format_services_list,
     format_services_list_header,
     format_staff_customer_card,
 )
@@ -2984,14 +2986,15 @@ async def adm_users_services(
                 ),
             )
         return
-    lines = [format_services_list_header(user_id, subject="کاربر"), ""]
-    for snap in snaps[:15]:
-        lines.append(snapshot_telegram_lines(snap))
-        lines.append("")
+    text = format_services_list(
+        format_services_list_header(user_id, subject="کاربر"),
+        [snapshot_telegram_lines(snap, with_link=False) for snap in snaps[:SERVICE_BUTTON_LIMIT]],
+        without_button=max(0, len(snaps) - SERVICE_BUTTON_LIMIT),
+    )
     if callback.message:
         await safe_edit_text(
             callback.message,
-            "\n".join(lines).strip(),
+            text,
             reply_markup=kb.admin_user_services_keyboard(
                 user_id, [s.service.id for s in snaps]
             ),

@@ -1304,8 +1304,12 @@ def _snapshot_plan(service: Any) -> Any:
     return None
 
 
-def snapshot_telegram_lines(snap: ServiceSnapshot) -> str:
-    """Pretty Telegram HTML for one live service snapshot (staff screens)."""
+def snapshot_telegram_lines(snap: ServiceSnapshot, *, with_link: bool = True) -> str:
+    """Pretty Telegram HTML for one live service snapshot (staff screens).
+
+    List screens pass ``with_link=False``: the link is long and one tap away on the
+    service's own screen.
+    """
     svc = snap.service
     plan = _snapshot_plan(svc)
     plan_name = html.escape(plan.name) if plan is not None and getattr(plan, "name", None) else "—"
@@ -1326,7 +1330,7 @@ def snapshot_telegram_lines(snap: ServiceSnapshot) -> str:
             f"{html.escape(str(snap.expire_text))} · مانده {html.escape(str(snap.time_label))}",
         ),
     ]
-    if snap.subscription_url:
+    if with_link and snap.subscription_url:
         rows.append(kv_line("🔗", "لینک", copyable(snap.subscription_url)))
     if snap.error:
         rows.append(f"⚠️ {html.escape(str(snap.error))}")
