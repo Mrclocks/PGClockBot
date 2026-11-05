@@ -96,6 +96,10 @@
     {% set global_pattern = (values or {}).get('pg_username_pattern','{prefix}_{random}{suffix}') if values is defined else '{prefix}_{random}{suffix}' %}
     {% include "_plan_naming_fields.html" %}
 
+    {% set packs_editor_id = 'user-plan-addon-packs-edit' %}
+    {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
+    {% include "_user_plan_addon_packs_editor.html" %}
+
     {% if plan.button_style is none %}
     {% set plan_button_style = 'inherit' %}
     {% else %}
@@ -114,6 +118,7 @@
   </form>
 </div>
 
+<script src="/static/user-plan-addon-packs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 <script>
 (function(){
   const mode = document.getElementById('plan-mode');

@@ -13,9 +13,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.db.models import Base, BotUser, Plan, ServiceAddonPack, UserService
 from app.services.service_addons import (
     create_addon_order,
+    list_packs_for_plan,
     list_packs_for_service,
     pack_matches_service,
     pack_purchase_button_text,
+    replace_plan_scoped_packs_from_form,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -273,6 +275,96 @@ class PlanScopedListTests(unittest.IsolatedAsyncioTestCase):
             svc = await session.get(UserService, 10)
             packs = await list_packs_for_service(session, svc, kind="volume")
             self.assertEqual(packs, [])
+
+
+class ReplacePlanScopedPacksFormTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        self.staff = {
+            "role": "admin",
+            "org_principal_id": 1,
+            "org_depth": 0,
+            "org_parent_id": None,
+            "org_status": "active",
+            "pg_is_owner": True,
+        }
+
+    async def asyncTearDown(self) -> None:
+        await self.engine.dispose()
+
+    async def test_form_replace_creates_volume_and_duration_rows(self) -> None:
+        async with self.Session() as session:
+            session.add(Plan(id=7, name="P", price=1000, duration_days=30))
+            await session.commit()
+            form = {
+                "plan_vol_amount": ["5", "10"],
+                "plan_vol_price": ["1000", "1800"],
+                "plan_vol_style": ["primary", "inherit"],
+                "plan_dur_amount": ["7"],
+                "plan_dur_price": ["500"],
+                "plan_dur_style": ["success"],
+            }
+            await replace_plan_scoped_packs_from_form(
+                session, self.staff, plan_id=7, form=form
+            )
+            await session.commit()
+            packs = await list_packs_for_plan(
+                session, plan_id=7, reseller_id=None, active_only=False
+            )
+            vols = [p for p in packs if p.kind == "volume"]
+            durs = [p for p in packs if p.kind == "duration"]
+            self.assertEqual([(p.amount, p.price, p.button_style) for p in vols], [
+                (5.0, 1000, "primary"),
+                (10.0, 1800, None),
+            ])
+            self.assertEqual([(p.amount, p.price, p.button_style) for p in durs], [
+                (7.0, 500, "success"),
+            ])
+            self.assertTrue(all(p.plan_id == 7 and not p.is_general for p in packs))
+
+    async def test_form_replace_clears_when_empty_and_rejects_other_shop(self) -> None:
+        async with self.Session() as session:
+            session.add_all(
+                [
+                    Plan(id=1, name="Mine", price=1000, duration_days=30),
+                    Plan(
+                        id=2,
+                        name="Other",
+                        price=1000,
+                        duration_days=30,
+                        owner_reseller_id=99,
+                    ),
+                    ServiceAddonPack(
+                        id=1,
+                        name="old",
+                        kind="volume",
+                        amount=1,
+                        price=100,
+                        plan_id=1,
+                        is_general=False,
+                    ),
+                ]
+            )
+            await session.commit()
+            await replace_plan_scoped_packs_from_form(
+                session, self.staff, plan_id=1, form={}
+            )
+            await session.flush()
+            left = await list_packs_for_plan(
+                session, plan_id=1, reseller_id=None, active_only=False
+            )
+            self.assertEqual(left, [])
+            with self.assertRaises(ValueError):
+                await replace_plan_scoped_packs_from_form(
+                    session, self.staff, plan_id=2, form={
+                        "plan_vol_amount": ["1"],
+                        "plan_vol_price": ["100"],
+                        "plan_vol_style": ["inherit"],
+                    }
+                )
 
 
 class MigrationTests(unittest.TestCase):

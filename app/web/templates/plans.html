@@ -430,6 +430,7 @@
 {% endif %}
 
 <script src="/static/reseller-extra-packs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/user-plan-addon-packs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 <script src="/static/plans-tabs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 
 {# —— Unified plan modal —— #}
@@ -537,6 +538,11 @@
         {% set global_suffix = values.get('pg_username_suffix','') %}
         {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
         {% include "_plan_naming_fields.html" %}
+        {% set packs_editor_id = 'user-plan-addon-packs-create' %}
+        {% set plan_vol_packs = [] %}
+        {% set plan_dur_packs = [] %}
+        {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
+        {% include "_user_plan_addon_packs_editor.html" %}
         {% set plan_button_style = 'inherit' %}
         {% include "_plan_button_style_field.html" %}
         <div class="ui-switch-list">

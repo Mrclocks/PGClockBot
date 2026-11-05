@@ -26,7 +26,6 @@
 
   function setRowEnabled(row, enabled) {
     row.querySelectorAll("input, select, button").forEach((el) => {
-      if (el.hasAttribute("data-extra-pack-add")) return;
       if (enabled) {
         el.removeAttribute("disabled");
         if (el.matches('input[type="number"]')) el.required = true;
@@ -41,6 +40,11 @@
     if (!root) return;
     root.hidden = !visible;
     root.querySelectorAll("[data-extra-pack-row]").forEach((row) => setRowEnabled(row, visible));
+    root.querySelectorAll("[data-extra-pack-add]").forEach((btn) => {
+      btn.hidden = !visible;
+      if (visible) btn.removeAttribute("disabled");
+      else btn.setAttribute("disabled", "disabled");
+    });
   }
 
   function buildRow(kind, amount, styleValue, styleOptionsHtml) {
@@ -50,17 +54,13 @@
     const styleLabel = kind === "gb" ? "رنگ دکمه بسته حجم" : "رنگ دکمه بسته کاربر";
     const removeLabel = kind === "gb" ? "حذف بسته حجم" : "حذف بسته کاربر";
     const wrap = document.createElement("div");
-    wrap.className = "form-row extra-pack-row";
+    wrap.className = "extra-pack-row";
     wrap.setAttribute("data-extra-pack-row", "");
     wrap.innerHTML =
-      '<label class="form-field">مقدار' +
-      `<input name="${amountName}" type="number" min="1" max="100000" step="1" inputmode="numeric" dir="ltr" value="${Number(amount) || 1}" aria-label="${amountLabel}" required />` +
-      "</label>" +
-      '<div class="plan-color-field"><div class="btn-color-card plan-color-card">' +
-      '<span class="btn-color-label">رنگ دکمه</span>' +
-      `<select name="${styleName}" class="btn-color-select" data-tone="default" aria-label="${styleLabel}">${styleOptionsHtml}</select>` +
-      "</div></div>" +
-      `<button type="button" class="btn btn-sm btn-ghost" data-extra-pack-remove aria-label="${removeLabel}">حذف</button>`;
+      `<input name="${amountName}" class="extra-pack-amount" type="number" min="1" max="100000" step="1" ` +
+      `inputmode="numeric" dir="ltr" value="${Number(amount) || 1}" aria-label="${amountLabel}" placeholder="مقدار" required />` +
+      `<select name="${styleName}" class="btn-color-select extra-pack-style" data-tone="default" aria-label="${styleLabel}">${styleOptionsHtml}</select>` +
+      `<button type="button" class="btn btn-danger btn-sm extra-pack-remove" data-extra-pack-remove aria-label="${removeLabel}">حذف</button>`;
     const select = wrap.querySelector("select");
     if (select) {
       const want = styleValue == null ? "inherit" : String(styleValue);
@@ -81,11 +81,12 @@
     ["gb", "users"].forEach((kind) => {
       const box = root.querySelector(`[data-extra-packs-rows="${kind}"]`);
       if (!box || box.querySelector("[data-extra-pack-row]")) return;
-      const key = kind === "gb" ? "defaultGb" : "defaultUsers";
       const attr = kind === "gb" ? "data-default-gb" : "data-default-users";
       const amounts = parseCsvInts(root.getAttribute(attr), DEFAULTS[kind]);
       const html = styleOptionsFrom(root);
-      amounts.forEach((n) => box.appendChild(buildRow(kind, n, "inherit", html || '<option value="inherit">ارث از پیش‌فرض</option>')));
+      amounts.forEach((n) =>
+        box.appendChild(buildRow(kind, n, "inherit", html || '<option value="inherit">ارث از پیش‌فرض</option>'))
+      );
     });
   }
 
@@ -116,7 +117,7 @@
   }
 
   function mount(selector) {
-    document.querySelectorAll(selector || "[data-extra-packs-root]").forEach((root) => bind(root));
+    document.querySelectorAll(selector || "[data-extra-packs-root]").forEach((el) => bind(el));
   }
 
   const api = {

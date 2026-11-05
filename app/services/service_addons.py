@@ -627,6 +627,100 @@ async def delete_pack(
     await session.commit()
 
 
+MAX_PLAN_SCOPED_PACKS_PER_KIND = 20
+
+
+def _form_getlist(form: object, key: str) -> list[str]:
+    if hasattr(form, "getlist"):
+        return [str(v) for v in form.getlist(key)]  # type: ignore[attr-defined]
+    raw = form.get(key) if hasattr(form, "get") else None  # type: ignore[attr-defined]
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple)):
+        return [str(v) for v in raw]
+    return [str(raw)]
+
+
+async def replace_plan_scoped_packs_from_form(
+    session: AsyncSession,
+    staff: dict | None,
+    *,
+    plan_id: int,
+    form: object,
+) -> None:
+    """Replace plan-scoped volume/duration packs from the user-plan form fields.
+
+    Empty lists clear that kind's scoped catalog so the service falls back to
+    general/category packs for that kind. Does not commit — the caller does.
+    """
+    from app.services.button_styles import normalize_style
+    from app.services.users import current_shop_reseller_id
+
+    owner_id = require_catalog_owner_id(staff)
+    plan = await session.get(Plan, int(plan_id))
+    if plan is None:
+        raise ValueError("پلن یافت نشد")
+    plan_owner = getattr(plan, "owner_reseller_id", None)
+    if owner_id is None and plan_owner is not None:
+        raise ValueError("پلن متعلق به این فروشگاه نیست")
+    if owner_id is not None and int(plan_owner or 0) != int(owner_id):
+        raise ValueError("پلن متعلق به این فروشگاه نیست")
+
+    rid = owner_id if owner_id is not None else current_shop_reseller_id()
+    existing = await list_packs_for_plan(
+        session, plan_id=int(plan_id), reseller_id=rid, active_only=False
+    )
+    for pack in existing:
+        await session.delete(pack)
+
+    specs: list[tuple[str, str, str, str]] = [
+        (KIND_VOLUME, "plan_vol_amount", "plan_vol_price", "plan_vol_style"),
+        (KIND_DURATION, "plan_dur_amount", "plan_dur_price", "plan_dur_style"),
+    ]
+    for kind, amount_key, price_key, style_key in specs:
+        amounts = _form_getlist(form, amount_key)
+        prices = _form_getlist(form, price_key)
+        styles = _form_getlist(form, style_key)
+        if len(amounts) > MAX_PLAN_SCOPED_PACKS_PER_KIND:
+            raise ValueError(
+                f"حداکثر {MAX_PLAN_SCOPED_PACKS_PER_KIND} بسته برای هر نوع مجاز است"
+            )
+        for index, raw_amount in enumerate(amounts):
+            raw_price = prices[index] if index < len(prices) else "0"
+            raw_style = styles[index] if index < len(styles) else "inherit"
+            _tmp, k, amt, price_i, _desc = _validate_pack_fields(
+                name="بسته",
+                kind=kind,
+                amount=raw_amount,
+                price=raw_price,
+                description=None,
+            )
+            label = format_amount_label(k, amt)
+            if raw_style is None or str(raw_style).strip().lower() in {
+                "inherit",
+                "__inherit__",
+            }:
+                style: str | None = None
+            else:
+                style = normalize_style(str(raw_style)) or None
+            session.add(
+                ServiceAddonPack(
+                    name=label,
+                    kind=k,
+                    amount=amt,
+                    price=price_i,
+                    description=None,
+                    owner_reseller_id=owner_id,
+                    category_id=None,
+                    plan_id=int(plan_id),
+                    button_style=style,
+                    is_general=False,
+                    sort_order=index,
+                    is_active=True,
+                )
+            )
+
+
 def pack_volume_bytes(amount: float) -> int:
     """Bytes a volume pack adds, with the rounding the panel write uses."""
     return int(float(amount) * (1024**3))

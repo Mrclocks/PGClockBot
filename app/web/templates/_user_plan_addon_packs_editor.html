@@ -1,0 +1,75 @@
+{# Plan-scoped customer volume/duration packs on the user plan form.
+   Optional: plan_vol_packs / plan_dur_packs — list of {amount, price, button_style}
+   Optional: packs_editor_id (default user-plan-addon-packs)
+   Requires: pack_style_options or plan_style_options
+#}
+{% set editor_id = packs_editor_id if packs_editor_id is defined else 'user-plan-addon-packs' %}
+{% set vol_rows = plan_vol_packs if plan_vol_packs is defined else [] %}
+{% set dur_rows = plan_dur_packs if plan_dur_packs is defined else [] %}
+{% set style_opts = pack_style_options if pack_style_options is defined else plan_style_options %}
+
+<div id="{{ editor_id }}" class="extra-packs-editor pay-dest-list"
+     data-user-plan-packs-root>
+  <div class="pay-dest-head">
+    <strong class="pay-dest-title">بسته‌های حجم / زمان این پلن</strong>
+    <p class="muted update-card-caption">اختیاری. با تعریف بسته برای یک نوع، بسته‌های عمومی همان نوع برای سرویس‌های این پلن مخفی می‌شوند. نوع دیگر اگر بستهٔ مخصوص نداشته باشد همچنان عمومی/دسته‌ای می‌ماند.</p>
+  </div>
+
+  <div class="extra-packs-kind" data-user-pack-kind="volume">
+    <span class="form-field-label">بسته‌های حجم (گیگ)</span>
+    <div class="extra-packs-rows pay-dest-rows" data-user-pack-rows="volume">
+      {% for row in vol_rows %}
+      {% set cur = 'inherit' if row.button_style is none else (row.button_style or '') %}
+      {% set cur_tone = 'default' if cur in ('inherit', '') else cur %}
+      <div class="extra-pack-row" data-user-pack-row>
+        <input name="plan_vol_amount" class="extra-pack-amount" type="number" min="0.1" max="100000" step="0.1"
+               inputmode="decimal" dir="ltr" value="{{ row.amount }}"
+               aria-label="مقدار حجم بسته" placeholder="گیگ" required />
+        <input name="plan_vol_price" class="extra-pack-price" type="number" data-money min="0" step="1"
+               inputmode="numeric" dir="ltr" value="{{ row.price }}"
+               aria-label="قیمت بسته حجم" placeholder="قیمت" required />
+        <select name="plan_vol_style" class="btn-color-select extra-pack-style" data-tone="{{ cur_tone }}"
+                aria-label="رنگ دکمه بسته حجم">
+          {% for opt_val, opt_label, opt_tone in style_opts %}
+          <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+          {% endfor %}
+        </select>
+        <button type="button" class="btn btn-danger btn-sm extra-pack-remove"
+                data-user-pack-remove aria-label="حذف بسته حجم">حذف</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="pay-dest-add-row" data-user-pack-add="volume" aria-label="افزودن بسته حجم">
+      <span aria-hidden="true">+</span><span>افزودن</span>
+    </button>
+  </div>
+
+  <div class="extra-packs-kind" data-user-pack-kind="duration">
+    <span class="form-field-label">بسته‌های زمان (روز)</span>
+    <div class="extra-packs-rows pay-dest-rows" data-user-pack-rows="duration">
+      {% for row in dur_rows %}
+      {% set cur = 'inherit' if row.button_style is none else (row.button_style or '') %}
+      {% set cur_tone = 'default' if cur in ('inherit', '') else cur %}
+      <div class="extra-pack-row" data-user-pack-row>
+        <input name="plan_dur_amount" class="extra-pack-amount" type="number" min="1" max="3650" step="1"
+               inputmode="numeric" dir="ltr" value="{{ row.amount | int }}"
+               aria-label="مقدار زمان بسته" placeholder="روز" required />
+        <input name="plan_dur_price" class="extra-pack-price" type="number" data-money min="0" step="1"
+               inputmode="numeric" dir="ltr" value="{{ row.price }}"
+               aria-label="قیمت بسته زمان" placeholder="قیمت" required />
+        <select name="plan_dur_style" class="btn-color-select extra-pack-style" data-tone="{{ cur_tone }}"
+                aria-label="رنگ دکمه بسته زمان">
+          {% for opt_val, opt_label, opt_tone in style_opts %}
+          <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+          {% endfor %}
+        </select>
+        <button type="button" class="btn btn-danger btn-sm extra-pack-remove"
+                data-user-pack-remove aria-label="حذف بسته زمان">حذف</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="pay-dest-add-row" data-user-pack-add="duration" aria-label="افزودن بسته زمان">
+      <span aria-hidden="true">+</span><span>افزودن</span>
+    </button>
+  </div>
+</div>
