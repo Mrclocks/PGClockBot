@@ -8,7 +8,6 @@ Hybrid Owner ACL: platform web Owner keeps full *shop* power, but PasarGuard
 menus/actions are clamped to the env ``PG_USERNAME`` role (fail-closed).
 """
 
-import time
 from typing import Any, Mapping
 
 from app.services.redact import user_safe_error
@@ -42,21 +41,44 @@ PG_FEATURE_LABELS: dict[str, str] = {
     "pg_admins": "ادمین",
 }
 
-# Short-lived cache: role_id → (monotonic_at, features, raw_role)
-# Menus must track GET /api/admin like quotas — keep this only as a fallback.
-_ROLE_CACHE: dict[int, tuple[float, list[str], dict]] = {}
-# Keep short: sidebar/menus must stay near live GET /api/admin (stale ACL = wrong menus).
-_ROLE_CACHE_TTL = 8.0
-
-# Platform env-credential capability cache: key → (monotonic_at, payload)
-_PLATFORM_CAPS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
-_PLATFORM_CAPS_TTL = 8.0
-
-
 def clear_platform_pg_capability_cache() -> None:
-    """Drop cached Owner PG ACL (call after setup / PG credential changes)."""
-    _PLATFORM_CAPS_CACHE.clear()
-    _ROLE_CACHE.clear()
+    """Drop cached PG ACL probes (call after setup / PG credential / permission changes)."""
+    from app.services.pg_read_cache import invalidate_capability_cache
+
+    invalidate_capability_cache()
+
+
+def _capability_ident(*, base_url: str, username: str, partition: str = "platform") -> str:
+    """Partition capability answers by panel identity; never share across shops."""
+    user = (username or "").strip().lower()
+    base = (base_url or "").rstrip("/")
+    if user:
+        return f"u:{user}@{base}:{partition}"
+    return f"owner@{base}:{partition}"
+
+
+def _client_capability_ident(pg: Any) -> str:
+    """Prefer the client's own cache partition; never await / share across shops."""
+    import inspect
+
+    bound = getattr(pg, "_read_cache_ident", None)
+    if callable(bound):
+        try:
+            value = bound()
+        except Exception:
+            value = None
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if inspect.isawaitable(value):
+            # AsyncMock or similar — ignore and fall back to attributes.
+            try:
+                value.close()  # type: ignore[attr-defined]
+            except Exception:
+                pass
+    uname = str(getattr(pg, "_login_username", "") or "").strip()
+    base = str(getattr(pg, "base_url", "") or "")
+    partition = str(getattr(pg, "_cache_partition", "role") or "role")
+    return _capability_ident(base_url=base, username=uname, partition=partition)
 
 
 def _nested_role(admin: dict | None) -> dict | None:
@@ -188,6 +210,13 @@ async def resolve_platform_pg_capabilities(
     from app.config import get_settings
     from app.services.pasarguard import PasarGuardClient, PasarGuardError, new_panel_http_client
 
+    from app.services.pg_read_cache import (
+        CAPABILITY_PROBE_MAX_AGE_SEC,
+        CAPABILITY_PROBE_PATH,
+        cache_get,
+        cache_put,
+    )
+
     settings = get_settings()
     env_username = getattr(settings, "pg_username", None)
     env_password = getattr(settings, "pg_password", None)
@@ -201,18 +230,26 @@ async def resolve_platform_pg_capabilities(
         "\r", ""
     ).strip()
     # base_url override only for setup probe (temporary client)
-    cache_key = f"{(base_url or env_base_url or '').rstrip('/')}|{uname.lower()}"
-    now = time.monotonic()
-    if (
-        use_cache
-        and username is None
-        and password is None
-        and api_key is None
-        and base_url is None
-    ):
-        hit = _PLATFORM_CAPS_CACHE.get(cache_key)
-        if hit and (now - hit[0]) < _PLATFORM_CAPS_TTL:
-            return dict(hit[1])
+    own_client = bool(
+        username is not None
+        or password is not None
+        or api_key is not None
+        or base_url is not None
+    )
+    cache_ident = _capability_ident(
+        base_url=str(base_url or env_base_url or ""),
+        username=uname,
+        partition="platform",
+    )
+    if use_cache and not own_client:
+        hit = cache_get(
+            cache_ident,
+            CAPABILITY_PROBE_PATH,
+            None,
+            max_age=CAPABILITY_PROBE_MAX_AGE_SEC,
+        )
+        if isinstance(hit, dict) and hit.get("ok") is True:
+            return dict(hit)
 
     empty: dict[str, Any] = {
         "ok": False,
@@ -229,12 +266,6 @@ async def resolve_platform_pg_capabilities(
         return empty
 
     client: PasarGuardClient | None = None
-    own_client = bool(
-        username is not None
-        or password is not None
-        or api_key is not None
-        or base_url is not None
-    )
     try:
         if own_client:
             # Temporary client for setup probe — do not touch global get_pg() singleton.
@@ -328,20 +359,17 @@ async def resolve_platform_pg_capabilities(
             "role": role,
             "admin": admin,
         }
-        if use_cache and not own_client:
-            _PLATFORM_CAPS_CACHE[cache_key] = (now, dict(payload))
+        # Cache only successful probes; failures stay fail-closed without a long TTL.
+        if use_cache and not own_client and payload["ok"]:
+            cache_put(cache_ident, CAPABILITY_PROBE_PATH, None, dict(payload))
         return payload
     except PasarGuardError as e:
         empty["error"] = e.user_message(fallback=str(e))
-        if use_cache and not own_client:
-            _PLATFORM_CAPS_CACHE[cache_key] = (now, dict(empty))
         return empty
     except Exception as e:
         # Transport errors carry internal hosts and ports; show a mapped Persian cause only.
         logger.warning("PasarGuard capability probe failed", exc_info=True)
         empty["error"] = user_safe_error(e, fallback="خطا در خواندن نقش پاسارگارد")
-        if use_cache and not own_client:
-            _PLATFORM_CAPS_CACHE[cache_key] = (now, dict(empty))
         return empty
     finally:
         if own_client and client is not None:
@@ -540,24 +568,36 @@ async def resolve_reseller_pg_features(
     *,
     client: Any | None = None,
 ) -> tuple[list[str], dict | None]:
-    """Fetch role from PasarGuard and return (feature_keys, raw_role). Cached ~60s.
+    """Fetch role from PasarGuard and return (feature_keys, raw_role).
 
-    ``client`` must be the caller-allowed PG client (Principal/parent/reseller/staff).
-    Omitting ``client`` uses Owner ``get_pg()`` — Owner/platform paths only.
+    Cached ~3 minutes per client identity via ``pg_read_cache`` so two shops never
+    share an answer. ``client`` must be the caller-allowed PG client
+    (Principal/parent/reseller/staff). Omitting ``client`` uses Owner ``get_pg()``.
     """
+    from app.services.pg_read_cache import (
+        CAPABILITY_PROBE_MAX_AGE_SEC,
+        ROLE_FEATURES_PATH,
+        cache_get,
+        cache_put,
+    )
+
     if not pg_role_id:
         return [], None
     rid = int(pg_role_id)
-    now = time.monotonic()
-    hit = _ROLE_CACHE.get(rid)
-    if hit and (now - hit[0]) < _ROLE_CACHE_TTL:
-        return list(hit[1]), dict(hit[2]) if isinstance(hit[2], dict) else hit[2]
 
     pg = client
     if pg is None:
         from app.services.pasarguard import get_pg
 
         pg = get_pg()
+
+    ident = _client_capability_ident(pg)
+    params = {"role_id": rid}
+    cached = cache_get(ident, ROLE_FEATURES_PATH, params, max_age=CAPABILITY_PROBE_MAX_AGE_SEC)
+    if isinstance(cached, dict) and cached.get("ok") is True:
+        features = list(cached.get("features") or [])
+        role = cached.get("role")
+        return features, dict(role) if isinstance(role, dict) else None
 
     role = None
     try:
@@ -572,7 +612,12 @@ async def resolve_reseller_pg_features(
     if not isinstance(role, dict):
         return [], None
     features = map_pg_role_to_features(role)
-    _ROLE_CACHE[rid] = (now, list(features), dict(role))
+    cache_put(
+        ident,
+        ROLE_FEATURES_PATH,
+        params,
+        {"ok": True, "features": list(features), "role": dict(role)},
+    )
     return features, role
 
 

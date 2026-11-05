@@ -25,6 +25,6 @@ class PanelAssetCacheTests(unittest.TestCase):
 
     def test_money_and_list_editors_use_the_current_script_content(self) -> None:
         static_dir = Path(__file__).resolve().parents[1] / "app/web/static"
-        for name in ("money-inputs.js", "list-inputs.js"):
+        for name in ("money-inputs.js", "list-inputs.js", "panel_ok_flash.js"):
             with self.subTest(script=name):
                 self.assertEqual(get_panel_asset_cache_key(name), build_asset_cache_key(static_dir / name))

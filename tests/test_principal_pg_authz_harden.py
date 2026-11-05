@@ -20,7 +20,7 @@ from app.services.org_principals import (
 )
 from app.services.pasarguard import PasarGuardError, get_pg_for_principal
 from app.services.pg_access import (
-    _ROLE_CACHE,
+    clear_platform_pg_capability_cache,
     enrich_staff_pg_from_role,
     resolve_reseller_pg_features,
     staff_has_pg_admins_create,
@@ -48,10 +48,10 @@ class PrincipalPgAuthzHardenTests(unittest.IsolatedAsyncioTestCase):
         self.Session = async_sessionmaker(
             self.engine, expire_on_commit=False, class_=AsyncSession
         )
-        _ROLE_CACHE.clear()
+        clear_platform_pg_capability_cache()
 
     async def asyncTearDown(self) -> None:
-        _ROLE_CACHE.clear()
+        clear_platform_pg_capability_cache()
         await self.engine.dispose()
 
     async def _siblings(self, session: AsyncSession) -> tuple[OrgPrincipal, OrgPrincipal]:
@@ -246,7 +246,7 @@ class ResellerPlansStaffCtxTests(unittest.IsolatedAsyncioTestCase):
                 side_effect=AssertionError("reseller L1 must not use Owner get_pg()"),
             ),
         ):
-            _ROLE_CACHE.clear()
+            clear_platform_pg_capability_cache()
             staff = await _staff_ctx(profile, MagicMock())
         self.assertEqual(staff["role"], "reseller")
         self.assertEqual(staff["bot_user_id"], 9)

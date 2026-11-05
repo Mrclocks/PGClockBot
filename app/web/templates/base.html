@@ -17,6 +17,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="{{ brand_name }}" />
   <script src="/static/panel_widget_request.js?v={{ panel_widget_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/panel_ok_flash.js?v={{ panel_ok_flash_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   {% if csrf_token %}<meta name="csrf-token" content="{{ csrf_token }}" />{% endif %}
   <title>{% block title %}پنل مدیریت{% endblock %} · {{ brand_name }}</title>
   <script{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>

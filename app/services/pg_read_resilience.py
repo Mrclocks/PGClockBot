@@ -244,6 +244,12 @@ def _pause_reads(state: _PanelState, reason: str, now: float) -> None:
         "PasarGuard web reads paused reason=%s retry_after=%ss recent=%s",
         reason, cooldown, pg_link_health.summary_text(),
     )
+    try:
+        from app.services.pg_link_alerts import schedule_circuit_pause_alert
+
+        schedule_circuit_pause_alert(reason if reason in pg_link_health.KIND_LABELS else None)
+    except Exception:
+        logger.debug("PasarGuard link alert schedule after pause failed", exc_info=True)
 
 
 def _mark_healthy(state: _PanelState) -> None:
@@ -279,6 +285,15 @@ def note_successful_panel_contact(base_url: str) -> None:
         return
     if state.blocked_until > 0.0 or state.pause_count > 0 or state.recent_failures:
         _mark_healthy(state)
+
+
+def force_mark_circuit_healthy(base_url: str) -> None:
+    """Watchdog/manual recovery: clear a pause after a verified successful probe."""
+    try:
+        state = _panel_state(base_url)
+    except PgReadUnavailable:
+        return
+    _mark_healthy(state)
 
 
 def _consume_dns_result(task: asyncio.Task[str], state: _PanelState) -> None:

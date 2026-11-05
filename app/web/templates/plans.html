@@ -430,6 +430,7 @@
 {% endif %}
 
 <script src="/static/reseller-extra-packs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/user-plan-addon-packs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 <script src="/static/plans-tabs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 
 {# —— Unified plan modal —— #}
@@ -537,6 +538,23 @@
         {% set global_suffix = values.get('pg_username_suffix','') %}
         {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
         {% include "_plan_naming_fields.html" %}
+        <div id="user-buy-extra-block">
+          <div class="ui-switch-list">
+            {{ switch('allow_buy_extra', 'امکان خرید حجم و زمان اضافه', checked=false, help='بسته‌های همین پلن در ربات و مینی‌اپ دیده می‌شوند؛ قیمت هر پله = نرخ واحد × مقدار', id='user-allow-buy-extra') }}
+          </div>
+          <div class="form-row" id="user-extra-prices" hidden>
+            <label class="form-field">قیمت هر گیگ حجم (تومان)
+              <input name="extra_gb_price" id="user-extra-gb-price" type="number" data-money min="0" value="0" />
+            </label>
+            <label class="form-field">قیمت هر ماه زمان (تومان)
+              <input name="extra_month_price" id="user-extra-month-price" type="number" data-money min="0" value="0" />
+            </label>
+          </div>
+          {% set packs_editor_id = 'user-plan-addon-packs-create' %}
+          {% set packs_hidden = true %}
+          {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
+          {% include "_user_plan_addon_packs_editor.html" %}
+        </div>
         {% set plan_button_style = 'inherit' %}
         {% include "_plan_button_style_field.html" %}
         <div class="ui-switch-list">
@@ -1301,6 +1319,20 @@
     }
   }
 
+  function syncUserExtras(){
+    const prices = document.getElementById('user-extra-prices');
+    const packs = document.getElementById('user-plan-addon-packs-create');
+    const sw = document.querySelector('#user-buy-extra-block input[name="allow_buy_extra"]');
+    const on = sw ? !!sw.checked : false;
+    if (prices) prices.hidden = !on;
+    if (window.UserPlanAddonPacks && packs) {
+      if (on) window.UserPlanAddonPacks.seedDefaultsIfEmpty(packs);
+      window.UserPlanAddonPacks.setEditorVisible(packs, on);
+    } else if (packs) {
+      packs.hidden = !on;
+    }
+  }
+
   function syncResellerForm(){
     const kind = kindSel ? kindSel.value : 'fixed';
     const billing = document.getElementById('reseller-billing-mode');
@@ -1394,7 +1426,9 @@
   }
 
   document.addEventListener('change', (e) => {
-    if (e.target && e.target.name === 'allow_buy_extra') syncResellerExtras();
+    if (!e.target || e.target.name !== 'allow_buy_extra') return;
+    if (e.target.closest('#user-buy-extra-block')) syncUserExtras();
+    else syncResellerExtras();
   });
 
   function hideAllPanels(){
@@ -1450,6 +1484,7 @@
     } else {
       const key = 'users:' + kind;
       if (panels[key]) panels[key].hidden = false;
+      if (kind === 'fixed') syncUserExtras();
       if (kind === 'addon_volume' || kind === 'addon_duration') syncUserAddonForm();
     }
   }

@@ -12779,29 +12779,77 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   margin: 0;
 }
 
-/* Reseller plan extra-pack editor (per-plan GB/user stairs). */
+/* Reseller / user plan pack editors — one-line stairs, pay-dest add row. */
 .extra-packs-editor {
   display: grid;
   gap: var(--space-3);
-  margin-top: var(--space-3);
+  margin-top: var(--space-2);
+  grid-column: 1 / -1;
+  width: 100%;
+}
+.extra-packs-editor[hidden] {
+  display: none !important;
 }
 .extra-packs-kind {
   display: grid;
-  gap: var(--space-2);
-}
-.extra-packs-kind-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 .extra-packs-rows {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 .extra-pack-row {
-  align-items: end;
+  /* Desktop: [amount|style equal] + delete. Fields share one nested 1fr|1fr grid. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+  box-sizing: border-box;
+  width: 100%;
 }
-.extra-pack-row .plan-color-field {
-  min-width: 10rem;
+.extra-pack-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-2);
+  min-width: 0;
+  width: 100%;
+}
+.extra-pack-fields > .extra-pack-amount,
+.extra-pack-fields > .extra-pack-style {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+.extra-pack-fields > .extra-pack-style {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.extra-pack-row > .extra-pack-remove {
+  width: auto;
+  margin: 0;
+  justify-self: stretch;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.extra-packs-kind > .pay-dest-add-row {
+  margin-top: 2px;
+}
+.extra-packs-kind > .pay-dest-add-row[hidden] {
+  display: none !important;
+}
+@media (max-width: 640px) {
+  /* Mobile: amount | style equal on one row; delete full-width under them. */
+  .extra-pack-row {
+    grid-template-columns: 1fr;
+  }
+  .extra-pack-row > .extra-pack-remove {
+    width: 100%;
+    justify-self: stretch;
+  }
 }
