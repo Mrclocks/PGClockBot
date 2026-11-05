@@ -41,9 +41,53 @@ def _item_style(ui: dict, item_style: str | None = None) -> str | None:
     return style_or_none(ui, "guides", fallback="primary")
 
 
+_CALLBACK_DATA_MAX = 64
+_AUDIENCE_TOKENS = frozenset({"user", "reseller"})
+
+
 def _list_callback(svc_id: int | None, audience: str) -> str:
     base = f"guide:list:{int(svc_id or 0)}"
     return f"{base}:reseller" if audience == "reseller" else base
+
+
+def _open_callback(prefix: str, gid: str, *, audience: str = "user") -> str:
+    """Build ``guide:open:…`` callback_data within Telegram's 64-byte limit.
+
+    When audience is reseller, the ``:reseller`` suffix is kept intact and the
+    guide id is truncated first — truncating the whole string would drop the
+    suffix and silently fall back to user guides.
+    """
+    if audience == "reseller":
+        suffix = ":reseller"
+        room = _CALLBACK_DATA_MAX - len(prefix) - len(suffix)
+        return f"{prefix}{gid[: max(0, room)]}{suffix}"
+    return f"{prefix}{gid}"[:_CALLBACK_DATA_MAX]
+
+
+def _parse_open_callback(
+    parts: list[str], known_ids: set[str]
+) -> tuple[int, str, str]:
+    """Parse ``guide:open:{svc}:{gid}[:audience]``.
+
+    Prefer a full trailing match against ``known_ids`` so a guide whose id
+    itself ends with ``:user`` / ``:reseller`` is not mis-parsed as an
+    audience token. Only strip a trailing audience token when the full id is
+    unknown and the stripped id is known.
+    """
+    svc_id = 0
+    try:
+        svc_id = int(parts[2]) if len(parts) > 2 else 0
+    except (TypeError, ValueError):
+        svc_id = 0
+    rest = parts[3:]
+    gid_full = ":".join(rest)
+    if gid_full in known_ids:
+        return svc_id, gid_full, "user"
+    if rest and rest[-1] in _AUDIENCE_TOKENS:
+        stripped = ":".join(rest[:-1])
+        if stripped in known_ids:
+            return svc_id, stripped, rest[-1]
+    return svc_id, gid_full, "user"
 
 
 def guides_list_keyboard(
@@ -59,12 +103,9 @@ def guides_list_keyboard(
     for g in items[: kb.LIST_BUTTON_CAP]:
         gid = str(g.get("id") or "")
         title = str(g.get("title") or "آموزش")[:64]
-        open_cb = f"{prefix}{gid}"
-        if audience == "reseller":
-            open_cb = f"{open_cb}:reseller"
         kwargs: dict = {
             "text": title,
-            "callback_data": open_cb[:64],
+            "callback_data": _open_callback(prefix, gid, audience=audience),
         }
         st = _item_style(ui, g.get("style") or g.get("button_style"))
         if st:
@@ -170,19 +211,14 @@ async def guide_open_cb(
 ):
     parts = (callback.data or "").split(":")
     # guide:open:{svc_id}:{guide_id}[:audience]
-    svc_id = 0
-    audience = "user"
-    try:
-        svc_id = int(parts[2]) if len(parts) > 2 else 0
-    except (TypeError, ValueError):
-        svc_id = 0
-    rest = parts[3:]
-    if rest and rest[-1] in {"user", "reseller"}:
-        audience = rest[-1]
-        rest = rest[:-1]
-    gid = ":".join(rest)
     ui = await get_all_settings(session)
     items = await get_connection_guides(session)
+    known_ids = {
+        str(g.get("id") or "")
+        for g in items
+        if g.get("enabled", True) and g.get("id") is not None
+    }
+    svc_id, gid, audience = _parse_open_callback(parts, known_ids)
     guide = next((g for g in items if str(g.get("id")) == gid and g.get("enabled", True)), None)
     if not guide:
         await callback.answer("آموزش یافت نشد", show_alert=True)
