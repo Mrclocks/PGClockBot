@@ -2242,6 +2242,14 @@ def admin_user_actions(
         ],
         [
             InlineKeyboardButton(
+                text="⭐ امتیاز +", callback_data=f"adm:users:pcredit:{user_id}"
+            ),
+            InlineKeyboardButton(
+                text="⭐ امتیاز −", callback_data=f"adm:users:pdebit:{user_id}"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
                 text="📦 سرویس‌ها", callback_data=f"adm:users:svcs:{user_id}"
             ),
             InlineKeyboardButton(
@@ -2257,8 +2265,9 @@ def admin_user_actions(
         ],
     ]
     if has_services:
+        # After wallet + points rows so امتیاز stays next to کیف پول.
         rows.insert(
-            1,
+            2,
             [
                 InlineKeyboardButton(
                     text="🔄 تمدید سریع",

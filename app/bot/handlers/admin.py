@@ -24,6 +24,7 @@ from app.services.color_tags import risk_mark
 from app.services.home_overview import bot_dashboard_summary
 from app.services.formatting import (
     bot_user_panel_label,
+    format_number,
     format_system_stats,
     format_toman,
     order_status_fa,
@@ -2476,14 +2477,17 @@ async def _user_card(
             bits.append(f"حجم {ops.volume_text}")
         alert_line = "🔔 اعلان: " + " · ".join(bits) if bits else "🔔 اعلان فعال"
     from app.services.color_tags import bot_tag_button_label, effective_color_tag
+    from app.services.loyalty import points_balance
 
     tag_line = bot_tag_button_label(effective_color_tag(user))
+    pts = await points_balance(session, user, None)
     text = format_staff_customer_card(
         flags=flags,
         display_name=user.full_name or user.username or "—",
         telegram_id=int(user.telegram_id),
         username=user.username,
         wallet_text=format_toman(user.wallet_balance, get_settings().currency),
+        points_text=format_number(pts),
         service_count=int(ops.service_count),
         is_blocked=bool(user.is_blocked),
         role=user.role,

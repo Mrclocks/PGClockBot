@@ -110,6 +110,7 @@ def bot_routers() -> list[Router]:
         admin_plans,
         admin_pg_nodes,
         admin_pg_users,
+        admin_points_adjust,
         admin_settings,
         admin_wallet_adjust,
         reseller_plan_extra_packs_admin,
@@ -215,7 +216,9 @@ def bot_routers() -> list[Router]:
         admin_pg_nodes.router,
         admin_plans.router,
         reseller_plan_extra_packs_admin.router,
+        # Before admin.router so adjust callbacks and FSM win over the large admin module.
         admin_wallet_adjust.router,
+        admin_points_adjust.router,
         admin.router,
         stale_menu.router,
     ]
@@ -243,6 +246,7 @@ def create_dispatcher() -> Dispatcher:
         admin_plans,
         admin_pg_nodes,
         admin_pg_users,
+        admin_points_adjust,
         admin_settings,
         admin_wallet_adjust,
         button_colors,
@@ -258,6 +262,7 @@ def create_dispatcher() -> Dispatcher:
     owner_gate = _RequireBotOwnerPrincipal()
     for r in (
         admin.router,
+        admin_points_adjust.router,
         admin_backup.router,
         admin_settings.router,
         admin_wallet_adjust.router,
