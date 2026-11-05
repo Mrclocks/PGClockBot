@@ -44,9 +44,10 @@ class PaygSuspendHelpersTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payg_purchase_min_wallet(10_000), 20_001)
 
     async def test_buy_extra_gb_rejects_forged_amount(self):
-        from app.services.reseller_capacity import buy_extra_gb
+        from app.services.reseller_capacity import unit_offer
 
         plan = MagicMock(
+            id=None,
             allow_buy_extra=True,
             billing_mode="fixed",
             plan_kind="subscription",
@@ -57,11 +58,8 @@ class PaygSuspendHelpersTests(unittest.IsolatedAsyncioTestCase):
             billing_balance=100_000,
             pg_admin_username="r1",
         )
-        user = MagicMock(id=1, wallet_balance=1_000_000)
         with self.assertRaises(ValueError):
-            await buy_extra_gb(
-                AsyncMock(), user=user, profile=profile, plan=plan, gb=999_999, generation=0,
-            )
+            unit_offer(profile, plan, "gb", 999_999)
 
 
 class ResellerCapacityPlanTests(unittest.TestCase):

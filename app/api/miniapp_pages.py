@@ -541,6 +541,17 @@ async def _renewal_already_ordered(session: AsyncSession, user: BotUser, preview
     return order_id is not None
 
 
+async def _addon_already_ordered(session: AsyncSession, user: BotUser, preview: object) -> bool:
+    """True when this preview's request key already created the caller's addon order."""
+    key = preview.get("request_key") if isinstance(preview, dict) else None
+    if not isinstance(key, str) or not key:
+        return False
+    order_id = await session.scalar(
+        select(Order.id).where(Order.addon_request_key == key, Order.user_id == int(user.id)).limit(1)
+    )
+    return order_id is not None
+
+
 def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
     @app.get("/api/mini/service/{service_id}/cancellation")
     async def mini_cancellation(request: Request, service_id: int, session: AsyncSession = Depends(get_db)):
@@ -707,16 +718,42 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             }
         )
 
+    @app.get("/api/mini/service/{service_id}/addon-preview")
+    async def mini_preview_addon(
+        service_id: int,
+        pack_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.db.models import ServiceAddonPack
+        from app.services.service_addons import preview_addon
+
+        user = await load_mini_user(session, request)
+        _require_commerce(user)
+        svc = await _addon_service(session, user, service_id, shop_id=mini_scope(request).shop_id)
+        pack = await session.get(ServiceAddonPack, pack_id)
+        try:
+            return _no_store(
+                await preview_addon(session, user_id=user.id, service=svc, pack=pack)
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                400, _safe_client_message(exc, fallback="دریافت پیش‌نمایش ناموفق")
+            ) from None
+        except Exception:
+            log.exception("mini addon preview failed user=%s svc=%s", user.id, service_id)
+            raise HTTPException(503, "دریافت اطلاعات سرویس ناموفق بود؛ دوباره تلاش کنید") from None
+
     @app.post("/api/mini/addon")
     async def mini_addon(request: Request, session: AsyncSession = Depends(get_db)):
         from app.db.models import ServiceAddonPack
         from app.services.orders import pay_with_wallet
         from app.services.service_addons import (
+            addon_terms,
             create_addon_order,
             kind_label,
-            pack_matches_service_category,
             pack_matches_shop,
-            service_plan_category_id,
+
         )
 
         user = await load_mini_user(session, request)
@@ -724,6 +761,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         user_id = int(user.id)
         try:
             body = await request.json()
+            if not isinstance(body, dict):
+                raise ValueError("bad json")
             service_id = int(body.get("service_id"))
             pack_id = int(body.get("pack_id"))
             kind = body.get("kind")
@@ -741,16 +780,29 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             raise HTTPException(400, "بسته یافت نشد")
         if kind is not None and pack.kind != kind:
             raise HTTPException(400, "نوع بسته با بخش انتخاب‌شده مطابقت ندارد")
-        svc_cat = await service_plan_category_id(session, svc)
-        if not pack_matches_service_category(pack, svc_cat):
-            raise HTTPException(400, "این بسته برای دستهٔ پلن این سرویس نیست")
         await session.refresh(user)
+        preview = body.get("preview")
+        retrying = await _addon_already_ordered(session, user, preview)
         quote = await quote_product(session, pack, shop_id=shop_id)
-        if quote.price > await _scope_wallet(session, user, request):
+        if not retrying and quote.price > await _scope_wallet(session, user, request):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
+            if (
+                not isinstance(preview, dict)
+                or preview.get("terms") != addon_terms(pack)
+                or preview.get("price") != sale_price(pack)
+                or not preview.get("request_key")
+            ):
+                raise ValueError(
+                    "پیش‌نمایش افزایش معتبر نیست یا بسته تغییر کرده؛ دوباره بسته را انتخاب کنید"
+                )
             order = await create_addon_order(
-                session, user_id=user.id, service=svc, pack=pack, expected_price=body.get("price")
+                session,
+                user_id=user.id,
+                service=svc,
+                pack=pack,
+                expected_price=preview["price"],
+                request_key=preview["request_key"],
             )
             order = await pay_with_wallet(session, order, user)
             await session.refresh(user)

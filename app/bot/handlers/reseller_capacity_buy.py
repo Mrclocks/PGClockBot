@@ -24,8 +24,6 @@ from app.services.formatting import format_message, format_toman
 from app.services.redact import user_safe_error
 from app.services.reseller_access import load_reseller_capacity_actor
 from app.services.reseller_capacity import (
-    ALLOWED_EXTRA_GB,
-    ALLOWED_EXTRA_USERS,
     buy_extra_gb,
     buy_extra_users,
     load_reseller_plan,
@@ -40,6 +38,10 @@ from app.services.reseller_capacity_orders import (
     parse_note,
 )
 from app.services.reseller_packs import buy_addon_pack
+from app.services.reseller_plan_extra_packs import (
+    active_amounts_for_plan,
+    get_pack_for_plan,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,12 +107,23 @@ async def _actor(
 
 
 def _parse_ok(data: str, prefix: str) -> tuple[int, int] | None:
-    """(item, generation) from ``prefix{item}:{generation}``; None for anything malformed."""
-    parts = data.removeprefix(prefix).split(":")
+    """(item, generation) from ``prefix{item}:{generation}``; None for anything malformed.
+
+    Also accepts ``prefixid:{pack_id}:{generation}`` where item is the pack id.
+    """
+    rest = data.removeprefix(prefix)
+    parts = rest.split(":")
+    if len(parts) == 3 and parts[0] == "id" and parts[1].isdigit() and parts[2].isdigit():
+        item, generation = int(parts[1]), int(parts[2])
+        return (item, generation) if 0 < item <= _ID_MAX and generation <= _ID_MAX else None
     if len(parts) != 2 or not all(p.isdigit() for p in parts):
         return None
     item, generation = int(parts[0]), int(parts[1])
     return (item, generation) if 0 < item <= _ID_MAX and generation <= _ID_MAX else None
+
+
+def _ok_uses_pack_id(data: str, prefix: str) -> bool:
+    return data.removeprefix(prefix).startswith("id:")
 
 
 async def _show_done(callback: CallbackQuery, title: str, lines: list[str]) -> None:
@@ -169,13 +182,23 @@ async def res_buy_gb_pay(
     if actor is None or actor[2] is None:
         await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
-    if parsed is None or parsed[0] not in ALLOWED_EXTRA_GB:
+    owner, profile, plan = actor
+    if parsed is None:
         await callback.answer("مقدار مجاز نیست", show_alert=True)
         return
-    owner, profile, plan = actor
+    gb = parsed[0]
+    if _ok_uses_pack_id(callback.data or "", GB_OK):
+        pack = await get_pack_for_plan(session, plan_id=int(plan.id), pack_id=parsed[0])
+        if pack is None or pack.kind != KIND_GB or not pack.is_active:
+            await callback.answer("مقدار مجاز نیست", show_alert=True)
+            return
+        gb = int(pack.amount)
+    elif gb not in await active_amounts_for_plan(session, int(plan.id), KIND_GB):
+        await callback.answer("مقدار مجاز نیست", show_alert=True)
+        return
     try:
         result = await buy_extra_gb(
-            session, user=owner, profile=profile, plan=plan, gb=parsed[0], generation=parsed[1],
+            session, user=owner, profile=profile, plan=plan, gb=gb, generation=parsed[1],
         )
     except ValueError as exc:
         await callback.answer(user_safe_error(exc, limit=180), show_alert=True)
@@ -199,13 +222,23 @@ async def res_buy_users_pay(
     if actor is None or actor[2] is None:
         await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
-    if parsed is None or parsed[0] not in ALLOWED_EXTRA_USERS:
+    owner, profile, plan = actor
+    if parsed is None:
         await callback.answer("مقدار مجاز نیست", show_alert=True)
         return
-    owner, profile, plan = actor
+    count = parsed[0]
+    if _ok_uses_pack_id(callback.data or "", USERS_OK):
+        pack = await get_pack_for_plan(session, plan_id=int(plan.id), pack_id=parsed[0])
+        if pack is None or pack.kind != KIND_USERS or not pack.is_active:
+            await callback.answer("مقدار مجاز نیست", show_alert=True)
+            return
+        count = int(pack.amount)
+    elif count not in await active_amounts_for_plan(session, int(plan.id), KIND_USERS):
+        await callback.answer("مقدار مجاز نیست", show_alert=True)
+        return
     try:
         result = await buy_extra_users(
-            session, user=owner, profile=profile, plan=plan, count=parsed[0], generation=parsed[1],
+            session, user=owner, profile=profile, plan=plan, count=count, generation=parsed[1],
         )
     except ValueError as exc:
         await callback.answer(user_safe_error(exc, limit=180), show_alert=True)
