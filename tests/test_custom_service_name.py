@@ -342,7 +342,7 @@ class RequestedUsernameMigrationTests(unittest.TestCase):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
-        path = Path(__file__).resolve().parents[1] / "alembic/versions/0084_order_requested_username.py"
+        path = Path(__file__).resolve().parents[1] / "alembic/versions/0085_order_requested_username.py"
         spec = importlib.util.spec_from_file_location("requested_username_migration", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)

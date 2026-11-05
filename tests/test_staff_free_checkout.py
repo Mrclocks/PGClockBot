@@ -247,3 +247,24 @@ class StaffFreeHandlerTests(ShopFixture):
 
         callback.deliver.assert_not_awaited()
         self.assertEqual(callback.answer.await_args.args[0], feedback.NO_ACCESS)
+
+    async def test_a_delivered_free_order_sends_the_service_card_without_an_interim_notice(self) -> None:
+        from app.bot.handlers import staff_free_checkout as handler
+
+        order = await self.order(user_id=SHOP_ID, shop_id=SHOP_ID)
+        callback = MagicMock(data=f"pay:staff:{order.id}", answer=AsyncMock(), message=MagicMock(delete=AsyncMock()))
+        edit = AsyncMock()
+        with (
+            patch.object(handler, "is_customer_order_in_current_shop", return_value=True),
+            patch.object(handler, "deliver_staff_free_order", AsyncMock(return_value=(order, None, None))),
+            patch.object(handler, "send_delivery_to_user", AsyncMock()) as card,
+            patch("app.services.notifications.notify_new_subscription", AsyncMock()),
+            patch.object(handler, "safe_edit_text", edit),
+        ):
+            await handler.pay_staff_free_cb(
+                callback, self.session, await self.user(SHOP_ID), is_reseller_bot=True, reseller_owner_id=SHOP_ID
+            )
+
+        callback.message.delete.assert_awaited_once()
+        card.assert_awaited_once()
+        edit.assert_not_awaited()

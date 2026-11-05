@@ -955,6 +955,43 @@ class ResellerPlan(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    extra_packs: Mapped[list["ResellerPlanExtraPack"]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan"
+    )
+
+
+class ResellerPlanExtraPack(Base):
+    """Per-plan quick-buy stairs for reseller extra GB / user slots.
+
+    Amounts are priced with the parent plan's unit rates (``extra_gb_price`` /
+    ``extra_user_price``). Packs never leak across plans: every list and purchase
+    path filters by ``plan_id``.
+    """
+
+    __tablename__ = "reseller_plan_extra_packs"
+    __table_args__ = (
+        UniqueConstraint(
+            "plan_id", "kind", "amount", name="uq_reseller_plan_extra_pack_amount"
+        ),
+        Index("ix_reseller_plan_extra_packs_plan_kind", "plan_id", "kind"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(
+        ForeignKey("reseller_plans.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # gb | users
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    # NULL = inherit plan button style; "" = Telegram default; primary|success|danger
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    plan: Mapped["ResellerPlan"] = relationship(back_populates="extra_packs")
 
 
 class PgAdminSubscription(Base):

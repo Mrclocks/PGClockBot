@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,6 +66,17 @@ async def _announce_delivery(callback: CallbackQuery, session: AsyncSession, act
         logger.exception("notify_new_subscription failed order=%s", order.id)
 
 
+async def _remove_checkout(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    try:
+        await callback.message.delete()
+    except TelegramAPIError:
+        # Too old to delete: at least drop the payment buttons.
+        logger.debug("staff free checkout bubble not deleted", exc_info=True)
+        await safe_edit_text(callback.message, callback.message.html_text or "", reply_markup=None)
+
+
 async def _show(callback: CallbackQuery, title: str, body: str) -> None:
     if not callback.message:
         return
@@ -99,7 +111,8 @@ async def pay_staff_free_cb(
     await callback.answer()
     await clear_checkout_nav(state)
     if delivered is not None:
-        await _show(callback, "✅ دریافت رایگان ثبت شد", f"سفارش #{delivered.id}")
+        # The service card (link, QR, details) replaces the checkout; no interim notice.
+        await _remove_checkout(callback)
         await _announce_delivery(callback, session, db_user, delivered)
         return
     logger.warning("staff free delivery failed order=%s", order.id, exc_info=error)
