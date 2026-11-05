@@ -252,23 +252,36 @@ class CardButtonTests(unittest.TestCase):
             ctx.update(link_overrides)
         return env.get_template("_pg_link_health.html").render(**ctx)
 
-    def test_button_is_secondary_when_healthy(self) -> None:
+    def test_button_is_hidden_when_healthy(self) -> None:
         health.reset()
         health.record_success(0.05)
         html = self._render(health.snapshot())
-        self.assertIn("ارتباط مجدد", html)
-        self.assertIn('action="/pg-link/reconnect"', html)
-        self.assertIn('name="csrf_token"', html)
-        self.assertIn("btn-ghost", html)
-        self.assertIn('aria-label="ارتباط مجدد با پاسارگارد"', html)
+        self.assertIn("عادی", html)
+        self.assertNotIn("ارتباط مجدد", html)
+        self.assertNotIn('action="/pg-link/reconnect"', html)
 
-    def test_button_is_primary_when_paused(self) -> None:
+    def test_button_shows_when_paused(self) -> None:
         health.reset()
         health.record_success(0.05)
         html = self._render(health.snapshot({"paused": True, "retry_in_sec": 5, "pause_count": 1}))
         self.assertIn("متوقف", html)
         self.assertIn("ارتباط مجدد", html)
-        self.assertNotIn("btn-ghost", html)
+        self.assertIn('action="/pg-link/reconnect"', html)
+        self.assertIn('name="csrf_token"', html)
+        self.assertIn('aria-label="ارتباط مجدد با پاسارگارد"', html)
+
+    def test_button_shows_when_unstable(self) -> None:
+        health.reset()
+        health.record_failure("timeout")
+        html = self._render(health.snapshot())
+        self.assertIn("ناپایدار", html)
+        self.assertIn("ارتباط مجدد", html)
+
+    def test_button_shows_when_no_data(self) -> None:
+        health.reset()
+        html = self._render(health.snapshot())
+        self.assertIn("بدون داده", html)
+        self.assertIn("ارتباط مجدد", html)
 
 
 class RouteAuthzTests(unittest.IsolatedAsyncioTestCase):
