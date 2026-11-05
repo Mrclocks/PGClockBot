@@ -8,6 +8,7 @@ VPN quota/links are live from PasarGuard through ``UserService.pg_user_id``.
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import time
 from dataclasses import dataclass
@@ -21,11 +22,15 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import BotUser, BotUserShop, Plan, Role, UserService, WalletTransaction
 from app.services.formatting import (
+    copyable,
     expire_remaining_days,
     format_bytes,
     format_bytes_ratio,
     format_expire_short,
+    format_message,
+    info_block,
     is_on_hold_status,
+    kv_line,
     on_hold_expire_duration_seconds,
     status_label_plain,
     time_remaining_label,
@@ -1265,17 +1270,41 @@ async def detach_local_services_for_pg_user(
     return len(svc_ids)
 
 
+def _snapshot_plan(service: Any) -> Any:
+    """Plan already on the instance — never sync-lazy-load in async (MissingGreenlet)."""
+    data = getattr(service, "__dict__", None)
+    if isinstance(data, dict) and "plan" in data:
+        return data.get("plan")
+    # Non-ORM stubs (e.g. SimpleNamespace) expose plan as a normal attribute.
+    if not hasattr(service, "_sa_instance_state"):
+        return getattr(service, "plan", None)
+    return None
+
+
 def snapshot_telegram_lines(snap: ServiceSnapshot) -> str:
+    """Pretty Telegram HTML for one live service snapshot (staff screens)."""
     svc = snap.service
-    plan_name = svc.plan.name if svc.plan else "—"
-    lines = [
-        f"📦 سرویس #{svc.id} · {plan_name}",
-        f"وضعیت: {snap.status_fa}",
-        f"حجم: {snap.volume_text} (مانده {snap.remain_gb_text})",
-        f"زمان: {snap.expire_text} · مانده {snap.time_label}",
+    plan = _snapshot_plan(svc)
+    plan_name = html.escape(plan.name) if plan is not None and getattr(plan, "name", None) else "—"
+    username_raw = getattr(svc, "pg_username", None)
+    username = copyable(username_raw) if username_raw else "—"
+    rows = [
+        kv_line("👤", "نام‌کاربری", username),
+        kv_line("📋", "پلن", plan_name),
+        kv_line("📶", "وضعیت", html.escape(str(snap.status_fa))),
+        kv_line(
+            "📦",
+            "حجم",
+            f"{html.escape(str(snap.volume_text))} · مانده {html.escape(str(snap.remain_gb_text))}",
+        ),
+        kv_line(
+            "📅",
+            "انقضا",
+            f"{html.escape(str(snap.expire_text))} · مانده {html.escape(str(snap.time_label))}",
+        ),
     ]
     if snap.subscription_url:
-        lines.append(f"لینک: {snap.subscription_url}")
+        rows.append(kv_line("🔗", "لینک", copyable(snap.subscription_url)))
     if snap.error:
-        lines.append(f"⚠️ {snap.error}")
-    return "\n".join(lines)
+        rows.append(f"⚠️ {html.escape(str(snap.error))}")
+    return format_message(f"📦 سرویس #{svc.id}", info_block(rows))
