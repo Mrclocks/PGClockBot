@@ -1454,6 +1454,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 allow_buy_extra=bool(form.get("allow_buy_extra")) if billing_mode == "fixed" else False,
             ),
             renew_price=_parse_nonneg_int(form, "renew_price"),
+            carry_remaining_period=bool(form.get("carry_remaining_period")),
+            keep_extras_on_renew=bool(form.get("keep_extras_on_renew")),
             can_approve_receipts="payments" in parse_perms(perms),
             web_permissions=perms,
             bot_permissions=perms,
@@ -1608,6 +1610,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             plan.renew_pricing_mode = _parse_renew_pricing_mode(
                 form, allow_buy_extra=bool(plan.allow_buy_extra)
             )
+            plan.carry_remaining_period = bool(form.get("carry_remaining_period"))
+            plan.keep_extras_on_renew = bool(form.get("keep_extras_on_renew"))
             plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
             perms = _feature_perms_from_form(form)
             plan.web_permissions = perms
@@ -1771,6 +1775,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         plan.create_pg_admin = bool(form.get("create_pg_admin"))
         plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
         plan.renew_price = _parse_nonneg_int(form, "renew_price")
+        plan.carry_remaining_period = bool(form.get("carry_remaining_period"))
+        plan.keep_extras_on_renew = bool(form.get("keep_extras_on_renew"))
         plan.plan_kind = "subscription"
         plan.duration_days = _parse_nonneg_int(form, "duration_days")
         plan.included_gb = _parse_nonneg_int(form, "included_gb")

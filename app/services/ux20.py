@@ -609,6 +609,7 @@ async def clone_plan(session: AsyncSession, plan_id: int, *, owner_reseller_id: 
         owner_reseller_id=src.owner_reseller_id,
         is_active=False,
         is_trial=bool(src.is_trial),
+        carry_remaining_quota=bool(getattr(src, "carry_remaining_quota", True)),
         sort_order=int(src.sort_order or 0),
     )
     session.add(copy)

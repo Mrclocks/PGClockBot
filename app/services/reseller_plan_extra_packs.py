@@ -167,25 +167,36 @@ async def buyable_packs_for_plan(
 
 
 async def ensure_default_packs(session: AsyncSession, plan: ResellerPlan) -> list[ResellerPlanExtraPack]:
-    """Seed default stairs when the plan has no pack rows yet. Idempotent."""
+    """Seed default stairs when the plan has no pack rows yet. Idempotent.
+
+    Concurrent callers may race the unique (plan_id, kind, amount) constraint.
+    Inserts run inside a savepoint so a conflict rolls back only this seed, not
+    the caller's pending plan/form changes on the same session.
+    """
+    from sqlalchemy.exc import IntegrityError
+
     if plan.id is None:
         await session.flush()
     if await has_any_pack(session, int(plan.id)):
         return await list_packs(session, int(plan.id))
     created: list[ResellerPlanExtraPack] = []
-    for kind, amounts in _DEFAULTS.items():
-        for index, amount in enumerate(amounts):
-            row = ResellerPlanExtraPack(
-                plan_id=int(plan.id),
-                kind=kind,
-                amount=int(amount),
-                button_style=None,
-                sort_order=index,
-                is_active=True,
-            )
-            session.add(row)
-            created.append(row)
-    await session.flush()
+    try:
+        async with session.begin_nested():
+            for kind, amounts in _DEFAULTS.items():
+                for index, amount in enumerate(amounts):
+                    row = ResellerPlanExtraPack(
+                        plan_id=int(plan.id),
+                        kind=kind,
+                        amount=int(amount),
+                        button_style=None,
+                        sort_order=index,
+                        is_active=True,
+                    )
+                    session.add(row)
+                    created.append(row)
+            await session.flush()
+    except IntegrityError:
+        return await list_packs(session, int(plan.id))
     return created
 
 
@@ -258,6 +269,14 @@ def telegram_style_kwargs(style: str | None) -> dict[str, str]:
     return {"style": style} if style else {}
 
 
+def stair_purchase_button_text(*, kind: str, amount: int, price_text: str) -> str:
+    """Plain Telegram caption for a unit stair: emoji, amount+unit, price."""
+    kind_n = parse_pack_kind(kind)
+    emoji = "📦" if kind_n == KIND_GB else "👥"
+    unit = "گیگ" if kind_n == KIND_GB else "کاربر"
+    return f"{emoji} {int(amount)} {unit} — {price_text}"
+
+
 def _form_getlist(form: object, key: str) -> list[str]:
     if hasattr(form, "getlist"):
         return [str(v) for v in form.getlist(key)]  # type: ignore[attr-defined]
@@ -270,20 +289,31 @@ def _form_getlist(form: object, key: str) -> list[str]:
 
 
 def packs_payload_from_form(form: object, kind: str) -> tuple[list[int], list[str | None]]:
-    """Read ordered amounts + styles for one kind from a multipart/form body."""
+    """Read ordered amounts + styles for one kind from a multipart/form body.
+
+    Amount and style are paired by row index before dedupe, so a duplicate amount
+    keeps the style from the first occurrence of that amount.
+    """
     kind_n = parse_pack_kind(kind)
     amount_key = "extra_gb_amount" if kind_n == KIND_GB else "extra_user_amount"
     style_key = "extra_gb_style" if kind_n == KIND_GB else "extra_user_style"
     raw_amounts = _form_getlist(form, amount_key)
     raw_styles = _form_getlist(form, style_key)
-    amounts = normalize_amount_list(kind_n, raw_amounts) if raw_amounts else []
     if not raw_amounts:
         return [], []
-    # Styles may be shorter when a row was half-submitted; pad with inherit.
+    amounts: list[int] = []
     styles: list[str | None] = []
-    for index, _amount in enumerate(amounts):
-        raw = raw_styles[index] if index < len(raw_styles) else "inherit"
-        styles.append(parse_pack_button_style(raw))
+    seen: set[int] = set()
+    for index, raw_amount in enumerate(raw_amounts):
+        amount = parse_pack_amount(kind_n, raw_amount)
+        if amount in seen:
+            continue
+        if len(amounts) >= MAX_PACKS_PER_KIND:
+            raise ValueError(f"حداکثر {MAX_PACKS_PER_KIND} بسته برای هر نوع مجاز است")
+        seen.add(amount)
+        amounts.append(amount)
+        raw_style = raw_styles[index] if index < len(raw_styles) else "inherit"
+        styles.append(parse_pack_button_style(raw_style))
     return amounts, styles
 
 

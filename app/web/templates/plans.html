@@ -539,6 +539,9 @@
         {% include "_plan_naming_fields.html" %}
         {% set plan_button_style = 'inherit' %}
         {% include "_plan_button_style_field.html" %}
+        <div class="ui-switch-list">
+          {{ switch('carry_remaining_quota', 'انتقال مانده حجم و زمان در تمدید', checked=true, help='روشن: مانده حجم و زمان سرویس به تمدید، ارتقا یا تنزل اضافه می‌شود. خاموش: دوره جدید فقط مطابق حجم و مدت همین پلن اعمال می‌شود.') }}
+        </div>
         <div class="actions">
           <button class="btn" type="submit">ذخیره پلن</button>
           <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
@@ -890,6 +893,11 @@
           {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند') }}
         </div>
 
+        <div class="ui-switch-list" id="reseller-renew-carry-block">
+          {{ switch('carry_remaining_period', 'انتقال زمان باقی‌مانده در تمدید', checked=true, help='روشن: مدت جدید از تاریخ انقضای فعلی اضافه می‌شود. خاموش: دوره از همین الان شروع می‌شود.') }}
+          {{ switch('keep_extras_on_renew', 'حفظ حجم و کاربر اضافه در تمدید', checked=true, help='روشن: ظرفیت اضافه‌خریداری‌شده به دوره بعد می‌ماند و در قیمت بر اساس ظرفیت حساب می‌شود. خاموش: با تمدید پاک می‌شود.') }}
+        </div>
+
         <div id="reseller-buy-extra-block">
         <div class="ui-switch-list">
           {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=false, help='فقط اشتراک ثابت — بسته‌های همین پلن در ربات و اشتراک من دیده می‌شوند؛ برای PAYG لازم نیست', id='reseller-allow-buy-extra') }}
@@ -1091,6 +1099,15 @@
             <option value="duration">زمان (روز)</option>
           </select>
         </label>
+        <label class="form-field">پلن اختصاصی (اختیاری)
+          <select name="plan_id" id="service-addon-plan">
+            <option value="">— بدون پلن (عمومی / دسته) —</option>
+            {% for p in plans or [] %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+          </select>
+          <small class="muted">اگر پلن انتخاب شود، بسته فقط روی سرویس‌های همان پلن دیده می‌شود و دسته نادیده گرفته می‌شود. با تعریف بستهٔ مخصوص این پلن برای یک نوع (حجم یا زمان)، بسته‌های عمومی همان نوع برای این پلن مخفی می‌شوند؛ نوع دیگر اگر بستهٔ مخصوص نداشته باشد همچنان عمومی/دسته‌ای می‌ماند.</small>
+        </label>
         <label class="form-field">دسته‌ی بسته
           <select name="category_id" id="service-addon-category" data-plan-category-select data-category-audience="users">
             <option value="">عمومی (همه‌ی دسته‌ها)</option>
@@ -1102,6 +1119,12 @@
           </select>
           <small class="muted">پیش‌فرض «عمومی» است و برای همهٔ سرویس‌ها دیده می‌شود. با انتخاب برچسب، فقط سرویس‌های همان دسته این بسته را می‌بینند.</small>
         </label>
+        {% set plan_button_style = 'inherit' %}
+        {% set button_style_name = 'button_style' %}
+        {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
+        {% set plan_style_options = pack_style_options %}
+        {% set plan_color_hint = 'رنگ دکمه این بسته در ربات؛ «ارث» یعنی رنگ پلن سرویس.' %}
+        {% include "_plan_button_style_field.html" %}
         <label class="form-field">مقدار
           <input name="amount" id="service-addon-amount" type="number" min="0.1" step="0.1" required placeholder="۱۰" />
           <small class="muted" id="service-addon-amount-hint">برای حجم می‌تواند اعشار باشد؛ برای زمان عدد صحیح روز</small>
@@ -1310,6 +1333,7 @@
     setVisible(rateField, !isAddon && isPayg);
     setVisible(extras, !isAddon);
     setVisible(document.getElementById('reseller-buy-extra-block'), !isAddon && !isPayg);
+    setVisible(document.getElementById('reseller-renew-carry-block'), !isAddon && !isPayg);
     setVisible(included, !isAddon);
     setVisible(renew, !isAddon);
     setVisible(duration, !isAddon);
