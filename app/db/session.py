@@ -174,6 +174,10 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
         sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN pg_username_pattern VARCHAR(255)"))
     if "category_id" not in cols:
         sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN category_id INTEGER"))
+    if "carry_remaining_quota" not in cols:
+        sync_conn.execute(
+            sql_text("ALTER TABLE plans ADD COLUMN carry_remaining_quota BOOLEAN DEFAULT 1")
+        )
 
     if not insp.has_table("plan_categories"):
         sync_conn.execute(

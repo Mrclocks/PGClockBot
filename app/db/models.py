@@ -174,6 +174,11 @@ class Plan(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
+    # When true (default), renewal/upgrade/downgrade adds leftover volume and time.
+    # When false, the new period is exactly this plan's volume and duration.
+    carry_remaining_quota: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
