@@ -488,27 +488,11 @@ async def open_wallet_home(
     *,
     push: bool = True,
 ) -> None:
+    from app.bot.handlers.wallet import build_wallet_home_text
     from app.bot.nav_inline import present_inline_only, wallet_hub_keyboard
-    from app.config import get_settings
-    from app.services.formatting import format_toman, kv_line
-    from app.services.wallet import wallet_balance_for_context
 
     ui = await get_all_settings(session)
-    bal = await wallet_balance_for_context(session, db_user)
-    text = format_message(
-        screen_title_html(ui, "c.wallet"),
-        "\n".join(
-            [
-                kv_line(
-                    "💵",
-                    "موجودی",
-                    f"<b>{format_toman(bal, get_settings().currency)}</b>",
-                ),
-                "",
-                screen_caption(ui, "c.wallet"),
-            ]
-        ),
-    )
+    text = await build_wallet_home_text(session, db_user, ui)
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_WALLET, push=push)
     await present_inline_only(

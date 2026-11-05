@@ -88,6 +88,7 @@ class HubKeyboardTests(unittest.TestCase):
         self.assertIn("nv:w:topup", data)
         self.assertIn("nv:w:tx", data)
         self.assertIn("menu:home", data)
+        self.assertNotIn("nv:loy:home", data)
 
     def test_support_hub_has_no_reseller_apply(self):
         from app.bot.nav_inline import support_hub_keyboard
@@ -133,6 +134,7 @@ class OpenWalletInlineTests(unittest.IsolatedAsyncioTestCase):
                 "app.services.wallet.wallet_balance_for_context",
                 AsyncMock(return_value=0),
             ),
+            patch("app.services.loyalty.loyalty_enabled", AsyncMock(return_value=False)),
             patch("app.config.get_settings") as gs,
         ):
             gs.return_value.currency = "IRT"

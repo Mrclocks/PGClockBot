@@ -15,7 +15,6 @@ from app.bot.list_pages import page_number
 from app.db.models import BotUser
 from app.services.users import get_all_settings
 from app.services import bot_feedback_texts as feedback
-from app.services.screen_titles import screen_caption, screen_title_html
 import logging
 
 logger = logging.getLogger(__name__)
@@ -119,30 +118,14 @@ async def nv_wallet_home(
     db_user: BotUser,
     state: FSMContext,
 ):
+    from app.bot.handlers.wallet import build_wallet_home_text
     from app.bot.nav_inline import safe_edit_inline, wallet_hub_keyboard
-    from app.config import get_settings
-    from app.services.formatting import format_message, format_toman, kv_line
-    from app.services.wallet import wallet_balance_for_context
 
     await callback.answer()
     if not callback.message:
         return
     ui = await get_all_settings(session)
-    bal = await wallet_balance_for_context(session, db_user)
-    text = format_message(
-        screen_title_html(ui, "c.wallet"),
-        "\n".join(
-            [
-                kv_line(
-                    "💵",
-                    "موجودی",
-                    f"<b>{format_toman(bal, get_settings().currency)}</b>",
-                ),
-                "",
-                screen_caption(ui, "c.wallet"),
-            ]
-        ),
-    )
+    text = await build_wallet_home_text(session, db_user, ui)
     ok = await safe_edit_inline(
         callback.message, text, reply_markup=wallet_hub_keyboard(ui)
     )

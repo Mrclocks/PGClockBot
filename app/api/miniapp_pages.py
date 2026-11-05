@@ -377,8 +377,11 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
 
     Plans, activity and live service usage load on their own screens. In a shop's Mini App
     everything is that shop's: its services, its purse and its settings, and paying stays
-    off until shop purchases are opened.
+    off until shop purchases are opened. Loyalty points appear only while this shop's club
+    is on, and only for that shop's purse.
     """
+    from app.services.loyalty import loyalty_enabled, points_balance
+
     ui = await get_all_settings(session, reseller_id=scope.shop_id)
     try:
         home = (await customer_home_summary(session, int(user.id), shop_id=scope.shop_id)).payload()
@@ -386,7 +389,7 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
         await rollback_quiet(session)
         log.warning("miniapp home summary failed user=%s", user.id, exc_info=True)
         home = _empty_home()
-    return {
+    out = {
         "wallet": await get_wallet_balance(session, user, shop_id=scope.shop_id),
         "wallet_pay_enabled": on(ui.get("pay_wallet_enabled")),
         "qr_enabled": on(ui.get("qr_enabled", "1")),
@@ -395,6 +398,11 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
         "badges": (await home_badges(session, user, shop_id=scope.shop_id)).payload(),
         "checkout": await checkout_options(session, user, scope),
     }
+    shop_id = scope.shop_id
+    if await loyalty_enabled(session, reseller_id=shop_id):
+        out["loyalty_enabled"] = True
+        out["points"] = await points_balance(session, user, shop_id)
+    return out
 
 
 async def _shop_me_payload(session: AsyncSession, user: BotUser, scope: MiniScope) -> dict:

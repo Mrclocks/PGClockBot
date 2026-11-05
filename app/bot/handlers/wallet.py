@@ -47,6 +47,34 @@ class WalletStates(StatesGroup):
     waiting_receipt = State()
     gift_code = State()
 
+
+async def build_wallet_home_text(
+    session: AsyncSession,
+    db_user: BotUser,
+    ui: dict,
+) -> str:
+    """Customer wallet hub HTML: balance, and this shop's points while loyalty is on."""
+    from app.services.formatting import format_number, format_toman, kv_line
+    from app.services.loyalty import loyalty_enabled, points_balance
+    from app.services.users import current_shop_reseller_id
+    from app.services.wallet import wallet_balance_for_context
+
+    shop_id = current_shop_reseller_id()
+    bal = await wallet_balance_for_context(session, db_user)
+    lines = [
+        kv_line(
+            "💵",
+            "موجودی",
+            f"<b>{format_toman(bal, get_settings().currency)}</b>",
+        ),
+    ]
+    if await loyalty_enabled(session, reseller_id=shop_id):
+        pts = await points_balance(session, db_user, shop_id)
+        lines.append(kv_line("⭐", "امتیاز", f"<b>{format_number(pts)}</b>"))
+    lines.extend(["", screen_caption(ui, "c.wallet")])
+    return format_message(screen_title_html(ui, "c.wallet"), "\n".join(lines))
+
+
 async def prompt_gift_code(
     message: Message,
     state: FSMContext,
@@ -187,23 +215,7 @@ async def wallet_gift_code(
 async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
     ui = await get_all_settings(session)
-    from app.services.wallet import wallet_balance_for_context
-
-    bal = await wallet_balance_for_context(session, db_user)
-    text = format_message(
-        screen_title_html(ui, "c.wallet"),
-        "\n".join(
-            [
-                kv_line(
-                    "💵",
-                    "موجودی",
-                    f"<b>{format_toman(bal, get_settings().currency)}</b>",
-                ),
-                "",
-                screen_caption(ui, "c.wallet"),
-            ]
-        ),
-    )
+    text = await build_wallet_home_text(session, db_user, ui)
     if callback.message:
         from app.bot.nav_inline import wallet_hub_keyboard
 
