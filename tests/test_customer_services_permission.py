@@ -13,7 +13,7 @@ from app.bot.handlers.reseller_customer_services import PERMISSION, may_manage_c
 from app.services.resellers import DEFAULT_FEATURE_PERMS, FEATURE_PERMS, parse_perms
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "alembic" / "versions" / "0084_customer_services_permission.py"
+MIGRATION = ROOT / "alembic" / "versions" / "0088_customer_services_permission.py"
 
 
 def _load_migration():

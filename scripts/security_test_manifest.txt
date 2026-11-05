@@ -81,6 +81,7 @@ tests/test_live_pg_menus.py
 tests/test_miniapp_security_audit.py
 tests/test_miniapp_init_data_window.py
 tests/test_miniapp_service_addons.py
+tests/test_addon_preview.py
 tests/test_miniapp_feeds.py
 tests/test_miniapp_frontend.py
 tests/test_miniapp_topup.py
@@ -95,6 +96,9 @@ tests/test_miniapp_badges.py
 tests/test_bot_profile_photo.py
 tests/test_bot_appearance_menu_button.py
 tests/test_renewal_preview.py
+tests/test_plan_carry_remaining_quota.py
+tests/test_reseller_plan_carry_on_renew.py
+tests/test_admin_renew_respects_carry.py
 tests/test_on_hold_addon_quotas.py
 tests/test_on_hold_service_display.py
 tests/test_owner_bypass_guards.py
@@ -356,6 +360,13 @@ tests/test_bulk_grant_miniapp.py
 tests/test_customer_notes_permission.py
 # Gift codes: own gift_codes key, own shop only; migration 0077 keeps current access.
 tests/test_gift_codes_permission.py
+# PasarGuard link reconnect: owner-only, CSRF, rate limit; never leak exception text.
+tests/test_pg_link_reconnect.py
+# PasarGuard read circuit: heal under concurrency, probe lease, budget exhaustion.
+tests/test_pg_read_circuit_heal.py
+tests/test_pg_read_breaker_threshold.py
+# PasarGuard HTTP client rebuild after repeated transport failures.
+tests/test_pg_http_rebuild.py
 # Shop staff action log: written with the change, read only by the shop it belongs to.
 tests/test_staff_audit.py
 # Manual shop wallet changes by shop staff: own shop purse only, capped, once per request.
@@ -371,6 +382,8 @@ tests/test_shop_bot_customer_tools.py
 
 # Reseller capacity packs: wallet, tenancy, generation claim and Mini App role gating.
 tests/test_reseller_packs.py
+tests/test_reseller_plan_extra_packs.py
+tests/test_reseller_plan_extra_packs_bot.py
 tests/test_reseller_capacity_buy_bot.py
 tests/test_reseller_renewal.py
 tests/test_pasarguard_admin_reset.py
@@ -378,3 +391,5 @@ tests/test_reseller_capacity_orders.py
 tests/test_reseller_package_orders.py
 # Mini App service packs: ownership of the service and who sees which pack.
 tests/test_mini_addon_packs.py
+tests/test_service_addon_plan_scope.py
+tests/test_svc_addon_kind_picker.py

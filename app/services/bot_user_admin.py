@@ -935,14 +935,20 @@ async def admin_renew_service(
     reset_traffic: bool = True,
     staff: dict | None = None,
 ) -> ServiceSnapshot:
-    """Admin renew: set expire from now + days and optional data limit (from plan or args)."""
+    """Admin renew: always a fresh period from now (does not follow plan carry).
+
+    Customer paid renewals, Mini App and automation use ``Plan.carry_remaining_quota``.
+    Staff renew from the users page stays the historical start-from-now + optional
+    traffic reset so operators are not surprised after an upgrade.
+    """
+    next_plan_id: int | None = None
     if plan is not None:
         if plan.is_trial:
             raise ValueError("پلن تست برای تمدید مجاز نیست")
         days = int(plan.duration_days or 0) or days
         if plan.data_limit_gb is not None:
             data_limit_gb = float(plan.data_limit_gb)
-        service.plan_id = int(plan.id)
+        next_plan_id = int(plan.id)
 
     if days is not None:
         days_n = int(days)
@@ -960,7 +966,10 @@ async def admin_renew_service(
     else:
         data_limit_bytes = None
 
-    return await admin_set_service_quota(
+    # Apply plan_id only after the panel write succeeds. ``_modify_with_hold`` may
+    # commit on a hard rejection; mutating beforehand could persist a plan change
+    # without the renew.
+    snap = await admin_set_service_quota(
         session,
         service,
         data_limit_bytes=data_limit_bytes,
@@ -969,6 +978,11 @@ async def admin_renew_service(
         activate=True,
         staff=staff,
     )
+    if next_plan_id is not None and service.plan_id != next_plan_id:
+        service.plan_id = next_plan_id
+        await session.commit()
+        snap = await service_snapshot(session, service)
+    return snap
 
 
 async def admin_extend_service(

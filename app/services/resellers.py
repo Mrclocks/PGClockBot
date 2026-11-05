@@ -54,6 +54,8 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("service_import", "تأیید افزودن سرویس قبلی"),
     ("orders_purge", "حذف کامل سفارش‌ها و پرداخت‌ها"),
     ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
+    # Owner-only: reconnect the platform PasarGuard link (never grant to shops).
+    ("pg_link.reconnect", "ارتباط مجدد با پاسارگارد"),
 ]
 
 DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import,miniapp,customer_notes,customer_services,gift_codes"
@@ -548,6 +550,18 @@ def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> s
                 f"(گیگ {format_toman(eg, currency) if eg else '—'} · "
                 f"کاربر {format_toman(eu, currency) if eu else '—'})"
             )
+        carry_period = bool(getattr(plan, "carry_remaining_period", True))
+        keep_extras = bool(getattr(plan, "keep_extras_on_renew", True))
+        lines.append(
+            "زمان مانده در تمدید: <b>"
+            + ("منتقل می‌شود" if carry_period else "منتقل نمی‌شود")
+            + "</b>"
+        )
+        lines.append(
+            "حجم/کاربر اضافه در تمدید: <b>"
+            + ("حفظ می‌شود" if keep_extras else "پاک می‌شود")
+            + "</b>"
+        )
     groups = (getattr(plan, "pg_group_ids", None) or "").strip()
     lines.append(
         f"گروه‌های پاسارگارد: <code>{html.escape(groups) if groups else '—'}</code>"

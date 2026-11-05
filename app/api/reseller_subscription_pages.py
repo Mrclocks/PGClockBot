@@ -21,13 +21,16 @@ from app.db.models import BotUser, ResellerPlan, ResellerProfile
 from app.services.db_safe import rollback_quiet
 from app.services.redact import user_safe_error
 from app.services.reseller_capacity import (
-    ALLOWED_EXTRA_GB,
-    ALLOWED_EXTRA_USERS,
     buy_extra_gb,
     buy_extra_users,
     plan_allows_buy_extra,
     plan_extra_gb_price,
     plan_extra_user_price,
+)
+from app.services.reseller_plan_extra_packs import (
+    KIND_GB,
+    KIND_USERS,
+    active_amounts_for_plan,
 )
 from app.services.reseller_package import package_overview, renew_package, renewal_effect
 
@@ -96,8 +99,12 @@ def register_reseller_subscription_pages(app, *, render, require_staff, get_db) 
         current = overview.current
         if plan_allows_buy_extra(current):
             ctx["extras"] = {
-                "gb_price": plan_extra_gb_price(current), "user_price": plan_extra_user_price(current),
-                "gb_options": sorted(ALLOWED_EXTRA_GB), "user_options": sorted(ALLOWED_EXTRA_USERS),
+                "gb_price": plan_extra_gb_price(current),
+                "user_price": plan_extra_user_price(current),
+                "gb_options": sorted(await active_amounts_for_plan(session, int(current.id), KIND_GB)),
+                "user_options": sorted(
+                    await active_amounts_for_plan(session, int(current.id), KIND_USERS)
+                ),
             }
         return render(request, "my_subscription.html", ctx)
 
