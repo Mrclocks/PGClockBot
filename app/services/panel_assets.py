@@ -7,7 +7,14 @@ from pathlib import Path
 from app.py_compat import file_digest
 
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "static"
-_SCRIPT_NAMES = ("panel.js", "panel_widget_request.js", "money-inputs.js", "list-inputs.js", "sales-chart.js")
+_SCRIPT_NAMES = (
+    "panel.js",
+    "panel_widget_request.js",
+    "panel_ok_flash.js",
+    "money-inputs.js",
+    "list-inputs.js",
+    "sales-chart.js",
+)
 
 
 def build_asset_cache_key(path: Path) -> str:

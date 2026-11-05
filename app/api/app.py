@@ -169,6 +169,7 @@ templates.env.globals["default_brand_color_hex"] = DEFAULT_COLOR_HEX
 templates.env.globals["default_brand_color_label"] = DEFAULT_COLOR_LABEL
 templates.env.globals["panel_script_cache_key"] = get_panel_asset_cache_key("panel.js")
 templates.env.globals["panel_widget_cache_key"] = get_panel_asset_cache_key("panel_widget_request.js")
+templates.env.globals["panel_ok_flash_cache_key"] = get_panel_asset_cache_key("panel_ok_flash.js")
 templates.env.globals["money_inputs_cache_key"] = get_panel_asset_cache_key("money-inputs.js")
 templates.env.globals["list_inputs_cache_key"] = get_panel_asset_cache_key("list-inputs.js")
 templates.env.globals["sales_chart_cache_key"] = get_panel_asset_cache_key("sales-chart.js")

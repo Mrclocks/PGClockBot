@@ -15,6 +15,7 @@ from app.jobs.cancellation_notifications import run_cancellation_notifications
 from app.jobs.chat_message_purge import run_chat_message_purge
 from app.jobs.connection_status import run_connection_status
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
+from app.jobs.pg_link_watchdog import run_pg_link_watchdog
 from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
 from app.services.formatting import format_bytes_ratio, parse_expire
@@ -833,6 +834,7 @@ def start_background_scheduler() -> None:
         ("crypto_rate_refresh", run_crypto_rate_refresh, {"seconds": 60}, 90),
         ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),
         ("connection_status", run_connection_status, {"seconds": 60}, 60),
+        ("pg_link_watchdog", run_pg_link_watchdog, {"seconds": 60}, 60),
         ("bbc_settlement_poll", run_bbc_settlement_poll, {"seconds": 45}, 90),
         ("psp_settlement_poll", run_psp_settlement_poll, {"seconds": 45}, 90),
         # Ticks often; each shop is recounted on the period set in volume_external_sync_minutes.

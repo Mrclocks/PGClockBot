@@ -33,6 +33,7 @@ STATUS_LABELS = {
 PLAIN_STATUS_LABELS = {status: label.split(" ", 1)[1] for status, label in STATUS_LABELS.items()}
 REASON_LABELS = {
     "core_unavailable": "هستهٔ Xray آماده نیست؛ تنظیمات سرور را بررسی کنید.", "account_unavailable": "کاربر تست قابل استفاده نیست؛ تنظیمات آن را بررسی کنید.",
+    "user_missing": "کاربر تست در پاسارگارد پیدا نشد؛ پایش متوقف شد. پس از بازگردانی کاربر، دوباره تست‌ها را روشن کنید.",
     "catalog_unavailable": "اطلاعات پنل یا کاربر تست دریافت نشد؛ تنظیمات اتصال را بررسی کنید.",
     "control_unavailable": "دسترسی سرور به سایت تست تأیید نشد.", "proxy_failed": "درخواست HTTPS از مسیر پروکسی ناموفق بود.",
     "fallback_destination": "اتصال از مقصد دوم تأیید شد.", "probe_unavailable": "بررسی این مسیر کامل نشد.",

@@ -638,7 +638,9 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "staff": staff,
                     "overview": overview,
                     "pg_health": pg_health,
-                    "pg_link_health": pg_link_health.snapshot(circuit_status()),
+                    "pg_link_health": await pg_link_health.load_persisted_snapshot(
+                        session, circuit_status()
+                    ),
                     "funnel_enabled": funnel_enabled,
                     "funnel": funnel,
                     "periods": periods,
