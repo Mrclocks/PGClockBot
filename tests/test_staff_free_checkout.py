@@ -93,9 +93,11 @@ class ShopFixture(unittest.IsolatedAsyncioTestCase):
 
 
 class StaffFreeCheckoutTests(ShopFixture):
-    async def test_shop_owner_and_bot_admin_may_take_their_own_order(self) -> None:
+    async def test_the_shop_owner_may_take_their_own_order(self) -> None:
         self.assertTrue(await self.may(SHOP_ID, await self.order(user_id=SHOP_ID, shop_id=SHOP_ID), shop_bot=SHOP_ID))
-        self.assertTrue(await self.may(9, await self.order(user_id=9, shop_id=SHOP_ID), shop_bot=SHOP_ID))
+
+    async def test_a_shop_bot_admin_cannot_take_an_order_free(self) -> None:
+        self.assertFalse(await self.may(9, await self.order(user_id=9, shop_id=SHOP_ID), shop_bot=SHOP_ID))
 
     async def test_a_customer_cannot_take_an_order_free(self) -> None:
         self.assertFalse(await self.may(10, await self.order(user_id=10, shop_id=SHOP_ID), shop_bot=SHOP_ID))
@@ -172,6 +174,29 @@ class StaffFreeCheckoutTests(ShopFixture):
         self.assertEqual(sorted(results), ["claimed", "refused"])
         count = await self.session.scalar(select(func.count()).select_from(Payment).where(Payment.order_id == order_id))
         self.assertEqual(count, 1)
+
+    async def test_two_taps_at_once_deliver_one_service(self) -> None:
+        order_id = (await self.order(user_id=SHOP_ID, shop_id=SHOP_ID)).id
+        deliveries: list[int] = []
+
+        async def deliver(session, order, *, attempt):
+            deliveries.append(int(order.id))
+            await asyncio.sleep(0.01)
+            return order
+
+        async def tap() -> str:
+            async with self.sessions() as session:
+                try:
+                    await free.deliver_staff_free_order(session, await session.get(Order, order_id), actor_id=SHOP_ID)
+                except ValueError:
+                    return "refused"
+                return "delivered"
+
+        with patch.object(free, "deliver_order", deliver):
+            results = await asyncio.gather(tap(), tap())
+
+        self.assertEqual(sorted(results), ["delivered", "refused"])
+        self.assertEqual(deliveries, [order_id])
 
     async def test_a_definite_delivery_failure_cancels_the_order(self) -> None:
         order = await self.order(user_id=SHOP_ID, shop_id=SHOP_ID)

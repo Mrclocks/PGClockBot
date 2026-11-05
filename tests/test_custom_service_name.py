@@ -191,6 +191,42 @@ class StoredNameTests(NameFixture):
         self.assertLessEqual(len(order.requested_username), naming.MAX_LENGTH)
         self.assertNotEqual(order.requested_username, wanted)
 
+    async def test_two_open_orders_of_a_shop_cannot_hold_the_same_name(self) -> None:
+        from sqlalchemy.exc import IntegrityError
+
+        await self.order(self.other, requested_username="ali")
+        with self.assertRaises(IntegrityError):
+            await self.order(self.buyer, requested_username="ali")
+        await self.session.rollback()
+
+    async def test_the_name_is_free_again_once_the_holding_order_is_closed_or_in_another_shop(self) -> None:
+        held = await self.order(self.other, requested_username="ali")
+        held.status = OrderStatus.CANCELLED.value
+        await self.session.commit()
+        await self.order(self.buyer, requested_username="ali")
+        shop = BotUser(telegram_id=9200, username="s", referral_code="s9", role="reseller")
+        self.session.add(shop)
+        await self.session.commit()
+        await self.order(self.buyer, requested_username="ali", reseller_id=shop.id)
+
+    async def test_a_lost_race_for_the_name_retries_with_an_ending(self) -> None:
+        await self.order(self.other, requested_username="ali")
+        order = await self.order(self.buyer)
+        calls = {"n": 0}
+        real_in_use = naming._name_in_use
+
+        async def first_check_misses(*args, **kwargs):
+            calls["n"] += 1
+            # The other buyer stored «ali» between this buyer's check and write.
+            return False if calls["n"] == 1 else await real_in_use(*args, **kwargs)
+
+        with patch.object(naming, "_name_in_use", first_check_misses):
+            await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
+
+        self.assertRegex(order.requested_username, r"^ali_[a-z0-9]{4}$")
+        # The handler still renders with the buyer it loaded before the lost race.
+        self.assertIsNotNone(self.buyer.telegram_id)
+
     async def test_someone_elses_or_a_paid_order_cannot_be_renamed(self) -> None:
         theirs = await self.order(self.other)
         paid = await self.order(self.buyer, status=OrderStatus.PAID.value)
@@ -348,14 +384,19 @@ class RequestedUsernameMigrationTests(unittest.TestCase):
         spec.loader.exec_module(migration)
         engine = sa.create_engine("sqlite:///:memory:")
         with engine.begin() as conn:
-            conn.execute(sa.text("CREATE TABLE orders (id INTEGER PRIMARY KEY, amount INTEGER)"))
-            conn.execute(sa.text("INSERT INTO orders VALUES (1, 500)"))
+            conn.execute(
+                sa.text(
+                    "CREATE TABLE orders "
+                    "(id INTEGER PRIMARY KEY, amount INTEGER, reseller_id INTEGER, status VARCHAR(32))"
+                )
+            )
+            conn.execute(sa.text("INSERT INTO orders (id, amount) VALUES (1, 500)"))
             with Operations.context(MigrationContext.configure(conn)):
                 migration.upgrade()
                 migration.upgrade()
                 self.assertEqual(conn.execute(sa.text("SELECT requested_username FROM orders")).scalar(), None)
-                indexes = {index["name"] for index in sa.inspect(conn).get_indexes("orders")}
-                self.assertIn("ix_orders_requested_username", indexes)
+                indexes = {row[1] for row in conn.execute(sa.text("PRAGMA index_list('orders')"))}
+                self.assertTrue({"ix_orders_requested_username", "uq_orders_open_requested_username"} <= indexes)
                 migration.downgrade()
                 columns = {column["name"] for column in sa.inspect(conn).get_columns("orders")}
                 self.assertNotIn("requested_username", columns)

@@ -2,7 +2,7 @@
 
 The same rules as the bot's payment screen, through the same services: a shop with
 ``custom_service_name`` (or the platform with its switch on) requires a name before
-paying, and a shop operator with ``free_checkout`` may take their own order free.
+paying, and the shop owner with ``free_checkout`` may take their own order free.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ async def checkout_options(session: AsyncSession, user: BotUser, scope: MiniScop
     """What the checkout card shows: a required name field, and the staff free button."""
     return {
         "service_name_required": await name_step_enabled(session, scope.shop_id),
-        # The platform Mini App has no commerce for its owner, so only shop operators get it.
+        # The platform Mini App has no commerce for its owner, so only a shop owner gets it.
         "staff_free": scope.is_shop and await may_use_staff_free(session, user, shop_owner_id=scope.shop_id),
     }
 

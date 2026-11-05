@@ -16,6 +16,7 @@ import secrets
 import string
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Order, OrderStatus, Plan, UserService
@@ -117,6 +118,8 @@ async def preview_username(session: AsyncSession, order: Order, name: str) -> st
 
 async def _name_in_use(session: AsyncSession, order: Order, name: str, username: str) -> bool:
     """Another service already has this username, or another open order in the shop chose the name."""
+    # Deliberately global: one PasarGuard panel serves every shop, and panel usernames
+    # are unique across it, so another shop's service blocks the name too.
     taken = await session.scalar(
         select(UserService.id).where(func.lower(UserService.pg_username) == username.lower()).limit(1)
     )
@@ -142,27 +145,42 @@ async def _free_name(session: AsyncSession, order: Order, wanted: str) -> tuple[
     raise ValueError(NO_FREE_NAME)
 
 
-async def set_service_name(session: AsyncSession, order: Order, *, buyer_id: int, raw: str | None) -> str:
-    """Store the name on the buyer's own unpaid order; returns the panel username.
-
-    A name already in use silently gets a short random ending.
-    """
-    name, username = await _free_name(session, order, normalize_service_name(raw))
-    result = await session.execute(
-        update(Order)
-        .where(
-            Order.id == int(order.id),
-            Order.user_id == int(buyer_id),
-            Order.status.in_(_EDITABLE_STATUSES),
+async def _store_name(session: AsyncSession, order_id: int, *, buyer_id: int, name: str) -> None:
+    # A savepoint, so a lost race undoes only this write and leaves the caller's objects loaded.
+    async with session.begin_nested():
+        result = await session.execute(
+            update(Order)
+            .where(
+                Order.id == order_id,
+                Order.user_id == int(buyer_id),
+                Order.status.in_(_EDITABLE_STATUSES),
+            )
+            .values(requested_username=name)
+            .execution_options(synchronize_session=False)
         )
-        .values(requested_username=name)
-        .execution_options(synchronize_session=False)
-    )
     if result.rowcount != 1:
         raise ValueError(ORDER_LOCKED)
     await session.commit()
-    await session.refresh(order)
-    return username
+
+
+async def set_service_name(session: AsyncSession, order: Order, *, buyer_id: int, raw: str | None) -> str:
+    """Store the name on the buyer's own unpaid order; returns the panel username.
+
+    A name already in use silently gets a short random ending. Two buyers sending
+    the same name at the same moment both pass the lookup; the unique index on open
+    orders refuses the second write, and the retry finds the name taken.
+    """
+    wanted = normalize_service_name(raw)
+    order_id = int(order.id)
+    for _ in range(MAX_VARIANT_TRIES):
+        name, username = await _free_name(session, order, wanted)
+        try:
+            await _store_name(session, order_id, buyer_id=buyer_id, name=name)
+        except IntegrityError:
+            continue
+        await session.refresh(order)
+        return username
+    raise ValueError(NO_FREE_NAME)
 
 
 async def name_order_at_checkout(session: AsyncSession, order: Order, *, buyer_id: int, raw: str | None) -> None:

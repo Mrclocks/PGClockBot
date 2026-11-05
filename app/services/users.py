@@ -1841,7 +1841,8 @@ SETTING_GROUPS = {
             "pg_username_pattern",
             "الگوی نام",
             "text",
-            "متغیرها: {prefix} {random} {suffix} {id} {plan_volume} {plan_unit} {username} — پیش‌فرض: {prefix}_{random}{suffix}",
+            "متغیرها: {prefix} {random} {suffix} {id} {plan_volume} {plan_unit} {username} — پیش‌فرض: {prefix}_{random}{suffix}. "
+            "نام دلخواه خریدار جای {random} می‌نشیند؛ اگر الگو {random} نداشته باشد، سفارش‌های نام‌دار با الگوی پیش‌فرض ساخته می‌شوند.",
         ),
     ],
     "کانال اجباری": [
