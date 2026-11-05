@@ -151,6 +151,10 @@ class BotCreateUserQuotaWiringTests(unittest.IsolatedAsyncioTestCase):
         import app.bot.handlers.admin_pg_users as mod
 
         fake_pg = AsyncMock()
+        # Owner-visible groups so selection resolves; quota must be what blocks.
+        fake_pg.get_groups_simple = AsyncMock(
+            return_value=[{"id": 1, "name": "g1"}, {"id": 2, "name": "g2"}]
+        )
         state = _fake_state(
             {
                 "pg_create_username": "testuser1",
@@ -176,6 +180,9 @@ class BotCreateUserQuotaWiringTests(unittest.IsolatedAsyncioTestCase):
 
         fake_pg = AsyncMock()
         fake_pg.create_user = AsyncMock(return_value={"id": 43})
+        fake_pg.get_groups_simple = AsyncMock(
+            return_value=[{"id": 1, "name": "g1"}, {"id": 2, "name": "g2"}]
+        )
         state = _fake_state(
             {
                 "pg_create_username": "testuser1",
