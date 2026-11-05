@@ -6,6 +6,7 @@ import math
 import secrets
 import string
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
@@ -43,7 +44,13 @@ from app.db.models import (
     WalletTransaction,
 )
 from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
-from app.services.pasarguard import extract_sub_token, get_pg, parse_group_ids, user_subscription_url
+from app.services.pasarguard import (
+    PasarGuardError,
+    extract_sub_token,
+    get_pg,
+    parse_group_ids,
+    user_subscription_url,
+)
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
 from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
@@ -215,9 +222,23 @@ async def _reseller_pg_link(
     )
 
 
+DEFAULT_USERNAME_PATTERN = "{prefix}_{random}{suffix}"
+# PasarGuard answers 409 when the username exists; nothing is created.
+USERNAME_TAKEN_STATUS = 409
+# Longest buyer-chosen name; a taken name keeps this length after its random ending.
+CHOSEN_NAME_MAX_LENGTH = 20
+CHOSEN_NAME_ENDING_LENGTH = 4
+
+
 def _random_alnum(length: int = 8) -> str:
     alphabet = string.ascii_lowercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def chosen_name_variant(name: str) -> str:
+    """The buyer's name with a short random ending, for when the name is taken."""
+    keep = CHOSEN_NAME_MAX_LENGTH - CHOSEN_NAME_ENDING_LENGTH - 1
+    return f"{name[:keep]}_{_random_alnum(CHOSEN_NAME_ENDING_LENGTH)}"
 
 
 def _sanitize_naming_username(raw: str | None, *, fallback: str) -> str:
@@ -237,6 +258,7 @@ def _random_username(
     username: str | None = None,
     plan_volume: str = "unlimited",
     plan_unit: str = "GB",
+    chosen_name: str | None = None,
 ) -> str:
     """Build a PG username from prefix/suffix or an optional pattern.
 
@@ -247,10 +269,13 @@ def _random_username(
     not be used as a ``BotUser`` primary key — pass ``buyer_id`` / ``user``
     separately for ``{username}``.
     """
-    random_part = _random_alnum(8)
+    random_part = chosen_name or _random_alnum(8)
     id_part = "" if user_id is None else str(user_id)
     prefix = (prefix or "clk").strip() or "clk"
     suffix = suffix or ""
+    if chosen_name and "{random}" not in (pattern or ""):
+        # A pattern without {random} would drop the buyer's name; use the default shape.
+        pattern = DEFAULT_USERNAME_PATTERN
     if pattern and pattern.strip():
         from app.services.message_variables import DOMAIN_NAMING, render_message_template
 
@@ -339,8 +364,11 @@ async def generate_pg_username(
     plan_pattern: str | None = None,
     reseller_id: int | None = None,
     user: BotUser | None = None,
+    chosen_name: str | None = None,
 ) -> str:
     """Generate a Pasarguard username using plan overrides when set, else globals.
+
+    ``chosen_name`` (the buyer's validated name) takes the place of ``{random}``.
 
     ``user_id`` fills ``{id}`` (order id on delivery; bot-user id on manual
     assign).  ``buyer_id`` / ``user`` resolve ``{username}`` — never look up
@@ -373,6 +401,7 @@ async def generate_pg_username(
         user_id=user_id,
         username=getattr(user, "username", None) or tg_fallback,
         plan_volume=f"{volume:g}" if volume is not None and volume > 0 else "unlimited",
+        chosen_name=chosen_name,
     )
 
 
@@ -2299,19 +2328,21 @@ async def deliver_order(
         created_pg_ids: list[int] = []
         services: list[UserService] = []
 
-        async def _create_one(index: int) -> UserService:
+        chosen_name = (getattr(order, "requested_username", None) or None) if qty == 1 else None
+
+        async def _username(name: str | None) -> str:
             # ``{id}`` = order id (catalog); ``buyer_id`` resolves ``{username}``.
-            username = await generate_pg_username(
+            return await generate_pg_username(
                 session,
                 user_id=int(order.id),
                 buyer_id=int(order.user_id),
                 plan=plan,
                 reseller_id=order.reseller_id,
                 user=order.user,
+                chosen_name=name,
             )
-            note = f"PGClockBot order #{order.id}"
-            if qty > 1:
-                note = f"{note} ({index}/{qty})"
+
+        async def _create_panel_user(username: str, note: str) -> dict:
             panel["touched"] = True
             if plan.pg_template_id:
                 payload = {
@@ -2330,6 +2361,18 @@ async def deliver_order(
                         note=note,
                     )
                 )
+            return pg_user
+
+        async def _create_one(index: int) -> UserService:
+            username = await _username(chosen_name)
+            note = f"PGClockBot order #{order.id}"
+            if qty > 1:
+                note = f"{note} ({index}/{qty})"
+            pg_user, username = await create_with_name_fallback(
+                lambda name: _create_panel_user(name, note),
+                username,
+                regenerate=(lambda: _username(chosen_name_variant(chosen_name))) if chosen_name else None,
+            )
             pg_uid = pg_user.get("id")
             if pg_uid:
                 created_pg_ids.append(int(pg_uid))
@@ -2434,6 +2477,28 @@ async def deliver_order(
         except Exception:
             logger.debug("deliver_order: ignored failure", exc_info=True)
         raise
+
+
+async def create_with_name_fallback(
+    create: Callable[[str], Awaitable[dict]],
+    username: str,
+    *,
+    regenerate: Callable[[], Awaitable[str]] | None,
+) -> tuple[dict, str]:
+    """Create the panel user; a chosen name the panel already holds gets a random ending.
+
+    Returns the panel reply and the username actually used. The panel answers 409 before
+    creating anything, so the second call cannot duplicate a user, and a paid order is
+    never left undelivered because of the buyer's name.
+    """
+    try:
+        return await create(username), username
+    except PasarGuardError as exc:
+        if regenerate is None or exc.status_code != USERNAME_TAKEN_STATUS:
+            raise
+        logger.info("chosen service name taken on the panel; adding a random ending")
+    generated = await regenerate()
+    return await create(generated), generated
 
 
 MIN_TOPUP_AMOUNT = 1000

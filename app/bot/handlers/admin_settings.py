@@ -223,6 +223,7 @@ SECTIONS: dict[str, dict] = {
                 ("pay_crypto_enabled", "رمزارز", "toggle"),
                 ("pay_stars_enabled", "استارز", "toggle"),
                 ("pay_discount_enabled", "کد تخفیف", "toggle"),
+                ("custom_service_name_enabled", "نام دلخواه سرویس", "toggle"),
                 ("auto_approve_payments", "تأیید خودکار رسید", "toggle"),
             ]),
             ("pay_btns", "متن دکمه‌های پرداخت مشترک", BTN_PAY_WALLET_DISCOUNT),

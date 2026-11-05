@@ -1071,6 +1071,7 @@ DEFAULT_SETTINGS = {
     "pay_bbc_enabled": "0",
     "pay_card_auto_enabled": "0",
     "pay_discount_enabled": "1",
+    "custom_service_name_enabled": "0",
     # JSON list of API gateways (see psp_gateways.py); empty = the single psp_* gateway below.
     "psp_gateways": "[]",
     "psp_provider": "zarinpal",
@@ -1840,7 +1841,8 @@ SETTING_GROUPS = {
             "pg_username_pattern",
             "الگوی نام",
             "text",
-            "متغیرها: {prefix} {random} {suffix} {id} {plan_volume} {plan_unit} {username} — پیش‌فرض: {prefix}_{random}{suffix}",
+            "متغیرها: {prefix} {random} {suffix} {id} {plan_volume} {plan_unit} {username} — پیش‌فرض: {prefix}_{random}{suffix}. "
+            "نام دلخواه خریدار جای {random} می‌نشیند (بدون {random}: الگوی پیش‌فرض).",
         ),
     ],
     "کانال اجباری": [
