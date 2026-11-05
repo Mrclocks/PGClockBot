@@ -28,11 +28,14 @@ from app.services.pg_admin_subscription import (
     plan_kind_of,
 )
 from app.services.reseller_capacity import (
-    ALLOWED_EXTRA_GB,
-    ALLOWED_EXTRA_USERS,
     plan_allows_buy_extra,
     plan_extra_gb_price,
     plan_extra_user_price,
+)
+from app.services.reseller_plan_extra_packs import (
+    KIND_GB,
+    KIND_USERS,
+    active_amounts_for_plan,
 )
 from app.services.reseller_package import read_admin_usage
 from app.services.wallet import get_wallet_balance
@@ -163,8 +166,10 @@ async def build_overview(session: AsyncSession, *, user: BotUser, profile: Resel
     if unavailable is None and plan is not None:
         overview.packs = [_pack_row(p) for p in await list_addon_plans(session, category_id=plan.category_id)]
         if plan_allows_buy_extra(plan):
-            if plan_extra_gb_price(plan) > 0:
-                overview.unit_gb = UnitOffer(plan_extra_gb_price(plan), sorted(ALLOWED_EXTRA_GB))
-            if plan_extra_user_price(plan) > 0:
-                overview.unit_users = UnitOffer(plan_extra_user_price(plan), sorted(ALLOWED_EXTRA_USERS))
+            gb_amounts = sorted(await active_amounts_for_plan(session, int(plan.id), KIND_GB))
+            user_amounts = sorted(await active_amounts_for_plan(session, int(plan.id), KIND_USERS))
+            if plan_extra_gb_price(plan) > 0 and gb_amounts:
+                overview.unit_gb = UnitOffer(plan_extra_gb_price(plan), gb_amounts)
+            if plan_extra_user_price(plan) > 0 and user_amounts:
+                overview.unit_users = UnitOffer(plan_extra_user_price(plan), user_amounts)
     return overview
