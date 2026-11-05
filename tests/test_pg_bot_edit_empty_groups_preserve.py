@@ -26,6 +26,9 @@ class BotEditEmptyGroupsPreserveTests(unittest.IsolatedAsyncioTestCase):
         session = AsyncMock()
 
         pg_client = AsyncMock()
+        # Successful fetch with no staff-visible groups → selection optional;
+        # empty selection must omit group_ids (preserve panel-assigned groups).
+        pg_client.get_groups_simple = AsyncMock(return_value=[])
         gate = MagicMock()
         gate.allowed = True
         gate.staff = {

@@ -222,13 +222,12 @@
         </label>
         {% if groups %}
         <div class="form-field">
-          <span class="form-field-label">گروه‌های پاسارگارد (اختیاری)</span>
+          <span class="form-field-label">گروه‌های پاسارگارد (حداقل یکی)</span>
           <div class="ui-switch-grid">
             {% for g in groups %}
             {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
             {% endfor %}
           </div>
-          <small class="muted">خالی بگذارید تا پنل گروه‌های پیش‌فرض/اختصاصی خودش را بزند</small>
         </div>
         {% endif %}
       </div>
@@ -291,13 +290,12 @@
       </label>
       {% if groups %}
       <div class="form-field">
-        <span class="form-field-label">گروه‌ها (اختیاری؛ خالی = بدون تغییر)</span>
+        <span class="form-field-label">گروه‌ها (حداقل یکی)</span>
         <div class="ui-switch-grid" id="pg-edit-groups">
           {% for g in groups %}
           {{ switch_chip('edit_group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
           {% endfor %}
         </div>
-        <small class="muted">انتخاب خالی گروه‌های فعلی را نگه می‌دارد؛ حذف همهٔ گروه‌ها از این فرم ممکن نیست</small>
       </div>
       {% endif %}
       <div class="actions">
@@ -367,6 +365,7 @@
     mode.addEventListener('change', sync);
     sync();
   }
+  const groupsRequired = {{ (groups_required|default(false))|tojson }};
   if (form) {
     form.addEventListener('submit', function(e){
       const unameEl = document.getElementById('pg-create-username');
@@ -376,6 +375,13 @@
         showFormErr(createErr, 'نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ باشد (بدون فاصله و فارسی)');
         if (unameEl) unameEl.focus();
         return;
+      }
+      if (groupsRequired && mode && mode.value === 'custom') {
+        const chips = form.querySelectorAll('input[name^="group_"]:checked');
+        if (!chips.length) {
+          e.preventDefault();
+          showFormErr(createErr, 'حداقل یک گروه انتخاب کنید');
+        }
       }
     });
   }
@@ -402,6 +408,14 @@
       });
       if (editErr && !editErr.dataset.keep) {
         showFormErr(editErr, '');
+      }
+    });
+    editForm.addEventListener('submit', function(e){
+      if (!groupsRequired) return;
+      const chips = editForm.querySelectorAll('input[name^="edit_group_"]:checked');
+      if (!chips.length) {
+        e.preventDefault();
+        showFormErr(editErr, 'حداقل یک گروه انتخاب کنید');
       }
     });
   }

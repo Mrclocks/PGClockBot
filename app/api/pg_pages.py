@@ -651,12 +651,15 @@ def register_pg_pages(
             err = str(e)
             groups_fetch_failed = True
         actions = staff_user_actions(staff)
-        # Custom create no longer requires a non-empty group list (panel may
+        from app.services.plans_catalog import staff_must_select_groups
+
+        # Custom create stays available when the allow-list is empty (panel may
         # bind groups). A failed group fetch must not look like "no groups".
         can_custom = (
             bool(actions["create"]) and (not require_template) and not groups_fetch_failed
         )
         can_template = bool(actions["create"]) and bool(templates)
+        groups_required = (not groups_fetch_failed) and staff_must_select_groups(groups)
         return render(
             request,
             "pg_users.html",
@@ -665,6 +668,7 @@ def register_pg_pages(
                 users=users,
                 templates=templates,
                 groups=groups,
+                groups_required=groups_required,
                 q=q,
                 pager=pager,
                 flash_err=err,
@@ -698,6 +702,7 @@ def register_pg_pages(
         from app.services.plans_catalog import (
             groups_allowed_for_staff,
             parse_group_ids_from_form,
+            resolve_user_write_group_ids,
             template_allowed_for_staff,
         )
 
@@ -768,8 +773,6 @@ def register_pg_pages(
                 if not ids:
                     # also accept comma field if present
                     ids = parse_group_ids(str(form.get("group_ids") or ""))
-                if ids and not groups_allowed_for_staff(staff, ids):
-                    return _pg_form_err("یکی از گروه‌های انتخاب‌شده مجاز نیست", modal="create")
 
                 gb_raw = str(form.get("data_limit_gb") or "").strip()
                 days_raw = str(form.get("duration_days") or "").strip()
@@ -816,11 +819,36 @@ def register_pg_pages(
                     return _pg_form_err(getattr(qe, "message", str(qe)), modal="create")
 
                 pg, as_owner = await _staff_pg(session, staff)
+                try:
+                    raw_groups = await pg.get_groups_simple()
+                except Exception:
+                    logger.warning(
+                        "pg users create: PasarGuard groups fetch failed",
+                        exc_info=True,
+                    )
+                    return _pg_form_err(
+                        "خواندن گروه‌های پاسارگارد ناموفق بود؛ دوباره تلاش کنید",
+                        modal="create",
+                    )
+                visible = _filter_groups(
+                    raw_groups if isinstance(raw_groups, list) else [], staff
+                )
+                try:
+                    resolved_ids = resolve_user_write_group_ids(
+                        ids, visible_groups=visible
+                    )
+                except ValueError as ve:
+                    return _pg_form_err(str(ve), modal="create")
+                if resolved_ids is not None and not groups_allowed_for_staff(
+                    staff, resolved_ids
+                ):
+                    return _pg_form_err("یکی از گروه‌های انتخاب‌شده مجاز نیست", modal="create")
+
                 hold = await hold_staff_create(session, staff, pg=pg, template_id=None, data_limit=data_limit)
                 await pg.create_user(
                     build_user_create_payload(
                         username=uname,
-                        group_ids=ids or None,
+                        group_ids=resolved_ids,
                         data_limit=data_limit,
                         expire_ts=expire_ts,
                         hwid_limit=hwid_limit,
@@ -872,14 +900,16 @@ def register_pg_pages(
     ):
         import time
 
-        from app.services.plans_catalog import groups_allowed_for_staff, parse_group_ids_from_form
+        from app.services.plans_catalog import (
+            groups_allowed_for_staff,
+            parse_group_ids_from_form,
+            resolve_user_write_group_ids,
+        )
 
         if not staff_user_actions(staff)["update"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ویرایش ندارید')}", status_code=303)
         form = await request.form()
         ids = parse_group_ids_from_form(form, prefix="edit_group_")
-        if ids and not groups_allowed_for_staff(staff, ids):
-            return _pg_form_err("یکی از گروه‌های انتخاب‌شده مجاز نیست", modal="edit", uid=user_id)
 
         gb_raw = str(form.get("data_limit_gb") or "").strip()
         days_raw = str(form.get("duration_days") or "").strip()
@@ -934,16 +964,43 @@ def register_pg_pages(
                 )
             except (ProvisionError, PgQuotaError) as qe:
                 return _pg_form_err(getattr(qe, "message", str(qe)), modal="edit", uid=user_id)
+            pg, _as_owner = await _staff_pg(session, staff)
+            try:
+                raw_groups = await pg.get_groups_simple()
+            except Exception:
+                logger.warning(
+                    "pg users edit: PasarGuard groups fetch failed",
+                    exc_info=True,
+                )
+                return _pg_form_err(
+                    "خواندن گروه‌های پاسارگارد ناموفق بود؛ دوباره تلاش کنید",
+                    modal="edit",
+                    uid=user_id,
+                )
+            visible = _filter_groups(
+                raw_groups if isinstance(raw_groups, list) else [], staff
+            )
+            try:
+                resolved_ids = resolve_user_write_group_ids(
+                    ids, visible_groups=visible
+                )
+            except ValueError as ve:
+                return _pg_form_err(str(ve), modal="edit", uid=user_id)
+            if resolved_ids is not None and not groups_allowed_for_staff(
+                staff, resolved_ids
+            ):
+                return _pg_form_err(
+                    "یکی از گروه‌های انتخاب‌شده مجاز نیست", modal="edit", uid=user_id
+                )
             # PasarGuard does not allow changing username after create
             payload = build_user_modify_payload(
                 username=None,
-                group_ids=ids or None,
+                group_ids=resolved_ids,
                 data_limit=data_limit,
                 expire_ts=expire_ts,
                 hwid_limit=hwid_limit if hwid_changed else None,
                 status=str(current.get("status") or "") or None,
             )
-            pg, _as_owner = await _staff_pg(session, staff)
             hold = await hold_staff_edit(
                 session, staff, current_limit=current.get("data_limit"), new_limit=data_limit
             )

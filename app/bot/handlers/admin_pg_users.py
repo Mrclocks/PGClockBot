@@ -180,6 +180,29 @@ async def _begin_custom_create_username(callback: CallbackQuery, state: FSMConte
         edit=True,
     )
 
+
+async def _resolve_selected_groups_for_write(
+    *,
+    pg,
+    staff,
+    state: FSMContext,
+    selected: list[int],
+) -> tuple[list[int] | None, str | None]:
+    """Return ``(group_ids_or_omit, error_message)`` for create/edit writes."""
+    from app.services.bot_pg_catalog_authz import catalog_groups_allowed
+    from app.services.plans_catalog import resolve_user_write_group_ids
+
+    visible, groups_ok = await _load_staff_groups(pg, staff, state)
+    if not groups_ok:
+        return None, _GROUPS_FETCH_FAILED_MSG
+    try:
+        resolved = resolve_user_write_group_ids(selected, visible_groups=visible)
+    except ValueError:
+        return None, feedback.PICK_AT_LEAST_ONE_GROUP
+    if resolved is not None and not catalog_groups_allowed(staff, resolved):
+        return None, feedback.ACTION_NOT_ALLOWED
+    return resolved, None
+
 _PAGE_RE = re.compile(r"^adm:pg:users:p:(\d+)$")
 _SETTPL_RE = re.compile(r"^adm:pg:settpl:(\d+)$")
 _TOGGRP_RE = re.compile(r"^adm:pg:toggrp:(\d+)$")
@@ -1207,27 +1230,21 @@ async def _show_create_group_picker(
         )
     done_cb = "adm:pg:edgrpdone" if edit_uid else "adm:pg:grpdone"
     back_cb = f"adm:pg:u:{edit_uid}:edit" if edit_uid else "adm:pg:create"
-    if edit_uid:
-        confirm_label = (
-            f"✅ تأیید ({len(selected)})" if selected else "✅ تأیید (بدون تغییر گروه‌ها)"
-        )
-        text = (
-            "📁 ویرایش گروه‌ها (اختیاری):\n"
-            f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}\n"
-            "اگر هیچ گروهی انتخاب نکنید، گروه‌های فعلی کاربر تغییر نمی‌کند.\n"
-            "حذف همهٔ گروه‌ها از این صفحه ممکن نیست."
-        )
-    else:
-        confirm_label = (
-            f"✅ تأیید ({len(selected)})" if selected else "✅ ادامه بدون گروه"
-        )
-        text = (
-            "📁 گروه‌ها اختیاری‌اند (چندتایی):\n"
-            f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}\n"
-            "بدون گروه هم می‌توانید ادامه دهید."
-        )
-    rows.append([InlineKeyboardButton(text=confirm_label, callback_data=done_cb)])
+    # Picker is only shown when the filtered list is non-empty → selection
+    # is mandatory (same as pre-optional behavior).
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=f"✅ تأیید ({len(selected)})",
+                callback_data=done_cb,
+            )
+        ]
+    )
     rows.append([kb.back_button(None, back_cb)])
+    text = (
+        "📁 گروه‌ها را انتخاب کنید (چندتایی):\n"
+        f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}"
+    )
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -1300,10 +1317,14 @@ async def pg_create_grpdone(
         return
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
-    from app.services.bot_pg_catalog_authz import catalog_groups_allowed
-
-    if selected and not catalog_groups_allowed(gate.staff, selected):
-        await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
+    _resolved, err = await _resolve_selected_groups_for_write(
+        pg=gate.pg_client,
+        staff=gate.staff,
+        state=state,
+        selected=selected,
+    )
+    if err:
+        await callback.answer(err, show_alert=True)
         return
     await callback.answer()
     await _begin_custom_create_username(callback, state)
@@ -1547,18 +1568,22 @@ async def pg_create_days(
         await state.clear()
         await message.answer("اطلاعات این مرحله کامل نیست. دوباره شروع کنید.")
         return
-    from app.services.bot_pg_catalog_authz import catalog_groups_allowed
-
-    if groups and not catalog_groups_allowed(gate.staff, groups):
+    resolved_ids, groups_err = await _resolve_selected_groups_for_write(
+        pg=gate.pg_client,
+        staff=gate.staff,
+        state=state,
+        selected=groups,
+    )
+    if groups_err:
         await state.clear()
-        await message.answer(feedback.ACTION_NOT_ALLOWED)
+        await message.answer(groups_err)
         return
     data_limit = int(gb * (1024**3)) if gb > 0 else 0
     expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
     payload = sanitize_pg_user_write_payload(
         build_user_create_payload(
             username=uname,
-            group_ids=groups or None,
+            group_ids=resolved_ids,
             data_limit=data_limit if gb > 0 else 0,
             expire_ts=expire_ts if days > 0 else 0,
             note=f"telegram admin · {db_user.telegram_id}",
@@ -2092,10 +2117,14 @@ async def pg_edit_grpdone(
     if not uid:
         await callback.answer("کاربر نامعتبر", show_alert=True)
         return
-    from app.services.bot_pg_catalog_authz import catalog_groups_allowed
-
-    if selected and not catalog_groups_allowed(gate.staff, selected):
-        await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
+    resolved_ids, groups_err = await _resolve_selected_groups_for_write(
+        pg=gate.pg_client,
+        staff=gate.staff,
+        state=state,
+        selected=selected,
+    )
+    if groups_err:
+        await callback.answer(groups_err, show_alert=True)
         return
     try:
         current = gate.pg_user or {}
@@ -2103,7 +2132,7 @@ async def pg_edit_grpdone(
         payload = sanitize_pg_user_write_payload(
             build_user_modify_payload(
                 username=str(uname) if uname else None,
-                group_ids=selected or None,
+                group_ids=resolved_ids,
                 status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
             )
         )
