@@ -24,12 +24,11 @@ from app.services.formatting import format_message, format_toman
 from app.services.redact import user_safe_error
 from app.services.reseller_access import load_reseller_capacity_actor
 from app.services.reseller_capacity import (
-    ALLOWED_EXTRA_GB,
-    ALLOWED_EXTRA_USERS,
     buy_extra_gb,
     buy_extra_users,
     load_reseller_plan,
 )
+from app.services.reseller_plan_extra_packs import KIND_GB, KIND_USERS, active_amounts_for_plan
 from app.services.reseller_capacity_orders import (
     KIND_GB,
     KIND_PACK,
@@ -169,10 +168,12 @@ async def res_buy_gb_pay(
     if actor is None or actor[2] is None:
         await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
-    if parsed is None or parsed[0] not in ALLOWED_EXTRA_GB:
+    owner, profile, plan = actor
+    if parsed is None or parsed[0] not in await active_amounts_for_plan(
+        session, int(plan.id), KIND_GB
+    ):
         await callback.answer("مقدار مجاز نیست", show_alert=True)
         return
-    owner, profile, plan = actor
     try:
         result = await buy_extra_gb(
             session, user=owner, profile=profile, plan=plan, gb=parsed[0], generation=parsed[1],
@@ -199,10 +200,12 @@ async def res_buy_users_pay(
     if actor is None or actor[2] is None:
         await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
-    if parsed is None or parsed[0] not in ALLOWED_EXTRA_USERS:
+    owner, profile, plan = actor
+    if parsed is None or parsed[0] not in await active_amounts_for_plan(
+        session, int(plan.id), KIND_USERS
+    ):
         await callback.answer("مقدار مجاز نیست", show_alert=True)
         return
-    owner, profile, plan = actor
     try:
         result = await buy_extra_users(
             session, user=owner, profile=profile, plan=plan, count=parsed[0], generation=parsed[1],

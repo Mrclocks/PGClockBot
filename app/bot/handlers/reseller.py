@@ -1565,14 +1565,31 @@ async def res_buy_gb(
     if not plan_allows_buy_extra(plan):
         await callback.answer("این پلن خرید حجم اضافه ندارد", show_alert=True)
         return
+    from app.services.reseller_plan_extra_packs import (
+        KIND_GB,
+        active_amounts_for_plan,
+        buyable_packs_for_plan,
+        resolve_extra_pack_button_style,
+        telegram_style_kwargs,
+    )
+
     price = plan_extra_gb_price(plan)
+    packs = await buyable_packs_for_plan(session, int(plan.id), KIND_GB)
+    if packs:
+        choices = [(int(p.amount), p.button_style) for p in packs]
+    else:
+        choices = [
+            (n, None) for n in sorted(await active_amounts_for_plan(session, int(plan.id), KIND_GB))
+        ]
     rows = []
-    for gb in (1, 5, 10, 50):
+    for gb, pack_style in choices:
+        style = resolve_extra_pack_button_style(pack_style, plan)
         rows.append(
             [
                 InlineKeyboardButton(
                     text=f"{gb} گیگابایت — {format_toman(price * gb, get_settings().currency)}",
                     callback_data=f"res:buy_gb:{gb}",
+                    **telegram_style_kwargs(style),
                 )
             ]
         )
@@ -1608,18 +1625,18 @@ async def res_buy_gb_go(
     if not owner_id or not profile or not plan or not owner:
         await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
-    from app.services.reseller_capacity import ALLOWED_EXTRA_GB
+    from app.services.reseller_plan_extra_packs import KIND_GB, active_amounts_for_plan
 
     try:
         gb = int(callback.data.split(":")[-1])
     except ValueError:
         await callback.answer("این مقدار مجاز نیست", show_alert=True)
         return
-    if gb not in ALLOWED_EXTRA_GB:
+    if gb not in await active_amounts_for_plan(session, int(plan.id), KIND_GB):
         await callback.answer("مقدار مجاز نیست", show_alert=True)
         return
     from app.bot.handlers.reseller_capacity_buy import GB_OK, confirm_view, current_generation, order_callback_for
-    from app.services.reseller_capacity_orders import KIND_GB
+    from app.services.reseller_capacity_orders import KIND_GB as ORDER_KIND_GB
     from app.services.reseller_capacity import plan_allows_buy_extra, plan_extra_gb_price
 
     price = plan_extra_gb_price(plan) * gb
@@ -1630,7 +1647,7 @@ async def res_buy_gb_go(
         title="📦 تأیید خرید حجم اضافه", lines=[f"حجم اضافه: <b>{gb}</b> گیگابایت"], price=price,
         wallet=int(owner.wallet_balance or 0),
         ok_callback=f"{GB_OK}{gb}:{await current_generation(session, profile)}", back_callback="res:buy_gb",
-        order_callback=order_callback_for(KIND_GB, gb, is_reseller_bot=is_reseller_bot),
+        order_callback=order_callback_for(ORDER_KIND_GB, gb, is_reseller_bot=is_reseller_bot),
     )
     await callback.answer()
     if callback.message:
@@ -1659,14 +1676,32 @@ async def res_buy_users(
     if not plan_allows_buy_extra(plan):
         await callback.answer("این پلن خرید کاربر اضافه ندارد", show_alert=True)
         return
+    from app.services.reseller_plan_extra_packs import (
+        KIND_USERS,
+        active_amounts_for_plan,
+        buyable_packs_for_plan,
+        resolve_extra_pack_button_style,
+        telegram_style_kwargs,
+    )
+
     price = plan_extra_user_price(plan)
+    packs = await buyable_packs_for_plan(session, int(plan.id), KIND_USERS)
+    if packs:
+        choices = [(int(p.amount), p.button_style) for p in packs]
+    else:
+        choices = [
+            (n, None)
+            for n in sorted(await active_amounts_for_plan(session, int(plan.id), KIND_USERS))
+        ]
     rows = []
-    for n in (1, 5, 10, 20):
+    for n, pack_style in choices:
+        style = resolve_extra_pack_button_style(pack_style, plan)
         rows.append(
             [
                 InlineKeyboardButton(
                     text=f"{n} کاربر — {format_toman(price * n, get_settings().currency)}",
                     callback_data=f"res:buy_users:{n}",
+                    **telegram_style_kwargs(style),
                 )
             ]
         )
@@ -1702,18 +1737,18 @@ async def res_buy_users_go(
     if not owner_id or not profile or not plan or not owner:
         await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
-    from app.services.reseller_capacity import ALLOWED_EXTRA_USERS
+    from app.services.reseller_plan_extra_packs import KIND_USERS, active_amounts_for_plan
 
     try:
         n = int(callback.data.split(":")[-1])
     except ValueError:
         await callback.answer("این مقدار مجاز نیست", show_alert=True)
         return
-    if n not in ALLOWED_EXTRA_USERS:
+    if n not in await active_amounts_for_plan(session, int(plan.id), KIND_USERS):
         await callback.answer("مقدار مجاز نیست", show_alert=True)
         return
     from app.bot.handlers.reseller_capacity_buy import USERS_OK, confirm_view, current_generation, order_callback_for
-    from app.services.reseller_capacity_orders import KIND_USERS
+    from app.services.reseller_capacity_orders import KIND_USERS as ORDER_KIND_USERS
     from app.services.reseller_capacity import plan_allows_buy_extra, plan_extra_user_price
 
     price = plan_extra_user_price(plan) * n
@@ -1724,7 +1759,7 @@ async def res_buy_users_go(
         title="👤 تأیید خرید کاربر اضافه", lines=[f"کاربر اضافه: <b>{n}</b>"], price=price,
         wallet=int(owner.wallet_balance or 0),
         ok_callback=f"{USERS_OK}{n}:{await current_generation(session, profile)}", back_callback="res:buy_users",
-        order_callback=order_callback_for(KIND_USERS, n, is_reseller_bot=is_reseller_bot),
+        order_callback=order_callback_for(ORDER_KIND_USERS, n, is_reseller_bot=is_reseller_bot),
     )
     await callback.answer()
     if callback.message:
