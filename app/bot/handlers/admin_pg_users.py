@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import logging
 import re
 import time
 from typing import Any
@@ -44,7 +45,10 @@ _USERS_BACK = InlineKeyboardMarkup(
 PG_HUB_CALLBACK = "nv:adm:pg"
 _PG_HUB_BACK = InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, PG_HUB_CALLBACK)]])
 
+logger = logging.getLogger(__name__)
 router = Router(name="admin_pg_users")
+
+_GROUPS_FETCH_FAILED_MSG = "خواندن گروه‌ها ناموفق بود؛ دوباره تلاش کنید."
 
 def _err_msg(exc: Exception) -> str:
     """Persian-friendly PasarGuard / local error for bot replies."""
@@ -129,21 +133,36 @@ def _filter_staff_groups(items, staff) -> list:
     return filter_groups_for_staff(items, staff or {})
 
 
-async def _load_staff_groups(pg, staff, state: FSMContext | None = None) -> list:
-    """Filtered groups for this staff; reuse FSM cache when present."""
+async def _load_staff_groups(
+    pg, staff, state: FSMContext | None = None
+) -> tuple[list, bool]:
+    """Filtered groups for this staff; reuse FSM cache when a prior fetch succeeded.
+
+    Returns ``(groups, ok)``. ``ok`` is False when the panel fetch failed; then
+    ``groups`` is ``[]`` and nothing is written to the FSM cache (so a transient
+    timeout cannot freeze an empty list for the rest of the flow).
+    """
     if state is not None:
         data = await state.get_data()
-        cached = data.get("pg_groups_cache")
-        if isinstance(cached, list):
-            return cached
+        if data.get("pg_groups_cache_ok") is True:
+            cached = data.get("pg_groups_cache")
+            if isinstance(cached, list):
+                return cached, True
     try:
         raw = await pg.get_groups_simple()
     except Exception:
-        raw = []
+        logger.warning("PasarGuard groups fetch failed for staff picker", exc_info=True)
+        return [], False
+    if not isinstance(raw, list):
+        logger.warning(
+            "PasarGuard groups fetch returned non-list: %s",
+            type(raw).__name__,
+        )
+        return [], False
     groups = _filter_staff_groups(raw, staff)
     if state is not None:
-        await state.update_data(pg_groups_cache=groups)
-    return groups
+        await state.update_data(pg_groups_cache=groups, pg_groups_cache_ok=True)
+    return groups, True
 
 
 async def _begin_custom_create_username(callback: CallbackQuery, state: FSMContext) -> None:
@@ -1144,10 +1163,13 @@ async def pg_create_custom_groups(
     )
     if not gate.allowed:
         return
-    await callback.answer()
     await state.clear()
     await state.update_data(pg_create_mode="custom", pg_template_id=None, pg_selected_groups=[])
-    groups = await _load_staff_groups(gate.pg_client, gate.staff, state)
+    groups, groups_ok = await _load_staff_groups(gate.pg_client, gate.staff, state)
+    if not groups_ok:
+        await callback.answer(_GROUPS_FETCH_FAILED_MSG, show_alert=True)
+        return
+    await callback.answer()
     if not groups:
         # Panel may already bind groups to this admin; skip a blank picker.
         await _begin_custom_create_username(callback, state)
@@ -1156,11 +1178,14 @@ async def pg_create_custom_groups(
 
 async def _show_create_group_picker(
     callback: CallbackQuery, state: FSMContext, *, pg, staff=None
-) -> None:
+) -> bool:
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
     edit_uid = data.get("pg_edit_uid")
-    groups = await _load_staff_groups(pg, staff, state)
+    groups, groups_ok = await _load_staff_groups(pg, staff, state)
+    if not groups_ok:
+        await callback.answer(_GROUPS_FETCH_FAILED_MSG, show_alert=True)
+        return False
     rows: list[list[InlineKeyboardButton]] = []
     prefix = "adm:pg:edgrp" if edit_uid else "adm:pg:toggrp"
     for g in groups[:25]:
@@ -1182,22 +1207,34 @@ async def _show_create_group_picker(
         )
     done_cb = "adm:pg:edgrpdone" if edit_uid else "adm:pg:grpdone"
     back_cb = f"adm:pg:u:{edit_uid}:edit" if edit_uid else "adm:pg:create"
-    confirm_label = (
-        f"✅ تأیید ({len(selected)})" if selected else "✅ ادامه بدون گروه"
-    )
+    if edit_uid:
+        confirm_label = (
+            f"✅ تأیید ({len(selected)})" if selected else "✅ تأیید (بدون تغییر گروه‌ها)"
+        )
+        text = (
+            "📁 ویرایش گروه‌ها (اختیاری):\n"
+            f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}\n"
+            "اگر هیچ گروهی انتخاب نکنید، گروه‌های فعلی کاربر تغییر نمی‌کند.\n"
+            "حذف همهٔ گروه‌ها از این صفحه ممکن نیست."
+        )
+    else:
+        confirm_label = (
+            f"✅ تأیید ({len(selected)})" if selected else "✅ ادامه بدون گروه"
+        )
+        text = (
+            "📁 گروه‌ها اختیاری‌اند (چندتایی):\n"
+            f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}\n"
+            "بدون گروه هم می‌توانید ادامه دهید."
+        )
     rows.append([InlineKeyboardButton(text=confirm_label, callback_data=done_cb)])
     rows.append([kb.back_button(None, back_cb)])
-    text = (
-        "📁 گروه‌ها اختیاری‌اند (چندتایی):\n"
-        f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}\n"
-        "بدون گروه هم می‌توانید ادامه دهید."
-    )
     if callback.message:
         await safe_edit_text(
             callback.message,
             text,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
+    return True
 
 @router.callback_query(F.data.startswith("adm:pg:toggrp:"))
 async def pg_create_toggrp(
@@ -1967,7 +2004,10 @@ async def pg_edit_groups_start(
     if not gate.allowed:
         return
     uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
-    groups = await _load_staff_groups(gate.pg_client, gate.staff, state)
+    groups, groups_ok = await _load_staff_groups(gate.pg_client, gate.staff, state)
+    if not groups_ok:
+        await callback.answer(_GROUPS_FETCH_FAILED_MSG, show_alert=True)
+        return
     if not groups:
         await callback.answer(
             "گروه قابل انتخابی ندارید؛ گروه‌های فعلی کاربر حفظ می‌شود.",

@@ -536,6 +536,7 @@ def register_pg_pages(
         )
         templates: list[dict] = []
         groups: list[dict] = []
+        groups_fetch_failed = False
         access = staff.get("pg_access") or {}
         require_template = bool(access.get("require_template")) and not _is_pg_owner_principal(staff)
         try:
@@ -624,19 +625,37 @@ def register_pg_pages(
                 templates = []
             templates = _filter_templates(templates, staff)
 
-            if isinstance(groups_raw, list):
+            if isinstance(groups_raw, Exception):
+                logger.warning(
+                    "pg users: PasarGuard groups fetch failed",
+                    exc_info=groups_raw,
+                )
+                groups_fetch_failed = True
+                groups = []
+            elif isinstance(groups_raw, list):
                 groups = groups_raw
             elif isinstance(groups_raw, dict):
                 groups = as_list(groups_raw, "groups") or []
-            elif not isinstance(groups_raw, Exception):
+            else:
                 groups = []
             groups = _filter_groups(groups, staff)
+            if groups_fetch_failed and not err:
+                err = (
+                    "خواندن گروه‌های پاسارگارد ناموفق بود؛ "
+                    "ساخت سفارشی موقتاً غیرفعال است."
+                )
         except PgReadDenied as e:
             err = e.message
+            groups_fetch_failed = True
         except Exception as e:
             err = str(e)
+            groups_fetch_failed = True
         actions = staff_user_actions(staff)
-        can_custom = bool(actions["create"]) and (not require_template) and bool(groups)
+        # Custom create no longer requires a non-empty group list (panel may
+        # bind groups). A failed group fetch must not look like "no groups".
+        can_custom = (
+            bool(actions["create"]) and (not require_template) and not groups_fetch_failed
+        )
         can_template = bool(actions["create"]) and bool(templates)
         return render(
             request,
@@ -1077,7 +1096,16 @@ def register_pg_pages(
             elif isinstance(templates_raw, Exception):
                 raise templates_raw
             templates = _filter_templates(templates, staff)
-            groups = _filter_groups(groups_raw if isinstance(groups_raw, list) else [], staff)
+            if isinstance(groups_raw, Exception):
+                logger.warning(
+                    "pg templates: PasarGuard groups fetch failed",
+                    exc_info=groups_raw,
+                )
+                groups = []
+            else:
+                groups = _filter_groups(
+                    groups_raw if isinstance(groups_raw, list) else [], staff
+                )
         except PgReadDenied as e:
             err = e.message
         except Exception as e:

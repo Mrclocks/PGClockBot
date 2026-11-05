@@ -228,6 +228,7 @@
             {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
             {% endfor %}
           </div>
+          <small class="muted">خالی بگذارید تا پنل گروه‌های پیش‌فرض/اختصاصی خودش را بزند</small>
         </div>
         {% endif %}
       </div>
@@ -290,12 +291,13 @@
       </label>
       {% if groups %}
       <div class="form-field">
-        <span class="form-field-label">گروه‌ها (اختیاری)</span>
+        <span class="form-field-label">گروه‌ها (اختیاری؛ خالی = بدون تغییر)</span>
         <div class="ui-switch-grid" id="pg-edit-groups">
           {% for g in groups %}
           {{ switch_chip('edit_group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
           {% endfor %}
         </div>
+        <small class="muted">انتخاب خالی گروه‌های فعلی را نگه می‌دارد؛ حذف همهٔ گروه‌ها از این فرم ممکن نیست</small>
       </div>
       {% endif %}
       <div class="actions">
