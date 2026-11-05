@@ -1310,7 +1310,12 @@ class DeliveryAttempt:
 
 
 async def settle_failed_free_delivery(
-    session: AsyncSession, order: Order, *, attempt: DeliveryAttempt, error: str
+    session: AsyncSession,
+    order: Order,
+    *,
+    attempt: DeliveryAttempt,
+    error: str,
+    reopen: bool = True,
 ) -> Payment | None:
     """After a free order's delivery failed: revert it for a retry, or keep it for staff.
 
@@ -1320,7 +1325,7 @@ async def settle_failed_free_delivery(
     None when the order was reverted and the buyer may try again.
     """
     if not attempt.panel_may_hold_account:
-        await revert_failed_free_delivery(session, order)
+        await revert_failed_free_delivery(session, order, reopen=reopen)
         return None
     payment = await session.scalar(
         select(Payment)
@@ -1335,11 +1340,17 @@ async def settle_failed_free_delivery(
     return payment
 
 
-async def revert_failed_free_delivery(session: AsyncSession, order: Order) -> None:
-    """Undo mark_order_free_paid so the user can retry after a delivery failure."""
+async def revert_failed_free_delivery(
+    session: AsyncSession, order: Order, *, reopen: bool = True
+) -> None:
+    """Undo a free claim after a delivery failure.
+
+    ``reopen`` puts the order back to pending so the buyer can retry; otherwise it is
+    cancelled (a staff free order keeps a zero amount and must not be paid later).
+    """
     if getattr(order, "service_mutation_pending", False):
         return
-    order.status = OrderStatus.PENDING.value
+    order.status = OrderStatus.PENDING.value if reopen else OrderStatus.CANCELLED.value
     pays = await session.execute(
         select(Payment).where(
             Payment.order_id == order.id,

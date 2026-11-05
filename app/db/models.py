@@ -49,6 +49,7 @@ class PaymentMethod(str, Enum):
     STARS = "stars"
     PSP = "psp"  # Iranian/online PSP with request→verify (additive)
     BBC = "bbc"  # BezanBeCard card-to-card match (per-shop API key)
+    STAFF_FREE = "staff_free"  # platform owner / shop operator took their own order free
 
 
 class PaymentStatus(str, Enum):

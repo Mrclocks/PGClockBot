@@ -242,7 +242,7 @@ async def shop_payment_method_breakdown(
             .order_by(func.count().desc())
         )
     ).all()
-    labels = {"card": "کارت", "wallet": "کیف پول", "stars": "Stars", "—": "نامشخص"}
+    labels = {"card": "کارت", "wallet": "کیف پول", "stars": "Stars", "staff_free": "رایگان مدیر", "—": "نامشخص"}
     total = sum(int(amount or 0) for _method, _count, amount in rows)
     out = []
     for method, count, amount in rows:
