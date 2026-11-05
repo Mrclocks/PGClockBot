@@ -399,22 +399,35 @@
       </form>`}
       ${checkoutExtrasHtml(options)}
       ${enough ? "" : lowBalanceHtml(f)}
-      <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "دریافت سرویس تست" : "پرداخت از کیف پول"}</button>
+      <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "ادامه دریافت تست" : "ادامه پرداخت"}</button>
       ${staffFreeButtonHtml(plan, options)}
     </section>`;
+  }
+
+  function buyConfirmHtml(plan) {
+    if (!plan) return emptyHtml("پلن انتخاب نشده است.");
+    const pid = Number(plan.id) || 0;
+    const confirmLabel = plan.is_trial ? "تأیید و دریافت سرویس تست" : "تأیید و پرداخت از کیف پول";
+    return `<div class="sum-row"><span class="muted">پلن</span><strong>${esc(plan.name)}</strong></div>
+      <div class="sum-row is-total"><span>مبلغ</span><span>${priceHtml(plan)}</span></div>
+      <p class="sm">${esc(planMetaText(plan))}</p>
+      <div class="btn-col">
+        <button type="button" class="btn block" data-action="confirm-buy" data-id="${pid}">${esc(confirmLabel)}</button>
+        <button type="button" class="btn ghost block" data-action="close-sheet">انصراف</button>
+      </div>`;
   }
 
   function discountedCheckoutHtml(checkout, plan, wallet, options) {
     const enough = Number(checkout.amount) <= (Number(wallet) || 0);
     return `<section class="card" aria-label="خلاصهٔ سفارش با تخفیف">
-      <div class="sum-row"><span class="muted">پلن</span><span>${esc(plan ? plan.name : "")}</span></div>
+      <div class="sum-row"><span class="muted">پلن</span><strong>${esc(plan ? plan.name : "")}</strong></div>
       <div class="sum-row"><span class="muted">قیمت</span><s>${esc(money(checkout.original_amount))}</s></div>
       <div class="sum-row"><span class="muted">تخفیف <bdi dir="ltr">${esc(checkout.code)}</bdi></span><span class="is-plus tx-amt"><span aria-hidden="true">−</span><bdi>${esc(money(checkout.discount))}</bdi></span></div>
-      <div class="sum-row is-total"><span>قابل پرداخت</span><span>${esc(money(checkout.amount))}</span></div>
+      <div class="sum-row is-total"><span>مبلغ</span><span>${esc(money(checkout.amount))}</span></div>
       ${checkoutExtrasHtml(options)}
       ${enough ? "" : lowBalanceHtml()}
       <div class="btn-col">
-        <button type="button" class="btn block" data-action="checkout-pay"${enough ? "" : " disabled"}>پرداخت از کیف پول</button>
+        <button type="button" class="btn block" data-action="checkout-pay"${enough ? "" : " disabled"}>تأیید و پرداخت از کیف پول</button>
         <button type="button" class="btn ghost block" data-action="checkout-cancel">حذف کد و انصراف</button>
       </div>
     </section>`;
@@ -455,11 +468,27 @@
   function addonPacksHtml(packs, serviceId) {
     if (!packs || !packs.length) return emptyHtml("بسته‌ای برای خرید فعال نیست.");
     const sid = Number(serviceId) || 0;
-    return `<p class="muted sm">بسته پس از پرداخت به همین سرویس اضافه می‌شود.</p>
-      <div class="plan-list">${packs.map((p) => `<button type="button" class="plan-option" data-action="buy-addon" data-id="${sid}" data-pack="${Number(p.id) || 0}">
+    return `<p class="muted sm">بسته را انتخاب کنید؛ پیش از پرداخت، نتیجه را می‌بینید.</p>
+      <div class="plan-list">${packs.map((p) => `<button type="button" class="plan-option" data-action="preview-addon" data-id="${sid}" data-pack="${Number(p.id) || 0}">
         <span class="plan-meta"><strong>${esc(p.name)}</strong><span class="muted sm">+${esc(p.amount_label)}</span>${p.description ? `<span class="muted sm">${esc(p.description)}</span>` : ""}</span>
         <span class="plan-price">${priceHtml(p)}</span>
       </button>`).join("")}</div>`;
+  }
+
+  function addonPreviewHtml(preview, serviceId, packId, kind) {
+    const sid = Number(serviceId) || 0;
+    const pid = Number(packId) || 0;
+    const k = kind === "duration" ? "duration" : "volume";
+    return `<div class="sum-row"><span class="muted">بسته</span><strong>${esc(preview.pack_name)}</strong></div>
+      <div class="sum-row"><span class="muted">افزایش</span><span>+${esc(preview.amount_label)}</span></div>
+      <div class="sum-row is-total"><span>مبلغ</span><span>${priceHtml(preview)}</span></div>
+      ${(preview.lines || []).map((line) => `<p class="sm">${esc(line)}</p>`).join("")}
+      ${(preview.warnings || []).map((line) => `<p class="inline-error">${esc(line)}</p>`).join("")}
+      ${preview.notice ? `<p class="muted sm">${esc(preview.notice)}</p>` : ""}
+      <div class="btn-col">
+        <button type="button" class="btn block" data-action="confirm-addon" data-id="${sid}" data-pack="${pid}">تأیید و پرداخت از کیف پول</button>
+        <button type="button" class="btn ghost block" data-action="addons" data-id="${sid}" data-kind="${esc(k)}">انتخاب بسته دیگر</button>
+      </div>`;
   }
 
   function automationHtml(data, serviceId) {
@@ -996,9 +1025,9 @@
   root.PGMini.render = Object.freeze({
     icon, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
     brandHeaderHtml, noticeBannerHtml, shortcutsHtml, panelShortcutsHtml, heroHtml,
-    attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, discountedCheckoutHtml,
+    attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, buyConfirmHtml, discountedCheckoutHtml,
     validServiceName, randomServiceName, giftFormHtml, renewPlansHtml,
-    renewPreviewHtml, addonPacksHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
+    renewPreviewHtml, addonPacksHtml, addonPreviewHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
     backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, reviewQueueHtml, reviewSheetHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml, resellerSubscriptionHtml,
   });

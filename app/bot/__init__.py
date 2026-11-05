@@ -111,6 +111,7 @@ def bot_routers() -> list[Router]:
         admin_pg_nodes,
         admin_pg_users,
         admin_settings,
+        reseller_plan_extra_packs_admin,
         automation_review,
         button_colors,
         cancellation_review,
@@ -137,6 +138,7 @@ def bot_routers() -> list[Router]:
         reseller_plans,
         reseller_reps,
         reseller_customer_tools,
+        reseller_customer_services,
         reseller_settings,
         screen_editor,
         service_import,
@@ -198,6 +200,7 @@ def bot_routers() -> list[Router]:
         reseller_package.router,
         reseller_reps.router,
         reseller_customer_tools.router,
+        reseller_customer_services.router,
         reseller_plans.router,
         plan_catalog_manage.router,
         reseller_settings.router,
@@ -210,6 +213,7 @@ def bot_routers() -> list[Router]:
         admin_pg_users.router,
         admin_pg_nodes.router,
         admin_plans.router,
+        reseller_plan_extra_packs_admin.router,
         admin.router,
         stale_menu.router,
     ]
@@ -242,6 +246,7 @@ def create_dispatcher() -> Dispatcher:
         connection_status_admin,
         connection_status_admin_input,
         guide_editor,
+        reseller_plan_extra_packs_admin,
         screen_editor,
     )
 
@@ -256,6 +261,7 @@ def create_dispatcher() -> Dispatcher:
         guide_editor.owner_router,
         screen_editor.owner_router,
         admin_plans.router,
+        reseller_plan_extra_packs_admin.router,
         connection_status_admin.router,
         connection_status_admin_input.router,
     ):

@@ -1419,6 +1419,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    from app.api.pg_link_pages import register_pg_link_pages
+
+    register_pg_link_pages(app, require_admin=require_admin)
     register_dashboard_trend_pages(app, require_staff=require_staff, get_db=get_db)
     register_bot_overview_pages(
         app, render=render, require_perm=require_perm, require_admin=require_admin, get_db=get_db
@@ -2807,6 +2810,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 category_id=category_id,
                 owner_reseller_id=owner_id,
                 description=description or None,
+                carry_remaining_quota=bool(form.get("carry_remaining_quota")),
                 is_active=True,
             )
         )
@@ -3230,6 +3234,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         plan.sort_order = sort_order
         plan.pg_template_id = tpl
         plan.pg_group_ids = group_csv
+        plan.carry_remaining_quota = bool(form.get("carry_remaining_quota"))
         from app.services.orders import parse_naming_form
         from app.services.button_styles import parse_plan_button_style_form
         from app.services.plan_categories import resolve_category_for_plan_write

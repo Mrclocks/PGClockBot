@@ -1,7 +1,7 @@
 """Orders keep the service name the buyer chose at checkout.
 
-Revision ID: 0085_order_requested_username
-Revises: 0084_reseller_plan_extra_packs
+Revision ID: 0090_order_requested_username
+Revises: 0089_addon_request_key
 
 ``orders`` gains a nullable ``requested_username``. Delivery puts it in place of the
 naming pattern's ``{random}`` part. Existing orders keep NULL (generated names).
@@ -15,8 +15,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0085_order_requested_username"
-down_revision: Union[str, None] = "0084_reseller_plan_extra_packs"
+revision: str = "0090_order_requested_username"
+down_revision: Union[str, None] = "0089_addon_request_key"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

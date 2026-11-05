@@ -31,7 +31,10 @@ KIND_LABELS = {
     "dropped": "اتصال وسط کار قطع شد",
     "gateway": "خطای پراکسی (502/503/504)",
     "server_error": "خطای خود پاسارگارد (5xx)",
+    "auth": "ورود به پاسارگارد رد شد (نام کاربری/رمز یا API key)",
+    "client_error": "پاسخ نامعتبر از پاسارگارد (4xx)",
 }
+BUDGET_EXHAUSTION_LABEL = "بودجه‌ی زمانی صفحه تمام شد"
 _DNS_HINTS = ("name or service not known", "temporary failure in name resolution", "getaddrinfo", "nodename nor servname")
 
 
@@ -41,6 +44,9 @@ class _LinkStats:
     events: deque[tuple[float, str]] = field(default_factory=lambda: deque(maxlen=MAX_EVENTS))
     latencies: deque[tuple[float, float]] = field(default_factory=lambda: deque(maxlen=MAX_LATENCIES))
     totals: Counter[str] = field(default_factory=Counter)
+    # Page-budget timeouts are not panel outages; keep a separate bounded counter.
+    budget_events: deque[float] = field(default_factory=lambda: deque(maxlen=MAX_EVENTS))
+    budget_total: int = 0
     reads: int = 0
     last_ok_at: float | None = None
     last_failure_at: float | None = None
@@ -58,7 +64,13 @@ def reset() -> None:
 def failure_kind(exc: BaseException | None = None, status_code: int | None = None) -> str:
     """Name the cause of a failed read."""
     if status_code is not None:
-        return "gateway" if status_code in (502, 503, 504) else "server_error"
+        if status_code in (502, 503, 504):
+            return "gateway"
+        if status_code in (401, 403):
+            return "auth"
+        if 400 <= status_code < 500:
+            return "client_error"
+        return "server_error"
     if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
         return "timeout"
     if isinstance(exc, httpx.ConnectError):
@@ -83,6 +95,23 @@ def record_failure(kind: str) -> None:
     _stats.totals[kind] += 1
     _stats.last_failure_at = now
     _stats.last_failure_kind = kind
+
+
+def latest_failure_kind() -> str | None:
+    """Most recent recorded failure kind key (not the Persian label)."""
+    return _stats.last_failure_kind
+
+
+def record_budget_exhaustion() -> None:
+    """Count a page-budget timeout separately from panel outages."""
+    now = time.time()
+    _stats.budget_events.append(now)
+    _stats.budget_total += 1
+
+
+def recent_budget_exhaustions(window_sec: float = WINDOW_SEC) -> int:
+    cutoff = time.time() - window_sec
+    return sum(1 for moment in _stats.budget_events if moment >= cutoff)
 
 
 def recent_failures(window_sec: float = WINDOW_SEC) -> Counter[str]:
@@ -128,6 +157,9 @@ def snapshot(circuit: dict[str, Any] | None = None) -> dict[str, Any]:
             if recent[kind] or _stats.totals[kind]
         ],
         "recent_failure_count": sum(recent.values()),
+        "budget_exhaustion_count": recent_budget_exhaustions(),
+        "budget_exhaustion_total": _stats.budget_total,
+        "budget_exhaustion_label": BUDGET_EXHAUSTION_LABEL,
         "circuit": circuit or {"paused": False, "retry_in_sec": 0, "pause_count": 0},
     }
 

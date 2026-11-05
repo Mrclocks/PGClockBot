@@ -57,7 +57,7 @@ class PlansAddonCategoryUiTests(unittest.TestCase):
         self.assertIn("list_packs_for_service", bot)
         mini = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
         self.assertIn("list_packs_for_service", mini)
-        self.assertIn("pack_matches_service_category", mini)
+        self.assertIn("pack_matches_service", mini)
         res = (ROOT / "app/bot/handlers/reseller.py").read_text(encoding="utf-8")
         self.assertIn("category_id=sub_cat", res)
 

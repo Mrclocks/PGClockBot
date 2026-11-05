@@ -175,6 +175,11 @@ class Plan(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
+    # When true (default), renewal/upgrade/downgrade adds leftover volume and time.
+    # When false, the new period is exactly this plan's volume and duration.
+    carry_remaining_quota: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -182,9 +187,9 @@ class Plan(Base):
 class ServiceAddonPack(Base):
     """Customer add-on packs: extra volume (GB) or duration (days) on an existing service.
 
-    A pack without a category (``is_general`` or no ``category_id``) applies to every plan
-    category of the shop. Otherwise ``category_id`` ties the pack to the plan category of the
-    service's sales plan, so VIP and economy packs can be priced differently.
+    Scope (narrowest wins at purchase time):
+    - ``plan_id`` set → only services of that sales plan see the pack.
+    - else ``category_id`` / ``is_general`` → category or shop-wide (legacy).
     """
 
     __tablename__ = "service_addon_packs"
@@ -205,6 +210,14 @@ class ServiceAddonPack(Base):
         nullable=True,
         index=True,
     )
+    # When set, the pack is exclusive to this sales plan (overrides category/general listing).
+    plan_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("plans.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    # NULL = inherit plan button style; "" = Telegram default; primary|success|danger
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     is_general: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
@@ -215,6 +228,7 @@ class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         Index("uq_orders_renewal_request_key", "renewal_request_key", unique=True),
+        Index("uq_orders_addon_request_key", "addon_request_key", unique=True),
         Index("ix_orders_created_at", "created_at"),
         Index(
             "uq_orders_service_quota_mutation", "service_id", unique=True,
@@ -245,6 +259,8 @@ class Order(Base):
     # Purchased terms and an absolute target, persisted before panel mutation.
     renewal_snapshot: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     renewal_request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Mini App addon preview idempotency — same role as renewal_request_key for packs.
+    addon_request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # Serialize quota changes and retain exclusion while a renewal needs review.
     service_mutation_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     service_id: Mapped[Optional[int]] = mapped_column(
@@ -942,6 +958,14 @@ class ResellerPlan(Base):
     extra_gb_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra GB
     extra_user_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra user slot
     renew_price: Mapped[int] = mapped_column(Integer, default=0)  # 0 = use plan.price
+    # When true (default), renew extends from a future expiry instead of from now.
+    carry_remaining_period: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    # When true (default), purchased extra GB/user slots survive into the next period.
+    keep_extras_on_renew: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
     # NULL = inherit plan-kind btn_style_*; "" = explicit Telegram default (white)
     button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     # Optional category label (audience=resellers); NULL = uncategorized

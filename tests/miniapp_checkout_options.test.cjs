@@ -41,6 +41,16 @@ async function shop(checkout, overrides) {
 }
 
 const buys = (env) => env.calls.filter((c) => c.method === "POST" && c.url === "/api/mini/buy");
+
+/** «ادامه پرداخت» opens the confirm sheet; its button sends the purchase. */
+async function buy(env, planId) {
+  env.mini.app.ACTIONS.buy(trigger({ "data-id": planId }));
+  await settle();
+  if (env.mini.app.state.sheet && env.mini.app.state.sheet.kind === "buy-confirm") {
+    await env.mini.app.ACTIONS["confirm-buy"](trigger({ "data-id": planId }));
+    await settle();
+  }
+}
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
 
@@ -68,22 +78,21 @@ test("the checkout card shows the name field and free button only when the serve
 
 test("a required name blocks the purchase until it is valid, then is sent", async () => {
   const env = await shop({ service_name_required: true, staff_free: false });
-  await env.mini.app.ACTIONS.buy(trigger({ "data-id": 1 }));
+  await buy(env, 1);
   assert.equal(buys(env).length, 0, "no name, no request");
+  assert.ok(!env.mini.app.state.sheet, "the confirm sheet does not open without a name");
   env.mini.app.state.serviceName = "علی";
-  await env.mini.app.ACTIONS.buy(trigger({ "data-id": 1 }));
+  await buy(env, 1);
   assert.equal(buys(env).length, 0, "an invalid name is refused before the request");
   env.mini.app.state.serviceName = "Ali";
-  await env.mini.app.ACTIONS.buy(trigger({ "data-id": 1 }));
-  await settle();
+  await buy(env, 1);
   assert.deepEqual(buys(env)[0].body, { plan_id: 1, price: 100000, service_name: "ali" });
   assert.equal(env.mini.app.state.serviceName, "", "the name is cleared after the purchase");
 });
 
 test("without a required name nothing extra is sent", async () => {
   const env = await shop({ service_name_required: false, staff_free: false });
-  await env.mini.app.ACTIONS.buy(trigger({ "data-id": 1 }));
-  await settle();
+  await buy(env, 1);
   assert.deepEqual(buys(env)[0].body, { plan_id: 1, price: 100000 });
 });
 
