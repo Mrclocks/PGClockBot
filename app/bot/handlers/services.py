@@ -441,7 +441,7 @@ async def svc_view(
 @router.callback_query(F.data.startswith("guide:svc:"))
 async def svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     """Open per-platform guides when the catalog has entries; else plain guide_text."""
-    from app.bot.handlers.guides import _audience_for_user, show_guides_list
+    from app.bot.handlers.guides import show_guides_list
     from app.services.connection_guides import get_connection_guides, guides_for_audience
     from app.services.rich_text import outbound_setting_text, rich_plain_text
 
@@ -454,10 +454,9 @@ async def svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
-    aud = await _audience_for_user(session, db_user)
-    items = guides_for_audience(await get_connection_guides(session), aud)
+    items = guides_for_audience(await get_connection_guides(session), "user")
     if items:
-        await show_guides_list(callback, session, db_user, svc_id=svc_id, audience=aud)
+        await show_guides_list(callback, session, db_user, svc_id=svc_id, audience="user")
         return
     ui = await get_all_settings(session)
     raw = ui.get("guide_text")
