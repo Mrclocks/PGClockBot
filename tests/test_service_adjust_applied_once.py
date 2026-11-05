@@ -53,7 +53,12 @@ class ShopConfirmTests(unittest.IsolatedAsyncioTestCase):
             self.addCleanup(patcher.stop)
 
     async def confirm(self, state: FSMContext, cb: MagicMock) -> None:
-        await shop_handler._adj_confirm(cb, state, AsyncMock(), MagicMock(), target=self.target, adj_key=SHOP_KEY)
+        # The adjust handler reads the staged values and passes them in, as the bot does.
+        staged = read_staged(await state.get_data(), SHOP_KEY)
+        await shop_handler._adj_confirm(
+            cb, state, AsyncMock(), MagicMock(), target=self.target, adj_key=SHOP_KEY,
+            days=staged.days, gb=staged.gb,
+        )
 
     async def test_two_confirms_at_once_extend_the_service_once(self) -> None:
         state = fsm()
@@ -66,7 +71,7 @@ class ShopConfirmTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.extend.await_args.kwargs["extra_days"], 5)
         self.assertEqual(self.extend.await_args.kwargs["extra_gb"], 2.0)
         answers = [first.answer.await_args.args[0], second.answer.await_args.args[0]]
-        self.assertIn(NOTHING_STAGED, answers)
+        self.assertTrue({shop_handler.IN_FLIGHT, "حداقل یک مقدار غیرصفر وارد کنید"} & set(answers))
 
     async def test_a_refused_change_stays_staged_for_a_retry(self) -> None:
         state = fsm()
@@ -77,7 +82,7 @@ class ShopConfirmTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(read_staged(await state.get_data(), SHOP_KEY).days, 5)
 
-    async def test_an_uncertain_outcome_is_not_staged_again(self) -> None:
+    async def test_an_unknown_outcome_is_not_staged_again(self) -> None:
         state = fsm()
         await state.update_data(**{SHOP_KEY: {"days": 5, "gb": 0}})
         self.extend.side_effect = httpx.ReadTimeout("slow panel")
@@ -87,6 +92,15 @@ class ShopConfirmTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(read_staged(await state.get_data(), SHOP_KEY).is_empty)
         self.assertEqual(cb.answer.await_args.args[0], shop_handler.UNKNOWN_OUTCOME)
+
+    async def test_an_unexpected_error_is_not_staged_again(self) -> None:
+        state = fsm()
+        await state.update_data(**{SHOP_KEY: {"days": 5, "gb": 0}})
+        self.extend.side_effect = RuntimeError("connection dropped after the write")
+
+        await self.confirm(state, callback())
+
+        self.assertTrue(read_staged(await state.get_data(), SHOP_KEY).is_empty)
 
 
 class PlatformAdminConfirmTests(unittest.IsolatedAsyncioTestCase):

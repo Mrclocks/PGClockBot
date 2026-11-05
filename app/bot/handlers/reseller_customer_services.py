@@ -26,13 +26,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.nav_input import ask_text, finish_text_step, try_legacy_cancel
-from app.bot.service_adjust import (
-    NOTHING_STAGED,
-    StagedAdjustment,
-    restore_staged,
-    service_adjust_lock,
-    take_staged,
-)
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.db.models import BotUser, Plan, ResellerProfile
 from app.services import bot_feedback_texts as feedback
@@ -40,7 +33,6 @@ from app.services.bot_principal_identity import shop_bot_panel_staff
 from app.services.bot_user_admin import (
     MAX_EXTEND_DAYS,
     MAX_EXTEND_GB,
-    ServiceSnapshot,
     admin_delete_service,
     admin_extend_service,
     admin_renew_service,
@@ -70,6 +62,27 @@ UNKNOWN_OUTCOME = (
     "جزئیات سرویس را باز کنید و وضعیت را ببینید."
 )
 PANEL_UNCERTAIN = (asyncio.TimeoutError, PasarGuardError, httpx.HTTPError)
+IN_FLIGHT = "در حال انجام است — صبر کنید."
+
+
+async def _fsm_clear(state: FSMContext, *keys: str) -> None:
+    data = await state.get_data()
+    changed = False
+    for key in keys:
+        if key in data:
+            data.pop(key, None)
+            changed = True
+    if changed:
+        await state.set_data(data)
+
+
+async def _fsm_try_busy(state: FSMContext, busy_key: str) -> bool:
+    """Best-effort same-chat guard against a second concurrent tap (not a DB claim)."""
+    data = await state.get_data()
+    if data.get(busy_key):
+        return False
+    await state.update_data(**{busy_key: True})
+    return True
 
 
 class ResellerServiceStates(StatesGroup):
@@ -381,6 +394,7 @@ async def res_user_service_link(
 @router.callback_query(F.data.startswith(f"{PREFIX}:svcrenew:"))
 async def res_user_service_renew(
     callback: CallbackQuery,
+    state: FSMContext,
     session: AsyncSession,
     db_user: BotUser,
     is_reseller_bot: bool = False,
@@ -397,40 +411,47 @@ async def res_user_service_renew(
     )
     if target is None or target.service_id is None:
         return
+    busy_key = f"rsvcbusy:renew:{target.user_id}:{target.service_id}"
+    if not await _fsm_try_busy(state, busy_key):
+        await callback.answer(IN_FLIGHT, show_alert=True)
+        return
     try:
-        svc = await get_owned_service(
-            session,
-            bot_user_id=target.user_id,
-            service_id=target.service_id,
-            shop_id=target.owner_id,
-        )
-        plan = await session.get(Plan, int(svc.plan_id)) if svc.plan_id else None
-        if plan is None:
-            await callback.answer("پلن این سرویس مشخص نیست", show_alert=True)
+        try:
+            svc = await get_owned_service(
+                session,
+                bot_user_id=target.user_id,
+                service_id=target.service_id,
+                shop_id=target.owner_id,
+            )
+            plan = await session.get(Plan, int(svc.plan_id)) if svc.plan_id else None
+            if plan is None:
+                await callback.answer("پلن این سرویس مشخص نیست", show_alert=True)
+                return
+            staff = await _panel_staff(callback, session, db_user, target)
+            if staff is None:
+                return
+            await admin_renew_service(session, svc, plan=plan, reset_traffic=True, staff=staff)
+            snap = await service_snapshot(session, svc)
+        except ValueError as exc:
+            await _fail_known(callback, session, exc)
             return
-        staff = await _panel_staff(callback, session, db_user, target)
-        if staff is None:
+        except PANEL_UNCERTAIN:
+            await _fail_uncertain(callback, session, sid=target.service_id, op="renew")
             return
-        await admin_renew_service(session, svc, plan=plan, reset_traffic=True, staff=staff)
-        snap = await service_snapshot(session, svc)
-    except ValueError as exc:
-        await _fail_known(callback, session, exc)
-        return
-    except PANEL_UNCERTAIN:
-        await _fail_uncertain(callback, session, sid=target.service_id, op="renew")
-        return
-    except Exception as exc:
-        await rollback_quiet(session)
-        logger.warning("shop service renew failed sid=%s", target.service_id, exc_info=True)
-        await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
-        return
-    await callback.answer(feedback.RENEWED)
-    if callback.message:
-        await safe_edit_text(
-            callback.message,
-            "✅ تمدید مدیریتی انجام شد (بدون کسر از کیف پول)\n\n" + snapshot_telegram_lines(snap),
-            reply_markup=_service_actions(target.user_id, target.service_id),
-        )
+        except Exception as exc:
+            await rollback_quiet(session)
+            logger.warning("shop service renew failed sid=%s", target.service_id, exc_info=True)
+            await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
+            return
+        await callback.answer(feedback.RENEWED)
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                "✅ تمدید مدیریتی انجام شد (بدون کسر از کیف پول)\n\n" + snapshot_telegram_lines(snap),
+                reply_markup=_service_actions(target.user_id, target.service_id),
+            )
+    finally:
+        await _fsm_clear(state, busy_key)
 
 
 @router.callback_query(F.data.startswith(f"{PREFIX}:svcdelask:"))
@@ -604,42 +625,6 @@ async def _adj_ask_input(
     )
 
 
-async def _apply_staged(
-    callback: CallbackQuery,
-    state: FSMContext,
-    session: AsyncSession,
-    db_user: BotUser,
-    *,
-    target: ShopServiceTarget,
-    adj_key: str,
-    staged: StagedAdjustment,
-) -> ServiceSnapshot | None:
-    """Apply a staged change; a refused change is staged again, an uncertain one is not."""
-    service_id = int(target.service_id or 0)
-    try:
-        svc = await get_owned_service(
-            session, bot_user_id=target.user_id, service_id=service_id, shop_id=target.owner_id
-        )
-        staff = await _panel_staff(callback, session, db_user, target)
-        if staff is None:
-            await restore_staged(state, adj_key, staged)
-            return None
-        await admin_extend_service(
-            session, svc, extra_days=staged.days, extra_gb=staged.gb, staff=staff
-        )
-        return await service_snapshot(session, svc)
-    except ValueError as exc:
-        await restore_staged(state, adj_key, staged)
-        await _fail_known(callback, session, exc)
-    except PANEL_UNCERTAIN:
-        await _fail_uncertain(callback, session, sid=service_id, op="extend")
-    except Exception as exc:
-        await rollback_quiet(session)
-        logger.warning("shop service extend failed sid=%s", service_id, exc_info=True)
-        await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
-    return None
-
-
 async def _adj_confirm(
     callback: CallbackQuery,
     state: FSMContext,
@@ -648,26 +633,56 @@ async def _adj_confirm(
     *,
     target: ShopServiceTarget,
     adj_key: str,
+    days: int,
+    gb: float,
 ) -> None:
-    if target.service_id is None:
+    assert target.service_id is not None
+    if days == 0 and gb == 0:
+        await callback.answer("حداقل یک مقدار غیرصفر وارد کنید", show_alert=True)
         return
-    async with service_adjust_lock(target.service_id):
-        staged = await take_staged(state, adj_key)
-        if staged.is_empty:
-            await callback.answer(NOTHING_STAGED, show_alert=True)
+    busy_key = f"rsvcbusy:adj:{target.user_id}:{target.service_id}"
+    if not await _fsm_try_busy(state, busy_key):
+        await callback.answer(IN_FLIGHT, show_alert=True)
+        return
+    # Claim the deltas before the panel call so a second confirm cannot reuse them.
+    await state.update_data(**{adj_key: {"days": 0, "gb": 0.0}})
+    try:
+        try:
+            svc = await get_owned_service(
+                session,
+                bot_user_id=target.user_id,
+                service_id=target.service_id,
+                shop_id=target.owner_id,
+            )
+            staff = await _panel_staff(callback, session, db_user, target)
+            if staff is None:
+                await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+                return
+            await admin_extend_service(session, svc, extra_days=days, extra_gb=gb, staff=staff)
+            snap = await service_snapshot(session, svc)
+        except ValueError as exc:
+            await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+            await _fail_known(callback, session, exc)
             return
-        snap = await _apply_staged(
-            callback, state, session, db_user, target=target, adj_key=adj_key, staged=staged
-        )
-    if snap is None:
-        return
-    await callback.answer("مانده به‌روز شد")
-    if callback.message:
-        await safe_edit_text(
-            callback.message,
-            "✅ مانده سرویس به‌روز شد\n\n" + snapshot_telegram_lines(snap),
-            reply_markup=_service_actions(target.user_id, target.service_id),
-        )
+        except PANEL_UNCERTAIN:
+            # The panel may have applied it: re-staging would let a second confirm add it again.
+            await _fail_uncertain(callback, session, sid=target.service_id, op="extend")
+            return
+        except Exception as exc:
+            await rollback_quiet(session)
+            logger.warning("shop service extend failed sid=%s", target.service_id, exc_info=True)
+            await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
+            return
+        await _fsm_clear(state, adj_key, "rsvcadj_uid", "rsvcadj_sid")
+        await callback.answer("مانده به‌روز شد")
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                "✅ مانده سرویس به‌روز شد\n\n" + snapshot_telegram_lines(snap),
+                reply_markup=_service_actions(target.user_id, target.service_id),
+            )
+    finally:
+        await _fsm_clear(state, busy_key)
 
 
 @router.callback_query(F.data.startswith(f"{PREFIX}:svcadj:"))
@@ -716,7 +731,9 @@ async def res_user_service_adjust(
         )
         return
     elif action == "confirm":
-        await _adj_confirm(callback, state, session, db_user, target=target, adj_key=adj_key)
+        await _adj_confirm(
+            callback, state, session, db_user, target=target, adj_key=adj_key, days=days, gb=gb
+        )
         return
     else:
         await state.update_data(**{adj_key: {"days": days, "gb": gb}})

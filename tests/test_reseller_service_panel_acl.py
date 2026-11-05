@@ -7,6 +7,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.base import StorageKey
+from aiogram.fsm.storage.memory import MemoryStorage
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.bot.handlers import reseller_customer_services as handler
@@ -79,6 +82,9 @@ class ShopBotServicePanelAclTests(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
         self.tmp.cleanup()
 
+    def fsm(self) -> FSMContext:
+        return FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=1, user_id=1))
+
     def callback(self, data: str) -> MagicMock:
         return MagicMock(data=data, answer=AsyncMock(), message=MagicMock())
 
@@ -127,7 +133,7 @@ class ShopBotServicePanelAclTests(unittest.IsolatedAsyncioTestCase):
             patch.object(handler, "safe_edit_text", AsyncMock()),
         ):
             await handler.res_user_service_renew(
-                callback, self.session, self.shop, is_reseller_bot=True, reseller_owner_id=SHOP_ID
+                callback, self.fsm(), self.session, self.shop, is_reseller_bot=True, reseller_owner_id=SHOP_ID
             )
 
         renew.assert_awaited_once()
@@ -138,10 +144,8 @@ class ShopBotServicePanelAclTests(unittest.IsolatedAsyncioTestCase):
             get_user_by_id=AsyncMock(return_value={"data_limit": 0, "expire": None}),
             modify_user_by_id=AsyncMock(),
         )
-        state = MagicMock(
-            get_data=AsyncMock(return_value={f"rsvcadj:{CUSTOMER_ID}:{SOLD_SERVICE_ID}": {"days": 5, "gb": 0}}),
-            update_data=AsyncMock(),
-        )
+        state = self.fsm()
+        await state.update_data(**{f"rsvcadj:{CUSTOMER_ID}:{SOLD_SERVICE_ID}": {"days": 5, "gb": 0}})
         callback = self.callback(f"res:svcadj:{CUSTOMER_ID}:{SOLD_SERVICE_ID}:confirm")
         with (
             self.with_panel_staff(shop_staff(update=False)),

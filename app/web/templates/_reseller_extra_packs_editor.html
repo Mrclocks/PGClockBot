@@ -1,0 +1,85 @@
+{# Per-plan quick-buy stairs editor (volume / users).
+   Requires: pack_style_options (ITEM or PLAN button style options)
+   Optional: extra_gb_packs, extra_user_packs — list of {amount, button_style}
+   Optional: packs_editor_id (default reseller-extra-packs), packs_hidden (bool)
+#}
+{% from "macros.html" import switch %}
+{% set editor_id = packs_editor_id if packs_editor_id is defined else 'reseller-extra-packs' %}
+{% set gb_rows = extra_gb_packs if extra_gb_packs is defined else [{'amount': 1, 'button_style': none}, {'amount': 5, 'button_style': none}, {'amount': 10, 'button_style': none}, {'amount': 50, 'button_style': none}] %}
+{% set user_rows = extra_user_packs if extra_user_packs is defined else [{'amount': 1, 'button_style': none}, {'amount': 5, 'button_style': none}, {'amount': 10, 'button_style': none}, {'amount': 20, 'button_style': none}] %}
+{% set style_opts = pack_style_options if pack_style_options is defined else plan_style_options %}
+{% set packs_are_hidden = packs_hidden if packs_hidden is defined else true %}
+
+<div id="{{ editor_id }}" class="extra-packs-editor" {% if packs_are_hidden %}hidden{% endif %}
+     data-extra-packs-root
+     data-default-gb="1,5,10,50"
+     data-default-users="1,5,10,20">
+  <h3 class="card-subhead">بسته‌ها</h3>
+  <p class="muted update-card-caption">فقط روی همین پلن دیده می‌شوند. قیمت = نرخ واحد × مقدار بسته. رنگ دکمه اختیاری است.</p>
+
+  <div class="extra-packs-kind" data-extra-packs-kind="gb">
+    <div class="extra-packs-kind-head">
+      <span class="form-field-label">بسته‌های حجم (گیگ)</span>
+      <button type="button" class="btn btn-sm btn-ghost" data-extra-pack-add="gb" aria-label="افزودن بسته حجم">افزودن</button>
+    </div>
+    <div class="extra-packs-rows" data-extra-packs-rows="gb">
+      {% for row in gb_rows %}
+      {% set cur = 'inherit' if row.button_style is none else (row.button_style or '') %}
+      {% set cur_tone = 'default' if cur in ('inherit', '') else cur %}
+      <div class="form-row extra-pack-row" data-extra-pack-row>
+        <label class="form-field">مقدار
+          <input name="extra_gb_amount" type="number" min="1" max="100000" step="1" inputmode="numeric" dir="ltr"
+                 value="{{ row.amount }}" aria-label="مقدار حجم بسته"
+                 {% if packs_are_hidden %}disabled{% else %}required{% endif %} />
+        </label>
+        <div class="plan-color-field">
+          <div class="btn-color-card plan-color-card">
+            <span class="btn-color-label">رنگ دکمه</span>
+            <select name="extra_gb_style" class="btn-color-select" data-tone="{{ cur_tone }}" aria-label="رنگ دکمه بسته حجم"
+                    {% if packs_are_hidden %}disabled{% endif %}>
+              {% for opt_val, opt_label, opt_tone in style_opts %}
+              <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <button type="button" class="btn btn-sm btn-ghost" data-extra-pack-remove aria-label="حذف بسته حجم"
+                {% if packs_are_hidden %}disabled{% endif %}>حذف</button>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="extra-packs-kind">
+    <div class="extra-packs-kind-head">
+      <span class="form-field-label">بسته‌های کاربر</span>
+      <button type="button" class="btn btn-sm btn-ghost" data-extra-pack-add="users" aria-label="افزودن بسته کاربر">افزودن</button>
+    </div>
+    <div class="extra-packs-rows" data-extra-packs-rows="users">
+      {% for row in user_rows %}
+      {% set cur = 'inherit' if row.button_style is none else (row.button_style or '') %}
+      {% set cur_tone = 'default' if cur in ('inherit', '') else cur %}
+      <div class="form-row extra-pack-row" data-extra-pack-row>
+        <label class="form-field">مقدار
+          <input name="extra_user_amount" type="number" min="1" max="100000" step="1" inputmode="numeric" dir="ltr"
+                 value="{{ row.amount }}" aria-label="تعداد کاربر بسته"
+                 {% if packs_are_hidden %}disabled{% else %}required{% endif %} />
+        </label>
+        <div class="plan-color-field">
+          <div class="btn-color-card plan-color-card">
+            <span class="btn-color-label">رنگ دکمه</span>
+            <select name="extra_user_style" class="btn-color-select" data-tone="{{ cur_tone }}" aria-label="رنگ دکمه بسته کاربر"
+                    {% if packs_are_hidden %}disabled{% endif %}>
+              {% for opt_val, opt_label, opt_tone in style_opts %}
+              <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <button type="button" class="btn btn-sm btn-ghost" data-extra-pack-remove aria-label="حذف بسته کاربر"
+                {% if packs_are_hidden %}disabled{% endif %}>حذف</button>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>

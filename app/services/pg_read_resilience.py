@@ -36,6 +36,14 @@ GATEWAY_OUTAGE_STATUSES = frozenset({502, 503, 504})
 DNS_CACHE_TTL_SEC = 60.0
 MAX_CONCURRENT_READS = 8
 MAX_PANEL_STATES = 16
+# Page budgets (default ~4s, configurable down to PG_WEB_READ_BUDGET_MIN_SEC=1s)
+# fire before httpx's 30s timeout. A TimeoutError from async_timeout is a real
+# panel outage when THIS read was the first consumer of the page budget, or
+# when its claimed wait met the derived threshold (capped here; scaled down for
+# short configured budgets so a 1s page can still pause the circuit).
+MIN_OUTAGE_WAIT_SEC = 2.0
+# Slack so scheduling jitter does not hide a first-of-page claim as "consumed".
+_FIRST_READ_SLACK_SEC = 0.05
 # A dropped keep-alive socket or a reset mid-read is usually gone on the next
 # try. Timeouts are not retried: they would only double the wait.
 TRANSIENT_READ_ERRORS = (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)
@@ -60,6 +68,9 @@ class PgReadUnavailable(httpx.TimeoutException):
 @dataclass(slots=True)
 class ReadBudget:
     deadline: float
+    # Full allowance for this page (seconds); used to scale the outage threshold
+    # and to recognise the first read before any of the budget was spent.
+    allowed_sec: float
     failure: str | None = None
     # Once the panel looked unreachable, further reads of this page fail fast.
     origin_down: bool = False
@@ -72,6 +83,8 @@ class _PanelState:
     blocked_until: float = 0.0
     in_flight: int = 0
     probing: bool = False
+    # Probe lease expiry (monotonic). A lost/slow probe must not block forever.
+    probe_until: float = 0.0
     generation: int = 0
     pause_count: int = 0
     recent_failures: deque[float] = field(default_factory=lambda: deque(maxlen=FAILURES_TO_PAUSE))
@@ -93,7 +106,11 @@ def web_read_budget(*, seconds: float | None = None, background: bool = False) -
     parent = _BUDGET.get()
     if parent is None:
         allowed = configured_read_budget_sec() if seconds is None else seconds
-        budget = ReadBudget(time.monotonic() + allowed, background=background)
+        budget = ReadBudget(
+            deadline=time.monotonic() + allowed,
+            allowed_sec=float(allowed),
+            background=background,
+        )
     else:
         budget = parent
     token = _BUDGET.set(budget)
@@ -132,28 +149,76 @@ def _reject(budget: ReadBudget, reason: str) -> None:
     raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE)
 
 
-def _claim_read(state: _PanelState, budget: ReadBudget) -> tuple[float, int]:
+def _probe_lease_active(state: _PanelState, now: float) -> bool:
+    return state.probe_until > now
+
+
+def _clear_probe_lease(state: _PanelState) -> None:
+    state.probing = False
+    state.probe_until = 0.0
+
+
+def _outage_wait_threshold(allowed_sec: float) -> float:
+    """Scale the outage floor with the page budget (never above MIN_OUTAGE_WAIT_SEC)."""
+    return min(MIN_OUTAGE_WAIT_SEC, max(0.0, allowed_sec) / 2.0)
+
+
+def _budget_timeout_is_outage(claimed_remaining: float, budget: ReadBudget) -> bool:
+    """True when the claimed wait was a fair panel test, not leftover page budget.
+
+    - First read of the page (claimed remaining ≈ full allowance) always counts,
+      even when PG_WEB_READ_BUDGET_SEC is below MIN_OUTAGE_WAIT_SEC.
+    - Later reads count when remaining >= min(2s, allowance/2) so a short
+      configured budget can still pause the circuit, while a straggler with a
+      tiny leftover does not.
+    """
+    allowed = max(0.0, budget.allowed_sec)
+    if allowed <= 0.0:
+        return False
+    # Relative slack: absolute 50ms would treat every claim on a 50ms leftover
+    # budget as "first read".
+    first_read_floor = max(allowed - _FIRST_READ_SLACK_SEC, allowed * 0.9)
+    if claimed_remaining >= first_read_floor:
+        return True
+    return claimed_remaining >= _outage_wait_threshold(allowed)
+
+
+def _claim_read(state: _PanelState, budget: ReadBudget) -> tuple[float, int, bool]:
+    """Reserve a read slot. Returns ``(remaining, generation, is_probe)``."""
     now = time.monotonic()
     remaining = budget.deadline - now
     if remaining <= 0:
         _reject(budget, "timeout")
     if budget.origin_down:
         _reject(budget, budget.failure or "unavailable")
-    if state.blocked_until > now or state.probing:
+    if state.blocked_until > now:
+        _reject(budget, "unavailable")
+    if _probe_lease_active(state, now):
         _reject(budget, "unavailable")
     if state.in_flight >= MAX_CONCURRENT_READS:
         _reject(budget, "busy")
     # After cooldown only one read may test recovery, preventing a retry storm.
-    state.probing = state.blocked_until > 0
+    # Lease the probe so a hung probe cannot reject others forever.
+    is_probe = state.blocked_until > 0
+    if is_probe:
+        state.probing = True
+        state.probe_until = now + remaining
     state.in_flight += 1
-    return remaining, state.generation
+    return remaining, state.generation, is_probe
 
 
-def _record_outage(state: _PanelState, budget: ReadBudget, reason: str) -> None:
+def _record_outage(
+    state: _PanelState,
+    budget: ReadBudget,
+    reason: str,
+    *,
+    is_probe: bool = False,
+) -> None:
     """Fail the rest of this page fast; pause all reads once the outage is confirmed."""
     budget.failure = reason
     budget.origin_down = True
-    # Any read that started before this failure must not reopen the circuit.
+    # Any read that started before this failure must not reopen the circuit
+    # while the pause is still active (see _maybe_mark_healthy).
     state.generation += 1
     if budget.background:
         return
@@ -163,9 +228,10 @@ def _record_outage(state: _PanelState, budget: ReadBudget, reason: str) -> None:
         return
     state.recent_failures.append(now)
     recent = [moment for moment in state.recent_failures if now - moment <= FAILURE_WINDOW_SEC]
-    # After a pause has expired, the next failure is the recovery probe failing.
-    failed_probe = state.blocked_until > 0
-    if failed_probe or len(recent) >= FAILURES_TO_PAUSE:
+    # Only a read that claimed the recovery probe may double the cooldown.
+    # A straggler that started before the pause must not count as a failed probe
+    # after the pause has expired.
+    if is_probe or len(recent) >= FAILURES_TO_PAUSE:
         _pause_reads(state, reason, now)
 
 
@@ -184,6 +250,35 @@ def _mark_healthy(state: _PanelState) -> None:
     state.blocked_until = 0.0
     state.pause_count = 0
     state.recent_failures.clear()
+    _clear_probe_lease(state)
+
+
+def _maybe_mark_healthy(state: _PanelState, *, started_generation: int) -> None:
+    """Heal after a success once the pause has expired.
+
+    Generation drift from unrelated failures does not block healing after the
+    pause window. A success from a read that started before the latest confirmed
+    outage is ignored only while the circuit is still paused.
+    """
+    now = time.monotonic()
+    still_paused = state.blocked_until > now
+    started_before_latest_outage = state.generation != started_generation
+    if still_paused and started_before_latest_outage:
+        return
+    _mark_healthy(state)
+
+
+def note_successful_panel_contact(base_url: str) -> None:
+    """Budget-less reads and mutations: heal an expired pause without starting one."""
+    try:
+        state = _panel_state(base_url)
+    except PgReadUnavailable:
+        return
+    now = time.monotonic()
+    if state.blocked_until > now:
+        return
+    if state.blocked_until > 0.0 or state.pause_count > 0 or state.recent_failures:
+        _mark_healthy(state)
 
 
 def _consume_dns_result(task: asyncio.Task[str], state: _PanelState) -> None:
@@ -200,7 +295,7 @@ async def validate_panel_base(base_url: str, *, protected: bool = True) -> str:
     if budget is None:
         return await asyncio.to_thread(assert_safe_pg_base_url, base_url)
     state = _panel_state(base_url)
-    remaining, _generation = _claim_read(state, budget)
+    remaining, _generation, is_probe = _claim_read(state, budget)
     try:
         if state.dns_task is not None and state.dns_task.done() and state.dns_valid_until <= time.monotonic():
             state.dns_task = None
@@ -211,15 +306,27 @@ async def validate_panel_base(base_url: str, *, protected: bool = True) -> str:
             await asyncio.shield(state.dns_task)
         # DNS is shared by origin, but each caller keeps its own API base path.
         return assert_safe_pg_base_url(base_url, resolve_dns=False)
-    except (TimeoutError, UnsafePgUrlError) as exc:
+    except TimeoutError as exc:
         if state.dns_task is not None and state.dns_task.done():
             state.dns_task = None
-        pg_link_health.record_failure("timeout" if isinstance(exc, TimeoutError) else "dns")
-        _record_outage(state, budget, "unavailable")
+        if _budget_timeout_is_outage(remaining, budget):
+            pg_link_health.record_failure("timeout")
+            _record_outage(state, budget, "timeout", is_probe=is_probe)
+        else:
+            # Earlier reads of this page left too little wait for a fair test.
+            pg_link_health.record_budget_exhaustion()
+            budget.failure = "timeout"
+        raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc
+    except UnsafePgUrlError as exc:
+        if state.dns_task is not None and state.dns_task.done():
+            state.dns_task = None
+        pg_link_health.record_failure("dns")
+        _record_outage(state, budget, "unavailable", is_probe=is_probe)
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc
     finally:
         state.in_flight -= 1
-        state.probing = False
+        if is_probe:
+            _clear_probe_lease(state)
 
 
 async def _request_with_retry(
@@ -265,33 +372,65 @@ async def panel_read_request(
     """
     budget = _BUDGET.get()
     if budget is None:
-        return await _request_with_retry(client, method, url, None, kwargs)
+        return await _budgetless_read(client, method, url, kwargs)
     state = _panel_state(str(client.base_url))
-    remaining, generation = _claim_read(state, budget)
+    remaining, generation, is_probe = _claim_read(state, budget)
     started = time.monotonic()
     try:
         async with async_timeout(remaining):
             response = await _request_with_retry(client, method, url, budget.deadline, kwargs)
-    except (TimeoutError, httpx.TransportError) as exc:
+    except httpx.TimeoutException as exc:
         pg_link_health.record_failure(pg_link_health.failure_kind(exc))
-        _record_outage(state, budget, "timeout" if isinstance(exc, (TimeoutError, httpx.TimeoutException)) else "unavailable")
+        _record_outage(state, budget, "timeout", is_probe=is_probe)
+        raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc
+    except TimeoutError as exc:
+        # Classify by how long THIS read was claimed to wait, not by exception type.
+        # Default page budget (~4s) fires before httpx's 30s timeout against a
+        # panel that accepts the connection but never answers.
+        if _budget_timeout_is_outage(remaining, budget):
+            pg_link_health.record_failure("timeout")
+            _record_outage(state, budget, "timeout", is_probe=is_probe)
+        else:
+            # Unfair wait (earlier reads consumed the page budget): exhaustion only.
+            # An unfair recovery probe must not double the cooldown or heal.
+            pg_link_health.record_budget_exhaustion()
+            budget.failure = "timeout"
+        raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc
+    except httpx.TransportError as exc:
+        pg_link_health.record_failure(pg_link_health.failure_kind(exc))
+        _record_outage(state, budget, "unavailable", is_probe=is_probe)
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE) from exc
     finally:
         state.in_flight -= 1
-        state.probing = False
+        # Only the read that claimed the probe lease may clear it.
+        if is_probe:
+            _clear_probe_lease(state)
     if response.status_code >= 500:
         pg_link_health.record_failure(pg_link_health.failure_kind(status_code=response.status_code))
-    else:
+    elif response.status_code < 400:
         pg_link_health.record_success(time.monotonic() - started)
+    # 4xx: the panel answered; reconnect/caller maps the status — do not pollute stats.
     if response.status_code in GATEWAY_OUTAGE_STATUSES:
-        _record_outage(state, budget, "unavailable")
+        _record_outage(state, budget, "unavailable", is_probe=is_probe)
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE)
     if response.status_code >= 500:
         # The panel answered: only this read failed, the circuit stays as it is.
         budget.failure = "unavailable"
         raise PgReadUnavailable(PG_READ_UNAVAILABLE_MESSAGE)
-    if state.generation == generation:
-        _mark_healthy(state)
+    _maybe_mark_healthy(state, started_generation=generation)
+    return response
+
+
+async def _budgetless_read(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    kwargs: dict[str, Any],
+) -> httpx.Response:
+    """Bot/job reads: never start a pause; heal an expired pause on success."""
+    response = await _request_with_retry(client, method, url, None, kwargs)
+    if response.status_code < 500:
+        note_successful_panel_contact(str(client.base_url))
     return response
 
 
@@ -304,5 +443,5 @@ def circuit_status() -> dict[str, object]:
         "paused": bool(paused),
         "retry_in_sec": max((round(state.blocked_until - now) for state in paused), default=0),
         "pause_count": max(pause_counts, default=0),
-        "probing": any(state.probing for state in _STATES.values()),
+        "probing": any(_probe_lease_active(state, now) for state in _STATES.values()),
     }

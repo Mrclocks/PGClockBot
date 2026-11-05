@@ -107,11 +107,15 @@ test("cancelling, switching plan or leaving the shop releases the reserved code"
   assert.equal(posts(env, /\/77\/cancel$/).length, 1, "leaving the shop cancels the unpaid order");
 });
 
-test("a declined confirmation pays nothing", async () => {
+test("discounted pay uses the summary card and never a native confirm", async () => {
+  const nativeConfirms = [];
   const env = await withCheckout();
-  env.context.confirm = () => false;
+  env.context.confirm = (message) => { nativeConfirms.push(message); return false; };
+  assert.ok(env.element("checkout").innerHTML.includes("تأیید و پرداخت از کیف پول"));
   await env.mini.app.ACTIONS["checkout-pay"](trigger({}));
-  assert.equal(posts(env, /\/pay$/).length, 0);
+  await settle();
+  assert.equal(posts(env, /\/77\/pay$/).length, 1, "the card confirm pays without a native dialog");
+  assert.deepEqual(nativeConfirms, []);
 });
 
 test("gift codes: empty is not sent, one request per tap, wallet re-read on success", async () => {

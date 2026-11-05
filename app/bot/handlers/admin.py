@@ -281,12 +281,14 @@ async def _plan_detail_text(p: Plan, *, category_name: str | None = None) -> str
     else:
         link = "⚠️ هنوز به تمپلیت/گروه وصل نشده — خرید تحویل نمی‌شود"
     cat = html.escape(category_name) if category_name else "—"
+    carry = bool(getattr(p, "carry_remaining_quota", True))
     return (
         f"💎 <b>پلن #{p.id}</b> — {html.escape(p.name)}\n\n"
         f"قیمت: {format_toman(p.price, get_settings().currency)}\n"
         f"مدت: {format_plan_duration_days(p.duration_days)}\n"
         f"حجم: {gb}\n"
         f"برچسب دسته: {cat}\n"
+        f"مانده در تمدید: {'منتقل می‌شود' if carry else 'منتقل نمی‌شود'}\n"
         f"وضعیت: {'فعال' if p.is_active else 'خاموش'}\n"
         f"اتصال پاسارگارد: {link}"
     )
@@ -334,6 +336,14 @@ def _plan_detail_keyboard(p: Plan, ui: dict | None = None) -> InlineKeyboardMark
             kb._ikb(
                 "🎨 رنگ دکمه",
                 callback_data=f"adm:plan:colorpick:{pid}",
+                style=st,
+            )
+        ],
+        [
+            kb._ikb(
+                ("✅ " if getattr(p, "carry_remaining_quota", True) else "⬜️ ")
+                + "انتقال مانده در تمدید",
+                callback_data=f"adm:plan:flag:carry:{p.id}",
                 style=st,
             )
         ],
@@ -1952,6 +1962,26 @@ async def plan_toggle(callback: CallbackQuery, session: AsyncSession, db_user: B
         except Exception:
             logger.debug("plan_toggle: ignored failure", exc_info=True)
     await _render_plans_list(callback, session)
+
+
+@router.callback_query(F.data.regexp(r"^adm:plan:flag:carry:\d+$"))
+@require_bot_owner_handler
+async def plan_carry_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
+        return
+    plan = await session.get(Plan, int(callback.data.rsplit(":", 1)[-1]))
+    if not plan or plan.is_trial:
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        return
+    plan.carry_remaining_quota = not bool(getattr(plan, "carry_remaining_quota", True))
+    await session.commit()
+    await callback.answer(feedback.UPDATED)
+    if callback.message:
+        await callback.message.edit_text(
+            await _plan_detail_text_for(session, plan),
+            reply_markup=await _plan_detail_markup(session, plan),
+        )
 
 @router.callback_query(F.data.startswith("adm:plan:delask:"))
 @require_bot_owner_handler

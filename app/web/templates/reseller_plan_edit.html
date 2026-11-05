@@ -165,9 +165,14 @@
       {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=plan.share_pg_panel_url, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند') }}
     </div>
 
+    <div class="ui-switch-list" id="edit-renew-carry-block">
+      {{ switch('carry_remaining_period', 'انتقال زمان باقی‌مانده در تمدید', checked=plan.carry_remaining_period, help='روشن: مدت جدید از تاریخ انقضای فعلی اضافه می‌شود. خاموش: دوره از همین الان شروع می‌شود.') }}
+      {{ switch('keep_extras_on_renew', 'حفظ حجم و کاربر اضافه در تمدید', checked=plan.keep_extras_on_renew, help='روشن: ظرفیت اضافه‌خریداری‌شده به دوره بعد می‌ماند و در قیمت بر اساس ظرفیت حساب می‌شود. خاموش: با تمدید پاک می‌شود.') }}
+    </div>
+
     <div id="edit-buy-extra-block">
     <div class="ui-switch-list">
-      {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=plan.allow_buy_extra, help='فقط اشتراک ثابت — در ربات پله‌های سریع؛ برای PAYG لازم نیست') }}
+      {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=plan.allow_buy_extra, help='فقط اشتراک ثابت — بسته‌های همین پلن؛ برای PAYG لازم نیست') }}
     </div>
 
     <div class="form-row" id="edit-extra-prices" {% if not plan.allow_buy_extra %}hidden{% endif %}>
@@ -178,6 +183,10 @@
         <input name="extra_user_price" type="number" data-money min="0" value="{{ plan.extra_user_price or 0 }}" />
       </label>
     </div>
+    {% set packs_editor_id = 'edit-extra-packs' %}
+    {% set packs_hidden = not plan.allow_buy_extra %}
+    {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
+    {% include "_reseller_extra_packs_editor.html" %}
     </div>{# /edit-buy-extra-block #}
 
     <label class="form-field" id="edit-role-field" {% if is_system_plan %}hidden{% endif %}>نقش پاسارگارد (الزامی)
@@ -211,6 +220,7 @@
   </form>
 </div>
 
+<script src="/static/reseller-extra-packs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 <script>
 (function(){
   const mode = document.getElementById('edit-billing-mode');
@@ -230,6 +240,7 @@
 
   function syncExtra(){
     const extraPrices = document.getElementById('edit-extra-prices');
+    const packs = document.getElementById('edit-extra-packs');
     const allowExtra = document.querySelector('#edit-buy-extra-block input[name="allow_buy_extra"]');
     const buyBlock = document.getElementById('edit-buy-extra-block');
     const renewMode = document.getElementById('edit-renew-pricing-mode');
@@ -250,10 +261,19 @@
     if (!extraPrices) return;
     if (payg) {
       extraPrices.hidden = true;
+      if (window.ResellerExtraPacks && packs) window.ResellerExtraPacks.setEditorVisible(packs, false);
+      else if (packs) packs.hidden = true;
       if (allowExtra) allowExtra.checked = false;
       return;
     }
-    extraPrices.hidden = !(allowExtra && allowExtra.checked);
+    const on = !!(allowExtra && allowExtra.checked);
+    extraPrices.hidden = !on;
+    if (window.ResellerExtraPacks && packs) {
+      if (on) window.ResellerExtraPacks.seedDefaultsIfEmpty(packs);
+      window.ResellerExtraPacks.setEditorVisible(packs, on);
+    } else if (packs) {
+      packs.hidden = !on;
+    }
   }
 
   function setHidden(el, hide){
@@ -280,6 +300,7 @@
     setHidden(billingWrap, isAddon || isCurrent);
     setHidden(rateField, isAddon || isCurrent || !payg);
     setHidden(document.getElementById('edit-buy-extra-block'), isAddon || payg);
+    setHidden(document.getElementById('edit-renew-carry-block'), isAddon || payg);
     setHidden(document.getElementById('edit-groups'), isAddon || isCurrent);
     setHidden(document.getElementById('edit-role-field'), isAddon || isCurrent);
     if (roleSel) {
