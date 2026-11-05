@@ -219,6 +219,10 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
         callback = self._callback(f"res:svcrenew:{self.customer.id}:11")
         edit = AsyncMock()
         owned = AsyncMock(return_value=await self.session.get(UserService, 11))
+        state = AsyncMock()
+        state.get_data = AsyncMock(return_value={})
+        state.update_data = AsyncMock()
+        state.set_data = AsyncMock()
         with patch.object(handler, "safe_edit_text", edit), patch.object(
             handler, "get_owned_service", owned
         ), patch.object(
@@ -230,6 +234,7 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
         ):
             await handler.res_user_service_renew(
                 callback,
+                state,
                 self.session,
                 self.shop,
                 is_reseller_bot=True,
@@ -239,6 +244,59 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(owned.await_args.kwargs.get("shop_id"), 2)
         self.assertEqual(owned.await_args.kwargs.get("bot_user_id"), 4)
         self.assertEqual(owned.await_args.kwargs.get("service_id"), 11)
+
+    async def test_adjust_confirm_claims_deltas_so_a_second_confirm_is_empty(self) -> None:
+        """Before the panel call, stored days/gb are zeroed so a concurrent confirm cannot reuse them."""
+        callback = self._callback(f"res:svcadj:{self.customer.id}:11:confirm")
+        store: dict = {f"rsvcadj:{self.customer.id}:11": {"days": 3, "gb": 1.0}}
+
+        async def get_data():
+            return dict(store)
+
+        async def update_data(**kwargs):
+            store.update(kwargs)
+
+        async def set_data(data):
+            store.clear()
+            store.update(data)
+
+        state = AsyncMock()
+        state.get_data = get_data
+        state.update_data = update_data
+        state.set_data = set_data
+        with patch.object(handler, "safe_edit_text", AsyncMock()), patch.object(
+            handler, "get_owned_service", AsyncMock(return_value=await self.session.get(UserService, 11))
+        ), patch.object(
+            handler, "admin_extend_service", AsyncMock()
+        ) as extend, patch.object(
+            handler, "service_snapshot", AsyncMock(return_value=await self._snap_for(11))
+        ):
+            await handler.res_user_service_adjust(
+                callback,
+                state,
+                self.session,
+                self.shop,
+                is_reseller_bot=True,
+                reseller_owner_id=self.shop.id,
+            )
+        extend.assert_awaited_once()
+        self.assertEqual(extend.await_args.kwargs.get("extra_days"), 3)
+        self.assertEqual(extend.await_args.kwargs.get("extra_gb"), 1.0)
+        self.assertNotIn(f"rsvcadj:{self.customer.id}:11", store)
+        self.assertNotIn(f"rsvcbusy:adj:{self.customer.id}:11", store)
+
+        # A second confirm with empty state must not call extend again.
+        callback2 = self._callback(f"res:svcadj:{self.customer.id}:11:confirm")
+        await handler.res_user_service_adjust(
+            callback2,
+            state,
+            self.session,
+            self.shop,
+            is_reseller_bot=True,
+            reseller_owner_id=self.shop.id,
+        )
+        self.assertEqual(extend.await_count, 1)
+        self.assertTrue(callback2.answer.await_args.kwargs.get("show_alert"))
 
     async def test_customer_card_shows_service_manage_button(self) -> None:
         from app.bot.handlers import reseller as res_handler

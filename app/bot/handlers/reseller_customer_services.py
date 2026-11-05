@@ -61,6 +61,27 @@ UNKNOWN_OUTCOME = (
     "جزئیات سرویس را باز کنید و وضعیت را ببینید."
 )
 PANEL_UNCERTAIN = (asyncio.TimeoutError, PasarGuardError, httpx.HTTPError)
+IN_FLIGHT = "در حال انجام است — صبر کنید."
+
+
+async def _fsm_clear(state: FSMContext, *keys: str) -> None:
+    data = await state.get_data()
+    changed = False
+    for key in keys:
+        if key in data:
+            data.pop(key, None)
+            changed = True
+    if changed:
+        await state.set_data(data)
+
+
+async def _fsm_try_busy(state: FSMContext, busy_key: str) -> bool:
+    """Best-effort same-chat guard against a second concurrent tap (not a DB claim)."""
+    data = await state.get_data()
+    if data.get(busy_key):
+        return False
+    await state.update_data(**{busy_key: True})
+    return True
 
 
 class ResellerServiceStates(StatesGroup):
@@ -359,6 +380,7 @@ async def res_user_service_link(
 @router.callback_query(F.data.startswith(f"{PREFIX}:svcrenew:"))
 async def res_user_service_renew(
     callback: CallbackQuery,
+    state: FSMContext,
     session: AsyncSession,
     db_user: BotUser,
     is_reseller_bot: bool = False,
@@ -375,37 +397,44 @@ async def res_user_service_renew(
     )
     if target is None or target.service_id is None:
         return
+    busy_key = f"rsvcbusy:renew:{target.user_id}:{target.service_id}"
+    if not await _fsm_try_busy(state, busy_key):
+        await callback.answer(IN_FLIGHT, show_alert=True)
+        return
     try:
-        svc = await get_owned_service(
-            session,
-            bot_user_id=target.user_id,
-            service_id=target.service_id,
-            shop_id=target.owner_id,
-        )
-        plan = await session.get(Plan, int(svc.plan_id)) if svc.plan_id else None
-        if plan is None:
-            await callback.answer("پلن این سرویس مشخص نیست", show_alert=True)
+        try:
+            svc = await get_owned_service(
+                session,
+                bot_user_id=target.user_id,
+                service_id=target.service_id,
+                shop_id=target.owner_id,
+            )
+            plan = await session.get(Plan, int(svc.plan_id)) if svc.plan_id else None
+            if plan is None:
+                await callback.answer("پلن این سرویس مشخص نیست", show_alert=True)
+                return
+            await admin_renew_service(session, svc, plan=plan, reset_traffic=True)
+            snap = await service_snapshot(session, svc)
+        except ValueError as exc:
+            await _fail_known(callback, session, exc)
             return
-        await admin_renew_service(session, svc, plan=plan, reset_traffic=True)
-        snap = await service_snapshot(session, svc)
-    except ValueError as exc:
-        await _fail_known(callback, session, exc)
-        return
-    except PANEL_UNCERTAIN:
-        await _fail_uncertain(callback, session, sid=target.service_id, op="renew")
-        return
-    except Exception as exc:
-        await rollback_quiet(session)
-        logger.warning("shop service renew failed sid=%s", target.service_id, exc_info=True)
-        await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
-        return
-    await callback.answer(feedback.RENEWED)
-    if callback.message:
-        await safe_edit_text(
-            callback.message,
-            "✅ تمدید مدیریتی انجام شد (بدون کسر از کیف پول)\n\n" + snapshot_telegram_lines(snap),
-            reply_markup=_service_actions(target.user_id, target.service_id),
-        )
+        except PANEL_UNCERTAIN:
+            await _fail_uncertain(callback, session, sid=target.service_id, op="renew")
+            return
+        except Exception as exc:
+            await rollback_quiet(session)
+            logger.warning("shop service renew failed sid=%s", target.service_id, exc_info=True)
+            await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
+            return
+        await callback.answer(feedback.RENEWED)
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                "✅ تمدید مدیریتی انجام شد (بدون کسر از کیف پول)\n\n" + snapshot_telegram_lines(snap),
+                reply_markup=_service_actions(target.user_id, target.service_id),
+            )
+    finally:
+        await _fsm_clear(state, busy_key)
 
 
 @router.callback_query(F.data.startswith(f"{PREFIX}:svcdelask:"))
@@ -587,34 +616,49 @@ async def _adj_confirm(
     gb: float,
 ) -> None:
     assert target.service_id is not None
-    try:
-        svc = await get_owned_service(
-            session,
-            bot_user_id=target.user_id,
-            service_id=target.service_id,
-            shop_id=target.owner_id,
-        )
-        await admin_extend_service(session, svc, extra_days=days, extra_gb=gb)
-        snap = await service_snapshot(session, svc)
-    except ValueError as exc:
-        await _fail_known(callback, session, exc)
+    if days == 0 and gb == 0:
+        await callback.answer("حداقل یک مقدار غیرصفر وارد کنید", show_alert=True)
         return
-    except PANEL_UNCERTAIN:
-        await _fail_uncertain(callback, session, sid=target.service_id, op="extend")
+    busy_key = f"rsvcbusy:adj:{target.user_id}:{target.service_id}"
+    if not await _fsm_try_busy(state, busy_key):
+        await callback.answer(IN_FLIGHT, show_alert=True)
         return
-    except Exception as exc:
-        await rollback_quiet(session)
-        logger.warning("shop service extend failed sid=%s", target.service_id, exc_info=True)
-        await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
-        return
+    # Claim the deltas before the panel call so a second confirm cannot reuse them.
     await state.update_data(**{adj_key: {"days": 0, "gb": 0.0}})
-    await callback.answer("مانده به‌روز شد")
-    if callback.message:
-        await safe_edit_text(
-            callback.message,
-            "✅ مانده سرویس به‌روز شد\n\n" + snapshot_telegram_lines(snap),
-            reply_markup=_service_actions(target.user_id, target.service_id),
-        )
+    try:
+        try:
+            svc = await get_owned_service(
+                session,
+                bot_user_id=target.user_id,
+                service_id=target.service_id,
+                shop_id=target.owner_id,
+            )
+            await admin_extend_service(session, svc, extra_days=days, extra_gb=gb)
+            snap = await service_snapshot(session, svc)
+        except ValueError as exc:
+            await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+            await _fail_known(callback, session, exc)
+            return
+        except PANEL_UNCERTAIN:
+            await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+            await _fail_uncertain(callback, session, sid=target.service_id, op="extend")
+            return
+        except Exception as exc:
+            await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+            await rollback_quiet(session)
+            logger.warning("shop service extend failed sid=%s", target.service_id, exc_info=True)
+            await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
+            return
+        await _fsm_clear(state, adj_key, "rsvcadj_uid", "rsvcadj_sid")
+        await callback.answer("مانده به‌روز شد")
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                "✅ مانده سرویس به‌روز شد\n\n" + snapshot_telegram_lines(snap),
+                reply_markup=_service_actions(target.user_id, target.service_id),
+            )
+    finally:
+        await _fsm_clear(state, busy_key)
 
 
 @router.callback_query(F.data.startswith(f"{PREFIX}:svcadj:"))
