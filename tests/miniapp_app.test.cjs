@@ -34,6 +34,14 @@ const PLANS = { wallet_pay_enabled: true, plans: [
 ] };
 const PREVIEW = { terms: { version: 1 }, price: 200, request_key: "a".repeat(32), plan_name: HOSTILE,
   lines: ["حجم پس از تمدید: ۱۷ گیگ"], warnings: [], notice: "مصرف تا اجرا کم می‌شود" };
+const ADDON_PACKS = { kind: "volume", packs: [
+  { id: 3, name: HOSTILE, kind: "volume", amount_label: "10 گیگ", price: 135000, description: "extra" },
+] };
+const ADDON_PREVIEW = {
+  terms: { version: 1, kind: "volume", volume_bytes: 10 * 1024 ** 3, duration_seconds: 0 },
+  price: 135000, request_key: "b".repeat(32), pack_name: HOSTILE, kind: "volume", amount_label: "10 گیگ",
+  lines: ["حجم پس از افزایش: ۲۷۰ گیگ"], warnings: [], notice: "مصرف تا اجرا کم می‌شود",
+};
 
 function router(overrides) {
   return async (method, url, body) => {
@@ -203,6 +211,79 @@ test("a preview that arrives after its sheet closed is dropped", async () => {
   assert.equal(env.element("sheet-body").innerHTML, "");
 });
 
+test("buy opens a renew-style confirm sheet without a native dialog", async () => {
+  const nativeConfirms = [];
+  const env = await boot({
+    confirm: (message) => { nativeConfirms.push(message); return true; },
+    routes: router([[/POST \/api\/mini\/buy/, () => ({ status: 200, body: { message: "خرید شد" } })]]),
+  });
+  env.mini.app.go("shop");
+  await settle();
+  assert.equal(env.mini.app.state.selectedPlanId, 2);
+  env.mini.app.ACTIONS.buy(trigger({ "data-id": 2 }));
+  await settle();
+  const sheet = env.element("sheet-body").innerHTML;
+  assert.equal(env.element("sheet").hidden, false);
+  assert.ok(sheet.includes('data-action="confirm-buy"'));
+  assert.ok(sheet.includes("تأیید و پرداخت از کیف پول"));
+  assert.ok(sheet.includes("&lt;img") && !sheet.includes("<img src=x"));
+  await env.mini.app.ACTIONS["confirm-buy"](trigger({ "data-id": 2 }));
+  await settle();
+  const posts = env.calls.filter((c) => c.method === "POST" && c.url === "/api/mini/buy");
+  assert.equal(posts.length, 1);
+  assert.deepEqual(posts[0].body, { plan_id: 2, price: 1250000 });
+  assert.deepEqual(nativeConfirms, [], "buy never uses a native confirm dialog");
+});
+
+test("addon preview is escaped and a lost response retries with the same request key", async () => {
+  let lose = true;
+  let release = null;
+  const nativeConfirms = [];
+  const env = await boot({
+    confirm: (message) => { nativeConfirms.push(message); return true; },
+    routes: router([
+      [/GET \/api\/mini\/service\/7\/addons/, () => ({ status: 200, body: ADDON_PACKS })],
+      [/GET \/api\/mini\/service\/7\/addon-preview/, () => ({ status: 200, body: ADDON_PREVIEW })],
+      [/POST \/api\/mini\/addon/, async () => {
+        if (lose) throw new Error("response lost");
+        if (release) await release;
+        return { status: 200, body: { message: "افزایش شد" } };
+      }],
+    ]),
+  });
+  env.mini.app.go("service", { serviceId: 7 });
+  await settle();
+  env.mini.app.ACTIONS.addons(trigger({ "data-id": 7, "data-kind": "volume" }));
+  await settle();
+  assert.ok(env.element("sheet-body").innerHTML.includes('data-action="preview-addon"'));
+  assert.ok(!env.element("sheet-body").innerHTML.includes('data-action="buy-addon"'));
+  env.mini.app.ACTIONS["preview-addon"](trigger({ "data-id": 7, "data-pack": 3 }));
+  await settle();
+  const sheet = env.element("sheet-body").innerHTML;
+  assert.ok(sheet.includes("۲۷۰ گیگ"));
+  assert.ok(sheet.includes('data-action="confirm-addon"'));
+  assert.ok(sheet.includes("&lt;img") && !sheet.includes("<img src=x"));
+
+  await env.mini.app.ACTIONS["confirm-addon"](trigger({ "data-id": 7, "data-pack": 3 }));
+  assert.equal(env.element("sheet").hidden, false, "the preview stays open after a lost response");
+  lose = false;
+  let open;
+  release = new Promise((resolve) => { open = resolve; });
+  const confirm = trigger({ "data-id": 7, "data-pack": 3 });
+  const first = env.mini.app.ACTIONS["confirm-addon"](confirm);
+  const second = env.mini.app.ACTIONS["confirm-addon"](confirm);
+  open();
+  await Promise.all([first, second]);
+  await settle();
+  const posts = env.calls.filter((c) => c.method === "POST" && c.url === "/api/mini/addon");
+  assert.equal(posts.length, 2, "one lost try plus one retry; the double tap is ignored");
+  assert.deepEqual(posts[0].body, posts[1].body);
+  assert.equal(posts[1].body.preview.request_key, ADDON_PREVIEW.request_key);
+  assert.deepEqual(nativeConfirms, [], "addon pay never uses a native confirm dialog");
+  await env.mini.app.ACTIONS["confirm-addon"](trigger({ "data-id": 7, "data-pack": 3 }));
+  assert.equal(env.calls.filter((c) => c.method === "POST" && c.url === "/api/mini/addon").length, 2, "a finished preview cannot be paid again");
+});
+
 test("a QR code that arrives after its sheet closed is dropped", async () => {
   let open;
   const pending = new Promise((resolve) => { open = resolve; });
@@ -254,8 +335,13 @@ test("purchase with a lost response is never retried automatically", async () =>
   const env = await boot({ routes: router([[/POST \/api\/mini\/buy/, () => { buys += 1; throw new Error("lost"); }]]) });
   env.mini.app.go("shop");
   await settle();
-  const buy = trigger({ "data-id": 2 });
-  await Promise.all([env.mini.app.ACTIONS.buy(buy), env.mini.app.ACTIONS.buy(buy)]);
+  env.mini.app.ACTIONS.buy(trigger({ "data-id": 2 }));
+  await settle();
+  const confirm = trigger({ "data-id": 2 });
+  await Promise.all([
+    env.mini.app.ACTIONS["confirm-buy"](confirm),
+    env.mini.app.ACTIONS["confirm-buy"](confirm),
+  ]);
   await settle();
   assert.equal(buys, 1);
   const posts = env.calls.filter((c) => c.method === "POST");
@@ -264,13 +350,21 @@ test("purchase with a lost response is never retried automatically", async () =>
   assert.equal(env.mini.app.state.view, "services");
 });
 
-test("declined confirmation sends nothing", async () => {
-  const env = await boot({ routes: router(), confirm: () => false, telegram: true });
-  env.context.Telegram.WebApp.showConfirm = (_msg, cb) => cb(false);
+test("closing the buy confirm sheet sends nothing", async () => {
+  const nativeConfirms = [];
+  const env = await boot({
+    routes: router(),
+    confirm: (message) => { nativeConfirms.push(message); return true; },
+  });
   env.mini.app.go("shop");
   await settle();
-  await env.mini.app.ACTIONS.buy(trigger({ "data-id": 2 }));
+  env.mini.app.ACTIONS.buy(trigger({ "data-id": 2 }));
+  await settle();
+  assert.ok(env.element("sheet-body").innerHTML.includes('data-action="confirm-buy"'));
+  env.mini.app.ACTIONS["close-sheet"](trigger({}));
+  await settle();
   assert.equal(env.calls.filter((c) => c.method === "POST").length, 0);
+  assert.deepEqual(nativeConfirms, []);
 });
 
 test("admin persona has no commerce screens or purchases", async () => {

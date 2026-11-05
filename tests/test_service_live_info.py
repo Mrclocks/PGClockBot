@@ -349,6 +349,19 @@ def test_bot_handlers_read_custom_link_and_display_result(svc, handler_name, fai
         assert "60 روز (پس از اتصال)" in text
 
 
+def _walk_app_routes(routes):
+    """Yield concrete routes, including those mounted via ``include_router``."""
+    for route in routes:
+        path = getattr(route, "path", None)
+        methods = getattr(route, "methods", None)
+        if path is not None and methods is not None:
+            yield route
+            continue
+        nested = getattr(route, "original_router", None)
+        if nested is not None:
+            yield from _walk_app_routes(nested.routes)
+
+
 @pytest.fixture(scope="module")
 def settings_endpoint():
     from app.api.app import create_api_app
@@ -356,7 +369,7 @@ def settings_endpoint():
     app = create_api_app()
     return next(
         route.endpoint
-        for route in app.routes
+        for route in _walk_app_routes(app.routes)
         if route.path == "/settings" and "POST" in route.methods
     )
 

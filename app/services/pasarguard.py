@@ -17,7 +17,19 @@ import httpx
 from app.config import get_settings, normalize_pg_subscription_path, pg_api_base_candidates
 from app.services.pg_read_cache import cache_get_last_good, last_good_notice_active, note_last_good_read
 from app.services.redact import redact
-from app.services.pg_read_resilience import DNS_CACHE_TTL_SEC, panel_read_request, reset_read_circuits, validate_panel_base
+from app.services.pg_http_rebuild import (
+    HttpRebuildState,
+    note_http_success,
+    note_http_transport_failure,
+)
+from app.services.pg_link_health import failure_kind
+from app.services.pg_read_resilience import (
+    DNS_CACHE_TTL_SEC,
+    note_successful_panel_contact,
+    panel_read_request,
+    reset_read_circuits,
+    validate_panel_base,
+)
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 
 logger = logging.getLogger(__name__)
@@ -27,7 +39,11 @@ async def _mutation_request(
     client: httpx.AsyncClient, method: str, url: str, **kwargs: Any
 ) -> httpx.Response:
     """Keep mutation timeouts and unknown outcomes independent of web reads."""
-    return await client.request(method, url, **kwargs)
+    response = await client.request(method, url, **kwargs)
+    # A real HTTP answer means the link works; heal an expired read pause only.
+    if response.status_code < 500:
+        note_successful_panel_contact(str(client.base_url))
+    return response
 
 
 # Read/write keep the old 30 s ceiling so slow panel writes do not turn into
@@ -380,6 +396,15 @@ class PasarGuardClient:
         if self._token == "":
             self._token = None
         self._client = new_panel_http_client(self.base_url)
+        self._http_rebuild = HttpRebuildState()
+
+    def _rebuild_tracker(self) -> HttpRebuildState:
+        """Lazy init so test doubles built with ``__new__`` still work."""
+        state = getattr(self, "_http_rebuild", None)
+        if state is None:
+            state = HttpRebuildState()
+            self._http_rebuild = state
+        return state
 
     @property
     def uses_api_key(self) -> bool:
@@ -650,24 +675,32 @@ class PasarGuardClient:
         elif resolve_api_base:
             await self._ensure_api_base()
         send_request = panel_read_request if method_u == "GET" else _mutation_request
-        resp = await send_request(self._http(), method, path, headers=headers, **kwargs)
-        if resp.status_code == 401 and auth:
-            # Bearer: clear JWT and re-login once. API key: same key cannot recover —
-            # skip retry (would only double the same unauthorized request).
-            if not self._api_key:
-                self._token = None
-                headers.update(await self._headers())
-                resp = await send_request(self._http(), method, path, headers=headers, **kwargs)
+        try:
+            resp = await send_request(self._http(), method, path, headers=headers, **kwargs)
+            if resp.status_code == 401 and auth:
+                # Bearer: clear JWT and re-login once. API key: same key cannot recover —
+                # skip retry (would only double the same unauthorized request).
+                if not self._api_key:
+                    self._token = None
+                    headers.update(await self._headers())
+                    resp = await send_request(self._http(), method, path, headers=headers, **kwargs)
+        except Exception as exc:
+            note_http_transport_failure(
+                self, self._rebuild_tracker(), exc, kind=failure_kind(exc)
+            )
+            raise
         if resp.status_code >= 400:
             if resp.status_code == 422:
                 logger.warning(
                     "PasarGuard rejected %s %s: %s", method, path, redact(resp.text, limit=600)
                 )
+            # HTTP answers (including 5xx) are not transport failures — counter stays put.
             raise PasarGuardError(
                 f"{method} {path} failed ({resp.status_code})",
                 resp.status_code,
                 resp.text,
             )
+        note_http_success(self._rebuild_tracker())
         if resp.status_code == 204 or not resp.content:
             return None
         content_type = resp.headers.get("content-type", "")
@@ -1051,6 +1084,18 @@ class PasarGuardClient:
             "علت محتمل: ادمین مالک یا دسترسی ناکافی. "
             "راه حل: از پنل اصلی پاسارگارد وضعیت را بررسی کنید.",
             404,
+        )
+
+    async def get_system_probe(self, *, timeout: httpx.Timeout) -> httpx.Response:
+        """Authenticated GET /api/system for a manual reconnect health probe."""
+        await self._ensure_safe_target(protected=True)
+        headers = await self._headers()
+        return await panel_read_request(
+            self._http(),
+            "GET",
+            "/api/system",
+            headers=headers,
+            timeout=timeout,
         )
 
     async def get_system_stats(self, *, cache_max_age: float | None = None, last_good_ok: bool = False) -> dict:

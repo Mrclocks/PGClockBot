@@ -1,6 +1,7 @@
 """Mini App addon checkout and the admin's payment-purpose notifications."""
 
 from datetime import datetime, timezone
+import time
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -12,13 +13,29 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.api.miniapp_feeds import register_miniapp_feeds
 from app.api.miniapp_pages import register_miniapp_pages
 from app.db.models import (
-    Base, BotUser, Order, Payment, ServiceAddonPack, UserService,
+    Base, BotUser, Order, Payment, Plan, ServiceAddonPack, UserService,
 )
 from app.services.notifications import (
     _pending_order_detail_lines, notify_new_order, notify_new_subscription,
     notify_pending_approval,
 )
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+
+GB = 1024**3
+DAY = 86400
+
+
+class FakeAddonPanel:
+    def __init__(self):
+        self.info = {
+            "status": "active",
+            "data_limit": 10 * GB,
+            "used_traffic": 3 * GB,
+            "expire": int(time.time()) + 5 * DAY,
+        }
+
+    async def get_user_by_id(self, user_id):
+        return dict(self.info)
 
 
 class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
@@ -42,6 +59,7 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
         await self.session.commit()
         self.shop_token = set_shop_reseller_id(None)
         self.bot = AsyncMock()
+        self.pg = FakeAddonPanel()
 
         async def load_user(*args):
             return await self.session.scalar(select(BotUser).where(BotUser.id == 1))
@@ -55,6 +73,7 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
             patch("app.services.reseller_bots.open_notify_bot_for_user", AsyncMock(return_value=(self.bot, True))),
             patch("app.api.miniapp_feeds.load_mini_user", AsyncMock(side_effect=load_user)),
             patch("app.api.miniapp_pages._fetch_pg_info", AsyncMock(return_value={"error": "upstream_unavailable"})),
+            patch("app.services.pasarguard.get_pg", return_value=self.pg),
         ]
         self.mocks = [p.start() for p in self.patches]
         app = FastAPI()
@@ -74,8 +93,24 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
         await self.session.close()
         await self.engine.dispose()
 
-    async def buy(self, pack_id=1, service_id=10, kind=None):
-        body = {"service_id": service_id, "pack_id": pack_id}
+    async def preview(self, pack_id=1, service_id=10):
+        return await self.client.get(f"/api/mini/service/{service_id}/addon-preview?pack_id={pack_id}")
+
+    async def buy(self, pack_id=1, service_id=10, kind=None, *, preview=None):
+        if preview is None:
+            response = await self.preview(pack_id=pack_id, service_id=service_id)
+            if response.status_code != 200:
+                return response
+            preview = response.json()
+        body = {
+            "service_id": service_id,
+            "pack_id": pack_id,
+            "preview": {
+                "terms": preview["terms"],
+                "price": preview["price"],
+                "request_key": preview["request_key"],
+            },
+        }
         if kind is not None:
             body["kind"] = kind
         return await self.client.post("/api/mini/addon", json=body)
@@ -112,11 +147,49 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
     async def test_checkout_rejects_the_opposite_kind_before_debit(self):
         for kind, pack_id in [("volume", 2), ("duration", 1), ("unknown", 1)]:
             with self.subTest(kind=kind):
-                response = await self.client.post("/api/mini/addon", json={
-                    "service_id": 10, "pack_id": pack_id, "kind": kind,
-                })
+                response = await self.buy(pack_id, kind=kind)
                 self.assertEqual(response.status_code, 400)
                 await self.assert_no_purchase()
+
+    async def test_preview_shows_before_after_without_charging(self):
+        response = await self.preview(pack_id=1)
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["pack_name"], "بسته حجم")
+        self.assertEqual(body["price"], 1000)
+        self.assertEqual(len(body["request_key"]), 32)
+        self.assertTrue(any("حجم پس از افزایش" in line for line in body["lines"]))
+        self.assertIn("notice", body)
+        await self.assert_no_purchase()
+
+    async def test_pay_without_preview_is_rejected(self):
+        response = await self.client.post("/api/mini/addon", json={
+            "service_id": 10, "pack_id": 1, "kind": "volume", "price": 1000,
+        })
+        self.assertEqual(response.status_code, 400)
+        await self.assert_no_purchase()
+
+    async def test_lost_response_retry_reuses_request_key(self):
+        from app.services.service_addons import addon_terms
+
+        first = await self.buy(pack_id=1, kind="volume")
+        self.assertEqual(first.status_code, 200, first.text)
+        order_id = first.json()["order_id"]
+        key = (await self.session.get(Order, order_id)).addon_request_key
+        self.assertEqual(len(key), 32)
+        pack = await self.session.get(ServiceAddonPack, 1)
+        # Replaying the same preview must not create a second order or debit again.
+        replay = await self.client.post("/api/mini/addon", json={
+            "service_id": 10,
+            "pack_id": 1,
+            "kind": "volume",
+            "preview": {"terms": addon_terms(pack), "price": 1000, "request_key": key},
+        })
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertEqual(replay.json()["order_id"], order_id)
+        self.assertEqual(await self.session.scalar(select(func.count(Order.id))), 1)
+        await self.session.refresh(self.user)
+        self.assertEqual(self.user.wallet_balance, 9000)
 
     async def test_service_payload_marks_only_eligible_owned_services(self):
         linked = UserService(id=11, bot_user_id=1, pg_user_id=111, pg_username="linked", remark="linked")
@@ -151,6 +224,73 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(pack.name, text)
                 self.assertIn("افزایش حجم" if pack.kind == "volume" else "افزایش زمان", text)
         self.assertEqual(self.bot.session.close.await_count, 2)
+
+    async def test_plan_scoped_pack_can_be_bought_from_mini_app(self):
+        """List shows plan packs via list_packs_for_service; checkout must use pack_matches_service."""
+        plan = Plan(id=50, name="VIP", price=1000, duration_days=30)
+        plan_pack = ServiceAddonPack(
+            id=50,
+            name="فقط VIP",
+            kind="volume",
+            amount=3,
+            price=500,
+            plan_id=50,
+            is_general=False,
+        )
+        other_plan_pack = ServiceAddonPack(
+            id=51,
+            name="پلن دیگر",
+            kind="volume",
+            amount=4,
+            price=500,
+            plan_id=99,
+            is_general=False,
+        )
+        self.svc.plan_id = 50
+        self.session.add_all([plan, Plan(id=99, name="Other", price=1, duration_days=1), plan_pack, other_plan_pack])
+        await self.session.commit()
+
+        catalog = await self.client.get("/api/mini/service/10/addons?kind=volume")
+        self.assertEqual(catalog.status_code, 200)
+        self.assertEqual([p["id"] for p in catalog.json()["packs"]], [50])
+
+        ok = await self.buy(50, kind="volume")
+        self.assertEqual(ok.status_code, 200, ok.text)
+        self.assertEqual(ok.json()["wallet"], 9500)
+
+        bad = await self.buy(51, kind="volume")
+        self.assertEqual(bad.status_code, 400)
+        self.assertIn("پلن", bad.text)
+
+        # Direct general volume pack_id must not bypass the exclusive volume catalog.
+        general_bypass = await self.buy(1, kind="volume")
+        self.assertEqual(general_bypass.status_code, 400)
+        self.assertIn("پلن", general_bypass.text)
+
+    async def test_volume_scoped_plan_still_lists_and_buys_general_duration(self):
+        plan = Plan(id=60, name="Mix", price=1000, duration_days=30)
+        plan_vol = ServiceAddonPack(
+            id=60,
+            name="حجم پلن",
+            kind="volume",
+            amount=3,
+            price=400,
+            plan_id=60,
+            is_general=False,
+        )
+        self.svc.plan_id = 60
+        self.session.add_all([plan, plan_vol])
+        await self.session.commit()
+
+        vol_list = await self.client.get("/api/mini/service/10/addons?kind=volume")
+        self.assertEqual([p["id"] for p in vol_list.json()["packs"]], [60])
+        dur_list = await self.client.get("/api/mini/service/10/addons?kind=duration")
+        self.assertEqual([p["id"] for p in dur_list.json()["packs"]], [2])
+
+        ok_time = await self.buy(2, kind="duration")
+        self.assertEqual(ok_time.status_code, 200, ok_time.text)
+        bad_vol = await self.buy(1, kind="volume")
+        self.assertEqual(bad_vol.status_code, 400)
 
     async def test_foreign_service_is_rejected_before_checkout(self):
         self.assertEqual((await self.buy(service_id=20)).status_code, 404)
