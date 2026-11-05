@@ -1,0 +1,85 @@
+{# Plan-scoped customer volume/duration stairs — same layout as reseller extras.
+   Requires: pack_style_options or plan_style_options
+   Optional: plan_vol_packs / plan_dur_packs — list of {amount, button_style}
+            (duration amount is months for the form)
+   Optional: packs_editor_id (default user-plan-addon-packs), packs_hidden (bool)
+#}
+{% set editor_id = packs_editor_id if packs_editor_id is defined else 'user-plan-addon-packs' %}
+{% set vol_rows = plan_vol_packs if plan_vol_packs is defined else [{'amount': 1, 'button_style': none}, {'amount': 5, 'button_style': none}, {'amount': 10, 'button_style': none}, {'amount': 50, 'button_style': none}] %}
+{% set dur_rows = plan_dur_packs if plan_dur_packs is defined else [{'amount': 1, 'button_style': none}, {'amount': 3, 'button_style': none}, {'amount': 6, 'button_style': none}, {'amount': 12, 'button_style': none}] %}
+{% set style_opts = pack_style_options if pack_style_options is defined else plan_style_options %}
+{% set packs_are_hidden = packs_hidden if packs_hidden is defined else true %}
+
+<div id="{{ editor_id }}" class="extra-packs-editor pay-dest-list" {% if packs_are_hidden %}hidden{% endif %}
+     data-user-plan-packs-root
+     data-default-volume="1,5,10,50"
+     data-default-duration="1,3,6,12">
+  <div class="pay-dest-head">
+    <strong class="pay-dest-title">بسته‌های همین پلن</strong>
+    <p class="muted update-card-caption">فقط روی همین پلن دیده می‌شوند. قیمت هر پله = نرخ واحد × مقدار. رنگ دکمه اختیاری است.</p>
+  </div>
+
+  <div class="extra-packs-kind" data-user-pack-kind="volume">
+    <span class="form-field-label">بسته‌های حجم (گیگ)</span>
+    <div class="extra-packs-rows pay-dest-rows" data-user-pack-rows="volume">
+      {% for row in vol_rows %}
+      {% set cur = 'inherit' if row.button_style is none else (row.button_style or '') %}
+      {% set cur_tone = 'default' if cur in ('inherit', '') else cur %}
+      <div class="extra-pack-row" data-user-pack-row>
+        <div class="extra-pack-fields">
+          <input name="plan_vol_amount" class="extra-pack-amount" type="number" min="1" max="100000" step="1"
+                 inputmode="numeric" dir="ltr" value="{{ row.amount | int }}"
+                 aria-label="مقدار حجم بسته" placeholder="مقدار"
+                 {% if packs_are_hidden %}disabled{% else %}required{% endif %} />
+          <select name="plan_vol_style" class="btn-color-select extra-pack-style" data-tone="{{ cur_tone }}"
+                  aria-label="رنگ دکمه بسته حجم"
+                  {% if packs_are_hidden %}disabled{% endif %}>
+            {% for opt_val, opt_label, opt_tone in style_opts %}
+            <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="button" class="btn btn-danger btn-sm extra-pack-remove"
+                data-user-pack-remove aria-label="حذف بسته حجم"
+                {% if packs_are_hidden %}disabled{% endif %}>حذف</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="pay-dest-add-row" data-user-pack-add="volume" aria-label="افزودن بسته حجم"
+            {% if packs_are_hidden %}disabled hidden{% endif %}>
+      <span aria-hidden="true">+</span><span>افزودن</span>
+    </button>
+  </div>
+
+  <div class="extra-packs-kind" data-user-pack-kind="duration">
+    <span class="form-field-label">بسته‌های زمان (ماه)</span>
+    <div class="extra-packs-rows pay-dest-rows" data-user-pack-rows="duration">
+      {% for row in dur_rows %}
+      {% set cur = 'inherit' if row.button_style is none else (row.button_style or '') %}
+      {% set cur_tone = 'default' if cur in ('inherit', '') else cur %}
+      <div class="extra-pack-row" data-user-pack-row>
+        <div class="extra-pack-fields">
+          <input name="plan_dur_amount" class="extra-pack-amount" type="number" min="1" max="120" step="1"
+                 inputmode="numeric" dir="ltr" value="{{ row.amount | int }}"
+                 aria-label="مقدار ماه بسته" placeholder="مقدار"
+                 {% if packs_are_hidden %}disabled{% else %}required{% endif %} />
+          <select name="plan_dur_style" class="btn-color-select extra-pack-style" data-tone="{{ cur_tone }}"
+                  aria-label="رنگ دکمه بسته زمان"
+                  {% if packs_are_hidden %}disabled{% endif %}>
+            {% for opt_val, opt_label, opt_tone in style_opts %}
+            <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="button" class="btn btn-danger btn-sm extra-pack-remove"
+                data-user-pack-remove aria-label="حذف بسته زمان"
+                {% if packs_are_hidden %}disabled{% endif %}>حذف</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="pay-dest-add-row" data-user-pack-add="duration" aria-label="افزودن بسته زمان"
+            {% if packs_are_hidden %}disabled hidden{% endif %}>
+      <span aria-hidden="true">+</span><span>افزودن</span>
+    </button>
+  </div>
+</div>

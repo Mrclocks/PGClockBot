@@ -180,6 +180,16 @@ class Plan(Base):
     carry_remaining_quota: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true")
     )
+    # Plan-scoped customer extra stairs (volume GB / duration months), like reseller fixed.
+    allow_buy_extra: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    extra_gb_price: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0")
+    )  # toman per extra GB
+    extra_month_price: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0")
+    )  # toman per extra month (stored packs use days = months * 30)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -589,6 +599,22 @@ class PanelAlertState(Base):
     fingerprint: Mapped[str] = mapped_column(String(64), default="", server_default="")
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PgLinkHealthState(Base):
+    """Single platform row: last known PasarGuard link-health summary across restarts."""
+
+    __tablename__ = "pg_link_health_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    pause_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    kind_totals_24h: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
 
 
 class VolumeHold(Base):

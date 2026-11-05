@@ -22,6 +22,8 @@ OPERATIONS = {
     "order_purge",
     "scheduled_backup",
     "connection_status",
+    # Cheap authenticated probe that heals/rebuilds the PasarGuard link; needs no bot.
+    "pg_link_watchdog",
     "bbc_settlement_poll",
     "psp_settlement_poll",
     "volume_external_sync",

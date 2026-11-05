@@ -1906,7 +1906,9 @@
         toast.setAttribute('role', 'status');
         toast.textContent = msg;
         document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 2800);
+        /* Same lifetime as page-level .flash.ok (panel_ok_flash.js). */
+        const dismissMs = (window.PGClockPanelOkFlash && window.PGClockPanelOkFlash.DISMISS_MS) || 2800;
+        setTimeout(() => toast.remove(), dismissMs);
       }
       document.addEventListener('submit', (e) => {
         const form = e.target;
