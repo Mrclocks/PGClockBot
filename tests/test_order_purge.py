@@ -256,14 +256,14 @@ class PurgeTests(PurgeDbHarness):
 
 
 class PurgeRouteTests(PurgeDbHarness):
-    """The cleanup tab saves cancel settings and deletion rules in one form; the run has its own route."""
+    """The cleanup tab saves tag deletion rules; the run has its own route."""
 
     async def asyncSetUp(self):
         await super().asyncSetUp()
         from app.api.cleanup_settings_pages import register_cleanup_settings_pages
         from app.api.order_purge_pages import register_order_purge_pages
 
-        self.staff = _reseller(SHOP_A, ["shop_settings", "orders_purge"])
+        self.staff = _reseller(SHOP_A, ["orders_purge"])
 
         async def get_db():
             async with self.Session() as session:
@@ -285,22 +285,16 @@ class PurgeRouteTests(PurgeDbHarness):
             return await get_all_settings(session, reseller_id=shop_id)
 
     async def _save(self, **data):
-        form = {"s_pending_order_cleanup_enabled": "1", "s_pending_order_ttl_hours": "24",
-                "s_pending_order_approval_ttl_hours": "9999", "purge_section": "1", "days": "10", **data}
+        form = {"days": "10", **data}
         return await self.client.post("/finance/cleanup/save", data=form)
 
-    async def test_one_save_stores_cancel_settings_and_deletion_rules(self):
+    async def test_one_save_stores_deletion_rules(self):
         response = await self._save(**{"t_order:cancelled": "1", "t_order:paid": "1", "t_payment:rejected": "1", "auto": "1"})
         self.assertIn("ok=", response.headers["location"])
         self.assertIn("settings=cleanup", response.headers["location"])
         values = await self._settings(SHOP_A)
         self.assertEqual(
             (values[KEY_TAGS], values[KEY_AUTO], values[KEY_DAYS]), ("order:cancelled,payment:rejected", "1", "10")
-        )
-        self.assertEqual(
-            (values["pending_order_cleanup_enabled"], values["pending_order_ttl_hours"],
-             values["pending_order_approval_ttl_hours"], values["pending_order_cleanup_awaiting_approval"]),
-            ("1", "24", "720", "0"),
         )
         platform = await self._settings(None)
         self.assertNotEqual(platform.get(KEY_TAGS), "order:cancelled,payment:rejected")
@@ -309,15 +303,13 @@ class PurgeRouteTests(PurgeDbHarness):
         bad = await self._save(days="0", **{"t_order:cancelled": "1"})
         self.assertIn("err=", bad.headers["location"])
         values = await self._settings(SHOP_A)
-        self.assertNotEqual(values.get("pending_order_ttl_hours"), "24")
         self.assertNotEqual(values.get(KEY_TAGS), "order:cancelled")
 
-    async def test_without_orders_purge_the_rules_are_ignored_but_cancel_settings_save(self):
+    async def test_without_orders_purge_save_goes_home(self):
         self.staff = _reseller(SHOP_A, ["shop_settings"])
-        response = await self._save(days="0", **{"t_order:cancelled": "1", "auto": "1"})
-        self.assertIn("ok=", response.headers["location"])
+        response = await self._save(days="10", **{"t_order:cancelled": "1", "auto": "1"})
+        self.assertEqual(response.headers["location"], "/home")
         values = await self._settings(SHOP_A)
-        self.assertEqual(values["pending_order_ttl_hours"], "24")
         self.assertNotEqual(values.get(KEY_TAGS), "order:cancelled")
         self.assertNotEqual(values.get(KEY_AUTO), "1")
 
@@ -335,54 +327,53 @@ class PurgeRouteTests(PurgeDbHarness):
         self.assertEqual(await self._count(Order, Order.reseller_id == SHOP_A), 0)
         self.assertEqual(await self._count(Order, Order.reseller_id == SHOP_B), 1)
 
-    async def test_staff_without_the_keys_go_home(self):
+    async def test_staff_without_purge_cannot_run(self):
         from app.db.models import Order
 
         await self._order("cancelled")
-        self.staff = _reseller(SHOP_A, ["orders", "orders_purge"])
-        self.assertEqual((await self._save(**{"t_order:cancelled": "1"})).headers["location"], "/home")
         self.staff = _reseller(SHOP_A, ["orders", "shop_settings"])
+        self.assertEqual((await self._save(**{"t_order:cancelled": "1"})).headers["location"], "/home")
         self.assertEqual((await self.client.post("/finance/cleanup/purge-run")).headers["location"], "/home")
         self.assertEqual(await self._count(Order), 1)
-        self.assertNotIn("pending_order_ttl_hours", {k for k, v in (await self._settings(SHOP_A)).items() if v == "24"})
 
 
 class CleanupTabTemplateTests(PurgeDbHarness):
-    """One tab, one settings form and one save; the two «الان» runs are separate forms."""
+    """One tab: tags, age, auto, one save; run-now is a separate form."""
 
     async def _render(self, purge) -> str:
         from app.api.app import templates
-        from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS
 
-        names = TAB_SETTING_GROUPS["cleanup"]
         return templates.env.get_template("_settings_cleanup_tab.html").render(
-            purge=purge, cleanup_status={"ready_count": 2, "last_run": "", "last_count": 0},
-            cleanup_settings_action="/finance/cleanup/save", finance_pending_action="/settings/cancel-pending-orders",
-            tab_groups=names, groups={n: SETTING_GROUPS[n] for n in names}, values={}, app_version="t",
+            purge=purge,
+            cleanup_settings_action="/finance/cleanup/save",
+            app_version="t",
         )
 
-    async def test_switches_and_cancel_settings_share_one_form_and_one_save(self):
+    async def test_tags_age_auto_and_run_share_the_tab(self):
         async with self.Session() as session:
             ctx = await purge_panel_context(session, OWNER, {KEY_TAGS: "order:cancelled", KEY_AUTO: "1"}, return_to="/finance?tab=orders")
         html = await self._render(ctx)
         settings_form = html.split('action="/finance/cleanup/save"', 1)[1].split("</form>", 1)[0]
         self.assertEqual(settings_form.count('name="t_'), 10)
-        self.assertIn("s_pending_order_ttl_hours", settings_form)
+        self.assertIn("هنوز پرداخت شروع نشده", settings_form)
         self.assertIn('name="auto" value="1" checked', settings_form)
+        self.assertIn('name="days"', settings_form)
         self.assertNotIn("t_order:paid", html)
         self.assertNotIn("t_order:delivering", html)
+        self.assertNotIn("s_pending_order", html)
+        self.assertNotIn("cancel-pending-orders", html)
         self.assertEqual(html.count("ui-modal-sticky-save"), 1)
-        self.assertEqual(html.count('action="/settings/cancel-pending-orders"'), 1)
         self.assertEqual(html.count("/finance/cleanup/purge-run"), 1)
+        self.assertIn("پاک کردن الان", html)
 
-    async def test_without_purge_permission_only_cancel_settings(self):
+    async def test_without_purge_permission_shows_access_note(self):
         async with self.Session() as session:
             self.assertIsNone(await purge_panel_context(session, _reseller(SHOP_A, ["orders"]), {}, return_to="/x"))
         html = await self._render(None)
         self.assertNotIn('name="t_', html)
         self.assertNotIn("purge_section", html)
         self.assertNotIn("purge-run", html)
-        self.assertIn("s_pending_order_ttl_hours", html)
+        self.assertIn("حذف کامل سفارش‌ها و پرداخت‌ها", html)
 
 
 if __name__ == "__main__":

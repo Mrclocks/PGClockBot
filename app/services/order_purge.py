@@ -78,6 +78,7 @@ class PurgeTag:
     table: str
     status: str
     label: str
+    hint: str = ""
 
     @property
     def token(self) -> str:
@@ -85,18 +86,18 @@ class PurgeTag:
 
 
 ORDER_TAGS: tuple[PurgeTag, ...] = (
-    PurgeTag(ORDER, OrderStatus.PENDING.value, "در انتظار"),
-    PurgeTag(ORDER, OrderStatus.AWAITING_RECEIPT.value, "منتظر رسید"),
-    PurgeTag(ORDER, OrderStatus.AWAITING_APPROVAL.value, "منتظر تأیید"),
-    PurgeTag(ORDER, OrderStatus.DELIVERED.value, "تحویل‌شده"),
-    PurgeTag(ORDER, OrderStatus.REJECTED.value, "ردشده"),
-    PurgeTag(ORDER, OrderStatus.CANCELLED.value, "لغوشده"),
+    PurgeTag(ORDER, OrderStatus.PENDING.value, "در انتظار", "هنوز پرداخت شروع نشده"),
+    PurgeTag(ORDER, OrderStatus.AWAITING_RECEIPT.value, "منتظر رسید", "رسید هنوز ارسال نشده"),
+    PurgeTag(ORDER, OrderStatus.AWAITING_APPROVAL.value, "منتظر تأیید", "رسید آمده؛ تأیید نشده"),
+    PurgeTag(ORDER, OrderStatus.DELIVERED.value, "تحویل‌شده", "سرویس ساخته شده؛ فقط ردیف سفارش"),
+    PurgeTag(ORDER, OrderStatus.REJECTED.value, "ردشده", "پرداخت رد شده"),
+    PurgeTag(ORDER, OrderStatus.CANCELLED.value, "لغوشده", "سفارش لغو شده"),
 )
 PAYMENT_TAGS: tuple[PurgeTag, ...] = (
-    PurgeTag(PAYMENT, PaymentStatus.PENDING.value, "در انتظار"),
-    PurgeTag(PAYMENT, PaymentStatus.APPROVED.value, "تأییدشده"),
-    PurgeTag(PAYMENT, PaymentStatus.REJECTED.value, "ردشده"),
-    PurgeTag(PAYMENT, PaymentStatus.VOIDED.value, "باطل‌شده"),
+    PurgeTag(PAYMENT, PaymentStatus.PENDING.value, "در انتظار", "پرداخت باز روی سفارش بسته‌شده"),
+    PurgeTag(PAYMENT, PaymentStatus.APPROVED.value, "تأییدشده", "پرداخت تأییدشدهٔ سفارش بسته‌شده"),
+    PurgeTag(PAYMENT, PaymentStatus.REJECTED.value, "ردشده", "پرداخت ردشده"),
+    PurgeTag(PAYMENT, PaymentStatus.VOIDED.value, "باطل‌شده", "پرداخت باطل‌شده"),
 )
 TAGS: dict[str, PurgeTag] = {tag.token: tag for tag in (*ORDER_TAGS, *PAYMENT_TAGS)}
 
@@ -376,7 +377,7 @@ def _last_run_view(settings: Mapping[str, str]) -> dict[str, object] | None:
 async def purge_panel_context(
     session: AsyncSession, staff: dict, settings: Mapping[str, str], *, return_to: str
 ) -> dict[str, object] | None:
-    """Template values for the cleanup tab, or None when ``staff`` may not delete rows."""
+    """Template values for the tag-based cleanup tab, or None when ``staff`` may not delete rows."""
     try:
         shop_id = purge_scope(staff)
     except PermissionError:

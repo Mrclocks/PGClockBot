@@ -1,4 +1,4 @@
-"""Finance cleanup tab: one save for the stale-order cancel settings and the deletion rules."""
+"""Finance cleanup tab: save the status-tag deletion rules."""
 
 from __future__ import annotations
 

@@ -1,4 +1,8 @@
-"""Stale pending order cleanup: separate approval deadline, preview count and run record."""
+"""Stale pending order cleanup: separate approval deadline, preview count and run record.
+
+The finance cleanup modal is tag-based purge; these tests cover the soft-cancel
+job that still reads the legacy pending_order_* settings.
+"""
 
 from __future__ import annotations
 
@@ -105,10 +109,6 @@ class StaleOrderCleanupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(platform["last_run"], "")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class CleanupTabRenderTests(unittest.TestCase):
     def _render(self, **overrides: object) -> str:
         from app.api.app import templates
@@ -117,33 +117,50 @@ class CleanupTabRenderTests(unittest.TestCase):
         def groups(tab: str) -> dict:
             return {name: SETTING_GROUPS[name] for name in TAB_SETTING_GROUPS[tab]}
 
+        purge = {
+            "sections": (),
+            "days": 30,
+            "min_days": 1,
+            "max_days": 3650,
+            "ready": type("R", (), {"total": 4, "orders": 3, "payments": 1})(),
+            "auto_on": True,
+            "last_run": {"at": "2026-10-28 12:00", "kind": "دستی", "orders": 2, "payments": 1},
+            "rules_action": "/finance/cleanup/save",
+            "run_action": "/finance/cleanup/purge-run",
+        }
         ctx = {
             "open_finance_settings": "cleanup",
             "can_pending_orders": True,
             "can_billing_settings": False,
             "values": dict(DEFAULT_SETTINGS),
-            "payment_tab_groups": TAB_SETTING_GROUPS["payment"], "payment_groups": groups("payment"),
-            "cleanup_tab_groups": TAB_SETTING_GROUPS["cleanup"], "cleanup_groups": groups("cleanup"),
-            "payment_settings_action": "/settings?tab=payment", "cleanup_settings_action": "/settings?tab=cleanup",
-            "finance_pending_action": "/settings/cancel-pending-orders",
-            "cleanup_status": {"ready_count": 7, "last_run": "2026-10-28 12:00", "last_count": 3},
+            "payment_tab_groups": TAB_SETTING_GROUPS["payment"],
+            "payment_groups": groups("payment"),
+            "payment_settings_action": "/settings?tab=payment",
+            "cleanup_settings_action": "/finance/cleanup/save",
+            "purge": purge,
+            "app_version": "t",
         }
         ctx.update(overrides)
         return templates.env.get_template("_modal_finance_settings.html").render(**ctx)
 
-    def test_cleanup_tab_shows_status_settings_and_manual_cancel(self) -> None:
+    def test_cleanup_tab_is_tags_age_auto_and_run_now(self) -> None:
         html = self._render()
         self.assertIn('data-modal-tab="cleanup"', html)
-        self.assertIn("s_pending_order_approval_ttl_hours", html)
-        self.assertIn("2026-10-28 12:00", html)
-        self.assertEqual(html.count('action="/settings/cancel-pending-orders"'), 1)
+        self.assertIn("تگ‌های پاکسازی", html)
+        self.assertIn("زمان‌بندی", html)
+        self.assertIn("پاک کردن الان", html)
+        self.assertIn("/finance/cleanup/purge-run", html)
+        self.assertIn("/finance/cleanup/save", html)
+        self.assertNotIn("cancel-pending-orders", html)
+        self.assertNotIn("s_pending_order_ttl_hours", html)
         self.assertEqual(html.count("وضعیت پاکسازی"), 1)
 
     def test_payment_tab_no_longer_carries_cleanup_fields(self) -> None:
-        html = self._render(open_finance_settings="payment", can_pending_orders=False)
+        html = self._render(open_finance_settings="payment", can_pending_orders=False, purge=None)
         self.assertNotIn("s_pending_order_ttl_hours", html)
         self.assertNotIn("cancel-pending-orders", html)
         self.assertNotIn('data-modal-tab="cleanup"', html)
+        self.assertNotIn("تگ‌های پاکسازی", html)
 
     def test_cleanup_is_the_last_tab_after_payg(self) -> None:
         from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS
@@ -158,3 +175,7 @@ class CleanupTabRenderTests(unittest.TestCase):
         self.assertEqual(tabs, sorted(tabs))
         panels = [html.index(f'data-modal-tab-panel="{name}"') for name in ("payment", "billing", "cleanup")]
         self.assertEqual(panels, sorted(panels))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -34,8 +34,6 @@
         {% set settings_form_action = payment_settings_action %}
         {% set tab_groups = payment_tab_groups %}
         {% set groups = payment_groups %}
-        {% set show_pending_orders = false %}
-        {% set show_cleanup_status = false %}
         {% include "_domain_settings_form.html" %}
       </div>
       {% if can_billing_settings %}
@@ -43,15 +41,11 @@
         {% set settings_form_action = billing_settings_action %}
         {% set tab_groups = billing_tab_groups %}
         {% set groups = billing_groups %}
-        {% set show_pending_orders = false %}
-        {% set show_cleanup_status = false %}
         {% include "_domain_settings_form.html" %}
       </div>
       {% endif %}
       {% if can_pending_orders %}
       <div class="modal-tab-panel" data-modal-tab-panel="cleanup" {% if open_settings != 'cleanup' %}hidden{% endif %}>
-        {% set tab_groups = cleanup_tab_groups %}
-        {% set groups = cleanup_groups %}
         {% include "_settings_cleanup_tab.html" %}
       </div>
       {% endif %}

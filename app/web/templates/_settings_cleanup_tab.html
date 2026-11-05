@@ -1,83 +1,66 @@
-{# Finance cleanup tab: stale-order cancel and full deletion, one status card and one save.
-   Expects: cleanup_status, cleanup_settings_action, finance_pending_action, tab_groups, groups, values;
-   purge (order_purge.purge_panel_context) only for staff who may delete. #}
-{% set purge_tone = {'awaiting_receipt': 'pending', 'awaiting_approval': 'pending', 'voided': 'cancelled'} %}
+{# Finance cleanup: status tags + age; auto hourly or run now. Expects purge + cleanup_settings_action. #}
+{% set purge_tone = {
+  'pending': 'pending', 'awaiting_receipt': 'pending', 'awaiting_approval': 'pending',
+  'delivered': 'delivered', 'approved': 'approved',
+  'rejected': 'rejected', 'cancelled': 'cancelled', 'voided': 'cancelled',
+} %}
 <div class="settings-domain-stack">
+  {% if not purge %}
+  <div class="card settings-card">
+    <h2>پاکسازی</h2>
+    <p class="muted update-card-caption">برای این بخش به دسترسی «حذف کامل سفارش‌ها و پرداخت‌ها» نیاز است.</p>
+  </div>
+  {% else %}
   <div class="card settings-card">
     <h2>وضعیت پاکسازی</h2>
+    <p class="muted update-card-caption">بر اساس تگ‌ها و مهلت ذخیره‌شده؛ بعد از تغییر اول ذخیره کنید.</p>
     <div class="home-panel-grid">
       <div class="stat">
-        <div class="stat-top"><span>آمادهٔ لغو</span></div>
-        <strong>{{ (cleanup_status.ready_count if cleanup_status else 0) | num }}</strong>
-        <span>سفارش معلق از مهلت گذشته</span>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>آخرین لغو</span></div>
-        {% if cleanup_status and cleanup_status.last_run %}
-        <strong><bdi dir="ltr">{{ cleanup_status.last_run }}</bdi></strong>
-        <span>{{ cleanup_status.last_count | num }} سفارش</span>
-        {% else %}
-        <strong>—</strong>
-        {% endif %}
-      </div>
-      {% if purge %}
-      <div class="stat">
-        <div class="stat-top"><span>آمادهٔ حذف</span></div>
+        <div class="stat-top"><span>آمادهٔ پاکسازی</span></div>
         <strong>{{ purge.ready.total | num }}</strong>
         <span>{{ purge.ready.orders | num }} سفارش · {{ purge.ready.payments | num }} پرداخت</span>
       </div>
       <div class="stat">
-        <div class="stat-top"><span>آخرین حذف</span></div>
+        <div class="stat-top"><span>آخرین اجرا</span></div>
         {% if purge.last_run %}
         <strong><bdi dir="ltr">{{ purge.last_run.at }}</bdi></strong>
         <span>{{ purge.last_run.kind }} · {{ purge.last_run.orders | num }} سفارش · {{ purge.last_run.payments | num }} پرداخت</span>
         {% else %}
         <strong>—</strong>
+        <span>هنوز اجرا نشده</span>
         {% endif %}
       </div>
-      {% endif %}
     </div>
     <div class="cleanup-run-actions">
-      <form method="post" action="{{ finance_pending_action }}"
-            data-confirm="سفارش‌های معلق قدیمی‌تر از مهلت‌های ذخیره‌شده همین حالا لغو شوند؟"
-            data-confirm-title="لغو سفارش‌های معلق" data-confirm-warn="1" data-confirm-label="لغو کن">
-        <button class="btn btn-warn" type="submit">لغو معلق‌ها الان</button>
-      </form>
-      {% if purge %}
       <form method="post" action="{{ purge.run_action }}"
             data-confirm="{{ purge.ready.orders | num }} سفارش و {{ purge.ready.payments | num }} پرداخت برای همیشه پاک شوند؟"
-            data-confirm-title="حذف کامل" data-confirm-label="حذف کامل" data-confirm-danger="1">
-        <button class="btn btn-danger" type="submit"{% if not purge.ready.total %} disabled{% endif %}>حذف کامل الان</button>
+            data-confirm-title="پاکسازی الان" data-confirm-label="پاک کن" data-confirm-danger="1">
+        <button class="btn btn-danger" type="submit"{% if not purge.ready.total %} disabled{% endif %}>پاک کردن الان</button>
       </form>
-      {% endif %}
     </div>
   </div>
 
   <form method="post" action="{{ cleanup_settings_action }}" class="settings-form">
-    {% for group_name in tab_groups %}
+    <input type="hidden" name="purge_section" value="1" />
     <div class="card settings-card">
-      <h2>لغو خودکار سفارش‌های معلق</h2>
-      <div class="settings-grid">
-      {% for field in groups[group_name] %}
-        {% include "_settings_field.html" %}
-      {% endfor %}
-      </div>
-    </div>
-    {% endfor %}
-    {% if purge %}
-    <div class="card settings-card">
-      <h2>حذف کامل از پایگاه داده</h2>
-      <p class="muted update-card-caption">وضعیت‌های روشن، با همهٔ ردیف‌های وابسته برای همیشه پاک می‌شوند. سرویس مشتری و پرداخت‌های در جریان دست نمی‌خورند.</p>
-      <input type="hidden" name="purge_section" value="1" />
+      <h2>تگ‌های پاکسازی</h2>
+      <p class="muted update-card-caption">
+        فقط وضعیت‌های روشن پاک می‌شوند؛ سرویس مشتری و پرداخت‌های در جریان دست نمی‌خورند.
+        سفارش‌های پرداخت‌شده یا در حال تحویل قابل انتخاب نیستند.
+      </p>
       {% for section in purge.sections %}
       <h3 class="order-purge-title">{{ section.title }}</h3>
-      <div class="order-purge-tags">
+      <div class="order-purge-tags" role="group" aria-label="{{ section.title }}">
         {% for row in section.rows %}
         {% set tag = row.tag %}
         <label class="ui-switch-row order-purge-tag">
-          <span class="ui-switch-copy"><span class="badge {{ purge_tone.get(tag.status, tag.status) }}">{{ tag.label }}</span></span>
+          <span class="ui-switch-copy">
+            <span class="badge {{ purge_tone.get(tag.status, tag.status) }}">{{ tag.label }}</span>
+            {% if tag.hint %}<small>{{ tag.hint }}</small>{% endif %}
+          </span>
           <span class="ui-switch">
-            <input type="checkbox" name="t_{{ tag.token }}" value="1" aria-label="حذف {{ section.title }} {{ tag.label }}"
+            <input type="checkbox" name="t_{{ tag.token }}" value="1"
+                   aria-label="{{ section.title }}: {{ tag.label }}"
                    {% if row.on %}checked{% endif %} />
             <span class="ui-switch-track" aria-hidden="true"></span>
           </span>
@@ -85,23 +68,32 @@
         {% endfor %}
       </div>
       {% endfor %}
+    </div>
+
+    <div class="card settings-card">
+      <h2>زمان‌بندی</h2>
+      <p class="muted update-card-caption">
+        ردیف‌های قدیمی‌تر از مهلت، با تگ‌های روشن بالا پاک می‌شوند؛ حذف خودکار هر ساعت یک‌بار اجرا می‌شود.
+      </p>
       <div class="order-purge-options">
         <label class="ui-switch-row">
-          <span class="ui-switch-copy"><strong>حذف خودکار</strong><small>هر ساعت</small></span>
+          <span class="ui-switch-copy"><strong>حذف خودکار</strong><small>هر ساعت روی تگ‌های روشن</small></span>
           <span class="ui-switch">
             <input type="checkbox" name="auto" value="1" {% if purge.auto_on %}checked{% endif %} />
             <span class="ui-switch-track" aria-hidden="true"></span>
           </span>
         </label>
-        <label class="form-field">قدیمی‌تر از (روز)
-          <input name="days" type="number" min="{{ purge.min_days }}" max="{{ purge.max_days }}" value="{{ purge.days }}" required dir="ltr" inputmode="numeric" />
+        <label class="form-field">مهلت (روز)
+          <input name="days" type="number" min="{{ purge.min_days }}" max="{{ purge.max_days }}"
+                 value="{{ purge.days }}" required dir="ltr" inputmode="numeric"
+                 aria-label="مهلت پاکسازی به روز" />
         </label>
       </div>
     </div>
-    {% endif %}
+
     <div class="actions sticky-actions ui-modal-sticky-save">
       <button class="btn" type="submit">ذخیره تنظیمات</button>
     </div>
   </form>
-  <script src="/static/settings-show-when.js?v={{ app_version }}" defer></script>
+  {% endif %}
 </div>

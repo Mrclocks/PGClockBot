@@ -45,15 +45,15 @@ class UsersListFilterTests(unittest.TestCase):
 
 
 class PendingOrderCleanupTests(unittest.TestCase):
-    def test_settings_keys(self):
+    def test_legacy_cancel_keys_stay_off_settings_tabs(self):
         from app.services.users import DEFAULT_SETTINGS, TAB_SETTING_GROUPS, keys_for_tab
 
+        # Soft-cancel still has defaults for the hourly job; the finance cleanup
+        # modal is tag-based purge and no longer lists these as editable fields.
         self.assertIn("pending_order_cleanup_enabled", DEFAULT_SETTINGS)
         self.assertIn("pending_order_ttl_hours", DEFAULT_SETTINGS)
-        self.assertIn("pending_order_cleanup_enabled", keys_for_tab("cleanup"))
-        self.assertIn("pending_order_approval_ttl_hours", keys_for_tab("cleanup"))
-        self.assertEqual(TAB_SETTING_GROUPS["cleanup"], ["پاکسازی سفارش‌های معلق"])
-        # The cleanup tab owns these keys; saving the payment tab must not touch them.
+        self.assertEqual(TAB_SETTING_GROUPS["cleanup"], [])
+        self.assertNotIn("pending_order_cleanup_enabled", keys_for_tab("cleanup"))
         self.assertNotIn("pending_order_cleanup_enabled", keys_for_tab("payment"))
 
     def test_cancel_helper_and_scheduler(self):
