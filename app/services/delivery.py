@@ -618,7 +618,7 @@ async def _deliver_reseller_app_order(
                 await bot.send_message(
                     aid,
                     notify,
-                    reply_markup=kb.reseller_app_review(app_id),
+                    reply_markup=kb.reseller_app_review(app_id, user_id=order.user_id),
                     parse_mode="HTML",
                 )
             except Exception:

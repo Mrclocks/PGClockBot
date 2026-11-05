@@ -2557,10 +2557,12 @@ def reseller_app_review(
     ui: dict | None = None,
     *,
     allow_approve: bool = True,
+    user_id: int | None = None,
 ) -> InlineKeyboardMarkup:
     """Message-scoped approve/reject (notifications). No nav chrome.
 
     ``allow_approve=False`` for unpaid (pending_payment) apps — reject only.
+    Optional ``user_id`` adds a platform customer-card button under the review row.
     """
     row: list[InlineKeyboardButton] = []
     if allow_approve:
@@ -2578,7 +2580,17 @@ def reseller_app_review(
             style=_style(ui, "reject", fallback="danger"),
         )
     )
-    return InlineKeyboardMarkup(inline_keyboard=[row])
+    rows: list[list[InlineKeyboardButton]] = [row]
+    if user_id:
+        rows.append(
+            [
+                _ikb(
+                    "👤 کاربر",
+                    callback_data=f"adm:users:view:{int(user_id)}",
+                )
+            ]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def reseller_home(profile=None, ui: dict | None = None) -> InlineKeyboardMarkup:

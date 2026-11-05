@@ -1938,7 +1938,11 @@ async def pay_wallet_cb(
                             aid,
                             f"🤝 درخواست نمایندگی پرداخت‌شده — سفارش #{order.id}\n"
                             f"کاربر: {db_user.full_name or db_user.telegram_id}",
-                            reply_markup=kb.reseller_app_review(app_id) if app_id else None,
+                            reply_markup=(
+                                kb.reseller_app_review(app_id, user_id=db_user.id)
+                                if app_id
+                                else None
+                            ),
                         )
             except Exception:
                 logger.debug("pay_wallet_cb: ignored failure", exc_info=True)
