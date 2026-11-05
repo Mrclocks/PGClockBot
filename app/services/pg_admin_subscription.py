@@ -252,6 +252,20 @@ def renew_base_amount(plan: ResellerPlan | None) -> int:
     return max(0, int(getattr(plan, "price", 0) or 0))
 
 
+def plan_carries_remaining_period(plan: ResellerPlan | None) -> bool:
+    """Whether renew extends from a future expiry (default yes)."""
+    if plan is None:
+        return True
+    return bool(getattr(plan, "carry_remaining_period", True))
+
+
+def plan_keeps_extras_on_renew(plan: ResellerPlan | None) -> bool:
+    """Whether purchased extra GB/user slots survive renew (default yes)."""
+    if plan is None:
+        return True
+    return bool(getattr(plan, "keep_extras_on_renew", True))
+
+
 def compute_renew_invoice(
     plan: ResellerPlan | None,
     sub: PgAdminSubscription | None,
@@ -264,10 +278,16 @@ def compute_renew_invoice(
 
     If ``allow_buy_extra`` is on, mode is forced to ``from_capacity`` so renew
     cannot undercharge after capacity purchases.
+
+    When ``keep_extras_on_renew`` is off, extras are not billed because renew
+    clears them before the next period starts.
     """
     base = renew_base_amount(plan)
-    extra_gb = int(getattr(sub, "extra_gb_purchased", 0) or 0) if sub else 0
-    extra_users = int(getattr(sub, "extra_users_purchased", 0) or 0) if sub else 0
+    keep_extras = plan_keeps_extras_on_renew(plan)
+    raw_extra_gb = int(getattr(sub, "extra_gb_purchased", 0) or 0) if sub else 0
+    raw_extra_users = int(getattr(sub, "extra_users_purchased", 0) or 0) if sub else 0
+    extra_gb = raw_extra_gb if keep_extras else 0
+    extra_users = raw_extra_users if keep_extras else 0
     gb_unit = max(0, int(getattr(plan, "extra_gb_price", 0) or 0)) if plan else 0
     user_unit = max(0, int(getattr(plan, "extra_user_price", 0) or 0)) if plan else 0
     mode = resolve_renew_pricing_mode(plan)
@@ -293,6 +313,10 @@ def compute_renew_invoice(
         "expires_at": getattr(sub, "expires_at", None) if sub else None,
         "access_status": getattr(sub, "access_status", None) if sub else None,
         "duration_days": max(0, int(getattr(plan, "duration_days", 0) or 0)) if plan else 0,
+        "carry_remaining_period": plan_carries_remaining_period(plan),
+        "keep_extras_on_renew": keep_extras,
+        "cleared_extra_gb": 0 if keep_extras else raw_extra_gb,
+        "cleared_extra_users": 0 if keep_extras else raw_extra_users,
     }
 
 
@@ -827,6 +851,8 @@ class _RenewSnapshot:
     expires_at: datetime | None
     base_gb: int
     base_users: int
+    extra_gb_purchased: int
+    extra_users_purchased: int
     last_renewed_at: datetime | None
     warn_sent_at: datetime | None
     access_status: str
@@ -835,8 +861,16 @@ class _RenewSnapshot:
     @classmethod
     def of(cls, sub: PgAdminSubscription) -> _RenewSnapshot:
         return cls(
-            sub.plan_id, sub.expires_at, int(sub.base_gb or 0), int(sub.base_users or 0),
-            sub.last_renewed_at, sub.warn_sent_at, sub.access_status, sub.expired_at,
+            sub.plan_id,
+            sub.expires_at,
+            int(sub.base_gb or 0),
+            int(sub.base_users or 0),
+            int(sub.extra_gb_purchased or 0),
+            int(sub.extra_users_purchased or 0),
+            sub.last_renewed_at,
+            sub.warn_sent_at,
+            sub.access_status,
+            sub.expired_at,
         )
 
     def restore(self, sub: PgAdminSubscription) -> None:
@@ -852,7 +886,9 @@ def _extend_period(sub: PgAdminSubscription, plan: ResellerPlan, now: datetime) 
     days = max(0, int(getattr(plan, "duration_days", 0) or 0))
     if days > 0:
         anchor = _as_aware(sub.expires_at) or now
-        sub.expires_at = max(anchor, now) + timedelta(days=days)
+        if (not plan_carries_remaining_period(plan)) or anchor < now:
+            anchor = now
+        sub.expires_at = anchor + timedelta(days=days)
     else:
         # Moving to an untimed package must not keep a stale clock that the expiry tick can cut.
         sub.expires_at = None
@@ -861,6 +897,9 @@ def _extend_period(sub: PgAdminSubscription, plan: ResellerPlan, now: datetime) 
     if not is_current_capacity_plan(plan):
         sub.base_gb = max(0, int(getattr(plan, "included_gb", 0) or 0))
         sub.base_users = max(0, int(getattr(plan, "included_users", 0) or 0))
+    if not plan_keeps_extras_on_renew(plan):
+        sub.extra_gb_purchased = 0
+        sub.extra_users_purchased = 0
     sub.last_renewed_at = now
     sub.warn_sent_at = None
     # Paid means active; the panel is reopened right after, and a failure there only warns.

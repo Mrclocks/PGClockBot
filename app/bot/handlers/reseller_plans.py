@@ -100,6 +100,7 @@ async def _plans_kb(
 
 def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
     """One plan's actions; «بازگشت» returns to the plans screen."""
+    carry = bool(getattr(plan, "carry_remaining_quota", True))
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -108,6 +109,12 @@ def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
                     callback_data=f"res:plan:tog:{plan.id}",
                 ),
                 InlineKeyboardButton(text="🗑 حذف", callback_data=f"res:plan:del:{plan.id}"),
+            ],
+            [
+                InlineKeyboardButton(
+                    text=("✅ " if carry else "⬜️ ") + "انتقال مانده در تمدید",
+                    callback_data=f"res:plan:carry:{plan.id}",
+                )
             ],
             [
                 InlineKeyboardButton(
@@ -137,11 +144,13 @@ def _plan_text(plan: Plan, *, category_name: str | None = None) -> str:
         else (f"گروه {plan.pg_group_ids}" if plan.pg_group_ids else "—")
     )
     cat = category_name or "—"
+    carry = bool(getattr(plan, "carry_remaining_quota", True))
     return (
         f"💎 <b>{plan.name}</b>\n"
         f"قیمت: {plan.price:,} تومان\n"
         f"مدت: {plan.duration_days} روز · حجم: {gb}\n"
         f"برچسب دسته: {cat}\n"
+        f"مانده در تمدید: {'منتقل می‌شود' if carry else 'منتقل نمی‌شود'}\n"
         f"پاسارگارد: {src}\n"
         f"وضعیت: {'فعال' if plan.is_active else 'خاموش'}"
     )
@@ -279,6 +288,38 @@ async def res_plan_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     plan.is_active = not plan.is_active
+    await session.commit()
+    await callback.answer(feedback.SAVED)
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            await _plan_text_for(session, plan),
+            reply_markup=_plan_item_kb(plan),
+        )
+
+
+@router.callback_query(F.data.startswith("res:plan:carry:"))
+async def res_plan_carry_toggle(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
+        await callback.answer(feedback.NOT_RESELLER, show_alert=True)
+        return
+    if not has_bot_perm(profile, "plans"):
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
+        return
+    plan = await session.get(Plan, int(callback.data.rsplit(":", 1)[-1]))
+    if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        return
+    plan.carry_remaining_quota = not bool(getattr(plan, "carry_remaining_quota", True))
     await session.commit()
     await callback.answer(feedback.SAVED)
     if callback.message:
