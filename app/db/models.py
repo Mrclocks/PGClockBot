@@ -227,6 +227,7 @@ class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         Index("uq_orders_renewal_request_key", "renewal_request_key", unique=True),
+        Index("uq_orders_addon_request_key", "addon_request_key", unique=True),
         Index("ix_orders_created_at", "created_at"),
         Index(
             "uq_orders_service_quota_mutation", "service_id", unique=True,
@@ -255,6 +256,8 @@ class Order(Base):
     # Purchased terms and an absolute target, persisted before panel mutation.
     renewal_snapshot: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     renewal_request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Mini App addon preview idempotency — same role as renewal_request_key for packs.
+    addon_request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # Serialize quota changes and retain exclusion while a renewal needs review.
     service_mutation_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     service_id: Mapped[Optional[int]] = mapped_column(

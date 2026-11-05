@@ -415,11 +415,27 @@
   function addonPacksHtml(packs, serviceId) {
     if (!packs || !packs.length) return emptyHtml("بسته‌ای برای خرید فعال نیست.");
     const sid = Number(serviceId) || 0;
-    return `<p class="muted sm">بسته پس از پرداخت به همین سرویس اضافه می‌شود.</p>
-      <div class="plan-list">${packs.map((p) => `<button type="button" class="plan-option" data-action="buy-addon" data-id="${sid}" data-pack="${Number(p.id) || 0}">
+    return `<p class="muted sm">بسته را انتخاب کنید؛ پیش از پرداخت، نتیجه را می‌بینید.</p>
+      <div class="plan-list">${packs.map((p) => `<button type="button" class="plan-option" data-action="preview-addon" data-id="${sid}" data-pack="${Number(p.id) || 0}">
         <span class="plan-meta"><strong>${esc(p.name)}</strong><span class="muted sm">+${esc(p.amount_label)}</span>${p.description ? `<span class="muted sm">${esc(p.description)}</span>` : ""}</span>
         <span class="plan-price">${priceHtml(p)}</span>
       </button>`).join("")}</div>`;
+  }
+
+  function addonPreviewHtml(preview, serviceId, packId, kind) {
+    const sid = Number(serviceId) || 0;
+    const pid = Number(packId) || 0;
+    const k = kind === "duration" ? "duration" : "volume";
+    return `<div class="sum-row"><span class="muted">بسته</span><strong>${esc(preview.pack_name)}</strong></div>
+      <div class="sum-row"><span class="muted">افزایش</span><span>+${esc(preview.amount_label)}</span></div>
+      <div class="sum-row is-total"><span>مبلغ</span><span>${priceHtml(preview)}</span></div>
+      ${(preview.lines || []).map((line) => `<p class="sm">${esc(line)}</p>`).join("")}
+      ${(preview.warnings || []).map((line) => `<p class="inline-error">${esc(line)}</p>`).join("")}
+      ${preview.notice ? `<p class="muted sm">${esc(preview.notice)}</p>` : ""}
+      <div class="btn-col">
+        <button type="button" class="btn block" data-action="confirm-addon" data-id="${sid}" data-pack="${pid}">تأیید و پرداخت از کیف پول</button>
+        <button type="button" class="btn ghost block" data-action="addons" data-id="${sid}" data-kind="${esc(k)}">انتخاب بسته دیگر</button>
+      </div>`;
   }
 
   function automationHtml(data, serviceId) {
@@ -957,7 +973,7 @@
     icon, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
     brandHeaderHtml, noticeBannerHtml, shortcutsHtml, panelShortcutsHtml, heroHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, discountedCheckoutHtml, giftFormHtml, renewPlansHtml,
-    renewPreviewHtml, addonPacksHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
+    renewPreviewHtml, addonPacksHtml, addonPreviewHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
     backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, reviewQueueHtml, reviewSheetHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml, resellerSubscriptionHtml,
   });

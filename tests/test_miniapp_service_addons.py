@@ -1,6 +1,7 @@
 """Mini App addon checkout and the admin's payment-purpose notifications."""
 
 from datetime import datetime, timezone
+import time
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -19,6 +20,22 @@ from app.services.notifications import (
     notify_pending_approval,
 )
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+
+GB = 1024**3
+DAY = 86400
+
+
+class FakeAddonPanel:
+    def __init__(self):
+        self.info = {
+            "status": "active",
+            "data_limit": 10 * GB,
+            "used_traffic": 3 * GB,
+            "expire": int(time.time()) + 5 * DAY,
+        }
+
+    async def get_user_by_id(self, user_id):
+        return dict(self.info)
 
 
 class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
@@ -42,6 +59,7 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
         await self.session.commit()
         self.shop_token = set_shop_reseller_id(None)
         self.bot = AsyncMock()
+        self.pg = FakeAddonPanel()
 
         async def load_user(*args):
             return await self.session.scalar(select(BotUser).where(BotUser.id == 1))
@@ -55,6 +73,7 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
             patch("app.services.reseller_bots.open_notify_bot_for_user", AsyncMock(return_value=(self.bot, True))),
             patch("app.api.miniapp_feeds.load_mini_user", AsyncMock(side_effect=load_user)),
             patch("app.api.miniapp_pages._fetch_pg_info", AsyncMock(return_value={"error": "upstream_unavailable"})),
+            patch("app.services.pasarguard.get_pg", return_value=self.pg),
         ]
         self.mocks = [p.start() for p in self.patches]
         app = FastAPI()
@@ -74,8 +93,24 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
         await self.session.close()
         await self.engine.dispose()
 
-    async def buy(self, pack_id=1, service_id=10, kind=None):
-        body = {"service_id": service_id, "pack_id": pack_id}
+    async def preview(self, pack_id=1, service_id=10):
+        return await self.client.get(f"/api/mini/service/{service_id}/addon-preview?pack_id={pack_id}")
+
+    async def buy(self, pack_id=1, service_id=10, kind=None, *, preview=None):
+        if preview is None:
+            response = await self.preview(pack_id=pack_id, service_id=service_id)
+            if response.status_code != 200:
+                return response
+            preview = response.json()
+        body = {
+            "service_id": service_id,
+            "pack_id": pack_id,
+            "preview": {
+                "terms": preview["terms"],
+                "price": preview["price"],
+                "request_key": preview["request_key"],
+            },
+        }
         if kind is not None:
             body["kind"] = kind
         return await self.client.post("/api/mini/addon", json=body)
@@ -112,11 +147,49 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
     async def test_checkout_rejects_the_opposite_kind_before_debit(self):
         for kind, pack_id in [("volume", 2), ("duration", 1), ("unknown", 1)]:
             with self.subTest(kind=kind):
-                response = await self.client.post("/api/mini/addon", json={
-                    "service_id": 10, "pack_id": pack_id, "kind": kind,
-                })
+                response = await self.buy(pack_id, kind=kind)
                 self.assertEqual(response.status_code, 400)
                 await self.assert_no_purchase()
+
+    async def test_preview_shows_before_after_without_charging(self):
+        response = await self.preview(pack_id=1)
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["pack_name"], "بسته حجم")
+        self.assertEqual(body["price"], 1000)
+        self.assertEqual(len(body["request_key"]), 32)
+        self.assertTrue(any("حجم پس از افزایش" in line for line in body["lines"]))
+        self.assertIn("notice", body)
+        await self.assert_no_purchase()
+
+    async def test_pay_without_preview_is_rejected(self):
+        response = await self.client.post("/api/mini/addon", json={
+            "service_id": 10, "pack_id": 1, "kind": "volume", "price": 1000,
+        })
+        self.assertEqual(response.status_code, 400)
+        await self.assert_no_purchase()
+
+    async def test_lost_response_retry_reuses_request_key(self):
+        from app.services.service_addons import addon_terms
+
+        first = await self.buy(pack_id=1, kind="volume")
+        self.assertEqual(first.status_code, 200, first.text)
+        order_id = first.json()["order_id"]
+        key = (await self.session.get(Order, order_id)).addon_request_key
+        self.assertEqual(len(key), 32)
+        pack = await self.session.get(ServiceAddonPack, 1)
+        # Replaying the same preview must not create a second order or debit again.
+        replay = await self.client.post("/api/mini/addon", json={
+            "service_id": 10,
+            "pack_id": 1,
+            "kind": "volume",
+            "preview": {"terms": addon_terms(pack), "price": 1000, "request_key": key},
+        })
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertEqual(replay.json()["order_id"], order_id)
+        self.assertEqual(await self.session.scalar(select(func.count(Order.id))), 1)
+        await self.session.refresh(self.user)
+        self.assertEqual(self.user.wallet_balance, 9000)
 
     async def test_service_payload_marks_only_eligible_owned_services(self):
         linked = UserService(id=11, bot_user_id=1, pg_user_id=111, pg_username="linked", remark="linked")

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import re
+import secrets
+import string
 import time
 from typing import Any
 
@@ -20,9 +22,17 @@ from app.db.models import (
     ServiceAddonPack,
     UserService,
 )
+from app.services.formatting import (
+    format_bytes,
+    format_expire_short,
+    hold_duration_from_info,
+    is_on_hold_status,
+    parse_expire,
+)
 from app.services.numbers import to_fa_digits
 from app.services.plans_catalog import require_catalog_owner_id
 from app.services.provision_gate import ProvisionError, hold_limit_change, new_hold_key
+from app.services.service_live_info import validate_service_info
 from app.services.volume_allocation import (
     HeldVolume,
     VolumeAllocationError,
@@ -37,6 +47,9 @@ log = logging.getLogger(__name__)
 KIND_VOLUME = "volume"
 KIND_DURATION = "duration"
 VALID_KINDS = frozenset({KIND_VOLUME, KIND_DURATION})
+ADDON_PREVIEW_NOTICE = (
+    "پیش‌نمایش بر اساس مانده فعلی است؛ مصرف و گذشت زمان تا اجرای افزایش از مانده کم می‌شود."
+)
 
 # note: svc_addon:{pack_id}:{service_id}[:{kind}:{amount}]
 # kind/amount snapshot freezes entitlement at order time (price is on order.amount).
@@ -619,36 +632,128 @@ def pack_volume_bytes(amount: float) -> int:
     return int(float(amount) * (1024**3))
 
 
-async def _assert_pack_volume_available(
-    session: AsyncSession, shop_rid: int | None, pack: ServiceAddonPack
-) -> None:
-    """Refuse a volume pack the shop cannot apply within its ceiling; delivery holds it again."""
-    try:
-        await assert_volume_delta_allowed(
-            session, shop_id=shop_rid, delta_bytes=pack_volume_bytes(pack.amount), audience="customer",
-        )
-    except VolumeAllocationError as e:
-        raise ValueError(e.user_message()) from e
+def addon_terms(pack: ServiceAddonPack) -> dict[str, Any]:
+    """Frozen pack entitlement used to re-validate a Mini App preview at pay time."""
+    if not pack or pack.kind not in VALID_KINDS:
+        raise ValueError("نوع بسته نامعتبر است")
+    if pack.kind == KIND_VOLUME:
+        bytes_added = pack_volume_bytes(pack.amount)
+        if bytes_added <= 0:
+            raise ValueError("حجم بسته نامعتبر است")
+        return {"version": 1, "kind": KIND_VOLUME, "volume_bytes": bytes_added, "duration_seconds": 0}
+    days = int(float(pack.amount))
+    if days <= 0 or days != float(pack.amount):
+        raise ValueError("مدت بسته نامعتبر است")
+    return {"version": 1, "kind": KIND_DURATION, "volume_bytes": 0, "duration_seconds": days * 86400}
 
 
-async def create_addon_order(
+def _time_label(seconds: int | None) -> str:
+    if seconds is None:
+        return "نامحدود"
+    days = f"{seconds / 86400:.2f}".rstrip("0").rstrip(".")
+    return f"{days} روز"
+
+
+def calculate_addon_preview(
+    info: dict[str, Any],
+    *,
+    kind: str,
+    amount: float,
+    now: int | None = None,
+) -> dict[str, Any]:
+    """Before/after lines for a volume or duration pack — same arithmetic as apply."""
+    info = validate_service_info(info)
+    if info.get("error"):
+        raise ValueError("اطلاعات زمان یا حجم سرویس کامل نیست؛ دوباره به‌روزرسانی کنید")
+    if kind not in VALID_KINDS:
+        raise ValueError("نوع بسته نامعتبر است")
+    now = int(time.time()) if now is None else int(now)
+    warnings: list[str] = []
+    on_hold = is_on_hold_status(info.get("status"))
+
+    if kind == KIND_VOLUME:
+        used = int(info["used_traffic"])
+        old_limit = int(info["data_limit"] or 0)
+        if old_limit <= 0:
+            raise ValueError("این سرویس حجم نامحدود دارد — بسته حجم قابل خرید نیست")
+        remaining = max(0, old_limit - used)
+        added = pack_volume_bytes(amount)
+        if added <= 0:
+            raise ValueError("حجم نامعتبر است")
+        new_remaining = remaining + added
+        lines = [
+            f"حجم مانده: {format_bytes(remaining)}",
+            f"حجم بسته: {format_bytes(added)}",
+            f"حجم پس از افزایش: {format_bytes(new_remaining)}",
+        ]
+        if on_hold:
+            warnings.append("سرویس در انتظار اتصال است؛ پس از خرید فعال می‌شود.")
+        return {
+            "lines": lines,
+            "warnings": warnings,
+            "notice": ADDON_PREVIEW_NOTICE,
+            "result_remaining_bytes": new_remaining,
+            "result_seconds": None,
+        }
+
+    days = int(float(amount))
+    if days <= 0:
+        raise ValueError("مدت نامعتبر است")
+    added_seconds = days * 86400
+    old_expire = parse_expire(info.get("expire", info.get("expire_date")))
+    if old_expire is not None and old_expire.tzinfo is None:
+        from datetime import timezone as _tz
+
+        old_expire = old_expire.replace(tzinfo=_tz.utc)
+    expire_ts = int(old_expire.timestamp()) if old_expire else None
+    if expire_ts is None and on_hold:
+        old_seconds = hold_duration_from_info(info)
+        if old_seconds is None:
+            raise ValueError("مدت سرویس در انتظار مشخص نیست — بسته قابل اعمال نیست")
+        new_seconds = old_seconds + added_seconds
+        target_expire = None
+        pending_start = True
+    elif expire_ts is None:
+        raise ValueError("این سرویس زمان نامحدود دارد — بسته زمان قابل خرید نیست")
+    else:
+        old_seconds = max(0, expire_ts - now)
+        base = max(now, expire_ts)
+        target_expire = base + added_seconds
+        new_seconds = max(0, target_expire - now)
+        pending_start = False
+    lines = [
+        f"زمان مانده: {_time_label(old_seconds)}",
+        f"زمان بسته: {_time_label(added_seconds)}",
+        f"زمان پس از افزایش: {_time_label(new_seconds)}"
+        + (" پس از اتصال" if pending_start else ""),
+    ]
+    if target_expire:
+        lines.append(f"انقضای جدید: {format_expire_short(target_expire)}")
+    if on_hold and not pending_start:
+        warnings.append("سرویس در انتظار اتصال است؛ پس از خرید فعال می‌شود.")
+    return {
+        "lines": lines,
+        "warnings": warnings,
+        "notice": ADDON_PREVIEW_NOTICE,
+        "result_remaining_bytes": None,
+        "result_seconds": new_seconds,
+    }
+
+
+async def validate_addon_selection(
     session: AsyncSession,
     *,
     user_id: int,
     service: UserService,
     pack: ServiceAddonPack,
-    commit: bool = True,
-    expected_price: int | None = None,
-) -> Order:
-    """Create a pending addon order. Price is snapshotted from the pack."""
-    from app.services.orders import _shop_reseller_id
-
+    shop_id: int | None,
+) -> dict[str, Any]:
+    """Shared ownership / shop / plan-scope / quota gates for preview and pay."""
     if not pack or not pack.is_active:
         raise ValueError("بسته یافت نشد")
     if pack.kind not in VALID_KINDS:
         raise ValueError("نوع بسته نامعتبر است")
-    shop_rid = _shop_reseller_id()
-    if not pack_matches_shop(pack, shop_rid):
+    if not pack_matches_shop(pack, shop_id):
         raise ValueError("این بسته در این فروشگاه موجود نیست")
     if int(service.bot_user_id) != int(user_id):
         raise ValueError("سرویس متعلق به شما نیست")
@@ -656,16 +761,14 @@ async def create_addon_order(
         raise ValueError("سرویس به پنل متصل نیست")
     if (service.remark or "").strip() == "linked":
         raise ValueError("سرویس متصل‌شده فقط مشاهده است؛ خرید افزونه ممکن نیست")
-
-    # Fail closed: service owner must live in the same shop as the pack.
     user = await session.get(BotUser, int(user_id))
     if not user:
         raise ValueError("کاربر یافت نشد")
     from app.services.service_automation import service_shop_id
+    from app.services.service_renewals import assert_service_quota_available
 
-    if await service_shop_id(session, service) != shop_rid:
+    if await service_shop_id(session, service) != shop_id:
         raise ValueError("سرویس این فروشگاه نیست")
-
     # Fail closed per kind: scoped catalog for pack.kind blocks general/category
     # packs of that kind; other kinds keep legacy rules.
     svc_cat = await service_plan_category_id(session, service)
@@ -675,7 +778,7 @@ async def create_addon_order(
         and await plan_has_scoped_packs(
             session,
             plan_id=svc_plan,
-            reseller_id=shop_rid,
+            reseller_id=shop_id,
             kind=pack.kind,
         )
     )
@@ -688,21 +791,106 @@ async def create_addon_order(
         raise ValueError(
             "این بسته برای پلن این سرویس نیست — بسته متناسب با همان سرویس را انتخاب کنید"
         )
-
-    from app.services.service_renewals import assert_service_quota_available
-
     await assert_service_quota_available(session, service.id)
-
-    # Fail closed on known-unlimited quotas (synced cache) so buyers are not charged
-    # for an entitlement that cannot be applied.
     if service.quota_synced_at is not None:
         if pack.kind == KIND_VOLUME and int(service.quota_data_limit_bytes or 0) <= 0:
             raise ValueError("این سرویس حجم نامحدود دارد — بسته حجم قابل خرید نیست")
         if pack.kind == KIND_DURATION and service.quota_expire_at is None:
             raise ValueError("این سرویس زمان نامحدود دارد — بسته زمان قابل خرید نیست")
-
     if pack.kind == KIND_VOLUME:
-        await _assert_pack_volume_available(session, shop_rid, pack)
+        await _assert_pack_volume_available(session, shop_id, pack)
+    return addon_terms(pack)
+
+
+async def preview_addon(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    service: UserService,
+    pack: ServiceAddonPack,
+) -> dict[str, Any]:
+    """Live before/after preview for Mini App confirmation — no financial writes."""
+    from app.services.orders import _shop_reseller_id
+    from app.services.pasarguard import get_pg, get_pg_for_reseller
+
+    shop_id = _shop_reseller_id()
+    terms = await validate_addon_selection(
+        session, user_id=user_id, service=service, pack=pack, shop_id=shop_id,
+    )
+    pg = await get_pg_for_reseller(session, shop_id) if shop_id else get_pg()
+    result = calculate_addon_preview(
+        await pg.get_user_by_id(service.pg_user_id),
+        kind=pack.kind,
+        amount=float(pack.amount),
+    )
+    quote = await quote_product(session, pack, shop_id=shop_id)
+    return {
+        **result,
+        **quote.payload(),
+        "terms": terms,
+        "pack_name": pack.name,
+        "kind": pack.kind,
+        "amount_label": amount_label(pack),
+        "request_key": secrets.token_hex(16),
+    }
+
+
+async def _assert_pack_volume_available(
+    session: AsyncSession, shop_rid: int | None, pack: ServiceAddonPack
+) -> None:
+    """Refuse a volume pack the shop cannot apply within its ceiling; delivery holds it again."""
+    try:
+        await assert_volume_delta_allowed(
+            session, shop_id=shop_rid, delta_bytes=pack_volume_bytes(pack.amount), audience="customer",
+        )
+    except VolumeAllocationError as e:
+        raise ValueError(e.user_message()) from e
+
+
+def _parse_addon_request_key(request_key: str | None) -> str | None:
+    if request_key is None:
+        return None
+    if (
+        not isinstance(request_key, str)
+        or len(request_key) != 32
+        or any(c not in string.hexdigits for c in request_key)
+    ):
+        raise ValueError("شناسه درخواست افزایش نامعتبر است")
+    return request_key
+
+
+async def create_addon_order(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    service: UserService,
+    pack: ServiceAddonPack,
+    commit: bool = True,
+    expected_price: int | None = None,
+    request_key: str | None = None,
+) -> Order:
+    """Create a pending addon order. Price is snapshotted from the pack."""
+    from app.services.orders import _shop_reseller_id
+
+    shop_rid = _shop_reseller_id()
+    key = _parse_addon_request_key(request_key)
+    if key is not None:
+        existing = await session.scalar(select(Order).where(Order.addon_request_key == key))
+        if existing is not None:
+            note = parse_addon_note(existing.note)
+            pack_id = note[0] if note else None
+            if (
+                existing.user_id,
+                existing.service_id,
+                pack_id,
+                existing.reseller_id,
+            ) != (user_id, service.id, int(pack.id), shop_rid):
+                raise ValueError("درخواست افزایش نامعتبر است")
+            return existing
+
+    await validate_addon_selection(
+        session, user_id=user_id, service=service, pack=pack, shop_id=shop_rid,
+    )
 
     quote = await quote_product(session, pack, shop_id=shop_rid)
     assert_expected_price(quote, expected_price)
@@ -719,8 +907,34 @@ async def create_addon_order(
         ),
         service_id=int(service.id),
         reseller_id=shop_rid,
+        addon_request_key=key,
     )
-    session.add(order)
+    if key is None:
+        session.add(order)
+    else:
+        connection = await session.connection()
+        if connection.dialect.name == "sqlite":
+            raw = await connection.get_raw_connection()
+            if not raw.driver_connection.in_transaction:
+                await connection.exec_driver_sql("BEGIN")
+        try:
+            async with session.begin_nested():
+                session.add(order)
+                await session.flush()
+        except IntegrityError:
+            existing = await session.scalar(select(Order).where(Order.addon_request_key == key))
+            if existing is None:
+                raise
+            note = parse_addon_note(existing.note)
+            pack_id = note[0] if note else None
+            if (
+                existing.user_id,
+                existing.service_id,
+                pack_id,
+                existing.reseller_id,
+            ) != (user_id, service.id, int(pack.id), shop_rid):
+                raise ValueError("درخواست افزایش نامعتبر است") from None
+            return existing
     if commit:
         await session.commit()
         await session.refresh(order)
