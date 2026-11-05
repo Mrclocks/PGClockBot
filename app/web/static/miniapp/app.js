@@ -93,8 +93,15 @@
     return null;
   }
 
+  /** [0, 1) from the browser's secure generator (falls back where it is missing). */
+  function secureRandom() {
+    const c = root.crypto;
+    if (c && c.getRandomValues) return c.getRandomValues(new Uint32Array(1))[0] / 4294967296;
+    return Math.random();
+  }
+
   function fillRandomServiceName() {
-    state.serviceName = R.randomServiceName(Math.random);
+    state.serviceName = R.randomServiceName(secureRandom);
     const input = doc.querySelector("[data-input=service-name]");
     if (input) input.value = state.serviceName;
     core.haptic("select");
