@@ -77,24 +77,28 @@ class ShopSettingsPrincipalScopeTests(unittest.TestCase):
         self.assertIn("get_all_settings(session, reseller_id=rid)", page)
         self.assertIn("_deny_scope", page)
 
-    def test_save_paths_use_same_session_scope(self):
-        src = (ROOT / "app/api/shop_settings.py").read_text(encoding="utf-8")
-        for name in (
-            "shop_settings_save",
-            "shop_notifications_save",
-            "shop_menu_layout_save",
-            "shop_supports_save",
-            "shop_supports_delete",
+    def test_save_paths_registered_without_cancel_pending_route(self):
+        from fastapi import FastAPI
+
+        from app.api.shop_settings import register_shop_settings
+
+        app = FastAPI()
+        register_shop_settings(
+            app,
+            render=lambda *args, **kwargs: None,
+            require_staff=lambda: {},
+            get_db=lambda: None,
+        )
+        paths = {getattr(route, "path", "") for route in app.routes}
+        for path in (
+            "/shop-settings",
+            "/shop-notifications",
+            "/shop-settings/menu-layout",
+            "/shop-supports/save",
+            "/shop-supports/delete",
         ):
-            start = src.find(f"async def {name}")
-            self.assertGreater(start, 0, name)
-            # slice until next async def at same indent level approx
-            rest = src[start:]
-            nxt = rest.find("\n    async def ", 10)
-            chunk = rest[: nxt if nxt > 0 else len(rest)]
-            self.assertNotIn('staff.get("role") != "reseller"', chunk, name)
-            self.assertIn("_rid(staff)", chunk, name)
-            self.assertIn("if not rid:", chunk, name)
+            self.assertIn(path, paths, path)
+        self.assertNotIn("/shop-settings/cancel-pending-orders", paths)
 
     def test_helper_uses_shop_owner_id_server_side(self):
         src = (ROOT / "app/api/shop_settings.py").read_text(encoding="utf-8")

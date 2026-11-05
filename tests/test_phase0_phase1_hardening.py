@@ -88,16 +88,10 @@ class TrialReleaseSourceTests(unittest.TestCase):
         src = (ROOT / "app/services/orders.py").read_text(encoding="utf-8")
         self.assertIn("def _trial_shop_key_for_order", src)
         self.assertIn("async def _release_trial_claim_for_order", src)
-        stale = src[
-            src.find("async def cancel_stale_pending_orders") : src.find(
-                "async def attach_receipt"
-            )
-        ]
-        # The stale cancel releases holds through the shared helper (also used by the purge).
-        self.assertIn("release_unpaid_order_holds", stale)
-        holds = src[src.find("async def release_unpaid_order_holds") : src.find("async def cancel_stale_pending_orders")]
+        holds = src[src.find("async def release_unpaid_order_holds") : src.find("async def attach_receipt")]
         self.assertIn("_release_trial_claim_for_order", holds)
-        self.assertNotIn('note.startswith("trial:")', stale)
+        purge = (ROOT / "app/services/order_purge.py").read_text(encoding="utf-8")
+        self.assertIn("release_unpaid_order_holds", purge)
         self.assertIn(
             "_release_trial_claim_for_order",
             src[src.find("async def cancel_order") :],

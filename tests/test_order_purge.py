@@ -399,6 +399,7 @@ class SoftCancelDisableTests(PurgeDbHarness):
             values = await get_all_settings(session, reseller_id=SHOP_A)
         self.assertEqual(deleted, 0)
         self.assertEqual(values["pending_order_cleanup_enabled"], "0")
+        self.assertEqual(values.get("cleanup_soft_cancel_retired_notice"), "1")
         self.assertNotEqual(values.get(KEY_AUTO), "1")
         self.assertFalse(bool(str(values.get(KEY_TAGS) or "").strip()))
         self.assertEqual(await self._count(Order, Order.reseller_id == SHOP_A), 1)

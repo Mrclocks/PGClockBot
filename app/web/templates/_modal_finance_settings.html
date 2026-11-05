@@ -20,6 +20,21 @@
       {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
     </div>
     {% endif %}
+    {% if open_settings and soft_cancel_retired_notice %}
+    <div class="settings-modal-flash">
+      <div class="flash warn">
+        لغو خودکار سفارش‌های معلق خاموش شد. دیگر سفارش‌های پرداخت‌نشده به‌صورت ساعتی لغو نمی‌شوند.
+        برای پاکسازی دائمی از پایگاه، تب «پاکسازی» را با دسترسی حذف سفارش‌ها تنظیم کنید.
+      </div>
+      {% if soft_cancel_retired_ack_action %}
+      <form method="post" action="{{ soft_cancel_retired_ack_action }}" class="settings-form">
+        <div class="actions">
+          <button class="btn" type="submit">متوجه شدم</button>
+        </div>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
     <nav class="section-tabs settings-tabs modal-section-tabs" role="tablist" aria-label="تب‌های تنظیمات مالی" data-modal-tabs>
       <button type="button" class="tab-btn {% if open_settings not in ['billing', 'cleanup'] %}active{% endif %}" data-modal-tab="payment" role="tab">پرداخت</button>
       {% if can_billing_settings %}

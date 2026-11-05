@@ -827,6 +827,8 @@ DEFAULT_SETTINGS = {
     "pending_order_approval_ttl_hours": "72",
     "pending_order_cleanup_last_run": "",
     "pending_order_cleanup_last_count": "0",
+    # One-shot banner after soft-cancel is retired by the hourly purge job.
+    "cleanup_soft_cancel_retired_notice": "0",
     "card_pay_text": (
         "مبلغ قابل پرداخت: <b>{amount}</b>\n"
         "شماره کارت: <code>{card}</code>\n"

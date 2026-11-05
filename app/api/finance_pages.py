@@ -11,8 +11,9 @@ from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.services.cleanup_settings import SAVE_PATH as CLEANUP_SAVE_PATH
+from app.services.cleanup_settings import ACK_RETIRED_PATH, SAVE_PATH as CLEANUP_SAVE_PATH
 from app.services.order_purge import purge_panel_context
+from app.services.stale_order_cleanup import soft_cancel_retired_notice_on
 from app.db.models import BotUser, Order, Payment, Plan
 from app.services.authz import authz_from_staff, can_shop
 from app.services.dashboard_trend import sales_trend_or_empty
@@ -194,6 +195,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "payment_settings_action": "",
             "billing_settings_action": "",
             "cleanup_settings_action": "",
+            "soft_cancel_retired_notice": False,
+            "soft_cancel_retired_ack_action": "",
             "purge": None,
             "receipt_matches": {},
             "report": {},
@@ -232,6 +235,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                     f"/settings?tab=billing&next={quote(next_base + '&settings=billing')}"
                 )
                 ctx["cleanup_settings_action"] = f"{CLEANUP_SAVE_PATH}?next={quote(next_base + '&settings=cleanup')}"
+                ctx["soft_cancel_retired_ack_action"] = (
+                    f"{ACK_RETIRED_PATH}?next={quote(next_base + '&settings=payment')}"
+                )
                 ctx["purge"] = await purge_panel_context(
                     session, staff, ctx["values"], return_to=next_base + "&settings=cleanup"
                 )
@@ -244,10 +250,15 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                     )
                     ctx["can_billing_settings"] = False
                     ctx["cleanup_settings_action"] = f"{CLEANUP_SAVE_PATH}?next={quote(next_base + '&settings=cleanup')}"
+                    ctx["soft_cancel_retired_ack_action"] = (
+                        f"{ACK_RETIRED_PATH}?next={quote(next_base + '&settings=payment')}"
+                    )
                     ctx["purge"] = await purge_panel_context(
                         session, staff, ctx["values"], return_to=next_base + "&settings=cleanup"
                     )
                 # else: leave values={} — fail-closed / degraded, no Owner fallback
+            if ctx["values"]:
+                ctx["soft_cancel_retired_notice"] = soft_cancel_retired_notice_on(ctx["values"])
             ctx["can_pending_orders"] = ctx["purge"] is not None
             if open_settings == "cleanup" and not ctx["can_pending_orders"]:
                 ctx["open_finance_settings"] = "payment" if can_finance_settings else ""
