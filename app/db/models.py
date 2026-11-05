@@ -952,6 +952,14 @@ class ResellerPlan(Base):
     extra_gb_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra GB
     extra_user_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra user slot
     renew_price: Mapped[int] = mapped_column(Integer, default=0)  # 0 = use plan.price
+    # When true (default), renew extends from a future expiry instead of from now.
+    carry_remaining_period: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    # When true (default), purchased extra GB/user slots survive into the next period.
+    keep_extras_on_renew: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
     # NULL = inherit plan-kind btn_style_*; "" = explicit Telegram default (white)
     button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     # Optional category label (audience=resellers); NULL = uncategorized
