@@ -26,6 +26,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.nav_input import ask_text, finish_text_step, try_legacy_cancel
+from app.bot.service_adjust import (
+    NOTHING_STAGED,
+    StagedAdjustment,
+    restore_staged,
+    service_adjust_lock,
+    take_staged,
+)
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.db.models import BotUser, Plan, ResellerProfile
 from app.services import bot_feedback_texts as feedback
@@ -33,6 +40,7 @@ from app.services.bot_principal_identity import shop_bot_panel_staff
 from app.services.bot_user_admin import (
     MAX_EXTEND_DAYS,
     MAX_EXTEND_GB,
+    ServiceSnapshot,
     admin_delete_service,
     admin_extend_service,
     admin_renew_service,
@@ -596,6 +604,42 @@ async def _adj_ask_input(
     )
 
 
+async def _apply_staged(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    target: ShopServiceTarget,
+    adj_key: str,
+    staged: StagedAdjustment,
+) -> ServiceSnapshot | None:
+    """Apply a staged change; a refused change is staged again, an uncertain one is not."""
+    service_id = int(target.service_id or 0)
+    try:
+        svc = await get_owned_service(
+            session, bot_user_id=target.user_id, service_id=service_id, shop_id=target.owner_id
+        )
+        staff = await _panel_staff(callback, session, db_user, target)
+        if staff is None:
+            await restore_staged(state, adj_key, staged)
+            return None
+        await admin_extend_service(
+            session, svc, extra_days=staged.days, extra_gb=staged.gb, staff=staff
+        )
+        return await service_snapshot(session, svc)
+    except ValueError as exc:
+        await restore_staged(state, adj_key, staged)
+        await _fail_known(callback, session, exc)
+    except PANEL_UNCERTAIN:
+        await _fail_uncertain(callback, session, sid=service_id, op="extend")
+    except Exception as exc:
+        await rollback_quiet(session)
+        logger.warning("shop service extend failed sid=%s", service_id, exc_info=True)
+        await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
+    return None
+
+
 async def _adj_confirm(
     callback: CallbackQuery,
     state: FSMContext,
@@ -604,34 +648,19 @@ async def _adj_confirm(
     *,
     target: ShopServiceTarget,
     adj_key: str,
-    days: int,
-    gb: float,
 ) -> None:
-    assert target.service_id is not None
-    try:
-        svc = await get_owned_service(
-            session,
-            bot_user_id=target.user_id,
-            service_id=target.service_id,
-            shop_id=target.owner_id,
-        )
-        staff = await _panel_staff(callback, session, db_user, target)
-        if staff is None:
+    if target.service_id is None:
+        return
+    async with service_adjust_lock(target.service_id):
+        staged = await take_staged(state, adj_key)
+        if staged.is_empty:
+            await callback.answer(NOTHING_STAGED, show_alert=True)
             return
-        await admin_extend_service(session, svc, extra_days=days, extra_gb=gb, staff=staff)
-        snap = await service_snapshot(session, svc)
-    except ValueError as exc:
-        await _fail_known(callback, session, exc)
+        snap = await _apply_staged(
+            callback, state, session, db_user, target=target, adj_key=adj_key, staged=staged
+        )
+    if snap is None:
         return
-    except PANEL_UNCERTAIN:
-        await _fail_uncertain(callback, session, sid=target.service_id, op="extend")
-        return
-    except Exception as exc:
-        await rollback_quiet(session)
-        logger.warning("shop service extend failed sid=%s", target.service_id, exc_info=True)
-        await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
-        return
-    await state.update_data(**{adj_key: {"days": 0, "gb": 0.0}})
     await callback.answer("مانده به‌روز شد")
     if callback.message:
         await safe_edit_text(
@@ -687,9 +716,7 @@ async def res_user_service_adjust(
         )
         return
     elif action == "confirm":
-        await _adj_confirm(
-            callback, state, session, db_user, target=target, adj_key=adj_key, days=days, gb=gb
-        )
+        await _adj_confirm(callback, state, session, db_user, target=target, adj_key=adj_key)
         return
     else:
         await state.update_data(**{adj_key: {"days": days, "gb": gb}})
