@@ -429,26 +429,21 @@ async def _send_delivery_guides(
     order,
     ui: dict[str, str],
     shop_rid: int | None,
+    audience: str = "user",
 ) -> None:
-    """Inline «آموزش اتصال» — call only after QR / WireGuard / text delivery."""
+    """Inline guides after delivery; audience follows purchase context, not role."""
     try:
         from app.bot.handlers.guides import delivery_guides_keyboard
-        from app.db.models import BotUser
         from app.services.connection_guides import get_connection_guides, guides_for_audience
 
-        buyer_id = getattr(order, "user_id", None) if order is not None else None
-        audience = "user"
-        if buyer_id:
-            buyer = await session.get(BotUser, int(buyer_id))
-            if buyer and (getattr(buyer, "role", None) or "").lower() == "reseller":
-                audience = "reseller"
+        aud = "reseller" if audience == "reseller" else "user"
         if guides_for_audience(
-            await get_connection_guides(session, reseller_id=shop_rid), audience
+            await get_connection_guides(session, reseller_id=shop_rid), aud
         ):
             await bot.send_message(
                 chat_id,
                 "برای راه‌اندازی، آموزش اتصال را ببینید:",
-                reply_markup=delivery_guides_keyboard(ui, audience=audience),
+                reply_markup=delivery_guides_keyboard(ui, audience=aud),
                 parse_mode="HTML",
             )
     except Exception:
@@ -581,6 +576,16 @@ async def _deliver_reseller_app_order(
         text = format_credentials_message(creds)
         if not await _try_send_html(bot, chat_id, text, reply_markup=reply_kb):
             logger.debug("reseller creds delivery failed", exc_info=True)
+        panel_ui = await get_all_settings(session, reseller_id=None)
+        await _send_delivery_guides(
+            bot,
+            chat_id,
+            session,
+            order=order,
+            ui=panel_ui,
+            shop_rid=None,
+            audience="reseller",
+        )
         user = await session.get(BotUser, order.user_id)
         notify = (
             f"✅ نمایندگی فعال شد #{app_id}\n"
