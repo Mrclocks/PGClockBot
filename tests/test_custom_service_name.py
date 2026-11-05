@@ -354,6 +354,8 @@ class RequestedUsernameMigrationTests(unittest.TestCase):
                 migration.upgrade()
                 migration.upgrade()
                 self.assertEqual(conn.execute(sa.text("SELECT requested_username FROM orders")).scalar(), None)
+                indexes = {index["name"] for index in sa.inspect(conn).get_indexes("orders")}
+                self.assertIn("ix_orders_requested_username", indexes)
                 migration.downgrade()
                 columns = {column["name"] for column in sa.inspect(conn).get_columns("orders")}
                 self.assertNotIn("requested_username", columns)
