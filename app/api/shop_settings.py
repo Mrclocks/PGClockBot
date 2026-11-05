@@ -574,35 +574,6 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             await prune_guide_media(session, reseller_id=rid)
         return _redirect_after_save(request, f"/shop-settings?tab={tab}")
 
-    @app.post("/shop-settings/cancel-pending-orders")
-    async def shop_cancel_pending_orders(
-        request: Request,
-        staff: dict = Depends(shop_dep),
-        session: AsyncSession = Depends(get_db),
-    ):
-        if _is_owner_settings_actor(staff):
-            return RedirectResponse("/finance?tab=orders&settings=cleanup", status_code=303)
-        rid = _rid(staff)
-        if not rid:
-            return _deny_scope()
-        from app.services.orders import cancel_stale_pending_for_settings
-
-        fallback = "/finance?tab=orders&settings=cleanup"
-        try:
-            n = await cancel_stale_pending_for_settings(
-                session, reseller_id=int(rid), force=True
-            )
-        except Exception:
-            logger.exception("manual pending order cancel failed shop=%s", rid)
-            dest = _safe_next(request, fallback)
-            sep = "&" if "?" in dest else "?"
-            return RedirectResponse(
-                f"{dest}{sep}err={quote('لغو سفارش‌ها ناموفق بود. لاگ سرور را بررسی کنید.')}",
-                status_code=303,
-            )
-        msg = f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود"
-        return _redirect_after_save(request, fallback, msg=msg)
-
     @app.post("/shop-notifications")
     async def shop_notifications_save(
         request: Request,

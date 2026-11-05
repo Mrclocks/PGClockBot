@@ -17,7 +17,6 @@ from app.jobs import scheduler as jobs
 OPERATIONS = {
     "billing_tick",
     "pg_admin_subscription",
-    "pending_order_cleanup",
     # Deletes the order and payment rows each shop chose for automatic deletion; needs no running bot.
     "order_purge",
     "scheduled_backup",

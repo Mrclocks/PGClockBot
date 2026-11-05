@@ -4570,29 +4570,6 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         return render(request, "settings.html", ctx)
 
-    @app.post("/settings/cancel-pending-orders")
-    async def settings_cancel_pending_orders(
-        request: Request,
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ):
-        """Manual cancel of stale pending/unapproved orders (platform shop)."""
-        from app.services.orders import cancel_stale_pending_for_settings
-
-        try:
-            n = await cancel_stale_pending_for_settings(
-                session, reseller_id=None, force=True
-            )
-        except Exception:
-            logging.getLogger(__name__).exception("manual pending order cancel failed")
-            dest = _settings_next(request, "/finance?tab=orders&settings=cleanup")
-            return _redirect_msg(dest, err="لغو سفارش‌ها ناموفق بود. لاگ سرور را بررسی کنید.")
-        dest = _settings_next(request, "/finance?tab=orders&settings=cleanup")
-        return _redirect_msg(
-            dest,
-            ok=f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود",
-        )
-
     async def _bot_token_status(token: str) -> dict:
         token = (token or "").strip()
         if not token:

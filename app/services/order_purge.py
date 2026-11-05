@@ -150,11 +150,16 @@ def rules_from_settings(settings: Mapping[str, str]) -> PurgeRules:
 
 
 def purge_scope(staff: dict) -> int | None:
-    """Shop whose rows ``staff`` may delete (``None`` = platform); raises ``PermissionError``."""
+    """Shop whose rows ``staff`` may delete (``None`` = platform); raises ``PermissionError``.
+
+    Shop staff need ``shop_settings`` (same gate as the old soft-cancel settings) or
+    ``orders_purge``. Permanent deletion is disclosed in the cleanup tab copy.
+    """
     if is_platform_admin(staff):
         return None
-    if not can_shop(authz_from_staff(staff), PURGE_PERMISSION):
-        raise PermissionError("دسترسی حذف کامل سفارش‌ها و پرداخت‌ها ندارید")
+    authz = authz_from_staff(staff)
+    if not (can_shop(authz, "shop_settings") or can_shop(authz, PURGE_PERMISSION)):
+        raise PermissionError("دسترسی پاکسازی سفارش‌ها و پرداخت‌ها ندارید")
     shop_id = shop_owner_id(staff)
     if shop_id is None:
         raise PermissionError("حساب شما به فروشگاه متصل نیست")
@@ -378,10 +383,14 @@ async def purge_panel_context(
     session: AsyncSession, staff: dict, settings: Mapping[str, str], *, return_to: str
 ) -> dict[str, object] | None:
     """Template values for the tag-based cleanup tab, or None when ``staff`` may not delete rows."""
+    from app.services.cleanup_settings import migrate_soft_cancel_to_purge
+
     try:
         shop_id = purge_scope(staff)
     except PermissionError:
         return None
+    if await migrate_soft_cancel_to_purge(session, shop_id):
+        settings = await get_all_settings(session, reseller_id=shop_id)
     rules = rules_from_settings(settings)
     return {
         "sections": purge_sections(rules),
@@ -409,7 +418,14 @@ async def _shops_with_auto_rules(session: AsyncSession) -> list[int]:
 
 
 async def auto_purge_all_shops(session: AsyncSession) -> int:
-    """One automatic pass over the platform and every shop that switched it on; one failure does not stop the rest."""
+    """One automatic pass over the platform and every shop that switched it on; one failure does not stop the rest.
+
+    Legacy soft-cancel is folded into tag rules first so shops that never open the
+    tab still stop silent cancels and keep an automatic cleanup path.
+    """
+    from app.services.cleanup_settings import migrate_all_soft_cancel
+
+    await migrate_all_soft_cancel(session)
     total = 0
     for shop_id in [None, *await _shops_with_auto_rules(session)]:
         try:

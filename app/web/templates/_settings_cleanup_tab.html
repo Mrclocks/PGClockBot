@@ -1,4 +1,5 @@
-{# Finance cleanup: status tags + age; auto hourly or run now. Expects purge + cleanup_settings_action. #}
+{# Finance cleanup: status tags + age; auto hourly or run now. Permanent DB delete.
+   Expects purge + cleanup_settings_action. #}
 {% set purge_tone = {
   'pending': 'pending', 'awaiting_receipt': 'pending', 'awaiting_approval': 'pending',
   'delivered': 'delivered', 'approved': 'approved',
@@ -8,15 +9,18 @@
   {% if not purge %}
   <div class="card settings-card">
     <h2>پاکسازی</h2>
-    <p class="muted update-card-caption">برای این بخش به دسترسی «حذف کامل سفارش‌ها و پرداخت‌ها» نیاز است.</p>
+    <p class="muted update-card-caption">برای این بخش به دسترسی تنظیمات فروشگاه یا حذف سفارش‌ها و پرداخت‌ها نیاز است.</p>
   </div>
   {% else %}
   <div class="card settings-card">
     <h2>وضعیت پاکسازی</h2>
-    <p class="muted update-card-caption">بر اساس تگ‌ها و مهلت ذخیره‌شده؛ بعد از تغییر اول ذخیره کنید.</p>
+    <p class="muted update-card-caption">
+      بر اساس تگ‌ها و مهلت ذخیره‌شده. «پاک کردن» ردیف سفارش/پرداخت را برای همیشه از پایگاه داده حذف می‌کند؛ برگشت ندارد.
+      بعد از تغییر تگ یا مهلت، اول ذخیره کنید.
+    </p>
     <div class="home-panel-grid">
       <div class="stat">
-        <div class="stat-top"><span>آمادهٔ پاکسازی</span></div>
+        <div class="stat-top"><span>آمادهٔ حذف از پایگاه</span></div>
         <strong>{{ purge.ready.total | num }}</strong>
         <span>{{ purge.ready.orders | num }} سفارش · {{ purge.ready.payments | num }} پرداخت</span>
       </div>
@@ -33,20 +37,19 @@
     </div>
     <div class="cleanup-run-actions">
       <form method="post" action="{{ purge.run_action }}"
-            data-confirm="{{ purge.ready.orders | num }} سفارش و {{ purge.ready.payments | num }} پرداخت برای همیشه پاک شوند؟"
-            data-confirm-title="پاکسازی الان" data-confirm-label="پاک کن" data-confirm-danger="1">
-        <button class="btn btn-danger" type="submit"{% if not purge.ready.total %} disabled{% endif %}>پاک کردن الان</button>
+            data-confirm="{{ purge.ready.orders | num }} سفارش و {{ purge.ready.payments | num }} پرداخت برای همیشه از پایگاه داده حذف شوند؟ این کار برگشت‌ناپذیر است."
+            data-confirm-title="حذف از پایگاه داده" data-confirm-label="حذف کامل" data-confirm-danger="1">
+        <button class="btn btn-danger" type="submit"{% if not purge.ready.total %} disabled{% endif %}>حذف از پایگاه الان</button>
       </form>
     </div>
   </div>
 
   <form method="post" action="{{ cleanup_settings_action }}" class="settings-form">
-    <input type="hidden" name="purge_section" value="1" />
     <div class="card settings-card">
-      <h2>تگ‌های پاکسازی</h2>
+      <h2>تگ‌های حذف</h2>
       <p class="muted update-card-caption">
-        فقط وضعیت‌های روشن پاک می‌شوند؛ سرویس مشتری و پرداخت‌های در جریان دست نمی‌خورند.
-        سفارش‌های پرداخت‌شده یا در حال تحویل قابل انتخاب نیستند.
+        وضعیت‌های روشن، با همهٔ ردیف‌های وابسته، برای همیشه از پایگاه داده حذف می‌شوند.
+        سرویس مشتری و پرداخت‌های در جریان دست نمی‌خورند؛ سفارش پرداخت‌شده یا در حال تحویل قابل انتخاب نیست.
       </p>
       {% for section in purge.sections %}
       <h3 class="order-purge-title">{{ section.title }}</h3>
@@ -73,11 +76,11 @@
     <div class="card settings-card">
       <h2>زمان‌بندی</h2>
       <p class="muted update-card-caption">
-        ردیف‌های قدیمی‌تر از مهلت، با تگ‌های روشن بالا پاک می‌شوند؛ حذف خودکار هر ساعت یک‌بار اجرا می‌شود.
+        ردیف‌های قدیمی‌تر از مهلت، با تگ‌های روشن بالا از پایگاه حذف می‌شوند؛ حذف خودکار هر ساعت یک‌بار اجرا می‌شود.
       </p>
       <div class="order-purge-options">
         <label class="ui-switch-row">
-          <span class="ui-switch-copy"><strong>حذف خودکار</strong><small>هر ساعت روی تگ‌های روشن</small></span>
+          <span class="ui-switch-copy"><strong>حذف خودکار</strong><small>هر ساعت · حذف دائمی از پایگاه</small></span>
           <span class="ui-switch">
             <input type="checkbox" name="auto" value="1" {% if purge.auto_on %}checked{% endif %} />
             <span class="ui-switch-track" aria-hidden="true"></span>
@@ -86,7 +89,7 @@
         <label class="form-field">مهلت (روز)
           <input name="days" type="number" min="{{ purge.min_days }}" max="{{ purge.max_days }}"
                  value="{{ purge.days }}" required dir="ltr" inputmode="numeric"
-                 aria-label="مهلت پاکسازی به روز" />
+                 aria-label="مهلت حذف از پایگاه به روز" />
         </label>
       </div>
     </div>

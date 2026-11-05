@@ -85,7 +85,6 @@ class ShopSettingsPrincipalScopeTests(unittest.TestCase):
             "shop_menu_layout_save",
             "shop_supports_save",
             "shop_supports_delete",
-            "shop_cancel_pending_orders",
         ):
             start = src.find(f"async def {name}")
             self.assertGreater(start, 0, name)

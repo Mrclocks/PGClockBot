@@ -146,9 +146,10 @@ class CleanupTabRenderTests(unittest.TestCase):
     def test_cleanup_tab_is_tags_age_auto_and_run_now(self) -> None:
         html = self._render()
         self.assertIn('data-modal-tab="cleanup"', html)
-        self.assertIn("تگ‌های پاکسازی", html)
+        self.assertIn("تگ‌های حذف", html)
         self.assertIn("زمان‌بندی", html)
-        self.assertIn("پاک کردن الان", html)
+        self.assertIn("حذف از پایگاه الان", html)
+        self.assertIn("برای همیشه از پایگاه داده حذف", html)
         self.assertIn("/finance/cleanup/purge-run", html)
         self.assertIn("/finance/cleanup/save", html)
         self.assertNotIn("cancel-pending-orders", html)
@@ -160,7 +161,7 @@ class CleanupTabRenderTests(unittest.TestCase):
         self.assertNotIn("s_pending_order_ttl_hours", html)
         self.assertNotIn("cancel-pending-orders", html)
         self.assertNotIn('data-modal-tab="cleanup"', html)
-        self.assertNotIn("تگ‌های پاکسازی", html)
+        self.assertNotIn("تگ‌های حذف", html)
 
     def test_cleanup_is_the_last_tab_after_payg(self) -> None:
         from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS

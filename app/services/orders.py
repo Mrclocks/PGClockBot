@@ -1592,7 +1592,12 @@ async def cancel_stale_pending_for_settings(
     reseller_id: int | None = None,
     force: bool = False,
 ) -> int:
-    """Read shop/platform settings, cancel stale pending orders and record the run."""
+    """Cancel stale pending orders from legacy ``pending_order_*`` settings.
+
+    The hourly scheduler and panel routes that called this are gone; soft-cancel
+    is folded into tag purge by ``migrate_soft_cancel_to_purge``. Kept for tests
+    and one-off forced runs (``force=True`` ignores the enabled switch).
+    """
     from app.services.users import get_all_settings, on
 
     ui = await get_all_settings(session, reseller_id=reseller_id)

@@ -1996,8 +1996,6 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "forcejoin": ["کانال اجباری"],
     "terms": ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"],
     "billing": ["مدیریت PAYG"],
-    # Tag-based deletion lives in the finance cleanup modal (order_purge), not SETTING_GROUPS.
-    "cleanup": [],
     "notifications": ["هشدار سرویس کاربر", "گزارش و عملیات", "سلامت ارتباط پاسارگارد"],
     "daily_report": ["گزارش روزانه"],
     "backup": ["بکاپ زمان‌بندی", "ارسال بکاپ به تلگرام"],
