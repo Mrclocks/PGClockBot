@@ -1,6 +1,6 @@
 """Staff take a new service order for themselves without paying.
 
-The platform owner (main bot) and a shop's operators (its own bot, with the
+The platform owner (main bot) and a shop's owner (its own bot, with the
 ``free_checkout`` shop permission) can finish their own purchase from the payment
 screen instead of sending a receipt to themselves. The order is claimed with a
 zero amount and its price moved to ``discount_amount``, so revenue reports and
@@ -41,13 +41,14 @@ def is_new_service_order(order: Order | None) -> bool:
     return isinstance(order, Order) and order.plan_id is not None and not is_mutation_order_note(order.note)
 
 
-async def _is_shop_operator_with_permission(
+async def _is_shop_owner_with_permission(
     session: AsyncSession, actor: BotUser, order: Order, reseller_owner_id: int | None
 ) -> bool:
     owner_id = await resolve_reseller_owner_id(
         session, actor, is_reseller_bot=True, reseller_owner_id=reseller_owner_id
     )
-    if owner_id is None or int(order.reseller_id or 0) != int(owner_id):
+    # The shop owner only: a bot admin is staff, not the account the shop's quota belongs to.
+    if owner_id is None or int(actor.id) != int(owner_id) or int(order.reseller_id or 0) != int(owner_id):
         return False
     profile = await get_reseller_profile(session, int(owner_id))
     return bool(profile and profile.is_active and has_bot_perm(profile, STAFF_FREE_PERMISSION))
@@ -74,7 +75,7 @@ async def may_take_order_free(
     if order.status not in _CLAIMABLE_STATUSES:
         return False
     if is_reseller_bot:
-        return await _is_shop_operator_with_permission(session, actor, order, reseller_owner_id)
+        return await _is_shop_owner_with_permission(session, actor, order, reseller_owner_id)
     return await _is_platform_owner(session, actor, order)
 
 
