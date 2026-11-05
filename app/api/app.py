@@ -2812,11 +2812,18 @@ def create_api_app(lifespan=None) -> FastAPI:
             carry_remaining_quota=bool(form.get("carry_remaining_quota")),
             is_active=True,
         )
+        from app.services.service_addons import (
+            apply_plan_extra_rates_from_form,
+            replace_plan_scoped_packs_from_form,
+        )
+
+        try:
+            apply_plan_extra_rates_from_form(plan, form)
+        except ValueError as e:
+            return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
         session.add(plan)
         await session.flush()
         try:
-            from app.services.service_addons import replace_plan_scoped_packs_from_form
-
             await replace_plan_scoped_packs_from_form(
                 session, staff, plan_id=int(plan.id), form=form
             )
@@ -3149,24 +3156,24 @@ def create_api_app(lifespan=None) -> FastAPI:
             ITEM_BUTTON_STYLE_OPTIONS,
             PLAN_BUTTON_STYLE_OPTIONS,
         )
-        from app.services.service_addons import KIND_DURATION, KIND_VOLUME, list_packs_for_plan
+        from app.services.service_addons import (
+            KIND_DURATION,
+            KIND_VOLUME,
+            list_packs_for_plan,
+            plan_duration_months_for_form,
+        )
 
         plan_packs = await list_packs_for_plan(
             session, plan_id=int(plan.id), reseller_id=rid, active_only=False
         )
         plan_vol_packs = [
-            {
-                "amount": p.amount,
-                "price": int(p.price or 0),
-                "button_style": p.button_style,
-            }
+            {"amount": int(p.amount), "button_style": p.button_style}
             for p in plan_packs
             if p.kind == KIND_VOLUME
         ]
         plan_dur_packs = [
             {
-                "amount": p.amount,
-                "price": int(p.price or 0),
+                "amount": plan_duration_months_for_form(p),
                 "button_style": p.button_style,
             }
             for p in plan_packs
@@ -3299,8 +3306,12 @@ def create_api_app(lifespan=None) -> FastAPI:
                 status_code=303,
             )
         try:
-            from app.services.service_addons import replace_plan_scoped_packs_from_form
+            from app.services.service_addons import (
+                apply_plan_extra_rates_from_form,
+                replace_plan_scoped_packs_from_form,
+            )
 
+            apply_plan_extra_rates_from_form(plan, form)
             await replace_plan_scoped_packs_from_form(
                 session, staff, plan_id=int(plan.id), form=form
             )

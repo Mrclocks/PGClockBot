@@ -96,9 +96,23 @@
     {% set global_pattern = (values or {}).get('pg_username_pattern','{prefix}_{random}{suffix}') if values is defined else '{prefix}_{random}{suffix}' %}
     {% include "_plan_naming_fields.html" %}
 
-    {% set packs_editor_id = 'user-plan-addon-packs-edit' %}
-    {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
-    {% include "_user_plan_addon_packs_editor.html" %}
+    <div id="edit-user-buy-extra-block">
+      <div class="ui-switch-list">
+        {{ switch('allow_buy_extra', 'امکان خرید حجم و زمان اضافه', checked=plan.allow_buy_extra, help='بسته‌های همین پلن در ربات و مینی‌اپ دیده می‌شوند؛ قیمت هر پله = نرخ واحد × مقدار') }}
+      </div>
+      <div class="form-row" id="edit-user-extra-prices" {% if not plan.allow_buy_extra %}hidden{% endif %}>
+        <label class="form-field">قیمت هر گیگ حجم (تومان)
+          <input name="extra_gb_price" type="number" data-money min="0" value="{{ plan.extra_gb_price or 0 }}" />
+        </label>
+        <label class="form-field">قیمت هر ماه زمان (تومان)
+          <input name="extra_month_price" type="number" data-money min="0" value="{{ plan.extra_month_price or 0 }}" />
+        </label>
+      </div>
+      {% set packs_editor_id = 'user-plan-addon-packs-edit' %}
+      {% set packs_hidden = not plan.allow_buy_extra %}
+      {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
+      {% include "_user_plan_addon_packs_editor.html" %}
+    </div>
 
     {% if plan.button_style is none %}
     {% set plan_button_style = 'inherit' %}
@@ -124,6 +138,23 @@
   const mode = document.getElementById('plan-mode');
   const custom = document.getElementById('mode-custom');
   const tpl = document.getElementById('mode-template');
+  function syncUserExtras(){
+    const prices = document.getElementById('edit-user-extra-prices');
+    const packs = document.getElementById('user-plan-addon-packs-edit');
+    const sw = document.querySelector('#edit-user-buy-extra-block input[name="allow_buy_extra"]');
+    const on = sw ? !!sw.checked : false;
+    if (prices) prices.hidden = !on;
+    if (window.UserPlanAddonPacks && packs) {
+      if (on) window.UserPlanAddonPacks.seedDefaultsIfEmpty(packs);
+      window.UserPlanAddonPacks.setEditorVisible(packs, on);
+    } else if (packs) {
+      packs.hidden = !on;
+    }
+  }
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.name === 'allow_buy_extra') syncUserExtras();
+  });
+  syncUserExtras();
   function sync(){
     const isTpl = mode.value === 'template';
     custom.style.display = isTpl ? 'none' : '';

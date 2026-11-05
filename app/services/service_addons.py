@@ -628,6 +628,8 @@ async def delete_pack(
 
 
 MAX_PLAN_SCOPED_PACKS_PER_KIND = 20
+DAYS_PER_EXTRA_MONTH = 30
+MAX_EXTRA_MONTHS = 120
 
 
 def _form_getlist(form: object, key: str) -> list[str]:
@@ -641,6 +643,52 @@ def _form_getlist(form: object, key: str) -> list[str]:
     return [str(raw)]
 
 
+def _parse_nonneg_int_field(raw: object, *, label: str) -> int:
+    text = str(raw if raw is not None else "0").strip() or "0"
+    try:
+        value = int(text)
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"{label} نامعتبر است") from e
+    if value < 0 or value > MAX_PRICE:
+        raise ValueError(f"{label} نامعتبر است")
+    return value
+
+
+def apply_plan_extra_rates_from_form(plan: Plan, form: object) -> None:
+    """Set plan.allow_buy_extra and unit rates from the fixed-plan form."""
+    allow = bool(form.get("allow_buy_extra")) if hasattr(form, "get") else False  # type: ignore[attr-defined]
+    plan.allow_buy_extra = allow
+    if not allow:
+        plan.extra_gb_price = 0
+        plan.extra_month_price = 0
+        return
+    plan.extra_gb_price = _parse_nonneg_int_field(
+        form.get("extra_gb_price") if hasattr(form, "get") else 0,  # type: ignore[attr-defined]
+        label="قیمت هر گیگ",
+    )
+    plan.extra_month_price = _parse_nonneg_int_field(
+        form.get("extra_month_price") if hasattr(form, "get") else 0,  # type: ignore[attr-defined]
+        label="قیمت هر ماه",
+    )
+
+
+def plan_duration_months_for_form(pack: ServiceAddonPack) -> int:
+    """Months shown in the editor for a stored duration pack (days ÷ 30)."""
+    days = int(float(pack.amount or 0))
+    if days <= 0:
+        return 1
+    months = max(1, round(days / DAYS_PER_EXTRA_MONTH))
+    return min(MAX_EXTRA_MONTHS, months)
+
+
+def _pack_style_from_raw(raw_style: object) -> str | None:
+    from app.services.button_styles import normalize_style
+
+    if raw_style is None or str(raw_style).strip().lower() in {"inherit", "__inherit__", ""}:
+        return None
+    return normalize_style(str(raw_style)) or None
+
+
 async def replace_plan_scoped_packs_from_form(
     session: AsyncSession,
     staff: dict | None,
@@ -648,12 +696,12 @@ async def replace_plan_scoped_packs_from_form(
     plan_id: int,
     form: object,
 ) -> None:
-    """Replace plan-scoped volume/duration packs from the user-plan form fields.
+    """Replace plan-scoped volume/duration stairs from the fixed user-plan form.
 
-    Empty lists clear that kind's scoped catalog so the service falls back to
-    general/category packs for that kind. Does not commit — the caller does.
+    Pack price = plan unit rate × amount (GB or months). Duration amounts are
+    entered as months and stored as days (months × 30) for delivery. When
+    ``allow_buy_extra`` is off, all plan-scoped packs are cleared. Does not commit.
     """
-    from app.services.button_styles import normalize_style
     from app.services.users import current_shop_reseller_id
 
     owner_id = require_catalog_owner_id(staff)
@@ -673,52 +721,94 @@ async def replace_plan_scoped_packs_from_form(
     for pack in existing:
         await session.delete(pack)
 
-    specs: list[tuple[str, str, str, str]] = [
-        (KIND_VOLUME, "plan_vol_amount", "plan_vol_price", "plan_vol_style"),
-        (KIND_DURATION, "plan_dur_amount", "plan_dur_price", "plan_dur_style"),
-    ]
-    for kind, amount_key, price_key, style_key in specs:
-        amounts = _form_getlist(form, amount_key)
-        prices = _form_getlist(form, price_key)
-        styles = _form_getlist(form, style_key)
-        if len(amounts) > MAX_PLAN_SCOPED_PACKS_PER_KIND:
-            raise ValueError(
-                f"حداکثر {MAX_PLAN_SCOPED_PACKS_PER_KIND} بسته برای هر نوع مجاز است"
-            )
-        for index, raw_amount in enumerate(amounts):
-            raw_price = prices[index] if index < len(prices) else "0"
-            raw_style = styles[index] if index < len(styles) else "inherit"
-            _tmp, k, amt, price_i, _desc = _validate_pack_fields(
-                name="بسته",
-                kind=kind,
-                amount=raw_amount,
-                price=raw_price,
+    if not bool(getattr(plan, "allow_buy_extra", False)):
+        return
+
+    gb_rate = max(0, int(getattr(plan, "extra_gb_price", 0) or 0))
+    month_rate = max(0, int(getattr(plan, "extra_month_price", 0) or 0))
+
+    vol_amounts = _form_getlist(form, "plan_vol_amount")
+    vol_styles = _form_getlist(form, "plan_vol_style")
+    if len(vol_amounts) > MAX_PLAN_SCOPED_PACKS_PER_KIND:
+        raise ValueError(f"حداکثر {MAX_PLAN_SCOPED_PACKS_PER_KIND} بسته حجم مجاز است")
+    for index, raw_amount in enumerate(vol_amounts):
+        style = _pack_style_from_raw(
+            vol_styles[index] if index < len(vol_styles) else "inherit"
+        )
+        price_i = 0
+        # Price is derived after amount validation; pass a placeholder first.
+        _tmp, k, amt, _price, _desc = _validate_pack_fields(
+            name="بسته",
+            kind=KIND_VOLUME,
+            amount=raw_amount,
+            price=0,
+            description=None,
+        )
+        if amt != int(amt):
+            raise ValueError("مقدار حجم باید عدد صحیح باشد")
+        amt = float(int(amt))
+        price_i = gb_rate * int(amt)
+        if price_i > MAX_PRICE:
+            raise ValueError("قیمت بسته حجم نامعتبر است")
+        label = format_amount_label(k, amt)
+        session.add(
+            ServiceAddonPack(
+                name=label,
+                kind=k,
+                amount=amt,
+                price=price_i,
                 description=None,
+                owner_reseller_id=owner_id,
+                category_id=None,
+                plan_id=int(plan_id),
+                button_style=style,
+                is_general=False,
+                sort_order=index,
+                is_active=True,
             )
-            label = format_amount_label(k, amt)
-            if raw_style is None or str(raw_style).strip().lower() in {
-                "inherit",
-                "__inherit__",
-            }:
-                style: str | None = None
-            else:
-                style = normalize_style(str(raw_style)) or None
-            session.add(
-                ServiceAddonPack(
-                    name=label,
-                    kind=k,
-                    amount=amt,
-                    price=price_i,
-                    description=None,
-                    owner_reseller_id=owner_id,
-                    category_id=None,
-                    plan_id=int(plan_id),
-                    button_style=style,
-                    is_general=False,
-                    sort_order=index,
-                    is_active=True,
-                )
+        )
+
+    dur_amounts = _form_getlist(form, "plan_dur_amount")
+    dur_styles = _form_getlist(form, "plan_dur_style")
+    if len(dur_amounts) > MAX_PLAN_SCOPED_PACKS_PER_KIND:
+        raise ValueError(f"حداکثر {MAX_PLAN_SCOPED_PACKS_PER_KIND} بسته زمان مجاز است")
+    for index, raw_months in enumerate(dur_amounts):
+        style = _pack_style_from_raw(
+            dur_styles[index] if index < len(dur_styles) else "inherit"
+        )
+        try:
+            months = int(str(raw_months).strip())
+        except (TypeError, ValueError) as e:
+            raise ValueError("مقدار ماه نامعتبر است") from e
+        if months <= 0 or months > MAX_EXTRA_MONTHS:
+            raise ValueError("مقدار ماه نامعتبر است")
+        days = months * DAYS_PER_EXTRA_MONTH
+        price_i = month_rate * months
+        if price_i > MAX_PRICE:
+            raise ValueError("قیمت بسته زمان نامعتبر است")
+        _tmp, k, amt, price_ok, _desc = _validate_pack_fields(
+            name=f"{months} ماه",
+            kind=KIND_DURATION,
+            amount=days,
+            price=price_i,
+            description=None,
+        )
+        session.add(
+            ServiceAddonPack(
+                name=_tmp,
+                kind=k,
+                amount=amt,
+                price=price_ok,
+                description=None,
+                owner_reseller_id=owner_id,
+                category_id=None,
+                plan_id=int(plan_id),
+                button_style=style,
+                is_general=False,
+                sort_order=index,
+                is_active=True,
             )
+        )
 
 
 def pack_volume_bytes(amount: float) -> int:
