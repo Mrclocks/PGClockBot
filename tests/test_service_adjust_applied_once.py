@@ -13,7 +13,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.bot.handlers import admin as admin_handler
 from app.bot.handlers import reseller_customer_services as shop_handler
-from app.bot.service_adjust import NOTHING_STAGED, read_staged
+from app.bot.service_adjust import NOTHING_STAGED, UNKNOWN_ADJUST_OUTCOME, read_staged
 
 USER_ID = 4
 SERVICE_ID = 11
@@ -138,6 +138,17 @@ class PlatformAdminConfirmTests(unittest.IsolatedAsyncioTestCase):
         await self.confirm(state, callback())
 
         self.assertEqual(read_staged(await state.get_data(), ADMIN_KEY).days, 3)
+
+    async def test_an_unknown_outcome_says_so_and_is_not_staged_again(self) -> None:
+        state = fsm()
+        await state.update_data(**{ADMIN_KEY: {"days": 3, "gb": 0}})
+        self.extend.side_effect = httpx.ReadTimeout("slow panel")
+        cb = callback()
+
+        await self.confirm(state, cb)
+
+        self.assertTrue(read_staged(await state.get_data(), ADMIN_KEY).is_empty)
+        self.assertEqual(cb.answer.await_args.args[0], UNKNOWN_ADJUST_OUTCOME)
 
     async def test_confirm_with_nothing_staged_does_not_call_the_panel(self) -> None:
         cb = callback()

@@ -74,6 +74,7 @@ from app.bot.handlers.subscription_lookup import (
 from app.bot.nav_inline import with_inline_back
 from app.bot.service_adjust import (
     NOTHING_STAGED,
+    UNKNOWN_ADJUST_OUTCOME,
     StagedAdjustment,
     restore_staged,
     service_adjust_lock,
@@ -3249,10 +3250,10 @@ async def _adm_apply_staged_adjust(
         await rollback_quiet(session)
         await restore_staged(state, adj_key, staged)
         await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
-    except Exception as exc:
+    except Exception:
         await rollback_quiet(session)
         logger.warning("service extend outcome unknown sid=%s", service_id, exc_info=True)
-        await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
+        await callback.answer(UNKNOWN_ADJUST_OUTCOME, show_alert=True)
     return None
 
 

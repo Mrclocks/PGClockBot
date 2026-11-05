@@ -14,8 +14,14 @@ from dataclasses import dataclass
 from aiogram.fsm.context import FSMContext
 
 NOTHING_STAGED = "تغییری برای اعمال نیست؛ ممکن است همین حالا اعمال شده باشد."
+UNKNOWN_ADJUST_OUTCOME = (
+    "وضعیت نامشخص است — ممکن است اعمال شده باشد. دوباره نزنید؛ "
+    "جزئیات سرویس را باز کنید و وضعیت را ببینید."
+)
 
 # Locks live only while a confirm holds them, so the map does not grow with services.
+# They guard one process: every bot runs in the app process today. Running bots in
+# several processes would need a database claim on the service instead.
 _service_locks: weakref.WeakValueDictionary[int, asyncio.Lock] = weakref.WeakValueDictionary()
 
 
