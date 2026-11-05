@@ -152,6 +152,7 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
         self.assertRegex(html, r'href="/static/panel\.css\?v=[^" ]+"')
         self.assertIn(f'src="/static/panel.js?v={get_panel_asset_cache_key("panel.js")}"', html)
         self.assertIn(f'src="/static/panel_widget_request.js?v={get_panel_asset_cache_key("panel_widget_request.js")}"', html)
+        self.assertIn(f'src="/static/panel_ok_flash.js?v={get_panel_asset_cache_key("panel_ok_flash.js")}"', html)
 
     def test_shop_settings_has_live_preview(self):
         shop = (ROOT / "app/web/templates/shop_settings.html").read_text(encoding="utf-8")
