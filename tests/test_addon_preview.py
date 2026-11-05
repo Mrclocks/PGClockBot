@@ -93,7 +93,7 @@ class AddonPreviewArithmeticTests(unittest.TestCase):
 
 def load_migration():
     spec = importlib.util.spec_from_file_location(
-        "addon_request_key_migration", ROOT / "alembic/versions/0084_addon_request_key.py"
+        "addon_request_key_migration", ROOT / "alembic/versions/0089_addon_request_key.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
