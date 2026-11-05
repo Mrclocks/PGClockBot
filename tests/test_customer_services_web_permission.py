@@ -124,6 +124,17 @@ class CustomerServicesWebPermissionTests(RoutesHarness):
         listed.assert_not_awaited()
 
 
+    async def test_edit_page_shows_services_with_customer_services(self) -> None:
+        await self.set_shop_permissions("dashboard,customer_services")
+        with patch(
+            "app.services.bot_user_admin.list_service_snapshots", AsyncMock(return_value=[])
+        ) as listed:
+            response = await self.call(SHOP_SESSION, "GET", f"/users/{CUSTOMER_ID}/edit?fragment=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="user-services"', response.text)
+        listed.assert_awaited_once()
+
+
 class CustomerServiceActionsTests(RoutesHarness):
     def test_platform_owner_keeps_service_actions(self) -> None:
         self.assertTrue(may_manage_customer_services(OWNER_SESSION))
