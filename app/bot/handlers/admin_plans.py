@@ -1534,6 +1534,14 @@ def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
             rows.append(
                 [
                     InlineKeyboardButton(
+                        text="📦 بسته‌های حجم/کاربر",
+                        callback_data=f"adm:resx:l:{pid}",
+                    )
+                ]
+            )
+            rows.append(
+                [
+                    InlineKeyboardButton(
                         text="✏️ قیمت گیگ اضافه",
                         callback_data=f"adm:resplan:edit:extra_gb:{pid}",
                     )
@@ -1624,6 +1632,9 @@ async def resplan_flag_toggle(callback: CallbackQuery, session: AsyncSession, db
         plan.allow_buy_extra = not bool(plan.allow_buy_extra)
         if plan.allow_buy_extra:
             plan.renew_pricing_mode = "from_capacity"
+            from app.services.reseller_plan_extra_packs import ensure_default_packs
+
+            await ensure_default_packs(session, plan)
         else:
             plan.extra_gb_price = 0
             plan.extra_user_price = 0
