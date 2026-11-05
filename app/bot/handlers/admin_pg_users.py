@@ -2043,7 +2043,8 @@ async def pg_edit_grpdone(
         payload = sanitize_pg_user_write_payload(
             build_user_modify_payload(
                 username=str(uname) if uname else None,
-                group_ids=selected,
+                # Empty selection must not send [] — that clears panel-assigned groups.
+                group_ids=selected or None,
                 status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
             )
         )
