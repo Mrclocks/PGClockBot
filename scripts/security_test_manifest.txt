@@ -362,6 +362,9 @@ tests/test_customer_notes_permission.py
 tests/test_gift_codes_permission.py
 # PasarGuard link reconnect: owner-only, CSRF, rate limit; never leak exception text.
 tests/test_pg_link_reconnect.py
+# PasarGuard read circuit: heal under concurrency, probe lease, budget exhaustion.
+tests/test_pg_read_circuit_heal.py
+tests/test_pg_read_breaker_threshold.py
 # Shop staff action log: written with the change, read only by the shop it belongs to.
 tests/test_staff_audit.py
 # Manual shop wallet changes by shop staff: own shop purse only, capped, once per request.
