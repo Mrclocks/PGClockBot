@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.bot_user_admin import may_manage_customer_services
 from app.services.miniapp_shop import PERMISSION as MINIAPP_PERMISSION
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.shop_permission_grant import GRANT_MINIAPP_ACTION, grant_shop_permission, grant_summary
@@ -75,6 +76,8 @@ def register_bulk_pages(
         if action == "renew":
             from app.services.pg_access import staff_user_actions
 
+            if not may_manage_customer_services(staff):
+                return redirect_bulk(return_to, err="اجازه این عملیات را ندارید")
             if not staff_user_actions(staff).get("update"):
                 return redirect_bulk(
                     return_to, err="نقش پاسارگارد شما اجازه تمدید ندارد"

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import BotUser, BotUserShop, Plan, Role, UserService, WalletTransaction
+from app.services.authz import authz_from_staff, can_shop
 from app.services.formatting import (
     copyable,
     expire_remaining_days,
@@ -44,6 +45,7 @@ from app.services.pasarguard import (
     get_pg,
     user_subscription_url,
 )
+from app.services.pg_access import staff_user_actions
 from app.services.redact import user_safe_error
 from app.services.wallet import credit_wallet, debit_wallet, list_transactions
 from app.services.service_scope import assert_service_in_shop, service_shop_id, shop_services_clause
@@ -74,6 +76,27 @@ SNAPSHOT_LIMIT = 30
 # Panel read failures that only mean «status unknown»: the stored row is shown instead.
 PANEL_READ_ERRORS = (asyncio.TimeoutError, PasarGuardError, httpx.HTTPError, ValueError)
 MAX_TELEGRAM_ID = 9_007_199_254_740_991  # signed int64 safe upper bound
+# Shop feature key for viewing and changing a customer's services (bot and web).
+CUSTOMER_SERVICES_PERMISSION = "customer_services"
+
+
+def may_manage_customer_services(staff: dict | None) -> bool:
+    """Whether web or bot staff may open and change customer services in their scope."""
+    return can_shop(authz_from_staff(staff), CUSTOMER_SERVICES_PERMISSION)
+
+
+def customer_service_actions(staff: dict) -> dict[str, bool]:
+    """PasarGuard users.* actions offered on the customer screens.
+
+    The panel role decides which actions exist. Reading or changing an existing
+    service also needs ``customer_services``; assigning a new plan does not.
+    """
+    actions = staff_user_actions(staff)
+    if may_manage_customer_services(staff):
+        return actions
+    limited = dict.fromkeys(actions, False)
+    limited["create"] = bool(actions.get("create"))
+    return limited
 
 
 def parse_admin_wallet_amount(text: str | None) -> int:

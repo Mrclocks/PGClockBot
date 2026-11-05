@@ -3635,7 +3635,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         from app.services.platform_identity import is_explicit_owner_staff
         from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
-        from app.services.pg_access import staff_user_actions
+        from app.services.bot_user_admin import customer_service_actions
         from app.services.color_tags import (
             color_tag_meta,
             color_tags_for_ui,
@@ -3710,7 +3710,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             in_fetched = any(int(u.id) == int(focus_uid) for u in users)
             if not in_fetched:
                 focus_uid = None
-        pg_acts = staff_user_actions(staff)
+        pg_acts = customer_service_actions(staff)
         in_shop = is_explicit_owner_staff(staff) or scope is not None
 
         def _users_href(**kwargs):

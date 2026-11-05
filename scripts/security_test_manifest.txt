@@ -346,6 +346,7 @@ tests/test_user_search_folding.py
 tests/test_shop_customer_card.py
 tests/test_reseller_customer_services.py
 tests/test_customer_services_permission.py
+tests/test_customer_services_web_permission.py
 # Shop Mini App: permission default for new shops and the reason a shop cannot switch it on.
 tests/test_shop_miniapp_defaults.py
 # Cleanup tab deletion: own shop only, chosen tags only, never money in flight, from the root.
