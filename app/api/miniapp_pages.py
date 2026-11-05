@@ -28,6 +28,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.catalog_pricing import displayed_quote, quote_product, sale_price
 from app.config import get_settings
 from app.db.models import BotUser, Order, ResellerProfile, UserService
+from app.api.miniapp_buy_extras import (
+    check_buy_extras,
+    checkout_options,
+    deliver_free,
+    is_staff_free_request,
+    service_name_field,
+)
+from app.services.custom_service_name import name_order_at_checkout
 from app.services.db_safe import rollback_quiet
 from app.services.funnel_events import STEP_PAY_START, record_order_funnel
 from app.services.service_scope import customer_may_use_service
@@ -385,6 +393,7 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
         "commerce_allowed": True,
         "home": home,
         "badges": (await home_badges(session, user, shop_id=scope.shop_id)).payload(),
+        "checkout": await checkout_options(session, user, scope),
     }
 
 
@@ -855,8 +864,13 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             plan_id = int(body.get("plan_id"))
         except (TypeError, ValueError):
             raise HTTPException(400, "plan_id required")
+        staff_free = is_staff_free_request(body)
+        service_name = service_name_field(body)
+        await check_buy_extras(
+            session, user, mini_scope(request), staff_free=staff_free, service_name=service_name
+        )
         ui = await _scope_ui(session, request)
-        if not on(ui.get("pay_wallet_enabled")):
+        if not staff_free and not on(ui.get("pay_wallet_enabled")):
             raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
         # This Mini App's catalog only: load_mini_user set the shop context, and
         # get_catalog_plan refuses every plan another shop (or the platform) sells.
@@ -864,14 +878,20 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         if not plan or not plan.is_active:
             raise HTTPException(400, "پلن یافت نشد")
         await session.refresh(user)
-        if sale_price(plan) > await _scope_wallet(session, user, request):
+        if not staff_free and sale_price(plan) > await _scope_wallet(session, user, request):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
             order = await create_order(session, user_id=user.id, plan_id=plan_id, expected_price=body.get("price"))
             await record_order_funnel(session, order, STEP_PAY_START, key=f"pay_start:order:{order.id}")
+            await name_order_at_checkout(session, order, buyer_id=int(user.id), raw=service_name)
             await session.refresh(user)
-            order = await pay_with_wallet(session, order, user)
+            if staff_free:
+                order = await deliver_free(session, order, user)
+            else:
+                order = await pay_with_wallet(session, order, user)
             await session.refresh(user)
+        except HTTPException:
+            raise
         except ValueError as exc:
             await rollback_quiet(session)
             raise HTTPException(

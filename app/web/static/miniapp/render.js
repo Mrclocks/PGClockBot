@@ -345,8 +345,45 @@
       : '<button type="button" class="btn ghost block" data-action="topup">شارژ کیف پول</button>'}`;
   }
 
+  const SERVICE_NAME_RE = /^[a-z][a-z0-9_]{2,19}$/;
+  const SERVICE_NAME_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+  /** Lower-cased name, or "" when it breaks the rules (3–20 of a-z 0-9 _, starting with a letter). */
+  function validServiceName(value) {
+    const name = String(value || "").trim().replace(/^@/, "").toLowerCase();
+    return SERVICE_NAME_RE.test(name) ? name : "";
+  }
+
+  /** «🎲 تصادفی»: a letter, then seven letters or digits. ``rand`` returns [0, 1). */
+  function randomServiceName(rand) {
+    const pick = (chars) => chars[Math.floor(rand() * chars.length) % chars.length];
+    let name = pick(SERVICE_NAME_CHARS.slice(0, 26));
+    for (let i = 0; i < 7; i += 1) name += pick(SERVICE_NAME_CHARS);
+    return name;
+  }
+
+  function serviceNameFieldHtml(value) {
+    return `<label class="form-field"><span class="muted sm">نام سرویس (الزامی)</span>
+        <span class="code-line"><input type="text" name="service_name" data-input="service-name" maxlength="20"
+          autocomplete="off" autocapitalize="none" spellcheck="false" dir="ltr" value="${esc(value || "")}"
+          aria-describedby="service-name-hint">
+        <button type="button" class="btn ghost" data-action="random-service-name">🎲 تصادفی</button></span>
+        <span class="muted sm" id="service-name-hint">حروف انگلیسی کوچک، عدد و _ ؛ ۳ تا ۲۰ نویسه و با یک حرف شروع شود.</span></label>`;
+  }
+
+  /** ``options``: ``nameRequired`` shows the name field, ``staffFree`` the free button for shop staff. */
+  function checkoutExtrasHtml(options) {
+    return options && options.nameRequired ? serviceNameFieldHtml(options.name) : "";
+  }
+
+  function staffFreeButtonHtml(plan, options) {
+    return options && options.staffFree
+      ? `<button type="button" class="btn ghost block" data-action="buy-free" data-id="${Number(plan.id) || 0}">🎁 دریافت رایگان (مدیر)</button>`
+      : "";
+  }
+
   /** ``features`` (from the app) hides the code field and top-up button where a shop has not opened them. */
-  function checkoutHtml(plan, wallet, features) {
+  function checkoutHtml(plan, wallet, features, options) {
     if (!plan) return `<section class="card"><p class="muted">یک پلن را انتخاب کنید.</p></section>`;
     const f = features || {};
     const price = Number(plan.price) || 0;
@@ -360,8 +397,10 @@
           <span class="code-line"><input type="text" name="code" maxlength="64" autocomplete="off" dir="ltr" autocapitalize="characters">
           <button type="submit" class="btn ghost">اعمال</button></span></label>
       </form>`}
+      ${checkoutExtrasHtml(options)}
       ${enough ? "" : lowBalanceHtml(f)}
       <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "ادامه دریافت تست" : "ادامه پرداخت"}</button>
+      ${staffFreeButtonHtml(plan, options)}
     </section>`;
   }
 
@@ -378,13 +417,14 @@
       </div>`;
   }
 
-  function discountedCheckoutHtml(checkout, plan, wallet) {
+  function discountedCheckoutHtml(checkout, plan, wallet, options) {
     const enough = Number(checkout.amount) <= (Number(wallet) || 0);
     return `<section class="card" aria-label="خلاصهٔ سفارش با تخفیف">
       <div class="sum-row"><span class="muted">پلن</span><strong>${esc(plan ? plan.name : "")}</strong></div>
       <div class="sum-row"><span class="muted">قیمت</span><s>${esc(money(checkout.original_amount))}</s></div>
       <div class="sum-row"><span class="muted">تخفیف <bdi dir="ltr">${esc(checkout.code)}</bdi></span><span class="is-plus tx-amt"><span aria-hidden="true">−</span><bdi>${esc(money(checkout.discount))}</bdi></span></div>
       <div class="sum-row is-total"><span>مبلغ</span><span>${esc(money(checkout.amount))}</span></div>
+      ${checkoutExtrasHtml(options)}
       ${enough ? "" : lowBalanceHtml()}
       <div class="btn-col">
         <button type="button" class="btn block" data-action="checkout-pay"${enough ? "" : " disabled"}>تأیید و پرداخت از کیف پول</button>
@@ -985,7 +1025,8 @@
   root.PGMini.render = Object.freeze({
     icon, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
     brandHeaderHtml, noticeBannerHtml, shortcutsHtml, panelShortcutsHtml, heroHtml,
-    attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, buyConfirmHtml, discountedCheckoutHtml, giftFormHtml, renewPlansHtml,
+    attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, buyConfirmHtml, discountedCheckoutHtml,
+    validServiceName, randomServiceName, giftFormHtml, renewPlansHtml,
     renewPreviewHtml, addonPacksHtml, addonPreviewHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
     backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, reviewQueueHtml, reviewSheetHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml, resellerSubscriptionHtml,

@@ -364,6 +364,8 @@ tests/test_customer_notes_permission.py
 tests/test_staff_free_checkout.py
 # Chosen service name: own unpaid order only, unique per shop, delivery never blocked by it.
 tests/test_custom_service_name.py
+# Mini App: free checkout only for the shop's own staff, required name before any order.
+tests/test_miniapp_checkout_options.py
 # Gift codes: own gift_codes key, own shop only; migration 0077 keeps current access.
 tests/test_gift_codes_permission.py
 # PasarGuard link reconnect: owner-only, CSRF, rate limit; never leak exception text.
