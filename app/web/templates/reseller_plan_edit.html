@@ -165,6 +165,11 @@
       {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=plan.share_pg_panel_url, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند') }}
     </div>
 
+    <div class="ui-switch-list" id="edit-renew-carry-block">
+      {{ switch('carry_remaining_period', 'انتقال زمان باقی‌مانده در تمدید', checked=plan.carry_remaining_period, help='روشن: مدت جدید از تاریخ انقضای فعلی اضافه می‌شود. خاموش: دوره از همین الان شروع می‌شود.') }}
+      {{ switch('keep_extras_on_renew', 'حفظ حجم و کاربر اضافه در تمدید', checked=plan.keep_extras_on_renew, help='روشن: ظرفیت اضافه‌خریداری‌شده به دوره بعد می‌ماند و در قیمت بر اساس ظرفیت حساب می‌شود. خاموش: با تمدید پاک می‌شود.') }}
+    </div>
+
     <div id="edit-buy-extra-block">
     <div class="ui-switch-list">
       {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=plan.allow_buy_extra, help='فقط اشتراک ثابت — بسته‌های همین پلن؛ برای PAYG لازم نیست') }}
@@ -295,6 +300,7 @@
     setHidden(billingWrap, isAddon || isCurrent);
     setHidden(rateField, isAddon || isCurrent || !payg);
     setHidden(document.getElementById('edit-buy-extra-block'), isAddon || payg);
+    setHidden(document.getElementById('edit-renew-carry-block'), isAddon || payg);
     setHidden(document.getElementById('edit-groups'), isAddon || isCurrent);
     setHidden(document.getElementById('edit-role-field'), isAddon || isCurrent);
     if (roleSel) {

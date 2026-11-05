@@ -15,7 +15,17 @@
 <section class="card home-periods-card home-link-health" aria-label="سلامت ارتباط با پاسارگارد">
   <header class="home-periods-head link-health-head">
     {{ card_title('connection', 'سلامت ارتباط با پاسارگارد') }}
-    <span class="badge {{ link_tone }}">{{ link_label }}</span>
+    <div class="link-health-actions">
+      <span class="badge {{ link_tone }}">{{ link_label }}</span>
+      <form method="post" action="/pg-link/reconnect" class="link-health-reconnect">
+        {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
+        <button
+          type="submit"
+          class="btn btn-sm{% if link_label == 'عادی' %} btn-ghost{% endif %}"
+          aria-label="ارتباط مجدد با پاسارگارد"
+        >ارتباط مجدد</button>
+      </form>
+    </div>
   </header>
   <div class="home-period-grid">
     <article class="home-period">
@@ -43,6 +53,9 @@
         {% else %}
         <div><dt>خطا</dt><dd>ندارد</dd></div>
         {% endfor %}
+        {% if health.budget_exhaustion_count %}
+        <div><dt>{{ health.budget_exhaustion_label }}</dt><dd>{{ health.budget_exhaustion_count | num }}</dd></div>
+        {% endif %}
       </dl>
     </article>
   </div>

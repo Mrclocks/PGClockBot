@@ -38,6 +38,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("stats", "آمار"),
     ("demo_users", "مدیریت کاربران دمو"),
     ("customer_notes", "یادداشت و تگ ریسک مشتری"),
+    ("customer_services", "اطلاعات و ویرایش سرویس مشتری"),
     ("shop_settings", "تنظیمات ربات فروشگاه"),
     ("campaigns", "کمپین‌های هدفمند فروشگاه"),
     ("trial_users", "مشاهدهٔ کاربران تست و خریداران"),
@@ -54,9 +55,11 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("orders_purge", "حذف کامل سفارش‌ها و پرداخت‌ها"),
     ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
     ("free_checkout", "دریافت رایگان سفارش خود توسط مدیران فروشگاه"),
+    # Owner-only: reconnect the platform PasarGuard link (never grant to shops).
+    ("pg_link.reconnect", "ارتباط مجدد با پاسارگارد"),
 ]
 
-DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import,miniapp,customer_notes,gift_codes"
+DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import,miniapp,customer_notes,customer_services,gift_codes"
 
 # Tabs a reseller may edit for their own shop bot
 RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
@@ -548,6 +551,18 @@ def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> s
                 f"(گیگ {format_toman(eg, currency) if eg else '—'} · "
                 f"کاربر {format_toman(eu, currency) if eu else '—'})"
             )
+        carry_period = bool(getattr(plan, "carry_remaining_period", True))
+        keep_extras = bool(getattr(plan, "keep_extras_on_renew", True))
+        lines.append(
+            "زمان مانده در تمدید: <b>"
+            + ("منتقل می‌شود" if carry_period else "منتقل نمی‌شود")
+            + "</b>"
+        )
+        lines.append(
+            "حجم/کاربر اضافه در تمدید: <b>"
+            + ("حفظ می‌شود" if keep_extras else "پاک می‌شود")
+            + "</b>"
+        )
     groups = (getattr(plan, "pg_group_ids", None) or "").strip()
     lines.append(
         f"گروه‌های پاسارگارد: <code>{html.escape(groups) if groups else '—'}</code>"
