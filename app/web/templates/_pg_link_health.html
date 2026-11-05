@@ -17,14 +17,17 @@
     {{ card_title('connection', 'سلامت ارتباط با پاسارگارد') }}
     <div class="link-health-actions">
       <span class="badge {{ link_tone }}">{{ link_label }}</span>
+      {# Reconnect only when the link is not healthy — hide while status is عادی. #}
+      {% if link_tone != 'ok' %}
       <form method="post" action="/pg-link/reconnect" class="link-health-reconnect">
         {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
         <button
           type="submit"
-          class="btn btn-sm{% if link_label == 'عادی' %} btn-ghost{% endif %}"
+          class="btn btn-sm"
           aria-label="ارتباط مجدد با پاسارگارد"
         >ارتباط مجدد</button>
       </form>
+      {% endif %}
     </div>
   </header>
   <div class="home-period-grid">
