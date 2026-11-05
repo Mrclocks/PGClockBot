@@ -672,11 +672,10 @@ async def _adj_confirm(
             await _fail_known(callback, session, exc)
             return
         except PANEL_UNCERTAIN:
-            await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+            # The panel may have applied it: re-staging would let a second confirm add it again.
             await _fail_uncertain(callback, session, sid=target.service_id, op="extend")
             return
         except Exception as exc:
-            await state.update_data(**{adj_key: {"days": days, "gb": gb}})
             await rollback_quiet(session)
             logger.warning("shop service extend failed sid=%s", target.service_id, exc_info=True)
             await callback.answer(user_safe_error(exc, limit=160), show_alert=True)

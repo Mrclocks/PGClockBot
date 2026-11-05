@@ -54,6 +54,13 @@ from app.services.updates import local_version
 from app.services.user_search import clean_handle, find_bot_user
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.billing import is_payg
+from app.services.bot_user_admin import (
+    ServiceSnapshot,
+    admin_extend_service,
+    get_owned_service,
+    service_snapshot,
+    snapshot_telegram_lines,
+)
 from app.services.volume_allocation import set_shop_oversell
 from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
@@ -67,6 +74,14 @@ from app.bot.handlers.subscription_lookup import (
     staff_user_search,
 )
 from app.bot.nav_inline import with_inline_back
+from app.bot.service_adjust import (
+    NOTHING_STAGED,
+    UNKNOWN_ADJUST_OUTCOME,
+    StagedAdjustment,
+    restore_staged,
+    service_adjust_lock,
+    take_staged,
+)
 from app.bot.nav_input import finish_text_step, form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services import bot_feedback_texts as feedback
@@ -3218,6 +3233,61 @@ async def adm_users_service_delete(
             ),
         )
 
+
+async def _adm_apply_staged_adjust(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    user_id: int,
+    service_id: int,
+    adj_key: str,
+    staged: StagedAdjustment,
+) -> ServiceSnapshot | None:
+    """Apply a staged change; a refused change is staged again, an unknown outcome is not."""
+    try:
+        svc = await get_owned_service(session, bot_user_id=user_id, service_id=service_id, shop_id=None)
+        await admin_extend_service(session, svc, extra_days=staged.days, extra_gb=staged.gb)
+        return await service_snapshot(session, svc)
+    except ValueError as exc:
+        await rollback_quiet(session)
+        await restore_staged(state, adj_key, staged)
+        await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
+    except Exception:
+        await rollback_quiet(session)
+        logger.warning("service extend outcome unknown sid=%s", service_id, exc_info=True)
+        await callback.answer(UNKNOWN_ADJUST_OUTCOME, show_alert=True)
+    return None
+
+
+async def _adm_confirm_service_adjust(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    user_id: int,
+    service_id: int,
+    adj_key: str,
+) -> None:
+    async with service_adjust_lock(service_id):
+        staged = await take_staged(state, adj_key)
+        if staged.is_empty:
+            await callback.answer(NOTHING_STAGED, show_alert=True)
+            return
+        snap = await _adm_apply_staged_adjust(
+            callback, state, session, user_id=user_id, service_id=service_id, adj_key=adj_key, staged=staged
+        )
+    if snap is None:
+        return
+    await callback.answer("مانده به‌روز شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            "✅ مانده سرویس به‌روز شد\n\n" + snapshot_telegram_lines(snap),
+            reply_markup=kb.admin_user_service_actions(user_id, service_id),
+        )
+
+
 @router.callback_query(F.data.startswith("adm:users:svcadj:"))
 @require_bot_owner_handler
 async def adm_users_service_adjust(
@@ -3312,35 +3382,9 @@ async def adm_users_service_adjust(
             )
         return
     elif action == "confirm":
-        from app.services.bot_user_admin import (
-            admin_extend_service,
-            get_owned_service,
-            service_snapshot,
-            snapshot_telegram_lines,
+        await _adm_confirm_service_adjust(
+            callback, state, session, user_id=user_id, service_id=service_id, adj_key=adj_key
         )
-
-        try:
-            svc = await get_owned_service(
-                session, bot_user_id=user_id, service_id=service_id, shop_id=None
-            )
-            await admin_extend_service(
-                session, svc, extra_days=days, extra_gb=gb
-            )
-            snap = await service_snapshot(session, svc)
-        except ValueError as e:
-            await callback.answer(user_safe_error(e, limit=160), show_alert=True)
-            return
-        except Exception as e:
-            await callback.answer(user_safe_error(e, limit=160), show_alert=True)
-            return
-        await state.update_data(**{adj_key: {"days": 0, "gb": 0.0}})
-        await callback.answer("مانده به‌روز شد")
-        if callback.message:
-            await safe_edit_text(
-                callback.message,
-                "✅ مانده سرویس به‌روز شد\n\n" + snapshot_telegram_lines(snap),
-                reply_markup=kb.admin_user_service_actions(user_id, service_id),
-            )
         return
     else:
         # Open adjust screen
