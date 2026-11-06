@@ -19,7 +19,13 @@ from app.services import pg_link_reconnect as reconnect
 from app.services import pg_read_resilience as resilience
 from app.services.csrf import CSRF_COOKIE, CSRF_FORM_FIELD, extract_csrf_from_request
 from app.services.pasarguard import PasarGuardError
-from app.services.resellers import DEFAULT_FEATURE_PERMS, FEATURE_PERMS, parse_perms
+from app.services.resellers import (
+    DEFAULT_FEATURE_PERMS,
+    FEATURE_PERMS,
+    join_perms,
+    normalize_feature_perms,
+    parse_perms,
+)
 
 BASE = "https://panel.example"
 TEMPLATES = Path(__file__).resolve().parent.parent / "app" / "web" / "templates"
@@ -61,10 +67,32 @@ class _FakePanel:
 
 
 class PermissionDeclarationTests(unittest.TestCase):
-    def test_reconnect_key_is_declared_and_denied_by_default(self) -> None:
+    def test_reconnect_is_not_a_grantable_reseller_permission(self) -> None:
+        """Owner-only reconnect must not appear in the shop ACL catalog or form save."""
         keys = {key for key, _label in FEATURE_PERMS}
-        self.assertIn(reconnect.PG_LINK_RECONNECT_PERMISSION, keys)
+        self.assertNotIn(reconnect.PG_LINK_RECONNECT_PERMISSION, keys)
         self.assertNotIn(reconnect.PG_LINK_RECONNECT_PERMISSION, parse_perms(DEFAULT_FEATURE_PERMS))
+
+    def test_stale_reconnect_perm_is_ignored_on_parse_and_save(self) -> None:
+        stale_csv = f"dashboard,{reconnect.PG_LINK_RECONNECT_PERMISSION},orders"
+        self.assertNotIn(reconnect.PG_LINK_RECONNECT_PERMISSION, parse_perms(stale_csv))
+        self.assertEqual(
+            join_perms(["dashboard", reconnect.PG_LINK_RECONNECT_PERMISSION, "orders"]),
+            "dashboard,orders",
+        )
+        # Form save iterates FEATURE_PERMS then join_perms; a forged field is dropped.
+        forged = {
+            f"perm_{reconnect.PG_LINK_RECONNECT_PERMISSION}": "on",
+            "perm_dashboard": "on",
+            "perm_orders": "on",
+        }
+        from app.api.reseller_pages import _feature_perms_from_form
+
+        saved = _feature_perms_from_form(forged)
+        self.assertNotIn(reconnect.PG_LINK_RECONNECT_PERMISSION, parse_perms(saved))
+        # Normalized save still works (no crash) when only the stale key was present.
+        only_stale = normalize_feature_perms(reconnect.PG_LINK_RECONNECT_PERMISSION)
+        self.assertNotIn(reconnect.PG_LINK_RECONNECT_PERMISSION, parse_perms(only_stale))
 
 
 class ReconnectServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -325,6 +353,8 @@ class RouteAuthzTests(unittest.IsolatedAsyncioTestCase):
         reconnect.reset_reconnect_gate()
 
     def _owner(self) -> dict:
+        # Owner reconnect uses explicit principal + platform-admin shop bypass;
+        # the key need not appear in FEATURE_PERMS or staff.permissions.
         return {
             "role": "admin",
             "username": "owner",
@@ -332,7 +362,7 @@ class RouteAuthzTests(unittest.IsolatedAsyncioTestCase):
             "org_depth": 0,
             "org_parent_id": None,
             "org_status": "active",
-            "permissions": [reconnect.PG_LINK_RECONNECT_PERMISSION],
+            "permissions": [],
         }
 
     async def _post(self, *, csrf: bool = True) -> httpx.Response:
@@ -368,6 +398,29 @@ class RouteAuthzTests(unittest.IsolatedAsyncioTestCase):
         location = unquote(response.headers["location"])
         self.assertTrue(location.startswith("/home?err="))
         self.assertIn(DENIED_MESSAGE, location)
+        self.reconnect_mock.assert_not_awaited()
+
+    async def test_non_owner_admin_with_stale_reconnect_perm_still_denied(self) -> None:
+        self.staff = {
+            "role": "admin",
+            "username": "legacy-admin",
+            "permissions": [reconnect.PG_LINK_RECONNECT_PERMISSION],
+        }
+        response = await self._post()
+        self.assertEqual(response.status_code, 303)
+        location = unquote(response.headers["location"])
+        self.assertTrue(location.startswith("/home?err="))
+        self.assertIn(DENIED_MESSAGE, location)
+        self.reconnect_mock.assert_not_awaited()
+
+    async def test_reseller_with_stale_reconnect_perm_is_forbidden(self) -> None:
+        self.staff = {
+            "role": "reseller",
+            "bot_user_id": 9,
+            "permissions": [reconnect.PG_LINK_RECONNECT_PERMISSION, "dashboard"],
+        }
+        response = await self._post()
+        self.assertEqual(response.status_code, 403)
         self.reconnect_mock.assert_not_awaited()
 
     async def test_reseller_staff_and_anonymous_are_forbidden(self) -> None:
