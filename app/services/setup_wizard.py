@@ -749,9 +749,15 @@ def trusted_finish_next(next_url: str, *, request_host: str) -> str:
     for known in (wizard_panel_url_hint(), setup_finish_login_url()):
         own_hosts.add((urlparse(known).hostname or "").lower())
     own_hosts.discard("")
+    # Browsers treat a backslash like a slash, so a URL can parse as this panel yet open another site.
+    if "\\" in raw:
+        return ""
     try:
-        target = (urlparse(raw).hostname or "").lower()
+        parsed = urlparse(raw)
+        target = (parsed.hostname or "").lower()
     except ValueError:
+        return ""
+    if "@" in parsed.netloc:
         return ""
     return raw if target in own_hosts else ""
 

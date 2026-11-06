@@ -21,6 +21,15 @@ class TrustedFinishNextTests(unittest.TestCase):
         for foreign in ("https://evil.example/login", "//evil.example/login", "http://evil.example:9000/login?restarting=1"):
             self.assertEqual(self._trusted(foreign), "", foreign)
 
+    def test_a_backslash_or_userinfo_in_the_authority_is_dropped(self):
+        for disguised in (
+            f"http://evil.example\\@{SERVER_IP}:9000/login",
+            f"http://evil.example@{SERVER_IP}:9000/login",
+            f"http://{SERVER_IP}\\.evil.example/login",
+            f"http://user:pass@{SERVER_IP}:9000/login",
+        ):
+            self.assertEqual(self._trusted(disguised), "", disguised)
+
     def test_the_detected_server_address_is_accepted(self):
         url = f"http://{SERVER_IP}:9000/login?restarting=1"
         self.assertEqual(self._trusted(url), url)
