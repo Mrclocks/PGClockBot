@@ -358,15 +358,81 @@ class PlatformWalletIdempotencyTests(unittest.IsolatedAsyncioTestCase):
         balances = await asyncio.gather(once(), once())
         async with self.Session() as session:
             user = await session.get(BotUser, 1)
+            from app.services.bot_user_admin import build_admin_wallet_idempotency_key
+
+            expected_key = build_admin_wallet_idempotency_key(
+                request_key=key, user_id=1, mode="credit", shop_id=None
+            )
             count = await session.scalar(
                 select(func.count()).select_from(WalletTransaction).where(
                     WalletTransaction.user_id == 1,
-                    WalletTransaction.idempotency_key == f"admin_wallet:{key}",
+                    WalletTransaction.idempotency_key == expected_key,
                 )
             )
         self.assertEqual(int(user.wallet_balance or 0), 13_000)
         self.assertEqual(int(count or 0), 1)
         self.assertTrue(all(b == 13_000 for b in balances))
+
+    async def test_same_nonce_does_not_collide_across_users_or_shops(self):
+        """Identical form nonces for different users/shops must not share a ledger key."""
+        from app.db.models import BotUser, ShopWallet, WalletTransaction
+        from app.services.bot_user_admin import (
+            admin_adjust_user_wallet,
+            build_admin_wallet_idempotency_key,
+        )
+        from app.services.wallet import get_wallet_balance
+        from sqlalchemy import func, select
+
+        nonce = "aabbccddeeff0011"
+        key_user1 = build_admin_wallet_idempotency_key(
+            request_key=nonce, user_id=1, mode="credit", shop_id=None
+        )
+        key_user2 = build_admin_wallet_idempotency_key(
+            request_key=nonce, user_id=2, mode="credit", shop_id=None
+        )
+        key_shop = build_admin_wallet_idempotency_key(
+            request_key=nonce, user_id=1, mode="credit", shop_id=2
+        )
+        key_debit = build_admin_wallet_idempotency_key(
+            request_key=nonce, user_id=1, mode="debit", shop_id=None
+        )
+        self.assertNotEqual(key_user1, key_user2)
+        self.assertNotEqual(key_user1, key_shop)
+        self.assertNotEqual(key_user1, key_debit)
+
+        async with self.Session() as session:
+            session.add(ShopWallet(user_id=1, reseller_id=2, balance=0))
+            await session.commit()
+            u1 = await session.get(BotUser, 1)
+            u2 = await session.get(BotUser, 2)
+            a = await admin_adjust_user_wallet(
+                session, u1, 1_000, mode="credit", actor="a", note="u1", request_key=nonce
+            )
+            b = await admin_adjust_user_wallet(
+                session, u2, 1_000, mode="credit", actor="a", note="u2", request_key=nonce
+            )
+            c = await admin_adjust_user_wallet(
+                session,
+                u1,
+                1_000,
+                mode="credit",
+                actor="a",
+                note="shop",
+                request_key=nonce,
+                shop_id=2,
+                min_abs=1_000,
+            )
+            await session.refresh(u1)
+            await session.refresh(u2)
+            shop_bal = await get_wallet_balance(session, 1, shop_id=2)
+            rows = await session.scalar(select(func.count()).select_from(WalletTransaction))
+        self.assertFalse(a.replayed)
+        self.assertFalse(b.replayed)
+        self.assertFalse(c.replayed)
+        self.assertEqual(int(u1.wallet_balance or 0), 11_000)
+        self.assertEqual(int(u2.wallet_balance or 0), 51_000)
+        self.assertEqual(int(shop_bal), 1_000)
+        self.assertEqual(int(rows or 0), 3)
 
     async def test_different_keys_apply_separately(self):
         import secrets

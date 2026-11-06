@@ -690,6 +690,18 @@ class AdminWalletChange:
     replayed: bool
 
 
+def build_admin_wallet_idempotency_key(
+    *,
+    request_key: str,
+    user_id: int,
+    mode: str,
+    shop_id: int | None,
+) -> str:
+    """Ledger key scoped so the same nonce cannot collide across users, shops, or directions."""
+    shop = "p" if shop_id is None else str(int(shop_id))
+    return f"admin_wallet:{shop}:{int(user_id)}:{mode}:{request_key}"
+
+
 async def admin_adjust_user_wallet(
     session: AsyncSession,
     user: BotUser,
@@ -719,7 +731,16 @@ async def admin_adjust_user_wallet(
     floor = int(min_abs)
     if floor > 0 and amt < floor:
         raise ValueError(f"حداقل مبلغ {floor:,} تومان است")
-    key = f"admin_wallet:{request_key}" if request_key else None
+    key = (
+        build_admin_wallet_idempotency_key(
+            request_key=request_key,
+            user_id=int(user.id),
+            mode=direction,
+            shop_id=shop_id,
+        )
+        if request_key
+        else None
+    )
     if key:
         existing = (
             await session.execute(
