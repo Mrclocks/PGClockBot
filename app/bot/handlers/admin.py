@@ -61,6 +61,7 @@ from app.services.bot_user_admin import (
     service_snapshot,
     snapshot_telegram_lines,
 )
+from app.services.support_button import support_markup
 from app.services.volume_allocation import set_shop_oversell
 from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
@@ -4512,6 +4513,7 @@ async def adm_resapp_no(callback: CallbackQuery, session: AsyncSession, db_user:
                 await callback.bot.send_message(
                     user.telegram_id,
                     "❌ درخواست نمایندگی شما رد شد.\nدر صورت نیاز با پشتیبانی در ارتباط باشید.",
+                    reply_markup=support_markup(),
                 )
         except Exception:
             logger.debug("adm_resapp_no: ignored failure", exc_info=True)

@@ -95,6 +95,7 @@ from app.services.panel_brand import (
     load_own_values,
 )
 from app.services.receipt_review import DEFAULT_REJECT_TEXT
+from app.services.support_button import support_markup
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
     SETTING_VISIBILITY,
@@ -3514,6 +3515,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             title="❌ سفارش رد شد",
             body=f"سفارش #{order_id} رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید.",
             shop_id=order.reseller_id,
+            reply_markup=support_markup(),
         )
         return _redirect_msg("/finance?tab=orders", ok="سفارش رد شد")
 
@@ -3683,7 +3685,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         text, send_kw = outbound_setting_text(
             ui.get("payment_reject_text") or DEFAULT_REJECT_TEXT, title="❌ پرداخت رد شد"
         )
-        await notify_payer(session, payment.user_id, title="❌ پرداخت رد شد", body=text, send_kw=send_kw, shop_id=shop_rid)
+        await notify_payer(
+            session, payment.user_id, title="❌ پرداخت رد شد", body=text, send_kw=send_kw, shop_id=shop_rid,
+            reply_markup=support_markup(),
+        )
         return _redirect_msg("/finance?tab=payments", ok="پرداخت رد شد")
 
     @app.get("/users", response_class=HTMLResponse)
