@@ -108,6 +108,7 @@ def bot_routers() -> list[Router]:
         admin,
         admin_backup,
         admin_plans,
+        admin_pg_inbounds,
         admin_pg_nodes,
         admin_pg_users,
         admin_points_adjust,
@@ -224,6 +225,7 @@ def bot_routers() -> list[Router]:
         admin_backup.router,
         admin_pg_users.router,
         admin_pg_nodes.router,
+        admin_pg_inbounds.router,
         admin_plans.router,
         reseller_plan_extra_packs_admin.router,
         # Before admin.router so adjust callbacks and FSM win over the large admin module.
@@ -254,6 +256,7 @@ def create_dispatcher() -> Dispatcher:
         admin,
         admin_backup,
         admin_plans,
+        admin_pg_inbounds,
         admin_pg_nodes,
         admin_pg_users,
         admin_points_adjust,
@@ -292,6 +295,7 @@ def create_dispatcher() -> Dispatcher:
     for r in (
         admin_pg_users.router,
         admin_pg_nodes.router,
+        admin_pg_inbounds.router,
     ):
         r.message.middleware(block)
         r.callback_query.middleware(block)
