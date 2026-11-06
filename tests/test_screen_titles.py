@@ -63,6 +63,7 @@ OLD_PLAIN_TITLES = {
     "c.support": "🎧 پشتیبانی",
     "c.loyalty": "⭐ باشگاه مشتریان",
     "r.home": "🤝 پنل نماینده",
+    "r.broadcast": "📢 پیام گروهی",
 }
 # Shop panel groups added after the titles became editable; they never had an old heading.
 GROUP_TITLES = {
