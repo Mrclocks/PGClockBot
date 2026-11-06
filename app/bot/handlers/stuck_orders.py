@@ -23,7 +23,7 @@ from app.services import bot_feedback_texts as feedback
 from app.services.formatting import format_message, format_toman, format_user_label, info_block, kv_line, order_status_fa
 from app.services.notifications import customer_markup
 from app.services.redact import operator_error, redact
-from app.services.shop_scope import ShopScopeError, assert_order_retry_in_scope, is_platform_admin
+from app.services.shop_scope import ShopScopeError, assert_order_retry_in_scope, is_platform_admin, resolve_shop_scope_id
 from app.services.stuck_order_resolution import (
     cancel_and_refund,
     close_without_refund,
@@ -72,13 +72,17 @@ CLOSING_ACTIONS = {
 async def stuck_staff(
     session: AsyncSession, db_user: BotUser, *, is_reseller_bot: bool, reseller_owner_id: int | None,
 ) -> dict | None:
-    return await resolve_feature_staff(
+    staff = await resolve_feature_staff(
         session, db_user, PERMISSION, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
-
-
-def _shop_of(staff: dict) -> int | None:
-    return None if is_platform_admin(staff) else int(staff.get("bot_user_id") or 0) or None
+    if staff is None:
+        return None
+    try:
+        resolve_shop_scope_id(staff)
+    except ShopScopeError:
+        # Not the platform Owner and no shop of their own: never fall through to the platform queue.
+        return None
+    return staff
 
 
 def _back(staff: dict) -> str:
@@ -138,7 +142,7 @@ async def queue_count(session: AsyncSession, shop_id: int | None) -> int:
 
 
 async def _render_list(callback: CallbackQuery, session: AsyncSession, staff: dict, page: int) -> None:
-    orders = await _queue(session, _shop_of(staff))
+    orders = await _queue(session, resolve_shop_scope_id(staff))
     if not orders:
         await _edit(callback, session, format_message("🚧 تحویل ناموفق و گیرکرده", "همهٔ تحویل‌ها سالم است؛ موردی نیاز به بررسی ندارد. ✅"), [], _back(staff))
         return
@@ -208,7 +212,7 @@ async def _card(callback: CallbackQuery, session: AsyncSession, staff: dict, ord
         rows.append([InlineKeyboardButton(text="🗑 بستن بدون بازگشت وجه", callback_data=f"stk:c:cl:{order.id}")])
     if failure:
         rows.append([InlineKeyboardButton(text="🙈 حذف از لیست خطاها", callback_data=f"stk:d:{order.id}")])
-    links = customer_markup(user_id=order.user_id, service_id=order.service_id, shop_id=_shop_of(staff))
+    links = customer_markup(user_id=order.user_id, service_id=order.service_id, shop_id=resolve_shop_scope_id(staff))
     if links is not None:
         rows.extend(links.inline_keyboard)
     await _edit(callback, session, format_message("🚧 بررسی تحویل", info_block(lines)), rows, LIST_CALLBACK)
