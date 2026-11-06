@@ -206,6 +206,141 @@ class BotApplyPointsTests(AdminPointsAdjustHarness):
             outcome.assert_not_awaited()
             msg.answer.assert_awaited()
 
+    async def test_pcredit_callback_denies_shop_customer(self) -> None:
+        from app.bot.handlers import admin_points_adjust as mod
+        from app.db.models import BotUser
+        from app.services.loyalty import points_balance
+
+        async with self.Session() as session:
+            admin = await self._admin(session)
+            callback = MagicMock(
+                data="adm:users:pcredit:20",
+                answer=AsyncMock(),
+                message=MagicMock(),
+            )
+            async with self._owner_gate():
+                with patch("app.bot.nav_input.ask_text", AsyncMock()) as ask:
+                    await mod.adm_users_points_credit_ask(callback, self.state, session, admin)
+            ask.assert_not_awaited()
+            callback.answer.assert_awaited()
+            self.assertIn("فروشگاه", callback.answer.await_args.args[0])
+            self.assertEqual(await points_balance(session, await session.get(BotUser, 20), None), 0)
+
+    async def test_pdebit_callback_denies_missing_user(self) -> None:
+        from app.bot.handlers import admin_points_adjust as mod
+
+        async with self.Session() as session:
+            admin = await self._admin(session)
+            callback = MagicMock(
+                data="adm:users:pdebit:404",
+                answer=AsyncMock(),
+                message=MagicMock(),
+            )
+            async with self._owner_gate():
+                with patch("app.bot.nav_input.ask_text", AsyncMock()) as ask:
+                    await mod.adm_users_points_debit_ask(callback, self.state, session, admin)
+            ask.assert_not_awaited()
+            callback.answer.assert_awaited()
+
+
+class ShopCardPointsIsolationTests(AdminPointsAdjustHarness):
+    async def test_shop_card_shows_only_that_shops_points(self) -> None:
+        from app.db.models import BotUser, ShopPoints
+        from app.services.formatting import format_number
+        from app.services.loyalty import credit_points, points_balance
+        from app.services.staff_cards import format_staff_customer_card
+
+        shop_a, shop_b = 99, 88
+        async with self.Session() as session:
+            user = await session.get(BotUser, 20)
+            # Platform purse must never leak onto a shop card.
+            user.points_balance = 9_999
+            session.add(ShopPoints(user_id=20, reseller_id=shop_a, balance=0))
+            session.add(ShopPoints(user_id=20, reseller_id=shop_b, balance=0))
+            await session.commit()
+            await credit_points(
+                session,
+                user,
+                120,
+                tx_type="adjust",
+                source="test",
+                reference=None,
+                description="shop a",
+                idempotency_key="shop-a-pts",
+                shop_id=shop_a,
+                commit=True,
+            )
+            await credit_points(
+                session,
+                user,
+                45,
+                tx_type="adjust",
+                source="test",
+                reference=None,
+                description="shop b",
+                idempotency_key="shop-b-pts",
+                shop_id=shop_b,
+                commit=True,
+            )
+            await session.refresh(user)
+            self.assertEqual(await points_balance(session, user, shop_a), 120)
+            self.assertEqual(await points_balance(session, user, shop_b), 45)
+            self.assertEqual(await points_balance(session, user, None), 9_999)
+            card_a = format_staff_customer_card(
+                flags="",
+                display_name=user.full_name or "—",
+                telegram_id=int(user.telegram_id),
+                username=None,
+                wallet_text="۰",
+                points_text=format_number(await points_balance(session, user, shop_a)),
+                service_count=0,
+                is_blocked=False,
+                wallet_label="کیف پول فروشگاه",
+            )
+            card_b = format_staff_customer_card(
+                flags="",
+                display_name=user.full_name or "—",
+                telegram_id=int(user.telegram_id),
+                username=None,
+                wallet_text="۰",
+                points_text=format_number(await points_balance(session, user, shop_b)),
+                service_count=0,
+                is_blocked=False,
+                wallet_label="کیف پول فروشگاه",
+            )
+        self.assertIn(format_number(120), card_a)
+        self.assertNotIn(format_number(45), card_a)
+        self.assertNotIn(format_number(9_999), card_a)
+        self.assertIn(format_number(45), card_b)
+        self.assertNotIn(format_number(120), card_b)
+
+    async def test_web_user_card_uses_shop_scope_points(self) -> None:
+        from app.db.models import BotUser, ShopPoints
+        from app.services.loyalty import credit_points
+        from app.services.user_card import build_user_card
+
+        async with self.Session() as session:
+            user = await session.get(BotUser, 20)
+            user.points_balance = 500
+            session.add(ShopPoints(user_id=20, reseller_id=99, balance=0))
+            await session.commit()
+            await credit_points(
+                session,
+                user,
+                33,
+                tx_type="adjust",
+                source="test",
+                reference=None,
+                description="shop",
+                idempotency_key="shop-web-pts",
+                shop_id=99,
+                commit=True,
+            )
+            shop_card = await build_user_card(session, user, shop_id=99, show_private_marks=False)
+            platform_card = await build_user_card(session, user, shop_id=None, show_private_marks=False)
+            self.assertEqual(shop_card.points_balance, 33)
+            self.assertEqual(platform_card.points_balance, 500)
+
 
 class WebUserCardPointsTests(AdminPointsAdjustHarness):
     async def test_user_card_includes_points_balance(self) -> None:
