@@ -1,6 +1,6 @@
 """Shop-scoped broadcast logs.
 
-Revision ID: 0094_broadcast_shop_id
+Revision ID: 0095_broadcast_shop_id
 Revises: 0093_wallet_tx_idempotency
 
 Adds nullable ``shop_id`` (platform rows stay NULL) and optional ``request_key`` so a
@@ -15,8 +15,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0094_broadcast_shop_id"
-down_revision: Union[str, None] = "0093_wallet_tx_idempotency"
+revision: str = "0095_broadcast_shop_id"
+down_revision: Union[str, None] = "0094_campaign_request_key"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

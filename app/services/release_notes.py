@@ -35,7 +35,7 @@ RELEASE_NOTES_FA: dict[str, list[str]] = {
         "ربات: اینباندها و ادمین‌های پنل پاسارگارد فقط‌خواندنی (#1188)",
         "ربات: مدیریت هاست‌های پاسارگارد (#1187)",
         "نماینده: پیام گروهی محدود به فروشگاه (#1175)",
-        "مایگریشن: 0094_broadcast_shop_id, 0094_campaign_request_key",
+        "مایگریشن: 0094_campaign_request_key، 0095_broadcast_shop_id",
         "ریستور: backup/dev-pre-v0.5.37 (commit 53642be9)",
     ],
     "0.5.36": [
