@@ -530,3 +530,80 @@ class PlatformWalletRejectBadAmountTests(unittest.TestCase):
         self.assertEqual(_require_admin_wallet_amount(-5), -5)  # type gate only
         with self.assertRaises(ValueError):
             parse_admin_wallet_amount("-5")
+
+
+class WalletIdempotencyCommitFalseTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        from app.db import Base
+        import app.db.models  # noqa: F401
+        from app.db.models import BotUser, Role
+
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.engine = create_async_engine(
+            f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'cf.db'}"
+        )
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        async with self.Session() as session:
+            session.add(
+                BotUser(
+                    id=1,
+                    telegram_id=101,
+                    referral_code="u1",
+                    role=Role.USER.value,
+                    wallet_balance=10_000,
+                )
+            )
+            await session.commit()
+
+    async def asyncTearDown(self):
+        await self.engine.dispose()
+        self._tmpdir.cleanup()
+
+    async def test_idempotency_key_rejected_when_commit_false(self):
+        from app.db.models import BotUser, WalletTransaction
+        from app.services.wallet import credit_wallet, debit_wallet
+        from sqlalchemy import func, select
+
+        async with self.Session() as session:
+            user = await session.get(BotUser, 1)
+            # Unrelated pending work in the caller's unit of work.
+            session.add(
+                WalletTransaction(
+                    user_id=1,
+                    amount=1,
+                    balance_after=10_001,
+                    reason="pending-marker",
+                    reseller_id=None,
+                )
+            )
+            with self.assertRaises(ValueError) as ctx:
+                await credit_wallet(
+                    session,
+                    user,
+                    1_000,
+                    "keyed",
+                    commit=False,
+                    idempotency_key="admin_wallet:p:1:credit:deadbeefdeadbeef",
+                )
+            self.assertIn("commit=True", str(ctx.exception))
+            with self.assertRaises(ValueError):
+                await debit_wallet(
+                    session,
+                    user,
+                    1_000,
+                    "keyed",
+                    commit=False,
+                    idempotency_key="admin_wallet:p:1:debit:deadbeefdeadbeef",
+                )
+            # Caller transaction still open — pending marker can still commit.
+            await session.commit()
+            count = await session.scalar(
+                select(func.count()).select_from(WalletTransaction).where(
+                    WalletTransaction.reason == "pending-marker"
+                )
+            )
+            await session.refresh(user)
+        self.assertEqual(int(count or 0), 1)
+        self.assertEqual(int(user.wallet_balance or 0), 10_000)

@@ -218,6 +218,9 @@ async def credit_wallet(
     """
     if amount <= 0:
         raise ValueError("amount must be positive")
+    # A keyed flush conflict would otherwise rollback_quiet the caller's open unit of work.
+    if idempotency_key and not commit:
+        raise ValueError("idempotency_key requires commit=True")
     sid = normalize_shop_id(shop_id)
     uid = int(user.id)
 
@@ -327,6 +330,8 @@ async def debit_wallet(
     """Debit platform purse or the matching shop purse. Fail-closed on shortfall."""
     if amount <= 0:
         raise ValueError("amount must be positive")
+    if idempotency_key and not commit:
+        raise ValueError("idempotency_key requires commit=True")
     sid = normalize_shop_id(shop_id)
     uid = int(user.id)
 
