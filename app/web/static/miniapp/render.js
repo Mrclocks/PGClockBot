@@ -545,16 +545,21 @@
   function walletCardHtml(customer, { actions, features } = {}) {
     const c = customer || {};
     const f = features || {};
+    const loyaltyOn = !!c.loyalty_enabled;
     const buttons = [
       f.topup !== false ? `<button type="button" class="btn on-hero" data-action="topup">${icon("plus", 18)}شارژ کیف پول</button>` : "",
       actions
         ? (f.shop !== false ? `<button type="button" class="btn hero-ghost" data-action="goto" data-view="shop">${icon("shop", 18)}خرید سرویس</button>` : "")
         : (f.gift !== false ? `<button type="button" class="btn hero-ghost" data-action="gift-code">${icon("gift", 18)}کد هدیه</button>` : ""),
+      loyaltyOn && f.club !== false
+        ? `<button type="button" class="btn hero-ghost" data-action="goto" data-view="club">${icon("gift", 18)}باشگاه</button>`
+        : "",
     ].join("");
     return heroHtml({
       label: "موجودی کیف پول",
       chip: c.wallet_pay_enabled ? "پرداخت فعال" : "فقط مشاهده",
       value: money(c.wallet),
+      sub: loyaltyOn ? `${num(c.points)} امتیاز` : "",
       footer: buttons ? `<div class="btn-row">${buttons}</div>` : "",
       aria: "کیف پول",
     });

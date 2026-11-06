@@ -72,7 +72,7 @@
     const c = customer();
     return {
       walletPay: !!c.wallet_pay_enabled, qr: !!c.qr_enabled, topup: can("topup"), gift: can("codes"),
-      manage: can("manage"), shop: can("shop"),
+      manage: can("manage"), shop: can("shop"), club: can("club"),
     };
   }
 
