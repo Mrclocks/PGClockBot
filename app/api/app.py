@@ -83,6 +83,7 @@ from app.services.updates import local_version
 from app.services.message_variables import template_variable_specs
 from app.services.psp_gateways import psp_gateways_form_json
 from app.services.panel_assets import get_panel_asset_cache_key
+from app.services.redact import operator_error
 from app.services.shop_scope import is_platform_admin, payment_shop_id
 from app.services.panel_brand import (
     BRAND_PRESET_CSS,
@@ -3455,7 +3456,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             else:
                 return _redirect_msg("/finance?tab=orders", err="این سفارش هنوز قابل تأیید نیست (رسید لازم است)")
         except Exception as e:
-            return _redirect_msg("/finance?tab=orders", err=str(e))
+            return _redirect_msg("/finance?tab=orders", err=operator_error(e))
         return _redirect_msg("/finance?tab=orders", ok="سفارش تأیید و تحویل شد")
 
     @app.post("/orders/{order_id}/reject")
@@ -3501,7 +3502,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             else:
                 await reject_order(session, order, note="web order reject")
         except Exception as e:
-            return _redirect_msg("/finance?tab=orders", err=str(e))
+            return _redirect_msg("/finance?tab=orders", err=operator_error(e))
         await notify_payer(
             session,
             order.user_id,
@@ -3535,7 +3536,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         try:
             await cancel_order(session, order, note="web order cancel")
         except Exception as e:
-            return _redirect_msg("/finance?tab=orders", err=str(e))
+            return _redirect_msg("/finance?tab=orders", err=operator_error(e))
         await notify_payer(
             session,
             order.user_id,
@@ -3593,7 +3594,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         try:
             order = await approve_payment(session, payment, reviewer_tg=0)
         except Exception as e:
-            return _redirect_msg("/finance?tab=payments", err=str(e))
+            return _redirect_msg("/finance?tab=payments", err=operator_error(e))
         user = await session.get(BotUser, payment.user_id)
         if user:
             try:
@@ -3676,7 +3677,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         try:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
         except Exception as e:
-            return _redirect_msg("/finance?tab=payments", err=str(e))
+            return _redirect_msg("/finance?tab=payments", err=operator_error(e))
         body = "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
         user = await session.get(BotUser, payment.user_id)
         if user:
