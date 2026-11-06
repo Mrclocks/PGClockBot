@@ -93,6 +93,7 @@ from app.services.panel_brand import (
     brand_for_staff,
     load_own_values,
 )
+from app.services.receipt_review import DEFAULT_REJECT_TEXT
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
     SETTING_VISIBILITY,
@@ -3677,7 +3678,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
         except Exception as e:
             return _redirect_msg("/finance?tab=payments", err=str(e))
-        body = "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
+        body = DEFAULT_REJECT_TEXT
         user = await session.get(BotUser, payment.user_id)
         if user:
             try:

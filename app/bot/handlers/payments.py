@@ -13,6 +13,7 @@ from app.services.formatting import format_message
 from app.services.notifications import notify_stars_delivery_failed
 from app.services.orders import approve_payment, reject_payment, stars_amount_for_toman
 from app.services.resellers import reseller_can_review_payment
+from app.services.receipt_review import DEFAULT_REJECT_TEXT
 from app.services.users import get_all_settings, get_setting
 from app.services import bot_feedback_texts as feedback
 
@@ -361,9 +362,7 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     if user:
         from app.services.rich_text import outbound_setting_text
 
-        reject_body = ui.get("payment_reject_text") or (
-            "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
-        )
+        reject_body = ui.get("payment_reject_text") or DEFAULT_REJECT_TEXT
         text, send_kw = outbound_setting_text(
             reject_body, title="❌ پرداخت رد شد"
         )
