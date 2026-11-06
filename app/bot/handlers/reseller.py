@@ -1527,7 +1527,7 @@ async def res_renew(
             callback.message,
             format_message(
                 "🔄 تمدید سرویس نماینده",
-                f"پلن: <b>{plan.name}</b>\n"
+                f"پلن: <b>{html.escape(plan.name)}</b>\n"
                 f"{detail}{exp_line}\n\n"
                 + explain,
             ),
