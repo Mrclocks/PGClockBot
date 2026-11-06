@@ -10,7 +10,6 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, BroadcastLog, Role
-from app.services.shop_broadcast import shop_scope_filter
 from app.services.shop_membership import shop_member_clause
 
 logger = logging.getLogger("pgclock.broadcast")
@@ -21,6 +20,13 @@ AUDIENCE_LABELS = {
     "resellers": "نمایندگان",
     "admins": "ادمین‌ها",
 }
+
+
+def shop_scope_filter(*, shop_id: int | None):
+    """Platform history is ``shop_id IS NULL``; a shop never sees NULL or another shop."""
+    if shop_id is None:
+        return BroadcastLog.shop_id.is_(None)
+    return BroadcastLog.shop_id == int(shop_id)
 
 
 async def list_broadcast_targets(

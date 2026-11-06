@@ -21,6 +21,7 @@ from app.services.shop_broadcast import (
     clean_shop_broadcast_text,
     new_shop_request_key,
     queue_shop_broadcast,
+    shop_broadcast_html_snippet,
 )
 from app.services.users import get_all_settings
 
@@ -138,7 +139,7 @@ def _history_text(rows) -> str:
     lines = []
     for row in rows:
         status = STATUS_LABELS.get(row.status, row.status)
-        snippet = (row.text or "")[:40]
+        snippet = shop_broadcast_html_snippet(row.text, limit=40)
         lines.append(f"#{row.id} · {status} · {row.ok_count}/{row.total}\n<code>{snippet}</code>")
     return "تاریخچه پیام گروهی:\n\n" + "\n\n".join(lines)
 
@@ -288,7 +289,9 @@ async def on_text(
     await state.update_data(shop_broadcast_text=body)
     await state.set_state(ShopBroadcastStates.confirm)
     ui = await get_all_settings(session)
-    preview = body if len(body) <= 500 else body[:500] + "…"
+    preview = shop_broadcast_html_snippet(body, limit=500)
+    if len(body) > 500:
+        preview += "…"
     await message.answer(
         f"تأیید ارسال به <b>{SHOP_AUDIENCE_LABELS['all']}</b>؟\n\n{preview}",
         reply_markup=_confirm_keyboard(ui),
@@ -322,7 +325,6 @@ async def cb_confirm(
             text=text,
             created_by=str(db_user.telegram_id),
             request_key=request_key,
-            already_cleaned=True,
         )
     except ValueError as exc:
         await session.rollback()

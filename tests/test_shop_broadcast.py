@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import importlib.util
+import inspect
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import httpx
 from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
@@ -22,25 +24,31 @@ from app.db.models import (
     BotUser,
     BotUserShop,
     BroadcastLog,
+    ResellerProfile,
     ShopBroadCampaignDay,
 )
 from app.services.broadcast import clear_broadcast_history, delete_broadcast_log, list_broadcast_history
 from app.services.broadcast_queue import (
     STATUS_CANCELLED,
     STATUS_DONE,
+    STATUS_FAILED,
     STATUS_QUEUED,
     cancel_broadcast,
     process_broadcast_batch,
     queue_broadcast,
+    run_broadcast_worker,
 )
 from app.services.campaigns import set_marketing_preference
 from app.services.shop_broadcast import (
+    SHOP_NO_BOT_MESSAGE,
     clean_shop_broadcast_text,
     count_shop_broadcast_targets,
     new_shop_request_key,
     queue_shop_broadcast,
     shop_audience_clause,
+    shop_broadcast_html_snippet,
 )
+
 ROOT = Path(__file__).resolve().parents[1]
 SHOP_A = 20
 SHOP_B = 30
@@ -49,6 +57,7 @@ SHOP_B = 30
 class FakeBot:
     def __init__(self):
         self.sent: list[int] = []
+        self.bodies: list[str] = []
         self.behaviour = {}
 
     async def send_message(self, chat_id, body, parse_mode=None):
@@ -56,6 +65,7 @@ class FakeBot:
         if isinstance(action, Exception):
             raise action
         self.sent.append(chat_id)
+        self.bodies.append(body)
 
 
 class ShopBroadcastCase(unittest.IsolatedAsyncioTestCase):
@@ -87,6 +97,8 @@ class ShopBroadcastCase(unittest.IsolatedAsyncioTestCase):
             [
                 BotUserShop(bot_user_id=6, shop_id=SHOP_B),
                 BotUserShop(bot_user_id=9, shop_id=SHOP_A, is_blocked=True, blocked_reason="test"),
+                ResellerProfile(user_id=SHOP_A, bot_token="enc-shop-a", is_active=True),
+                ResellerProfile(user_id=SHOP_B, bot_token="enc-shop-b", is_active=True),
             ]
         )
         await self.session.commit()
@@ -270,15 +282,68 @@ class CapAndIdempotencyTests(ShopBroadcastCase):
 
 
 class InputAndFailureTests(ShopBroadcastCase):
-    async def test_hostile_and_empty_and_long_text_are_rejected_or_escaped(self):
+    async def test_raw_text_is_stored_and_escaped_only_at_send(self):
         with self.assertRaises(ValueError):
             clean_shop_broadcast_text("   ")
         with self.assertRaises(ValueError):
             clean_shop_broadcast_text("x" * 5000)
-        escaped = clean_shop_broadcast_text('<b>hi</b> & <a href="x">y</a>')
-        self.assertNotIn("<b>", escaped)
-        self.assertIn("&lt;b&gt;", escaped)
-        self.assertIn("&amp;", escaped)
+        raw = '<b>hi</b> & <a href="x">y</a>'
+        cleaned = clean_shop_broadcast_text(raw)
+        self.assertEqual(cleaned, raw)
+        self.assertIn("<b>", cleaned)
+        # Truncate first, then escape — never cut mid-entity the way escape-then-slice would.
+        amp_heavy = "a" * 38 + "&x"
+        snippet = shop_broadcast_html_snippet(amp_heavy, limit=40)
+        self.assertEqual(snippet, html.escape(amp_heavy[:40], quote=False))
+        self.assertNotEqual(snippet, html.escape(amp_heavy, quote=False)[:40])
+
+        log = await queue_shop_broadcast(
+            self.session, shop_id=SHOP_A, text=raw, created_by="a", request_key=new_shop_request_key()
+        )
+        self.assertEqual(log.text, raw)
+        await self.run_all(log.id)
+        self.assertTrue(self.bot.bodies)
+        self.assertEqual(self.bot.bodies[0], html.escape(raw, quote=False))
+        self.assertNotIn("<b>", self.bot.bodies[0])
+
+    async def test_platform_broadcast_does_not_reescape_html(self):
+        body = "<b>owner</b>"
+        log = await queue_broadcast(self.session, text=body, audience="users", created_by="owner")
+        await self.run_all(log.id)
+        self.assertEqual(self.bot.bodies[0], body)
+
+    async def test_queue_rejects_shop_without_bot(self):
+        profile = await self.session.scalar(
+            select(ResellerProfile).where(ResellerProfile.user_id == SHOP_A)
+        )
+        profile.bot_token = None
+        await self.session.commit()
+        with self.assertRaises(ValueError) as ctx:
+            await queue_shop_broadcast(
+                self.session, shop_id=SHOP_A, text="no bot", created_by="a", request_key=new_shop_request_key()
+            )
+        self.assertEqual(str(ctx.exception), SHOP_NO_BOT_MESSAGE)
+
+    async def test_worker_marks_failed_when_shop_bot_disappears(self):
+        log = await queue_shop_broadcast(
+            self.session, shop_id=SHOP_A, text="later", created_by="a", request_key=new_shop_request_key()
+        )
+        with patch(
+            "app.services.reseller_bots.open_notify_bot_for_reseller",
+            return_value=(None, False),
+        ):
+            await run_broadcast_worker(self.Session, self.bot, budget_seconds=5)
+        row = await self.session.get(BroadcastLog, log.id)
+        await self.session.refresh(row)
+        self.assertEqual(row.status, STATUS_FAILED)
+        self.assertEqual(self.bot.sent, [])
+
+    async def test_queue_broadcast_has_no_dead_shop_kwargs(self):
+        params = inspect.signature(queue_broadcast).parameters
+        self.assertNotIn("total_override", params)
+        self.assertNotIn("skip_text_clean", params)
+        self.assertNotIn("shop_id", params)
+        self.assertLessEqual(len(params), 5)
 
     async def test_one_failed_send_does_not_stop_the_queue(self):
         self.bot.behaviour[2001] = TelegramForbiddenError(method=MagicMock(), message="blocked")

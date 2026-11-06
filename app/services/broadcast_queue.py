@@ -8,6 +8,7 @@ the outcome as unknown and moves past the user, so nobody is messaged twice. Pla
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import secrets
 import time
@@ -19,8 +20,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, BroadcastLog, Role
-from app.services.broadcast import AUDIENCE_LABELS
-from app.services.shop_broadcast import shop_audience_clause, shop_scope_filter
+from app.services.broadcast import AUDIENCE_LABELS, shop_scope_filter
 from app.services.shop_membership import shop_member_clause
 
 logger = logging.getLogger("pgclock.broadcast")
@@ -34,12 +34,14 @@ STATUS_QUEUED = "queued"
 STATUS_RUNNING = "running"
 STATUS_DONE = "done"
 STATUS_CANCELLED = "cancelled"
+STATUS_FAILED = "failed"
 ACTIVE_STATUSES = (STATUS_QUEUED, STATUS_RUNNING)
 STATUS_LABELS = {
     STATUS_QUEUED: "در صف ارسال",
     STATUS_RUNNING: "در حال ارسال",
     STATUS_DONE: "ارسال شد",
     STATUS_CANCELLED: "لغو شد",
+    STATUS_FAILED: "ناموفق",
 }
 OUTCOME_OK, OUTCOME_FAILED, OUTCOME_UNKNOWN = "ok", "failed", "unknown"
 
@@ -47,6 +49,9 @@ OUTCOME_OK, OUTCOME_FAILED, OUTCOME_UNKNOWN = "ok", "failed", "unknown"
 def _audience_clause(audience: str, *, shop_id: int | None = None):
     """Recipients for one broadcast: platform bot audience, or one shop's customers."""
     if shop_id is not None:
+        # Lazy import: shop_broadcast imports STATUS_QUEUED from this module at load time.
+        from app.services.shop_broadcast import shop_audience_clause
+
         return shop_audience_clause(int(shop_id))
     clause = [BotUser.is_blocked.is_(False), shop_member_clause(None)]
     if audience == "users":
@@ -64,42 +69,21 @@ async def queue_broadcast(
     text: str,
     audience: str,
     created_by: str | None,
-    shop_id: int | None = None,
-    request_key: str | None = None,
-    total_override: int | None = None,
-    skip_text_clean: bool = False,
 ) -> BroadcastLog:
-    """Record the broadcast and its audience size; the worker sends it."""
-    if skip_text_clean:
-        body = text
-    else:
-        body = (text or "").strip()
-        if not body:
-            raise ValueError("متن پیام خالی است")
-        if len(body) > MAX_TEXT_LENGTH:
-            raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
-    if shop_id is not None:
-        if audience not in ("all",):
-            raise ValueError("گروه مخاطبان نامعتبر است")
-    elif audience not in AUDIENCE_LABELS:
+    """Record a platform broadcast and its audience size; the worker sends it."""
+    body = (text or "").strip()
+    if not body:
+        raise ValueError("متن پیام خالی است")
+    if len(body) > MAX_TEXT_LENGTH:
+        raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
+    if audience not in AUDIENCE_LABELS:
         raise ValueError("گروه مخاطبان نامعتبر است")
-    if request_key:
-        existing = await session.scalar(
-            select(BroadcastLog).where(BroadcastLog.request_key == request_key)
+    total = int(
+        await session.scalar(
+            select(func.count()).select_from(BotUser).where(*_audience_clause(audience))
         )
-        if existing is not None:
-            return existing
-    if total_override is not None:
-        total = int(total_override)
-    else:
-        total = int(
-            await session.scalar(
-                select(func.count())
-                .select_from(BotUser)
-                .where(*_audience_clause(audience, shop_id=shop_id))
-            )
-            or 0
-        )
+        or 0
+    )
     if not total:
         raise ValueError("مخاطبی برای این گروه وجود ندارد")
     log = BroadcastLog(
@@ -108,8 +92,7 @@ async def queue_broadcast(
         total=total,
         created_by=(created_by or "")[:128] or None,
         status=STATUS_QUEUED,
-        shop_id=int(shop_id) if shop_id is not None else None,
-        request_key=(request_key or None),
+        shop_id=None,
     )
     session.add(log)
     await session.commit()
@@ -131,6 +114,33 @@ async def cancel_broadcast(
             BroadcastLog.status.in_(ACTIVE_STATUSES),
         )
         .values(status=STATUS_CANCELLED, completed_at=datetime.now(timezone.utc))
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+    return changed.rowcount == 1
+
+
+async def mark_broadcast_failed(
+    session: AsyncSession,
+    log_id: int,
+    *,
+    shop_id: int | None = None,
+) -> bool:
+    """End an active broadcast that cannot run (for example a shop with no bot)."""
+    changed = await session.execute(
+        update(BroadcastLog)
+        .where(
+            BroadcastLog.id == int(log_id),
+            shop_scope_filter(shop_id=shop_id),
+            BroadcastLog.status.in_(ACTIVE_STATUSES),
+        )
+        .values(
+            status=STATUS_FAILED,
+            completed_at=datetime.now(timezone.utc),
+            lock_token=None,
+            locked_until=None,
+            inflight_id=None,
+        )
         .execution_options(synchronize_session=False)
     )
     await session.commit()
@@ -220,9 +230,10 @@ async def _record(session: AsyncSession, log_id: int, token: str, user_id: int, 
     await session.commit()
 
 
-async def _send(bot: Bot, telegram_id: int, text: str) -> str:
+async def _send(bot: Bot, telegram_id: int, text: str, *, escape_html: bool = False) -> str:
+    body = html.escape(text, quote=False) if escape_html else text
     try:
-        await bot.send_message(telegram_id, text, parse_mode="HTML")
+        await bot.send_message(telegram_id, body, parse_mode="HTML")
     except (TelegramForbiddenError, TelegramBadRequest):
         return OUTCOME_FAILED
     return OUTCOME_OK
@@ -296,11 +307,12 @@ async def process_broadcast_batch(
                 .limit(take)
             )
         ).all()
+        escape_html = shop_id is not None
         for user_id, telegram_id in recipients:
             if not await _mark_inflight(session, log_id, token, int(user_id)):
                 return False
             try:
-                outcome = await _send(bot, telegram_id, text)
+                outcome = await _send(bot, telegram_id, text, escape_html=escape_html)
             except TelegramRetryAfter as exc:
                 await _back_off(session, log_id, token, exc.retry_after)
                 return True
@@ -328,11 +340,19 @@ async def run_broadcast_worker(session_factory, bot: Bot, *, budget_seconds: flo
         send_bot, should_close = bot, False
         try:
             if shop_id is not None:
+                # Lazy import: reseller_bots pulls secret/token helpers this module does not need at import.
                 from app.services.reseller_bots import open_notify_bot_for_reseller
 
                 async with session_factory() as session:
                     send_bot, should_close = await open_notify_bot_for_reseller(session, shop_id)
                 if send_bot is None:
+                    logger.warning(
+                        "broadcast %s: shop %s has no usable bot; marking failed",
+                        log_id,
+                        shop_id,
+                    )
+                    async with session_factory() as session:
+                        await mark_broadcast_failed(session, log_id, shop_id=shop_id)
                     continue
             while time.monotonic() < deadline:
                 async with session_factory() as session:

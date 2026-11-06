@@ -10,7 +10,8 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, BroadcastLog, MarketingPreference, ShopBroadCampaignDay
+from app.db.models import BotUser, BroadcastLog, MarketingPreference, ResellerProfile, ShopBroadCampaignDay
+from app.services.broadcast_queue import STATUS_QUEUED
 from app.services.campaigns import BROAD_PER_DAY, RECIPIENT_LIMIT, _member_clause
 from app.services.daily_cap import claim_daily_cap
 from app.services.rich_text import utf16_len
@@ -20,6 +21,7 @@ SHOP_AUDIENCE_LABELS = {"all": "همهٔ مشتریان"}
 SHOP_BROAD_LIMIT_MESSAGE = (
     "پیام گروهی گسترده برای هر فروشگاه روزی یک‌بار است (با کمپین گسترده مشترک است)"
 )
+SHOP_NO_BOT_MESSAGE = "ربات فروشگاه فعال نیست؛ ابتدا ربات شاپ را وصل کنید"
 MAX_SHOP_TEXT_UTF16 = 4000
 REQUEST_KEY_LEN = 32
 
@@ -43,31 +45,42 @@ def shop_audience_clause(shop_id: int):
 
 
 def clean_shop_broadcast_text(raw: object) -> str:
-    """Escape hostile input and keep Telegram UTF-16 length under the shop limit."""
+    """Validate and return the raw body; escaping happens only at Telegram send time."""
     text = str(raw or "").replace("\x00", "").strip()
     if not text:
         raise ValueError("متن پیام خالی است")
     if utf16_len(text) > MAX_SHOP_TEXT_UTF16:
         raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_SHOP_TEXT_UTF16})")
-    body = html.escape(text, quote=False)
-    if utf16_len(body) > MAX_SHOP_TEXT_UTF16:
+    # Escaped HTML must still fit Telegram's limit when the worker sends with parse_mode=HTML.
+    if utf16_len(html.escape(text, quote=False)) > MAX_SHOP_TEXT_UTF16:
         raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_SHOP_TEXT_UTF16})")
-    return body
+    return text
+
+
+def shop_broadcast_html_snippet(raw: object, *, limit: int) -> str:
+    """Truncate the raw body first, then escape, so HTML entities are never split."""
+    snippet = str(raw or "")[: max(0, int(limit))]
+    return html.escape(snippet, quote=False)
 
 
 def parse_shop_request_key(raw: object, *, shop_id: int) -> str:
     """Build a globally unique request key scoped to the shop."""
     token = str(raw or "").strip()
-    if (
-        len(token) != REQUEST_KEY_LEN
-        or any(c not in string.hexdigits for c in token)
-    ):
+    if len(token) != REQUEST_KEY_LEN or any(c not in string.hexdigits for c in token):
         token = secrets.token_hex(REQUEST_KEY_LEN // 2)
     return f"shop-{int(shop_id)}-{token.lower()}"
 
 
 def new_shop_request_key() -> str:
     return secrets.token_hex(REQUEST_KEY_LEN // 2)
+
+
+async def shop_can_send_broadcast(session: AsyncSession, *, shop_id: int) -> bool:
+    """True when the shop has an active dedicated bot token (no secret is returned)."""
+    profile = await session.scalar(
+        select(ResellerProfile).where(ResellerProfile.user_id == int(shop_id))
+    )
+    return bool(profile and profile.is_active and profile.bot_token)
 
 
 async def count_shop_broadcast_targets(session: AsyncSession, *, shop_id: int) -> int:
@@ -86,20 +99,17 @@ async def queue_shop_broadcast(
     text: object,
     created_by: str | None,
     request_key: object = None,
-    already_cleaned: bool = False,
 ) -> BroadcastLog:
     """Enqueue one shop broadcast; daily broad cap and request_key make repeats safe."""
-    from app.services.broadcast_queue import STATUS_QUEUED
-
     if not isinstance(shop_id, int) or isinstance(shop_id, bool) or shop_id <= 0:
         raise ValueError("فروشگاه نامعتبر است")
-    body = str(text) if already_cleaned else clean_shop_broadcast_text(text)
-    if already_cleaned and not (body or "").strip():
-        raise ValueError("متن پیام خالی است")
+    body = clean_shop_broadcast_text(text)
     key = parse_shop_request_key(request_key, shop_id=shop_id)
     existing = await session.scalar(select(BroadcastLog).where(BroadcastLog.request_key == key))
     if existing is not None:
         return existing
+    if not await shop_can_send_broadcast(session, shop_id=shop_id):
+        raise ValueError(SHOP_NO_BOT_MESSAGE)
     total = await count_shop_broadcast_targets(session, shop_id=shop_id)
     if not total:
         raise ValueError("مخاطبی برای این گروه وجود ندارد")
@@ -130,10 +140,3 @@ async def queue_shop_broadcast(
         raise
     await session.commit()
     return log
-
-
-def shop_scope_filter(*, shop_id: int | None):
-    """Platform history is ``shop_id IS NULL``; a shop never sees NULL or another shop."""
-    if shop_id is None:
-        return BroadcastLog.shop_id.is_(None)
-    return BroadcastLog.shop_id == int(shop_id)

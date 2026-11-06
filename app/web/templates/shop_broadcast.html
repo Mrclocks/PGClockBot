@@ -62,7 +62,7 @@
           <span class="li-only">· <bdi dir="ltr">{{ (row.created_at|string)[:16] }}</bdi>{% if row.created_by %} · {{ row.created_by }}{% endif %}</span>
         </td>
         <td class="broadcast-snippet li-title"><span dir="auto">{{ row.text[:120] }}{% if row.text|length > 120 %}…{% endif %}</span></td>
-        <td class="mono cell-tight li-value"><bdi dir="ltr">{{ row.ok_count }}/{{ row.total }}</bdi><span class="li-hide">{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}{% if row.review_count %} · نامشخص {{ row.review_count }}{% endif %}</span>{% if row.status in ['queued', 'running', 'cancelled'] %}<small class="muted" style="display:block">{{ status_labels.get(row.status, row.status) }}</small>{% endif %}</td>
+        <td class="mono cell-tight li-value"><bdi dir="ltr">{{ row.ok_count }}/{{ row.total }}</bdi><span class="li-hide">{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}{% if row.review_count %} · نامشخص {{ row.review_count }}{% endif %}</span>{% if row.status in ['queued', 'running', 'cancelled', 'failed'] %}<small class="muted" style="display:block">{{ status_labels.get(row.status, row.status) }}</small>{% endif %}</td>
         <td class="muted col-hide-sm">{{ row.created_by or '—' }}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -85,7 +85,7 @@
           {% endif %}
           {% endcall %}
         </td>
-        <td class="li-only-cell li-badge">{% if row.status in ['queued', 'running'] %}<span class="badge pending">{{ status_labels.get(row.status, row.status) }}</span>{% elif row.fail_count %}<span class="badge rejected">{{ row.fail_count }} ناموفق</span>{% else %}<span class="badge ok">موفق</span>{% endif %}</td>
+        <td class="li-only-cell li-badge">{% if row.status in ['queued', 'running'] %}<span class="badge pending">{{ status_labels.get(row.status, row.status) }}</span>{% elif row.status == 'failed' %}<span class="badge rejected">{{ status_labels.get(row.status, row.status) }}</span>{% elif row.fail_count %}<span class="badge rejected">{{ row.fail_count }} ناموفق</span>{% else %}<span class="badge ok">موفق</span>{% endif %}</td>
       </tr>
     {% else %}
       <tr><td colspan="8" class="muted">هنوز پیامی ارسال نشده</td></tr>
