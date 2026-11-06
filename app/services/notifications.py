@@ -1887,7 +1887,10 @@ async def notify_account_edit(
 
             bot = create_bot()
             try:
-                await _send_admins(bot, admin_text)
+                await _send_admins(
+                    bot, admin_text,
+                    markup=customer_markup(user_id=user.id, service_id=None, shop_id=None),
+                )
                 result["admins"] = True
             finally:
                 await bot.session.close()
