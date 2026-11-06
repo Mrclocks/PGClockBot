@@ -431,6 +431,10 @@
           "callback_data": "adm:pg:template",
           "style": "primary",
           "text": "📋 ساخت تمپلیت"
+        },
+        {
+          "callback_data": "adm:pg:inbounds",
+          "text": "📡 اینباندها"
         }
       ],
       [
@@ -475,6 +479,12 @@
           "callback_data": "adm:pg:template",
           "style": "primary",
           "text": "📋 ساخت تمپلیت"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:pg:inbounds",
+          "text": "📡 اینباندها"
         }
       ],
       [

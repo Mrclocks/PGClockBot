@@ -426,3 +426,4 @@ tests/test_stuck_orders_bot.py
 tests/test_staff_views_bot.py
 tests/test_service_shop_review_bot.py
 tests/test_broadcast_history_bot.py
+tests/test_admin_pg_inbounds_bot.py

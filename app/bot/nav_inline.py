@@ -27,6 +27,12 @@ from app.bot.hub_entries import (
 )
 from app.bot.broadcast_entries import BROADCAST_HISTORY_CALLBACK, BROADCAST_HISTORY_LABEL
 from app.bot.keyboards import _ikb, _t
+from app.bot.pg_entries import (
+    PG_ADMINS_CALLBACK,
+    PG_ADMINS_LABEL,
+    PG_INBOUNDS_CALLBACK,
+    PG_INBOUNDS_LABEL,
+)
 from app.bot.list_pages import Page, page_of, pager_row
 from app.services.resellers import has_bot_perm
 from app.bot.reseller_hub_groups import (
@@ -875,6 +881,11 @@ def pg_hub_keyboard(
         )
         if key in cb_map
     ]
+    if features is None or "pg_inbounds" in features:
+        buttons.append(_ikb(PG_INBOUNDS_LABEL, callback_data=PG_INBOUNDS_CALLBACK, ui=ui))
+    # Owner-only page: shown only when the actor's own feature set includes it, never for an unfiltered hub.
+    if features is not None and "pg_admins" in features:
+        buttons.append(_ikb(PG_ADMINS_LABEL, callback_data=PG_ADMINS_CALLBACK, ui=ui))
     return _pack_hub_keyboard(buttons, ui, back_callback=back_callback)
 
 
