@@ -6,6 +6,7 @@ audience size and queues the campaign only after a confirmation. Blocking stays 
 from __future__ import annotations
 
 import html
+import secrets
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -34,8 +35,7 @@ PERMISSION = "trial_users"
 MANAGE_PERMISSION = "trial_users_manage"
 MESSAGE_CANCEL_CODE = "tru_msg"
 TEXT_PREVIEW = 300
-# Users whose confirmation is being sent; the bot runs in one process, so this stops a double tap racing the state.
-_SENDING: set[int] = set()
+REQUEST_KEY_PREFIX = "tru:"
 PAGE_SIZE = 8
 PLATFORM_BACK = "nv:adm:marketing"
 SHOP_BACK = "nv:res:home"
@@ -181,7 +181,7 @@ async def receive_message_text(
         await state.clear()
         await message.answer("گیرنده‌ای پیدا نشد.")
         return
-    await state.update_data(tru_ids=ids, tru_text=text)
+    await state.update_data(tru_ids=ids, tru_text=text, tru_token=secrets.token_hex(16))
     await state.set_state(None)
     preview = html.escape(text[:TEXT_PREVIEW])
     markup = InlineKeyboardMarkup(inline_keyboard=[
@@ -200,15 +200,7 @@ async def confirm_message(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser,
     is_reseller_bot: bool = False, reseller_owner_id: int | None = None,
 ) -> None:
-    sender = int(db_user.id)
-    if sender in _SENDING:
-        await callback.answer()
-        return
-    _SENDING.add(sender)
-    try:
-        await _send_confirmed(callback, state, session, db_user, is_reseller_bot, reseller_owner_id)
-    finally:
-        _SENDING.discard(sender)
+    await _send_confirmed(callback, state, session, db_user, is_reseller_bot, reseller_owner_id)
 
 
 async def _send_confirmed(
@@ -217,16 +209,19 @@ async def _send_confirmed(
 ) -> None:
     scope = await _manage_scope(session, db_user, is_reseller_bot, reseller_owner_id)
     data = await state.get_data()
-    ids, text = data.get("tru_ids"), data.get("tru_text")
-    if scope is None or not ids or not text or int(data.get("tru_shop") or 0) != int(scope[1] or 0):
-        await state.update_data(tru_ids=None, tru_text=None)
+    ids, text, token = data.get("tru_ids"), data.get("tru_text"), data.get("tru_token")
+    if scope is None or not ids or not text or not token or int(data.get("tru_shop") or 0) != int(scope[1] or 0):
+        await state.update_data(tru_ids=None, tru_text=None, tru_token=None)
         await callback.answer(feedback.INVALID, show_alert=True)
         return
-    # Cleared before the send, so a later tap on the same confirmation finds nothing to send.
-    await state.update_data(tru_ids=None, tru_text=None)
+    await state.update_data(tru_ids=None, tru_text=None, tru_token=None)
     staff, shop_id = scope
     try:
-        campaign = await message_trial_users(session, staff=staff, shop_id=shop_id, user_ids=list(ids), text=str(text))
+        # The token is unique to this confirmation: a repeated or raced tap reuses the one campaign.
+        campaign = await message_trial_users(
+            session, staff=staff, shop_id=shop_id, user_ids=list(ids), text=str(text),
+            request_key=f"{REQUEST_KEY_PREFIX}{token}",
+        )
     except ValueError as exc:
         await session.rollback()
         await callback.answer(str(exc)[:190], show_alert=True)

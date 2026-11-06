@@ -88,6 +88,24 @@ class TrialMessageTests(unittest.IsolatedAsyncioTestCase):
         again.answer.assert_awaited_once_with(feedback.INVALID, show_alert=True)
         self.assertEqual(len((await self.session.scalars(select(TargetedCampaign.id))).all()), 1)
 
+    async def test_a_raced_confirmation_with_the_same_token_reuses_the_one_campaign(self) -> None:
+        await self.type_text("سلام", SHOP_STAFF)
+        stale = dict(self.stored)
+        await self.confirm(SHOP_STAFF)
+        self.stored.update(stale)  # the second tap read the state before the first one cleared it
+        callback = await self.confirm(SHOP_STAFF)
+        self.assertIn("کمپین", callback.answer.await_args.args[0])
+        self.assertEqual(len((await self.session.scalars(select(TargetedCampaign.id))).all()), 1)
+
+    async def test_a_new_confirmation_gets_its_own_token_and_campaign(self) -> None:
+        await self.type_text("اول", SHOP_STAFF)
+        first = self.stored["tru_token"]
+        await self.confirm(SHOP_STAFF)
+        await self.type_text("دوم", SHOP_STAFF)
+        self.assertNotEqual(self.stored["tru_token"], first)
+        await self.confirm(SHOP_STAFF)
+        self.assertEqual(len((await self.session.scalars(select(TargetedCampaign.id))).all()), 2)
+
     async def test_without_the_manage_permission_nothing_is_queued(self) -> None:
         message, finish = await self.type_text("سلام", None)
         message.answer.assert_awaited_once_with(feedback.NO_ACCESS_REPLY)

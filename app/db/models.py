@@ -1850,6 +1850,13 @@ class ServiceCancellation(Base):
 
 class TargetedCampaign(Base):
     __tablename__ = "targeted_campaigns"
+    __table_args__ = (
+        Index(
+            "uq_targeted_campaigns_request_key", "request_key", unique=True,
+            sqlite_where=text("request_key IS NOT NULL"),
+            postgresql_where=text("request_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     reseller_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True, index=True)
@@ -1858,6 +1865,8 @@ class TargetedCampaign(Base):
     text: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
     created_by: Mapped[str] = mapped_column(String(128))
+    # Set by callers that can be repeated (a confirmation tap); one campaign per key.
+    request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
