@@ -291,14 +291,13 @@ async def credit_wallet(
             await session.refresh(user)
         else:
             await session.flush()
-    except Exception as exc:
+    except IntegrityError:
         # Duplicate idempotency_key: roll back our update and reload the winner.
         from sqlalchemy import select
-        from sqlalchemy.exc import IntegrityError
 
         from app.services.db_safe import rollback_quiet
 
-        if not (idempotency_key and isinstance(exc, IntegrityError)):
+        if not idempotency_key:
             raise
         await rollback_quiet(session)
         existing = (
@@ -391,13 +390,12 @@ async def debit_wallet(
             await session.refresh(user)
         else:
             await session.flush()
-    except Exception as exc:
+    except IntegrityError:
         from sqlalchemy import select
-        from sqlalchemy.exc import IntegrityError
 
         from app.services.db_safe import rollback_quiet
 
-        if not (idempotency_key and isinstance(exc, IntegrityError)):
+        if not idempotency_key:
             raise
         await rollback_quiet(session)
         existing = (
