@@ -17,6 +17,7 @@ from app.db.models import (
     ShopWallet,
     WalletTransaction,
 )
+from app.services.db_safe import rollback_quiet
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +265,7 @@ async def credit_wallet(
     # conflicting idempotency_key row mid-flight.
     if sid is None:
         try:
+            # Local import: billing_suspend imports wallet helpers (cycle).
             from app.services.billing_suspend import maybe_restore_after_wallet_credit
 
             await maybe_restore_after_wallet_credit(
@@ -293,10 +295,6 @@ async def credit_wallet(
             await session.flush()
     except IntegrityError:
         # Duplicate idempotency_key: roll back our update and reload the winner.
-        from sqlalchemy import select
-
-        from app.services.db_safe import rollback_quiet
-
         if not idempotency_key:
             raise
         await rollback_quiet(session)
@@ -391,10 +389,6 @@ async def debit_wallet(
         else:
             await session.flush()
     except IntegrityError:
-        from sqlalchemy import select
-
-        from app.services.db_safe import rollback_quiet
-
         if not idempotency_key:
             raise
         await rollback_quiet(session)

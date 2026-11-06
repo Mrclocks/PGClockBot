@@ -17,11 +17,13 @@ from typing import Any
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import BotUser, BotUserShop, Plan, Role, UserService, WalletTransaction
 from app.services.authz import authz_from_staff, can_shop
+from app.services.db_safe import rollback_quiet
 from app.services.formatting import (
     copyable,
     expire_remaining_days,
@@ -47,7 +49,7 @@ from app.services.pasarguard import (
 )
 from app.services.pg_access import staff_user_actions
 from app.services.redact import user_safe_error
-from app.services.wallet import credit_wallet, debit_wallet, list_transactions
+from app.services.wallet import credit_wallet, debit_wallet, get_wallet_balance, list_transactions
 from app.services.service_scope import assert_service_in_shop, service_shop_id, shop_services_clause
 from app.services.shop_membership import ensure_member
 from app.services.provision_gate import (
@@ -719,11 +721,6 @@ async def admin_adjust_user_wallet(
     When ``request_key`` is set, a repeated submit with the same key returns the first
     result (``replayed=True``) without moving money again.
     """
-    from sqlalchemy.exc import IntegrityError
-
-    from app.services.db_safe import rollback_quiet
-    from app.services.wallet import get_wallet_balance
-
     direction = parse_admin_wallet_mode(mode)
     amt = _require_admin_wallet_amount(amount)
     if amt <= 0:
