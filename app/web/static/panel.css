@@ -12784,11 +12784,32 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   margin: 0;
 }
 
+/* Nested reseller subscription extras — same vertical rhythm as .form-stack
+   so the packs “افزودن” row is not flush against نقش پاسارگارد below. */
+#reseller-subscription-extras,
+#edit-subscription-extras {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+#reseller-subscription-extras > .ui-switch-section,
+#edit-subscription-extras > .ui-switch-section {
+  margin: 0;
+}
+#reseller-subscription-extras > .ui-switch-list,
+#edit-subscription-extras > .ui-switch-list {
+  margin: 0;
+}
+
 /* Reseller / user plan pack editors — one-line stairs, pay-dest add row. */
 .extra-packs-editor {
   display: grid;
   gap: var(--space-3);
   margin-top: var(--space-2);
+  /* Match margin-top so the last “افزودن” clears the next form title
+     (role / button color) for both user and reseller plan forms. */
+  margin-bottom: var(--space-2);
   grid-column: 1 / -1;
   width: 100%;
 }
