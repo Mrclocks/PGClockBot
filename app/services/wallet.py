@@ -40,6 +40,35 @@ class ActivityLine:
     sort_id: int
 
 
+async def _user_after_idempotent_conflict(
+    session: AsyncSession,
+    user: BotUser,
+    *,
+    uid: int,
+    sid: int | None,
+    idempotency_key: str,
+) -> BotUser | None:
+    """Roll back a failed keyed insert and reload the winning ledger state.
+
+    Returns the (possibly refreshed) user when a winning row exists; ``None``
+    when this was not an idempotent replay and the caller should re-raise.
+    """
+    await rollback_quiet(session)
+    existing = (
+        await session.execute(
+            select(WalletTransaction).where(
+                WalletTransaction.idempotency_key == idempotency_key
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        return None
+    fresh = await session.get(BotUser, uid)
+    if fresh is not None and sid is None:
+        user.wallet_balance = int(fresh.wallet_balance or 0)
+    return user
+
+
 def normalize_shop_id(shop_id: int | None) -> int | None:
     """Canonical shop scope: None = platform purse; positive int = shop purse."""
     if shop_id is None:
@@ -294,23 +323,14 @@ async def credit_wallet(
         else:
             await session.flush()
     except IntegrityError:
-        # Duplicate idempotency_key: roll back our update and reload the winner.
         if not idempotency_key:
             raise
-        await rollback_quiet(session)
-        existing = (
-            await session.execute(
-                select(WalletTransaction).where(
-                    WalletTransaction.idempotency_key == idempotency_key
-                )
-            )
-        ).scalar_one_or_none()
-        if existing is None:
+        restored = await _user_after_idempotent_conflict(
+            session, user, uid=uid, sid=sid, idempotency_key=idempotency_key
+        )
+        if restored is None:
             raise
-        fresh = await session.get(BotUser, uid)
-        if fresh is not None and sid is None:
-            user.wallet_balance = int(fresh.wallet_balance or 0)
-        return user
+        return restored
     return user
 
 
@@ -391,20 +411,12 @@ async def debit_wallet(
     except IntegrityError:
         if not idempotency_key:
             raise
-        await rollback_quiet(session)
-        existing = (
-            await session.execute(
-                select(WalletTransaction).where(
-                    WalletTransaction.idempotency_key == idempotency_key
-                )
-            )
-        ).scalar_one_or_none()
-        if existing is None:
+        restored = await _user_after_idempotent_conflict(
+            session, user, uid=uid, sid=sid, idempotency_key=idempotency_key
+        )
+        if restored is None:
             raise
-        fresh = await session.get(BotUser, uid)
-        if fresh is not None and sid is None:
-            user.wallet_balance = int(fresh.wallet_balance or 0)
-        return user
+        return restored
     return user
 
 
