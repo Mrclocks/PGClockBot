@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.bot.handlers import staff_audit_view as audit
 from app.bot.handlers import trial_users_view as trial
-from app.db.models import Base, BotUser, Order, Plan, ShopStaffAction
+from app.db.models import Base, BotUser, CampaignRecipient, MarketingPreference, Order, Plan, ShopStaffAction, TargetedCampaign
+from sqlalchemy import select
 from app.services import bot_feedback_texts as feedback
 from tests.test_update_owner_only import OWNER_SESSION
 
@@ -19,6 +20,93 @@ CTX = {"is_reseller_bot": False, "reseller_owner_id": None}
 
 def callbacks(markup) -> list[str]:
     return [b.callback_data for row in markup.inline_keyboard for b in row]
+
+
+class TrialMessageTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
+        self.session.add_all([
+            BotUser(id=5, telegram_id=105, referral_code="s5", role="reseller"),
+            BotUser(id=1, telegram_id=101, referral_code="u1", role="user"),
+            BotUser(id=6, telegram_id=106, referral_code="u6", role="user", reseller_id=5),
+            BotUser(id=7, telegram_id=107, referral_code="u7", role="user", reseller_id=5, is_blocked=True),
+            BotUser(id=8, telegram_id=108, referral_code="u8", role="user", reseller_id=5),
+        ])
+        self.session.add(Plan(id=1, name="Trial", price=0, is_trial=True, is_active=True))
+        await self.session.flush()
+        self.session.add_all([
+            Order(id=10, user_id=1, plan_id=1, amount=0, status="delivered"),
+            Order(id=11, user_id=6, plan_id=1, reseller_id=5, amount=0, status="delivered"),
+            Order(id=12, user_id=7, plan_id=1, reseller_id=5, amount=0, status="delivered"),
+            Order(id=13, user_id=8, plan_id=1, reseller_id=5, amount=0, status="delivered"),
+            MarketingPreference(user_id=8, shop_key=5, enabled=False),
+        ])
+        await self.session.commit()
+        self.state = AsyncMock()
+        self.stored: dict = {"tru_shop": 5, "tru_filter": "all"}
+        self.state.get_data = AsyncMock(side_effect=lambda: dict(self.stored))
+        self.state.update_data = AsyncMock(side_effect=lambda **kw: self.stored.update(kw))
+
+    async def asyncTearDown(self) -> None:
+        await self.session.close()
+        await self.engine.dispose()
+
+    async def type_text(self, text: str, staff: dict | None):
+        message = AsyncMock()
+        message.text = text
+        with patch.object(trial, "resolve_feature_staff", AsyncMock(return_value=staff)), \
+                patch.object(trial, "try_legacy_cancel", AsyncMock(return_value=False)), \
+                patch.object(trial, "finish_text_step", AsyncMock()) as finish:
+            await trial.receive_message_text(message, self.state, session=self.session, db_user=SimpleNamespace(id=9), **CTX)
+        return message, finish
+
+    async def confirm(self, staff: dict | None):
+        callback = AsyncMock()
+        callback.data = "tru:ok"
+        callback.message = AsyncMock()
+        with patch.object(trial, "resolve_feature_staff", AsyncMock(return_value=staff)), \
+                patch.object(trial, "safe_edit_text", AsyncMock()):
+            await trial.confirm_message(callback, self.state, session=self.session, db_user=SimpleNamespace(id=9), **CTX)
+        return callback
+
+    async def test_audience_is_the_shops_own_trial_takers(self) -> None:
+        _, finish = await self.type_text("سلام", SHOP_STAFF)
+        self.assertEqual(sorted(self.stored["tru_ids"]), [6, 7, 8])
+        self.assertIn("tru:ok", callbacks(finish.await_args.kwargs["inline"]))
+
+    async def test_confirmation_queues_one_campaign_for_eligible_customers_only(self) -> None:
+        await self.type_text("سلام", SHOP_STAFF)
+        callback = await self.confirm(SHOP_STAFF)
+        self.assertIn("کمپین", callback.answer.await_args.args[0])
+        recipients = (await self.session.scalars(select(CampaignRecipient.user_id))).all()
+        self.assertEqual(sorted(recipients), [6])
+        self.assertEqual(len((await self.session.scalars(select(TargetedCampaign.id))).all()), 1)
+        again = await self.confirm(SHOP_STAFF)
+        again.answer.assert_awaited_once_with(feedback.INVALID, show_alert=True)
+        self.assertEqual(len((await self.session.scalars(select(TargetedCampaign.id))).all()), 1)
+
+    async def test_without_the_manage_permission_nothing_is_queued(self) -> None:
+        message, finish = await self.type_text("سلام", None)
+        message.answer.assert_awaited_once_with(feedback.NO_ACCESS_REPLY)
+        finish.assert_not_awaited()
+        self.stored.update(tru_ids=[6], tru_text="x")
+        callback = await self.confirm(None)
+        callback.answer.assert_awaited_once_with(feedback.INVALID, show_alert=True)
+        self.assertEqual((await self.session.scalars(select(TargetedCampaign.id))).all(), [])
+
+    async def test_another_shops_scope_in_state_is_refused(self) -> None:
+        self.stored["tru_shop"] = 99
+        message, _ = await self.type_text("سلام", SHOP_STAFF)
+        message.answer.assert_awaited_once_with(feedback.NO_ACCESS_REPLY)
+
+    async def test_empty_or_script_text_is_rejected_before_any_audience_lookup(self) -> None:
+        for text in ("   ", "<script>x</script>"):
+            message, finish = await self.type_text(text, SHOP_STAFF)
+            message.answer.assert_awaited_once()
+            finish.assert_not_awaited()
 
 
 class StaffViewsTests(unittest.IsolatedAsyncioTestCase):
