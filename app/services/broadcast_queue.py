@@ -1,9 +1,9 @@
-"""Durable owner broadcasts: queued once, sent in small throttled steps by a background worker.
+"""Durable broadcasts: queued once, sent in small throttled steps by a background worker.
 
 A broadcast row keeps its progress (a keyset cursor and counts), a lease and the user a message is
 being sent to. A worker that dies mid-send leaves that user marked in flight; the next worker counts
-the outcome as unknown and moves past the user, so nobody is messaged twice. Only platform customers
-are reached: a shop's customers belong to the shop's own bot.
+the outcome as unknown and moves past the user, so nobody is messaged twice. Platform rows
+(``shop_id IS NULL``) use the platform bot; shop rows use that shop's bot and that shop's customers.
 """
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, BroadcastLog, Role
 from app.services.broadcast import AUDIENCE_LABELS
+from app.services.shop_broadcast import shop_audience_clause, shop_scope_filter
 from app.services.shop_membership import shop_member_clause
 
 logger = logging.getLogger("pgclock.broadcast")
@@ -43,8 +44,10 @@ STATUS_LABELS = {
 OUTCOME_OK, OUTCOME_FAILED, OUTCOME_UNKNOWN = "ok", "failed", "unknown"
 
 
-def _audience_clause(audience: str):
-    """Recipients of the platform bot for one audience."""
+def _audience_clause(audience: str, *, shop_id: int | None = None):
+    """Recipients for one broadcast: platform bot audience, or one shop's customers."""
+    if shop_id is not None:
+        return shop_audience_clause(int(shop_id))
     clause = [BotUser.is_blocked.is_(False), shop_member_clause(None)]
     if audience == "users":
         clause.append(BotUser.role.in_([Role.USER.value, Role.RESELLER.value]))
@@ -55,29 +58,78 @@ def _audience_clause(audience: str):
     return clause
 
 
-async def queue_broadcast(session: AsyncSession, *, text: str, audience: str, created_by: str | None) -> BroadcastLog:
+async def queue_broadcast(
+    session: AsyncSession,
+    *,
+    text: str,
+    audience: str,
+    created_by: str | None,
+    shop_id: int | None = None,
+    request_key: str | None = None,
+    total_override: int | None = None,
+    skip_text_clean: bool = False,
+) -> BroadcastLog:
     """Record the broadcast and its audience size; the worker sends it."""
-    body = (text or "").strip()
-    if not body:
-        raise ValueError("متن پیام خالی است")
-    if len(body) > MAX_TEXT_LENGTH:
-        raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
-    if audience not in AUDIENCE_LABELS:
+    if skip_text_clean:
+        body = text
+    else:
+        body = (text or "").strip()
+        if not body:
+            raise ValueError("متن پیام خالی است")
+        if len(body) > MAX_TEXT_LENGTH:
+            raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
+    if shop_id is not None:
+        if audience not in ("all",):
+            raise ValueError("گروه مخاطبان نامعتبر است")
+    elif audience not in AUDIENCE_LABELS:
         raise ValueError("گروه مخاطبان نامعتبر است")
-    total = int(await session.scalar(select(func.count()).select_from(BotUser).where(*_audience_clause(audience))) or 0)
+    if request_key:
+        existing = await session.scalar(
+            select(BroadcastLog).where(BroadcastLog.request_key == request_key)
+        )
+        if existing is not None:
+            return existing
+    if total_override is not None:
+        total = int(total_override)
+    else:
+        total = int(
+            await session.scalar(
+                select(func.count())
+                .select_from(BotUser)
+                .where(*_audience_clause(audience, shop_id=shop_id))
+            )
+            or 0
+        )
     if not total:
         raise ValueError("مخاطبی برای این گروه وجود ندارد")
-    log = BroadcastLog(audience=audience, text=body, total=total, created_by=(created_by or "")[:128] or None, status=STATUS_QUEUED)
+    log = BroadcastLog(
+        audience=audience,
+        text=body,
+        total=total,
+        created_by=(created_by or "")[:128] or None,
+        status=STATUS_QUEUED,
+        shop_id=int(shop_id) if shop_id is not None else None,
+        request_key=(request_key or None),
+    )
     session.add(log)
     await session.commit()
     return log
 
 
-async def cancel_broadcast(session: AsyncSession, log_id: int) -> bool:
-    """Stop a queued or running broadcast; messages already sent stay sent."""
+async def cancel_broadcast(
+    session: AsyncSession,
+    log_id: int,
+    *,
+    shop_id: int | None = None,
+) -> bool:
+    """Stop a queued or running broadcast in one tenant; messages already sent stay sent."""
     changed = await session.execute(
         update(BroadcastLog)
-        .where(BroadcastLog.id == int(log_id), BroadcastLog.status.in_(ACTIVE_STATUSES))
+        .where(
+            BroadcastLog.id == int(log_id),
+            shop_scope_filter(shop_id=shop_id),
+            BroadcastLog.status.in_(ACTIVE_STATUSES),
+        )
         .values(status=STATUS_CANCELLED, completed_at=datetime.now(timezone.utc))
         .execution_options(synchronize_session=False)
     )
@@ -86,14 +138,26 @@ async def cancel_broadcast(session: AsyncSession, log_id: int) -> bool:
 
 
 async def active_broadcast_ids(session: AsyncSession, *, limit: int = 5) -> list[int]:
+    rows = await active_broadcast_jobs(session, limit=limit)
+    return [log_id for log_id, _shop_id in rows]
+
+
+async def active_broadcast_jobs(
+    session: AsyncSession, *, limit: int = 5
+) -> list[tuple[int, int | None]]:
     now = datetime.now(timezone.utc)
-    rows = await session.scalars(
-        select(BroadcastLog.id)
-        .where(BroadcastLog.status.in_(ACTIVE_STATUSES), or_(BroadcastLog.locked_until.is_(None), BroadcastLog.locked_until < now))
-        .order_by(BroadcastLog.id)
-        .limit(max(1, min(int(limit), 20)))
-    )
-    return [int(log_id) for log_id in rows]
+    rows = (
+        await session.execute(
+            select(BroadcastLog.id, BroadcastLog.shop_id)
+            .where(
+                BroadcastLog.status.in_(ACTIVE_STATUSES),
+                or_(BroadcastLog.locked_until.is_(None), BroadcastLog.locked_until < now),
+            )
+            .order_by(BroadcastLog.id)
+            .limit(max(1, min(int(limit), 20)))
+        )
+    ).all()
+    return [(int(log_id), int(shop_id) if shop_id is not None else None) for log_id, shop_id in rows]
 
 
 async def _take_lease(session: AsyncSession, log_id: int) -> str | None:
@@ -201,14 +265,35 @@ async def process_broadcast_batch(
     keep_going = True
     try:
         await _settle_crashed_send(session, log_id, token)
-        row = (await session.execute(select(BroadcastLog.audience, BroadcastLog.text, BroadcastLog.cursor_id).where(BroadcastLog.id == log_id))).one()
-        audience, text, cursor = row
+        row = (
+            await session.execute(
+                select(
+                    BroadcastLog.audience,
+                    BroadcastLog.text,
+                    BroadcastLog.cursor_id,
+                    BroadcastLog.shop_id,
+                    BroadcastLog.total,
+                    BroadcastLog.ok_count,
+                    BroadcastLog.fail_count,
+                    BroadcastLog.review_count,
+                ).where(BroadcastLog.id == log_id)
+            )
+        ).one()
+        audience, text, cursor, shop_id, total, ok_count, fail_count, review_count = row
+        progress = int(ok_count) + int(fail_count) + int(review_count)
+        if progress >= int(total):
+            await _finish(session, log_id, token)
+            return False
+        take = max(1, min(int(batch_size), 500, int(total) - progress))
         recipients = (
             await session.execute(
                 select(BotUser.id, BotUser.telegram_id)
-                .where(*_audience_clause(audience), BotUser.id > int(cursor))
+                .where(
+                    *_audience_clause(audience, shop_id=int(shop_id) if shop_id is not None else None),
+                    BotUser.id > int(cursor),
+                )
                 .order_by(BotUser.id)
-                .limit(max(1, min(int(batch_size), 500)))
+                .limit(take)
             )
         ).all()
         for user_id, telegram_id in recipients:
@@ -226,7 +311,7 @@ async def process_broadcast_batch(
             await _record(session, log_id, token, int(user_id), outcome)
             if delay:
                 await asyncio.sleep(delay)
-        if len(recipients) < batch_size:
+        if len(recipients) < take:
             await _finish(session, log_id, token)
             keep_going = False
         return keep_going
@@ -237,15 +322,27 @@ async def process_broadcast_batch(
 async def run_broadcast_worker(session_factory, bot: Bot, *, budget_seconds: float = TICK_BUDGET_SECONDS) -> None:
     """One scheduler tick: advance each active broadcast until the time budget is used."""
     async with session_factory() as session:
-        log_ids = await active_broadcast_ids(session)
+        jobs = await active_broadcast_jobs(session)
     deadline = time.monotonic() + budget_seconds
-    for log_id in log_ids:
-        while time.monotonic() < deadline:
-            async with session_factory() as session:
-                try:
-                    more = await process_broadcast_batch(session, log_id, bot)
-                except Exception:
-                    logger.exception("broadcast batch failed id=%s", log_id)
+    for log_id, shop_id in jobs:
+        send_bot, should_close = bot, False
+        try:
+            if shop_id is not None:
+                from app.services.reseller_bots import open_notify_bot_for_reseller
+
+                async with session_factory() as session:
+                    send_bot, should_close = await open_notify_bot_for_reseller(session, shop_id)
+                if send_bot is None:
+                    continue
+            while time.monotonic() < deadline:
+                async with session_factory() as session:
+                    try:
+                        more = await process_broadcast_batch(session, log_id, send_bot)
+                    except Exception:
+                        logger.exception("broadcast batch failed id=%s", log_id)
+                        break
+                if not more:
                     break
-            if not more:
-                break
+        finally:
+            if should_close and send_bot is not None:
+                await send_bot.session.close()
