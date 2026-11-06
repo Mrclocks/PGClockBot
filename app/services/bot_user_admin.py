@@ -745,6 +745,11 @@ async def admin_adjust_user_wallet(
             )
         ).scalar_one_or_none()
         if existing is not None:
+            if int(existing.user_id) != int(user.id) or existing.reseller_id != shop_id:
+                raise ValueError("کلید یکتای عملیات نامعتبر است")
+            expected_sign = 1 if direction == "credit" else -1
+            if int(existing.amount) * expected_sign <= 0:
+                raise ValueError("کلید یکتای عملیات نامعتبر است")
             balance = await get_wallet_balance(session, int(user.id), shop_id=shop_id)
             return AdminWalletChange(
                 user=user,
@@ -787,6 +792,8 @@ async def admin_adjust_user_wallet(
         ).scalar_one_or_none()
         if existing is None:
             raise
+        if int(existing.user_id) != int(user.id) or existing.reseller_id != shop_id:
+            raise ValueError("کلید یکتای عملیات نامعتبر است") from None
     balance_after = await get_wallet_balance(session, int(user.id), shop_id=shop_id)
     refreshed = await session.get(BotUser, int(user.id))
     # Concurrent loser: credit_wallet rolled back our update so the purse did not move

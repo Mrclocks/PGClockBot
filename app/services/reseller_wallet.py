@@ -11,6 +11,7 @@ instead of on the next billing tick.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import html
 import logging
 import secrets
@@ -33,6 +34,32 @@ logger = logging.getLogger(__name__)
 
 # Follow-up tasks are kept referenced until they finish so they are not garbage collected.
 _followups: set[asyncio.Task[None]] = set()
+
+# ResellerBillingTransaction.idempotency_key is String(191).
+_RESELLER_WALLET_KEY_MAX = 191
+
+
+def build_reseller_wallet_idempotency_key(
+    *,
+    client_key: str | None,
+    user_id: int,
+    mode: str,
+) -> str:
+    """Bind a client nonce to reseller + direction before it hits the billing ledger.
+
+    Callers may pass a form nonce or a longer legacy string; neither is trusted as a
+    global ledger key on its own.
+    """
+    direction = parse_admin_wallet_mode(mode)
+    raw = (client_key or "").strip() or secrets.token_hex(16)
+    prefix = f"rw:{int(user_id)}:{direction}:"
+    room = _RESELLER_WALLET_KEY_MAX - len(prefix)
+    if room < 8:
+        raise ValueError("کلید یکتای عملیات نامعتبر است")
+    if len(raw) > room:
+        # Digest instead of truncating so two long distinct client keys cannot collide.
+        raw = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:room]
+    return f"{prefix}{raw}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,15 +106,19 @@ async def adjust_reseller_wallet(
 ) -> WalletChange:
     """Apply and commit one manual change; raise ValueError with a safe message when refused.
 
-    ``idempotency_key`` makes a repeated form or button press a no-op on the PAYG ledger. Without
-    one (a form opened before the key existed) a fresh key is used, as such forms always did.
+    ``idempotency_key`` is treated as a client nonce: the server always scopes it with
+    ``user_id`` and direction before the PAYG billing ledger or platform wallet helpers.
+    Without one (a form opened before the key existed) a fresh nonce is used.
     """
     direction = parse_admin_wallet_mode(mode)
     amt = _checked_amount(amount)
     profile = await load_reseller_profile(session, int(user.id))
     clean_note = (note or "").strip()[:200] or None
+    client_nonce = (idempotency_key or "").strip() or secrets.token_hex(16)
     if profile is not None and is_payg(profile):
-        key = idempotency_key or f"wallet:{direction}:{int(user.id)}:{secrets.token_hex(8)}"
+        key = build_reseller_wallet_idempotency_key(
+            client_key=client_nonce, user_id=int(user.id), mode=direction
+        )
         replayed = await session.scalar(
             select(ResellerBillingTransaction.id).where(ResellerBillingTransaction.idempotency_key == key)
         ) is not None
@@ -98,8 +129,7 @@ async def adjust_reseller_wallet(
         )
         balance = int(tx.balance_after)
     else:
-        # Non-PAYG reseller purse still goes through the platform wallet helpers.
-        wallet_key = idempotency_key or f"wallet:{direction}:{int(user.id)}:{secrets.token_hex(8)}"
+        # Non-PAYG: pass the nonce only; admin_adjust_user_wallet scopes shop/user/direction.
         change = await admin_adjust_user_wallet(
             session,
             user,
@@ -107,7 +137,7 @@ async def adjust_reseller_wallet(
             mode=direction,
             actor=actor,
             note=clean_note,
-            request_key=wallet_key,
+            request_key=client_nonce,
         )
         replayed = change.replayed
         balance = int(change.balance_after)

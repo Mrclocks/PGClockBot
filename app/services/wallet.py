@@ -63,6 +63,8 @@ async def _user_after_idempotent_conflict(
     ).scalar_one_or_none()
     if existing is None:
         return None
+    if int(existing.user_id) != uid or existing.reseller_id != sid:
+        return None
     fresh = await session.get(BotUser, uid)
     if fresh is not None and sid is None:
         user.wallet_balance = int(fresh.wallet_balance or 0)

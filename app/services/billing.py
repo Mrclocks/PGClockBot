@@ -553,6 +553,22 @@ async def _find_by_idempotency(
     ).scalar_one_or_none()
 
 
+async def _idempotent_tx_for_reseller(
+    session: AsyncSession, key: str, reseller_user_id: int
+) -> ResellerBillingTransaction | None:
+    """Return a prior row for this key only when it belongs to ``reseller_user_id``.
+
+    Keys are globally unique; a hit for another reseller must not silently replay
+    their ledger row (wrong balance / skipped charge) for the caller.
+    """
+    existing = await _find_by_idempotency(session, key)
+    if existing is None:
+        return None
+    if int(existing.reseller_user_id) != int(reseller_user_id):
+        raise ValueError("کلید یکتای عملیات نامعتبر است")
+    return existing
+
+
 async def credit_topup(
     session: AsyncSession,
     reseller_user_id: int,
@@ -581,7 +597,7 @@ async def credit_topup(
     if not is_payg(profile):
         raise ValueError("شارژ Billing فقط برای حالت PAYG است")
 
-    existing = await _find_by_idempotency(session, key)
+    existing = await _idempotent_tx_for_reseller(session, key, int(reseller_user_id))
     if existing:
         return existing
 
@@ -631,7 +647,7 @@ async def credit_topup(
             await session.flush()
     except IntegrityError:
         await session.rollback()
-        existing = await _find_by_idempotency(session, key)
+        existing = await _idempotent_tx_for_reseller(session, key, int(reseller_user_id))
         if existing:
             return existing
         raise
@@ -675,7 +691,9 @@ async def debit_adjustment(
     if not is_payg(profile):
         raise ValueError("کسر از کیف پول Billing فقط برای حالت PAYG است")
 
-    existing = await _find_by_idempotency(session, idempotency_key)
+    existing = await _idempotent_tx_for_reseller(
+        session, idempotency_key, int(reseller_user_id)
+    )
     if existing:
         return existing
 
@@ -712,7 +730,9 @@ async def debit_adjustment(
             await session.flush()
     except IntegrityError:
         await session.rollback()
-        existing = await _find_by_idempotency(session, idempotency_key)
+        existing = await _idempotent_tx_for_reseller(
+            session, idempotency_key, int(reseller_user_id)
+        )
         if existing:
             return existing
         raise
@@ -782,12 +802,12 @@ async def debit_usage(
             await session.commit()
         return None
 
-    existing = await _find_by_idempotency(session, idempotency_key)
+    rid = int(profile.user_id)
+    existing = await _idempotent_tx_for_reseller(session, idempotency_key, rid)
     if existing:
         return existing
 
     amount = bytes_cost_proportional(bytes_delta, rate_per_gb)
-    rid = int(profile.user_id)
     expected_wm = (
         int(watermark_before)
         if watermark_before is not None
@@ -832,7 +852,7 @@ async def debit_usage(
                 .execution_options(synchronize_session=False)
             )
         if wm_result.rowcount != 1:
-            existing = await _find_by_idempotency(session, idempotency_key)
+            existing = await _idempotent_tx_for_reseller(session, idempotency_key, rid)
             if existing:
                 return existing
             logger.warning(
@@ -929,7 +949,7 @@ async def debit_usage(
             await session.flush()
     except IntegrityError:
         await session.rollback()
-        existing = await _find_by_idempotency(session, idempotency_key)
+        existing = await _idempotent_tx_for_reseller(session, idempotency_key, rid)
         if existing:
             return existing
         raise
