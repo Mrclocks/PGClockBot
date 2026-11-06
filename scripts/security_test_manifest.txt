@@ -391,6 +391,8 @@ tests/test_shop_bot_customer_tools.py
 tests/test_staff_notify_view_user.py
 # Settlement review notices never offer payrev approve; shop delivery alerts omit platform panel URLs.
 tests/test_staff_notify_action_buttons.py
+# Platform admin points adjust: shop customers denied; shop cards show only that shop's purse.
+tests/test_admin_points_adjust.py
 
 # Reseller capacity packs: wallet, tenancy, generation claim and Mini App role gating.
 tests/test_reseller_packs.py

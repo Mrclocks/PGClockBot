@@ -1755,6 +1755,16 @@
       ],
       [
         {
+          "callback_data": "adm:users:pcredit:5",
+          "text": "⭐ امتیاز +"
+        },
+        {
+          "callback_data": "adm:users:pdebit:5",
+          "text": "⭐ امتیاز −"
+        }
+      ],
+      [
+        {
           "callback_data": "adm:users:renew:5",
           "text": "🔄 تمدید سریع"
         }
@@ -1804,6 +1814,16 @@
         {
           "callback_data": "adm:users:wdebit:5",
           "text": "➖ کاهش کیف"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:pcredit:5",
+          "text": "⭐ امتیاز +"
+        },
+        {
+          "callback_data": "adm:users:pdebit:5",
+          "text": "⭐ امتیاز −"
         }
       ],
       [

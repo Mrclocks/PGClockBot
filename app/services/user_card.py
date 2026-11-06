@@ -18,6 +18,7 @@ from app.services.bot_user_admin import load_user_services
 from app.services.color_tags import ColorTag, color_tag_meta
 from app.services.customer_marks import marks_of
 from app.services.daily_report import format_jalali_parts
+from app.services.loyalty import points_balance
 from app.services.users_ops import ServiceSummary, build_user_ops_row
 from app.services.wallet import get_wallet_balance
 
@@ -32,6 +33,7 @@ PAID_ORDER_STATUSES = (
 class UserCard:
     user: BotUser
     wallet_balance: int
+    points_balance: int
     paid_total: int
     paid_count: int
     joined: str
@@ -77,6 +79,7 @@ async def build_user_card(
     return UserCard(
         user=user,
         wallet_balance=await get_wallet_balance(session, user, shop_id=shop_id),
+        points_balance=await points_balance(session, user, shop_id),
         paid_total=paid_total,
         paid_count=paid_count,
         joined=_joined_text(user.created_at),
