@@ -1405,7 +1405,7 @@ async def resapply_buy(
                     await callback.bot.send_message(
                         aid,
                         notify,
-                        reply_markup=kb.reseller_app_review(app.id),
+                        reply_markup=kb.reseller_app_review(app.id, user_id=db_user.id),
                     )
             except Exception:
                 logger.debug("resapply_buy: ignored failure", exc_info=True)
