@@ -6,6 +6,7 @@ import secrets
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from app.config import DATA_DIR, ROOT_DIR, get_settings, normalize_pg_base_url
 from app.services.web_auth import load_web_admin
@@ -732,6 +733,27 @@ def force_http_login_url(url: str) -> str:
         return urlunparse((p.scheme, p.netloc, path, "", q, ""))
     except Exception:
         return setup_finish_login_url()
+
+
+def trusted_finish_next(next_url: str, *, request_host: str) -> str:
+    """The wizard's ``next`` when it points at this panel, else an empty string.
+
+    The page sends the panel address it displayed, which can differ from the host the operator
+    typed (detected IP vs. domain), so the panel's own addresses are accepted. Anything else
+    would let a crafted request send the operator's browser to another site after setup.
+    """
+    raw = (next_url or "").strip()
+    if not raw:
+        return ""
+    own_hosts = {(request_host or "").strip().lower()}
+    for known in (wizard_panel_url_hint(), setup_finish_login_url()):
+        own_hosts.add((urlparse(known).hostname or "").lower())
+    own_hosts.discard("")
+    try:
+        target = (urlparse(raw).hostname or "").lower()
+    except ValueError:
+        return ""
+    return raw if target in own_hosts else ""
 
 
 def panel_url_hint(public_base: str = "", web_port: str = "9000") -> str:

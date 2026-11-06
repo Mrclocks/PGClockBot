@@ -1945,7 +1945,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         mark_setup_complete()
         ensure_web_secret()
         from app.services.service_control import schedule_panel_restart
-        from app.services.setup_wizard import force_http_login_url
+        from app.services.setup_wizard import force_http_login_url, trusted_finish_next
 
         schedule_panel_restart(delay_sec=2.5, reason="setup wizard finished")
         # Prefer an explicit next from the wizard page (matches the displayed
@@ -1957,6 +1957,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             next_url = str(form.get("next") or "").strip()
         except Exception:
             next_url = ""
+        next_url = trusted_finish_next(next_url, request_host=request.url.hostname or "")
         return RedirectResponse(force_http_login_url(next_url), status_code=303)
 
     @app.get("/", response_class=HTMLResponse)
