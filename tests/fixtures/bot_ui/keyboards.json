@@ -433,6 +433,12 @@
           "text": "📋 ساخت تمپلیت"
         },
         {
+          "callback_data": "adm:pg:hosts",
+          "text": "🌐 هاست‌ها"
+        }
+      ],
+      [
+        {
           "callback_data": "adm:pg:inbounds",
           "text": "📡 اینباندها"
         }
@@ -482,6 +488,10 @@
         }
       ],
       [
+        {
+          "callback_data": "adm:pg:hosts",
+          "text": "🌐 هاست‌ها"
+        },
         {
           "callback_data": "adm:pg:inbounds",
           "text": "📡 اینباندها"
@@ -1768,7 +1778,7 @@
         {
           "callback_data": "adm:plans:noop",
           "style": "primary",
-          "text": "پلنی نیست"
+          "text": "هنوز پلنی ساخته نشده است"
         }
       ],
       [
