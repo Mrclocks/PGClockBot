@@ -3560,19 +3560,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not payment:
             return _redirect_msg("/finance?tab=payments", err="پرداخت یافت نشد")
         if staff.get("role") != "admin":
-            from app.services.shop_scope import ShopScopeError, require_shop_owner_id
+            from app.services.shop_scope import ShopScopeError, require_shop_owner_id, shop_may_review_payment
 
-            # Wallet top-ups mint global balance — tenant reviewers cannot approve them.
-            if payment.is_wallet_topup:
-                return _redirect_msg("/finance?tab=payments", err="شارژ کیف پول فقط توسط مدیر اصلی تأیید می‌شود")
             try:
                 rid = require_shop_owner_id(staff)
             except ShopScopeError as e:
                 return _redirect_msg("/finance?tab=payments", err=e.message)
-            if not payment.order_id:
-                return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
-            order_row = await session.get(Order, payment.order_id)
-            if not order_row or order_row.reseller_id != rid:
+            order_row = await session.get(Order, payment.order_id) if payment.order_id else None
+            if not shop_may_review_payment(payment, order_row, rid):
                 return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
         else:
             # Platform admin must not approve shop-tenant payments or shop wallet top-ups.
@@ -3647,18 +3642,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not payment:
             return _redirect_msg("/finance?tab=payments", err="پرداخت یافت نشد")
         if staff.get("role") != "admin":
-            from app.services.shop_scope import ShopScopeError, require_shop_owner_id
+            from app.services.shop_scope import ShopScopeError, require_shop_owner_id, shop_may_review_payment
 
-            if payment.is_wallet_topup:
-                return _redirect_msg("/finance?tab=payments", err="شارژ کیف پول فقط توسط مدیر اصلی رد می‌شود")
             try:
                 rid = require_shop_owner_id(staff)
             except ShopScopeError as e:
                 return _redirect_msg("/finance?tab=payments", err=e.message)
-            if not payment.order_id:
-                return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
-            order_row = await session.get(Order, payment.order_id)
-            if not order_row or order_row.reseller_id != rid:
+            order_row = await session.get(Order, payment.order_id) if payment.order_id else None
+            if not shop_may_review_payment(payment, order_row, rid):
                 return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
         else:
             from app.services.shop_scope import platform_may_review_payment
