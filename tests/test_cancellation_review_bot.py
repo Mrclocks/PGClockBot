@@ -113,6 +113,44 @@ class ReviewCase(unittest.IsolatedAsyncioTestCase):
         return row.status
 
 
+class CancellationCustomerNoticeTests(ReviewCase):
+    async def run_service(self, name: str, *args, **kwargs):
+        from app.services import service_cancellations as service
+
+        with patch("app.services.cancellation_customer_notice.notify_payer", AsyncMock(return_value=True)) as sent:
+            try:
+                await getattr(service, name)(self.session, *args, **kwargs)
+            except ValueError:
+                await self.session.rollback()
+        return sent
+
+    async def test_approval_tells_the_customer_once_with_the_refund(self):
+        sent = await self.run_service("approve_cancellation", self.shop_request, shop_id=2, amount=5000, actor="tg:1")
+        sent.assert_awaited_once()
+        self.assertEqual(sent.await_args.args[1], 4)
+        self.assertEqual(sent.await_args.kwargs["shop_id"], 2)
+        self.assertIn("shop-svc", sent.await_args.kwargs["body"])
+        self.assertIn("5", sent.await_args.kwargs["body"])
+        again = await self.run_service("approve_cancellation", self.shop_request, shop_id=2, amount=5000, actor="tg:1")
+        again.assert_not_awaited()
+
+    async def test_rejection_tells_the_customer_once_and_escapes_the_note(self):
+        sent = await self.run_service("reject_cancellation", self.shop_request, shop_id=2, actor="tg:1", note="<b>x</b>")
+        sent.assert_awaited_once()
+        body = sent.await_args.kwargs["body"]
+        self.assertIn("&lt;b&gt;x&lt;/b&gt;", body)
+        self.assertNotIn("<b>x</b>", body)
+        again = await self.run_service("reject_cancellation", self.shop_request, shop_id=2, actor="tg:1", note="n")
+        again.assert_not_awaited()
+
+    async def test_a_refused_or_out_of_scope_decision_sends_nothing(self):
+        sent = await self.run_service("reject_cancellation", self.shop_request, shop_id=3, actor="tg:1", note="n")
+        sent.assert_not_awaited()
+        self.panel.lose_response = True
+        sent = await self.run_service("approve_cancellation", self.shop_request, shop_id=2, amount=100, actor="tg:1")
+        sent.assert_not_awaited()
+
+
 class CancellationReviewBotTests(ReviewCase):
     async def test_card_shows_decisions_only_for_the_permissions_held(self):
         _, edit, _ = await self.press(f"cnrv:v:{self.shop_request}")
