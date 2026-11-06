@@ -4882,8 +4882,11 @@ async def adm_broadcast_send(message: Message, state: FSMContext, session: Async
     await _show_outcome(
         message,
         state,
-        f"✅ در صف ارسال قرار گرفت\nمخاطبان: {log.total}\nارسال به‌تدریج انجام می‌شود؛ پیشرفت در پنل وب (پیام گروهی) دیده می‌شود.",
-        back,
+        f"✅ در صف ارسال قرار گرفت\nمخاطبان: {log.total}\nارسال به‌تدریج انجام می‌شود؛ پیشرفت را از «تاریخچهٔ ارسال‌ها» ببینید.",
+        InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📜 وضعیت این ارسال", callback_data=f"bch:v:{log.id}")],
+            *back.inline_keyboard,
+        ]),
     )
 
 @router.callback_query(F.data == "adm:pg:stats")

@@ -420,3 +420,4 @@ tests/test_pg_stop_missing_user_poll.py
 tests/test_pg_cache_capability_probe.py
 tests/test_service_addon_plan_scope.py
 tests/test_svc_addon_kind_picker.py
+tests/test_broadcast_history_bot.py

@@ -56,6 +56,12 @@
       ],
       [
         {
+          "callback_data": "bch:l",
+          "text": "📜 تاریخچهٔ ارسال‌ها"
+        }
+      ],
+      [
+        {
           "callback_data": "nv:adm:marketing",
           "text": "⬅️ بازگشت"
         }
