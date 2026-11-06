@@ -17,6 +17,7 @@ from app.api.loyalty_pages import _shop_scope
 from app.services.funnel_access import funnel_shop_scope
 from app.services.gift_codes import gift_code_scope
 from app.services.authz import authz_from_staff, can_shop
+from app.api.shop_broadcast_pages import shop_broadcast_scope
 from app.services.marketing_nav import (
     BROADCAST,
     CAMPAIGNS,
@@ -25,6 +26,7 @@ from app.services.marketing_nav import (
     DISCOUNTS,
     FUNNEL,
     GIFT_CODES,
+    SHOP_BROADCAST,
     TRIAL_USERS,
     MarketingSection,
     marketing_sections,
@@ -149,9 +151,18 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         self.assertEqual(_keys(_reseller(["gift_codes"], shop_id=None)), [])
         self.assertNotIn(GIFT_CODES, _keys(_reseller(["loyalty", "campaigns"])))
 
-    def test_reseller_never_sees_broadcast(self):
+    def test_reseller_never_sees_owner_broadcast(self):
         every_perm = ["loyalty", "campaigns", "broadcast", "shop_settings", "dashboard"]
         self.assertNotIn(BROADCAST, _keys(_reseller(every_perm)))
+
+    def test_reseller_sees_shop_broadcast_only_with_broadcast_permission(self):
+        self.assertEqual(_keys(_reseller(["broadcast"])), [SHOP_BROADCAST])
+        self.assertNotIn(SHOP_BROADCAST, _keys(_reseller(["campaigns"])))
+        self.assertNotIn(SHOP_BROADCAST, _keys(_reseller(["shop_settings"])))
+        self.assertEqual(_keys(_reseller(["broadcast"], shop_id=None)), [])
+
+    def test_owner_does_not_see_shop_broadcast_tab(self):
+        self.assertNotIn(SHOP_BROADCAST, _keys(OWNER))
 
     def test_reseller_without_feature_permission_sees_nothing(self):
         self.assertEqual(_keys(_reseller(["dashboard", "tickets"])), [])
@@ -171,7 +182,7 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         self.assertEqual(marketing_sections(staff), ())
 
     def test_visibility_matches_the_route_guards(self):
-        for staff in PROFILES:
+        for staff in PROFILES + [_reseller(["broadcast"]), _reseller(["broadcast"], shop_id=None)]:
             with self.subTest(staff=staff):
                 self.assertEqual(CAMPAIGNS in _keys(staff), _campaigns_route_allows(staff))
                 self.assertEqual(DISCOUNTS in _keys(staff), _discounts_route_allows(staff))
@@ -179,6 +190,15 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
                 self.assertEqual(FUNNEL in _keys(staff), _funnel_route_allows(staff))
                 self.assertEqual(CLUB in _keys(staff), _loyalty_route_allows(staff))
                 self.assertEqual(CLUB_TRANSACTIONS in _keys(staff), _loyalty_route_allows(staff))
+                self.assertEqual(SHOP_BROADCAST in _keys(staff), _shop_broadcast_route_allows(staff))
+
+
+def _shop_broadcast_route_allows(staff: dict) -> bool:
+    try:
+        shop_broadcast_scope(staff)
+    except HTTPException:
+        return False
+    return True
 
 
 def _render_tabs(sections, active: str) -> str:

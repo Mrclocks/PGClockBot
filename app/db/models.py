@@ -812,8 +812,20 @@ class DiscountCode(Base):
 
 class BroadcastLog(Base):
     __tablename__ = "broadcast_logs"
+    __table_args__ = (
+        Index("ix_broadcast_logs_shop_id", "shop_id"),
+        Index(
+            "uq_broadcast_logs_request_key",
+            "request_key",
+            unique=True,
+            sqlite_where=text("request_key IS NOT NULL"),
+            postgresql_where=text("request_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # None = platform/owner broadcast; a shop id never shares history or audience with another shop.
+    shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
     audience: Mapped[str] = mapped_column(String(32), default="all")
     text: Mapped[str] = mapped_column(Text)
     total: Mapped[int] = mapped_column(Integer, default=0)
@@ -830,6 +842,8 @@ class BroadcastLog(Base):
     lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Client nonce scoped by the service (``shop-<id>-<nonce>``); unique when set.
+    request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
 class ResellerProfile(Base):

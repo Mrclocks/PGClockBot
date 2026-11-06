@@ -114,6 +114,33 @@ async def reopen_admin_broadcast(
     )
 
 
+async def reopen_shop_broadcast(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    **_kw,
+) -> None:
+    from app.bot.handlers.shop_broadcast import open_shop_broadcast_hub
+    from app.bot.nav_chrome import answer_staff_nav
+
+    await answer_staff_nav(
+        message,
+        session,
+        db_user,
+        text=feedback.CANCELLED,
+        classic=None,
+        state=state,
+        reopen_panel=open_shop_broadcast_hub,
+        clear_state=True,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+
+
 async def reopen_admin_settings(
     message: Message,
     session: AsyncSession,
@@ -410,6 +437,7 @@ def register_staff_cancel_codes() -> None:
     register_cancel_code("adm_tkt", CancelEntry(reopen=reopen_admin_tickets))
     register_cancel_code("adm_home", CancelEntry(reopen=reopen_admin_home))
     register_cancel_code("adm_bc", CancelEntry(reopen=reopen_admin_broadcast))
+    register_cancel_code("shp_bc", CancelEntry(reopen=reopen_shop_broadcast))
     register_cancel_code("adm_set", CancelEntry(reopen=reopen_admin_settings))
     register_cancel_code("adm_bak", CancelEntry(reopen=reopen_admin_backup))
     register_cancel_code("adm_pg_u", CancelEntry(reopen=reopen_pg_users))

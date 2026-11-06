@@ -2343,6 +2343,18 @@ async def _soft_reseller(
             reseller_owner_id=reseller_owner_id,
         )
         return
+    if action == "res_broadcast":
+        from app.bot.handlers.shop_broadcast import open_shop_broadcast_hub
+
+        await open_shop_broadcast_hub(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
     if action == "res_plans":
         await open_reseller_plans_hub(
             message,
@@ -2542,6 +2554,7 @@ async def reply_main_nav(
         "res_payments",
         "res_tickets",
         "res_loyalty",
+        "res_broadcast",
         "res_renew",
         "res_buy_gb",
         "res_buy_users",

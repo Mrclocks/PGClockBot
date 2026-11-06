@@ -337,13 +337,14 @@ async def bulk_broadcast_delete(
     session: AsyncSession,
     log_ids: list[int],
 ) -> tuple[int, int]:
+    """Owner bulk delete: platform rows only (``shop_id IS NULL``)."""
     from app.services.broadcast import delete_broadcast_log
 
     ids = parse_bulk_ids(log_ids)
     ok = fail = 0
     for lid in ids:
         try:
-            if await delete_broadcast_log(session, lid):
+            if await delete_broadcast_log(session, lid, shop_id=None):
                 ok += 1
             else:
                 fail += 1

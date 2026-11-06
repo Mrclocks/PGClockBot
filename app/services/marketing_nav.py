@@ -26,6 +26,7 @@ FUNNEL = "funnel"
 CAMPAIGNS = "campaigns"
 TRIAL_USERS = "trial_users"
 BROADCAST = "broadcast"
+SHOP_BROADCAST = "shop_broadcast"
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +46,7 @@ _FUNNEL_SECTION = MarketingSection(FUNNEL, "رفتار کاربر", "/funnel")
 _CAMPAIGN_SECTION = MarketingSection(CAMPAIGNS, "کمپین هدفمند", "/campaigns")
 _TRIAL_USERS_SECTION = MarketingSection(TRIAL_USERS, "کاربران تست", "/trial-users")
 _BROADCAST_SECTION = MarketingSection(BROADCAST, "پیام گروهی", "/broadcast")
+_SHOP_BROADCAST_SECTION = MarketingSection(SHOP_BROADCAST, "پیام گروهی", "/shop-broadcast")
 
 
 def _has_shop_scope(staff: Mapping[str, Any]) -> bool:
@@ -84,6 +86,16 @@ def _can_open_broadcast(staff: Mapping[str, Any]) -> bool:
     return staff.get("role") == "admin" and is_explicit_owner_staff(dict(staff))
 
 
+def _can_open_shop_broadcast(staff: Mapping[str, Any]) -> bool:
+    """Same rule as ``shop_broadcast_scope``: ``broadcast`` plus a concrete shop id."""
+    if not can_shop(authz_from_staff(staff), "broadcast"):
+        return False
+    try:
+        return resolve_shop_scope_id(dict(staff)) is not None
+    except ShopScopeError:
+        return False
+
+
 def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSection, ...]:
     """Sections the staff member can open, in display order. Empty when unauthenticated."""
     if not staff:
@@ -101,6 +113,8 @@ def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSectio
         sections.append(_TRIAL_USERS_SECTION)
     if _can_open_funnel(staff):
         sections.append(_FUNNEL_SECTION)
+    if _can_open_shop_broadcast(staff):
+        sections.append(_SHOP_BROADCAST_SECTION)
     if _can_open_broadcast(staff):
         sections.append(_BROADCAST_SECTION)
     return tuple(sections)

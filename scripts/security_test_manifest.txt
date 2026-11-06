@@ -312,6 +312,7 @@ tests/test_payment_voids.py
 tests/test_payment_void_bot.py
 # Durable broadcast queue: platform audience only, no double send, cancel, admin-only.
 tests/test_broadcast_queue.py
+tests/test_shop_broadcast.py
 # First-use nudge: once per service, per-shop switch, shop bot only.
 tests/test_first_use_nudge.py
 # The app must compile and import (guards a broken merge).
