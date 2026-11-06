@@ -121,18 +121,27 @@ class AdminFsmFinishShowsOutcomeInPlaceTests(unittest.IsolatedAsyncioTestCase):
                 "admin_credit_user_id": 5,
                 "admin_wallet_mode": "credit",
                 "admin_wallet_amount": 5000,
+                "admin_wallet_nonce": "abcd1234efgh5678",
             }
+        )
+        from app.services.bot_user_admin import AdminWalletChange
+
+        change = AdminWalletChange(
+            user=user, amount=5000, mode="credit", balance_after=10_000, replayed=False
         )
         with ExitStack() as stack:
             finish = self._patches(stack)
             stack.enter_context(patch("app.bot.handlers.admin_wallet_adjust._is_admin", MagicMock(return_value=True)))
             stack.enter_context(patch("app.bot.handlers.admin_wallet_adjust._platform_shop_user", AsyncMock(return_value=(user, None))))
             stack.enter_context(patch("app.bot.handlers.admin_wallet_adjust.load_reseller_profile", AsyncMock(return_value=None)))
-            adjust = stack.enter_context(patch("app.services.bot_user_admin.admin_adjust_user_wallet", AsyncMock()))
+            adjust = stack.enter_context(
+                patch("app.services.bot_user_admin.admin_adjust_user_wallet", AsyncMock(return_value=change))
+            )
             stack.enter_context(patch("app.bot.handlers.admin_wallet_adjust.schedule_wallet_notice"))
             await adm_users_wallet_reason_save(message2, state2, session=session2, db_user=db_user2)
         adjust.assert_awaited_once()
         self.assertEqual(adjust.await_args.kwargs.get("note"), "جبران قطعی")
+        self.assertEqual(adjust.await_args.kwargs.get("request_key"), "abcd1234efgh5678")
         self.assert_one_in_place(message2, finish, "کیف پول شارژ شد")
 
     async def test_block_reason_shows_the_outcome_on_the_card(self):
