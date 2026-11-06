@@ -275,7 +275,7 @@ class HubEntryTests(unittest.TestCase):
 
         data = _callbacks(admin_marketing_hub_keyboard({}))
         self.assertEqual(
-            data, ["nv:adm:loy", "nv:adm:broadcast", "nv:adm:gc", "nv:adm:cmp", "nv:adm:home"]
+            data, ["nv:adm:loy", "nv:adm:broadcast", "nv:adm:gc", "nv:adm:cmp", "tru:l:all:0", "nv:adm:home"]
         )
 
 
