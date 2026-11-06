@@ -71,6 +71,13 @@ class StuckOrdersBotTests(unittest.IsolatedAsyncioTestCase):
     def shown(self, edit) -> tuple[str, list[str]]:
         return edit.await_args.args[1], callbacks(edit.await_args.kwargs["reply_markup"])
 
+    async def test_a_non_owner_without_a_shop_is_refused_and_never_sees_the_platform_queue(self) -> None:
+        for staff in ({"role": "reseller"}, {"role": "admin"}, {"role": "reseller", "bot_user_id": 0}):
+            with patch.object(stuck, "resolve_feature_staff", AsyncMock(return_value=staff)):
+                self.assertIsNone(await stuck.stuck_staff(self.session, SimpleNamespace(id=9), **CTX))
+        with patch.object(stuck, "resolve_feature_staff", AsyncMock(return_value=OWNER_SESSION)):
+            self.assertEqual(await stuck.stuck_staff(self.session, SimpleNamespace(id=9), **CTX), OWNER_SESSION)
+
     async def test_shop_sees_only_its_own_queue(self) -> None:
         _, edit, _ = await self.press("stk:l:0", staff=SHOP_STAFF)
         _, found = self.shown(edit)

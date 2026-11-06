@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.bot.handlers import service_shop_review_view as view
-from app.db.models import Base, BotUser, ResellerProfile, UserService
+from app.db.models import Base, BotUser, Order, ResellerProfile, UserService
 from app.services import bot_feedback_texts as feedback
 
 
@@ -68,6 +68,26 @@ class ServiceShopReviewBotTests(unittest.IsolatedAsyncioTestCase):
         found = callbacks(edit.await_args.kwargs["reply_markup"])
         self.assertIn("ssr:c:11:p", found)
         self.assertIn("ssr:c:11:5", found)
+
+    async def test_shops_with_evidence_come_first_and_the_list_is_paged(self) -> None:
+        for shop_id in range(20, 32):
+            self.session.add(BotUser(id=shop_id, telegram_id=shop_id + 1000, referral_code=f"s{shop_id}", role="reseller"))
+        await self.session.flush()
+        self.session.add_all([ResellerProfile(user_id=shop_id, is_active=True) for shop_id in range(20, 32)])
+        self.session.add(Order(id=77, user_id=1, reseller_id=31, amount=1, status="delivered"))
+        await self.session.commit()
+        _, edit = await self.press("ssr:v:11", owner=True)
+        found = callbacks(edit.await_args.kwargs["reply_markup"])
+        shop_buttons = [c for c in found if c.startswith("ssr:c:11:") and not c.endswith(":p")]
+        self.assertEqual(shop_buttons[0], "ssr:c:11:31")
+        self.assertEqual(len(shop_buttons), view.PAGE_SIZE)
+        self.assertIn("ssr:v:11:1", found)
+        _, edit = await self.press("ssr:v:11:1", owner=True)
+        second = [c for c in callbacks(edit.await_args.kwargs["reply_markup"]) if c.startswith("ssr:c:11:") and not c.endswith(":p")]
+        self.assertTrue(second)
+        self.assertNotIn("ssr:c:11:31", second)
+        _, edit = await self.press("ssr:v:11:99", owner=True)
+        self.assertTrue(edit.await_args.kwargs["reply_markup"])
 
     async def test_assign_runs_once_and_second_tap_is_refused(self) -> None:
         callback, _ = await self.press("ssr:x:11:5", owner=True)

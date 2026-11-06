@@ -85,18 +85,29 @@ async def _find(session: AsyncSession, service_id: int) -> ReviewRow | None:
     return next((r for r in await list_services_under_review(session) if r.service_id == service_id), None)
 
 
-@router.callback_query(F.data.regexp(rf"^ssr:v:{ID}$"))
+def _ordered_shops(row: ReviewRow, shops: dict[int, str]) -> list[int]:
+    """Shops with evidence for this customer first (attribution, then order shops), then the rest by id."""
+    evidence = [s for s in [row.attributed_shop, *row.order_shops] if s is not None and s in shops]
+    first = list(dict.fromkeys(evidence))
+    return first + [shop_id for shop_id in shops if shop_id not in first]
+
+
+@router.callback_query(F.data.regexp(rf"^ssr:v:{ID}(?::(\d{{1,3}}))?$"))
 async def show_service(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, is_reseller_bot: bool = False) -> None:
     if not await _is_owner(session, db_user, is_reseller_bot):
         await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
-    service_id = int(callback.data.split(":")[2])
+    parts = callback.data.split(":")
+    service_id = int(parts[2])
     row = await _find(session, service_id)
     if row is None:
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     shops = dict(await list_assignable_shops(session))
+    ordered = _ordered_shops(row, shops)
+    last_page = max(0, (len(ordered) - 1) // PAGE_SIZE)
+    page = min(int(parts[3]) if len(parts) > 3 else 0, last_page)
     evidence = "، ".join(_shop_text(s, shops) for s in row.order_shops) or "—"
     lines = [
         kv_line("📦", "سرویس", f"<code>{html.escape(row.pg_username)}</code> (#{row.service_id})"),
@@ -106,9 +117,16 @@ async def show_service(callback: CallbackQuery, session: AsyncSession, db_user: 
     ]
     rows = [[InlineKeyboardButton(text="🏠 پلتفرم (ربات اصلی)", callback_data=f"ssr:c:{service_id}:{PLATFORM_CHOICE}")]]
     rows += [
-        [InlineKeyboardButton(text=f"🏬 {name}"[:64], callback_data=f"ssr:c:{service_id}:{shop_id}")]
-        for shop_id, name in list(shops.items())[:PAGE_SIZE]
+        [InlineKeyboardButton(text=f"🏬 {shops[shop_id]}"[:64], callback_data=f"ssr:c:{service_id}:{shop_id}")]
+        for shop_id in ordered[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
     ]
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="◀️ قبل", callback_data=f"ssr:v:{service_id}:{page - 1}"))
+    if page < last_page:
+        nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"ssr:v:{service_id}:{page + 1}"))
+    if nav:
+        rows.append(nav)
     rows.append([InlineKeyboardButton(text="👤 کارت مشتری", callback_data=f"adm:users:view:{row.customer_id}")])
     await _edit(callback, session, format_message("🏷 فروشگاه این سرویس کدام است؟", info_block(lines)), rows, LIST_CALLBACK)
 
