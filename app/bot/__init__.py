@@ -108,6 +108,7 @@ def bot_routers() -> list[Router]:
         admin,
         admin_backup,
         admin_plans,
+        admin_pg_hosts,
         admin_pg_inbounds,
         admin_pg_nodes,
         admin_pg_users,
@@ -225,6 +226,7 @@ def bot_routers() -> list[Router]:
         admin_backup.router,
         admin_pg_users.router,
         admin_pg_nodes.router,
+        admin_pg_hosts.router,
         admin_pg_inbounds.router,
         admin_plans.router,
         reseller_plan_extra_packs_admin.router,
@@ -256,6 +258,7 @@ def create_dispatcher() -> Dispatcher:
         admin,
         admin_backup,
         admin_plans,
+        admin_pg_hosts,
         admin_pg_inbounds,
         admin_pg_nodes,
         admin_pg_users,
@@ -295,6 +298,7 @@ def create_dispatcher() -> Dispatcher:
     for r in (
         admin_pg_users.router,
         admin_pg_nodes.router,
+        admin_pg_hosts.router,
         admin_pg_inbounds.router,
     ):
         r.message.middleware(block)
