@@ -1607,6 +1607,11 @@ def _wallet_topup_credit_reason(payment_id: int) -> str:
     return f"شارژ کیف پول #{int(payment_id)}"
 
 
+def _wallet_topup_idempotency_key(payment_id: int) -> str:
+    """Ledger key that makes a second credit for the same top-up payment a no-op."""
+    return f"topup:payment:{int(payment_id)}"
+
+
 async def _wallet_topup_already_credited(
     session: AsyncSession, payment: Payment
 ) -> bool:
@@ -1668,6 +1673,7 @@ async def _resume_approved_payment(
                 payment.amount,
                 _wallet_topup_credit_reason(int(payment.id)),
                 shop_id=topup_shop,
+                idempotency_key=_wallet_topup_idempotency_key(int(payment.id)),
             )
         except Exception:
             payment.status = PaymentStatus.PENDING.value
@@ -1832,6 +1838,7 @@ async def approve_payment(
                 payment.amount,
                 _wallet_topup_credit_reason(int(payment.id)),
                 shop_id=topup_shop,
+                idempotency_key=_wallet_topup_idempotency_key(int(payment.id)),
             )
         except Exception:
             payment.status = PaymentStatus.PENDING.value
