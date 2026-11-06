@@ -425,3 +425,4 @@ tests/test_shop_topup_web_review.py
 tests/test_stuck_orders_bot.py
 tests/test_staff_views_bot.py
 tests/test_service_shop_review_bot.py
+tests/test_broadcast_history_bot.py
