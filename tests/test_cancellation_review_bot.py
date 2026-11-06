@@ -155,11 +155,24 @@ class CancellationReviewBotTests(ReviewCase):
     async def test_card_shows_decisions_only_for_the_permissions_held(self):
         _, edit, _ = await self.press(f"cnrv:v:{self.shop_request}")
         text, found = self.shown(edit)
-        self.assertEqual(found, [f"cnrv:a:{self.shop_request}", f"cnrv:r:{self.shop_request}", review.SHOP_LIST])
+        customer = f"res:user:{self.shop_customer.id}"
+        self.assertEqual(found, [f"cnrv:a:{self.shop_request}", f"cnrv:r:{self.shop_request}", customer, review.SHOP_LIST])
         self.assertIn("&lt;b&gt;x&lt;/b&gt;", text)
         self.assertNotIn("<b>x</b>", text)
         _, edit, _ = await self.press(f"cnrv:v:{self.shop_request}", perms=("orders",))
-        self.assertEqual(self.shown(edit)[1], [f"cnrv:r:{self.shop_request}", review.SHOP_LIST])
+        self.assertEqual(self.shown(edit)[1], [f"cnrv:r:{self.shop_request}", customer, review.SHOP_LIST])
+
+    async def test_card_names_the_customer_and_service_and_leads_to_the_customer_card(self):
+        _, edit, _ = await self.press(f"cnrv:v:{self.shop_request}")
+        text, found = self.shown(edit)
+        self.assertIn("shop-svc", text)
+        self.assertIn(str(self.shop_customer.telegram_id), text)
+        self.assertIn(f"#{self.shop_request}", text)
+        self.assertIn(f"res:user:{self.shop_customer.id}", found)
+        _, edit, _ = await self.press(f"cnrv:v:{self.platform_request}", shop_id=None, owner=True)
+        found = self.shown(edit)[1]
+        self.assertIn(f"adm:users:view:{self.platform_customer.id}", found)
+        self.assertIn(f"adm:users:svc:{self.platform_customer.id}:11", found)
 
     async def test_without_orders_permission_nothing_is_shown_or_changed(self):
         for data in (f"cnrv:v:{self.shop_request}", f"cnrv:a:{self.shop_request}", f"cnrv:r:{self.shop_request}",

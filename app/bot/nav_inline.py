@@ -17,8 +17,17 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.bot.chat_cleanup import note_throwaway, sweep_above
 from app.bot.edit_mode import editable_screen
+from app.bot.hub_entries import (
+    SERVICE_SHOP_REVIEW_CALLBACK,
+    SERVICE_SHOP_REVIEW_LABEL,
+    STAFF_AUDIT_CALLBACK,
+    STAFF_AUDIT_LABEL,
+    TRIAL_USERS_CALLBACK,
+    TRIAL_USERS_LABEL,
+)
 from app.bot.keyboards import _ikb, _t
 from app.bot.list_pages import Page, page_of, pager_row
+from app.services.resellers import has_bot_perm
 from app.bot.reseller_hub_groups import (
     RESELLER_GROUPS,
     RESELLER_HOME_CALLBACK,
@@ -787,6 +796,7 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
                 label_key="btn_adm_campaigns",
                 style_id="adm_campaigns",
             ),
+            _ikb(TRIAL_USERS_LABEL, callback_data=TRIAL_USERS_CALLBACK, ui=ui),
         ]
     )
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
@@ -817,6 +827,8 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         for key, text in _reply_admin_system_entries(ui)
         if key in cb_map
     ]
+    buttons.append(_ikb(STAFF_AUDIT_LABEL, callback_data=STAFF_AUDIT_CALLBACK, ui=ui))
+    buttons.append(_ikb(SERVICE_SHOP_REVIEW_LABEL, callback_data=SERVICE_SHOP_REVIEW_CALLBACK, ui=ui))
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
@@ -993,9 +1005,12 @@ def reseller_group_hub_keyboard(
     )
     shown = group_entries(group, entries) if group else []
     badge_for = {"res_payments": pending_payments, "res_tickets": pending_tickets, "res_orders": pending_deliveries}
-    return _pack_hub_keyboard(
-        _reseller_entry_buttons(shown, ui, badge_for), ui, back_callback=RESELLER_HOME_CALLBACK
-    )
+    buttons = _reseller_entry_buttons(shown, ui, badge_for)
+    if group_id == "customers" and has_bot_perm(profile, "trial_users"):
+        buttons.append(_ikb(TRIAL_USERS_LABEL, callback_data=TRIAL_USERS_CALLBACK, ui=ui))
+    if group_id == "account":
+        buttons.append(_ikb(STAFF_AUDIT_LABEL, callback_data=STAFF_AUDIT_CALLBACK, ui=ui))
+    return _pack_hub_keyboard(buttons, ui, back_callback=RESELLER_HOME_CALLBACK)
 
 
 def reseller_access_card_keyboard(

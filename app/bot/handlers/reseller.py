@@ -47,6 +47,7 @@ from app.services.resellers import (
 )
 from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
+from app.bot.handlers import stuck_orders
 from app.bot.handlers.reseller_package import change_button, renew_button
 from app.bot.handlers.subscription_lookup import ASK_CALLBACK
 from app.bot.reseller_hub_groups import back_callback_for
@@ -857,6 +858,8 @@ async def res_orders(
         markup = InlineKeyboardMarkup(inline_keyboard=[void_row, *markup.inline_keyboard])
     if await count_review_queue(session, shop_id=int(owner_id)):
         markup = InlineKeyboardMarkup(inline_keyboard=[[review_button()], *markup.inline_keyboard])
+    if stuck_count := await stuck_orders.queue_count(session, int(owner_id)):
+        markup = InlineKeyboardMarkup(inline_keyboard=[stuck_orders.entry_row(stuck_count), *markup.inline_keyboard])
     if callback.message:
         await safe_edit_text(callback.message, "\n".join(lines), reply_markup=markup)
 

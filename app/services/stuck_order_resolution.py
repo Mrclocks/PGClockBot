@@ -30,6 +30,7 @@ from app.db.models import (
     ResellerApplicationStatus,
 )
 from app.services.orders import is_mutation_order_note
+from app.services.payer_notify import notify_payer
 from app.services.shop_scope import assert_order_retry_in_scope
 from app.services.wallet import credit_wallet
 
@@ -284,4 +285,18 @@ async def count_still_stuck(session: AsyncSession, order_ids: list[int]) -> int:
             )
         )
         or 0
+    )
+
+
+REFUND_NOTICE_TITLE = "↩️ بازگشت وجه"
+
+
+async def tell_customer_refunded(session: AsyncSession, result: Resolution) -> None:
+    """Tell the customer that a cancelled stuck order returned money to the wallet."""
+    if result.refunded <= 0:
+        return
+    await notify_payer(
+        session, result.user_id, title=REFUND_NOTICE_TITLE,
+        body=f"سفارش #{result.order_id} به‌دلیل انجام‌نشدن تحویل لغو شد و {result.refunded:,} به کیف پول شما برگشت.",
+        shop_id=result.shop_id,
     )

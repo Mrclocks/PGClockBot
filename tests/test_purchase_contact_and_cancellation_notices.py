@@ -256,6 +256,35 @@ class ContactAndNoticeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("&lt;b&gt;", sent[0].text)
         self.assertNotIn("<b>دیگر", sent[0].text)
 
+    async def test_notice_shows_customer_service_and_plan_with_buttons_to_review_it(self) -> None:
+        request_id = await self.request()
+        service = await self.session.get(UserService, 11)
+        service.plan_id = 1
+        service.quota_synced_at = datetime.now(timezone.utc)
+        service.quota_data_limit_bytes = 0
+        service.quota_expire_at = None
+        await self.session.commit()
+        await self.dispatch_notices()
+        self.main_bot.send_message.assert_awaited_once()
+        text = self.main_bot.send_message.await_args.args[1]
+        self.assertIn("&lt;mine&gt;", text)
+        self.assertIn("Paid", text)
+        self.assertIn("نامحدود", text)
+        self.assertIn(str(self.user.telegram_id), text)
+        markup = self.main_bot.send_message.await_args.kwargs["reply_markup"]
+        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+        self.assertEqual(callbacks[0], f"cnrv:v:{request_id}")
+        self.assertIn(f"adm:users:view:{self.user.id}", callbacks)
+        self.assertIn(f"adm:users:svc:{self.user.id}:11", callbacks)
+
+    async def test_shop_notice_offers_only_the_shop_customer_card(self) -> None:
+        request_id = await self.request(12, 2)
+        await self.dispatch_notices()
+        markup = self.shop_bot.send_message.await_args.kwargs["reply_markup"]
+        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+        self.assertEqual(callbacks[:2], [f"cnrv:v:{request_id}", f"res:user:{self.user.id}"])
+        self.assertFalse([c for c in callbacks if c and c.startswith("adm:")])
+
     async def test_concurrent_workers_do_not_send_the_same_notice_twice(self) -> None:
         await self.request()
         await self.session.commit()
@@ -316,7 +345,7 @@ class ContactAndNoticeTests(unittest.IsolatedAsyncioTestCase):
         profile = await self.session.scalar(sa.select(ResellerProfile).where(ResellerProfile.user_id == 2))
         profile.web_permissions = "tickets"
         await self.session.commit()
-        notice = CancellationNotice(request_id, 2, "درخواست لغو")
+        notice = CancellationNotice(request_id, 2, "درخواست لغو", 1, 11)
         outcome = await self.dispatch_notice(notice)
         self.assertEqual(outcome, "pending")
         self.shop_bot.send_message.assert_not_awaited()
