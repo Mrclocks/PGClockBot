@@ -148,8 +148,10 @@ class PlatformWalletReasonTests(unittest.IsolatedAsyncioTestCase):
             schedule.assert_called_once()
             args, kwargs = schedule.call_args
             self.assertEqual(args[0], 1)
+            # Internal reason (including its HTML) must not appear; our own <b> labels may.
             self.assertNotIn("جبران", args[1])
-            self.assertNotIn("<b>", args[1])
+            self.assertNotIn("شبکه", args[1])
+            self.assertNotIn("outage", args[1])
             self.assertNotIn("توضیح", args[1])
             self.assertIn(format_toman(15_000), args[1])
             self.assertEqual(kwargs.get("shop_id"), None)
