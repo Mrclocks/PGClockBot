@@ -25,6 +25,7 @@ from app.bot.hub_entries import (
     TRIAL_USERS_CALLBACK,
     TRIAL_USERS_LABEL,
 )
+from app.bot.broadcast_entries import BROADCAST_HISTORY_CALLBACK, BROADCAST_HISTORY_LABEL
 from app.bot.keyboards import _ikb, _t
 from app.bot.list_pages import Page, page_of, pager_row
 from app.services.resellers import has_bot_perm
@@ -1227,6 +1228,7 @@ def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
         for key, text in _admin_broadcast_submenu_entries(ui)
         if key.startswith("bc_aud_")
     ]
+    buttons.append(_ikb(BROADCAST_HISTORY_LABEL, callback_data=BROADCAST_HISTORY_CALLBACK, ui=ui))
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:marketing")
 
 
