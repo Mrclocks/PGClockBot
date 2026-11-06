@@ -86,7 +86,9 @@ def is_addon_order_note(note: str | None) -> bool:
     return (note or "").strip().startswith("svc_addon:")
 
 
-async def fulfill_paid_order(session: AsyncSession, order: Order) -> Order:
+async def fulfill_paid_order(
+    session: AsyncSession, order: Order, *, attempt: DeliveryAttempt | None = None
+) -> Order:
     """Route a PAID order to renew / addon / reseller_app / new-mint delivery.
 
     Callers that previously used ``deliver_order`` for PAID recovery must use
@@ -122,7 +124,7 @@ async def fulfill_paid_order(session: AsyncSession, order: Order) -> Order:
         from app.services.reseller_package_orders import apply_package_order
 
         return await apply_package_order(session, order)
-    return await deliver_order(session, order)
+    return await deliver_order(session, order, attempt=attempt)
 
 
 async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None:
@@ -1183,10 +1185,12 @@ def wallet_purchase_reason(order: Order) -> str:
     return f"خرید سفارش #{order.id}"
 
 
-async def _resume_paid_wallet_order(session: AsyncSession, order: Order, user) -> Order:
+async def _resume_paid_wallet_order(
+    session: AsyncSession, order: Order, user, *, attempt: DeliveryAttempt | None = None
+) -> Order:
     """Continue delivery for an already-PAID wallet order (crash recovery)."""
     _ = user
-    return await fulfill_paid_order(session, order)
+    return await fulfill_paid_order(session, order, attempt=attempt)
 
 
 async def _require_checkout_contact(session: AsyncSession, order: Order) -> None:
@@ -1197,6 +1201,37 @@ async def _require_checkout_contact(session: AsyncSession, order: Order) -> None
     is_trial = await session.scalar(select(Plan.is_trial).where(Plan.id == order.plan_id))
     if not is_trial:
         raise ValueError(CONTACT_REQUIRED_MESSAGE)
+
+
+async def _resume_unfinished_wallet_order(session: AsyncSession, order: Order, user) -> Order | None:
+    """Crash recovery: PAID wallet order with an approved payment whose delivery never finished.
+
+    Returns None when the order is not in that state. Refuses to deliver again when an
+    earlier attempt left the panel outcome unknown; staff decide that case.
+    """
+    if not (
+        order.status == OrderStatus.PAID.value
+        and (order.payment_method or "") == PaymentMethod.WALLET.value
+    ):
+        return None
+    existing = (
+        await session.execute(
+            select(Payment)
+            .where(
+                Payment.order_id == order.id,
+                Payment.method == PaymentMethod.WALLET.value,
+                Payment.status == PaymentStatus.APPROVED.value,
+            )
+            .order_by(Payment.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        return None
+    if existing.review_note == UNKNOWN_DELIVERY_NOTE:
+        # The panel may already hold this buyer's account; staff decide, not a re-tap.
+        raise DeliveryOutcomeUnknown()
+    return await _resume_paid_wallet_order(session, order, user)
 
 
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
@@ -1211,25 +1246,9 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     if payer <= 0 or oid_user != payer:
         raise ValueError("سفارش متعلق به این کاربر نیست")
 
-    # Crash recovery: PAID wallet order with approved payment, delivery never finished.
-    if (
-        order.status == OrderStatus.PAID.value
-        and (order.payment_method or "") == PaymentMethod.WALLET.value
-    ):
-        existing = (
-            await session.execute(
-                select(Payment)
-                .where(
-                    Payment.order_id == order.id,
-                    Payment.method == PaymentMethod.WALLET.value,
-                    Payment.status == PaymentStatus.APPROVED.value,
-                )
-                .order_by(Payment.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if existing is not None:
-            return await _resume_paid_wallet_order(session, order, user)
+    resumed = await _resume_unfinished_wallet_order(session, order, user)
+    if resumed is not None:
+        return resumed
 
     if order.status not in _PAYABLE_ORDER_STATUSES:
         raise ValueError("این سفارش قابل پرداخت با کیف پول نیست")
@@ -1237,6 +1256,7 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
 
     payment: Payment | None = None
     debited = False
+    attempt = DeliveryAttempt()
     order = await _claim_payable_order(
         session, order, payment_method=PaymentMethod.WALLET.value
     )
@@ -1268,13 +1288,16 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
         await session.commit()
         await session.refresh(order)
         await session.refresh(payment)
-        return await _resume_paid_wallet_order(session, order, user)
+        return await _resume_paid_wallet_order(session, order, user, attempt=attempt)
     except Exception as exc:
         from app.services.service_renewals import RenewalPendingReview
 
         if isinstance(exc, RenewalPendingReview):
             # A lost panel response is not evidence that the paid renewal failed.
             raise
+        if attempt.panel_may_hold_account:
+            # The panel may have created the account: refunding now would sell it for free.
+            raise await hold_unknown_delivery_for_review(session, order, error=str(exc)) from exc
         if getattr(order, "renewal_snapshot", None):
             await session.refresh(order)
             await session.refresh(user)
@@ -1327,6 +1350,43 @@ class DeliveryAttempt:
     """What a failed ``deliver_order`` may have left on the panel."""
 
     panel_may_hold_account: bool = False
+
+
+UNKNOWN_DELIVERY_NOTE = "delivery_outcome_unknown"
+
+
+class DeliveryOutcomeUnknown(ValueError):
+    """A paid delivery failed after the panel may have created the account."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "پرداخت شما ثبت شد اما نتیجه تحویل سرویس نیاز به بررسی پشتیبانی دارد. "
+            "دوباره خرید نکنید."
+        )
+
+
+async def hold_unknown_delivery_for_review(
+    session: AsyncSession, order: Order, *, error: str
+) -> DeliveryOutcomeUnknown:
+    """Keep the paid order for staff after an unknown panel outcome; never refund or retry.
+
+    The approved payment is stamped so automatic re-entry (a buyer tapping pay again)
+    is refused, and the order is listed under failed deliveries for a staff decision.
+    """
+    payment = await session.scalar(
+        select(Payment)
+        .where(Payment.order_id == int(order.id), Payment.status == PaymentStatus.APPROVED.value)
+        .order_by(Payment.id.desc())
+        .limit(1)
+    )
+    if payment is not None:
+        payment.review_note = UNKNOWN_DELIVERY_NOTE
+        await session.commit()
+    # Local import: ux20 imports this module.
+    from app.services.ux20 import note_delivery_send_failure
+
+    await note_delivery_send_failure(session, order=order, payment=payment, error=error)
+    return DeliveryOutcomeUnknown()
 
 
 async def settle_failed_free_delivery(
@@ -1638,7 +1698,7 @@ async def _wallet_topup_already_credited(
 
 
 async def _resume_approved_payment(
-    session: AsyncSession, payment: Payment
+    session: AsyncSession, payment: Payment, *, attempt: DeliveryAttempt | None = None
 ) -> Order | None:
     """Continue after APPROVED claim when credit/delivery never finished.
 
@@ -1763,7 +1823,7 @@ async def _resume_approved_payment(
             await session.refresh(order)
 
     if order.status == OrderStatus.PAID.value:
-        return await fulfill_paid_order(session, order)
+        return await fulfill_paid_order(session, order, attempt=attempt)
 
     raise ValueError("این پرداخت قبلاً تأیید شده")
 
@@ -1781,7 +1841,12 @@ async def _sync_payment_review_messages(
 
 
 async def approve_payment(
-    session: AsyncSession, payment: Payment, reviewer_tg: int, *, bot=None
+    session: AsyncSession,
+    payment: Payment,
+    reviewer_tg: int,
+    *,
+    bot=None,
+    attempt: DeliveryAttempt | None = None,
 ) -> Order | None:
     payment_id = int(payment.id)
     # DB-only claim: disable autoflush so a dirty in-memory status cannot
@@ -1808,7 +1873,7 @@ async def approve_payment(
         if fresh and fresh.status == PaymentStatus.APPROVED.value:
             await _sync_payment_review_messages(session, payment_id, bot=bot)
             # Approved but credit/delivery may still be incomplete — resume safely.
-            return await _resume_approved_payment(session, fresh)
+            return await _resume_approved_payment(session, fresh, attempt=attempt)
         raise ValueError("این پرداخت قابل تأیید نیست")
     await session.refresh(payment)
 
@@ -1920,7 +1985,7 @@ async def approve_payment(
     await session.commit()
     await session.refresh(order)
     await _sync_payment_review_messages(session, payment_id, bot=bot)
-    return await fulfill_paid_order(session, order)
+    return await fulfill_paid_order(session, order, attempt=attempt)
 
 
 async def reject_payment(

@@ -1407,6 +1407,14 @@ async def notify_settlement_review(
         await bot.session.close()
 
 
+def _stars_refund_status(*, refunded: bool, held: bool) -> str:
+    if refunded:
+        return "انجام شد"
+    if held:
+        return "نگه داشته شد — پس از بررسی تحویل دستی تصمیم بگیرید"
+    return "ناموفق — دستی بررسی شود"
+
+
 async def notify_stars_delivery_failed(
     bot: Bot,
     session: AsyncSession,
@@ -1416,6 +1424,7 @@ async def notify_stars_delivery_failed(
     charge_id: str | None,
     refunded: bool,
     error: str,
+    held: bool = False,
 ) -> int:
     """Staff of the payment's shop (platform admins for the platform): a paid Stars
     payment could not be delivered; never reaches another shop's or the platform's staff."""
@@ -1427,7 +1436,7 @@ async def notify_stars_delivery_failed(
             kv_line("🧾", "پرداخت", f"#{payment.id}"),
             kv_line("👤", "کاربر", f"<code>{int(telegram_id)}</code>"),
             kv_line("🔖", "شناسهٔ پرداخت", f"<code>{html_mod.escape(charge_id or '—')}</code>"),
-            kv_line("↩️", "بازگشت استارز", "انجام شد" if refunded else "ناموفق — دستی بررسی شود"),
+            kv_line("↩️", "بازگشت استارز", _stars_refund_status(refunded=refunded, held=held)),
         ]) + f"\n\n<code>{html_mod.escape(error[:300])}</code>",
     )
     order = await session.get(Order, payment.order_id) if payment.order_id else None

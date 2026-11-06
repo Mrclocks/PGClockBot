@@ -6,12 +6,18 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
+from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
 from app.services.chat_records import keep_sent
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
 from app.services.notifications import notify_stars_delivery_failed
-from app.services.orders import approve_payment, reject_payment, stars_amount_for_toman
+from app.services.orders import (
+    DeliveryAttempt,
+    approve_payment,
+    hold_unknown_delivery_for_review,
+    reject_payment,
+    stars_amount_for_toman,
+)
 from app.services.resellers import reseller_can_review_payment
 from app.services.users import get_all_settings, get_setting
 from app.services import bot_feedback_texts as feedback
@@ -39,6 +45,37 @@ async def _refund_stars_charge(bot, *, telegram_user_id: int, charge_id: str) ->
             "stars refund failed user=%s charge=%s", telegram_user_id, charge
         )
         return False
+
+
+async def _hold_stars_for_review(
+    message: Message,
+    session: AsyncSession,
+    payment: Payment,
+    db_user: BotUser,
+    *,
+    charge_id: str,
+    error: Exception,
+) -> None:
+    """Delivery outcome unknown: keep the Stars with the shop and let staff decide."""
+    logger.error(
+        "stars delivery outcome unknown payment=%s charge=%s", payment.id, charge_id, exc_info=error
+    )
+    order = await session.get(Order, payment.order_id) if payment.order_id else None
+    if order is not None:
+        await hold_unknown_delivery_for_review(session, order, error=str(error))
+    with keep_sent():  # the buyer must be able to find this notice again
+        await message.answer(
+            "پرداخت استارز دریافت شد اما نتیجه تحویل سرویس نیاز به بررسی پشتیبانی دارد.\n"
+            "دوباره پرداخت نکنید؛ شناسه پرداخت ثبت شد."
+        )
+    try:
+        await notify_stars_delivery_failed(
+            message.bot, session, payment, telegram_id=int(db_user.telegram_id),
+            charge_id=charge_id, refunded=False, held=True, error=str(error),
+        )
+    except Exception:
+        # Best-effort staff alert: the order is already listed under failed deliveries.
+        logger.warning("stars hold alert failed payment=%s", payment.id, exc_info=True)
 
 
 @router.pre_checkout_query()
@@ -143,9 +180,15 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
     payment.receipt_file_id = payment.receipt_file_id or f"stars:{charge_id}"
     payment.status = PaymentStatus.PENDING.value
     await session.commit()
+    attempt = DeliveryAttempt()
     try:
-        order = await approve_payment(session, payment, reviewer_tg=0)
+        order = await approve_payment(session, payment, reviewer_tg=0, attempt=attempt)
     except Exception as e:
+        if attempt.panel_may_hold_account:
+            await _hold_stars_for_review(
+                message, session, payment, db_user, charge_id=charge_id, error=e
+            )
+            return
         logging.getLogger(__name__).error(
             "stars delivery failed payment=%s charge=%s err=%s",
             payment.id,
