@@ -795,6 +795,12 @@
       ],
       [
         {
+          "callback_data": "ssr:l:0",
+          "text": "🏷 تعیین فروشگاه سرویس"
+        }
+      ],
+      [
+        {
           "callback_data": "nv:adm:home",
           "text": "⬅️ بازگشت"
         }

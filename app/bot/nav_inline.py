@@ -17,7 +17,14 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.bot.chat_cleanup import note_throwaway, sweep_above
 from app.bot.edit_mode import editable_screen
-from app.bot.hub_entries import STAFF_AUDIT_CALLBACK, STAFF_AUDIT_LABEL, TRIAL_USERS_CALLBACK, TRIAL_USERS_LABEL
+from app.bot.hub_entries import (
+    SERVICE_SHOP_REVIEW_CALLBACK,
+    SERVICE_SHOP_REVIEW_LABEL,
+    STAFF_AUDIT_CALLBACK,
+    STAFF_AUDIT_LABEL,
+    TRIAL_USERS_CALLBACK,
+    TRIAL_USERS_LABEL,
+)
 from app.bot.keyboards import _ikb, _t
 from app.bot.list_pages import Page, page_of, pager_row
 from app.services.resellers import has_bot_perm
@@ -821,6 +828,7 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         if key in cb_map
     ]
     buttons.append(_ikb(STAFF_AUDIT_LABEL, callback_data=STAFF_AUDIT_CALLBACK, ui=ui))
+    buttons.append(_ikb(SERVICE_SHOP_REVIEW_LABEL, callback_data=SERVICE_SHOP_REVIEW_CALLBACK, ui=ui))
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
