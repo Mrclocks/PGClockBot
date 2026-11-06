@@ -153,7 +153,8 @@ class UserEditUiTests(unittest.TestCase):
         self.assertIn("admin_user_service_actions", kb)
 
         admin = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        self.assertIn("adm_users_wallet_credit", admin)
+        wallet = Path("app/bot/handlers/admin_wallet_adjust.py").read_text(encoding="utf-8")
+        self.assertIn("adm_users_wallet_credit", wallet)
         self.assertIn("adm_users_services", admin)
         self.assertIn("admin_renew_service", admin)
         self.assertIn("admin_extend_service", admin)

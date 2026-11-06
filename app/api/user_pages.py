@@ -399,10 +399,14 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         form = await request.form()
 
         raw = str(form.get("amount") or "").strip()
-        note = str(form.get("note") or "").strip()
+        from app.services.shop_manual_adjust import ManualAdjustError, parse_reason
+
         try:
             amount = parse_admin_wallet_amount(raw)
             mode = parse_admin_wallet_mode(str(form.get("mode") or ""))
+            note = parse_reason(form.get("note"))
+        except ManualAdjustError as e:
+            return _redirect_user(user_id, err=str(e))
         except (TypeError, ValueError) as e:
             return _redirect_user(user_id, err=str(e) or "مبلغ نامعتبر است")
         try:
@@ -412,17 +416,34 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                 key = f"user-page:{mode}:{user_id}:{amount}:{nonce}" if len(nonce) >= 8 else None
                 change = await adjust_reseller_wallet(
                     session, user, amount, mode=mode, actor=actor_label_from_staff(staff),
-                    note=note or None, idempotency_key=key,
+                    note=note, idempotency_key=key,
                 )
                 schedule_followups(change)
             else:
-                await admin_adjust_user_wallet(
+                from app.services.shop_manual_adjust import parse_request_key
+
+                try:
+                    request_key = parse_request_key(form.get("nonce"))
+                except ManualAdjustError as e:
+                    return _redirect_user(user_id, err=str(e))
+                change = await admin_adjust_user_wallet(
                     session,
                     user,
                     amount,
                     mode=mode,
                     actor=actor_label_from_staff(staff),
-                    note=note or None,
+                    note=note,
+                    request_key=request_key,
+                )
+                from app.services.manual_adjust_notices import schedule_wallet_notice
+
+                schedule_wallet_notice(
+                    user_id=int(user.id),
+                    mode=mode,
+                    amount=amount,
+                    balance=change.balance_after,
+                    shop_id=None,
+                    replayed=change.replayed,
                 )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
@@ -440,7 +461,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         session: AsyncSession = Depends(get_db),
     ):
         """Platform owner: adjust the customer's platform points purse (shop_id=None)."""
-        from app.services.loyalty import admin_adjust_points, points_balance
+        from app.services.loyalty import admin_adjust_points
         from app.services.notifications import actor_label_from_staff
         from app.services.shop_manual_adjust import ManualAdjustError, parse_reason, parse_request_key
 
@@ -467,7 +488,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return _redirect_user(user_id, err="امتیاز باید مثبت باشد")
         delta = points if mode == "credit" else -points
         try:
-            await admin_adjust_points(
+            change = await admin_adjust_points(
                 session,
                 user,
                 delta,
@@ -478,7 +499,17 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             )
         except ValueError as exc:
             return _redirect_user(user_id, err=str(exc))
-        balance = await points_balance(session, user, None)
+        from app.services.manual_adjust_notices import schedule_points_notice
+
+        balance = int(change.tx.balance_after)
+        schedule_points_notice(
+            user_id=int(user.id),
+            mode=mode,
+            points=points,
+            balance=balance,
+            shop_id=None,
+            replayed=change.replayed,
+        )
         verb = "افزوده شد" if mode == "credit" else "کسر شد"
         return _redirect_user(user_id, ok=f"{points:,} امتیاز {verb} · مانده: {balance:,}")
 

@@ -381,6 +381,11 @@ tests/test_staff_audit.py
 tests/test_shop_wallet_adjust.py
 # Manual loyalty-point changes by shop staff: own shop only, capped, once per request.
 tests/test_shop_points_adjust.py
+# Platform/shop manual adjusts require a reason and notify the customer once (not on replay).
+tests/test_manual_adjust_notices.py
+# Platform wallet adjust: request-key idempotency, isolation, hostile notice text.
+tests/test_admin_wallet_adjust.py
+tests/test_wallet_tx_idempotency_migration.py
 # Per-shop customer block: that shop's bot, Mini App and campaigns only; never account-wide.
 tests/test_shop_customer_block.py
 # Campaigns to a shop's whole audience: own reachable customers only, one per shop per day.

@@ -151,7 +151,7 @@ async def adm_users_points_amount(
         state,
         prompt=(
             f"علت {DIRECTION_LABELS.get(mode, '')} {format_number(amount)} امتیاز را بفرستید "
-            f"(حداقل {REASON_MIN} کاراکتر؛ در دفترکل ثبت می‌شود)."
+            f"(حداقل {REASON_MIN} کاراکتر؛ فقط در دفترکل ثبت می‌شود و برای مشتری ارسال نمی‌شود)."
         ),
         cancel_code="adm_usr",
         return_to=f"adm:users:view:{user_id}",
@@ -200,7 +200,7 @@ async def adm_users_points_apply(
         return
     delta = amount if mode == "credit" else -amount
     try:
-        await admin_adjust_points(
+        change = await admin_adjust_points(
             session,
             user,
             delta,
@@ -212,8 +212,17 @@ async def adm_users_points_apply(
     except ValueError as exc:
         await _outcome_on_card(message, state, session, user, f"⚠️ {user_safe_error(exc)}")
         return
-    await session.refresh(user)
-    balance = await points_balance(session, user, None)
+    from app.services.manual_adjust_notices import schedule_points_notice
+
+    balance = int(change.tx.balance_after)
+    schedule_points_notice(
+        user_id=int(user.id),
+        mode=mode,
+        points=amount,
+        balance=balance,
+        shop_id=None,
+        replayed=change.replayed,
+    )
     verb = "افزوده شد" if mode == "credit" else "کسر شد"
     await _outcome_on_card(
         message,
