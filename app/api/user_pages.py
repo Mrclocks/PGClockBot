@@ -436,7 +436,6 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                     mode=mode,
                     amount=amount,
                     balance=int(user.wallet_balance or 0),
-                    note=note,
                     shop_id=None,
                 )
         except ValueError as e:
@@ -501,7 +500,6 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             mode=mode,
             points=points,
             balance=balance,
-            note=reason,
             shop_id=None,
             replayed=change.replayed,
         )

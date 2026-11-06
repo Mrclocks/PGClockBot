@@ -162,7 +162,6 @@ async def adjust_shop_points(session: AsyncSession, *, staff: dict, request: Sho
         mode=change.direction,
         points=change.points,
         balance=change.balance_after,
-        note=request.reason,
         shop_id=shop_id,
     )
     return change

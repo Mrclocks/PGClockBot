@@ -609,7 +609,6 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
             mode="credit" if int(delta) > 0 else "debit",
             points=abs(int(delta)),
             balance=int(change.tx.balance_after),
-            note=str(reason).strip(),
             shop_id=shop_id,
             replayed=change.replayed,
         )

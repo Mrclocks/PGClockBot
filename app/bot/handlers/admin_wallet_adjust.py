@@ -40,7 +40,10 @@ from app.services.shop_manual_adjust import ManualAdjustError, parse_reason
 logger = logging.getLogger(__name__)
 router = Router(name="admin_wallet_adjust")
 
-REASON_PROMPT = "علت را بفرستید (حداقل ۳ کاراکتر؛ برای مشتری ارسال می‌شود)."
+REASON_PROMPT = (
+    "علت را بفرستید (حداقل ۳ کاراکتر؛ فقط در گزارش کارکنان/دفترکل ثبت می‌شود "
+    "و برای مشتری ارسال نمی‌شود)."
+)
 
 
 async def _is_payg_reseller(session: AsyncSession, user: BotUser) -> bool:
@@ -251,7 +254,6 @@ async def adm_users_wallet_reason_save(
         mode=direction,
         amount=amount,
         balance=int(user.wallet_balance or 0),
-        note=reason,
         shop_id=None,
     )
     verb = "شارژ شد" if direction == "credit" else "کسر شد"

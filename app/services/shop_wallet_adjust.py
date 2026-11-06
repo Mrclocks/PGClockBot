@@ -150,7 +150,6 @@ async def adjust_shop_wallet(session: AsyncSession, *, staff: dict, request: Sho
         mode=change.direction,
         amount=change.amount,
         balance=change.balance_after,
-        note=request.reason,
         shop_id=shop_id,
     )
     return change

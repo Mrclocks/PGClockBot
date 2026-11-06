@@ -1,8 +1,10 @@
-"""Manual wallet/points adjusts require a reason and notify the customer once."""
+"""Manual wallet/points adjusts require a reason and notify the customer once.
+
+Customer notices never include the staff internal reason (option ب).
+"""
 
 from __future__ import annotations
 
-import html
 import secrets
 import tempfile
 import unittest
@@ -17,28 +19,29 @@ SHOP_B = 82
 
 
 class NoticeTextTests(unittest.TestCase):
-    def test_wallet_and_points_notices_escape_reason_and_show_balance(self):
+    def test_wallet_and_points_notices_omit_internal_reason(self):
         from app.services.formatting import format_toman
         from app.services.manual_adjust_notices import points_change_notice, wallet_change_notice
 
-        wallet = wallet_change_notice(
-            mode="credit", amount=12_000, balance=50_000, note="<script>x</script>"
-        )
+        hostile = "<script>x</script> & <b>hi</b>"
+        wallet = wallet_change_notice(mode="credit", amount=12_000, balance=50_000)
         self.assertIn("شارژ شد", wallet)
         self.assertIn(format_toman(12_000), wallet)
         self.assertIn(format_toman(50_000), wallet)
-        self.assertIn(html.escape("<script>x</script>"), wallet)
+        self.assertNotIn("توضیح", wallet)
+        self.assertNotIn(hostile, wallet)
         self.assertNotIn("<script>", wallet)
 
-        debit = wallet_change_notice(mode="debit", amount=1_000, balance=0, note=None)
+        debit = wallet_change_notice(mode="debit", amount=1_000, balance=0)
         self.assertIn("کسر شد", debit)
-        self.assertNotIn("توضیح:", debit)
+        self.assertNotIn("توضیح", debit)
 
-        points = points_change_notice(mode="debit", points=7, balance=3, note="a&b")
+        points = points_change_notice(mode="debit", points=7, balance=3)
         self.assertIn("کسر شد", points)
         self.assertIn("7", points)
         self.assertIn("3", points)
-        self.assertIn("a&amp;b", points)
+        self.assertNotIn("توضیح", points)
+        self.assertNotIn("a&b", points)
 
     def test_schedule_skips_replayed_adjust(self):
         from app.services import manual_adjust_notices as notices
@@ -46,6 +49,14 @@ class NoticeTextTests(unittest.TestCase):
         with patch.object(notices.asyncio, "get_running_loop") as loop:
             notices.schedule_customer_notice(1, "hi", shop_id=None, replayed=True)
             loop.assert_not_called()
+
+    def test_notice_text_stays_under_telegram_limit(self):
+        from app.services.manual_adjust_notices import points_change_notice, wallet_change_notice
+
+        wallet = wallet_change_notice(mode="credit", amount=10**9, balance=10**9)
+        points = points_change_notice(mode="credit", points=10**9, balance=10**9)
+        self.assertLessEqual(len(wallet), 4096)
+        self.assertLessEqual(len(points), 4096)
 
 
 class PlatformWalletReasonTests(unittest.IsolatedAsyncioTestCase):
@@ -101,7 +112,7 @@ class PlatformWalletReasonTests(unittest.IsolatedAsyncioTestCase):
             user = await session.get(BotUser, 1)
             self.assertEqual(int(user.wallet_balance or 0), 10_000)
 
-    async def test_web_platform_wallet_schedules_notice_with_reason_and_balance(self):
+    async def test_web_platform_wallet_notice_omits_internal_reason(self):
         from fastapi import FastAPI
         import httpx
         from app.api.user_pages import register_user_pages
@@ -119,6 +130,7 @@ class PlatformWalletReasonTests(unittest.IsolatedAsyncioTestCase):
 
         app = FastAPI()
         register_user_pages(app, render=lambda *a, **k: None, require_admin=lambda: staff, get_db=get_db)
+        internal = "جبران قطعی <b>شبکه</b> & outage"
         with patch("app.services.manual_adjust_notices.schedule_customer_notice") as schedule:
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -127,7 +139,7 @@ class PlatformWalletReasonTests(unittest.IsolatedAsyncioTestCase):
                     data={
                         "amount": "5000",
                         "mode": "credit",
-                        "note": "جبران قطعی شبکه",
+                        "note": internal,
                         "nonce": secrets.token_hex(8),
                     },
                 )
@@ -136,7 +148,9 @@ class PlatformWalletReasonTests(unittest.IsolatedAsyncioTestCase):
             schedule.assert_called_once()
             args, kwargs = schedule.call_args
             self.assertEqual(args[0], 1)
-            self.assertIn("جبران قطعی شبکه", args[1])
+            self.assertNotIn("جبران", args[1])
+            self.assertNotIn("<b>", args[1])
+            self.assertNotIn("توضیح", args[1])
             self.assertIn(format_toman(15_000), args[1])
             self.assertEqual(kwargs.get("shop_id"), None)
             self.assertFalse(kwargs.get("replayed", False))
@@ -170,6 +184,7 @@ class PlatformWalletReasonTests(unittest.IsolatedAsyncioTestCase):
         platform = edit.split('id="user-wallet"', 1)[1].split("{% endif %}", 1)[0]
         self.assertIn("note_required=true", platform)
         self.assertIn("note_label='علت'", platform)
+        self.assertIn("برای مشتری ارسال نمی‌شود", platform)
 
 
 class ShopAdjustNoticeTests(unittest.IsolatedAsyncioTestCase):
@@ -227,7 +242,7 @@ class ShopAdjustNoticeTests(unittest.IsolatedAsyncioTestCase):
         schedule.assert_called_once()
         _args, kwargs = schedule.call_args
         self.assertEqual(kwargs.get("shop_id"), SHOP_A)
-        self.assertIn("refund outage", _args[1])
+        self.assertNotIn("refund outage", _args[1])
         self.assertIn(format_toman(5_000), _args[1])
         self.assertIn(format_toman(first.balance_after), _args[1])
 
@@ -250,7 +265,7 @@ class ShopAdjustNoticeTests(unittest.IsolatedAsyncioTestCase):
         args, kwargs = schedule.call_args
         self.assertEqual(args[0], 101)
         self.assertEqual(kwargs.get("shop_id"), SHOP_A)
-        self.assertIn("goodwill gift", args[1])
+        self.assertNotIn("goodwill gift", args[1])
         self.assertIn("40", args[1])
 
 
@@ -295,7 +310,6 @@ class PlatformPointsNoticeTests(unittest.IsolatedAsyncioTestCase):
                     mode="credit",
                     points=5,
                     balance=int(first.tx.balance_after),
-                    note="جبران",
                     shop_id=None,
                     replayed=first.replayed,
                 )
@@ -309,16 +323,14 @@ class PlatformPointsNoticeTests(unittest.IsolatedAsyncioTestCase):
                     mode="credit",
                     points=5,
                     balance=int(again.tx.balance_after),
-                    note="جبران",
                     shop_id=None,
                     replayed=again.replayed,
                 )
         self.assertFalse(first.replayed)
         self.assertTrue(again.replayed)
-        # The mock replaces the early-return; only non-replayed kwargs count as a real notify.
         sent = [c for c in schedule.call_args_list if not c.kwargs.get("replayed")]
         self.assertEqual(len(sent), 1)
-        self.assertIn("جبران", sent[0].args[1])
+        self.assertNotIn("جبران", sent[0].args[1])
         self.assertEqual(await self._balance(), 15)
 
     async def _balance(self) -> int:
@@ -352,15 +364,37 @@ class PlatformPointsNoticeTests(unittest.IsolatedAsyncioTestCase):
         bot.send_message.assert_awaited_once()
         self.assertEqual(bot.send_message.await_args.args[0], 1010)
 
+    async def test_telegram_send_failure_does_not_raise_to_caller(self):
+        from app.services.manual_adjust_notices import _send_customer_notice
+
+        bot = MagicMock()
+        bot.send_message = AsyncMock(side_effect=RuntimeError("telegram down"))
+        bot.session = MagicMock()
+        bot.session.close = AsyncMock()
+        with (
+            patch("app.db.session.SessionLocal") as session_local,
+            patch(
+                "app.services.reseller_bots.open_notify_bot_for_user",
+                AsyncMock(return_value=(bot, False)),
+            ),
+        ):
+            session = AsyncMock()
+            session.get = AsyncMock(return_value=MagicMock(id=1, telegram_id=101))
+            session_local.return_value.__aenter__ = AsyncMock(return_value=session)
+            session_local.return_value.__aexit__ = AsyncMock(return_value=None)
+            # Must not raise — notice is best-effort after the money commit.
+            await _send_customer_notice(1, "hi", shop_id=None)
+
 
 class FormatTomanInNoticeTests(unittest.TestCase):
     def test_wallet_notice_includes_formatted_balance(self):
         from app.services.formatting import format_toman
         from app.services.manual_adjust_notices import wallet_change_notice
 
-        text = wallet_change_notice(mode="credit", amount=5000, balance=15000, note="ok reason")
+        text = wallet_change_notice(mode="credit", amount=5000, balance=15000)
         self.assertIn(format_toman(5000), text)
         self.assertIn(format_toman(15000), text)
+        self.assertNotIn("توضیح", text)
 
 
 if __name__ == "__main__":

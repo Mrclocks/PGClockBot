@@ -109,7 +109,7 @@
 <section class="edit-section" id="user-wallet">
   <header class="edit-section-head">
     <h3>تنظیم کیف پول</h3>
-    <p class="muted">مبلغ را وارد کنید، سپس افزایش یا کاهش را بزنید. موجودی منفی مجاز نیست.</p>
+    <p class="muted">مبلغ را وارد کنید، سپس افزایش یا کاهش را بزنید. موجودی منفی مجاز نیست. علت الزامی است و فقط در گزارش کارکنان/دفترکل ثبت می‌شود؛ برای مشتری ارسال نمی‌شود.</p>
   </header>
   {% from "_wallet_adjust_form.html" import wallet_adjust_form %}
   {{ wallet_adjust_form('/users/' ~ user.id ~ '/wallet-credit', 'موجودی کیف پول این کاربر مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟', nonce=wallet_nonce, note_label='علت', note_required=true) }}
@@ -118,7 +118,7 @@
 <section class="edit-section" id="user-points">
   <header class="edit-section-head">
     <h3>تنظیم امتیاز</h3>
-    <p class="muted">امتیاز پلتفرم این کاربر. دلیل الزامی است و در دفترکل ثبت می‌شود.</p>
+    <p class="muted">امتیاز پلتفرم این کاربر. دلیل الزامی است و فقط در دفترکل ثبت می‌شود؛ برای مشتری ارسال نمی‌شود.</p>
   </header>
   <form method="post" action="/users/{{ user.id }}/points-adjust" class="form-stack"
         data-confirm="امتیاز این کاربر مطابق مقدار و نوع انتخاب‌شده تغییر کند؟"

@@ -151,7 +151,7 @@ async def adm_users_points_amount(
         state,
         prompt=(
             f"علت {DIRECTION_LABELS.get(mode, '')} {format_number(amount)} امتیاز را بفرستید "
-            f"(حداقل {REASON_MIN} کاراکتر؛ در دفترکل ثبت می‌شود)."
+            f"(حداقل {REASON_MIN} کاراکتر؛ فقط در دفترکل ثبت می‌شود و برای مشتری ارسال نمی‌شود)."
         ),
         cancel_code="adm_usr",
         return_to=f"adm:users:view:{user_id}",
@@ -220,7 +220,6 @@ async def adm_users_points_apply(
         mode=mode,
         points=amount,
         balance=balance,
-        note=reason,
         shop_id=None,
         replayed=change.replayed,
     )

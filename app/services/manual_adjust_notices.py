@@ -2,12 +2,14 @@
 
 The money or points change is committed first; these helpers only schedule a best-effort
 message afterwards. A replayed adjust (same request key) must not send again.
+
+The staff ``reason`` / note is an internal audit field and is never included in the
+customer message (option ب: notify without the internal reason).
 """
 
 from __future__ import annotations
 
 import asyncio
-import html
 import logging
 
 from app.services.formatting import format_toman
@@ -15,34 +17,32 @@ from app.services.reseller_bots import ATTRIBUTED_SHOP
 
 logger = logging.getLogger(__name__)
 
-# Keep a strong reference until the background send finishes.
+# Strong refs until the background send finishes (create_task alone can be GC'd).
 _pending: set[asyncio.Task[None]] = set()
 
 
-def wallet_change_notice(*, mode: str, amount: int, balance: int, note: str | None) -> str:
-    """Customer-facing HTML for a manual wallet credit or debit."""
+def wallet_change_notice(*, mode: str, amount: int, balance: int) -> str:
+    """Customer-facing HTML for a manual wallet credit or debit (no staff reason)."""
     head = "➕ <b>کیف پول شما شارژ شد</b>" if mode == "credit" else "➖ <b>از کیف پول شما کسر شد</b>"
-    lines = [
-        head,
-        f"مبلغ: <b>{format_toman(amount)}</b>",
-        f"موجودی فعلی: <b>{format_toman(balance)}</b>",
-    ]
-    if note:
-        lines.append(f"توضیح: {html.escape(note)}")
-    return "\n".join(lines)
+    return "\n".join(
+        [
+            head,
+            f"مبلغ: <b>{format_toman(amount)}</b>",
+            f"موجودی فعلی: <b>{format_toman(balance)}</b>",
+        ]
+    )
 
 
-def points_change_notice(*, mode: str, points: int, balance: int, note: str | None) -> str:
-    """Customer-facing HTML for a manual points credit or debit."""
+def points_change_notice(*, mode: str, points: int, balance: int) -> str:
+    """Customer-facing HTML for a manual points credit or debit (no staff reason)."""
     head = "➕ <b>به امتیاز شما افزوده شد</b>" if mode == "credit" else "➖ <b>از امتیاز شما کسر شد</b>"
-    lines = [
-        head,
-        f"امتیاز: <b>{points:,}</b>",
-        f"مانده فعلی: <b>{balance:,}</b>",
-    ]
-    if note:
-        lines.append(f"توضیح: {html.escape(note)}")
-    return "\n".join(lines)
+    return "\n".join(
+        [
+            head,
+            f"امتیاز: <b>{points:,}</b>",
+            f"مانده فعلی: <b>{balance:,}</b>",
+        ]
+    )
 
 
 async def _send_customer_notice(user_id: int, text: str, *, shop_id: int | None | object) -> None:
@@ -69,7 +69,17 @@ async def _send_customer_notice(user_id: int, text: str, *, shop_id: int | None 
                 shop_id,
             )
         except Exception:
+            # Never raise into the event loop; the wallet/points commit already succeeded.
             logger.warning("customer adjust notice failed user=%s", user_id, exc_info=True)
+
+
+def _notice_task_done(task: asyncio.Task[None]) -> None:
+    _pending.discard(task)
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.warning("customer adjust notice task crashed", exc_info=exc)
 
 
 def schedule_customer_notice(
@@ -87,7 +97,7 @@ def schedule_customer_notice(
         name="manual-adjust-notice",
     )
     _pending.add(task)
-    task.add_done_callback(_pending.discard)
+    task.add_done_callback(_notice_task_done)
 
 
 def schedule_wallet_notice(
@@ -96,13 +106,12 @@ def schedule_wallet_notice(
     mode: str,
     amount: int,
     balance: int,
-    note: str | None,
     shop_id: int | None = None,
     replayed: bool = False,
 ) -> None:
     schedule_customer_notice(
         user_id,
-        wallet_change_notice(mode=mode, amount=amount, balance=balance, note=note),
+        wallet_change_notice(mode=mode, amount=amount, balance=balance),
         shop_id=shop_id,
         replayed=replayed,
     )
@@ -114,13 +123,12 @@ def schedule_points_notice(
     mode: str,
     points: int,
     balance: int,
-    note: str | None,
     shop_id: int | None = None,
     replayed: bool = False,
 ) -> None:
     schedule_customer_notice(
         user_id,
-        points_change_notice(mode=mode, points=points, balance=balance, note=note),
+        points_change_notice(mode=mode, points=points, balance=balance),
         shop_id=shop_id,
         replayed=replayed,
     )
