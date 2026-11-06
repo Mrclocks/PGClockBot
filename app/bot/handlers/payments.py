@@ -20,6 +20,7 @@ from app.services.orders import (
 )
 from app.services.resellers import reseller_can_review_payment
 from app.services.receipt_review import DEFAULT_REJECT_TEXT
+from app.services.support_button import support_markup
 from app.services.users import get_all_settings, get_setting
 from app.services import bot_feedback_texts as feedback
 
@@ -67,7 +68,8 @@ async def _hold_stars_for_review(
     with keep_sent():  # the buyer must be able to find this notice again
         await message.answer(
             "پرداخت استارز دریافت شد اما نتیجه تحویل سرویس نیاز به بررسی پشتیبانی دارد.\n"
-            "دوباره پرداخت نکنید؛ شناسه پرداخت ثبت شد."
+            "دوباره پرداخت نکنید؛ شناسه پرداخت ثبت شد.",
+            reply_markup=support_markup(),
         )
     try:
         await notify_stars_delivery_failed(
@@ -175,7 +177,8 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
         else:
             await message.answer(
                 f"مبلغ استارز نامعتبر است (انتظار {expected_stars}، دریافت {sp.total_amount}). "
-                "بازگشت خودکار ناموفق بود — با پشتیبانی تماس بگیرید و شناسه پرداخت را بفرستید."
+                "بازگشت خودکار ناموفق بود — با پشتیبانی تماس بگیرید و شناسه پرداخت را بفرستید.",
+                reply_markup=support_markup(),
             )
         return
     payment.receipt_file_id = payment.receipt_file_id or f"stars:{charge_id}"
@@ -226,7 +229,8 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
             else:
                 await message.answer(
                     "پرداخت استارز دریافت شد ولی تحویل ناموفق بود.\n"
-                    "بازگشت خودکار ناموفق بود — با پشتیبانی تماس بگیرید؛ شناسه پرداخت ثبت شد."
+                    "بازگشت خودکار ناموفق بود — با پشتیبانی تماس بگیرید؛ شناسه پرداخت ثبت شد.",
+                    reply_markup=support_markup(),
                 )
         try:
             await notify_stars_delivery_failed(
@@ -410,19 +414,12 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
             reject_body, title="❌ پرداخت رد شد"
         )
         try:
-            from app.bot.menu_nav import buyer_main_reply_keyboard
-
-            main_kb, _ = await buyer_main_reply_keyboard(
-                session,
-                user,
-                is_reseller_bot=False,
-                reseller_owner_id=None,
-            )
+            # An inline button under the notice; the buyer's main keyboard stays as it is.
             with keep_sent():  # a notice or review item, never a temporary panel
                 await callback.bot.send_message(
                     user.telegram_id,
                     text,
-                    reply_markup=main_kb,
+                    reply_markup=support_markup(),
                     **{"parse_mode": "HTML", **send_kw},
                 )
         except Exception:

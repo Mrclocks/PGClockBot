@@ -16,6 +16,7 @@ from app.bot import keyboards as kb
 from app.config import get_settings
 from app.services.pasarguard import absolutize_subscription_url, get_pg
 from app.services.qrcode_gen import make_subscription_qr
+from app.services.support_button import support_markup
 from app.services.message_variables import DOMAIN_ORDER, DOMAIN_WALLET, render_message_template
 from app.services.users import get_all_settings, on
 from app.services.wireguard_delivery import has_wireguard
@@ -370,6 +371,7 @@ async def build_delivery_content(
             "ui": ui,
             "is_subscription": False,
             "skip_qr": True,
+            "needs_support": True,
         }
 
     title = rich_plain_text(ui.get("payment_ok_title")) or "✅ پرداخت تأیید شد"
@@ -698,8 +700,11 @@ async def _deliver_subscription_order(
             if isinstance(sub_info, dict) and not wg_username:
                 wg_username = sub_info.get("username")
 
+        # A paid order with no service yet: the buyer's next step is to ask support, so the message
+        # carries that button (the main keyboard stays as it is).
+        notice_markup = support_markup() if payload.get("needs_support") else reply_kb
         notify_ok = await _try_send_html(
-            bot, chat_id, text, reply_markup=reply_kb, send_kw=send_kw
+            bot, chat_id, text, reply_markup=notice_markup, send_kw=send_kw
         )
         if not notify_ok:
             logger.error(
