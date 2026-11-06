@@ -125,7 +125,8 @@
             <form method="post" action="/pg/users/{{ uid }}/revoke" data-confirm="سابسکرایب ابطال شود؟" data-confirm-title="ابطال سابسکرایب" data-confirm-warn="1" data-confirm-label="ابطال"><button class="btn btn-ghost btn-sm" type="submit">ابطال ساب</button></form>
             {% endif %}
             {% if can_delete and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/delete" data-confirm="کاربر پاسارگارد حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
+            <form method="post" action="/pg/users/{{ uid }}/delete" data-confirm="کاربر پاسارگارد حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-reason="1" data-confirm-reason-label="علت حذف" data-confirm-reason-name="reason" data-confirm-label="حذف">
+              <input type="hidden" name="reason" value="" />
               <button class="btn btn-danger btn-sm" type="submit">حذف</button>
             </form>
             {% endif %}

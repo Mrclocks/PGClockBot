@@ -1108,6 +1108,13 @@ def register_pg_pages(
     ):
         if not staff_user_actions(staff)["delete"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه حذف ندارید')}", status_code=303)
+        from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
+
+        reason = extract_delete_reason(await request.form())
+        if delete_reason_too_short(reason):
+            return RedirectResponse(
+                f"/pg/users?err={_q('علت حذف کاربر الزامی است (حداقل ۳ کاراکتر)')}", status_code=303
+            )
         try:
             denied = await _guard_owned_mutation(staff, user_id, session=session)
             if denied is not None:
@@ -1125,6 +1132,7 @@ def register_pg_pages(
             await detach_local_services_for_pg_user(session, user_id, commit=True)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
+        logger.info("panel user %s deleted by staff role=%s reason_len=%s", user_id, staff.get("role"), len(reason))
         return RedirectResponse(f"/pg/users?ok={_q('کاربر حذف شد')}", status_code=303)
 
     # ---- templates ----
