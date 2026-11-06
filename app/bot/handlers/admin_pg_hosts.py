@@ -17,6 +17,7 @@ from app.bot.pg_entries import PG_HOSTS_CALLBACK
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.bot_pg_object_authz import (
+    BotPgObjectAction,
     BotPgObjectGate,
     authorize_bot_pg_object_op,
     list_scoped_pg_objects,
@@ -35,11 +36,11 @@ ADDRESS_PREVIEW = 3
 
 
 async def _gate(
-    callback: CallbackQuery, session: AsyncSession | None, db_user: BotUser, action: str, *,
+    callback: CallbackQuery, session: AsyncSession | None, db_user: BotUser, action: BotPgObjectAction, *,
     object_id: int | None, is_reseller_bot: bool, reseller_profile_id: int | None, reseller_owner_id: int | None,
 ) -> BotPgObjectGate:
     gate = await authorize_bot_pg_object_op(
-        session, db_user=db_user, kind="hosts", action=action,  # type: ignore[arg-type]
+        session, db_user=db_user, kind="hosts", action=action,
         callback_data=callback.data, object_id=object_id,
         is_reseller_bot=is_reseller_bot, reseller_profile_id=reseller_profile_id,
         reseller_owner_id=reseller_owner_id,
