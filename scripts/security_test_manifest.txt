@@ -421,3 +421,4 @@ tests/test_pg_cache_capability_probe.py
 tests/test_service_addon_plan_scope.py
 tests/test_svc_addon_kind_picker.py
 tests/test_stale_admin_demotion.py
+tests/test_shop_topup_web_review.py
