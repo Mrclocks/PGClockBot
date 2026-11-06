@@ -421,3 +421,4 @@ tests/test_pg_cache_capability_probe.py
 tests/test_service_addon_plan_scope.py
 tests/test_svc_addon_kind_picker.py
 tests/test_stuck_orders_bot.py
+tests/test_staff_views_bot.py

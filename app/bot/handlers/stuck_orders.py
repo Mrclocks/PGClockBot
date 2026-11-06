@@ -14,7 +14,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.auth import require_bot_owner, resolve_bot_principal_bridge
+from app.bot.feature_staff import resolve_feature_staff
 from app.bot.nav_inline import with_inline_back
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
@@ -22,9 +22,7 @@ from app.db.models import BotUser, DeliveryFailure, Order, Plan
 from app.services import bot_feedback_texts as feedback
 from app.services.formatting import format_message, format_toman, format_user_label, info_block, kv_line, order_status_fa
 from app.services.notifications import customer_markup
-from app.services.reseller_access import load_reseller_actor
 from app.services.redact import operator_error, redact
-from app.services.resellers import has_bot_perm
 from app.services.shop_scope import ShopScopeError, assert_order_retry_in_scope, is_platform_admin
 from app.services.stuck_order_resolution import (
     cancel_and_refund,
@@ -74,21 +72,9 @@ CLOSING_ACTIONS = {
 async def stuck_staff(
     session: AsyncSession, db_user: BotUser, *, is_reseller_bot: bool, reseller_owner_id: int | None,
 ) -> dict | None:
-    """Staff dict scoped to the actor's own shop (or the platform Owner); None when not allowed."""
-    owner_id, profile = await load_reseller_actor(
-        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    return await resolve_feature_staff(
+        session, db_user, PERMISSION, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
-    if owner_id and profile:
-        if not has_bot_perm(profile, PERMISSION):
-            return None
-        bridge = await resolve_bot_principal_bridge(
-            session, db_user, is_reseller_bot=True, reseller_owner_id=reseller_owner_id
-        )
-        return bridge.staff if bridge and bridge.staff else {"role": "reseller", "bot_user_id": int(owner_id)}
-    if is_reseller_bot or not await require_bot_owner(session, db_user, is_reseller_bot=False, notify=False):
-        return None
-    bridge = await resolve_bot_principal_bridge(session, db_user, is_reseller_bot=False)
-    return bridge.staff if bridge and bridge.staff and is_platform_admin(bridge.staff) else None
 
 
 def _shop_of(staff: dict) -> int | None:

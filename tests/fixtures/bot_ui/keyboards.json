@@ -289,6 +289,12 @@
       ],
       [
         {
+          "callback_data": "tru:l:all:0",
+          "text": "🧪 کاربران تست"
+        }
+      ],
+      [
+        {
           "callback_data": "nv:adm:home",
           "text": "⬅️ بازگشت"
         }
@@ -781,6 +787,10 @@
         {
           "callback_data": "nv:adm:preview",
           "text": "👁 پیش‌نمایش منوی کاربر"
+        },
+        {
+          "callback_data": "saud:l:0",
+          "text": "🧾 گزارش اقدامات کارکنان"
         }
       ],
       [
