@@ -44,6 +44,8 @@ def format_staff_customer_card(
     service_count: int,
     is_blocked: bool,
     wallet_label: str = "کیف پول",
+    points_text: str | None = None,
+    points_label: str = "امتیاز",
     role: str | None = None,
     risk_tag: str | None = None,
     alert_line: str = "",
@@ -64,9 +66,11 @@ def format_staff_customer_card(
         rows.append(kv_line("🏷", "نقش", html.escape(role_label_fa(role))))
     if risk_tag is not None:
         rows.append(kv_line("🎯", "تگ ریسک", html.escape(risk_tag)))
+    rows.append(kv_line("💰", wallet_label, wallet_text))
+    if points_text is not None:
+        rows.append(kv_line("⭐", points_label, points_text))
     rows.extend(
         [
-            kv_line("💰", wallet_label, wallet_text),
             kv_line("📦", "سرویس‌ها", str(int(service_count))),
             kv_line("🚫", "مسدود", "بله" if is_blocked else "خیر"),
         ]

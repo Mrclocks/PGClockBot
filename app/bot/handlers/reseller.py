@@ -30,6 +30,7 @@ from app.services.home_overview import reseller_shop_summary
 from app.services.formatting import (
     bot_user_panel_label,
     format_message,
+    format_number,
     format_toman,
     order_status_fa,
 )
@@ -465,6 +466,7 @@ async def res_user_view(
         may_manage_customer_services,
         services_button,
     )
+    from app.services.loyalty import points_balance
     from app.services.staff_cards import format_staff_customer_card
     from app.services.users_ops import (
         bot_user_alert_flags,
@@ -486,12 +488,14 @@ async def res_user_view(
         if bits:
             alert_line = "🔔 " + " · ".join(bits)
     shop_bal = await get_wallet_balance(session, user, shop_id=owner_id)
+    shop_pts = await points_balance(session, user, int(owner_id))
     text = format_staff_customer_card(
         flags=flags,
         display_name=user.full_name or user.username or "—",
         telegram_id=int(user.telegram_id),
         username=user.username,
         wallet_text=format_toman(shop_bal, get_settings().currency),
+        points_text=format_number(shop_pts),
         service_count=int(ops.service_count),
         is_blocked=bool(user.is_blocked),
         wallet_label="کیف پول فروشگاه",
