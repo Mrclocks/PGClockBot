@@ -23,7 +23,9 @@ from app.bot.tg_utils import parse_bot_int, safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, ServiceCancellation
 from app.services import bot_feedback_texts as feedback
-from app.services.formatting import format_toman
+from app.services.cancellation_context import cancellation_detail_lines, load_cancellation_parts, reason_block
+from app.services.formatting import format_message, format_toman
+from app.services.notifications import customer_markup
 from app.services.numbers import normalize_number_text
 from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import has_bot_perm
@@ -102,14 +104,14 @@ async def show_card(
         return
     if answer:
         await callback.answer()
-    text = (
-        f"📝 <b>درخواست لغو #{row.id}</b>\n"
-        f"سرویس: <code>{row.service_id}</code>\n"
-        f"وضعیت: {html.escape(STATUS_LABELS.get(row.status, row.status))}\n"
-        f"دلیل:\n{html.escape((row.reason or '')[:800])}"
+    user, service, plan_name = await load_cancellation_parts(session, row)
+    currency = get_settings().currency
+    text = format_message(
+        f"📝 درخواست لغو #{row.id}",
+        f"{cancellation_detail_lines(row, user, service, plan_name, currency=currency)}\n"
+        f"📌 <b>وضعیت:</b> {html.escape(STATUS_LABELS.get(row.status, row.status))}\n\n"
+        f"{reason_block(row.reason)}",
     )
-    if row.refund_amount is not None and row.status != "pending":
-        text += f"\nاعتبار تعیین‌شده: {format_toman(row.refund_amount, get_settings().currency)}"
     rows: list[list[InlineKeyboardButton]] = []
     if row.status == "pending":
         decisions = []
@@ -119,6 +121,9 @@ async def show_card(
         rows.append(decisions)
     elif can_approve and row.status in OPEN_FOR_APPROVAL:
         rows.append([InlineKeyboardButton(text="🔁 بررسی پنل و ادامه", callback_data=f"cnrv:a:{row.id}")])
+    links = customer_markup(user_id=row.user_id, service_id=row.service_id, shop_id=shop_id)
+    if links is not None:
+        rows.extend(links.inline_keyboard)
     ui = await get_all_settings(session)
     markup = with_inline_back(InlineKeyboardMarkup(inline_keyboard=rows), ui, _list_back(shop_id))
     if callback.message:
