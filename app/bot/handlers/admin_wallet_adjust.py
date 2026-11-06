@@ -241,20 +241,30 @@ async def adm_users_wallet_reason_save(
         return
     from app.services.bot_user_admin import admin_adjust_user_wallet
 
+    request_key = str(data.get("admin_wallet_nonce") or "").strip()
+    if len(request_key) < 8:
+        await _outcome_back_to_users(message, state, session, feedback.INVALID)
+        return
     try:
-        await admin_adjust_user_wallet(
-            session, user, amount, mode=direction, actor=f"tg:{db_user.telegram_id}", note=reason
+        change = await admin_adjust_user_wallet(
+            session,
+            user,
+            amount,
+            mode=direction,
+            actor=f"tg:{db_user.telegram_id}",
+            note=reason,
+            request_key=request_key,
         )
     except ValueError as e:
         await _outcome_on_card(message, state, session, user, f"⚠️ {user_safe_error(e)}")
         return
-    await session.refresh(user)
     schedule_wallet_notice(
         user_id=int(user.id),
         mode=direction,
         amount=amount,
-        balance=int(user.wallet_balance or 0),
+        balance=change.balance_after,
         shop_id=None,
+        replayed=change.replayed,
     )
     verb = "شارژ شد" if direction == "credit" else "کسر شد"
     await _outcome_on_card(

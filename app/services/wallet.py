@@ -209,6 +209,7 @@ async def credit_wallet(
     *,
     shop_id: int | None = None,
     commit: bool = True,
+    idempotency_key: str | None = None,
 ) -> BotUser:
     """Credit platform purse (shop_id=None) or an isolated shop purse.
 
@@ -256,17 +257,8 @@ async def credit_wallet(
         balance_after = int(balance_after)
         row.balance = balance_after
 
-    session.add(
-        WalletTransaction(
-            user_id=uid,
-            amount=int(amount),
-            balance_after=balance_after,
-            reason=reason,
-            reseller_id=sid,
-        )
-    )
-
-    # PAYG auto-unsuspend only for platform / owner purse credits.
+    # PAYG restore before the ledger insert so its queries do not autoflush a
+    # conflicting idempotency_key row mid-flight.
     if sid is None:
         try:
             from app.services.billing_suspend import maybe_restore_after_wallet_credit
@@ -279,11 +271,46 @@ async def credit_wallet(
                 "PAYG restore-after-wallet-credit failed user=%s", uid
             )
 
-    if commit:
-        await session.commit()
-        await session.refresh(user)
-    else:
-        await session.flush()
+    session.add(
+        WalletTransaction(
+            user_id=uid,
+            amount=int(amount),
+            balance_after=balance_after,
+            reason=reason,
+            reseller_id=sid,
+            idempotency_key=idempotency_key,
+        )
+    )
+
+    try:
+        if commit:
+            await session.commit()
+            await session.refresh(user)
+        else:
+            await session.flush()
+    except Exception as exc:
+        # Duplicate idempotency_key: roll back our update and reload the winner.
+        from sqlalchemy import select
+        from sqlalchemy.exc import IntegrityError
+
+        from app.services.db_safe import rollback_quiet
+
+        if not (idempotency_key and isinstance(exc, IntegrityError)):
+            raise
+        await rollback_quiet(session)
+        existing = (
+            await session.execute(
+                select(WalletTransaction).where(
+                    WalletTransaction.idempotency_key == idempotency_key
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            raise
+        fresh = await session.get(BotUser, uid)
+        if fresh is not None and sid is None:
+            user.wallet_balance = int(fresh.wallet_balance or 0)
+        return user
     return user
 
 
@@ -295,6 +322,7 @@ async def debit_wallet(
     *,
     shop_id: int | None = None,
     commit: bool = True,
+    idempotency_key: str | None = None,
 ) -> BotUser:
     """Debit platform purse or the matching shop purse. Fail-closed on shortfall."""
     if amount <= 0:
@@ -349,13 +377,37 @@ async def debit_wallet(
             balance_after=balance_after,
             reason=reason,
             reseller_id=sid,
+            idempotency_key=idempotency_key,
         )
     )
-    if commit:
-        await session.commit()
-        await session.refresh(user)
-    else:
-        await session.flush()
+    try:
+        if commit:
+            await session.commit()
+            await session.refresh(user)
+        else:
+            await session.flush()
+    except Exception as exc:
+        from sqlalchemy import select
+        from sqlalchemy.exc import IntegrityError
+
+        from app.services.db_safe import rollback_quiet
+
+        if not (idempotency_key and isinstance(exc, IntegrityError)):
+            raise
+        await rollback_quiet(session)
+        existing = (
+            await session.execute(
+                select(WalletTransaction).where(
+                    WalletTransaction.idempotency_key == idempotency_key
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            raise
+        fresh = await session.get(BotUser, uid)
+        if fresh is not None and sid is None:
+            user.wallet_balance = int(fresh.wallet_balance or 0)
+        return user
     return user
 
 

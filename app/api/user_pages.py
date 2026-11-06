@@ -420,23 +420,30 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                 )
                 schedule_followups(change)
             else:
-                await admin_adjust_user_wallet(
+                from app.services.shop_manual_adjust import parse_request_key
+
+                try:
+                    request_key = parse_request_key(form.get("nonce"))
+                except ManualAdjustError as e:
+                    return _redirect_user(user_id, err=str(e))
+                change = await admin_adjust_user_wallet(
                     session,
                     user,
                     amount,
                     mode=mode,
                     actor=actor_label_from_staff(staff),
                     note=note,
+                    request_key=request_key,
                 )
-                await session.refresh(user)
                 from app.services.manual_adjust_notices import schedule_wallet_notice
 
                 schedule_wallet_notice(
                     user_id=int(user.id),
                     mode=mode,
                     amount=amount,
-                    balance=int(user.wallet_balance or 0),
+                    balance=change.balance_after,
                     shop_id=None,
+                    replayed=change.replayed,
                 )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))

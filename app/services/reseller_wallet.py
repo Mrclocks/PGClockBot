@@ -98,10 +98,19 @@ async def adjust_reseller_wallet(
         )
         balance = int(tx.balance_after)
     else:
-        replayed = False
-        await admin_adjust_user_wallet(session, user, amt, mode=direction, actor=actor, note=clean_note)
-        await session.refresh(user)
-        balance = int(user.wallet_balance or 0)
+        # Non-PAYG reseller purse still goes through the platform wallet helpers.
+        wallet_key = idempotency_key or f"wallet:{direction}:{int(user.id)}:{secrets.token_hex(8)}"
+        change = await admin_adjust_user_wallet(
+            session,
+            user,
+            amt,
+            mode=direction,
+            actor=actor,
+            note=clean_note,
+            request_key=wallet_key,
+        )
+        replayed = change.replayed
+        balance = int(change.balance_after)
     return WalletChange(
         reseller_user_id=int(user.id),
         mode=direction,

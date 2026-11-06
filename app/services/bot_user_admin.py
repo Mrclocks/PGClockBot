@@ -641,6 +641,7 @@ async def admin_credit_user_wallet(
     actor: str,
     note: str | None = None,
     shop_id: int | None = None,
+    idempotency_key: str | None = None,
 ) -> BotUser:
     """Increase platform or shop wallet (admin). Positive amounts only."""
     amt = _require_admin_wallet_amount(amount)
@@ -651,7 +652,9 @@ async def admin_credit_user_wallet(
     reason = f"شارژ ادمین ({(actor or 'admin')[:64]})"
     if note:
         reason = f"{reason}: {note.strip()[:120]}"
-    return await credit_wallet(session, user, amt, reason, shop_id=shop_id)
+    return await credit_wallet(
+        session, user, amt, reason, shop_id=shop_id, idempotency_key=idempotency_key
+    )
 
 
 async def admin_debit_user_wallet(
@@ -662,6 +665,7 @@ async def admin_debit_user_wallet(
     actor: str,
     note: str | None = None,
     shop_id: int | None = None,
+    idempotency_key: str | None = None,
 ) -> BotUser:
     """Decrease platform or shop wallet (admin). Fail-closed on shortfall."""
     amt = _require_admin_wallet_amount(amount)
@@ -672,7 +676,18 @@ async def admin_debit_user_wallet(
     reason = f"کسر ادمین ({(actor or 'admin')[:64]})"
     if note:
         reason = f"{reason}: {note.strip()[:120]}"
-    return await debit_wallet(session, user, amt, reason, shop_id=shop_id)
+    return await debit_wallet(
+        session, user, amt, reason, shop_id=shop_id, idempotency_key=idempotency_key
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class AdminWalletChange:
+    user: BotUser
+    amount: int
+    mode: str
+    balance_after: int
+    replayed: bool
 
 
 async def admin_adjust_user_wallet(
@@ -685,8 +700,18 @@ async def admin_adjust_user_wallet(
     note: str | None = None,
     shop_id: int | None = None,
     min_abs: int = MIN_ADMIN_WALLET_ADJUST,
-) -> BotUser:
-    """Admin adjust: positive ``amount`` + ``mode`` credit|debit (atomic shortfall)."""
+    request_key: str | None = None,
+) -> AdminWalletChange:
+    """Admin adjust: positive ``amount`` + ``mode`` credit|debit (atomic shortfall).
+
+    When ``request_key`` is set, a repeated submit with the same key returns the first
+    result (``replayed=True``) without moving money again.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from app.services.db_safe import rollback_quiet
+    from app.services.wallet import get_wallet_balance
+
     direction = parse_admin_wallet_mode(mode)
     amt = _require_admin_wallet_amount(amount)
     if amt <= 0:
@@ -694,12 +719,68 @@ async def admin_adjust_user_wallet(
     floor = int(min_abs)
     if floor > 0 and amt < floor:
         raise ValueError(f"حداقل مبلغ {floor:,} تومان است")
-    if direction == "credit":
-        return await admin_credit_user_wallet(
-            session, user, amt, actor=actor, note=note, shop_id=shop_id
-        )
-    return await admin_debit_user_wallet(
-        session, user, amt, actor=actor, note=note, shop_id=shop_id
+    key = f"admin_wallet:{request_key}" if request_key else None
+    if key:
+        existing = (
+            await session.execute(
+                select(WalletTransaction).where(WalletTransaction.idempotency_key == key)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            balance = await get_wallet_balance(session, int(user.id), shop_id=shop_id)
+            return AdminWalletChange(
+                user=user,
+                amount=amt,
+                mode=direction,
+                balance_after=int(balance),
+                replayed=True,
+            )
+
+    balance_before = await get_wallet_balance(session, int(user.id), shop_id=shop_id)
+    try:
+        if direction == "credit":
+            await admin_credit_user_wallet(
+                session,
+                user,
+                amt,
+                actor=actor,
+                note=note,
+                shop_id=shop_id,
+                idempotency_key=key,
+            )
+        else:
+            await admin_debit_user_wallet(
+                session,
+                user,
+                amt,
+                actor=actor,
+                note=note,
+                shop_id=shop_id,
+                idempotency_key=key,
+            )
+    except IntegrityError:
+        await rollback_quiet(session)
+        if key is None:
+            raise
+        existing = (
+            await session.execute(
+                select(WalletTransaction).where(WalletTransaction.idempotency_key == key)
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            raise
+    balance_after = await get_wallet_balance(session, int(user.id), shop_id=shop_id)
+    refreshed = await session.get(BotUser, int(user.id))
+    # Concurrent loser: credit_wallet rolled back our update so the purse did not move
+    # in this attempt (peer already applied the same key).
+    expected = balance_before + amt if direction == "credit" else balance_before - amt
+    replayed = key is not None and int(balance_after) != int(expected)
+    return AdminWalletChange(
+        user=refreshed or user,
+        amount=amt,
+        mode=direction,
+        balance_after=int(balance_after),
+        replayed=replayed,
     )
 
 
