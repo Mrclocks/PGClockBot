@@ -7,12 +7,15 @@ from urllib.parse import parse_qs, urlsplit
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
+from unittest.mock import AsyncMock, patch
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, Payment, PaymentStatus
 from app.services.broadcast import list_broadcast_targets, send_broadcast
 from app.services.shop_scope import platform_may_review_payment
-from tests.test_update_owner_only import OWNER_SESSION, RoutesHarness
+from app.services.users import _SETTINGS_CACHE, set_setting
+from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION, RoutesHarness
 
 SHOP_ID = 5
 
@@ -82,6 +85,37 @@ class OwnerShopBoundaryTests(RoutesHarness):
         self.assertIn("err", parse_qs(urlsplit(response.headers["location"]).query))
         async with AsyncSession(bind=self.engine) as session:
             self.assertEqual((await session.get(Payment, 32)).status, PaymentStatus.PENDING.value)
+
+    async def reject_as(self, session_cookie: dict, payment_id: int) -> AsyncMock:
+        cookie = f"session={self.signer.dumps(session_cookie)}; csrf=token"
+        headers = {"cookie": cookie, "x-csrf-token": "token", "origin": "http://panel.test"}
+        with patch("app.api.app.notify_payer", AsyncMock(return_value=True)) as notify:
+            response = await self.client.post(f"/payments/{payment_id}/reject", headers=headers)
+        self.assertEqual(response.status_code, 303)
+        return notify
+
+    async def test_web_rejection_tells_the_customer_with_the_payments_own_shop_text(self):
+        async with AsyncSession(bind=self.engine, expire_on_commit=False) as session:
+            session.add_all([
+                Payment(id=33, user_id=8, amount=1000, is_wallet_topup=True, status=PaymentStatus.PENDING.value),
+                Order(id=90, user_id=7, reseller_id=SHOP_ID, amount=1000, status="awaiting_approval"),
+            ])
+            await session.flush()
+            session.add(Payment(id=34, user_id=7, order_id=90, amount=1000, method="card", status=PaymentStatus.PENDING.value))
+            await set_setting(session, "payment_reject_text", "متن پلتفرم", reseller_id=0)
+            await set_setting(session, "payment_reject_text", "متن <b>فروشگاه</b>", reseller_id=SHOP_ID)
+            await session.commit()
+        _SETTINGS_CACHE.clear()
+        platform = await self.reject_as(OWNER_SESSION, 33)
+        platform.assert_awaited_once()
+        self.assertIsNone(platform.await_args.kwargs["shop_id"])
+        self.assertIn("متن پلتفرم", platform.await_args.kwargs["body"])
+        _SETTINGS_CACHE.clear()
+        shop = await self.reject_as(SHOP_SESSION, 34)
+        shop.assert_awaited_once()
+        self.assertEqual(shop.await_args.kwargs["shop_id"], SHOP_ID)
+        self.assertIn("متن", shop.await_args.kwargs["body"])
+        self.assertNotIn("پلتفرم", shop.await_args.kwargs["body"])
 
     async def test_broadcast_audience_excludes_shop_customers(self):
         for audience in ("all", "users", "resellers", "admins"):

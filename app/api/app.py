@@ -94,6 +94,7 @@ from app.services.panel_brand import (
     brand_for_staff,
     load_own_values,
 )
+from app.services.receipt_review import DEFAULT_REJECT_TEXT
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
     SETTING_VISIBILITY,
@@ -3670,27 +3671,16 @@ def create_api_app(lifespan=None) -> FastAPI:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
         except Exception as e:
             return _redirect_msg("/finance?tab=payments", err=operator_error(e))
-        body = "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
-        user = await session.get(BotUser, payment.user_id)
-        if user:
-            try:
-                shop_rid = payment_shop_id(
-                    payment, await session.get(Order, payment.order_id) if payment.order_id else None
-                )
-                ui = await get_all_settings(session, reseller_id=shop_rid)
-                body = ui.get("payment_reject_text") or body
-            except Exception:
-                logger.debug("payment_reject: ignored failure", exc_info=True)
-        # Packed reject text keeps premium emoji via notify_payer unpack.
-        await notify_payer(
-            session,
-            payment.user_id,
-            title="❌ پرداخت رد شد",
-            body=body,
-            shop_id=payment_shop_id(
-                payment, await session.get(Order, payment.order_id) if payment.order_id else None
-            ),
+        reject_order = await session.get(Order, payment.order_id) if payment.order_id else None
+        shop_rid = payment_shop_id(payment, reject_order)
+        ui = await get_all_settings(session, reseller_id=shop_rid)
+        # The shop's own (possibly rich-text) rejection text, built the same way as the bot's reject handler.
+        from app.services.rich_text import outbound_setting_text
+
+        text, send_kw = outbound_setting_text(
+            ui.get("payment_reject_text") or DEFAULT_REJECT_TEXT, title="❌ پرداخت رد شد"
         )
+        await notify_payer(session, payment.user_id, title="❌ پرداخت رد شد", body=text, send_kw=send_kw, shop_id=shop_rid)
         return _redirect_msg("/finance?tab=payments", ok="پرداخت رد شد")
 
     @app.get("/users", response_class=HTMLResponse)

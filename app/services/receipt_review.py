@@ -26,12 +26,12 @@ from app.services.receipt_files import fetch_telegram_file, payment_bot_token
 from app.services.reseller_bots import ShopBotUnavailable, open_notify_bot_for_user
 from app.services.resellers import get_reseller_profile, has_bot_perm, reseller_can_review_payment
 from app.services.shop_scope import payment_shop_id, pending_receipt_clause
-from app.services.users import get_all_settings, reset_shop_reseller_id, set_shop_reseller_id
+from app.services.users import DEFAULT_SETTINGS, get_all_settings, reset_shop_reseller_id, set_shop_reseller_id
 
 logger = logging.getLogger(__name__)
 
 QUEUE_LIMIT = 20
-DEFAULT_REJECT_TEXT = "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
+DEFAULT_REJECT_TEXT = DEFAULT_SETTINGS["payment_reject_text"]
 STARS_RECEIPT_PREFIX = "stars:"
 
 
