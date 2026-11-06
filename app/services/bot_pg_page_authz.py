@@ -5,6 +5,7 @@ PG page capability -> the Principal's own client. A shop bot and tampered callba
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,6 +25,8 @@ from app.services.principal_pg_authz import (
     is_level1_principal_staff,
     principal_pg_authz_ready,
 )
+
+logger = logging.getLogger(__name__)
 
 DENIED_MESSAGE = feedback.ACTION_NOT_ALLOWED
 
@@ -74,5 +77,6 @@ async def authorize_bot_pg_page(
     try:
         pg_client, _as_owner = await bot_pg_client_for_resolution(session, resolution)
     except Exception:  # noqa: BLE001 - client construction can fail on any panel/config problem; fail closed
+        logger.warning("bot pg page %s: client construction failed", page, exc_info=True)
         return _deny()
     return BotPgPageGate(allowed=True, staff=staff, pg_client=pg_client)

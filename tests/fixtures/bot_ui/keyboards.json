@@ -427,12 +427,6 @@
       ],
       [
         {
-          "callback_data": "adm:pg:admins",
-          "text": "🛡 ادمین‌های پنل"
-        }
-      ],
-      [
-        {
           "callback_data": "nv:adm:product",
           "text": "⬅️ بازگشت"
         }
@@ -479,10 +473,6 @@
         {
           "callback_data": "adm:pg:inbounds",
           "text": "📡 اینباندها"
-        },
-        {
-          "callback_data": "adm:pg:admins",
-          "text": "🛡 ادمین‌های پنل"
         }
       ],
       [

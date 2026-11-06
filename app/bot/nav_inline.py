@@ -870,7 +870,8 @@ def pg_hub_keyboard(
     ]
     if features is None or "pg_inbounds" in features:
         buttons.append(_ikb(PG_INBOUNDS_LABEL, callback_data=PG_INBOUNDS_CALLBACK, ui=ui))
-    if features is None or "pg_admins" in features:
+    # Owner-only page: shown only when the actor's own feature set includes it, never for an unfiltered hub.
+    if features is not None and "pg_admins" in features:
         buttons.append(_ikb(PG_ADMINS_LABEL, callback_data=PG_ADMINS_CALLBACK, ui=ui))
     return _pack_hub_keyboard(buttons, ui, back_callback=back_callback)
 

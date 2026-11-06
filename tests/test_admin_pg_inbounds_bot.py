@@ -43,9 +43,31 @@ class PageGateTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(gate.allowed)
         self.assertIsNotNone(gate.pg_client)
 
+    async def test_client_construction_failure_is_logged_and_denied(self) -> None:
+        with patch.object(authz, "resolve_bot_pg_family_identity", AsyncMock(return_value=SimpleNamespace(staff=dict(OWNER_STAFF)))), \
+                patch.object(authz, "principal_pg_authz_ready", MagicMock(return_value=True)), \
+                patch.object(authz, "authorize_pg_page", MagicMock(return_value=SimpleNamespace(allowed=True))), \
+                patch.object(authz, "bot_pg_client_for_resolution", AsyncMock(side_effect=RuntimeError("no panel"))), \
+                self.assertLogs("app.services.bot_pg_page_authz", level="WARNING") as logs:
+            gate = await authz.authorize_bot_pg_page(MagicMock(), db_user=MagicMock(), page="pg_inbounds")
+        self.assertFalse(gate.allowed)
+        self.assertIn("pg_inbounds", logs.output[0])
+
     async def test_unready_staff_is_denied(self) -> None:
         gate = await self.gate(SimpleNamespace(staff=dict(OWNER_STAFF)), ready=False)
         self.assertFalse(gate.allowed)
+
+
+class HubButtonTests(unittest.TestCase):
+    def test_admins_button_is_shown_only_when_the_actors_features_include_it(self) -> None:
+        from app.bot.nav_inline import pg_hub_keyboard
+
+        def found(**kw) -> list[str]:
+            return [b.callback_data for row in pg_hub_keyboard({}, **kw).inline_keyboard for b in row]
+
+        self.assertNotIn("adm:pg:admins", found())
+        self.assertNotIn("adm:pg:admins", found(features=frozenset({"pg_users"})))
+        self.assertIn("adm:pg:admins", found(features=frozenset({"pg_users", "pg_admins"})))
 
 
 class HandlerTests(unittest.IsolatedAsyncioTestCase):
