@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -146,7 +148,7 @@ def _plan_text(plan: Plan, *, category_name: str | None = None) -> str:
     cat = category_name or "—"
     carry = bool(getattr(plan, "carry_remaining_quota", True))
     return (
-        f"💎 <b>{plan.name}</b>\n"
+        f"💎 <b>{html.escape(plan.name)}</b>\n"
         f"قیمت: {plan.price:,} تومان\n"
         f"مدت: {plan.duration_days} روز · حجم: {gb}\n"
         f"برچسب دسته: {cat}\n"
@@ -793,7 +795,7 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
     if callback.message:
         await safe_edit_text(
             callback.message,
-            f"✅ پلن «{plan.name}» ساخته شد.\n" + await _plan_text_for(session, plan),
+            f"✅ پلن «{html.escape(plan.name)}» ساخته شد.\n" + await _plan_text_for(session, plan),
             reply_markup=await _plans_kb(session, plans, reseller_id=owner_id),
         )
 
@@ -860,7 +862,7 @@ async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session:
     if callback.message:
         await safe_edit_text(
             callback.message,
-            f"✅ پلن «{plan.name}» ساخته شد.\n" + await _plan_text_for(session, plan),
+            f"✅ پلن «{html.escape(plan.name)}» ساخته شد.\n" + await _plan_text_for(session, plan),
             reply_markup=await _plans_kb(session, plans, reseller_id=owner_id),
         )
 

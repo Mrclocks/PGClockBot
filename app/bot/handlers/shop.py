@@ -969,7 +969,7 @@ async def wholesale_pick_plan(callback: CallbackQuery, session: AsyncSession, st
     await callback.answer()
     text = format_message(
         "📦 فروش عمده — تعداد",
-        f"پلن: <b>{plan.name}</b>\n"
+        f"پلن: <b>{html.escape(plan.name)}</b>\n"
         f"قیمت واحد: <b>{format_toman(sale_price(plan), get_settings().currency)}</b>\n\n"
         f"{wholesale_description(ui)}\n\n"
         f"تعداد درخواستی را انتخاب کنید ({mn} تا {mx}):\n"
@@ -998,7 +998,7 @@ async def wholesale_qty_back(callback: CallbackQuery, session: AsyncSession, sta
     await callback.answer()
     text = format_message(
         "📦 فروش عمده — تعداد",
-        f"پلن: <b>{plan.name}</b>\n"
+        f"پلن: <b>{html.escape(plan.name)}</b>\n"
         f"قیمت واحد: <b>{format_toman(sale_price(plan), get_settings().currency)}</b>\n\n"
         f"{wholesale_description(ui)}\n\n"
         f"تعداد درخواستی را انتخاب کنید ({mn} تا {mx}):\n"
@@ -1039,7 +1039,7 @@ async def wholesale_qty_step(callback: CallbackQuery, session: AsyncSession, sta
     disc_line = f"\nتخفیف فعلی: <b>{pct}٪</b> (−{format_toman(discount, get_settings().currency)})" if pct else ""
     text = format_message(
         "📦 فروش عمده — تعداد",
-        f"پلن: <b>{plan.name}</b>\n"
+        f"پلن: <b>{html.escape(plan.name)}</b>\n"
         f"قیمت واحد: <b>{format_toman(sale_price(plan), get_settings().currency)}</b>\n\n"
         f"{wholesale_description(ui)}\n\n"
         f"فعلی: <b>{qty}</b> عدد{disc_line}\n"
@@ -1132,7 +1132,7 @@ async def wholesale_qty_entered(
     disc_line = f"\nتخفیف: <b>{pct}٪</b> (−{format_toman(discount, get_settings().currency)})" if pct else ""
     text = format_message(
         "📦 فروش عمده — تعداد",
-        f"پلن: <b>{plan.name}</b>\n"
+        f"پلن: <b>{html.escape(plan.name)}</b>\n"
         f"فعلی: <b>{qty}</b> عدد{disc_line}\n"
         f"جمع: <b>{format_toman(payable, get_settings().currency)}</b>",
     )
@@ -2607,7 +2607,7 @@ def _register_shop_cancel_codes() -> None:
         )
         text = format_message(
             "📦 فروش عمده — تعداد",
-            f"پلن: <b>{plan.name}</b>\n"
+            f"پلن: <b>{html.escape(plan.name)}</b>\n"
             f"قیمت واحد: <b>{format_toman(sale_price(plan), get_settings().currency)}</b>\n\n"
             f"{wholesale_description(ui)}\n\n"
             f"فعلی: <b>{qty}</b> عدد{disc_line}\n"
