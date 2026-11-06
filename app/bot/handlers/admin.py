@@ -64,6 +64,7 @@ from app.services.bot_user_admin import (
 from app.services.volume_allocation import set_shop_oversell
 from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
+from app.bot.handlers import stuck_orders
 from app.bot.handlers.payment_voids import void_button
 from app.bot.handlers.subscription_lookup import (
     RESELLER_SEARCH_PROMPT,
@@ -662,6 +663,8 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         rows.append([InlineKeyboardButton(text=label[:64], callback_data=f"adm:order:{o.id}")])
     if await count_review_queue(session, shop_id=None):
         rows.append([review_button()])
+    if stuck_count := await stuck_orders.queue_count(session, None):
+        rows.append(stuck_orders.entry_row(stuck_count))
     if callback.message:
         markup = InlineKeyboardMarkup(inline_keyboard=rows)
         markup = with_inline_back(markup, ui, "nv:adm:ops")

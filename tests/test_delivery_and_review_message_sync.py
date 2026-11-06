@@ -125,6 +125,10 @@ class DeliveryPlanLoadingTests(AsyncDatabaseTest):
             self.assertIn("یک ماهه", content["text"])
 
 
+def _callbacks(markup) -> list[str]:
+    return [button.callback_data for row in markup.inline_keyboard for button in row]
+
+
 class MultiAdminReviewTests(AsyncDatabaseTest):
     async def test_approve_updates_both_cards_with_original_reviewer(self):
         await self._notify()
@@ -137,7 +141,7 @@ class MultiAdminReviewTests(AsyncDatabaseTest):
                 self.assertIn("تأیید شد توسط علی &lt;ادمین&gt;", call.kwargs["text"])
                 self.assertNotIn("نیاز به تأیید", call.kwargs["text"])
                 self.assertNotIn("از دکمه‌های زیر", call.kwargs["text"])
-                self.assertIsNone(call.kwargs["reply_markup"])
+                self.assertEqual(_callbacks(call.kwargs["reply_markup"]), [f"adm:users:view:{self.user_id}"])
             self.assertEqual(
                 {c.kwargs["chat_id"] for c in self.bot.edit_message_text.await_args_list},
                 {201, 202},
@@ -162,12 +166,13 @@ class MultiAdminReviewTests(AsyncDatabaseTest):
             self.assertEqual(len(rows), 2)
             self.assertTrue(all(r.is_photo for r in rows))
             payment = await session.get(Payment, self.payment_id)
-            await reject_payment(session, payment, 202, bot=self.bot)
+            await reject_payment(session, payment, 202, bot=self.bot, note="رسید خوانا نبود <b>")
         self.assertEqual(self.bot.edit_message_caption.await_count, 2)
         self.bot.edit_message_text.assert_not_awaited()
         for call in self.bot.edit_message_caption.await_args_list:
             self.assertIn("رد شد توسط رضا", call.kwargs["caption"])
-            self.assertIsNone(call.kwargs["reply_markup"])
+            self.assertIn("رسید خوانا نبود &lt;b&gt;", call.kwargs["caption"])
+            self.assertEqual(_callbacks(call.kwargs["reply_markup"]), [f"adm:users:view:{self.user_id}"])
 
     async def test_photo_failure_tracks_actual_fallback_text_message(self):
         self.bot.send_photo.side_effect = RuntimeError("photo unavailable")
