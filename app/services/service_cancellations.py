@@ -8,6 +8,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import BotUser, Order, ServiceAutomation, ServiceCancellation, ShopWallet, UserService
+from app.services.cancellation_customer_notice import notify_cancellation_decision
 from app.services.pasarguard import get_pg, get_pg_for_reseller
 from app.services.service_automation import service_shop_id
 from app.services.service_import import is_external_service
@@ -131,6 +132,7 @@ async def reject_cancellation(session, request_id, *, shop_id, actor, note):
     if result.rowcount != 1:
         raise ValueError("فقط درخواست بررسی‌نشده قابل رد است")
     await session.commit()
+    await notify_cancellation_decision(session, request_id)
 
 
 async def approve_cancellation(session, request_id, *, shop_id, amount, actor, note=""):
@@ -197,7 +199,6 @@ async def approve_cancellation(session, request_id, *, shop_id, amount, actor, n
             renew_enabled=False, duration_enabled=False, volume_enabled=False))
         await session.commit()
         await session.refresh(row)
-        return row
     except Exception:
         await session.rollback()
         await session.execute(update(ServiceCancellation).where(
@@ -205,3 +206,6 @@ async def approve_cancellation(session, request_id, *, shop_id, amount, actor, n
         ).values(status="review", lock_token=None, locked_until=None).execution_options(synchronize_session=False))
         await session.commit()
         raise ValueError("نتیجهٔ پنل نامشخص است؛ اعتبار واریز نشده و درخواست برای تلاش مجدد محفوظ است") from None
+    # Reached only when this call moved the request to approved: the failure branch above raises.
+    await notify_cancellation_decision(session, request_id)
+    return row
