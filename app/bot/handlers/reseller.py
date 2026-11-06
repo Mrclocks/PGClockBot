@@ -1338,7 +1338,7 @@ async def resapply_plan(
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message(plan.name, body),
+            format_message(html.escape(plan.name), body),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
@@ -1392,16 +1392,16 @@ async def resapply_buy(
                 callback.message,
                 format_message(
                     "✅ درخواست ثبت شد",
-                    f"درخواست #{app.id} برای پلن «{plan.name}» ({mode_label}) ثبت شد.\n"
+                    f"درخواست #{app.id} برای پلن «{html.escape(plan.name)}» ({mode_label}) ثبت شد.\n"
                     "پس از تأیید ادمین، اطلاعات ورود وب‌پنل برایتان ارسال می‌شود.",
                 ),
                 reply_markup=kb.back_home(ui),
             )
         notify = (
             f"🤝 درخواست نمایندگی جدید #{app.id}\n"
-            f"کاربر: {db_user.full_name or db_user.telegram_id}\n"
+            f"کاربر: {html.escape(db_user.full_name or str(db_user.telegram_id))}\n"
             f"نوع: {mode_label}\n"
-            f"پلن: {plan.name}"
+            f"پلن: {html.escape(plan.name)}"
         )
         for aid in get_settings().admin_ids:
             try:
@@ -1426,7 +1426,7 @@ async def resapply_buy(
 
     summary = format_message(
         f"🧾 سفارش نمایندگی #{order.id}",
-        f"نوع: {mode_label}\nپلن: {plan.name}\n"
+        f"نوع: {mode_label}\nپلن: {html.escape(plan.name)}\n"
         f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>",
     )
     if callback.message:
