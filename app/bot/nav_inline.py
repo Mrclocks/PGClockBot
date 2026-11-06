@@ -18,6 +18,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from app.bot.chat_cleanup import note_throwaway, sweep_above
 from app.bot.edit_mode import editable_screen
 from app.bot.keyboards import _ikb, _t
+from app.bot.pg_entries import PG_HOSTS_CALLBACK, PG_HOSTS_LABEL
 from app.bot.list_pages import Page, page_of, pager_row
 from app.bot.reseller_hub_groups import (
     RESELLER_GROUPS,
@@ -862,6 +863,8 @@ def pg_hub_keyboard(
         )
         if key in cb_map
     ]
+    if features is None or "pg_hosts" in features:
+        buttons.append(_ikb(PG_HOSTS_LABEL, callback_data=PG_HOSTS_CALLBACK, ui=ui))
     return _pack_hub_keyboard(buttons, ui, back_callback=back_callback)
 
 

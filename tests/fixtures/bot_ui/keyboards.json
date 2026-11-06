@@ -419,6 +419,10 @@
           "callback_data": "adm:pg:template",
           "style": "primary",
           "text": "📋 ساخت تمپلیت"
+        },
+        {
+          "callback_data": "adm:pg:hosts",
+          "text": "🌐 هاست‌ها"
         }
       ],
       [
@@ -463,6 +467,12 @@
           "callback_data": "adm:pg:template",
           "style": "primary",
           "text": "📋 ساخت تمپلیت"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:pg:hosts",
+          "text": "🌐 هاست‌ها"
         }
       ],
       [
