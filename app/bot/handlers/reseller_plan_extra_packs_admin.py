@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 
 from aiogram import F, Router
@@ -203,7 +204,7 @@ async def extrapacks_home(
     if callback.message:
         await safe_edit_text(
             callback.message,
-            f"📦 بسته‌های پلن «{plan.name}»\nفقط روی همین پلن دیده می‌شوند.",
+            f"📦 بسته‌های پلن «{html.escape(plan.name)}»\nفقط روی همین پلن دیده می‌شوند.",
             reply_markup=_packs_home_kb(int(plan.id)),
         )
 
@@ -230,7 +231,7 @@ async def extrapacks_kind(
     if callback.message:
         await safe_edit_text(
             callback.message,
-            f"بسته‌های {_kind_label(kind)} — «{plan.name}»",
+            f"بسته‌های {_kind_label(kind)} — «{html.escape(plan.name)}»",
             reply_markup=_kind_list_kb(plan, packs, kind),
         )
 
@@ -260,7 +261,7 @@ async def extrapacks_view(
                 f"بسته {_kind_label(pack.kind)}\n"
                 f"مقدار: <b>{int(pack.amount)}</b> {unit}\n"
                 f"رنگ: {_style_label(pack.button_style)}\n"
-                f"پلن: {plan.name if plan else pack.plan_id}"
+                f"پلن: {html.escape(plan.name) if plan else pack.plan_id}"
             ),
             reply_markup=_pack_detail_kb(pack),
         )
@@ -503,6 +504,6 @@ async def extrapacks_del_ok(
     if callback.message and plan is not None:
         await safe_edit_text(
             callback.message,
-            f"بسته‌های {_kind_label(kind)} — «{plan.name}»",
+            f"بسته‌های {_kind_label(kind)} — «{html.escape(plan.name)}»",
             reply_markup=_kind_list_kb(plan, packs, kind),
         )
