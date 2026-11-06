@@ -995,6 +995,7 @@ DEFAULT_SETTINGS = {
     "btn_res_payments": "🧾 رسیدهای در انتظار",
     "btn_res_tickets": "🎫 تیکت‌های مشتریان",
     "btn_res_loyalty": "⭐ باشگاه مشتریان",
+    "btn_res_broadcast": "📢 پیام گروهی",
     "btn_res_settings": "⚙️ تنظیمات فروشگاه",
     "btn_res_billing": "💰 کیف پول PAYG",
     "btn_res_grp_daily": "📥 کارهای روزانه",

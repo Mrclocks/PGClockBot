@@ -909,18 +909,31 @@ def admin_loyalty_manage_hub_keyboard(
 def _reseller_entry_buttons(
     entries: list[tuple[str, str]], ui: dict | None, badge_for: dict[str, int]
 ) -> list[InlineKeyboardButton]:
+    from app.bot.handlers.shop_broadcast import CB_HUB as SHOP_BROADCAST_HUB
     from app.services.admin_counters import with_badge
 
-    return [
-        _ikb(
-            with_badge(text, badge_for.get(key, 0)),
-            callback_data=f"nv:res:ra:{key}",
-            ui=ui,
-            action=key,
-            style_id=key, style_fallback="primary",
+    buttons: list[InlineKeyboardButton] = []
+    for key, text in entries:
+        # Dedicated shop-broadcast callbacks stay off the owner ``nv:adm:*`` / reply_nav path.
+        callback = SHOP_BROADCAST_HUB if key == "res_broadcast" else f"nv:res:ra:{key}"
+        buttons.append(
+            _ikb(
+                with_badge(text, badge_for.get(key, 0)),
+                callback_data=callback,
+                ui=ui,
+                action=key,
+                style_id=key,
+                style_fallback="primary",
+            )
         )
-        for key, text in entries
-    ]
+    return buttons
+
+
+@editable_screen("r.broadcast")
+def shop_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.bot.handlers.shop_broadcast import _hub_keyboard
+
+    return _hub_keyboard(ui or {})
 
 
 @editable_screen("r.home")

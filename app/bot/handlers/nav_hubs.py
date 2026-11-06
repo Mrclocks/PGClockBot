@@ -790,6 +790,19 @@ async def nv_res_ra(
     await callback.answer()
     if not callback.message or not action:
         return
+    if action == "res_broadcast":
+        from app.bot.handlers.shop_broadcast import open_shop_broadcast_hub
+
+        await open_shop_broadcast_hub(
+            callback.message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            push=False,
+        )
+        return
     if action in {kb.REPLY_ACTION_RES_PREVIEW, "res_preview"}:
         if not is_reseller_bot:
             await callback.message.answer(
