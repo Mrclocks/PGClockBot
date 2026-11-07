@@ -12,11 +12,11 @@
 {% set pg_update = can_pg_update if can_pg_update is defined else false %}
 {% set ops = can_user_ops if can_user_ops is defined else true %}
 {% set bulk_count = rows|length if flt != 'all' else 0 %}
-{% block title %}کاربران بات{% endblock %}
+{% block title %}کاربران ربات{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    {{ page_title('users', 'کاربران بات', help='users') }}
+    {{ page_title('users', 'کاربران ربات', help='users') }}
   </div>
   <div class="page-head-actions">
     {% if provision %}

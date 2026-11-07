@@ -37,6 +37,7 @@ from app.api.miniapp_buy_extras import (
 )
 from app.services.custom_service_name import name_order_at_checkout
 from app.services.db_safe import rollback_quiet
+from app.services.panel_nav import MINIAPP_OWNER_SHORTCUTS, MINIAPP_RESELLER_SHORTCUTS, miniapp_shortcuts
 from app.services.funnel_events import STEP_PAY_START, record_order_funnel
 from app.services.service_scope import customer_may_use_service
 from app.services.trial_notify import notify_trial_claimed_outside_bot
@@ -481,15 +482,7 @@ async def _admin_ops_payload(session: AsyncSession) -> dict:
             "tickets": int(summary.get("tickets") or 0),
             "resellers": int(summary.get("resellers") or 0),
         },
-        "panel_links": [
-            {"id": "resellers", "label": "نمایندگان", "path": "/resellers"},
-            {"id": "finance", "label": "مالی", "path": "/finance"},
-            {"id": "users", "label": "کاربران", "path": "/users"},
-            {"id": "tickets", "label": "تیکت‌ها", "path": "/tickets"},
-            {"id": "dashboard", "label": "نمای کلی وب", "path": "/dashboard"},
-        ]
-        if base
-        else [],
+        "panel_links": miniapp_shortcuts(MINIAPP_OWNER_SHORTCUTS) if base else [],
         "panel_base": base,
     }
 
@@ -533,14 +526,7 @@ async def _reseller_ops_payload(
             "active": bool(profile.is_active) if profile else False,
             "billing": billing,
         },
-        "panel_links": [
-            {"id": "home", "label": "داشبورد وب", "path": "/home"},
-            {"id": "finance", "label": "مالی", "path": "/finance"},
-            {"id": "tickets", "label": "پشتیبانی", "path": "/tickets"},
-            {"id": "shop", "label": "تنظیمات فروشگاه", "path": "/shop-settings"},
-        ]
-        if base
-        else [],
+        "panel_links": miniapp_shortcuts(MINIAPP_RESELLER_SHORTCUTS) if base else [],
         "panel_base": base,
     }
 

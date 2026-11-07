@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_title %}
-{% block title %}وضعیت اتصال{% endblock %}
+{% block title %}تست اتصال سرویس{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/connection-status.css?v={{ app_version }}">{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div>{{ page_title('activity', 'وضعیت اتصال', help='connection-status') }}</div>
+  <div>{{ page_title('activity', 'تست اتصال سرویس', help='connection-status') }}</div>
   <div class="actions"><a class="btn btn-ghost" href="/connection-status">تازه‌سازی</a></div>
 </div>
 

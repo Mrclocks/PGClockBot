@@ -37,12 +37,12 @@ class DomainSettingsRedirectTests(unittest.TestCase):
         self.assertIn("loyalty", SHOP_SETTINGS_DOMAIN_REDIRECTS)
 
     def test_nav_has_finance_not_separate_orders_payments(self):
-        src = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-        self.assertIn('href="/finance"', src)
-        self.assertIn("مدیریت مالی", src)
+        from tests.sidebar_view import owner_sidebar
+
+        shop = owner_sidebar()["shop"]
+        self.assertIn(("مالی", "/finance"), shop)
         # Separate sidebar entries for orders/payments removed
-        self.assertNotRegex(src, r'href="/orders"\s+class="nav-item')
-        self.assertNotRegex(src, r'href="/payments"\s+class="nav-item')
+        self.assertFalse({"/orders", "/payments"} & {href for _, href in shop})
 
 
 class DomainModalTemplateTests(unittest.TestCase):
@@ -86,12 +86,11 @@ class DomainModalTemplateTests(unittest.TestCase):
             self.assertNotIn("search-bar-label", html)
 
     def test_bot_settings_nav_is_last(self):
-        src = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-        bot = src.split("nav-section-bot", 1)[1].split("nav-section-pg", 1)[0]
-        loyalty_i = bot.find("بازاریابی و وفاداری")
-        settings_i = bot.find(">تنظیمات</span>")
-        self.assertGreater(loyalty_i, 0)
-        self.assertGreater(settings_i, loyalty_i)
+        from tests.sidebar_view import labels, owner_sidebar
+
+        shop = labels(owner_sidebar()["shop"])
+        self.assertEqual(shop[-1], "تنظیمات ربات")
+        self.assertLess(shop.index("بازاریابی"), shop.index("تنظیمات ربات"))
 
     def test_settings_html_no_supports_or_payment_branches(self):
         html = (TEMPLATES / "settings.html").read_text(encoding="utf-8")
@@ -300,10 +299,13 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         general = (TEMPLATES / "_settings_general.html").read_text(encoding="utf-8")
         self.assertIn("وب و عمومی", general)
         self.assertIn('name="WEB_PORT"', general)
-        base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-        self.assertIn('href="/settings?tab=general"', base)
-        self.assertNotIn('href="/settings?tab=pasarguard"', base)
-        self.assertIn('href="/settings?tab=bot"', base)
+        from tests.sidebar_view import hrefs, owner_sidebar
+
+        nav = owner_sidebar()
+        every_href = [h for section in nav.values() for h in hrefs(section)]
+        self.assertIn("/settings?tab=general", hrefs(nav["system"]))
+        self.assertNotIn("/settings?tab=pasarguard", every_href)
+        self.assertIn("/settings?tab=bot", every_href)
 
     def test_bot_secret_placeholders_are_clean_rtl(self):
         bot = (TEMPLATES / "_settings_bot.html").read_text(encoding="utf-8")
@@ -362,13 +364,10 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         self.assertIn("--topbar-h: 58px", css)
 
     def test_pg_connection_settings_is_last_sidebar_item(self):
-        base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-        section = base.split('id="nav-panel-pg"', 1)[1].split("</div>", 1)[0]
-        self.assertIn("تنظیمات اتصال", section)
-        self.assertIn('href="/settings?tab=bot"', section)
+        from tests.sidebar_view import owner_sidebar
+
         # Owner connection link must come after every other PG nav item.
-        self.assertGreater(section.rindex("تنظیمات اتصال"), section.rindex("اینباند"))
-        self.assertGreater(section.rindex('href="/settings?tab=bot"'), section.index('href="/pg"'))
+        self.assertEqual(owner_sidebar()["pg"][-1], ("اتصال ربات و پاسارگارد", "/settings?tab=bot"))
 
 if __name__ == "__main__":
     unittest.main()
