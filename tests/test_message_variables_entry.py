@@ -57,9 +57,9 @@ class MessageVariablesEntryTests(unittest.TestCase):
     def test_owner_settings_page_links_to_the_variables_as_a_tab(self):
         from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 
-        nav = group_settings_tabs(tabs_with_message_variables(SETTINGS_TABS, OWNER), "limits")
+        nav = group_settings_tabs(tabs_with_message_variables(SETTINGS_TABS, OWNER), "messages")
         html = _page(
-            "settings.html", "/settings", OWNER, tabs=SETTINGS_TABS, tab="limits", is_panel_settings=False, tab_nav=nav
+            "settings.html", "/settings", OWNER, tabs=SETTINGS_TABS, tab="messages", is_panel_settings=False, tab_nav=nav
         )
         self.assertIn('href="/message-variables"', html.split("settings-layout", 1)[0])
         self.assertNotIn('href="/message-variables"', _sidebar(html))
@@ -73,10 +73,10 @@ class MessageVariablesEntryTests(unittest.TestCase):
     def test_shop_settings_page_links_to_the_variables_as_a_tab(self):
         from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 
-        nav = group_settings_tabs(tabs_with_message_variables(RESELLER_SETTINGS_TABS, SHOP_STAFF), "limits")
+        nav = group_settings_tabs(tabs_with_message_variables(RESELLER_SETTINGS_TABS, SHOP_STAFF), "messages")
         html = _page(
             "shop_settings.html", "/shop-settings", SHOP_STAFF,
-            tabs=RESELLER_SETTINGS_TABS, tab="limits", shop_mode=True, settings_base="/shop-settings", tab_nav=nav,
+            tabs=RESELLER_SETTINGS_TABS, tab="messages", shop_mode=True, settings_base="/shop-settings", tab_nav=nav,
         )
         self.assertIn('href="/message-variables"', html.split("settings-layout", 1)[0])
         self.assertNotIn('href="/message-variables"', _sidebar(html))

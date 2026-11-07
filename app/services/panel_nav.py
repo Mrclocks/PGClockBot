@@ -29,9 +29,6 @@ DOT_LABELS: dict[str, str] = {
 
 MARKETING_KEY = "marketing"
 
-# Owner settings tabs that belong to the PasarGuard section of the sidebar, not to bot settings.
-CONNECTION_SETTINGS_TAB = "bot"
-
 
 @dataclass(frozen=True, slots=True)
 class NavViewer:
@@ -94,9 +91,6 @@ class NavLocation:
     def is_panel_settings(self) -> bool:
         return self.path.startswith("/settings") and self.tab in PANEL_SETTINGS_KEYS
 
-    def is_connection_settings(self) -> bool:
-        return self.path == "/settings" and self.tab == CONNECTION_SETTINGS_TAB
-
 
 @dataclass(frozen=True, slots=True)
 class NavItem:
@@ -154,7 +148,7 @@ def _owner(v: NavViewer) -> bool:
 def _bot_settings_active(loc: NavLocation) -> bool:
     if loc.path.startswith(("/shop-settings", "/message-variables")):
         return True
-    return loc.path.startswith("/settings") and not loc.is_panel_settings() and not loc.is_connection_settings()
+    return loc.path.startswith("/settings") and not loc.is_panel_settings()
 
 
 _DASHBOARD = _ItemSpec("home", "داشبورد", "/home", "home", lambda v: True, _exact("/home"))
@@ -210,8 +204,6 @@ _PG_ITEMS: tuple[_ItemSpec, ...] = (
     _ItemSpec("pg_templates", "تمپلیت‌ها", "/pg/templates", "template", _pg("pg_templates"), _starts("/pg/templates")),
     _ItemSpec("pg_inbounds", "اینباندها", "/pg/inbounds", "inbound", _pg("pg_inbounds"), _starts("/pg/inbounds")),
     _ItemSpec("connection_test", "تست اتصال سرویس", "/connection-status", "pulse", _owner, _starts("/connection-status")),
-    _ItemSpec("connection_settings", "اتصال ربات و پاسارگارد", f"/settings?tab={CONNECTION_SETTINGS_TAB}", "plug",
-              _owner, NavLocation.is_connection_settings),
 )
 
 def _items(specs: Iterable[_ItemSpec], viewer: NavViewer, loc: NavLocation) -> list[NavItem]:

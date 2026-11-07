@@ -22,12 +22,15 @@ MESSAGE_VARIABLES_PERMISSION = "shop_settings"
 # Tabs that open their own page instead of ``<settings base>?tab=<key>``.
 _TAB_PAGES = {MESSAGE_VARIABLES_TAB_KEY: "/message-variables"}
 
-# (group key, label, tab keys in display order)
+# (group key, label, tab keys in display order). Related tabs sit together:
+# what the bot looks like, what it says, what a sale delivers, what it reports.
 _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("look", "ظاهر و متن‌ها", ("welcome", "appearance", "brand", "messages", "buttons", "screens", "colors", "menu", "miniapp")),
-    ("service", "سرویس و فروش", ("naming", "qr", "guides", "limits", "service_import", MESSAGE_VARIABLES_TAB_KEY)),
-    ("alerts", "اعلان‌ها", ("notifications", "daily_report")),
-    ("connect", "اتصال و لینک‌ها", ("links", "bot")),
+    ("look", "ظاهر ربات", ("welcome", "appearance", "brand", "menu", "miniapp", "links")),
+    ("texts", "متن‌ها", ("messages", "buttons", "colors", "screens", MESSAGE_VARIABLES_TAB_KEY)),
+    ("service", "فروش و سرویس", ("naming", "qr", "guides", "limits", "service_import")),
+    ("alerts", "هشدار و گزارش", ("notifications", "daily_report")),
+    # A reseller's own shop bot (the Owner's bot connection is a system setting).
+    ("connect", "ربات اختصاصی", ("bot",)),
 )
 
 
