@@ -305,7 +305,8 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         every_href = [h for section in nav.values() for h in hrefs(section)]
         self.assertIn("/settings?tab=general", hrefs(nav["system"]))
         self.assertNotIn("/settings?tab=pasarguard", every_href)
-        self.assertIn("/settings?tab=bot", every_href)
+        # The bot connection is reached from the system settings tabs, not the sidebar.
+        self.assertNotIn("/settings?tab=bot", every_href)
 
     def test_bot_secret_placeholders_are_clean_rtl(self):
         bot = (TEMPLATES / "_settings_bot.html").read_text(encoding="utf-8")
@@ -363,11 +364,12 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         self.assertIn("--brand-logo-size: 40px", css)
         self.assertIn("--topbar-h: 58px", css)
 
-    def test_pg_connection_settings_is_last_sidebar_item(self):
+    def test_bot_connection_is_a_system_settings_tab(self):
+        from app.services.users import PANEL_SETTINGS_TABS, SETTINGS_TABS
         from tests.sidebar_view import owner_sidebar
 
-        # Owner connection link must come after every other PG nav item.
-        self.assertEqual(owner_sidebar()["pg"][-1], ("اتصال ربات و پاسارگارد", "/settings?tab=bot"))
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertIn("bot", [k for k, _ in PANEL_SETTINGS_TABS])
+        self.assertNotIn("bot", [k for k, _ in SETTINGS_TABS])
+        self.assertNotIn("/settings?tab=bot", [h for _, h in owner_sidebar()["pg"]])
+        tabs = (TEMPLATES / "_panel_settings_tabs.html").read_text(encoding="utf-8")
+        self.assertIn('href="/settings?tab=bot"', tabs)

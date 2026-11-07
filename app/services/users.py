@@ -1194,18 +1194,17 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
     (SCREEN_TEXT_TAB, "تیتر و توضیح منوها"),
-    ("colors", "رنگبندی دکمه‌ها"),
-    ("menu", "منوی بات"),
+    ("colors", "رنگ دکمه‌ها"),
+    ("menu", "منوی ربات"),
     ("miniapp", "مینی‌اپ"),
     ("links", "لینک‌های سریع"),
     ("qr", "QR اشتراک"),
-    ("naming", "نام‌گذاری سرویس"),
-    ("limits", "محدودیت"),
+    ("naming", "قالب نام‌گذاری"),
+    ("limits", "قوانین و محدودیت‌ها"),
     ("service_import", "افزودن سرویس قبلی"),
     ("guides", "آموزش اتصال"),
-    ("notifications", "نوتیفیکیشن"),
+    ("notifications", "هشدارها"),
     ("daily_report", "گزارش روزانه"),
-    ("bot", "ربات و اتصال"),
 ]
 
 # Legacy bot-settings tabs moved to page-level modals (finance / support / loyalty).
@@ -1217,10 +1216,10 @@ SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
     "supports": "/tickets?supports=1",
     "loyalty": "/loyalty?settings=referral",
     "reseller": "/resellers",
-    # Merged into «محدودیت»
+    # Merged into «قوانین و محدودیت‌ها»
     "forcejoin": "/settings?tab=limits",
     "terms": "/settings?tab=limits",
-    # PG connection lives under «ربات و اتصال»
+    # PG connection lives under «اتصال ربات و پاسارگارد» (system settings)
     "pasarguard": "/settings?tab=bot",
 }
 
@@ -1231,6 +1230,8 @@ PANEL_SETTINGS_TABS: list[tuple[str, str]] = [
     ("pwa", "ظاهر و برند"),
     # Tab key stays "ssl" so saved links keep working.
     ("ssl", "دامنه‌ها"),
+    # Bot token, webhook and PasarGuard credentials are server settings, not shop settings.
+    ("bot", "اتصال ربات و پاسارگارد"),
     ("update", "آپدیت"),
 ]
 PANEL_SETTINGS_KEYS = {t[0] for t in PANEL_SETTINGS_TABS}

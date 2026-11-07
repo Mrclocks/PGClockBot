@@ -130,6 +130,13 @@
           </button>
         </div>
       </div>
+      <div class="side-search" data-panel-search role="search">
+        <label class="sr-only" for="panel-search-input">جستجو در پنل</label>
+        <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="panel-search-input" type="search" autocomplete="off" maxlength="60" placeholder="جستجوی صفحه یا تنظیم…"
+               aria-controls="panel-search-results" aria-expanded="false" data-panel-search-input />
+        <div id="panel-search-results" class="side-search-results" role="listbox" aria-label="نتیجه‌های جستجو" hidden data-panel-search-results></div>
+      </div>
       <nav class="side-nav" data-side-nav>
         {% set nav_dots = {'inbox_alert': inbox_alert, 'tickets_unread': tickets_unread, 'cancel_alert': cancel_alert} %}
         {# Environments built outside the panel app (template unit tests) have no registry global. #}
@@ -298,6 +305,7 @@
   </div>
   <script src="/static/money-inputs.js?v={{ money_inputs_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/nav-accordion.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/panel-search.js?v={{ app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/panel.js?v={{ panel_script_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/list-inputs.js?v={{ list_inputs_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/table-list.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>

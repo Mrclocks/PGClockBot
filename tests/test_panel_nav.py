@@ -50,7 +50,7 @@ class SidebarPerRoleTests(unittest.TestCase):
         self.assertEqual(nav["shop"], ["نمای کلی فروشگاه", "کاربران ربات", "نمایندگان", "مالی", "پلن‌ها", "پشتیبانی",
                                        "بازاریابی", "گزارش کارکنان", "تنظیمات ربات"])
         self.assertEqual(nav["pg"][0], "نمای کلی پاسارگارد")
-        self.assertEqual(nav["pg"][-2:], ["تست اتصال سرویس", "اتصال ربات و پاسارگارد"])
+        self.assertEqual(nav["pg"][-1], "تست اتصال سرویس")
 
     def test_reseller_gets_an_account_section_and_only_shop_items(self) -> None:
         sections = build_sidebar(RESELLER, path="/home")
@@ -84,8 +84,8 @@ class SidebarPerRoleTests(unittest.TestCase):
 
 
 class ActiveItemTests(unittest.TestCase):
-    def test_connection_tab_lights_only_the_pasarguard_entry(self) -> None:
-        self.assertEqual(active(OWNER, "/settings", "bot"), ["اتصال ربات و پاسارگارد"])
+    def test_bot_connection_tab_is_part_of_system_settings(self) -> None:
+        self.assertEqual(active(OWNER, "/settings", "bot"), ["تنظیمات سیستم"])
 
     def test_bot_and_system_settings_tabs_light_their_own_entry(self) -> None:
         self.assertEqual(active(OWNER, "/settings", "messages"), ["تنظیمات ربات"])
