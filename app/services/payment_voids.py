@@ -33,6 +33,7 @@ from app.services.loyalty import reverse_order_points
 from app.services.orders import _order_note, _wallet_topup_already_credited, is_mutation_order_note
 from app.services.pasarguard import get_pg, get_pg_for_reseller, is_pg_not_found
 from app.services.payer_notify import notify_payer
+from app.services.support_button import support_markup
 from app.services.shop_scope import payment_shop_id
 from app.services.wallet import credit_wallet, debit_wallet
 
@@ -428,6 +429,7 @@ async def void_and_notify(
         await notify_payer(
             session, payment.user_id, title="⚠️ پرداخت ابطال شد",
             body=void_customer_notice(payment, int(void.refund_amount)), shop_id=void.shop_id,
+            reply_markup=support_markup(),
         )
     return void
 

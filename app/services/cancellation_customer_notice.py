@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.db.models import ServiceCancellation, UserService
 from app.services.formatting import format_toman
 from app.services.payer_notify import notify_payer
+from app.services.support_button import support_markup
 
 APPROVED_TITLE = "✅ لغو سرویس انجام شد"
 REJECTED_TITLE = "❌ درخواست لغو پذیرفته نشد"
@@ -57,4 +58,8 @@ async def notify_cancellation_decision(session: AsyncSession, request_id: int) -
     if notice is None:
         return False
     title, body = notice
-    return await notify_payer(session, int(row.user_id), title=title, body=body, shop_id=row.reseller_id)
+    # A refused request is where the customer may need to ask why, so it carries the support button.
+    markup = support_markup() if row.status == "rejected" else None
+    return await notify_payer(
+        session, int(row.user_id), title=title, body=body, shop_id=row.reseller_id, reply_markup=markup
+    )

@@ -33,6 +33,7 @@ from app.services.volume_allocation import apply_create_form_oversell, apply_ove
 from app.services.billing import require_positive_payg_rate
 from app.services.pasarguard import get_pg
 from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
+from app.services.support_button import support_markup
 from app.services.resellers import (
     DEFAULT_FEATURE_PERMS,
     FEATURE_PERMS,
@@ -1961,6 +1962,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                     await bot.send_message(
                         user.telegram_id,
                         "❌ درخواست نمایندگی شما رد شد.\nدر صورت نیاز با پشتیبانی در ارتباط باشید.",
+                        reply_markup=support_markup(),
                     )
                 finally:
                     await bot.session.close()
