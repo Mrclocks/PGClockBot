@@ -59,7 +59,7 @@ class Phase2NavAccordionTests(unittest.TestCase):
 
     def test_additive_css_and_js_wired(self):
         html = BASE.read_text(encoding="utf-8")
-        self.assertIn("/static/panel-nav-modes.css?v={{ app_version }}", html)
+        self.assertIn("/static/panel-nav-modes.css?v={{ asset_v('panel-nav-modes.css')", html)
         self.assertTrue(CSS.is_file())
         css = CSS.read_text(encoding="utf-8")
         self.assertNotIn(".nav-modes", css)

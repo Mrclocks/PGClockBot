@@ -37,7 +37,7 @@ class PwaTests(unittest.TestCase):
         from app.services.pwa import service_worker_js
 
         sw = service_worker_js()
-        self.assertIn("pgclock-shell-v52", sw)
+        self.assertIn("pgclock-shell-v53", sw)
         self.assertIn("isVersionedPanelAsset", sw)
         self.assertIn("matchExact", sw)
         self.assertIn("/static/fonts.css", sw)
