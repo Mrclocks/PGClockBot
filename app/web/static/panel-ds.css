@@ -379,3 +379,15 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ui-switch-chip:has(input:checked)::before { display: block; }
 .ds .ui-switch-chip:has(input:checked) .ui-switch-copy strong { font-weight: 600; color: var(--pg-line); }
 .ds .ui-switch-chip:has(input:focus-visible) { outline: 2px solid var(--pg-line); outline-offset: 2px; }
+
+/* General pack rows: the price is typed, so it gets the wider column. */
+.ds [data-addon-rows] .ds-list-head, .ds [data-addon-rows] .ds-list-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) 40px 32px; }
+.ds [data-addon-rows] .ds-list-value { overflow: visible; }
+.ds [data-addon-rows] .ds-list-value input { width: 100%; }
+/* Phones: the unit moves to the column head so the typed digits keep the whole field. */
+@media (max-width: 480px) {
+  .ds [data-addon-rows] .ds-list-head, .ds [data-addon-rows] .ds-list-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) 36px 30px; gap: 6px; padding: 0 var(--ds-2); }
+  .ds [data-addon-rows] .ds-list-head .ds-unit-head { display: inline; }
+  .ds [data-addon-rows] .ds-pack-amt .ds-unit-label { display: none; }
+  .ds [data-addon-rows] .ds-list-row input { padding-inline: 8px; text-align: center; }
+}
