@@ -387,12 +387,14 @@
 
 {% endif %}
 {% if edit_svc %}
-<div class="ui-modal" id="modal-user-card" hidden>
+<div class="ui-modal ds" id="modal-user-card" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-card-title">
-    <div class="ui-modal-head">
-      {{ modal_title('users', 'اطلاعات کاربر', tone='brand', heading_id='user-card-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('users', 'اطلاعات کاربر', tone='brand', heading_id='user-card-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     <div id="user-card-body" data-load-fragment>
       <p class="muted">در حال بارگذاری…</p>
@@ -400,13 +402,15 @@
   </div>
 </div>
 
-<div class="ui-modal" id="modal-user-edit" hidden
+<div class="ui-modal ds" id="modal-user-edit" hidden
      data-modal-strip-keys="edit,ok,err,_">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl" role="dialog" aria-modal="true" aria-labelledby="user-edit-title">
-    <div class="ui-modal-head">
-      {{ modal_title('users', 'ویرایش کاربر', caption='کیف پول، سرویس و دسترسی‌ها', tone='brand', heading_id='user-edit-title') }}
-      <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('users', 'ویرایش کاربر', tone='brand', heading_id='user-edit-title') }}
+        <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     <div id="user-edit-body" class="edit-modal-body">
       <p class="muted">در حال بارگذاری…</p>

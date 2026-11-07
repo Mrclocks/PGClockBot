@@ -165,12 +165,14 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
   </p>
 </div>
 
-<div class="ui-modal" id="ssl-done-modal" hidden>
+<div class="ui-modal ds" id="ssl-done-modal" hidden>
   <div class="ui-modal-backdrop" data-ssl-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="ssl-done-title">
-    <div class="ui-modal-head">
-      {{ modal_title('security', 'گواهی SSL فعال شد', caption='گواهی و دامنه', tone='neutral', heading_id='ssl-done-title') }}
-      <button type="button" class="icon-btn" data-ssl-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('security', 'گواهی SSL فعال شد', tone='neutral', heading_id='ssl-done-title') }}
+        <button type="button" class="icon-btn" data-ssl-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     <div class="form-stack">
       <p class="confirm-message">

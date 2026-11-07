@@ -278,15 +278,18 @@
 </div>
 
 {% if owner_view %}
-<div class="ui-modal" id="modal-reseller-create" hidden>
+<div class="ui-modal ds" id="modal-reseller-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('resellers', 'افزودن نماینده', caption='مدیریت نمایندگی', tone='brand') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('resellers', 'افزودن نماینده', tone='brand') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     <p class="muted">بعد از ثبت، اطلاعات ورود در تلگرام فرستاده می‌شود. حالت پرداخت از پلن نمایندگی و دسترسی‌های پاسارگارد از نقش انتخاب‌شده می‌آید.</p>
-    <form method="post" action="/resellers" class="form-stack">
+    <form method="post" action="/resellers" class="form-stack ds-body">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       {% if not reseller_plans %}
       <div class="flash warn">هنوز پلن نمایندگی فعالی ندارید — ابتدا از بخش پلن‌ها یک پلن نماینده بسازید.</div>
       {% endif %}
@@ -345,25 +348,28 @@
         {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند') }}
         {% if owner_view %}{{ oversell_create_switch() }}{% endif %}
       </div>
-
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" {% if not reseller_plans %}disabled{% endif %}>ذخیره و ارسال اطلاعات</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      </div></div>
     </form>
   </div>
 </div>
 {% endif %}
 
 {% if can_create_l2 %}
-<div class="ui-modal" id="modal-reseller-create-child" hidden>
+<div class="ui-modal ds" id="modal-reseller-create-child" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('resellers', 'افزودن نماینده', caption='مدیریت نمایندگی', tone='brand') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('resellers', 'افزودن نماینده', tone='brand') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/resellers/create-child" class="form-stack" autocomplete="off">
+    <form method="post" action="/resellers/create-child" class="form-stack ds-body" autocomplete="off">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <p class="muted">نام کاربری و رمز پنل همان نام کاربری و رمز پاسارگارد است. نقش از پاسارگارد شما انتخاب می‌شود.</p>
       <label class="form-field">نام کاربری پاسارگارد
         <input name="pg_username" required dir="ltr" autocomplete="off" />
@@ -383,21 +389,24 @@
       <label class="form-field">یادداشت (اختیاری)
         <input name="note" maxlength="200" />
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" {% if not l2_pg_roles %}disabled{% endif %}>ساخت</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      </div></div>
     </form>
   </div>
 </div>
 {% endif %}
 
-<div class="ui-modal" id="modal-reseller-edit" hidden>
+<div class="ui-modal ds" id="modal-reseller-edit" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-xl" role="dialog" aria-modal="true" aria-labelledby="reseller-edit-title">
-    <div class="ui-modal-head">
-      {{ modal_title('reseller-edit', 'ویرایش نماینده', caption='سقف، دسترسی و اتصال پاسارگارد', tone='brand', heading_id='reseller-edit-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('reseller-edit', 'ویرایش نماینده', tone='brand', heading_id='reseller-edit-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     <div id="reseller-edit-body" class="edit-modal-body">
       <p class="muted">در حال بارگذاری…</p>
@@ -405,12 +414,14 @@
   </div>
 </div>
 
-<div class="ui-modal" id="modal-reseller-color" hidden>
+<div class="ui-modal ds" id="modal-reseller-color" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="reseller-color-title">
-    <div class="ui-modal-head">
-      {{ modal_title('reseller-color', 'تگ ریسک', caption='سطح ریسک کنار نام در لیست', tone='brand', heading_id='reseller-color-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('reseller-color', 'تگ ریسک', tone='brand', heading_id='reseller-color-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     <div id="reseller-color-body" class="edit-modal-body">
       <p class="muted">در حال بارگذاری…</p>

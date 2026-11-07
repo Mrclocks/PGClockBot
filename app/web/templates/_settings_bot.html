@@ -247,11 +247,13 @@
   </div>
 </div>
 
-<div class="ui-modal" id="modal-bot-restart-progress" hidden data-modal-no-escape="1">
+<div class="ui-modal ds ds-dialog" id="modal-bot-restart-progress" hidden data-modal-no-escape="1">
   <div class="ui-modal-backdrop"></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bot-restart-progress-title">
-    <div class="ui-modal-head">
-      {{ modal_title('bot-settings', 'در حال اعمال تغییرات', caption='تا پایان عملیات در این صفحه بمانید', tone='neutral', heading='h3', heading_id='bot-restart-progress-title') }}
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('bot-settings', 'در حال اعمال تغییرات', tone='neutral', heading='h3', heading_id='bot-restart-progress-title') }}
+      </div>
     </div>
     <div class="flash warn update-stay-warn flash-has-ico" role="status">
       {{ flash_warn_icon() }}

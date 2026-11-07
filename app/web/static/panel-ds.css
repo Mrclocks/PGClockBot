@@ -360,3 +360,22 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .pay-dest-row > .ds-del.pay-dest-remove-btn { position: absolute; top: var(--ds-2); left: var(--ds-2); width: 36px; }
 .ds .ds-del.force-channel-remove { width: 36px; flex: 0 0 36px; }
 .ds .pay-dest-add-row { min-height: 44px; border-radius: 999px; color: var(--primary); font-weight: 500; }
+
+/* Multi-select chips (groups, inbounds): a tag with a check instead of a small switch. */
+.ds .ui-switch-grid { display: flex; flex-wrap: wrap; gap: var(--ds-2); }
+.ds .ui-switch-chip {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 34px; padding: 0 12px; margin: 0; border-radius: 999px; border: 1px solid var(--border);
+  background: transparent; cursor: pointer; direction: ltr; line-height: 1;
+}
+.ds .ui-switch-chip .ui-switch { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.ds .ui-switch-chip .ui-switch-copy strong { font-size: 13px; font-weight: 500; }
+.ds .ui-switch-chip::before {
+  content: ""; display: none; width: 14px; height: 14px;
+  background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.ds .ui-switch-chip:has(input:checked) { border-color: color-mix(in srgb, var(--pg-line) 55%, var(--border)); background: var(--pg-fill); color: var(--pg-line); }
+.ds .ui-switch-chip:has(input:checked)::before { display: block; }
+.ds .ui-switch-chip:has(input:checked) .ui-switch-copy strong { font-weight: 600; color: var(--pg-line); }
+.ds .ui-switch-chip:has(input:focus-visible) { outline: 2px solid var(--pg-line); outline-offset: 2px; }

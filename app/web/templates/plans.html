@@ -518,13 +518,15 @@
 </div>
 
 {# —— Plan category labels modal —— #}
-<div class="ui-modal{% if open_categories %} open{% endif %}" id="modal-plan-categories" {% if not open_categories %}hidden{% endif %}
+<div class="ui-modal ds{% if open_categories %} open{% endif %}" id="modal-plan-categories" {% if not open_categories %}hidden{% endif %}
      data-modal-strip-keys="categories,ok,err,_">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="plan-categories-title">
-    <div class="ui-modal-head">
-      {{ modal_title('plans', 'برچسب دسته', caption='در ربات فروشگاه، به‌جای «ثابت» دکمه‌های دسته نشان داده می‌شوند — رنگ دکمه را اینجا تنظیم کنید', tone='brand', heading_id='plan-categories-title') }}
-      <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('plans', 'برچسب دسته', tone='brand', heading_id='plan-categories-title') }}
+        <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     {% if open_categories and (flash_ok or flash_err) %}
     <div class="settings-modal-flash" id="plan-categories-flash">
@@ -532,7 +534,8 @@
       {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
     </div>
     {% endif %}
-    <form method="post" action="/plans/categories" class="form-stack plan-cat-form" id="plan-category-form" data-create-action="/plans/categories">
+    <form method="post" action="/plans/categories" class="form-stack ds-body plan-cat-form" id="plan-category-form" data-create-action="/plans/categories">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <div class="settings-grid">
         <label class="form-field">نام برچسب
           <input name="name" id="plan-category-name" required maxlength="128" placeholder="مثلاً ویژه / اقتصادی" />
@@ -560,11 +563,12 @@
           {% include "_plan_button_style_field.html" %}
         </div>
       </div>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" id="plan-category-submit">افزودن برچسب</button>
         <button type="button" class="btn btn-ghost" id="plan-category-cancel-edit" hidden>انصراف از ویرایش</button>
         <button type="button" class="btn btn-ghost" data-modal-close-strip>بستن</button>
-      </div>
+      </div></div>
     </form>
     <div class="plan-cat-list">
       <h3 class="gift-codes-recent-title">برچسب‌های فعلی</h3>
@@ -656,14 +660,17 @@
 </div>
 
 {# —— Service addon packs modal —— #}
-<div class="ui-modal{% if open_addons %} open{% endif %}" id="modal-service-addons" {% if not open_addons %}hidden{% endif %}>
+<div class="ui-modal ds{% if open_addons %} open{% endif %}" id="modal-service-addons" {% if not open_addons %}hidden{% endif %}>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="service-addons-title">
-    <div class="ui-modal-head">
-      {{ modal_title('plans', 'بسته حجم / زمان', caption='کاربر می‌تواند حجم یا زمان بخرد و به سرویس فعلی‌اش اضافه کند', tone='brand', heading_id='service-addons-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('plans', 'بسته حجم / زمان', tone='brand', heading_id='service-addons-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/plans/addons" class="form-stack" id="service-addon-form" data-create-action="/plans/addons">
+    <form method="post" action="/plans/addons" class="form-stack ds-body" id="service-addon-form" data-create-action="/plans/addons">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <div class="settings-grid">
         <label class="form-field">نام بسته
           <input name="name" id="service-addon-name" required maxlength="128" placeholder="مثلاً ۱۰ گیگ اضافه" />
@@ -714,11 +721,12 @@
           <input name="description" id="service-addon-desc" maxlength="255" placeholder="نمایش در بات" />
         </label>
       </div>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" id="service-addon-submit">افزودن بسته</button>
         <button type="button" class="btn btn-ghost" id="service-addon-cancel-edit" hidden>انصراف از ویرایش</button>
         <button type="button" class="btn btn-ghost" data-modal-close>بستن</button>
-      </div>
+      </div></div>
     </form>
     <h3 class="gift-codes-recent-title">بسته‌های فعلی</h3>
     <div class="table-wrap">
