@@ -1,7 +1,7 @@
 {# Admin Telegram prefs + user low-usage alerts #}
 <form method="post" action="/notifications" class="settings-form notify-form">
   <div class="card settings-card">
-    <h2>نوتیفیکیشن ادمین اصلی</h2>
+    <h2>هشدارهای ادمین اصلی</h2>
     <p class="muted update-card-caption">برای کدام رویدادها در تلگرام پیام بگیرید. این تنظیمات فقط برای ادمین اصلی است و روی نمایندگان اثر ندارد.</p>
     <div class="notify-list ui-switch-list">
     {% for key, title, help, default in notify_items %}
@@ -19,7 +19,7 @@
     </div>
   </div>
   <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیره نوتیفیکیشن‌های ادمین</button>
+    <button class="btn" type="submit">ذخیره هشدارهای ادمین</button>
   </div>
 </form>
 
