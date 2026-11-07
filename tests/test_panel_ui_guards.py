@@ -178,7 +178,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         block = re.search(r"(?ms)^\.btn-danger\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
         body = block.group(1)
-        self.assertIn("background: rgba(239, 68, 68, 0.12)", body)
+        self.assertIn("background: color-mix(in srgb, var(--destructive) 7%, transparent)", body)
         self.assertIn("color: var(--destructive-fg)", body)
         self.assertNotIn("0.92", body)
 
@@ -187,15 +187,16 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         block = re.search(r"(?ms)^\.btn-ok\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
         body = block.group(1)
-        self.assertIn("background: rgba(34, 197, 94, 0.12)", body)
-        self.assertIn("color: var(--ok-fg)", body)
+        # Approve actions follow the panel brand colour like the other main actions.
+        self.assertIn("background: color-mix(in srgb, var(--brand) 8%, transparent)", body)
+        self.assertIn("color: var(--brand-fg)", body)
 
     def test_btn_warn_matches_soft_tint_style(self):
         css = CSS.read_text(encoding="utf-8")
         block = re.search(r"(?ms)^\.btn-warn\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
         body = block.group(1)
-        self.assertIn("background: rgba(234, 179, 8, 0.12)", body)
+        self.assertIn("background: color-mix(in srgb, var(--warn) 7%, transparent)", body)
         self.assertIn("color: var(--warn-fg)", body)
 
     def test_modal_above_chrome(self):
