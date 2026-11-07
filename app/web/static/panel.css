@@ -3785,6 +3785,10 @@ a.btn.btn-star:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--section-gap);
 }
+/* A payment method's details stay hidden while its switch is off. */
+.settings-grid[hidden] {
+  display: none;
+}
 .settings-grid > .form-field,
 .settings-grid > .setting-item {
   min-width: 0;
