@@ -2,6 +2,7 @@
 {% from "macros.html" import switch, page_title %}
 {% block title %}ویرایش نماینده{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>
     {{ page_title('reseller-edit', 'ویرایش نماینده', help='resellers') }}
@@ -10,5 +11,6 @@
 </div>
 <div class="card reseller-edit-page">
   {% include "_reseller_edit_body.html" %}
+</div>
 </div>
 {% endblock %}

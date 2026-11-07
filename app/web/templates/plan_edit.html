@@ -2,6 +2,7 @@
 {% from "macros.html" import switch, switch_chip, page_title %}
 {% block title %}ویرایش پلن{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>
     {{ page_title('plan-edit', 'ویرایش پلن #' ~ plan.id, help='plans') }}
@@ -202,4 +203,5 @@
   })();
 })();
 </script>
+</div>
 {% endblock %}
