@@ -94,11 +94,11 @@ html[data-theme="light"] .ds .ds-card { background: rgba(0, 0, 0, 0.02); }
   min-height: var(--ds-tag-h); padding: 0 10px; border-radius: 999px; border: 1px solid var(--border);
   background: transparent; color: var(--muted-fg); font: inherit; font-size: 11.5px; font-weight: 500; cursor: pointer;
 }
-.ds .ds-mini[aria-pressed="true"] { background: var(--foreground); border-color: var(--foreground); color: var(--background); }
+.ds .ds-mini[aria-pressed="true"] { background: var(--ds-sel-bg); border-color: var(--ds-sel-line); color: var(--ds-sel-fg); }
 .ds .ds-link-btn {
   align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
   border: 0; background: none; padding: 2px 0; font: inherit; font-size: 13px; font-weight: 500;
-  color: var(--primary); cursor: pointer;
+  color: var(--ds-sel-fg); cursor: pointer;
 }
 .ds .ds-link-btn svg, .ds .ds-add svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .ds .ds-note {
@@ -125,7 +125,7 @@ html[data-theme="light"] .ds .ds-card { background: rgba(0, 0, 0, 0.02); }
   min-width: 0; min-height: var(--ds-chip-h); padding: 0 8px; border-radius: 999px; border: 1px solid var(--border);
   background: transparent; color: var(--foreground); font: inherit; font-size: 13px; cursor: pointer;
 }
-.ds .ds-chips button[aria-checked="true"] { background: var(--foreground); color: var(--background); border-color: var(--foreground); font-weight: 600; }
+.ds .ds-chips button[aria-checked="true"] { background: var(--ds-sel-bg); color: var(--ds-sel-fg); border-color: var(--ds-sel-line); font-weight: 600; }
 
 .ds .ds-types { display: flex; flex-direction: column; gap: var(--ds-2); }
 .ds .ds-types-2 { display: grid; grid-template-columns: 1fr 1fr; }
@@ -211,7 +211,7 @@ html[data-theme="light"] .ds .ds-card { background: rgba(0, 0, 0, 0.02); }
 .ds .ds-del:hover { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, transparent); }
 .ds .ds-add {
   gap: 6px; min-height: 48px; border: 0; border-top: 1px dashed var(--ds-divider); background: none;
-  font: inherit; font-size: 13px; font-weight: 500; color: var(--primary); cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 500; color: var(--ds-sel-fg); cursor: pointer;
 }
 .ds .ds-list-head .ds-unit-head { display: none; }
 @media (max-width: 374px) {
@@ -319,11 +319,11 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   flex: 1 0 auto; border-color: transparent; background: transparent; color: var(--muted-fg);
 }
 .ds .section-tabs:not(.settings-subtabs) a.active, .ds .section-tabs:not(.settings-subtabs) .tab-btn.active {
-  background: var(--bg-card); color: var(--foreground); border-color: transparent; box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+  background: var(--bg-card); color: var(--ds-sel-fg); border: 1.5px solid var(--ds-sel-line); box-shadow: 0 1px 3px rgba(0, 0, 0, .08); font-weight: 600;
 }
 .ds .section-tabs.settings-subtabs { margin-bottom: var(--ds-4); }
 .ds .section-tabs.settings-subtabs a { height: var(--ds-tab-h); font-size: 13px; background: transparent; }
-.ds .section-tabs.settings-subtabs a.active { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+.ds .section-tabs.settings-subtabs a.active { background: var(--ds-sel-bg); color: var(--ds-sel-fg); border: 1.5px solid var(--ds-sel-line); font-weight: 600; }
 .ds .section-tabs + .ds-settings-body, .ds .section-tabs + .settings-layout { margin-top: var(--ds-2); }
 
 /* ---------- Pages: settings cards ---------- */
@@ -356,10 +356,10 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 
 /* Repeating list rows in settings (cards, gateways, supports, guides, channels):
    the trash button sits in the row's top corner instead of a full-width text button. */
-.ds .pay-dest-row { position: relative; padding-inline-end: calc(var(--ds-4) + 40px); }
+.ds .pay-dest-row { position: relative; }
 .ds .pay-dest-row > .ds-del.pay-dest-remove-btn { position: absolute; top: var(--ds-2); left: var(--ds-2); width: 36px; }
 .ds .ds-del.force-channel-remove { width: 36px; flex: 0 0 36px; }
-.ds .pay-dest-add-row { min-height: 44px; border-radius: 999px; color: var(--primary); font-weight: 500; }
+.ds .pay-dest-add-row { min-height: 44px; border-radius: 999px; color: var(--ds-sel-fg); font-weight: 500; }
 
 /* Multi-select chips (groups, inbounds): a tag with a check instead of a small switch. */
 .ds .ui-switch-grid { display: flex; flex-wrap: wrap; gap: var(--ds-2); }
@@ -375,10 +375,10 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
           mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
 }
-.ds .ui-switch-chip:has(input:checked) { border-color: color-mix(in srgb, var(--pg-line) 55%, var(--border)); background: var(--pg-fill); color: var(--pg-line); }
+.ds .ui-switch-chip:has(input:checked) { border-color: var(--ds-sel-line); background: var(--ds-sel-bg); color: var(--ds-sel-fg); }
 .ds .ui-switch-chip:has(input:checked)::before { display: block; }
-.ds .ui-switch-chip:has(input:checked) .ui-switch-copy strong { font-weight: 600; color: var(--pg-line); }
-.ds .ui-switch-chip:has(input:focus-visible) { outline: 2px solid var(--pg-line); outline-offset: 2px; }
+.ds .ui-switch-chip:has(input:checked) .ui-switch-copy strong { font-weight: 600; color: var(--ds-sel-fg); }
+.ds .ui-switch-chip:has(input:focus-visible) { outline: 2px solid var(--ds-sel-line); outline-offset: 2px; }
 
 /* General pack rows: the price is typed, so it gets the wider column. */
 .ds [data-addon-rows] .ds-list-head, .ds [data-addon-rows] .ds-list-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) 40px 32px; }
@@ -391,3 +391,22 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   .ds [data-addon-rows] .ds-pack-amt .ds-unit-label { display: none; }
   .ds [data-addon-rows] .ds-list-row input { padding-inline: 8px; text-align: center; }
 }
+
+/* ---------- Brand accent and vertical rhythm ----------
+   Selected tabs, chips and «افزودن» use the panel brand colour (a strong edge on a light fill, like the
+   main buttons); delete stays red and everything else neutral. Written with var(--brand) directly so a
+   brand set on a nested element ([data-brand]) is followed. */
+.ds {
+  --ds-sel-line: color-mix(in srgb, var(--brand) 72%, transparent);
+  --ds-sel-bg: color-mix(in srgb, var(--brand) 9%, transparent);
+  --ds-sel-fg: var(--brand-fg);
+}
+.ds .sales-seg button.on, .ds .sales-seg a.on, .ds .ds-seg button.on, .ds .ds-aud button.on {
+  background: var(--bg-card); color: var(--ds-sel-fg); box-shadow: inset 0 0 0 1.5px var(--ds-sel-line);
+}
+/* Every tab row keeps the same space below it, in pages and in modals. */
+.ds nav.section-tabs, .ds .settings-modal-panel .ui-modal-scroll > .modal-section-tabs { margin: 0 0 var(--ds-4); padding-bottom: 0; }
+.ds .section-tabs.settings-tabs-groups + .section-tabs { margin-top: calc(-1 * var(--ds-1)); }
+/* Text in fields sits on the vertical centre, and the unit beside a number lines up with the digits. */
+.ds input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .ds select { line-height: normal; }
+.ds .ds-unit-label { line-height: 1; padding-top: 2px; }
