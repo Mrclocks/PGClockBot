@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.payer_notify import notify_payer
+from app.services.support_button import support_markup
 from app.services.service_import import ServiceImportError
 from app.services.service_import import MAX_LINK_LENGTH
 from app.services.service_import_requests import Decision, approve_request, list_requests, reject_request
@@ -98,4 +99,5 @@ async def _tell_customer(session: AsyncSession, decision: Decision) -> None:
         session, decision.user_id, title=NOTICE_TITLE,
         body=APPROVED_NOTICE if decision.approved else REJECTED_NOTICE,
         shop_id=decision.shop_id,
+        reply_markup=None if decision.approved else support_markup(),
     )

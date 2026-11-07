@@ -27,6 +27,7 @@ from app.db.models import (
 )
 from app.services.catalog_pricing import annotate_prices, displayed_quote, sale_price
 from app.services.service_scope import service_shop_id
+from app.services.support_button import support_row
 from app.services.formatting import format_toman, parse_expire
 from app.services.users import (
     current_shop_reseller_id,
@@ -309,6 +310,7 @@ async def notify_once(
                             callback_data=f"svc:auto:{service.id}",
                         ),
                     ],
+                    *([support_row()] if code == "review" else []),
                 ]
             ),
         )

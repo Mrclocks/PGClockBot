@@ -131,6 +131,7 @@ class CancellationCustomerNoticeTests(ReviewCase):
         self.assertEqual(sent.await_args.kwargs["shop_id"], 2)
         self.assertIn("shop-svc", sent.await_args.kwargs["body"])
         self.assertIn("5", sent.await_args.kwargs["body"])
+        self.assertIsNone(sent.await_args.kwargs["reply_markup"])
         again = await self.run_service("approve_cancellation", self.shop_request, shop_id=2, amount=5000, actor="tg:1")
         again.assert_not_awaited()
 
@@ -140,6 +141,8 @@ class CancellationCustomerNoticeTests(ReviewCase):
         body = sent.await_args.kwargs["body"]
         self.assertIn("&lt;b&gt;x&lt;/b&gt;", body)
         self.assertNotIn("<b>x</b>", body)
+        markup = sent.await_args.kwargs["reply_markup"]
+        self.assertEqual([b.callback_data for row in markup.inline_keyboard for b in row], ["nv:s:home"])
         again = await self.run_service("reject_cancellation", self.shop_request, shop_id=2, actor="tg:1", note="n")
         again.assert_not_awaited()
 

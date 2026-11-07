@@ -168,8 +168,11 @@ class AutomationNoticeTests(AlertCase):
     async def test_the_insufficient_wallet_notice_offers_a_topup(self):
         self.assertEqual(buttons(await self.notice_markup("low_wallet")), [TOPUP_CALLBACK, "svc:auto:10"])
 
+    async def test_a_review_notice_adds_the_support_button(self):
+        self.assertEqual(buttons(await self.notice_markup("review")), ["svc:auto:10", "nv:s:home"])
+
     async def test_other_notices_keep_their_single_button(self):
-        self.assertEqual(buttons(await self.notice_markup("review")), ["svc:auto:10"])
+        self.assertEqual(buttons(await self.notice_markup("insufficient")), ["svc:auto:10"])
 
 
 class AlertJobTests(AlertCase):
