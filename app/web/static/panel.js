@@ -2845,11 +2845,9 @@
         if (e.target.hasAttribute('data-money')) applyNormalize(e.target);
       }, true);
       document.addEventListener('formdata', (e) => {
-        e.target.querySelectorAll('input[data-money]').forEach((el) => {
-          if (!el.disabled && el.name && e.formData.has(el.name)) {
-            e.formData.set(el.name, normalizeNumberText(el.value));
-          }
-        });
+        if (window.PanelMoney && window.PanelMoney.normalizeMoneyFormData) {
+          window.PanelMoney.normalizeMoneyFormData(e.formData, Array.from(e.target.elements || []), normalizeNumberText);
+        }
       });
       document.addEventListener('reset', (e) => {
         setTimeout(() => unlockNumberInputs(e.target), 0);
