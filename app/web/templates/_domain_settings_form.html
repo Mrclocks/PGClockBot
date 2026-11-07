@@ -47,5 +47,5 @@
     <button class="btn" type="submit">ذخیره تنظیمات</button>
   </div>
 </form>
-<script src="/static/settings-show-when.js?v={{ app_version }}" defer></script>
+<script src="/static/settings-show-when.js?v={{ asset_v('settings-show-when.js') if asset_v is defined else app_version }}" defer></script>
 </div>

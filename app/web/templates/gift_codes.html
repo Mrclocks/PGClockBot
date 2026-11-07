@@ -95,5 +95,5 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script src="/static/gift-codes.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/gift-codes.js?v={{ asset_v('gift-codes.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 {% endblock %}

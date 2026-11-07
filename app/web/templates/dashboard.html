@@ -164,6 +164,6 @@
 <script src="/static/sales-chart.js?v={{ sales_chart_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 {% endif %}
 {% if host_gauges %}
-<script src="/static/overview-live.js?v={{ app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/overview-live.js?v={{ asset_v('overview-live.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 {% endif %}
 {% endblock %}

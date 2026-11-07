@@ -53,6 +53,6 @@
 {% endblock %}
 {% block page_scripts %}
 {% if staff.pg_is_owner %}
-<script src="/static/overview-live.js?v={{ app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/overview-live.js?v={{ asset_v('overview-live.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 {% endif %}
 {% endblock %}

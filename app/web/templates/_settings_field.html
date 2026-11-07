@@ -88,7 +88,7 @@
     <input type="hidden" name="s_{{ key }}" value="{{ val }}" data-guides-json />
     <div class="pay-dest-rows" data-guides-list></div>
   </div>
-  {% if guides_media_base %}<script src="/static/guide-media.js?v={{ app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>{% endif %}
+  {% if guides_media_base %}<script src="/static/guide-media.js?v={{ asset_v('guide-media.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>{% endif %}
   {% elif kind == 'payment_cards' %}
   <div class="pay-dest-list" data-pay-dest="cards" data-style-inherit-label="ارث از کارت به کارت">
     <div class="pay-dest-head">
