@@ -394,8 +394,8 @@ class ButtonStyleTests(unittest.TestCase):
         from app.services.resellers import RESELLER_SETTINGS_TABS
         from app.services.users import DEFAULT_SETTINGS, SETTINGS_TABS, keys_for_tab
 
-        self.assertIn(("colors", "رنگبندی دکمه‌ها"), SETTINGS_TABS)
-        self.assertIn(("colors", "رنگبندی دکمه‌ها"), RESELLER_SETTINGS_TABS)
+        self.assertIn(("colors", "رنگ دکمه‌ها"), SETTINGS_TABS)
+        self.assertIn(("colors", "رنگ دکمه‌ها"), RESELLER_SETTINGS_TABS)
         self.assertIn(("appearance", "هویت ربات"), SETTINGS_TABS)
         self.assertIn(("appearance", "هویت ربات"), RESELLER_SETTINGS_TABS)
         keys = keys_for_tab("colors")

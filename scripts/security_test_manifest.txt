@@ -431,3 +431,4 @@ tests/test_admin_pg_inbounds_bot.py
 tests/test_admin_pg_hosts_bot.py
 # Web panel sidebar: every entry follows the visibility rule of its route.
 tests/test_panel_nav.py
+tests/test_panel_search.py

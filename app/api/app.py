@@ -97,7 +97,7 @@ from app.services.panel_brand import (
     load_own_values,
 )
 from app.services.receipt_review import DEFAULT_REJECT_TEXT
-from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
+from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
 from app.services.users import (
     SETTING_VISIBILITY,
     SETTINGS_DOMAIN_REDIRECTS,
@@ -122,6 +122,7 @@ from app.services.web_auth import (
 from app.api.catalog_discounts import register_catalog_discounts
 from app.api.connection_status_pages import register_connection_status_pages
 from app.api.funnel_pages import register_funnel_pages
+from app.api.panel_search_pages import register_panel_search_pages
 from app.api.order_purge_pages import register_order_purge_pages
 from app.api.cleanup_settings_pages import register_cleanup_settings_pages
 from app.api.staff_audit_pages import register_staff_audit_pages
@@ -1588,6 +1589,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_panel_search_pages(app, require_staff=require_staff)
     register_order_purge_pages(app, require_staff=require_staff, get_db=get_db)
     register_cleanup_settings_pages(app, require_staff=require_staff, get_db=get_db)
     register_staff_audit_pages(app, render=render, require_staff=require_staff, get_db=get_db)
@@ -4341,7 +4343,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.notifications import PLATFORM_NOTIFY_PREFS, get_notify_prefs
         from app.services.updates import clear_update_cache, local_version
 
-        tab = (request.query_params.get("tab") or "welcome").strip()
+        tab = resolve_merged_tab((request.query_params.get("tab") or "welcome").strip())
         valid = {t[0] for t in SETTINGS_TABS} | PANEL_SETTINGS_KEYS
         if tab in SETTINGS_DOMAIN_REDIRECTS:
             dest = SETTINGS_DOMAIN_REDIRECTS[tab]
