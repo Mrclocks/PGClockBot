@@ -81,12 +81,13 @@
 </div>
 {%- endmacro %}
 
-{# Save bar: primary action (two thirds) and cancel. Pinned to the panel bottom by panel.js. #}
-{% macro ds_foot(label, primary_class='btn', primary_id=none, pinned=true) -%}
+{# Modal footer. A form modal has one full-width action (close is the × in the header);
+   a confirmation dialog passes cancel=true to pair its action with «انصراف». #}
+{% macro ds_foot(label, primary_class='btn', primary_id=none, pinned=true, cancel=false) -%}
 <div class="{% if pinned %}ui-modal-sticky-save {% endif %}ds-foot">
   <div class="ds-foot-btns">
     <button type="submit" class="{{ primary_class }}"{% if primary_id %} id="{{ primary_id }}"{% endif %}>{{ label }}</button>
-    <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+    {% if cancel %}<button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>{% endif %}
   </div>
 </div>
 {%- endmacro %}

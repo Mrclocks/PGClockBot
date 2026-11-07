@@ -24,7 +24,7 @@
   </div>
   {% for kind, title, unit, amount_name, style_name, amount_label, style_label, remove_label, add_label, rows, rate_sel, amount_max in kinds %}
   <div class="ds-list" data-user-pack-kind="{{ kind }}" data-pack-list="{{ kind }}" data-rate="{{ rate_sel }}" role="tabpanel"{% if not loop.first %} hidden{% endif %}>
-    <div class="ds-list-head" aria-hidden="true"><span>مقدار<span class="ds-unit-head"> ({{ unit }})</span></span><span>قیمت (تومان)</span><span>رنگ</span><span></span></div>
+    <div class="ds-list-head" aria-hidden="true"><span>مقدار<span class="ds-unit-head"> ({{ unit }})</span></span><span>قیمت<span class="ds-head-long"> (تومان)</span></span><span>رنگ</span><span></span></div>
     <div class="extra-packs-rows" data-user-pack-rows="{{ kind }}">
       {% for row in rows %}
       {% set cur = 'inherit' if row.button_style is none else (row.button_style or '') %}
@@ -38,7 +38,7 @@
           <select name="{{ style_name }}" class="btn-color-select extra-pack-style" data-tone="{{ cur_tone }}" aria-label="{{ style_label }}"
                   {% if packs_are_hidden %}disabled{% endif %}>
             {% for opt_val, opt_label, opt_tone in style_opts %}
-            <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+            <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ 'پیش‌فرض' if opt_val == 'inherit' else opt_label }}</option>
             {% endfor %}
           </select>
         </span>
