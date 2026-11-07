@@ -1624,7 +1624,7 @@ SETTING_GROUPS = {
     # Payment settings: one section per payment method, its switch first.
     "کیف پول": [
         ("pay_wallet_enabled", "کیف پول داخلی", "toggle", "پرداخت از موجودی کیف پول کاربر"),
-        ("btn_pay_wallet", "پرداخت با کیف پول", "text", ""),
+        ("btn_pay_wallet", "متن دکمه کیف پول", "text", ""),
     ],
     "رسیدها": [
         ("auto_approve_payments", "تأیید خودکار رسید", "toggle", "اگر روشن باشد، سرویس بلافاصله بعد از ارسال رسید خرید تحویل می‌شود؛ یا بعد از مدتی که پایین‌تر تعیین می‌کنید. شارژ کیف پول هرگز خودکار تأیید نمی‌شود."),
@@ -1662,7 +1662,7 @@ SETTING_GROUPS = {
     ],
     "کد تخفیف": [
         ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),
-        ("btn_pay_discount", "کد تخفیف", "text", ""),
+        ("btn_pay_discount", "متن دکمه کد تخفیف", "text", ""),
     ],
     "وضعیت فروش": [
         (

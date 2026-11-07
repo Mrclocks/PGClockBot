@@ -59,10 +59,17 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 }
 .ui-modal.ds .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {
   gap: 0;
-  padding: 0 var(--g4) calc(var(--modal-save-footer-h, 0px) + var(--g6));
+  padding: 0 var(--g4) calc(var(--modal-save-footer-h, 0px) + var(--g4));
   scrollbar-gutter: auto;
 }
-.ui-modal.ds .ui-modal-panel[data-scroll-shell="1"]:not(:has(> .ui-modal-sticky-save)) > .ui-modal-scroll { padding-bottom: var(--g6); }
+/* The last content ends 16 above the footer line, like the 16 below it; without a footer, 16 above the edge. */
+.ui-modal.ds .ui-modal-panel[data-scroll-shell="1"]:not(:has(> .ui-modal-sticky-save)) > .ui-modal-scroll { padding-bottom: var(--g4); }
+/* A dialog's footer sits in its form: no extra space under it, and 16 between the message and the footer line. */
+.ui-modal.ds.ds-dialog .ui-modal-panel[data-scroll-shell="1"]:not(:has(> .ui-modal-sticky-save)) > .ui-modal-scroll { padding-bottom: 0; }
+.ui-modal.ds.ds-dialog .ui-modal-scroll > form { gap: var(--g4); }
+.ui-modal.ds.ds-dialog form .ds-body { padding-top: 0; }
+.ui-modal.ds.ds-dialog .ds-body { gap: var(--g4); }
+.ui-modal.ds.ds-dialog .ui-modal-scroll .ds-foot { margin: 0 calc(-1 * var(--g4)); }
 @media (max-width: 640px) {
   .ui-modal.ds { padding: calc(var(--g6) + var(--safe-top)) 0 0 0; align-items: flex-end; }
   .ui-modal.ds .ui-modal-panel { width: 100%; max-height: 100%; height: 100%; border-radius: var(--box-radius) var(--box-radius) 0 0; border-bottom: 0; }
@@ -132,6 +139,8 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 
 /* ===================================================================== 4. Sections and boxes */
 .ds .ds-sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); margin: 0 0 var(--g2); }
+/* A title alone needs no room for an action, so the space above its letters is not padded out. */
+.ds .ds-sec-head:has(> :only-child) { min-height: 0; }
 .ds .ds-sec-title { margin: 0; padding-inline: var(--g1); font-size: 13px; font-weight: 600; color: var(--muted-fg); }
 .ds .ds-card, .ds .settings-card, .ds .edit-section, .ui-modal.ds .ui-modal-scroll > form > .card {
   display: flex; flex-direction: column; gap: var(--box-gap); margin: 0;
@@ -238,8 +247,9 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
   background: var(--bg-card); color: var(--muted-fg); border: 1px solid var(--line);
 }
 /* Rows of tabs: 16 below every row; a topic row and its page chips sit 8 apart. */
-.ds nav.section-tabs { margin: 0 0 var(--g4); }
-.ds .section-tabs.settings-tabs-groups { margin-bottom: var(--g2); }
+/* A page's tab track sits 16 below what is above it and 16 above what follows — never touching a box. */
+.ds nav.section-tabs:not(.settings-subtabs):not(.modal-section-tabs) { margin: 0 0 var(--g4) !important; }
+.ds :is(.main-body, .ds-settings) > :has(+ nav.section-tabs:not(.modal-section-tabs)) { margin-bottom: var(--g4) !important; }
 .ds .section-tabs.settings-subtabs {
   display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: var(--g2);
   min-height: 0; height: auto; padding: 0; border: 0; background: none; border-radius: 0;
@@ -334,7 +344,6 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-rows > .ui-switch-row:first-child, .ds .ui-switch-list > .ui-switch-row:first-child { padding-top: 0 !important; }
 .ds .ds-rows > .ui-switch-row:last-child, .ds .ui-switch-list > .ui-switch-row:last-child { padding-bottom: 0 !important; }
 .ds .ds-rows > .ui-switch-row + .ui-switch-row, .ds .ui-switch-list > .ui-switch-row + .ui-switch-row { border-top: 1px dashed var(--dash) !important; }
-.ds .setting-item:has(> .ui-switch-row) + .setting-item:has(> .ui-switch-row) { padding-top: var(--box-gap); border-top: 1px dashed var(--dash); }
 
 /* ===================================================================== 9. Accordion with counters */
 .ds .ds-acc-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--g1) var(--g3); padding: var(--g3) var(--g4); font-size: 13.5px; }
@@ -350,9 +359,10 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-acc.is-risk summary { color: var(--destructive); }
 .ds .ds-acc.is-risk .ds-meta { background: color-mix(in srgb, var(--destructive) 10%, transparent); color: var(--destructive); }
 .ds .ds-acc-note { margin: 0 var(--g4) var(--g3); font-size: 12px; color: var(--muted-fg); }
-.ds .ds-acc-rows { display: flex; flex-direction: column; padding: 0 var(--g4) var(--g3); }
-.ds .ds-acc-rows > .ui-switch-row.ds-switch { padding: var(--g2) 0 !important; min-height: 52px; }
-.ds .ds-acc-rows > .ui-switch-row.ds-switch + .ui-switch-row.ds-switch { border-top: 1px dashed var(--dash) !important; }
+/* Summary and rows are all 56 high with their content centred, and a dashed line separates every row —
+   the summary from the first row too — so the space on both sides of each line is the same. */
+.ds .ds-acc-rows { display: flex; flex-direction: column; padding: 0 var(--g4); }
+.ds .ds-acc > .ds-acc-rows > .ui-switch-row.ds-switch { padding: var(--g2) 0 !important; min-height: 56px; border-top: 1px dashed var(--dash) !important; }
 .ds .ds-acc-rows .ui-switch-copy strong { font-size: 13.5px; font-weight: 400; }
 
 /* ===================================================================== 10. Editable row lists (packs) */
@@ -417,7 +427,7 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 }
 
 /* ===================================================================== 11. Confirmations */
-.ds .ds-confirm { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--g3); padding: var(--g6) var(--g2) var(--g2); }
+.ds .ds-confirm { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--g3); padding: 0 var(--g2); }
 .ds .ds-confirm p { margin: 0; font-size: 14px; line-height: 1.8; }
 .ds .ds-confirm-ico { width: 56px; height: 56px; border-radius: 999px; display: grid; place-items: center; background: color-mix(in srgb, var(--warn) 14%, transparent); }
 .ds .ds-confirm-ico svg { width: 26px; height: 26px; fill: none; stroke: var(--warn); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -524,3 +534,28 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 /* A section whose on/off switch is its header: title and switch share one row. */
 .ds .settings-card > .settings-card-switch { display: flex; align-items: center; justify-content: space-between; gap: var(--g3); padding: 0 !important; border: 0 !important; background: none !important; }
 .ds .settings-card > .settings-card-switch h2 { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.25; }
+/* Flush cards (a title over an edge-to-edge table): every title has 16 above and 16 below; a description
+   sits 8 under its title and 16 above the table; a second title has 8 of top padding: with the last row's
+   16 of padding that makes 24 between sections. */
+.ds .card-flush > :is(h2, h3, .card-subhead):not(.sr-only) { margin: 0 !important; padding: var(--g4) var(--g4) var(--g4) !important; line-height: 1.25; }
+.ds .card-flush > :is(h2, h3, .card-subhead) + p.muted { margin: 0 !important; padding: 0 var(--g4) var(--g4) !important; }
+.ds .card-flush > :is(h2, h3, .card-subhead):has(+ p.muted) { padding-bottom: var(--g2) !important; }
+.ds .card-flush > .table-wrap + :is(h2, h3, .card-subhead) { padding-top: var(--g2) !important; }
+/* Rows of chip tabs under a track keep the same 16 as the track itself. */
+.ds .section-tabs.settings-subtabs { margin: 0 0 var(--g4) !important; }
+/* Plan naming is part of its card: separated by space like every other group in a card, not by a line. */
+.ds .plan-naming-block { margin-top: var(--g2); padding-top: 0; border-top: 0; }
+/* The small select is the compact tier (36), like every other compact control. */
+.ds .ui-select-sm .ui-select-toggle { height: var(--cmp-h) !important; min-height: var(--cmp-h) !important; }
+@media (max-width: 880px) {
+  /* List header bar: one compact row (select-all, count, sort), with no empty actions cell adding a second row. */
+  .ds .table-list-sm > thead > tr { grid-template-rows: var(--cmp-h); padding-block: var(--g2); }
+  .ds .table-list-sm > thead > tr > th.col-actions { display: none; }
+  .ds .table-list-sm .li-sort, .ds .table-list-sm .li-head .ui-select-toggle { height: var(--cmp-h) !important; min-height: var(--cmp-h) !important; }
+}
+.ds .ds-confirm p:empty { display: none; }
+/* A page section after a box starts 24 below it (the box's own margin); its title sits 8 above its description
+   and the description 16 above what follows. */
+.ds .main-body > section.ticket-tg-section { margin-top: 0; }
+.ds .main-body .section-title { margin: 0 0 var(--g2); line-height: 1.25; }
+.ds .main-body .section-title + .page-sub { margin: 0 0 var(--g4); }
