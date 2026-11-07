@@ -4,6 +4,7 @@
 {% from "_panel_settings_tabs.html" import panel_settings_tabs %}
 {% block title %}{% if is_panel_settings %}تنظیمات وب پنل{% else %}تنظیمات{% endif %}{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>
     {% if is_panel_settings %}
@@ -219,4 +220,5 @@
 })();
 </script>
 {% endif %}
+</div>
 {% endblock %}
