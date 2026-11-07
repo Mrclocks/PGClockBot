@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_title %}
 {% block title %}تست اتصال سرویس{% endblock %}
-{% block head %}<link rel="stylesheet" href="/static/connection-status.css?v={{ app_version }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/connection-status.css?v={{ asset_v('connection-status.css') if asset_v is defined else app_version }}">{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
 <div class="page-head">

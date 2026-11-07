@@ -545,6 +545,6 @@
     </form>
   </div>
 </div>
-<script src="/static/payment-void.js?v={{ app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/payment-void.js?v={{ asset_v('payment-void.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 {% endif %}
 {% endblock %}

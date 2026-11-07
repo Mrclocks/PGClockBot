@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+from functools import partial
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
@@ -86,7 +87,7 @@ from app.services.security_policy import (
 from app.services.updates import local_version
 from app.services.message_variables import template_variable_specs
 from app.services.psp_gateways import psp_gateways_form_json
-from app.services.panel_assets import get_panel_asset_cache_key
+from app.services.panel_assets import asset_version, get_panel_asset_cache_key
 from app.services.redact import operator_error
 from app.services.shop_scope import is_platform_admin, payment_shop_id
 from app.services.panel_brand import (
@@ -177,6 +178,7 @@ templates.env.globals["panel_brand_css"] = BRAND_PRESET_CSS
 templates.env.globals["default_brand_color_hex"] = DEFAULT_COLOR_HEX
 templates.env.globals["default_brand_color_label"] = DEFAULT_COLOR_LABEL
 templates.env.globals["panel_script_cache_key"] = get_panel_asset_cache_key("panel.js")
+templates.env.globals["asset_v"] = partial(asset_version, fallback=local_version())
 templates.env.globals["panel_widget_cache_key"] = get_panel_asset_cache_key("panel_widget_request.js")
 templates.env.globals["panel_ok_flash_cache_key"] = get_panel_asset_cache_key("panel_ok_flash.js")
 templates.env.globals["money_inputs_cache_key"] = get_panel_asset_cache_key("money-inputs.js")
