@@ -11,7 +11,7 @@
       {% for key, title, help, default in notify_items %}
       <label class="notify-row ui-switch-row">
         <span class="notify-meta ui-switch-copy">
-          <strong>{{ title }}</strong>
+          <strong>{{ title }}{% if key in system_notify_keys|default([]) %} <span class="badge neutral notify-system-badge">سیستم</span>{% endif %}</strong>
           <small>{{ help }}</small>
         </span>
         <span class="ui-switch">

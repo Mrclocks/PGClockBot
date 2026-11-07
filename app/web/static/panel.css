@@ -12893,3 +12893,6 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
     justify-self: stretch;
   }
 }
+
+/* «سیستم» tag on alerts about the panel itself. */
+.notify-system-badge { margin-inline-start: var(--space-0); font-size: 0.75em; vertical-align: middle; }

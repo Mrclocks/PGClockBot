@@ -94,6 +94,7 @@ from app.services.panel_brand import (
     brand_for_staff,
     load_own_values,
 )
+from app.services.notifications import SYSTEM_NOTIFY_KEYS
 from app.services.receipt_review import DEFAULT_REJECT_TEXT
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
@@ -164,6 +165,7 @@ templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
 templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
 templates.env.globals["brand_presets"] = BRAND_PRESETS
+templates.env.globals["system_notify_keys"] = SYSTEM_NOTIFY_KEYS
 # Request context overrides these; they keep templates that render without a signed-in person working.
 templates.env.globals["panel_brand"] = DEFAULT_BRAND
 templates.env.globals["panel_brand_css"] = BRAND_PRESET_CSS
