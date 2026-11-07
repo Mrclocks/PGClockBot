@@ -3,6 +3,7 @@
 {% block title %}وضعیت اتصال{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/connection-status.css?v={{ app_version }}">{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>{{ page_title('activity', 'وضعیت اتصال', help='connection-status') }}</div>
   <div class="actions"><a class="btn btn-ghost" href="/connection-status">تازه‌سازی</a></div>
@@ -163,4 +164,5 @@
 </section>
 {% else %}<div class="card"><p class="muted">هنوز کانفیگی برای تست انتخاب نشده است. از بخش «انتخاب کانفیگ‌های اشتراک» شروع کنید.</p></div>{% endfor %}
 {% if page.next_id %}<div class="actions"><a class="btn btn-ghost" href="/connection-status?after={{ page.next_id }}">نتیجه‌های بعدی</a></div>{% endif %}
+</div>
 {% endblock %}
