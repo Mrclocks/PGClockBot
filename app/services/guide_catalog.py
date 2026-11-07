@@ -172,7 +172,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "title": "درخواست‌های نمایندگی",
         "summary": "بررسی و تأیید درخواست‌هایی که کاربر از داخل ربات فرستاده است.",
         "slug": "reseller-applications",
-        "panel": "/reseller-applications",
+        "panel": "/resellers/applications",
         "roles": ["owner", "admin"],
         "nav_group": "پنل ربات",
         "icon": "inbox",
