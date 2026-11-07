@@ -1277,6 +1277,22 @@
       active.setAttribute('data-save-home', slot.id);
       active.setAttribute('data-save-form', form.id);
       panel.appendChild(active);
+      reserveModalFooterRoom(panel, active);
+    }
+
+    /* The scroll area keeps room for the pinned footer's real height (it grows when a
+       warning line shows), so the last field never sits under the buttons. */
+    function reserveModalFooterRoom(panel, footer){
+      const apply = () => {
+        const h = footer.isConnected ? footer.getBoundingClientRect().height : 0;
+        panel.style.setProperty('--modal-save-footer-h', Math.ceil(h) + 'px');
+      };
+      apply();
+      if (typeof ResizeObserver === 'function') {
+        if (panel._footerObserver) panel._footerObserver.disconnect();
+        panel._footerObserver = new ResizeObserver(apply);
+        panel._footerObserver.observe(footer);
+      }
     }
 
     function ensureModalScrollShell(modal){

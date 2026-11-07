@@ -56,11 +56,41 @@ class DesignMacroTests(unittest.TestCase):
         html = render_macro("{{ ds_switch('x', label) }}{{ ds_foot(label) }}", label="<script>1</script>")
         self.assertNotIn("<script>", html)
 
-    def test_save_bar_is_pinned_and_has_cancel(self) -> None:
+    def test_form_save_bar_is_pinned_without_cancel(self) -> None:
         html = render_macro("{{ ds_foot('ذخیره') }}")
         self.assertIn('class="ui-modal-sticky-save ds-foot"', html)
         self.assertIn('type="submit"', html)
+        self.assertNotIn("data-modal-close", html)
+
+    def test_dialog_save_bar_keeps_cancel_when_asked(self) -> None:
+        html = render_macro("{{ ds_foot('باطل کن', cancel=true) }}")
         self.assertIn("data-modal-close", html)
+        self.assertIn("انصراف", html)
+
+
+class GatedSettingsSectionTests(unittest.TestCase):
+    """A payment section whose first field is its on/off switch shows that switch in its header."""
+
+    def render(self, enabled: str) -> str:
+        groups = {"کارت به کارت": [
+            ("pay_card_enabled", "کارت به کارت", "toggle", ""),
+            ("pay_card_random", "نمایش کارت تصادفی", "toggle", ""),
+        ]}
+        return templates.env.get_template("_domain_settings_form.html").render(
+            settings_form_action="/settings", tab_groups=list(groups), groups=groups,
+            values={"pay_card_enabled": enabled}, app_version="t")
+
+    def test_section_title_is_not_repeated_as_switch_label(self) -> None:
+        html = self.render("1")
+        self.assertEqual(html.count("کارت به کارت"), 2)  # header title and the switch's aria-label
+        self.assertIn('name="s_pay_card_enabled" value="1" aria-label="کارت به کارت" checked', html)
+        self.assertEqual(html.count('name="s_pay_card_enabled"'), 1)
+
+    def test_section_body_is_hidden_while_switched_off(self) -> None:
+        html = self.render("0")
+        body = html.split('data-pay-settings-for="pay_card_enabled"', 1)[1].split(">", 1)[0]
+        self.assertIn("hidden", body)
+        self.assertNotIn('aria-label="کارت به کارت" checked', html)
 
 
 if __name__ == "__main__":
