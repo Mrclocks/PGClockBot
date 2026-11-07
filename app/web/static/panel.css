@@ -65,9 +65,9 @@
   --topbar-h: 58px;
   --brand-logo-size: 40px;
   /* Control size tiers (see «Control size tiers» at the end of this file). */
-  --btn-h: 40px;
-  --ctl-sm-h: 32px;
-  --tag-h: 24px;
+  --btn-h: 44px;
+  --ctl-sm-h: 36px;
+  --tag-h: 28px;
   /* Spacing scale — 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 */
   --space-0: 4px;
   --space-1: 8px;

@@ -15,6 +15,7 @@
   'کد تخفیف': 'pay_discount_enabled',
   'وضعیت فروش': 'shop_maintenance_enabled',
 } %}
+{% from "macros.html" import setting_help %}
 {% set _pay_on = ['1', 'true', 'yes', 'on'] %}
 <div class="settings-domain-stack">
 <form method="post" action="{{ settings_form_action }}" enctype="multipart/form-data" class="settings-form">
@@ -23,18 +24,26 @@
   {% set gate_key = pay_settings_gate.get(group_name) %}
   {% set gated = gate_key and fields and fields[0][0] == gate_key %}
   <div class="card settings-card">
-    <h2>{{ group_name }}</h2>
     {% if gated %}
-    <div class="settings-grid">
-      {% set field = fields[0] %}
-      {% include "_settings_field.html" %}
-    </div>
+    {# The section's on/off switch is its header, so the title is not repeated as a switch label. #}
+    {% set gate_help = fields[0][3] if fields[0]|length > 3 else '' %}
+    <label class="toggle-row ui-switch-row settings-card-switch">
+      <span class="ui-switch-copy">
+        <h2>{{ group_name }}</h2>
+        {{ setting_help(gate_help) }}
+      </span>
+      <span class="ui-switch">
+        <input type="checkbox" name="s_{{ gate_key }}" value="1" aria-label="{{ fields[0][1] }}" {% if (values.get(gate_key, '')|string|lower) in _pay_on %}checked{% endif %} />
+        <span class="ui-switch-track" aria-hidden="true"></span>
+      </span>
+    </label>
     <div class="settings-grid" data-pay-settings-for="{{ gate_key }}"{% if (values.get(gate_key, '')|string|lower) not in _pay_on %} hidden{% endif %}>
     {% for field in fields[1:] %}
       {% include "_settings_field.html" %}
     {% endfor %}
     </div>
     {% else %}
+    <h2>{{ group_name }}</h2>
     <div class="settings-grid">
     {% for field in fields %}
       {% include "_settings_field.html" %}
