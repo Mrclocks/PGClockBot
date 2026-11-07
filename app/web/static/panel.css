@@ -64,7 +64,10 @@
   /* Header chrome — keep in sync with .brand / .topbar padding + logo size */
   --topbar-h: 58px;
   --brand-logo-size: 40px;
-  --btn-h: 36px;
+  /* Control size tiers (see «Control size tiers» at the end of this file). */
+  --btn-h: 40px;
+  --ctl-sm-h: 32px;
+  --tag-h: 24px;
   /* Spacing scale — 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 */
   --space-0: 4px;
   --space-1: 8px;
@@ -959,9 +962,9 @@ tr.principal-row-l2 td:first-child {
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  /* Match .btn-star height so side-foot & site-footer share one baseline */
-  height: 28px;
-  min-height: 28px;
+  /* Same compact tier as .btn-star so side-foot & site-footer share one baseline */
+  height: var(--ctl-sm-h);
+  min-height: var(--ctl-sm-h);
   padding: 0 var(--space-1);
   box-sizing: border-box;
   border-radius: var(--control-radius);
@@ -1434,7 +1437,9 @@ label > small.muted,
 }
 /* Force help under the input/select/textarea even if HTML still has it under the title */
 label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > .ui-select, > textarea, > .pw-field) > small.muted,
-.form-field > small.muted {
+label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > .ui-select, > textarea, > .pw-field) > details.setting-help,
+.form-field > small.muted,
+.form-field > details.setting-help {
   order: 10;
   margin-top: var(--space-1);
   margin-bottom: 0;
@@ -3751,8 +3756,8 @@ a.btn.btn-star {
   background: color-mix(in srgb, var(--brand-base) 12%, transparent);
   border-radius: var(--control-radius);
   padding: 0 var(--space-1);
-  height: 28px;
-  min-height: 28px;
+  height: var(--ctl-sm-h);
+  min-height: var(--ctl-sm-h);
   font-size: 12px;
   font-weight: 600;
   text-decoration: none !important;
@@ -9444,8 +9449,8 @@ html[data-theme="light"] .home-period {
   text-align: right;
 }
 .magic-link-field {
-  --magic-link-h: 52px;
-  --magic-copy-h: 34px;
+  --magic-link-h: var(--btn-h);
+  --magic-copy-h: var(--ctl-sm-h);
   --magic-copy-w: 4.75rem; /* «کپی» / «کپی شد» — same slot, no jump */
   direction: ltr;
   display: flex;
@@ -12489,7 +12494,7 @@ html[data-theme="light"] .sc-tip { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
   stroke-linejoin: round;
 }
 @media (max-width: 640px) {
-  .settings-reset-btn { width: 100%; justify-content: center; min-height: 44px; }
+  .settings-reset-btn { width: 100%; justify-content: center; min-height: var(--btn-h); }
 }
 
 /* Guide photo/video upload: the profile-photo upload box, at a lower height. */
@@ -12852,3 +12857,24 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
     justify-self: stretch;
   }
 }
+
+/* ---------- Control size tiers ----------
+   Three heights for the whole panel, so boxes side by side share one size and one centre line:
+   --btn-h    fields, selects, buttons, icon buttons and tabs
+   --ctl-sm-h compact buttons, filters, segment switches and multi-select tags
+   --tag-h    status tags and counters */
+.btn-sm, a.btn-sm, .btn-star { height: var(--ctl-sm-h); min-height: var(--ctl-sm-h); font-size: 12.5px; }
+.section-tabs a, .section-tabs .tab-btn { min-height: var(--btn-h); box-sizing: border-box; }
+.sales-seg button, .sales-seg a {
+  min-height: calc(var(--ctl-sm-h) - 4px); display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+}
+.sales-seg { min-height: var(--ctl-sm-h); box-sizing: border-box; align-items: center; }
+.badge { min-height: var(--tag-h); display: inline-flex; align-items: center; justify-content: center; line-height: 1; box-sizing: border-box; }
+.magic-link-input { height: var(--btn-h); min-height: var(--btn-h); }
+/* The panel font draws Latin digits higher than Persian letters; number fields move their text
+   down a little so the digits read centred like the Persian text of other fields. */
+input[dir="ltr"], input[inputmode="numeric"], input[inputmode="decimal"], input[type="number"], input[data-money] {
+  padding-top: 3px; padding-bottom: 0;
+}
+/* A colour card's menu sits at the bottom, so menus in one row line up even when a label wraps. */
+.btn-color-card > .ui-select, .btn-color-card > select { margin-top: auto; }

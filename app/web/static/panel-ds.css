@@ -8,10 +8,10 @@
   --ds-3: var(--space-1_5);
   --ds-4: var(--space-2);
   --ds-6: var(--space-3);
-  --ds-control-h: 44px;
-  --ds-tab-h: 40px;
-  --ds-chip-h: 36px;
-  --ds-tag-h: 26px;
+  --ds-control-h: var(--btn-h);
+  --ds-tab-h: var(--btn-h);
+  --ds-chip-h: var(--btn-h);
+  --ds-tag-h: var(--tag-h);
   --ds-radius-sm: 16px;
   --ds-divider: color-mix(in srgb, var(--border) 80%, transparent);
 }
@@ -410,3 +410,16 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 /* Text in fields sits on the vertical centre, and the unit beside a number lines up with the digits. */
 .ds input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .ds select { line-height: normal; }
 .ds .ds-unit-label { line-height: 1; padding-top: 2px; }
+
+/* Size tiers inside the design scope (tokens in panel.css). */
+.ds .ds-mini, .ds .ui-switch-chip { min-height: var(--ctl-sm-h); }
+.ds .ds-del { width: var(--btn-h); height: var(--btn-h); }
+.ds .ds-list-row input, .ds .ds-pack-amt input { height: var(--btn-h); min-height: var(--btn-h); }
+/* The header audience switch is one 40px control: a 32px choice inside a 4px track. */
+.ds .ds-aud button { min-height: calc(var(--btn-h) - 8px); }
+.ds .ds-list-row input { margin: 0; }
+/* Section jump chips: compact tier, sized to their label, scrolling sideways like tab rows when space runs out. */
+.ds .ds-steps { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; }
+.ds .ds-steps::-webkit-scrollbar { display: none; }
+.ds .ds-steps a { flex: 1 0 auto; min-height: var(--ctl-sm-h); padding: 0 6px; font-size: 12px; }
+.ds .ds-foot-warn-go { color: var(--ds-sel-fg); }
