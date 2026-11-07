@@ -12936,3 +12936,5 @@ input[dir="ltr"], input[inputmode="numeric"], input[inputmode="decimal"], input[
 }
 /* A colour card's menu sits at the bottom, so menus in one row line up even when a label wraps. */
 .btn-color-card > .ui-select, .btn-color-card > select { margin-top: auto; }
+/* «سیستم» tag on alerts about the panel itself. */
+.notify-system-badge { margin-inline-start: var(--space-0); font-size: 0.75em; vertical-align: middle; }

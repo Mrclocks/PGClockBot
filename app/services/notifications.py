@@ -143,6 +143,9 @@ PLATFORM_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset(
 # Keys that only make sense for a reseller shop (nothing to announce for the platform itself).
 SHOP_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset({"notify_panel_capacity"})
 
+# Alerts about the panel itself rather than a sale; the settings tab marks them «سیستم».
+SYSTEM_NOTIFY_KEYS: frozenset[str] = frozenset({"notify_panel_update", "notify_panel_delivery_failures"})
+
 # What the platform Owner sees and toggles.
 PLATFORM_NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
     item for item in NOTIFY_PREFS if item[0] not in SHOP_ONLY_NOTIFY_KEYS
