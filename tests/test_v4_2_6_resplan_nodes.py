@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from tests.template_source import template_with_includes
 
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
 ADMIN_PLANS = (ROOT / "app/bot/handlers/admin_plans.py").read_text(encoding="utf-8")
 ADMIN_NODES = (ROOT / "app/bot/handlers/admin_pg_nodes.py").read_text(encoding="utf-8")
 RESELLER_PAGES = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
-PLANS_HTML = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+PLANS_HTML = template_with_includes("plans.html")
 EDIT_HTML = (ROOT / "app/web/templates/reseller_plan_edit.html").read_text(encoding="utf-8")
 BOT_INIT = (ROOT / "app/bot/__init__.py").read_text(encoding="utf-8")
 RESELLERS = (ROOT / "app/services/resellers.py").read_text(encoding="utf-8")

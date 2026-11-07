@@ -19,6 +19,7 @@ from app.services.representative_unification import (
     staff_can_manage_representatives,
     RepresentativeUnifyError,
 )
+from tests.template_source import template_with_includes
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -215,7 +216,7 @@ class WizardAndKeyboardSurfaceTests(unittest.TestCase):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("assert_user_plan_within_limits", src)
         self.assertIn("assert_custom_plan_range_within_limits", src)
-        plans = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        plans = template_with_includes("plans.html")
         self.assertIn("plan_limit_issues", plans)
         self.assertIn("pg_limit_snapshot", plans)
         reseller = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")

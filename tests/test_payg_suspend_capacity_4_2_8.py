@@ -14,6 +14,7 @@ from app.services.reseller_capacity import (
     plan_extra_gb_price,
     plan_renew_price,
 )
+from tests.template_source import template_with_includes
 
 
 class PaygSuspendHelpersTests(unittest.IsolatedAsyncioTestCase):
@@ -95,7 +96,7 @@ class ResellerCapacityPlanTests(unittest.TestCase):
         self.assertEqual(plan_renew_price(plan), 12_000)
 
     def test_templates_have_extra_switch(self):
-        plans = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
+        plans = template_with_includes("plans.html")
         edit = Path("app/web/templates/reseller_plan_edit.html").read_text(encoding="utf-8")
         self.assertIn("allow_buy_extra", plans)
         self.assertIn("extra_gb_price", plans)
