@@ -1,11 +1,24 @@
-{# One tab strip for loyalty club, targeted campaigns and broadcasts.
+{# Marketing tab strip: one tab per topic, with sub-tabs when a topic has more than one page.
    `sections` comes from marketing_nav.marketing_sections (route-accurate), so a tab never leads to a 403. #}
 {% macro marketing_tabs(sections, active) -%}
+{% set groups = marketing_groups(sections) if marketing_groups is defined else () %}
 {% if sections and sections|length > 1 %}
-<nav class="section-tabs" aria-label="بازاریابی و وفاداری">
-  {% for section in sections %}
+{% set ns = namespace(current=none) %}
+{% for group in groups %}{% for section in group.sections %}{% if section.key == active %}{% set ns.current = group %}{% endif %}{% endfor %}{% endfor %}
+{% if groups|length > 1 %}
+<nav class="section-tabs settings-tabs settings-tabs-groups" aria-label="بازاریابی">
+  {% for group in groups %}
+  {% set on = ns.current is not none and ns.current.key == group.key %}
+  <a href="{{ group.href }}" class="{% if on %}active{% endif %}"{% if on %} aria-current="page"{% endif %}>{{ group.label }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
+{% if ns.current is not none and ns.current.sections|length > 1 %}
+<nav class="section-tabs settings-tabs settings-subtabs" aria-label="{{ ns.current.label }}">
+  {% for section in ns.current.sections %}
   <a href="{{ section.href }}" class="{% if active == section.key %}active{% endif %}"{% if active == section.key %} aria-current="page"{% endif %}>{{ section.label }}</a>
   {% endfor %}
 </nav>
+{% endif %}
 {% endif %}
 {%- endmacro %}
