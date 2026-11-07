@@ -61,14 +61,17 @@
 </div>
 
 {% if can_create %}
-<div class="ui-modal" id="modal-pg-group-create" hidden>
+<div class="ui-modal ds" id="modal-pg-group-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('groups', 'ساخت گروه', caption='گروه پاسارگارد جدید', tone='pg') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('groups', 'ساخت گروه', tone='pg') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/pg/groups" class="form-stack">
+    <form method="post" action="/pg/groups" class="form-stack ds-body">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <label class="form-field">نام گروه
         <input name="name" required placeholder="مثلاً default" />
       </label>
@@ -82,24 +85,28 @@
           {% endfor %}
         </div>
       </div>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit">ساخت در پاسارگارد</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      </div></div>
     </form>
   </div>
 </div>
 {% endif %}
 
 {% if can_update %}
-<div class="ui-modal" id="modal-pg-group-edit" hidden>
+<div class="ui-modal ds" id="modal-pg-group-edit" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-group-edit-title">
-    <div class="ui-modal-head">
-      {{ modal_title('groups', 'ویرایش گروه', caption='نام و تگ‌های گروه', tone='pg', heading_id='pg-group-edit-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('groups', 'ویرایش گروه', tone='pg', heading_id='pg-group-edit-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/pg/groups/0/edit" class="form-stack" id="pg-group-edit-form">
+    <form method="post" action="/pg/groups/0/edit" class="form-stack ds-body" id="pg-group-edit-form">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <label class="form-field">نام گروه
         <input name="name" id="pg-group-edit-name" required />
       </label>
@@ -116,10 +123,11 @@
       <div class="ui-switch-list">
         {{ switch('is_disabled', 'غیرفعال', id='pg-group-edit-disabled') }}
       </div>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit">ذخیره تغییرات</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      </div></div>
     </form>
   </div>
 </div>

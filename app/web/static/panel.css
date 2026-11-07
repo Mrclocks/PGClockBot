@@ -64,7 +64,10 @@
   /* Header chrome — keep in sync with .brand / .topbar padding + logo size */
   --topbar-h: 58px;
   --brand-logo-size: 40px;
-  --btn-h: 36px;
+  /* Control size tiers (see «Control size tiers» at the end of this file). */
+  --btn-h: 40px;
+  --ctl-sm-h: 32px;
+  --tag-h: 24px;
   /* Spacing scale — 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 */
   --space-0: 4px;
   --space-1: 8px;
@@ -959,9 +962,9 @@ tr.principal-row-l2 td:first-child {
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  /* Match .btn-star height so side-foot & site-footer share one baseline */
-  height: 28px;
-  min-height: 28px;
+  /* Same compact tier as .btn-star so side-foot & site-footer share one baseline */
+  height: var(--ctl-sm-h);
+  min-height: var(--ctl-sm-h);
   padding: 0 var(--space-1);
   box-sizing: border-box;
   border-radius: var(--control-radius);
@@ -1434,7 +1437,9 @@ label > small.muted,
 }
 /* Force help under the input/select/textarea even if HTML still has it under the title */
 label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > .ui-select, > textarea, > .pw-field) > small.muted,
-.form-field > small.muted {
+label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > .ui-select, > textarea, > .pw-field) > details.setting-help,
+.form-field > small.muted,
+.form-field > details.setting-help {
   order: 10;
   margin-top: var(--space-1);
   margin-bottom: 0;
@@ -2284,9 +2289,10 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
   max-width: 100%;
   min-width: 0;
   text-decoration: none !important;
-  color: var(--info-fg) !important;
-  border: 1px solid rgba(59, 130, 246, 0.42);
-  background: rgba(59, 130, 246, 0.12);
+  /* Main actions (save, confirm, add, select) follow the panel brand colour: strong edge, light fill. */
+  color: var(--brand-fg) !important;
+  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
   box-sizing: border-box;
   transition:
     background var(--motion-fast) var(--ease-standard),
@@ -2297,7 +2303,7 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
     box-shadow var(--motion-fast) var(--ease-standard);
 }
 .btn:hover, a.btn:hover {
-  background: rgba(59, 130, 246, 0.2);
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
   opacity: 1;
   transform: translateY(-1px);
 }
@@ -2312,43 +2318,43 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
 .btn-ghost,
 a.btn.btn-ghost {
   color: var(--foreground) !important;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px solid color-mix(in srgb, var(--foreground) 24%, transparent);
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
   font-weight: 500;
 }
 .btn-ghost:hover,
 a.btn.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
   color: var(--foreground) !important;
   opacity: 1;
   transform: translateY(-1px);
 }
 .btn-danger {
   color: var(--destructive-fg) !important;
-  border: 1px solid rgba(239, 68, 68, 0.42);
-  background: rgba(239, 68, 68, 0.12);
+  border: 1.5px solid color-mix(in srgb, var(--destructive) 72%, transparent);
+  background: color-mix(in srgb, var(--destructive) 7%, transparent);
   font-weight: 550;
 }
 .btn-danger:hover {
-  background: rgba(239, 68, 68, 0.2);
+  background: color-mix(in srgb, var(--destructive) 14%, transparent);
   opacity: 1;
   transform: translateY(-1px);
 }
 .btn-ok {
-  color: var(--ok-fg) !important;
-  border: 1px solid rgba(34, 197, 94, 0.42);
-  background: rgba(34, 197, 94, 0.12);
+  color: var(--brand-fg) !important;
+  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
   font-weight: 550;
 }
 .btn-ok:hover {
-  background: rgba(34, 197, 94, 0.2);
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
   opacity: 1;
   transform: translateY(-1px);
 }
 .btn-warn {
   color: var(--warn-fg) !important;
-  border: 1px solid rgba(234, 179, 8, 0.42);
-  background: rgba(234, 179, 8, 0.12);
+  border: 1.5px solid color-mix(in srgb, var(--warn) 72%, transparent);
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
   font-weight: 550;
 }
 .btn-warn:hover {
@@ -3750,8 +3756,8 @@ a.btn.btn-star {
   background: color-mix(in srgb, var(--brand-base) 12%, transparent);
   border-radius: var(--control-radius);
   padding: 0 var(--space-1);
-  height: 28px;
-  min-height: 28px;
+  height: var(--ctl-sm-h);
+  min-height: var(--ctl-sm-h);
   font-size: 12px;
   font-weight: 600;
   text-decoration: none !important;
@@ -8262,49 +8268,7 @@ html[data-theme="light"] .nav-item-pg:hover {
   color: var(--foreground);
 }
 
-/* Primary/action buttons: same blue-tint language as dark */
-html[data-theme="light"] .btn,
-html[data-theme="light"] a.btn,
-html[data-theme="light"] .btn-sm,
-html[data-theme="light"] a.btn-sm {
-  color: #1d4ed8 !important;
-  border-color: rgba(37, 99, 235, 0.38);
-  background: rgba(37, 99, 235, 0.10);
-}
-html[data-theme="light"] .btn:hover,
-html[data-theme="light"] a.btn:hover {
-  background: rgba(37, 99, 235, 0.16);
-}
-/* Ghost: subtle dark-on-light (not white) */
-html[data-theme="light"] .btn-ghost,
-html[data-theme="light"] a.btn.btn-ghost {
-  color: var(--foreground) !important;
-  border-color: var(--border);
-  background: rgba(24, 24, 27, 0.03);
-}
-html[data-theme="light"] .btn-ghost:hover,
-html[data-theme="light"] a.btn.btn-ghost:hover {
-  background: rgba(24, 24, 27, 0.06);
-  color: var(--foreground) !important;
-}
-html[data-theme="light"] .btn-danger {
-  color: #b91c1c !important;
-  border-color: rgba(220, 38, 38, 0.35);
-  background: rgba(220, 38, 38, 0.08);
-}
-html[data-theme="light"] .btn-danger:hover { background: rgba(220, 38, 38, 0.14); }
-html[data-theme="light"] .btn-ok {
-  color: #15803d !important;
-  border-color: rgba(22, 163, 74, 0.35);
-  background: rgba(22, 163, 74, 0.08);
-}
-html[data-theme="light"] .btn-ok:hover { background: rgba(22, 163, 74, 0.14); }
-html[data-theme="light"] .btn-warn {
-  color: #a16207 !important;
-  border-color: rgba(202, 138, 4, 0.4);
-  background: rgba(234, 179, 8, 0.12);
-}
-html[data-theme="light"] .btn-warn:hover { background: rgba(234, 179, 8, 0.2); }
+html[data-theme="light"] .btn-warn { color: #a16207 !important; }
 
 html[data-theme="light"] .icon-btn,
 html[data-theme="light"] .icon-btn.icon-move,
@@ -9485,8 +9449,8 @@ html[data-theme="light"] .home-period {
   text-align: right;
 }
 .magic-link-field {
-  --magic-link-h: 52px;
-  --magic-copy-h: 34px;
+  --magic-link-h: var(--btn-h);
+  --magic-copy-h: var(--ctl-sm-h);
   --magic-copy-w: 4.75rem; /* «کپی» / «کپی شد» — same slot, no jump */
   direction: ltr;
   display: flex;
@@ -12530,7 +12494,7 @@ html[data-theme="light"] .sc-tip { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
   stroke-linejoin: round;
 }
 @media (max-width: 640px) {
-  .settings-reset-btn { width: 100%; justify-content: center; min-height: 44px; }
+  .settings-reset-btn { width: 100%; justify-content: center; min-height: var(--btn-h); }
 }
 
 /* Guide photo/video upload: the profile-photo upload box, at a lower height. */
@@ -12952,3 +12916,23 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
 .side-search-hit.is-active { background: var(--accent-soft); outline: none; }
 .side-search-where { font-size: 0.8em; color: var(--muted-fg); }
 .side-search-empty { margin: 0; padding: var(--space-1); text-align: center; color: var(--muted-fg); }
+/* ---------- Control size tiers ----------
+   Three heights for the whole panel, so boxes side by side share one size and one centre line:
+   --btn-h    fields, selects, buttons, icon buttons and tabs
+   --ctl-sm-h compact buttons, filters, segment switches and multi-select tags
+   --tag-h    status tags and counters */
+.btn-sm, a.btn-sm, .btn-star { height: var(--ctl-sm-h); min-height: var(--ctl-sm-h); font-size: 12.5px; }
+.section-tabs a, .section-tabs .tab-btn { min-height: var(--btn-h); box-sizing: border-box; }
+.sales-seg button, .sales-seg a {
+  min-height: calc(var(--ctl-sm-h) - 4px); display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+}
+.sales-seg { min-height: var(--ctl-sm-h); box-sizing: border-box; align-items: center; }
+.badge { min-height: var(--tag-h); display: inline-flex; align-items: center; justify-content: center; line-height: 1; box-sizing: border-box; }
+.magic-link-input { height: var(--btn-h); min-height: var(--btn-h); }
+/* The panel font draws Latin digits higher than Persian letters; number fields move their text
+   down a little so the digits read centred like the Persian text of other fields. */
+input[dir="ltr"], input[inputmode="numeric"], input[inputmode="decimal"], input[type="number"], input[data-money] {
+  padding-top: 3px; padding-bottom: 0;
+}
+/* A colour card's menu sits at the bottom, so menus in one row line up even when a label wraps. */
+.btn-color-card > .ui-select, .btn-color-card > select { margin-top: auto; }

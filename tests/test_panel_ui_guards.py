@@ -178,7 +178,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         block = re.search(r"(?ms)^\.btn-danger\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
         body = block.group(1)
-        self.assertIn("background: rgba(239, 68, 68, 0.12)", body)
+        self.assertIn("background: color-mix(in srgb, var(--destructive) 7%, transparent)", body)
         self.assertIn("color: var(--destructive-fg)", body)
         self.assertNotIn("0.92", body)
 
@@ -187,15 +187,16 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         block = re.search(r"(?ms)^\.btn-ok\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
         body = block.group(1)
-        self.assertIn("background: rgba(34, 197, 94, 0.12)", body)
-        self.assertIn("color: var(--ok-fg)", body)
+        # Approve actions follow the panel brand colour like the other main actions.
+        self.assertIn("background: color-mix(in srgb, var(--brand) 8%, transparent)", body)
+        self.assertIn("color: var(--brand-fg)", body)
 
     def test_btn_warn_matches_soft_tint_style(self):
         css = CSS.read_text(encoding="utf-8")
         block = re.search(r"(?ms)^\.btn-warn\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
         body = block.group(1)
-        self.assertIn("background: rgba(234, 179, 8, 0.12)", body)
+        self.assertIn("background: color-mix(in srgb, var(--warn) 7%, transparent)", body)
         self.assertIn("color: var(--warn-fg)", body)
 
     def test_modal_above_chrome(self):
@@ -315,8 +316,8 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("margin-top: auto", body)
         # Align with .side-foot baseline
         self.assertIn("padding-top: var(--page-title-gap)", body)
-        # star button should be shorter than primary --btn-h
-        self.assertIn("min-height: 28px", css)
+        # star button uses the compact tier, shorter than the primary --btn-h
+        self.assertIn("min-height: var(--ctl-sm-h)", css)
         # sidebar footer must stay at the pre-compact sizing
         side = re.search(r"(?ms)^\.side-foot\s*\{([^}]+)\}", css)
         self.assertIsNotNone(side)
@@ -324,7 +325,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         logout = re.search(r"(?ms)^\.logout-link\s*\{([^}]+)\}", css)
         self.assertIsNotNone(logout)
         self.assertIn("font-size: 13px", logout.group(1))
-        self.assertIn("height: 28px", logout.group(1))
+        self.assertIn("height: var(--ctl-sm-h)", logout.group(1))
         self.assertIn("padding: 0 var(--space-1)", logout.group(1))
 
     def test_block_button_is_warn_update_is_ok(self):

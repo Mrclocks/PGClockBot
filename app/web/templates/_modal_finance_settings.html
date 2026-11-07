@@ -3,16 +3,18 @@
 
 {% set open_settings = (open_finance_settings or '')|string %}
 {% set strip_keys = 'settings,supports,stab,saved,ok,err,msg,_' %}
-<div class="ui-modal{% if open_settings %} open{% endif %}" id="modal-finance-settings"
+<div class="ui-modal ds ds-settings{% if open_settings %} open{% endif %}" id="modal-finance-settings"
      {% if not open_settings %}hidden{% endif %}
      data-modal-strip-keys="{{ strip_keys }}">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl settings-modal-panel" role="dialog" aria-modal="true" aria-labelledby="finance-settings-title">
-    <div class="ui-modal-head">
-      {{ modal_title('payments', 'تنظیمات مالی', caption='پرداخت، کارت، درگاه، پاکسازی سفارش‌ها و PAYG', tone='brand', heading_id='finance-settings-title') }}
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+      {{ modal_title('payments', 'تنظیمات مالی', tone='brand', heading_id='finance-settings-title') }}
       <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
+      </div>
     </div>
     {% if open_settings and (flash_ok or flash_err) %}
     <div class="settings-modal-flash">

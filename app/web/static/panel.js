@@ -2048,7 +2048,7 @@
                 '</span>' +
               '</label>' +
               '<div class="force-channel-actions">' +
-                '<button type="button" class="btn btn-danger btn-sm force-channel-remove" aria-label="حذف کانال">حذف</button>' +
+                '<button type="button" class="ds-del force-channel-remove" aria-label="حذف کانال"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
               '</div>' +
             '</div>' +
           '</div>'
@@ -2845,11 +2845,9 @@
         if (e.target.hasAttribute('data-money')) applyNormalize(e.target);
       }, true);
       document.addEventListener('formdata', (e) => {
-        e.target.querySelectorAll('input[data-money]').forEach((el) => {
-          if (!el.disabled && el.name && e.formData.has(el.name)) {
-            e.formData.set(el.name, normalizeNumberText(el.value));
-          }
-        });
+        if (window.PanelMoney && window.PanelMoney.normalizeMoneyFormData) {
+          window.PanelMoney.normalizeMoneyFormData(e.formData, Array.from(e.target.elements || []), normalizeNumberText);
+        }
       });
       document.addEventListener('reset', (e) => {
         setTimeout(() => unlockNumberInputs(e.target), 0);
@@ -3089,7 +3087,7 @@
               '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-sandbox"' + (item.sandbox ? ' checked' : '') + ' /> سندباکس زرین‌پال</label>' +
               '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-enabled"' + (item.enabled === false ? '' : ' checked') + ' /> فعال</label>' +
             '</div>' +
-            '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
           '</div>'
         );
       }
@@ -3117,7 +3115,7 @@
                 '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + attrEsc(item.holder) + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
-              '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+              '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
             '</div>'
           );
         }
@@ -3129,7 +3127,7 @@
                 '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + attrEsc(item.link) + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
-              '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+              '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
             '</div>'
           );
         }
@@ -3141,7 +3139,7 @@
               '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + attrEsc(item.address) + '" autocomplete="off" /></label>' +
               styleHtml +
             '</div>' +
-            '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
           '</div>'
         );
       }
@@ -3302,7 +3300,7 @@
               '</label>' +
               styleSelectHtml(storedStyleValue(item)) +
             '</div>' +
-            '<button type="button" class="btn btn-danger btn-sm supports-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="ds-del supports-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
           '</div>'
         );
       }
@@ -3486,7 +3484,7 @@
               linksHtml(item && item.links) +
               '<div class="full guides-media" data-guides-media-slot></div>' +
             '</div>' +
-            '<button type="button" class="btn btn-danger btn-sm guides-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="ds-del guides-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
           '</div>'
         );
       }

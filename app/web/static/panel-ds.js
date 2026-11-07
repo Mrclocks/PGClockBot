@@ -207,6 +207,17 @@
     if (focusable && focusable.focus) setTimeout(() => focusable.focus({ preventScroll: true }), 250);
   }
 
+  /* Long tab rows scroll sideways on phones: bring the active tab into view. */
+  function revealActiveTabs(scope) {
+    scope.querySelectorAll(".ds .section-tabs").forEach((row) => {
+      const active = row.querySelector("a.active, .tab-btn.active");
+      if (!active || row.scrollWidth <= row.clientWidth + 1) return;
+      const rowBox = row.getBoundingClientRect();
+      const box = active.getBoundingClientRect();
+      row.scrollLeft += box.left + box.width / 2 - (rowBox.left + rowBox.width / 2);
+    });
+  }
+
   function syncAll(scope) {
     const base = scope || document;
     base.querySelectorAll("[data-ds-choice]").forEach(syncChoice);
@@ -243,6 +254,7 @@
     document.addEventListener("change", onEdit);
     document.addEventListener("input", onEdit);
     syncAll(document);
+    revealActiveTabs(document);
   }
 
   function refreshForm(el) {

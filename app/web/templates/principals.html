@@ -150,14 +150,17 @@
 </div>
 
 {% if can_create %}
-<div class="ui-modal" id="modal-principal-create" hidden>
+<div class="ui-modal ds" id="modal-principal-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('resellers', 'افزودن نماینده', caption='مدیریت نمایندگی', tone='brand') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('resellers', 'افزودن نماینده', tone='brand') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/principals/create" class="form-stack" autocomplete="off">
+    <form method="post" action="/principals/create" class="form-stack ds-body" autocomplete="off">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <p class="muted">نام کاربری و رمز پنل همان نام کاربری و رمز پاسارگارد است. نقش پاسارگارد فقط پروفایل قابلیت است.</p>
       <label class="form-field">نام کاربری پاسارگارد
         <input name="pg_username" required dir="ltr" autocomplete="off" />
@@ -177,24 +180,28 @@
       <label class="form-field">یادداشت (اختیاری)
         <input name="note" maxlength="200" />
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" {% if not pg_roles %}disabled{% endif %}>ساخت</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      </div></div>
     </form>
   </div>
 </div>
 {% endif %}
 
 {% if can_create_l2 %}
-<div class="ui-modal" id="modal-principal-create-l2" hidden>
+<div class="ui-modal ds" id="modal-principal-create-l2" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('resellers', 'افزودن نماینده', caption='مدیریت نمایندگی', tone='brand') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('resellers', 'افزودن نماینده', tone='brand') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/principals/create-l2" class="form-stack" autocomplete="off">
+    <form method="post" action="/principals/create-l2" class="form-stack ds-body" autocomplete="off">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <p class="muted">نام کاربری و رمز پنل همان نام کاربری و رمز پاسارگارد است. نقش از پاسارگارد شما انتخاب می‌شود.</p>
       <label class="form-field">نام کاربری پاسارگارد
         <input name="pg_username" required dir="ltr" autocomplete="off" />
@@ -214,21 +221,24 @@
       <label class="form-field">یادداشت (اختیاری)
         <input name="note" maxlength="200" />
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" {% if not l2_pg_roles %}disabled{% endif %}>ساخت</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      </div></div>
     </form>
   </div>
 </div>
 {% endif %}
 
-<div class="ui-modal" id="modal-principal-detail" hidden>
+<div class="ui-modal ds" id="modal-principal-detail" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="principal-detail-title">
-    <div class="ui-modal-head">
-      {{ modal_title('resellers', 'جزئیات نماینده', caption='مدیریت نمایندگی', tone='brand', heading_id='principal-detail-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('resellers', 'جزئیات نماینده', tone='brand', heading_id='principal-detail-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     {% if detail %}
     {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
@@ -301,14 +311,17 @@
 </div>
 
 {% if can_attach_web %}
-<div class="ui-modal" id="modal-principal-web-identity" hidden>
+<div class="ui-modal ds" id="modal-principal-web-identity" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('settings', 'فعال‌سازی ورود وب', caption='تنظیمات پنل', tone='brand') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('settings', 'فعال‌سازی ورود وب', tone='brand') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/principals/{{ detail.principal_id }}/web-identity" class="form-stack" autocomplete="off">
+    <form method="post" action="/principals/{{ detail.principal_id }}/web-identity" class="form-stack ds-body" autocomplete="off">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <p class="muted">نام کاربری پنل همان نام کاربری پاسارگارد است و تغییر نمی‌کند.</p>
       <label class="form-field">نام کاربری
         <input name="username" required dir="ltr" autocomplete="off" value="{{ detail.pg_username or '' }}" readonly />
@@ -316,32 +329,37 @@
       <label class="form-field">رمز عبور (همان رمز پاسارگارد)
         <input name="password" type="password" required dir="ltr" autocomplete="new-password" />
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit">فعال‌سازی</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      </div></div>
     </form>
   </div>
 </div>
 {% endif %}
 
 {% if can_attach_l2_telegram %}
-<div class="ui-modal" id="modal-principal-telegram-bind" hidden>
+<div class="ui-modal ds" id="modal-principal-telegram-bind" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('settings', 'اتصال تلگرام', caption='تنظیمات پنل', tone='brand') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('settings', 'اتصال تلگرام', tone='brand') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/principals/{{ detail.principal_id }}/telegram-bind" class="form-stack" autocomplete="off">
+    <form method="post" action="/principals/{{ detail.principal_id }}/telegram-bind" class="form-stack ds-body" autocomplete="off">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <p class="muted">اتصال اختیاری است. فقط شناسه تلگرام پذیرفته می‌شود؛ سلسله‌مراتب توسط سرور تعیین می‌شود.</p>
       <label class="form-field">شناسه تلگرام
         <input name="telegram_id" required dir="ltr" inputmode="numeric" autocomplete="off" />
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit">اتصال</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      </div></div>
     </form>
   </div>
 </div>

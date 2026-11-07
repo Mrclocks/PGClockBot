@@ -230,7 +230,8 @@
                     data-price="{{ a.price }}"
                     data-sort="{{ a.sort_order }}"
                     data-category="{{ a.category_id or '' }}"
-                    data-description="{{ a.description or '' }}">ویرایش</button>
+                    data-description="{{ a.description or '' }}"
+                    data-style="{{ a.button_style or 'inherit' }}">ویرایش</button>
             <form method="post" action="/plans/addons/{{ a.id }}/toggle">
               <button class="btn btn-ghost btn-sm" type="submit">{% if a.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
@@ -430,6 +431,7 @@
 {% endif %}
 
 <script src="/static/pack-rows.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/addon-pack-form.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 <script src="/static/reseller-extra-packs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 <script src="/static/user-plan-addon-packs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 <script src="/static/plans-tabs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
@@ -518,13 +520,15 @@
 </div>
 
 {# —— Plan category labels modal —— #}
-<div class="ui-modal{% if open_categories %} open{% endif %}" id="modal-plan-categories" {% if not open_categories %}hidden{% endif %}
+<div class="ui-modal ds{% if open_categories %} open{% endif %}" id="modal-plan-categories" {% if not open_categories %}hidden{% endif %}
      data-modal-strip-keys="categories,ok,err,_">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="plan-categories-title">
-    <div class="ui-modal-head">
-      {{ modal_title('plans', 'برچسب دسته', caption='در ربات فروشگاه، به‌جای «ثابت» دکمه‌های دسته نشان داده می‌شوند — رنگ دکمه را اینجا تنظیم کنید', tone='brand', heading_id='plan-categories-title') }}
-      <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('plans', 'برچسب دسته', tone='brand', heading_id='plan-categories-title') }}
+        <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     {% if open_categories and (flash_ok or flash_err) %}
     <div class="settings-modal-flash" id="plan-categories-flash">
@@ -532,7 +536,8 @@
       {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
     </div>
     {% endif %}
-    <form method="post" action="/plans/categories" class="form-stack plan-cat-form" id="plan-category-form" data-create-action="/plans/categories">
+    <form method="post" action="/plans/categories" class="form-stack ds-body plan-cat-form" id="plan-category-form" data-create-action="/plans/categories">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <div class="settings-grid">
         <label class="form-field">نام برچسب
           <input name="name" id="plan-category-name" required maxlength="128" placeholder="مثلاً ویژه / اقتصادی" />
@@ -560,11 +565,12 @@
           {% include "_plan_button_style_field.html" %}
         </div>
       </div>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" id="plan-category-submit">افزودن برچسب</button>
         <button type="button" class="btn btn-ghost" id="plan-category-cancel-edit" hidden>انصراف از ویرایش</button>
         <button type="button" class="btn btn-ghost" data-modal-close-strip>بستن</button>
-      </div>
+      </div></div>
     </form>
     <div class="plan-cat-list">
       <h3 class="gift-codes-recent-title">برچسب‌های فعلی</h3>
@@ -656,17 +662,37 @@
 </div>
 
 {# —— Service addon packs modal —— #}
-<div class="ui-modal{% if open_addons %} open{% endif %}" id="modal-service-addons" {% if not open_addons %}hidden{% endif %}>
+<div class="ui-modal ds{% if open_addons %} open{% endif %}" id="modal-service-addons" {% if not open_addons %}hidden{% endif %}>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="service-addons-title">
-    <div class="ui-modal-head">
-      {{ modal_title('plans', 'بسته حجم / زمان', caption='کاربر می‌تواند حجم یا زمان بخرد و به سرویس فعلی‌اش اضافه کند', tone='brand', heading_id='service-addons-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('plans', 'بسته حجم / زمان', tone='brand', heading_id='service-addons-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/plans/addons" class="form-stack" id="service-addon-form" data-create-action="/plans/addons">
+{# One row of the general pack form; also rendered into a <template> so added rows start un-enhanced. #}
+{% macro addon_pack_row(style_options) -%}
+{% from "_ds.html" import ico %}
+<div class="ds-list-row extra-pack-row" data-addon-row>
+  <span class="ds-unit ds-pack-amt"><input name="amount" class="extra-pack-amount" type="number" min="0.1" step="0.1" inputmode="decimal" dir="ltr" required placeholder="۱۰" aria-label="مقدار بسته" /><span class="ds-unit-label" data-addon-unit>گیگ</span></span>
+  <span class="ds-list-value"><input name="price" type="number" data-money min="0" required placeholder="50,000" dir="ltr" aria-label="قیمت بسته (تومان)" /></span>
+  <span class="ds-dot-select" data-ds-dot data-menu-min-width="168" data-value="inherit" data-tone="default">
+    <select name="button_style" class="btn-color-select extra-pack-style" data-tone="default" aria-label="رنگ دکمه بسته در ربات">
+      {% for opt_val, opt_label, opt_tone in style_options %}
+      <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if opt_val == 'inherit' %}selected{% endif %}>{{ opt_label }}</option>
+      {% endfor %}
+    </select>
+  </span>
+  <button type="button" class="ds-del extra-pack-remove" data-addon-row-remove aria-label="حذف ردیف بسته">{{ ico('trash') }}</button>
+</div>
+{%- endmacro %}
+    <form method="post" action="/plans/addons" class="form-stack ds-body" id="service-addon-form" data-create-action="/plans/addons">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <div class="settings-grid">
         <label class="form-field">نام بسته
-          <input name="name" id="service-addon-name" required maxlength="128" placeholder="مثلاً ۱۰ گیگ اضافه" />
+          <input name="name" id="service-addon-name" maxlength="128" placeholder="خالی: از مقدار ساخته می‌شود" />
+          <small class="muted" id="service-addon-name-hint">برای چند بسته خالی بگذارید؛ نام هر بسته مثل «۱۰ گیگ» از مقدارش ساخته می‌شود.</small>
         </label>
         <label class="form-field">نوع
           <select name="kind" id="service-addon-kind" required>
@@ -699,14 +725,22 @@
         {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
         {% set plan_style_options = pack_style_options %}
         {% set plan_color_hint = 'رنگ دکمه این بسته در ربات؛ «ارث» یعنی رنگ پلن سرویس.' %}
-        {% include "_plan_button_style_field.html" %}
-        <label class="form-field">مقدار
-          <input name="amount" id="service-addon-amount" type="number" min="0.1" step="0.1" required placeholder="۱۰" />
-          <small class="muted" id="service-addon-amount-hint">برای حجم می‌تواند اعشار باشد؛ برای زمان عدد صحیح روز</small>
-        </label>
-        <label class="form-field">قیمت (تومان)
-          <input name="price" id="service-addon-price" type="number" data-money min="0" required placeholder="50,000" />
-        </label>
+        {% set addon_style_options = pack_style_options %}
+      </div>
+      </div></section>
+      <section class="ds-sec"><div class="ds-card">
+        <div class="ds-list" data-addon-rows>
+          <div class="ds-list-head" aria-hidden="true"><span>مقدار<span class="ds-unit-head" data-addon-unit-head> (گیگ)</span></span><span>قیمت (تومان)</span><span>رنگ</span><span></span></div>
+          <div class="extra-packs-rows" data-addon-row-list>
+            {{ addon_pack_row(addon_style_options) }}
+          </div>
+          <template data-addon-row-template>{{ addon_pack_row(addon_style_options) }}</template>
+          <button type="button" class="ds-add" data-addon-row-add>{{ ico('plus') }}افزودن ردیف</button>
+          <small class="muted" id="service-addon-amount-hint">حجم به گیگ — اعشار مجاز است</small>
+        </div>
+      </div></section>
+      <section class="ds-sec"><div class="ds-card">
+      <div class="settings-grid">
         <label class="form-field">ترتیب
           <input name="sort_order" id="service-addon-sort" type="number" value="0" />
         </label>
@@ -714,11 +748,12 @@
           <input name="description" id="service-addon-desc" maxlength="255" placeholder="نمایش در بات" />
         </label>
       </div>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" id="service-addon-submit">افزودن بسته</button>
         <button type="button" class="btn btn-ghost" id="service-addon-cancel-edit" hidden>انصراف از ویرایش</button>
         <button type="button" class="btn btn-ghost" data-modal-close>بستن</button>
-      </div>
+      </div></div>
     </form>
     <h3 class="gift-codes-recent-title">بسته‌های فعلی</h3>
     <div class="table-wrap">
@@ -757,7 +792,8 @@
                         data-price="{{ a.price }}"
                         data-sort="{{ a.sort_order }}"
                         data-category="{{ a.category_id or '' }}"
-                        data-description="{{ a.description or '' }}">ویرایش</button>
+                        data-description="{{ a.description or '' }}"
+                    data-style="{{ a.button_style or 'inherit' }}">ویرایش</button>
                 <form method="post" action="/plans/addons/{{ a.id }}/toggle">
                   <button class="btn btn-ghost btn-sm" type="submit">{% if a.is_active %}خاموش{% else %}روشن{% endif %}</button>
                 </form>
@@ -1311,70 +1347,56 @@
     if (cancelEl) cancelEl.addEventListener('click', resetCreate);
   })();
 
-  // —— Service addon form: create / edit + amount step by kind ——
+  // —— Service addon form: several rows when adding, one when editing ——
   (function(){
     const form = document.getElementById('service-addon-form');
-    if (!form) return;
+    if (!form || !window.AddonPackForm) return;
+    const rowsUi = window.AddonPackForm.bind(form);
+    if (!rowsUi) return;
     const createAction = form.getAttribute('data-create-action') || '/plans/addons';
-    const nameEl = document.getElementById('service-addon-name');
-    const kindEl = document.getElementById('service-addon-kind');
-    const amountEl = document.getElementById('service-addon-amount');
-    const priceEl = document.getElementById('service-addon-price');
-    const sortEl = document.getElementById('service-addon-sort');
-    const descEl = document.getElementById('service-addon-desc');
-    const catEl = document.getElementById('service-addon-category');
-    const submitEl = document.getElementById('service-addon-submit');
-    const cancelEl = document.getElementById('service-addon-cancel-edit');
-    const hintEl = document.getElementById('service-addon-amount-hint');
-    function syncAmountStep(){
-      if (!amountEl || !kindEl) return;
-      const isDays = kindEl.value === 'duration';
-      amountEl.step = isDays ? '1' : '0.1';
-      amountEl.min = isDays ? '1' : '0.1';
-      if (hintEl) {
-        hintEl.textContent = isDays
-          ? 'تعداد روز — فقط عدد صحیح'
-          : 'حجم به گیگ — اعشار مجاز است';
-      }
-    }
+    const field = (id) => document.getElementById(id);
+    const nameEl = field('service-addon-name');
+    const nameHint = field('service-addon-name-hint');
+    const kindEl = field('service-addon-kind');
+    const sortEl = field('service-addon-sort');
+    const descEl = field('service-addon-desc');
+    const catEl = field('service-addon-category');
+    const submitEl = field('service-addon-submit');
+    const cancelEl = field('service-addon-cancel-edit');
     function setSelectValue(el, value){
       if (!el) return;
       el.value = value || '';
       el.dispatchEvent(new Event('change', { bubbles: true }));
     }
+    function setEditing(on){
+      if (nameEl) nameEl.required = on;
+      if (nameHint) nameHint.hidden = on;
+      if (submitEl) submitEl.textContent = on ? 'ذخیره تغییرات' : 'افزودن بسته';
+      if (cancelEl) cancelEl.hidden = !on;
+    }
     function resetCreate(){
       form.action = createAction;
       if (nameEl) nameEl.value = '';
       if (kindEl) kindEl.value = 'volume';
-      if (amountEl) amountEl.value = '';
-      if (priceEl) priceEl.value = '';
       if (sortEl) sortEl.value = '0';
       if (descEl) descEl.value = '';
       setSelectValue(catEl, '');
-      if (submitEl) submitEl.textContent = 'افزودن بسته';
-      if (cancelEl) cancelEl.hidden = true;
-      syncAmountStep();
+      rowsUi.reset();
+      setEditing(false);
     }
-    if (kindEl) kindEl.addEventListener('change', syncAmountStep);
-    syncAmountStep();
     document.querySelectorAll('[data-addon-edit]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-id');
-        form.action = '/plans/addons/' + id + '/edit';
-        if (nameEl) nameEl.value = btn.getAttribute('data-name') || '';
-        if (kindEl) kindEl.value = btn.getAttribute('data-kind') || 'volume';
-        if (amountEl) amountEl.value = btn.getAttribute('data-amount') || '';
-        if (priceEl) {
-          priceEl.value = btn.getAttribute('data-price') || '';
-          priceEl.dispatchEvent(new Event('input', {bubbles: true}));
-        }
-        if (sortEl) sortEl.value = btn.getAttribute('data-sort') || '0';
-        if (descEl) descEl.value = btn.getAttribute('data-description') || '';
-        setSelectValue(catEl, btn.getAttribute('data-category') || '');
-        if (submitEl) submitEl.textContent = 'ذخیره تغییرات';
-        if (cancelEl) cancelEl.hidden = false;
-        syncAmountStep();
-        nameEl && nameEl.focus();
+        const data = (k) => btn.getAttribute('data-' + k) || '';
+        form.action = '/plans/addons/' + data('id') + '/edit';
+        if (nameEl) nameEl.value = data('name');
+        if (kindEl) kindEl.value = data('kind') || 'volume';
+        if (sortEl) sortEl.value = data('sort') || '0';
+        if (descEl) descEl.value = data('description');
+        setSelectValue(catEl, data('category'));
+        rowsUi.editPack({ amount: data('amount'), price: data('price'), style: data('style') });
+        rowsUi.syncKind();
+        setEditing(true);
+        if (nameEl) nameEl.focus();
       });
     });
     if (cancelEl) cancelEl.addEventListener('click', resetCreate);

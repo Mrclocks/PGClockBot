@@ -7,6 +7,7 @@ import re
 import secrets
 import string
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import or_, select, update
@@ -495,6 +496,125 @@ def _validate_pack_fields(
     return cleaned, k, amt, price_i, desc
 
 
+MAX_PACK_ROWS = 10
+_PACK_UNITS = {KIND_VOLUME: "گیگ", KIND_DURATION: "روز"}
+
+
+@dataclass(frozen=True, slots=True)
+class PackRow:
+    """One pack of a batch: what it adds, its price and its button colour (None = inherit)."""
+
+    amount: float
+    price: int
+    button_style: str | None = None
+
+
+def default_pack_name(kind: str, amount: float) -> str:
+    """Name shown in the bot when the admin leaves it blank, e.g. «۱۰ گیگ»."""
+    number = int(amount) if float(amount).is_integer() else amount
+    return f"{to_fa_digits(str(number))} {_PACK_UNITS.get(kind, '')}".strip()
+
+
+def _pack_style(button_style: str | None | object) -> str | None:
+    from app.services.button_styles import normalize_style
+
+    if button_style is ... or button_style is None:
+        return None
+    if str(button_style).strip().lower() in {"", "inherit", "__inherit__"}:
+        return None
+    return normalize_style(str(button_style))
+
+
+async def _resolve_pack_scope(
+    session: AsyncSession,
+    staff: dict | None,
+    owner_id: int | None,
+    *,
+    plan_id: int | None,
+    category_id: int | None | object,
+) -> tuple[int | None, int | None]:
+    """(plan id, category id) a new pack is tied to, checked against the caller's shop."""
+    from app.services.plan_categories import AUDIENCE_USERS, resolve_category_for_plan_write
+
+    if plan_id is not None:
+        plan = await session.get(Plan, int(plan_id))
+        if plan is None:
+            raise ValueError("پلن یافت نشد")
+        plan_owner = getattr(plan, "owner_reseller_id", None)
+        if owner_id is None and plan_owner is not None:
+            raise ValueError("پلن متعلق به این فروشگاه نیست")
+        if owner_id is not None and int(plan_owner or 0) != int(owner_id):
+            raise ValueError("پلن متعلق به این فروشگاه نیست")
+        return int(plan.id), None
+    if category_id is ...:
+        return None, None
+    category = await resolve_category_for_plan_write(
+        session, staff, category_id, expected_audience=AUDIENCE_USERS
+    )
+    return None, category
+
+
+async def create_packs(
+    session: AsyncSession,
+    staff: dict | None,
+    *,
+    kind: str,
+    rows: list[PackRow],
+    name: str = "",
+    description: str | None = None,
+    sort_order: int = 0,
+    category_id: int | None | object = ...,
+    plan_id: int | None = None,
+) -> list[ServiceAddonPack]:
+    """Add several packs of one kind and scope in one commit; nothing is saved if one row is invalid.
+
+    A blank ``name`` gives each pack a name from its amount; a typed name needs a single row.
+    """
+    if not rows:
+        raise ValueError("حداقل یک بسته وارد کنید")
+    if len(rows) > MAX_PACK_ROWS:
+        raise ValueError(f"حداکثر {to_fa_digits(str(MAX_PACK_ROWS))} بسته در هر بار")
+    typed_name = (name or "").strip()
+    if typed_name and len(rows) > 1:
+        raise ValueError("برای چند بسته نام را خالی بگذارید؛ نام هر بسته از مقدارش ساخته می‌شود")
+    owner_id = require_catalog_owner_id(staff)
+    validated = [
+        _validate_pack_fields(
+            name=typed_name or default_pack_name((kind or "").strip().lower(), row.amount),
+            kind=kind,
+            amount=row.amount,
+            price=row.price,
+            description=description,
+        )
+        for row in rows
+    ]
+    resolved_plan, resolved_cat = await _resolve_pack_scope(
+        session, staff, owner_id, plan_id=plan_id, category_id=category_id
+    )
+    packs = [
+        ServiceAddonPack(
+            name=cleaned,
+            kind=k,
+            amount=amt,
+            price=price_i,
+            description=desc,
+            owner_reseller_id=owner_id,
+            category_id=resolved_cat,
+            plan_id=resolved_plan,
+            button_style=_pack_style(row.button_style),
+            is_general=resolved_plan is None and resolved_cat is None,
+            sort_order=int(sort_order or 0),
+            is_active=True,
+        )
+        for (cleaned, k, amt, price_i, desc), row in zip(validated, rows, strict=True)
+    ]
+    session.add_all(packs)
+    await session.commit()
+    for pack in packs:
+        await session.refresh(pack)
+    return packs
+
+
 async def create_pack(
     session: AsyncSession,
     staff: dict | None,
@@ -509,59 +629,21 @@ async def create_pack(
     plan_id: int | None = None,
     button_style: str | None | object = ...,
 ) -> ServiceAddonPack:
-    from app.services.button_styles import normalize_style
-    from app.services.plan_categories import (
-        AUDIENCE_USERS,
-        resolve_category_for_plan_write,
+    if not (name or "").strip():
+        raise ValueError("نام بسته الزامی است")
+    style = None if button_style is ... else button_style
+    packs = await create_packs(
+        session,
+        staff,
+        kind=kind,
+        rows=[PackRow(amount=amount, price=price, button_style=style)],
+        name=name,
+        description=description,
+        sort_order=sort_order,
+        category_id=category_id,
+        plan_id=plan_id,
     )
-
-    owner_id = require_catalog_owner_id(staff)
-    cleaned, k, amt, price_i, desc = _validate_pack_fields(
-        name=name, kind=kind, amount=amount, price=price, description=description
-    )
-    resolved_plan: int | None = None
-    if plan_id is not None:
-        plan = await session.get(Plan, int(plan_id))
-        if plan is None:
-            raise ValueError("پلن یافت نشد")
-        plan_owner = getattr(plan, "owner_reseller_id", None)
-        if owner_id is None and plan_owner is not None:
-            raise ValueError("پلن متعلق به این فروشگاه نیست")
-        if owner_id is not None and int(plan_owner or 0) != int(owner_id):
-            raise ValueError("پلن متعلق به این فروشگاه نیست")
-        resolved_plan = int(plan.id)
-    resolved_cat: int | None = None
-    if resolved_plan is None and category_id is not ...:
-        resolved_cat = await resolve_category_for_plan_write(
-            session,
-            staff,
-            category_id,
-            expected_audience=AUDIENCE_USERS,
-        )
-    style: str | None = None
-    if button_style is not ...:
-        if button_style is None or str(button_style).strip().lower() in {"inherit", "__inherit__"}:
-            style = None
-        else:
-            style = normalize_style(str(button_style))
-    pack = ServiceAddonPack(
-        name=cleaned,
-        kind=k,
-        amount=amt,
-        price=price_i,
-        description=desc,
-        owner_reseller_id=owner_id,
-        category_id=None if resolved_plan is not None else resolved_cat,
-        plan_id=resolved_plan,
-        button_style=style,
-        is_general=resolved_plan is None and resolved_cat is None,
-        sort_order=int(sort_order or 0),
-        is_active=True,
-    )
-    session.add(pack)
-    await session.commit()
-    await session.refresh(pack)
-    return pack
+    return packs[0]
 
 
 async def update_pack(

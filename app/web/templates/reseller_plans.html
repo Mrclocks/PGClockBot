@@ -2,6 +2,7 @@
 {% from "macros.html" import switch, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
 {% block title %}پلن‌های نمایندگی{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>
     {{ page_title('plans', 'پلن‌های نمایندگی', help='plans') }}
@@ -113,5 +114,6 @@
       </div>
     </form>
   </div>
+</div>
 </div>
 {% endblock %}

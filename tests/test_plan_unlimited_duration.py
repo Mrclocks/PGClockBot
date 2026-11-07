@@ -75,7 +75,7 @@ class PanelTemplateGuards(unittest.TestCase):
         edit_field = edit.split('name="duration_days"')[1].split("/>")[0]
         self.assertNotIn("required", edit_field)
         self.assertIn('min="0"', edit_field)
-        self.assertIn("برای مدت نامحدود", edit)
+        self.assertIn('data-ds-unlimited="#edit-plan-days" data-ds-empty-is-unlimited', edit)
 
     def test_api_parses_duration_as_string(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")

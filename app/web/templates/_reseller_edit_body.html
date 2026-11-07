@@ -1,4 +1,5 @@
 {% from "macros.html" import switch %}
+{% from "_ds.html" import ds_perm_groups %}
 {% from "_list_input.html" import list_input %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
@@ -75,12 +76,12 @@
     </div>
 
     <div class="ui-switch-section">
-      <span class="ui-switch-section-title">سطح دسترسی (وب = بات)</span>
+      <span class="ds-label-row"><span class="ui-switch-section-title">سطح دسترسی (وب = بات)</span>
+        <button type="button" class="ds-link-btn" data-ds-perms-reset="#reseller-edit-perms">بازگشت به پیشنهادی</button></span>
       <p class="ui-switch-section-hint">هر مورد برای هر دو محیط یکسان اعمال می‌شود؛ نماینده از ربات بیشتر از وب نمی‌تواند.</p>
-      <div class="ui-switch-list">
-        {% for key, label in feature_perms %}
-        {{ switch('perm_' ~ key, label, checked=(key in selected_perms)) }}
-        {% endfor %}
+      <div class="ds-card ds-card-flush" id="reseller-edit-perms" data-ds-perms>
+        <div class="ds-acc-top"><span><b data-ds-total></b> از <span data-ds-of></span> دسترسی روشن</span></div>
+        {{ ds_perm_groups(feature_perm_groups(), checked_keys=selected_perms) }}
       </div>
       {% if miniapp_status %}
       <p class="ui-switch-section-hint" role="status">وضعیت مینی‌اپ فروشگاه: {{ miniapp_status }}</p>
