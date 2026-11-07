@@ -41,6 +41,7 @@ from app.services.orders import (
 from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
 from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
 from app.services.chat_cleanup_config import chat_cleanup_payload
+from app.services.marketing_nav import marketing_groups
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
@@ -185,6 +186,7 @@ except Exception:
     templates.env.globals["deployed_channel"] = "main"
     templates.env.globals["deployed_channel_label"] = "پایدار"
 templates.env.globals["order_status_fa"] = order_status_fa
+templates.env.globals["marketing_groups"] = marketing_groups
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
 templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
