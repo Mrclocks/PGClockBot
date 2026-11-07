@@ -35,15 +35,16 @@ class SoftInjectAclTests(unittest.TestCase):
 
 class OwnerChromeSourceTests(unittest.TestCase):
     def test_base_html_gates_owner_nav_on_is_owner(self):
-        html = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("is_owner", html)
-        self.assertIn("{% if is_owner %}", html)
-        users_idx = html.find('href="/users"')
-        self.assertGreater(users_idx, 0)
-        window = html[max(0, users_idx - 120) : users_idx]
-        self.assertIn("is_owner", window)
-        self.assertNotIn("is_reseller or 'tickets' in perms", html)
-        self.assertNotIn("'shop_settings' in perms or is_reseller", html)
+        from tests.sidebar_view import labels, sidebar
+
+        # A sticky role=admin without the Owner identity gets no Owner entries.
+        admin = sidebar("admin")
+        for owner_only in ("تنظیمات سیستم", "کاربران ربات", "تنظیمات ربات", "تست اتصال سرویس"):
+            self.assertNotIn(owner_only, labels(admin["system"]) + labels(admin["shop"]))
+        # Being a reseller alone does not unlock support or shop settings.
+        reseller = labels(sidebar("reseller", perms=("dashboard",))["shop"])
+        self.assertNotIn("پشتیبانی", reseller)
+        self.assertNotIn("تنظیمات فروشگاه", reseller)
 
     def test_render_injects_is_owner(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")

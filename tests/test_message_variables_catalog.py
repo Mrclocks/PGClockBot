@@ -38,10 +38,11 @@ class MessageVariablesCatalogTests(unittest.TestCase):
         self.assertNotIn("random", keys)
 
     def test_sidebar_has_no_standalone_entry(self):
-        src = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        bot = src.split("nav-section-bot", 1)[1].split("nav-section-pg", 1)[0]
-        self.assertNotIn('href="/message-variables"', bot)
-        self.assertNotIn(">متغیرهای پیام</span>", bot)
+        from tests.sidebar_view import hrefs, labels, owner_sidebar
+
+        shop = owner_sidebar()["shop"]
+        self.assertNotIn("/message-variables", hrefs(shop))
+        self.assertNotIn("متغیرهای پیام", labels(shop))
 
     def test_page_template_panel_aligned(self):
         html = (ROOT / "app/web/templates/message_variables.html").read_text(encoding="utf-8")

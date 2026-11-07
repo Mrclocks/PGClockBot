@@ -84,8 +84,10 @@ class NestedRoleBeatsRoleCacheTests(unittest.IsolatedAsyncioTestCase):
 
 class SurfaceContractTests(unittest.TestCase):
     def test_sidebar_and_tabs_use_pg_permissions_only(self):
-        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("'pg_nodes' in pg_nav", base)
+        from tests.sidebar_view import labels, sidebar
+
+        self.assertNotIn("pg", sidebar("admin"))
+        self.assertEqual(labels(sidebar("admin", pg=frozenset({"pg_nodes"}))["pg"]), ["نودها"])
         macros = (ROOT / "app/web/templates/macros.html").read_text(encoding="utf-8")
         self.assertNotIn("admin or 'pg_nodes'", macros)
         self.assertIn("'pg_nodes' in perms", macros)

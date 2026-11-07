@@ -196,8 +196,10 @@ class WizardAndKeyboardSurfaceTests(unittest.TestCase):
         self.assertIn("🛠 پنل ادمین", main_hidden)
 
     def test_sidebar_owner_resellers_uses_capability(self) -> None:
-        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("ident.can_manage_representatives", base)
+        from tests.sidebar_view import sidebar
+
+        self.assertNotIn("نمایندگان", [label for label, _ in sidebar("admin", owner=True)["shop"]])
+        self.assertIn("نمایندگان", [label for label, _ in sidebar("admin", owner=True, manage_rep=True)["shop"]])
         self.assertIn('require_pg_perm("pg_admins")', (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8"))
         resellers = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
         self.assertIn("_require_rep_mgmt", resellers)

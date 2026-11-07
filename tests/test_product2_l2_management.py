@@ -524,13 +524,16 @@ class Product2SourceContracts(unittest.TestCase):
         self.assertNotIn("pg_password_enc", tpl)
         self.assertNotIn('name="parent_id"', tpl)
         self.assertNotIn('name="depth"', tpl)
-        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("ident.can_add_representative", base)
+        from tests.sidebar_view import sidebar
+
+        self.assertNotIn("نمایندگان من", [label for label, _ in sidebar("principal", perms=("dashboard",))["shop"]])
 
     def test_l2_nav_not_shown_for_l2_kind(self) -> None:
-        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("ident.can_add_representative", base)
-        self.assertNotIn('href="/principals"', base)
+        from tests.sidebar_view import sidebar
+
+        l2 = sidebar("principal", perms=("dashboard",), add_rep=False)["shop"]
+        self.assertNotIn("/resellers", [h for _, h in l2])
+        self.assertNotIn("/principals", [h for _, h in l2])
 
 
 if __name__ == "__main__":
