@@ -62,8 +62,12 @@ def _settings_tab_entries(base: str, tabs: Sequence[tuple[str, str]], area: str)
     entries: list[SettingsSearchEntry] = []
     for group in group_settings_tabs(tabs, ""):
         for tab in group.tabs:
-            href = tab.href or f"{base}?tab={tab.key}"
-            entries.extend(_tab_entries(tab.key, tab.label, href, tab_where=f"{area} › {group.label}", area=area))
+            if tab.sections:
+                entries.append(_entry(tab.label, f"{area} › {group.label}", tab.href or f"{base}?tab={tab.key}"))
+            for section in tab.sections or (tab,):
+                href = section.href or f"{base}?tab={section.key}"
+                where = f"{area} › {tab.label}" if tab.sections else f"{area} › {group.label}"
+                entries.extend(_tab_entries(section.key, section.label, href, tab_where=where, area=area))
     return entries
 
 

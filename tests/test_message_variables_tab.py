@@ -100,7 +100,7 @@ class GroupingTests(unittest.TestCase):
         for tabs, staff in ((SETTINGS_TABS, OWNER), (RESELLER_SETTINGS_TABS, SHOP_WITH_RIGHT)):
             before = group_settings_tabs(tabs, "welcome")
             after = group_settings_tabs(tabs_with_message_variables(tabs, staff), "welcome")
-            keys = [tab.key for group in after for tab in group.tabs]
+            keys = [s.key for group in after for tab in group.tabs for s in (tab.sections or (tab,))]
             self.assertEqual(len(keys), len(set(keys)))
             self.assertEqual(sorted(keys), sorted([*(k for k, _ in tabs), MESSAGE_VARIABLES_TAB_KEY]))
             self.assertEqual([g.key for g in before], [g.key for g in after])
@@ -183,16 +183,16 @@ class VariablesPageTests(unittest.IsolatedAsyncioTestCase):
         response = await self._get(OWNER)
         self.assertEqual(response.status_code, 200)
         strip = _tab_strip(response.text)
-        self.assertIn('href="/settings?tab=welcome"', strip)
+        self.assertIn('href="/settings?tab=identity"', strip)
         self.assertIn('href="/message-variables" class="active">متغیرهای پیام</a>', strip)
-        self.assertIn('href="/settings?tab=naming" class=""', strip)
+        self.assertIn('href="/settings?tab=delivery" class=""', strip)
         self.assertNotIn("/shop-settings", strip)
 
     async def test_shop_owner_gets_the_shop_tab_strip(self):
         response = await self._get(SHOP_WITH_RIGHT)
         self.assertEqual(response.status_code, 200)
         strip = _tab_strip(response.text)
-        self.assertIn('href="/shop-settings?tab=welcome"', strip)
+        self.assertIn('href="/shop-settings?tab=identity"', strip)
         self.assertIn('href="/message-variables" class="active">متغیرهای پیام</a>', strip)
         self.assertNotIn('href="/settings?tab=', strip)
 

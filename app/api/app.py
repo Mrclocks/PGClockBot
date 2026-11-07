@@ -97,7 +97,7 @@ from app.services.panel_brand import (
     load_own_values,
 )
 from app.services.receipt_review import DEFAULT_REJECT_TEXT
-from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
+from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
 from app.services.users import (
     SETTING_VISIBILITY,
     SETTINGS_DOMAIN_REDIRECTS,
@@ -4343,7 +4343,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.notifications import PLATFORM_NOTIFY_PREFS, get_notify_prefs
         from app.services.updates import clear_update_cache, local_version
 
-        tab = (request.query_params.get("tab") or "welcome").strip()
+        tab = resolve_merged_tab((request.query_params.get("tab") or "welcome").strip())
         valid = {t[0] for t in SETTINGS_TABS} | PANEL_SETTINGS_KEYS
         if tab in SETTINGS_DOMAIN_REDIRECTS:
             dest = SETTINGS_DOMAIN_REDIRECTS[tab]
