@@ -194,9 +194,11 @@ class PaymentSettingsModalUxTests(unittest.TestCase):
         )
         self.assertIn('data-pay-settings-for="pay_card_enabled" hidden', html)
         self.assertIn('data-pay-settings-for="pay_bbc_enabled" hidden', html)
-        # Methods card itself is always visible (holds the toggles)
-        self.assertIn(">روش‌های پرداخت<", html)
-        self.assertNotIn('data-pay-settings-for="pay_wallet_enabled"', html)
+        # Each method section stays visible and keeps its own switch outside the hidden part
+        card = html.split(">کارت به کارت<", 1)[1].split('data-pay-settings-for="pay_card_enabled"', 1)[0]
+        self.assertIn('name="s_pay_card_enabled"', card)
+        # Receipts have no on/off switch of their own
+        self.assertNotIn('data-pay-settings-for="auto_approve_payments"', html)
 
         values["pay_card_enabled"] = "1"
         html_on = tpl.render(
@@ -221,7 +223,7 @@ class PaymentSettingsModalUxTests(unittest.TestCase):
         self.assertIn(".setting-help {", css)
         from app.services.users import SETTING_GROUPS
 
-        bbc = next(f for f in SETTING_GROUPS["روش‌های پرداخت"] if f[0] == "pay_bbc_enabled")
+        bbc = next(f for f in SETTING_GROUPS["بزن به کارت"] if f[0] == "pay_bbc_enabled")
         self.assertGreater(len(bbc[3]), 70)
 
 
@@ -235,7 +237,9 @@ class DomainSettingGroupsTests(unittest.TestCase):
         self.assertNotIn("support_text", msg_keys)
         self.assertNotIn("referral_text", msg_keys)
         self.assertEqual(keys_for_tab("supports"), {"support_text"})
-        self.assertEqual(keys_for_tab("loyalty"), {"referral_text"})
+        # The referral wallet bonus sits with the referral text, not among payment methods
+        self.assertEqual(keys_for_tab("loyalty"), {"referral_text", "referral_bonus"})
+        self.assertNotIn("referral_bonus", keys_for_tab("payment"))
         # Required-referral moved from payment modal → limits tab
         self.assertEqual(
             keys_for_tab("payment") & {"referral_required", "referral_required_text"},
@@ -246,13 +250,13 @@ class DomainSettingGroupsTests(unittest.TestCase):
             {"referral_required", "referral_required_text"},
         )
         self.assertEqual(TAB_SETTING_GROUPS["limits"][0], "معرف اجباری")
-        self.assertIn("روش‌های پرداخت", TAB_SETTING_GROUPS["payment"])
+        self.assertEqual(TAB_SETTING_GROUPS["payment"][:2], ["کیف پول", "کارت به کارت"])
         self.assertIn("معرف اجباری", SETTING_GROUPS)
         self.assertEqual(
             {f[0] for f in SETTING_GROUPS["معرف اجباری"]},
             {"referral_required", "referral_required_text"},
         )
-        self.assertEqual({f[0] for f in SETTING_GROUPS["متن دعوت دوستان"]}, {"referral_text"})
+        self.assertEqual({f[0] for f in SETTING_GROUPS["متن دعوت دوستان"]}, {"referral_bonus", "referral_text"})
 
     def test_preview_js_drops_moved_message_fields(self):
         src = (TEMPLATES / "_tg_preview_chat_js.html").read_text(encoding="utf-8")

@@ -1,7 +1,10 @@
 {# Shared settings groups inside a domain modal panel.
    Expects: settings_form_action, tab_groups, groups, values
 #}
+{# Sections that start with an on/off switch: the switch stays visible, the rest of the
+   section shows only while it is on (panel.js toggles data-pay-settings-for). #}
 {% set pay_settings_gate = {
+  'کیف پول': 'pay_wallet_enabled',
   'کارت به کارت': 'pay_card_enabled',
   'تأیید خودکار کارت به کارت': 'pay_card_auto_enabled',
   'درگاه پرداخت': 'pay_gateway_enabled',
@@ -9,6 +12,8 @@
   'بزن به کارت': 'pay_bbc_enabled',
   'رمزارز': 'pay_crypto_enabled',
   'استارز تلگرام': 'pay_stars_enabled',
+  'کد تخفیف': 'pay_discount_enabled',
+  'وضعیت فروش': 'shop_maintenance_enabled',
 } %}
 {% set _pay_on = ['1', 'true', 'yes', 'on'] %}
 <div class="settings-domain-stack">
@@ -16,13 +21,26 @@
   {% for group_name in tab_groups %}
   {% set fields = groups[group_name] %}
   {% set gate_key = pay_settings_gate.get(group_name) %}
-  <div class="card settings-card"{% if gate_key %} data-pay-settings-for="{{ gate_key }}"{% if (values.get(gate_key, '')|string|lower) not in _pay_on %} hidden{% endif %}{% endif %}>
+  {% set gated = gate_key and fields and fields[0][0] == gate_key %}
+  <div class="card settings-card">
     <h2>{{ group_name }}</h2>
+    {% if gated %}
+    <div class="settings-grid">
+      {% set field = fields[0] %}
+      {% include "_settings_field.html" %}
+    </div>
+    <div class="settings-grid" data-pay-settings-for="{{ gate_key }}"{% if (values.get(gate_key, '')|string|lower) not in _pay_on %} hidden{% endif %}>
+    {% for field in fields[1:] %}
+      {% include "_settings_field.html" %}
+    {% endfor %}
+    </div>
+    {% else %}
     <div class="settings-grid">
     {% for field in fields %}
       {% include "_settings_field.html" %}
     {% endfor %}
     </div>
+    {% endif %}
   </div>
   {% endfor %}
   <div class="actions sticky-actions ui-modal-sticky-save">
