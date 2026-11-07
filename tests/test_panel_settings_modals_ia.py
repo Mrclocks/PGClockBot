@@ -346,8 +346,8 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         self.assertIn("display: flex", block)
         self.assertIn("direction: ltr", block)
         self.assertNotIn("position: relative", block)
-        self.assertIn("--magic-link-h: 52px", block)
-        self.assertIn("--magic-copy-h: 34px", block)
+        self.assertIn("--magic-link-h: var(--btn-h)", block)
+        self.assertIn("--magic-copy-h: var(--ctl-sm-h)", block)
         self.assertIn("--magic-copy-w: 4.75rem", block)
         inp = css.split(".magic-link-field .magic-link-input {", 1)[1].split("}", 1)[0]
         self.assertIn("text-overflow: ellipsis", inp)

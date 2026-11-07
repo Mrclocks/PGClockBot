@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "macros.html" import ord_status, pay_status, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
 {% from "_stuck_order_actions.html" import stuck_close_actions %}
+{% from "_ds.html" import ds_modal_head, ds_sec, ds_foot, ds_switch, ico %}
 {% block title %}
 {%- if finance_tab == 'reports' -%}گزارشات
 {%- elif finance_tab == 'payments' -%}پرداخت‌ها
@@ -473,12 +474,14 @@
   {% include "_modal_finance_settings.html" %}
 {% endif %}
 
-<div class="ui-modal" id="modal-receipt" hidden>
+<div class="ui-modal ds" id="modal-receipt" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-receipt" role="dialog" aria-modal="true" aria-labelledby="receipt-modal-title">
-    <div class="ui-modal-head">
-      {{ modal_title('payments', 'رسید پرداخت', caption='بررسی و تأیید رسید', tone='brand', heading_id='receipt-modal-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('payments', 'رسید پرداخت', tone='brand', heading_id='receipt-modal-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     <div class="receipt-modal-body">
       <div class="receipt-modal-frame">
@@ -520,24 +523,25 @@
 })();
 </script>
 {% if finance_tab == 'payments' and can_void_payment %}
-<div class="ui-modal" id="modal-payment-void" hidden>
+<div class="ui-modal ds" id="modal-payment-void" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="payment-void-title">
-    <div class="ui-modal-head">
-      {{ modal_title('payments', 'ابطال پرداخت تأییدشده', caption='سرویس مربوط به این پرداخت غیرفعال می‌شود', tone='brand', heading_id='payment-void-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-    <form method="post" id="payment-void-form" class="form-stack" action="">
+    {{ ds_modal_head('payments', 'ابطال پرداخت تأییدشده', 'payment-void-title') }}
+    <form method="post" id="payment-void-form" class="form-stack ds-body" action="">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <p class="muted" id="payment-void-summary"></p>
-      <label class="form-field">دلیل ابطال
-        <textarea name="reason" maxlength="500" required></textarea>
-      </label>
-      <label class="form-field" id="payment-void-refund-field">
-        <span><input type="checkbox" name="refund_to_wallet" value="1"> مبلغ پرداخت به کیف پول مشتری برگردد</span>
-      </label>
-      <p class="muted" id="payment-void-topup-note" hidden>مبلغ شارژ از کیف پول مشتری کم می‌شود؛ اگر مشتری آن را خرج کرده باشد ابطال انجام نمی‌شود.</p>
-      <button class="btn btn-danger" type="submit">ابطال پرداخت</button>
+      {% call ds_sec('ابطال', extra_class='ds-sec-first') %}
+        <div class="ds-note" data-tone="danger" role="note">{{ ico('info') }}<span>سرویس مربوط به این پرداخت غیرفعال می‌شود. این کار برگشت‌پذیر نیست.</span></div>
+        <p class="ds-desc" id="payment-void-summary"></p>
+        <label class="form-field"><span>دلیل ابطال <span class="ds-req" aria-hidden="true">*</span></span>
+          <textarea name="reason" maxlength="500" required rows="3" placeholder="مثلاً رسید تکراری بود"></textarea>
+          <small class="muted">در گزارش کارکنان ثبت می‌شود.</small>
+        </label>
+        <div class="ds-rows" id="payment-void-refund-field">
+          {{ ds_switch('refund_to_wallet', 'مبلغ به کیف پول مشتری برگردد') }}
+        </div>
+        <p class="ds-desc" id="payment-void-topup-note" hidden>مبلغ شارژ از کیف پول مشتری کم می‌شود؛ اگر مشتری آن را خرج کرده باشد ابطال انجام نمی‌شود.</p>
+      {% endcall %}
+      {{ ds_foot('ابطال پرداخت', primary_class='btn btn-danger') }}
     </form>
   </div>
 </div>

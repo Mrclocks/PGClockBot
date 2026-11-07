@@ -8,10 +8,10 @@
   --ds-3: var(--space-1_5);
   --ds-4: var(--space-2);
   --ds-6: var(--space-3);
-  --ds-control-h: 44px;
-  --ds-tab-h: 40px;
-  --ds-chip-h: 36px;
-  --ds-tag-h: 26px;
+  --ds-control-h: var(--btn-h);
+  --ds-tab-h: var(--btn-h);
+  --ds-chip-h: var(--btn-h);
+  --ds-tag-h: var(--tag-h);
   --ds-radius-sm: 16px;
   --ds-divider: color-mix(in srgb, var(--border) 80%, transparent);
 }
@@ -94,11 +94,11 @@ html[data-theme="light"] .ds .ds-card { background: rgba(0, 0, 0, 0.02); }
   min-height: var(--ds-tag-h); padding: 0 10px; border-radius: 999px; border: 1px solid var(--border);
   background: transparent; color: var(--muted-fg); font: inherit; font-size: 11.5px; font-weight: 500; cursor: pointer;
 }
-.ds .ds-mini[aria-pressed="true"] { background: var(--foreground); border-color: var(--foreground); color: var(--background); }
+.ds .ds-mini[aria-pressed="true"] { background: var(--ds-sel-bg); border-color: var(--ds-sel-line); color: var(--ds-sel-fg); }
 .ds .ds-link-btn {
   align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
   border: 0; background: none; padding: 2px 0; font: inherit; font-size: 13px; font-weight: 500;
-  color: var(--primary); cursor: pointer;
+  color: var(--ds-sel-fg); cursor: pointer;
 }
 .ds .ds-link-btn svg, .ds .ds-add svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .ds .ds-note {
@@ -125,7 +125,7 @@ html[data-theme="light"] .ds .ds-card { background: rgba(0, 0, 0, 0.02); }
   min-width: 0; min-height: var(--ds-chip-h); padding: 0 8px; border-radius: 999px; border: 1px solid var(--border);
   background: transparent; color: var(--foreground); font: inherit; font-size: 13px; cursor: pointer;
 }
-.ds .ds-chips button[aria-checked="true"] { background: var(--foreground); color: var(--background); border-color: var(--foreground); font-weight: 600; }
+.ds .ds-chips button[aria-checked="true"] { background: var(--ds-sel-bg); color: var(--ds-sel-fg); border-color: var(--ds-sel-line); font-weight: 600; }
 
 .ds .ds-types { display: flex; flex-direction: column; gap: var(--ds-2); }
 .ds .ds-types-2 { display: grid; grid-template-columns: 1fr 1fr; }
@@ -211,7 +211,7 @@ html[data-theme="light"] .ds .ds-card { background: rgba(0, 0, 0, 0.02); }
 .ds .ds-del:hover { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, transparent); }
 .ds .ds-add {
   gap: 6px; min-height: 48px; border: 0; border-top: 1px dashed var(--ds-divider); background: none;
-  font: inherit; font-size: 13px; font-weight: 500; color: var(--primary); cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 500; color: var(--ds-sel-fg); cursor: pointer;
 }
 .ds .ds-list-head .ds-unit-head { display: none; }
 @media (max-width: 374px) {
@@ -244,6 +244,15 @@ html[data-theme="light"] .ds .ds-card { background: rgba(0, 0, 0, 0.02); }
 }
 .ds.extra-packs-editor, .ds .extra-packs-editor { display: flex; flex-direction: column; gap: var(--ds-3); }
 .ds.extra-packs-editor[hidden], .ds .extra-packs-editor[hidden] { display: none; }
+
+/* ---------- Notes, confirmations ---------- */
+.ds .ds-note[data-tone="danger"] { background: color-mix(in srgb, var(--destructive) 9%, transparent); }
+.ds .ds-note[data-tone="danger"] svg { stroke: var(--destructive); }
+.ds .ds-confirm { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--ds-3); padding: var(--ds-6) var(--ds-2) var(--ds-4); }
+.ds .ds-confirm p { margin: 0; font-size: 14px; line-height: 1.8; }
+.ds .ds-confirm-ico { width: 56px; height: 56px; border-radius: 999px; display: grid; place-items: center; background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.ds .ds-confirm-ico svg { width: 26px; height: 26px; fill: none; stroke: var(--warn); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ds .ds-foot:not(.ui-modal-sticky-save) { padding: var(--ds-3) var(--ds-4) calc(var(--ds-4) + var(--safe-bottom)); border-top: 1px solid var(--border); }
 
 /* ---------- Badges ---------- */
 .ds .ds-badge { min-height: var(--ds-tag-h); padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--muted); color: var(--muted-fg); box-sizing: border-box; }
@@ -280,3 +289,150 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   .ds .ds-steps a { font-size: 10.5px; padding: 0 1px; }
   .ds .ds-steps { gap: 3px; }
 }
+
+/* Body of a short dialog: one column with standard gaps. */
+.ds .ds-stack { display: flex; flex-direction: column; gap: var(--ds-4); padding-top: var(--ds-4); }
+
+/* Short dialogs (confirmations) open as a sheet only as tall as their content. */
+@media (max-width: 640px) {
+  .ui-modal.ds.ds-dialog .ui-modal-panel { height: auto; max-height: 100%; }
+}
+.ds.ds-dialog .ds-body { padding-bottom: var(--ds-4); }
+
+/* ---------- Pages: tab strips ----------
+   One height for every tab (40px). A row of topics sits in a track with the active one raised;
+   the active topic's pages are outlined chips under it. Rows scroll sideways on phones and the
+   active tab is scrolled into view (panel-ds.js). */
+.ds .section-tabs {
+  flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: var(--ds-1);
+  margin-bottom: var(--ds-2);
+}
+.ds .section-tabs::-webkit-scrollbar { display: none; }
+.ds .section-tabs a, .ds .section-tabs .tab-btn {
+  flex: 0 0 auto; height: var(--ds-tab-h); min-height: var(--ds-tab-h); padding: 0 var(--ds-4);
+  justify-content: center; white-space: nowrap; border-radius: 999px; font-size: 13px;
+}
+.ds .section-tabs:not(.settings-subtabs) {
+  padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: var(--muted);
+}
+.ds .section-tabs:not(.settings-subtabs) a, .ds .section-tabs:not(.settings-subtabs) .tab-btn {
+  flex: 1 0 auto; border-color: transparent; background: transparent; color: var(--muted-fg);
+}
+.ds .section-tabs:not(.settings-subtabs) a.active, .ds .section-tabs:not(.settings-subtabs) .tab-btn.active {
+  background: var(--bg-card); color: var(--ds-sel-fg); border: 1.5px solid var(--ds-sel-line); box-shadow: 0 1px 3px rgba(0, 0, 0, .08); font-weight: 600;
+}
+.ds .section-tabs.settings-subtabs { margin-bottom: var(--ds-4); }
+.ds .section-tabs.settings-subtabs a { height: var(--ds-tab-h); font-size: 13px; background: transparent; }
+.ds .section-tabs.settings-subtabs a.active { background: var(--ds-sel-bg); color: var(--ds-sel-fg); border: 1.5px solid var(--ds-sel-line); font-weight: 600; }
+.ds .section-tabs + .ds-settings-body, .ds .section-tabs + .settings-layout { margin-top: var(--ds-2); }
+
+/* ---------- Pages: settings cards ---------- */
+.ds-settings .settings-card {
+  display: flex; flex-direction: column; gap: var(--ds-4);
+  padding: var(--ds-4); border-radius: var(--radius); margin-bottom: var(--ds-4);
+}
+.ds-settings .settings-card > h2 { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.4; }
+.ds-settings .settings-card > h2 + p.muted { margin-top: calc(-1 * var(--ds-2)); font-size: 12.5px; line-height: 1.7; }
+.ds-settings .settings-grid { gap: var(--ds-4); }
+/* Switches: no box of their own; consecutive switches read as one divided list. */
+.ds-settings .setting-item > .ui-switch-row,
+.ds-settings .setting-item > .toggle-row,
+.ds-settings .ui-switch-list > .ui-switch-row {
+  background: transparent !important; border: 0 !important; box-shadow: none !important;
+  border-radius: 0; padding: var(--ds-2) 0 !important; min-height: 0;
+}
+.ds-settings .setting-item:has(> .ui-switch-row) + .setting-item:has(> .ui-switch-row) {
+  margin-top: calc(-1 * var(--ds-2)); padding-top: var(--ds-2); border-top: 1px dashed var(--ds-divider);
+}
+.ds-settings .ui-switch-list > .ui-switch-row + .ui-switch-row { border-top: 1px dashed var(--ds-divider) !important; }
+.ds-settings .ui-switch-list { gap: 0; }
+.ds-settings .ui-switch-copy strong { font-size: 14px; font-weight: 500; }
+.ds-settings .ui-switch-copy small, .ds-settings .setting-item small { font-size: 12px; line-height: 1.6; }
+/* Save button at the bottom of its card or form */
+.ds-settings .sticky-actions, .ds-settings .settings-card > .actions {
+  display: flex; justify-content: flex-start; gap: var(--ds-3);
+}
+.ds-settings .sticky-actions .btn, .ds-settings .settings-card > .actions .btn { min-width: 140px; min-height: var(--ds-control-h); }
+
+/* Repeating list rows in settings (cards, gateways, supports, guides, channels):
+   the trash button sits in the row's top corner instead of a full-width text button. */
+.ds .pay-dest-row { position: relative; }
+.ds .pay-dest-row > .ds-del.pay-dest-remove-btn { position: absolute; top: var(--ds-2); left: var(--ds-2); width: 36px; }
+.ds .ds-del.force-channel-remove { width: 36px; flex: 0 0 36px; }
+.ds .pay-dest-add-row { min-height: 44px; border-radius: 999px; color: var(--ds-sel-fg); font-weight: 500; }
+
+/* Multi-select chips (groups, inbounds): a tag with a check instead of a small switch. */
+.ds .ui-switch-grid { display: flex; flex-wrap: wrap; gap: var(--ds-2); }
+.ds .ui-switch-chip {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 34px; padding: 0 12px; margin: 0; border-radius: 999px; border: 1px solid var(--border);
+  background: transparent; cursor: pointer; direction: ltr; line-height: 1;
+}
+.ds .ui-switch-chip .ui-switch { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.ds .ui-switch-chip .ui-switch-copy strong { font-size: 13px; font-weight: 500; }
+.ds .ui-switch-chip::before {
+  content: ""; display: none; width: 14px; height: 14px;
+  background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.ds .ui-switch-chip:has(input:checked) { border-color: var(--ds-sel-line); background: var(--ds-sel-bg); color: var(--ds-sel-fg); }
+.ds .ui-switch-chip:has(input:checked)::before { display: block; }
+.ds .ui-switch-chip:has(input:checked) .ui-switch-copy strong { font-weight: 600; color: var(--ds-sel-fg); }
+.ds .ui-switch-chip:has(input:focus-visible) { outline: 2px solid var(--ds-sel-line); outline-offset: 2px; }
+
+/* General pack rows: the price is typed, so it gets the wider column. */
+.ds [data-addon-rows] .ds-list-head, .ds [data-addon-rows] .ds-list-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) 40px 32px; }
+.ds [data-addon-rows] .ds-list-value { overflow: visible; }
+.ds [data-addon-rows] .ds-list-value input { width: 100%; }
+/* Phones: the unit moves to the column head so the typed digits keep the whole field. */
+@media (max-width: 480px) {
+  .ds [data-addon-rows] .ds-list-head, .ds [data-addon-rows] .ds-list-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) 36px 30px; gap: 6px; padding: 0 var(--ds-2); }
+  .ds [data-addon-rows] .ds-list-head .ds-unit-head { display: inline; }
+  .ds [data-addon-rows] .ds-pack-amt .ds-unit-label { display: none; }
+  .ds [data-addon-rows] .ds-list-row input { padding-inline: 8px; text-align: center; }
+}
+
+/* ---------- Brand accent and vertical rhythm ----------
+   Selected tabs, chips and «افزودن» use the panel brand colour (a strong edge on a light fill, like the
+   main buttons); delete stays red and everything else neutral. Written with var(--brand) directly so a
+   brand set on a nested element ([data-brand]) is followed. */
+.ds {
+  --ds-sel-line: color-mix(in srgb, var(--brand) 72%, transparent);
+  --ds-sel-bg: color-mix(in srgb, var(--brand) 9%, transparent);
+  --ds-sel-fg: var(--brand-fg);
+}
+.ds .sales-seg button.on, .ds .sales-seg a.on, .ds .ds-seg button.on, .ds .ds-aud button.on {
+  background: var(--bg-card); color: var(--ds-sel-fg); box-shadow: inset 0 0 0 1.5px var(--ds-sel-line);
+}
+/* Every tab row keeps the same space below it, in pages and in modals. */
+.ds nav.section-tabs, .ds .settings-modal-panel .ui-modal-scroll > .modal-section-tabs { margin: 0 0 var(--ds-4); padding-bottom: 0; }
+.ds .section-tabs.settings-tabs-groups + .section-tabs { margin-top: calc(-1 * var(--ds-1)); }
+/* Text in fields sits on the vertical centre, and the unit beside a number lines up with the digits. */
+.ds input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .ds select { line-height: normal; }
+.ds .ds-unit-label { line-height: 1; padding-top: 2px; }
+
+/* Size tiers inside the design scope (tokens in panel.css). */
+.ds .ds-mini, .ds .ui-switch-chip { min-height: var(--ctl-sm-h); }
+.ds .ds-del { width: var(--btn-h); height: var(--btn-h); }
+.ds .ds-list-row input, .ds .ds-pack-amt input { height: var(--btn-h); min-height: var(--btn-h); }
+/* The header audience switch is one 40px control: a 32px choice inside a 4px track. */
+.ds .ds-aud button { min-height: calc(var(--btn-h) - 8px); }
+.ds .ds-list-row input { margin: 0; }
+/* Section jump chips: compact tier, sized to their label, scrolling sideways like tab rows when space runs out. */
+.ds .ds-steps { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; }
+.ds .ds-steps::-webkit-scrollbar { display: none; }
+.ds .ds-steps a { flex: 1 0 auto; min-height: var(--ctl-sm-h); padding: 0 6px; font-size: 12px; }
+.ds .ds-foot-warn-go { color: var(--ds-sel-fg); }
+
+/* Edit bodies (user, reseller; page and modal): each section is a settings card with its own save. */
+.ds .edit-section {
+  display: flex; flex-direction: column; gap: var(--ds-4); margin: 0 0 var(--ds-4); padding: var(--ds-4);
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--card);
+}
+.ds .edit-section:first-child, .ds .edit-section.edit-section--identity { padding: var(--ds-4); border: 1px solid var(--border); }
+.ds .edit-section-head { margin: 0; gap: var(--ds-1); }
+.ds .edit-section-head h3, .ds .edit-section > h3 { font-size: 14px; font-weight: 700; }
+.ds .edit-section-head p.muted { margin: 0; font-size: 12.5px; line-height: 1.7; }
+.ds .edit-section .form-stack { gap: var(--ds-4); }
+.ds .edit-section .actions { margin: 0; }
+.ds .edit-section .ui-switch-section > .ds-label-row { margin-bottom: var(--ds-1); }

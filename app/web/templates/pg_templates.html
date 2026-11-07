@@ -84,14 +84,17 @@
 </div>
 
 {% if can_create %}
-<div class="ui-modal" id="modal-pg-template-create" hidden>
+<div class="ui-modal ds" id="modal-pg-template-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('templates', 'ساخت تمپلیت جدید', caption='تمپلیت آماده پاسارگارد', tone='pg') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('templates', 'ساخت تمپلیت جدید', tone='pg') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/pg/templates" class="form-stack">
+    <form method="post" action="/pg/templates" class="form-stack ds-body">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <div class="form-row">
         <div>
           <label class="form-field">نام تمپلیت
@@ -119,24 +122,28 @@
           {% endfor %}
         </div>
       </div>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit">ساخت در پاسارگارد</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      </div></div>
     </form>
   </div>
 </div>
 {% endif %}
 
 {% if can_update %}
-<div class="ui-modal" id="modal-pg-template-edit" hidden>
+<div class="ui-modal ds" id="modal-pg-template-edit" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-template-edit-title">
-    <div class="ui-modal-head">
-      {{ modal_title('templates', 'ویرایش تمپلیت', caption='تنظیمات تمپلیت', tone='pg', heading_id='pg-template-edit-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('templates', 'ویرایش تمپلیت', tone='pg', heading_id='pg-template-edit-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/pg/templates/0/edit" class="form-stack" id="pg-template-edit-form">
+    <form method="post" action="/pg/templates/0/edit" class="form-stack ds-body" id="pg-template-edit-form">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <div class="form-row">
         <div>
           <label class="form-field">نام تمپلیت
@@ -164,10 +171,11 @@
           {% endfor %}
         </div>
       </div>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit">ذخیره تغییرات</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      </div></div>
     </form>
   </div>
 </div>

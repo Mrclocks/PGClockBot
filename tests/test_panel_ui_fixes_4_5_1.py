@@ -78,8 +78,9 @@ class SwitchHoverThemeTests(unittest.TestCase):
 class CancelButtonUnityTests(unittest.TestCase):
     def test_ghost_link_matches_button(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        # One rule serves both themes: the neutral edge and fill are mixed from --foreground.
         self.assertIn("a.btn.btn-ghost:hover", css)
-        self.assertIn('html[data-theme="light"] a.btn.btn-ghost:hover', css)
+        self.assertNotIn('html[data-theme="light"] a.btn.btn-ghost', css)
 
     def test_plan_modal_cancel_pattern(self):
         plans = template_with_includes("plans.html")

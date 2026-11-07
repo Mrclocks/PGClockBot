@@ -5,16 +5,18 @@
 {% set strip_keys = 'settings,supports,stab,saved,ok,err,msg,_' %}
 {% set show_referral_tab = referral_tab_groups and referral_tab_groups|length > 0 %}
 {% set loy_tab = loyalty_settings_tab or 'club' %}
-<div class="ui-modal{% if open_loy %} open{% endif %}" id="modal-loyalty-settings"
+<div class="ui-modal ds ds-settings{% if open_loy %} open{% endif %}" id="modal-loyalty-settings"
      {% if not open_loy %}hidden{% endif %}
      data-modal-strip-keys="{{ strip_keys }}">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl settings-modal-panel" role="dialog" aria-modal="true" aria-labelledby="loyalty-settings-title">
-    <div class="ui-modal-head">
-      {{ modal_title('loyalty', 'تنظیمات باشگاه مشتریان', caption='امتیاز، دعوت، جوایز و چرخ شانس', tone='brand', heading_id='loyalty-settings-title') }}
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+      {{ modal_title('loyalty', 'تنظیمات باشگاه مشتریان', tone='brand', heading_id='loyalty-settings-title') }}
       <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
+      </div>
     </div>
     {% if open_loy and (flash_ok or flash_err) %}
     <div class="settings-modal-flash">

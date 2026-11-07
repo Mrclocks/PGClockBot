@@ -3,6 +3,7 @@
 {% from "_shop_settings_tabs.html" import shop_settings_tabs %}
 {% block title %}تنظیمات فروشگاه{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>
     {{ page_title('bot-settings', 'تنظیمات فروشگاه', help='settings-bot') }}
@@ -258,4 +259,5 @@
 })();
 </script>
 {% endif %}
+</div>
 {% endblock %}
