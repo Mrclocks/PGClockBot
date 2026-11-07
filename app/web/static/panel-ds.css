@@ -405,7 +405,9 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-dot-select[data-value="primary"] .ui-select-toggle::before { border: 0; background: #3b82f6; }
 .ds .ds-dot-select[data-value="success"] .ui-select-toggle::before { border: 0; background: #22c55e; }
 .ds .ds-dot-select[data-value="danger"] .ui-select-toggle::before { border: 0; background: #ef4444; }
-.ds .ds-dot-select .ui-select-label { overflow: hidden; text-overflow: ellipsis; }
+.ds .ds-dot-select .ui-select-label { overflow: hidden; text-overflow: ellipsis; font-size: 13px !important; font-weight: 500; }
+/* «پیش‌فرض» has no colour of its own, so it shows no dot. */
+.ds .ds-dot-select:is([data-value="inherit"], :not([data-value])) .ui-select-toggle::before { display: none; }
 @media (max-width: 480px) {
   .ds .ds-list-head, .ds .ds-list-row { grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) 96px 40px; gap: 6px; padding-inline: var(--g2); }
   .ds .ds-list-head .ds-unit-head { display: inline; }
@@ -493,7 +495,7 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   margin: var(--sec-gap) 0 var(--g2) !important; padding: 0 var(--g1) !important; border: 0 !important;
   font-size: 13px !important; font-weight: 600 !important; line-height: 1.25 !important; color: var(--muted-fg) !important;
 }
-.ui-modal.ds .plan-cat-list { gap: 0 !important; margin: 0 !important; }
+.ui-modal.ds .plan-cat-list { gap: 0 !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
 .ui-modal.ds .ui-modal-scroll > .table-wrap, .ui-modal.ds .plan-cat-list > .table-wrap { margin: 0; border-radius: var(--inner-radius); }
 /* A segmented choice that fills its row (pack kinds) keeps equal options across the whole track. */
 .ds .sales-seg.ds-seg { display: flex; width: 100%; }
