@@ -2,6 +2,8 @@
 (function (root) {
   "use strict";
 
+  const PackRows = typeof module === "object" && module.exports ? require("./pack-rows.js") : root.PackRows;
+
   const DEFAULTS = {
     gb: [1, 5, 10, 50],
     users: [1, 5, 10, 20],
@@ -17,12 +19,6 @@
     return parts.length ? parts : fallback.slice();
   }
 
-  function syncSelectTone(select) {
-    if (!select) return;
-    const opt = select.selectedOptions && select.selectedOptions[0];
-    const tone = (opt && opt.getAttribute("data-tone")) || "default";
-    select.setAttribute("data-tone", tone);
-  }
 
   function setRowEnabled(row, enabled) {
     row.querySelectorAll("input, select, button").forEach((el) => {
@@ -47,35 +43,18 @@
     });
   }
 
+  const ROW_SPECS = {
+    gb: { rowAttr: "data-extra-pack-row", removeAttr: "data-extra-pack-remove", amountName: "extra_gb_amount", styleName: "extra_gb_style", amountMax: "100000", unit: "گیگ", amountLabel: "مقدار حجم بسته", styleLabel: "رنگ دکمه بسته حجم", removeLabel: "حذف بسته حجم" },
+    users: { rowAttr: "data-extra-pack-row", removeAttr: "data-extra-pack-remove", amountName: "extra_user_amount", styleName: "extra_user_style", amountMax: "100000", unit: "نفر", amountLabel: "تعداد کاربر بسته", styleLabel: "رنگ دکمه بسته کاربر", removeLabel: "حذف بسته کاربر" },
+  };
+
   function buildRow(kind, amount, styleValue, styleOptionsHtml) {
-    const amountName = kind === "gb" ? "extra_gb_amount" : "extra_user_amount";
-    const styleName = kind === "gb" ? "extra_gb_style" : "extra_user_style";
-    const amountLabel = kind === "gb" ? "مقدار حجم بسته" : "تعداد کاربر بسته";
-    const styleLabel = kind === "gb" ? "رنگ دکمه بسته حجم" : "رنگ دکمه بسته کاربر";
-    const removeLabel = kind === "gb" ? "حذف بسته حجم" : "حذف بسته کاربر";
-    const wrap = document.createElement("div");
-    wrap.className = "extra-pack-row";
-    wrap.setAttribute("data-extra-pack-row", "");
-    wrap.innerHTML =
-      `<div class="extra-pack-fields">` +
-      `<input name="${amountName}" class="extra-pack-amount" type="number" min="1" max="100000" step="1" ` +
-      `inputmode="numeric" dir="ltr" value="${Number(amount) || 1}" aria-label="${amountLabel}" placeholder="مقدار" required />` +
-      `<select name="${styleName}" class="btn-color-select extra-pack-style" data-tone="default" aria-label="${styleLabel}">${styleOptionsHtml}</select>` +
-      `</div>` +
-      `<button type="button" class="btn btn-danger btn-sm extra-pack-remove" data-extra-pack-remove aria-label="${removeLabel}">حذف</button>`;
-    const select = wrap.querySelector("select");
-    if (select) {
-      const want = styleValue == null ? "inherit" : String(styleValue);
-      select.value = want;
-      if (select.value !== want) select.value = "inherit";
-      syncSelectTone(select);
-    }
-    return wrap;
+    return PackRows.buildRow(ROW_SPECS[kind], amount, styleValue, styleOptionsHtml);
   }
 
   function styleOptionsFrom(root) {
-    const sample = root.querySelector("select[name='extra_gb_style'], select[name='extra_user_style']");
-    return sample ? sample.innerHTML : "";
+    const sample = root.querySelector("select.extra-pack-style");
+    return sample ? sample.innerHTML : '<option value="inherit">ارث از پیش‌فرض</option>';
   }
 
   function seedDefaultsIfEmpty(root) {
@@ -90,11 +69,13 @@
         box.appendChild(buildRow(kind, n, "inherit", html || '<option value="inherit">ارث از پیش‌فرض</option>'))
       );
     });
+    PackRows.refresh(root);
   }
 
   function bind(root) {
     if (!root || root.dataset.bound === "1") return;
     root.dataset.bound = "1";
+    PackRows.bindView(root);
     root.addEventListener("click", (event) => {
       const add = event.target.closest("[data-extra-pack-add]");
       if (add && root.contains(add)) {
@@ -103,17 +84,14 @@
         if (!box) return;
         const html = styleOptionsFrom(root);
         box.appendChild(buildRow(kind, 1, "inherit", html));
+        PackRows.refresh(root);
         return;
       }
       const remove = event.target.closest("[data-extra-pack-remove]");
       if (remove && root.contains(remove)) {
         const row = remove.closest("[data-extra-pack-row]");
         if (row) row.remove();
-      }
-    });
-    root.addEventListener("change", (event) => {
-      if (event.target && event.target.matches("select.btn-color-select")) {
-        syncSelectTone(event.target);
+        PackRows.refresh(root);
       }
     });
   }
@@ -125,6 +103,7 @@
   const api = {
     DEFAULTS,
     parseCsvInts,
+    packPrice: PackRows.packPrice,
     setEditorVisible,
     seedDefaultsIfEmpty,
     bind,
