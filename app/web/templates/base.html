@@ -66,6 +66,7 @@
 </head>
 <body>
   {% if staff is defined and staff %}
+  {% from "_ds.html" import ds_modal_head, ico %}
   {% set path = request.url.path %}
   {% set perms = staff.get('permissions') or [] %}
   {% set pg_nav = staff.get('pg_permissions') or [] %}
@@ -425,13 +426,10 @@
       </span>
     </span>
   </div>
-  <div class="ui-modal" id="modal-inbox-dismiss" hidden>
+  <div class="ui-modal ds ds-dialog" id="modal-inbox-dismiss" hidden>
     <div class="ui-modal-backdrop" data-modal-close></div>
     <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="inbox-dismiss-title">
-      <div class="ui-modal-head">
-        {{ modal_title('inbox', 'حذف اعلان', caption='مدت مخفی‌سازی را انتخاب کنید', tone='neutral', heading_id='inbox-dismiss-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
+      {{ ds_modal_head('inbox', 'حذف اعلان', 'inbox-dismiss-title', tone='neutral') }}
       <form method="post" action="/inbox/dismiss" class="form-stack" id="form-inbox-dismiss" data-panel-validate="0" novalidate>
         {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
         <input type="hidden" name="alert_key" id="inbox-dismiss-key" value="" />
@@ -439,7 +437,8 @@
         <input type="hidden" name="return_to" id="inbox-dismiss-return" value="" />
         {# Explicit mode field — WebKit may omit zero-size radios from native submit #}
         <input type="hidden" name="mode" id="inbox-dismiss-mode" value="24h" />
-        <p class="muted" id="inbox-dismiss-hint">مدت مخفی‌سازی را انتخاب کنید، سپس تأیید کنید.</p>
+        <div class="ds-body ds-stack">
+        <p class="ds-desc" id="inbox-dismiss-hint">مدت مخفی‌سازی را انتخاب کنید، سپس تأیید کنید.</p>
         <div class="inbox-dismiss-options" role="radiogroup" aria-labelledby="inbox-dismiss-hint">
           <label class="inbox-dismiss-option is-selected">
             <input type="radio" name="dismiss_choice" value="24h" checked data-inbox-mode="24h" />
@@ -458,31 +457,38 @@
             </span>
           </label>
         </div>
-        <div class="actions">
-          <button type="submit" class="btn" id="inbox-dismiss-submit">تأیید</button>
-          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        </div>
+        <div class="ds-foot">
+          <div class="ds-foot-btns">
+            <button type="submit" class="btn" id="inbox-dismiss-submit">تأیید</button>
+            <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+          </div>
         </div>
       </form>
     </div>
   </div>
-  <div class="ui-modal" id="modal-confirm" hidden>
+  <div class="ui-modal ds ds-dialog" id="modal-confirm" hidden>
     <div class="ui-modal-backdrop" data-modal-close></div>
     <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-      <div class="ui-modal-head">
-        {{ modal_title('overview', 'تأیید', caption='این عمل را تأیید کنید', tone='neutral', heading_id='confirm-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
+      {{ ds_modal_head('overview', 'تأیید', 'confirm-title', tone='neutral') }}
       <form id="confirm-form" class="form-stack" action="#" method="post" data-panel-validate="0" novalidate>
         {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
-        <p id="confirm-message" class="confirm-message"></p>
-        {# Reason field is injected by panel.js only when requireReason=true.
-           Phrase (type-to-confirm) is injected when confirmPhrase is set.
-           novalidate: HTML minlength fights Persian IME composition and showed
-           false "too short" errors; panel.js validates after composition ends. #}
-        <div id="confirm-reason-slot" hidden></div>
-        <div class="actions">
-          <button type="submit" class="btn btn-danger" id="confirm-submit">تأیید</button>
-          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        <div class="ds-body">
+          <div class="ds-confirm">
+            <span class="ds-confirm-ico" aria-hidden="true">{{ ico('warn') }}</span>
+            <p id="confirm-message" class="confirm-message"></p>
+          </div>
+          {# Reason field is injected by panel.js only when requireReason=true.
+             Phrase (type-to-confirm) is injected when confirmPhrase is set.
+             novalidate: HTML minlength fights Persian IME composition and showed
+             false "too short" errors; panel.js validates after composition ends. #}
+          <div id="confirm-reason-slot" hidden></div>
+        </div>
+        <div class="ds-foot">
+          <div class="ds-foot-btns">
+            <button type="submit" class="btn btn-danger" id="confirm-submit">تأیید</button>
+            <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+          </div>
         </div>
       </form>
     </div>

@@ -245,6 +245,15 @@ html[data-theme="light"] .ds .ds-card { background: rgba(0, 0, 0, 0.02); }
 .ds.extra-packs-editor, .ds .extra-packs-editor { display: flex; flex-direction: column; gap: var(--ds-3); }
 .ds.extra-packs-editor[hidden], .ds .extra-packs-editor[hidden] { display: none; }
 
+/* ---------- Notes, confirmations ---------- */
+.ds .ds-note[data-tone="danger"] { background: color-mix(in srgb, var(--destructive) 9%, transparent); }
+.ds .ds-note[data-tone="danger"] svg { stroke: var(--destructive); }
+.ds .ds-confirm { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--ds-3); padding: var(--ds-6) var(--ds-2) var(--ds-4); }
+.ds .ds-confirm p { margin: 0; font-size: 14px; line-height: 1.8; }
+.ds .ds-confirm-ico { width: 56px; height: 56px; border-radius: 999px; display: grid; place-items: center; background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.ds .ds-confirm-ico svg { width: 26px; height: 26px; fill: none; stroke: var(--warn); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ds .ds-foot:not(.ui-modal-sticky-save) { padding: var(--ds-3) var(--ds-4) calc(var(--ds-4) + var(--safe-bottom)); border-top: 1px solid var(--border); }
+
 /* ---------- Badges ---------- */
 .ds .ds-badge { min-height: var(--ds-tag-h); padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--muted); color: var(--muted-fg); box-sizing: border-box; }
 .ds .ds-badge[data-tone="warn"] { background: color-mix(in srgb, var(--warn) 16%, transparent); color: #b45309; }
@@ -280,3 +289,12 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   .ds .ds-steps a { font-size: 10.5px; padding: 0 1px; }
   .ds .ds-steps { gap: 3px; }
 }
+
+/* Body of a short dialog: one column with standard gaps. */
+.ds .ds-stack { display: flex; flex-direction: column; gap: var(--ds-4); padding-top: var(--ds-4); }
+
+/* Short dialogs (confirmations) open as a sheet only as tall as their content. */
+@media (max-width: 640px) {
+  .ui-modal.ds.ds-dialog .ui-modal-panel { height: auto; max-height: 100%; }
+}
+.ds.ds-dialog .ds-body { padding-bottom: var(--ds-4); }

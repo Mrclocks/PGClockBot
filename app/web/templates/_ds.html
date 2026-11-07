@@ -1,4 +1,5 @@
 {# Design-language building blocks (styles: panel-ds.css, behavior: panel-ds.js). #}
+{% from "macros.html" import modal_title %}
 
 {% macro ico(name) -%}
 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -16,13 +17,14 @@
 {%- elif name == 'time' -%}<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>
 {%- elif name == 'users' -%}<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/>
 {%- elif name == 'chev' -%}<path d="M15 6l-6 6 6 6"/>
+{%- elif name == 'warn' -%}<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/>
 {%- endif -%}
 </svg>
 {%- endmacro %}
 
 {# Section: small grey title outside, dashboard-style card inside. #}
-{% macro ds_sec(title, sid='', side='', flush=false) -%}
-<section class="ds-sec"{% if sid %} id="{{ sid }}"{% endif %}>
+{% macro ds_sec(title, sid='', side='', flush=false, extra_class='') -%}
+<section class="ds-sec{% if extra_class %} {{ extra_class }}{% endif %}"{% if sid %} id="{{ sid }}"{% endif %}>
   <div class="ds-sec-head"><h3 class="ds-sec-title">{{ title }}</h3>{% if side %}{{ side }}{% endif %}</div>
   <div class="ds-card{% if flush %} ds-card-flush{% endif %}">{{ caller() }}</div>
 </section>
@@ -67,4 +69,24 @@
 {# Footer line shown instead of the summary while a required field is empty. #}
 {% macro ds_foot_warn() -%}
 <a class="ds-foot-warn" href="#" role="status" hidden>{{ ico('info') }}<span><span data-ds-missing-count>۱</span> مورد مانده: <b data-ds-missing></b></span><span class="ds-foot-warn-go">رفتن به آن</span></a>
+{%- endmacro %}
+
+{# Modal header: icon and title (no caption), close button at the far edge. #}
+{% macro ds_modal_head(icon, title, heading_id, tone='brand') -%}
+<div class="ui-modal-head ds-head">
+  <div class="ds-head-row">
+    {{ modal_title(icon, title, tone=tone, heading_id=heading_id) }}
+    <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+</div>
+{%- endmacro %}
+
+{# Save bar: primary action (two thirds) and cancel. Pinned to the panel bottom by panel.js. #}
+{% macro ds_foot(label, primary_class='btn', primary_id=none, pinned=true) -%}
+<div class="{% if pinned %}ui-modal-sticky-save {% endif %}ds-foot">
+  <div class="ds-foot-btns">
+    <button type="submit" class="{{ primary_class }}"{% if primary_id %} id="{{ primary_id }}"{% endif %}>{{ label }}</button>
+    <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+  </div>
+</div>
 {%- endmacro %}
