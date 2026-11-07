@@ -423,3 +423,16 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-steps::-webkit-scrollbar { display: none; }
 .ds .ds-steps a { flex: 1 0 auto; min-height: var(--ctl-sm-h); padding: 0 6px; font-size: 12px; }
 .ds .ds-foot-warn-go { color: var(--ds-sel-fg); }
+
+/* Edit bodies (user, reseller; page and modal): each section is a settings card with its own save. */
+.ds .edit-section {
+  display: flex; flex-direction: column; gap: var(--ds-4); margin: 0 0 var(--ds-4); padding: var(--ds-4);
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--card);
+}
+.ds .edit-section:first-child, .ds .edit-section.edit-section--identity { padding: var(--ds-4); border: 1px solid var(--border); }
+.ds .edit-section-head { margin: 0; gap: var(--ds-1); }
+.ds .edit-section-head h3, .ds .edit-section > h3 { font-size: 14px; font-weight: 700; }
+.ds .edit-section-head p.muted { margin: 0; font-size: 12.5px; line-height: 1.7; }
+.ds .edit-section .form-stack { gap: var(--ds-4); }
+.ds .edit-section .actions { margin: 0; }
+.ds .edit-section .ui-switch-section > .ds-label-row { margin-bottom: var(--ds-1); }
