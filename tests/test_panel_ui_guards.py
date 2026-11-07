@@ -316,8 +316,8 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("margin-top: auto", body)
         # Align with .side-foot baseline
         self.assertIn("padding-top: var(--page-title-gap)", body)
-        # star button should be shorter than primary --btn-h
-        self.assertIn("min-height: 28px", css)
+        # star button uses the compact tier, shorter than the primary --btn-h
+        self.assertIn("min-height: var(--ctl-sm-h)", css)
         # sidebar footer must stay at the pre-compact sizing
         side = re.search(r"(?ms)^\.side-foot\s*\{([^}]+)\}", css)
         self.assertIsNotNone(side)
@@ -325,7 +325,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         logout = re.search(r"(?ms)^\.logout-link\s*\{([^}]+)\}", css)
         self.assertIsNotNone(logout)
         self.assertIn("font-size: 13px", logout.group(1))
-        self.assertIn("height: 28px", logout.group(1))
+        self.assertIn("height: var(--ctl-sm-h)", logout.group(1))
         self.assertIn("padding: 0 var(--space-1)", logout.group(1))
 
     def test_block_button_is_warn_update_is_ok(self):
