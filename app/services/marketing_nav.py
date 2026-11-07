@@ -37,8 +37,8 @@ class MarketingSection:
 
 
 _CLUB_SECTIONS: tuple[MarketingSection, ...] = (
-    MarketingSection(CLUB, "باشگاه مشتریان", "/loyalty?tab=overview"),
-    MarketingSection(CLUB_TRANSACTIONS, "تراکنش‌های باشگاه", "/loyalty?tab=transactions"),
+    MarketingSection(CLUB, "باشگاه", "/loyalty?tab=overview"),
+    MarketingSection(CLUB_TRANSACTIONS, "تراکنش‌ها", "/loyalty?tab=transactions"),
 )
 _DISCOUNT_SECTION = MarketingSection(DISCOUNTS, "تخفیف‌ها", "/catalog-discounts")
 _GIFT_CODE_SECTION = MarketingSection(GIFT_CODES, "کد هدیه", "/gift-codes")
@@ -118,3 +118,37 @@ def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSectio
     if _can_open_broadcast(staff):
         sections.append(_BROADCAST_SECTION)
     return tuple(sections)
+
+
+@dataclass(frozen=True, slots=True)
+class MarketingGroup:
+    """One entry of the marketing tab strip; sections of the same topic open as sub-tabs."""
+
+    key: str
+    label: str
+    sections: tuple[MarketingSection, ...]
+
+    @property
+    def href(self) -> str:
+        return self.sections[0].href
+
+
+# (group key, label, section keys in display order)
+_GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("club", "باشگاه مشتریان", (CLUB, CLUB_TRANSACTIONS)),
+    ("offers", "تخفیف و کد هدیه", (DISCOUNTS, GIFT_CODES)),
+    ("messages", "پیام و کمپین", (BROADCAST, SHOP_BROADCAST, CAMPAIGNS)),
+    ("trials", "کاربران تست", (TRIAL_USERS,)),
+    ("funnel", "رفتار کاربر", (FUNNEL,)),
+)
+
+
+def marketing_groups(sections: tuple[MarketingSection, ...]) -> tuple[MarketingGroup, ...]:
+    """Group the sections a staff member may open; a group with none of them is left out."""
+    by_key = {s.key: s for s in sections}
+    groups = []
+    for key, label, members in _GROUP_LAYOUT:
+        allowed = tuple(by_key[m] for m in members if m in by_key)
+        if allowed:
+            groups.append(MarketingGroup(key, label, allowed))
+    return tuple(groups)

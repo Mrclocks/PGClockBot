@@ -29,6 +29,7 @@ from app.services.marketing_nav import (
     SHOP_BROADCAST,
     TRIAL_USERS,
     MarketingSection,
+    marketing_groups,
     marketing_sections,
 )
 
@@ -206,6 +207,7 @@ def _render_tabs(sections, active: str) -> str:
         loader=FileSystemLoader(str(TEMPLATES)),
         autoescape=select_autoescape(["html", "xml"]),
     )
+    env.globals["marketing_groups"] = marketing_groups
     template = env.from_string(
         '{% from "_marketing_tabs.html" import marketing_tabs %}'
         "{{ marketing_tabs(sections, active) }}"
@@ -214,11 +216,25 @@ def _render_tabs(sections, active: str) -> str:
 
 
 class MarketingTabsTemplateTests(unittest.TestCase):
-    def test_marks_only_the_active_section(self):
+    def test_marks_the_active_topic_and_its_active_page(self):
         html = _render_tabs(marketing_sections(OWNER), CAMPAIGNS)
-        self.assertEqual(html.count('class="active"'), 1)
-        self.assertIn('href="/campaigns" class="active" aria-current="page"', html)
-        self.assertIn('href="/broadcast" class=""', html)
+        top, sub = html.split("settings-subtabs", 1)
+        self.assertEqual(top.count('class="active"'), 1)
+        self.assertIn(">پیام و کمپین</a>", top.split('class="active"', 1)[1].split("</a>", 1)[0] + "</a>")
+        self.assertEqual(sub.count('class="active"'), 1)
+        self.assertIn('href="/campaigns" class="active" aria-current="page"', sub)
+        self.assertIn('href="/broadcast" class=""', sub)
+
+    def test_eight_pages_become_five_topics(self):
+        groups = marketing_groups(marketing_sections(OWNER))
+        self.assertEqual([g.label for g in groups],
+                         ["باشگاه مشتریان", "تخفیف و کد هدیه", "پیام و کمپین", "کاربران تست", "رفتار کاربر"])
+        keys = [s.key for g in groups for s in g.sections]
+        self.assertEqual(sorted(keys), sorted(s.key for s in marketing_sections(OWNER)))
+
+    def test_a_topic_without_allowed_pages_is_left_out(self):
+        groups = marketing_groups(marketing_sections(_reseller(["campaigns", "loyalty"])))
+        self.assertNotIn("تخفیف و کد هدیه", [g.label for g in groups])
 
     def test_single_section_renders_no_strip(self):
         self.assertEqual(_render_tabs(marketing_sections(_reseller(["campaigns"])), CAMPAIGNS).strip(), "")
@@ -227,8 +243,11 @@ class MarketingTabsTemplateTests(unittest.TestCase):
         self.assertEqual(_render_tabs((), CLUB).strip(), "")
 
     def test_labels_are_escaped(self):
-        hostile = (MarketingSection("x", "<script>alert(1)</script>", "/loyalty"),) * 2
-        html = _render_tabs(hostile, "x")
+        hostile = (
+            MarketingSection(CLUB, "<script>alert(1)</script>", "/loyalty"),
+            MarketingSection(CLUB_TRANSACTIONS, "<script>alert(2)</script>", "/loyalty?tab=transactions"),
+        )
+        html = _render_tabs(hostile, CLUB)
         self.assertNotIn("<script>", html)
         self.assertIn("&lt;script&gt;", html)
 
