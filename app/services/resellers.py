@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
@@ -60,6 +61,43 @@ FEATURE_PERMS: list[tuple[str, str]] = [
 ]
 
 DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import,miniapp,customer_notes,customer_services,gift_codes"
+
+
+@dataclass(frozen=True, slots=True)
+class FeaturePerm:
+    key: str
+    label: str
+    default: bool
+
+
+@dataclass(frozen=True, slots=True)
+class FeaturePermGroup:
+    title: str
+    risky: bool
+    perms: tuple[FeaturePerm, ...]
+
+
+# Display groups for the permission switches; every FEATURE_PERMS key is in exactly one group.
+# Risky money and data actions sit in their own group and are off by default.
+FEATURE_PERM_LAYOUT: tuple[tuple[str, bool, tuple[str, ...]], ...] = (
+    ("فروش و سفارش", False, ("dashboard", "plans", "orders", "payments", "stats", "custom_service_name")),
+    ("مشتریان", False, ("tickets", "customer_notes", "customer_services", "demo_users", "trial_users",
+                        "trial_users_manage", "customers_block")),
+    ("بازاریابی و وفاداری", False, ("campaigns", "broadcast", "catalog_discounts", "gift_codes", "loyalty")),
+    ("فروشگاه و فنی", False, ("shop_settings", "miniapp", "service_import", "connection_status",
+                             "connection_status_manage")),
+    ("عملیات حساس مالی", True, ("payment_void", "wallet_adjust", "loyalty_adjust", "orders_purge", "free_checkout")),
+)
+
+
+def feature_perm_groups() -> list[FeaturePermGroup]:
+    """Permission switches in display groups, with the default state used when creating a plan."""
+    labels = dict(FEATURE_PERMS)
+    defaults = set(DEFAULT_FEATURE_PERMS.split(","))
+    return [
+        FeaturePermGroup(title, risky, tuple(FeaturePerm(k, labels[k], k in defaults) for k in keys))
+        for title, risky, keys in FEATURE_PERM_LAYOUT
+    ]
 
 # Tabs a reseller may edit for their own shop bot
 RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [

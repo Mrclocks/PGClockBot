@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from tests.template_source import template_with_includes
 
 ROOT = Path(__file__).resolve().parents[1]
-PLANS_HTML = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+PLANS_HTML = template_with_includes("plans.html")
 EDIT_HTML = (ROOT / "app/web/templates/reseller_plan_edit.html").read_text(encoding="utf-8")
 RESELLER_PAGES = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
 KEYBOARDS = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")

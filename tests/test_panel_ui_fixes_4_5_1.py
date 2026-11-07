@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.services.formatting import format_bytes, format_bytes_ratio
 from app.services.numbers import normalize_number_text, parse_float, parse_int
+from tests.template_source import template_with_includes
 
 ROOT = Path(__file__).resolve().parents[1]
 GB = 1024**3
@@ -81,7 +82,7 @@ class CancelButtonUnityTests(unittest.TestCase):
         self.assertIn('html[data-theme="light"] a.btn.btn-ghost:hover', css)
 
     def test_plan_modal_cancel_pattern(self):
-        plans = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        plans = template_with_includes("plans.html")
         self.assertIn('class="btn btn-ghost" data-modal-close>انصراف</button>', plans)
 
 

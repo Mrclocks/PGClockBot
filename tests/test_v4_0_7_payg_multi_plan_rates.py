@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
+from tests.template_source import template_with_includes
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,7 +33,7 @@ class PaygPlanModelTests(unittest.TestCase):
 
 class PaygPlanUiTests(unittest.TestCase):
     def test_create_modal_has_payg_rate_and_groups(self):
-        html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        html = template_with_includes("plans.html")
         self.assertIn("reseller-price-per-gb-field", html)
         self.assertIn('name="price_per_gb"', html)
         self.assertIn('id="reseller-groups"', html)

@@ -4,6 +4,13 @@
 {% set bs_name = button_style_name if button_style_name is defined else 'button_style' %}
 {% set cur = plan_button_style if plan_button_style is defined else 'inherit' %}
 {% set cur_tone = 'default' if cur in ('inherit', '') else cur %}
+{% if plan_color_compact is defined and plan_color_compact %}
+<select name="{{ bs_name }}" class="btn-color-select" data-tone="{{ cur_tone }}" aria-label="رنگ دکمه پلن در ربات">
+  {% for opt_val, opt_label, opt_tone in plan_style_options %}
+  <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+  {% endfor %}
+</select>
+{% else %}
 <div class="plan-color-field">
   <div class="btn-color-card plan-color-card">
     <span class="btn-color-label">رنگ دکمه در ربات</span>
@@ -30,3 +37,4 @@
     {% endif %}
   </p>
 </div>
+{% endif %}
