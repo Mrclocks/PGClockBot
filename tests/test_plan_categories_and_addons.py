@@ -28,6 +28,7 @@ from app.services.orders import (
     is_addon_order_note,
     is_mutation_order_note,
 )
+from tests.template_source import template_with_includes
 
 
 def _staff(*, role: str, bot_user_id: int | None = None) -> dict:
@@ -196,7 +197,7 @@ class WiringTests(unittest.TestCase):
     def test_templates_and_routes(self):
         from pathlib import Path
 
-        plans = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
+        plans = template_with_includes("plans.html")
         self.assertIn("modal-plan-categories", plans)
         self.assertIn("modal-service-addons", plans)
         self.assertIn("برچسب دسته", plans)

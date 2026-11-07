@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from tests.template_source import template_with_includes
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -225,7 +226,7 @@ class ModalLayoutPolishTests(unittest.TestCase):
         self.assertIn("btn_pay_card", field)
 
     def test_plan_modal_uses_modal_title(self):
-        plans = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        plans = template_with_includes("plans.html")
         self.assertIn("modal_title('plans'", plans)
         self.assertIn("heading_id='plan-unified-title'", plans)
         # Name/price/duration/volume share one form-row (2-col on desktop via CSS)

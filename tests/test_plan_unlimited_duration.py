@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from tests.template_source import template_with_includes
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -62,14 +63,15 @@ class DeliveryUnlimitedDurationTests(unittest.TestCase):
 
 class PanelTemplateGuards(unittest.TestCase):
     def test_create_and_edit_allow_empty_duration(self):
-        plans = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        plans = template_with_includes("plans.html")
         edit = (ROOT / "app/web/templates/plan_edit.html").read_text(encoding="utf-8")
         # Fixed-plan create field (not trial / reseller)
         create_chunk = plans.split('id="panel-user-fixed"')[1].split('id="panel-user-trial"')[0]
         self.assertIn('name="duration_days"', create_chunk)
         self.assertNotIn("required", create_chunk.split('name="duration_days"')[1].split("/>")[0])
         self.assertIn('min="0"', create_chunk.split('name="duration_days"')[1].split("/>")[0])
-        self.assertIn("برای مدت نامحدود", create_chunk)
+        # «نامحدود» toggle empties the field (empty duration = no expiry)
+        self.assertIn('data-ds-unlimited="#user-plan-days" data-ds-empty-is-unlimited', create_chunk)
         edit_field = edit.split('name="duration_days"')[1].split("/>")[0]
         self.assertNotIn("required", edit_field)
         self.assertIn('min="0"', edit_field)

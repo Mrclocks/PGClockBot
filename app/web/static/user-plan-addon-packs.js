@@ -2,6 +2,8 @@
 (function (root) {
   "use strict";
 
+  const PackRows = typeof module === "object" && module.exports ? require("./pack-rows.js") : root.PackRows;
+
   const DEFAULTS = {
     volume: [1, 5, 10, 50],
     duration: [1, 3, 6, 12],
@@ -17,12 +19,6 @@
     return parts.length ? parts : fallback.slice();
   }
 
-  function syncSelectTone(select) {
-    if (!select) return;
-    const opt = select.selectedOptions && select.selectedOptions[0];
-    const tone = (opt && opt.getAttribute("data-tone")) || "default";
-    select.setAttribute("data-tone", tone);
-  }
 
   function setRowEnabled(row, enabled) {
     row.querySelectorAll("input, select, button").forEach((el) => {
@@ -48,39 +44,17 @@
   }
 
   function styleOptionsFrom(root) {
-    const sample = root.querySelector(
-      "select[name='plan_vol_style'], select[name='plan_dur_style']"
-    );
+    const sample = root.querySelector("select.extra-pack-style");
     return sample ? sample.innerHTML : '<option value="inherit">ارث از پیش‌فرض</option>';
   }
 
+  const ROW_SPECS = {
+    volume: { rowAttr: "data-user-pack-row", removeAttr: "data-user-pack-remove", amountName: "plan_vol_amount", styleName: "plan_vol_style", amountMax: "100000", unit: "گیگ", amountLabel: "مقدار حجم بسته", styleLabel: "رنگ دکمه بسته حجم", removeLabel: "حذف بسته حجم" },
+    duration: { rowAttr: "data-user-pack-row", removeAttr: "data-user-pack-remove", amountName: "plan_dur_amount", styleName: "plan_dur_style", amountMax: "120", unit: "ماه", amountLabel: "مقدار ماه بسته", styleLabel: "رنگ دکمه بسته زمان", removeLabel: "حذف بسته زمان" },
+  };
+
   function buildRow(kind, amount, styleValue, styleOptionsHtml) {
-    const isVol = kind === "volume";
-    const amountName = isVol ? "plan_vol_amount" : "plan_dur_amount";
-    const styleName = isVol ? "plan_vol_style" : "plan_dur_style";
-    const amountMax = isVol ? "100000" : "120";
-    const amountLabel = isVol ? "مقدار حجم بسته" : "مقدار ماه بسته";
-    const styleLabel = isVol ? "رنگ دکمه بسته حجم" : "رنگ دکمه بسته زمان";
-    const removeLabel = isVol ? "حذف بسته حجم" : "حذف بسته زمان";
-    const wrap = document.createElement("div");
-    wrap.className = "extra-pack-row";
-    wrap.setAttribute("data-user-pack-row", "");
-    wrap.innerHTML =
-      `<div class="extra-pack-fields">` +
-      `<input name="${amountName}" class="extra-pack-amount" type="number" min="1" max="${amountMax}" ` +
-      `step="1" inputmode="numeric" dir="ltr" value="${Number(amount) || 1}" ` +
-      `aria-label="${amountLabel}" placeholder="مقدار" required />` +
-      `<select name="${styleName}" class="btn-color-select extra-pack-style" data-tone="default" aria-label="${styleLabel}">${styleOptionsHtml}</select>` +
-      `</div>` +
-      `<button type="button" class="btn btn-danger btn-sm extra-pack-remove" data-user-pack-remove aria-label="${removeLabel}">حذف</button>`;
-    const select = wrap.querySelector("select");
-    if (select) {
-      const want = styleValue == null ? "inherit" : String(styleValue);
-      select.value = want;
-      if (select.value !== want) select.value = "inherit";
-      syncSelectTone(select);
-    }
-    return wrap;
+    return PackRows.buildRow(ROW_SPECS[kind], amount, styleValue, styleOptionsHtml);
   }
 
   function seedDefaultsIfEmpty(root) {
@@ -93,11 +67,13 @@
       const html = styleOptionsFrom(root);
       amounts.forEach((n) => box.appendChild(buildRow(kind, n, "inherit", html)));
     });
+    PackRows.refresh(root);
   }
 
   function bind(root) {
     if (!root || root.dataset.bound === "1") return;
     root.dataset.bound = "1";
+    PackRows.bindView(root);
     root.addEventListener("click", (event) => {
       const add = event.target.closest("[data-user-pack-add]");
       if (add && root.contains(add)) {
@@ -105,17 +81,14 @@
         const box = root.querySelector(`[data-user-pack-rows="${kind}"]`);
         if (!box) return;
         box.appendChild(buildRow(kind, 1, "inherit", styleOptionsFrom(root)));
+        PackRows.refresh(root);
         return;
       }
       const remove = event.target.closest("[data-user-pack-remove]");
       if (remove && root.contains(remove)) {
         const row = remove.closest("[data-user-pack-row]");
         if (row) row.remove();
-      }
-    });
-    root.addEventListener("change", (event) => {
-      if (event.target && event.target.matches("select.btn-color-select")) {
-        syncSelectTone(event.target);
+        PackRows.refresh(root);
       }
     });
   }
@@ -127,6 +100,7 @@
   const api = {
     DEFAULTS,
     parseCsvInts,
+    packPrice: PackRows.packPrice,
     setEditorVisible,
     seedDefaultsIfEmpty,
     bind,

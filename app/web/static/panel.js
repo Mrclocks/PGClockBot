@@ -773,13 +773,16 @@
       set('overflow-y', 'auto');
       set('-webkit-overflow-scrolling', 'touch');
 
-      let width = Math.max(rect.width, 120);
+      /* Compact toggles (e.g. a colour dot) ask for a wider menu than themselves. */
+      const minHost = wrap.closest('[data-menu-min-width]');
+      const minW = minHost ? Number(minHost.getAttribute('data-menu-min-width')) || 0 : 0;
+      let width = Math.max(rect.width, 120, minW);
       let leftVis = rect.left;
       const maxW = Math.max(120, vvW - pad * 2);
       if (width > maxW) width = maxW;
       if (leftVis < pad) leftVis = pad;
       if (leftVis + width > vvW - pad) leftVis = Math.max(pad, vvW - pad - width);
-      if (rect.width <= maxW && rect.left >= pad - 0.5 && rect.right <= vvW - pad + 0.5) {
+      if (rect.width >= minW && rect.width <= maxW && rect.left >= pad - 0.5 && rect.right <= vvW - pad + 0.5) {
         leftVis = rect.left;
         width = rect.width;
       }
@@ -1534,6 +1537,8 @@
       el.classList.add('is-front');
     }
     window.bringModalToFront = bringModalToFront;
+    /* Forms that swap their visible panel (plan modal) re-pin the matching save bar. */
+    window.pinModalStickySave = pinModalStickySave;
     window.topOpenModal = topOpenModal;
     function prefersReducedMotion(){
       try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }

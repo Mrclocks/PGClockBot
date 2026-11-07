@@ -60,6 +60,7 @@
   {% if panel_brand_css is defined %}<style{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>{{ panel_brand_css }}</style>{% endif %}
   <link rel="stylesheet" href="/static/list-inputs.css?v={{ app_version }}" />
   <link rel="stylesheet" href="/static/panel-nav-modes.css?v={{ app_version }}" />
+  <link rel="stylesheet" href="/static/panel-ds.css?v={{ app_version }}" />
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
   {% block head %}{% endblock %}
 </head>
@@ -309,6 +310,7 @@
   <script src="/static/panel.js?v={{ panel_script_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/list-inputs.js?v={{ list_inputs_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/table-list.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/panel-ds.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script type="application/json" id="template-variable-specs"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>{{ template_variable_specs(daily_report_actor|default('shop' if shop_mode|default(false) else 'owner', true))|tojson }}</script>
   <script src="/static/template-variables.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   {% block page_scripts %}{% endblock %}

@@ -43,6 +43,7 @@ from app.api.guide_media_pages import guides_media_view, register_guide_media_pa
 from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.panel_nav import DOT_LABELS as NAV_DOT_LABELS
 from app.services.panel_nav import sidebar_for_template
+from app.services.resellers import feature_perm_groups
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
@@ -190,6 +191,7 @@ except Exception:
 templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["panel_sidebar"] = sidebar_for_template
 templates.env.globals["nav_dot_labels"] = NAV_DOT_LABELS
+templates.env.globals["feature_perm_groups"] = feature_perm_groups
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
 templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
