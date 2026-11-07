@@ -298,9 +298,13 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertNotIn('href="/pg">بروزرسانی', src)
 
     def test_sidebar_web_panel_label(self):
-        src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("وب پنل", src)
-        self.assertIn("nav-label-home", src)
+        from tests.sidebar_view import sidebar
+
+        from app.services.panel_nav import build_sidebar, viewer_from_context
+
+        owner = build_sidebar(viewer_from_context({"role": "admin"}, {}, is_owner=True), path="/home")
+        self.assertEqual((owner[0].label, owner[0].tone), ("سیستم", "home"))
+        self.assertIn("system", sidebar("reseller"))
 
     def test_update_context_fetches_remote_notes(self):
         src = Path("app/services/panel_update.py").read_text(encoding="utf-8")

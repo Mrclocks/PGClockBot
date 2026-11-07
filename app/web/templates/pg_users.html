@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "macros.html" import row_actions, switch_chip, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
-{% block title %}کاربران پنل{% endblock %}
+{% block title %}کاربران پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    {{ page_title('user', 'کاربران پنل', 'pg', help='pg-users') }}
+    {{ page_title('user', 'کاربران پاسارگارد', 'pg', help='pg-users') }}
   </div>
   {% if can_create %}
   <button type="button" class="btn" data-modal-open="modal-pg-user-create">ساخت کاربر</button>

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_title %}
 {% from "_panel_settings_tabs.html" import panel_settings_tabs %}
-{% block title %}امنیت{% endblock %}
+{% block title %}{% if is_owner %}تنظیمات سیستم{% else %}حساب و امنیت{% endif %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    {{ page_title('panel-settings', 'تنظیمات وب پنل', 'neutral', help='settings-panel') }}
+    {{ page_title('panel-settings', 'تنظیمات سیستم' if is_owner else 'حساب و امنیت', 'neutral', help='settings-panel') }}
   </div>
 </div>
 

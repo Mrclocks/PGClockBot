@@ -657,11 +657,12 @@ class RepresentativeUnificationTests(unittest.IsolatedAsyncioTestCase):
 
 class RepresentativeUnificationSourceContracts(unittest.TestCase):
     def test_product_ui_is_resellers_not_principals_nav(self) -> None:
-        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("ident.can_add_representative", base)
-        self.assertIn("ident.can_manage_representatives", base)
-        self.assertIn("نمایندگان من", base)
-        self.assertNotIn('href="/principals"', base)
+        from tests.sidebar_view import owner_sidebar, sidebar
+
+        self.assertIn(("نمایندگان من", "/resellers"), sidebar("reseller", perms=("dashboard",), add_rep=True)["shop"])
+        self.assertIn(("نمایندگان", "/resellers"), owner_sidebar()["shop"])
+        self.assertNotIn("نمایندگان", [label for label, _ in sidebar("admin", owner=True)["shop"]])
+        self.assertNotIn("/principals", [h for nav in owner_sidebar().values() for _, h in nav])
         pages = (ROOT / "app/api/principal_pages.py").read_text(encoding="utf-8")
         self.assertIn('dest = "/resellers"', pages)
         self.assertIn("assert_live_parent_for_child", pages)

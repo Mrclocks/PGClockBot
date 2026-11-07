@@ -50,9 +50,9 @@ class PgUserCreateUiTests(unittest.TestCase):
         self.assertIn("can_reconnect", tpl)
 
     def test_panel_settings_tabs(self):
-        src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("تنظیمات وب پنل", src)
-        self.assertNotIn("nav-section-panel", src)
+        from tests.sidebar_view import owner_sidebar
+
+        self.assertEqual(set(owner_sidebar()), {"system", "shop", "pg"})
         tabs = Path("app/web/templates/_panel_settings_tabs.html").read_text(encoding="utf-8")
         self.assertIn("tab=backup", tabs)
         self.assertIn("/security", tabs)
