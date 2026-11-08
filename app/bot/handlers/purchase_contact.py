@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.menu_nav import build_main_reply_keyboard, restore_main_reply
 from app.db.models import BotUser
+from app.services.user_errors import domain_error_text
 from app.services import bot_feedback_texts as feedback
 from app.services.purchase_contact import purchase_contact_needed, purchase_shop_key, verify_purchase_contact
 
@@ -73,7 +74,7 @@ async def receive_purchase_contact(
     try:
         await verify_purchase_contact(session, db_user, contact_user_id=contact.user_id, phone_number=contact.phone_number)
     except ValueError as exc:
-        await message.answer(str(exc))
+        await message.answer(domain_error_text(exc))
         return
     await state.set_state(None)
     # The contact button leaves; the person's own main menu comes back, not a shop submenu.
