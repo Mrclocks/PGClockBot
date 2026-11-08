@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 ERROR_REF_PREFIX = "E-"
 ERROR_REF_BYTES = 3
-DOMAIN_ERROR_LIMIT = 300
+DOMAIN_ERROR_LIMIT = 190  # Telegram rejects a callback alert longer than 200 characters
 GENERIC_ERROR_TEXT = "خطایی رخ داد. دوباره تلاش کنید."
 PANEL_MISSING_TEXT = "این مورد در پاسارگارد وجود ندارد یا از پنل حذف شده است."
 

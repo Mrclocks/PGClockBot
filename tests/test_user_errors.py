@@ -32,7 +32,10 @@ class DomainErrorTextTests(unittest.TestCase):
         self.assertNotEqual(first, second)
 
     def test_long_text_is_bounded(self) -> None:
-        self.assertLessEqual(len(domain_error_text(ValueError("ب" * 5000))), 300)
+        self.assertLessEqual(len(domain_error_text(ValueError("ب" * 5000))), 190)
+
+    def test_text_fits_a_telegram_callback_alert(self) -> None:
+        self.assertLess(len(domain_error_text(ValueError("ب" * 250))), 200)
 
 
 class PanelNotFoundTextTests(unittest.TestCase):
