@@ -946,6 +946,42 @@ class ResellerBillingTransaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ResellerCharge(Base):
+    """One PAYG charge for a change to a shop's panel user (create, renew, volume, reset).
+
+    The row and the wallet debit are committed together before the panel call; the panel
+    outcome then settles, refunds or sends it to review. ``panel_target`` keeps the exact
+    change so a retry after an unknown outcome repeats it unchanged.
+    """
+
+    __tablename__ = "reseller_charges"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_reseller_charges_idempotency"),
+        Index("ix_reseller_charges_shop_created", "shop_id", "created_at"),
+        Index("ix_reseller_charges_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
+    plan_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    event: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    pg_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    bytes_charged: Mapped[int] = mapped_column(BigInteger, default=0)
+    days_charged: Mapped[int] = mapped_column(Integer, default=0)
+    user_units: Mapped[int] = mapped_column(Integer, default=0)
+    price_per_gb: Mapped[int] = mapped_column(Integer, default=0)
+    user_price: Mapped[int] = mapped_column(Integer, default=0)
+    is_unlimited: Mapped[bool] = mapped_column(Boolean, default=False)
+    amount: Mapped[int] = mapped_column(Integer)
+    idempotency_key: Mapped[str] = mapped_column(String(191))
+    panel_target: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ResellerBillingRate(Base):
     """Extensible price table. MVP UI uses global Setting; this enables per-reseller/plan/inbound/node later."""
 
@@ -1007,6 +1043,22 @@ class ResellerPlan(Base):
     billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")
     # PAYG: toman per GB for resellers on this package (overrides global Setting via plan rate)
     price_per_gb: Mapped[int] = mapped_column(Integer, default=0)
+    # PAYG basis: traffic | user | user_traffic (see payg_pricing).
+    payg_basis: Mapped[str] = mapped_column(
+        String(16), default="traffic", server_default=text("'traffic'")
+    )
+    # Traffic is charged for the volume set on a user when it is set, not as it is used.
+    # Rows that existed before keep usage billing (server default false).
+    payg_charge_upfront: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("false")
+    )
+    payg_user_price: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # True: the user price is per started 30 days of the user's period.
+    payg_user_price_per_30d: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    # Price of an unlimited user; NULL forbids unlimited users on this package.
+    payg_unlimited_price: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Optional PasarGuard group ids this PAYG price is intended for (comma-separated)
     pg_group_ids: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # subscription | current_capacity | addon_volume | addon_users

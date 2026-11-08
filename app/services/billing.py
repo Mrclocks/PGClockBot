@@ -34,6 +34,8 @@ BILLING_MODE_PAYG = "payg"
 KIND_TOPUP = "topup"
 KIND_USAGE = "usage"
 KIND_ADJUSTMENT = "adjustment"
+KIND_CHARGE = "charge"
+KIND_CHARGE_REFUND = "charge_refund"
 
 ON_EMPTY_BLOCK_PROVISION = "block_provision"
 
@@ -697,26 +699,17 @@ async def debit_adjustment(
     if existing:
         return existing
 
-    user, _bal = await ensure_payg_shop_wallet(session, profile)
-    with session.no_autoflush:
-        # Atomic shortfall check: a concurrent usage charge cannot push the wallet negative.
-        result = await session.execute(
-            update(BotUser)
-            .where(BotUser.id == int(user.id), BotUser.wallet_balance >= int(amount))
-            .values(wallet_balance=BotUser.wallet_balance - int(amount))
-            .execution_options(synchronize_session=False)
-        )
-    if result.rowcount != 1:
+    try:
+        balance_after = await _move_payg_wallet(session, profile, -int(amount))
+    except ValueError:
         await session.rollback()
-        raise ValueError("موجودی کیف پول نماینده برای این کسر کافی نیست")
-    await session.refresh(user)
-    profile.billing_balance = int(user.wallet_balance or 0)
+        raise
 
     tx = ResellerBillingTransaction(
         reseller_user_id=int(reseller_user_id),
         kind=KIND_ADJUSTMENT,
         amount=-int(amount),
-        balance_after=int(user.wallet_balance or 0),
+        balance_after=balance_after,
         idempotency_key=idempotency_key,
         note=(note or "")[:255] or None,
         created_by=(created_by or "")[:128] or None,
@@ -736,6 +729,69 @@ async def debit_adjustment(
         if existing:
             return existing
         raise
+    return tx
+
+
+SHORTFALL_MESSAGE = "موجودی کیف پول نماینده برای این کسر کافی نیست"
+
+
+async def _move_payg_wallet(session: AsyncSession, profile: ResellerProfile, delta: int) -> int:
+    """Add ``delta`` to the shop wallet in one statement; a debit never goes below zero.
+
+    Returns the balance after the change. Raises ``ValueError`` on a shortfall; the caller
+    owns the transaction.
+    """
+    user, _bal = await ensure_payg_shop_wallet(session, profile)
+    stmt = update(BotUser).where(BotUser.id == int(user.id))
+    if delta < 0:
+        # Atomic shortfall check: a concurrent charge cannot push the wallet negative.
+        stmt = stmt.where(BotUser.wallet_balance >= -int(delta))
+    with session.no_autoflush:
+        result = await session.execute(
+            stmt.values(wallet_balance=BotUser.wallet_balance + int(delta)).execution_options(
+                synchronize_session=False
+            )
+        )
+    if result.rowcount != 1:
+        raise ValueError(SHORTFALL_MESSAGE)
+    await session.refresh(user)
+    profile.billing_balance = int(user.wallet_balance or 0)
+    return int(user.wallet_balance or 0)
+
+
+async def record_payg_ledger_entry(
+    session: AsyncSession,
+    profile: ResellerProfile,
+    *,
+    kind: str,
+    amount: int,
+    idempotency_key: str,
+    note: str | None = None,
+    created_by: str | None = None,
+) -> ResellerBillingTransaction:
+    """Move ``amount`` (signed) on the shop wallet and write its ledger row, without committing.
+
+    A key already used by this shop returns that row and moves nothing.
+    """
+    if isinstance(amount, bool) or not isinstance(amount, int) or amount == 0:
+        raise ValueError("مبلغ تراکنش نامعتبر است")
+    if not idempotency_key:
+        raise ValueError("کلید یکتای تراکنش الزامی است")
+    existing = await _idempotent_tx_for_reseller(session, idempotency_key, int(profile.user_id))
+    if existing is not None:
+        return existing
+    balance_after = await _move_payg_wallet(session, profile, int(amount))
+    tx = ResellerBillingTransaction(
+        reseller_user_id=int(profile.user_id),
+        kind=kind,
+        amount=int(amount),
+        balance_after=balance_after,
+        idempotency_key=idempotency_key,
+        note=(note or "")[:255] or None,
+        created_by=(created_by or "")[:128] or None,
+    )
+    session.add(tx)
+    await session.flush()
     return tx
 
 

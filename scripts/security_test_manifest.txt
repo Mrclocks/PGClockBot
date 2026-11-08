@@ -435,3 +435,6 @@ tests/test_panel_search.py
 tests/test_addon_pack_batches.py
 # «دسترسی به پاسارگارد»: closed shops get no PasarGuard pages, actions or panel password.
 tests/test_pg_panel_access.py
+# PAYG charge ledger: one debit per confirmed change, refunds once, scoped to the shop.
+tests/test_payg_charges.py
+tests/test_payg_pricing.py
