@@ -36,6 +36,7 @@ from app.services.plans_catalog import require_catalog_owner_id
 from app.services.payg_charges import new_request_key
 from app.services.payg_gate import (
     SHORTFALL_FOR_CUSTOMER,
+    assert_shop_can_afford,
     charge_shop_change,
     finish_charge,
     settle_failed_charge,
@@ -1167,6 +1168,7 @@ async def create_addon_order(
     await validate_addon_selection(
         session, user_id=user_id, service=service, pack=pack, shop_id=shop_rid,
     )
+    await _assert_pack_affordable(session, shop_rid, service, pack)
 
     quote = await quote_product(session, pack, shop_id=shop_rid)
     assert_expected_price(quote, expected_price)
@@ -1425,6 +1427,23 @@ async def _charge_pack(
         log.warning("payg pack charge refused service=%s: %s", service.id, e.message)
         await release_volume_hold(session, hold)
         await session.commit()
+        raise ValueError(SHORTFALL_FOR_CUSTOMER) from e
+
+
+async def _assert_pack_affordable(session: AsyncSession, shop_id: int | None, service: UserService, pack) -> None:
+    """Refuse a pack order its PAYG shop cannot pay for, before the buyer pays (cached limits)."""
+    if not shop_id:
+        return
+    current = int(service.quota_data_limit_bytes or 0)
+    if pack.kind == KIND_VOLUME:
+        new_limit = current + pack_volume_bytes(float(pack.amount))
+        change = _pack_change(KIND_VOLUME, current_limit=current, new_limit=new_limit, days=0)
+    else:
+        change = _pack_change(pack.kind, current_limit=current, new_limit=None, days=int(float(pack.amount)))
+    try:
+        await assert_shop_can_afford(session, int(shop_id), change)
+    except ProvisionError as e:
+        log.warning("payg pack checkout refused shop=%s: %s", shop_id, e.message)
         raise ValueError(SHORTFALL_FOR_CUSTOMER) from e
 
 

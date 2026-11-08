@@ -48,6 +48,7 @@ from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
 from app.services.payg_gate import (
     SHORTFALL_FOR_CUSTOMER,
+    assert_shop_can_afford,
     charge_shop_change,
     finish_charge,
     read_template_volume,
@@ -649,6 +650,7 @@ async def create_order(
         except IntegrityError as exc:
             raise ValueError("پلن تست رایگان را قبلاً دریافت کرده‌اید") from exc
     await _assert_plan_volume_available(session, shop_rid, plan)
+    await _assert_shop_can_afford_plan(session, shop_rid, plan)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -973,6 +975,34 @@ async def _assert_plan_volume_available(
         raise ValueError(e.user_message()) from e
 
 
+async def _assert_shop_can_afford_plan(
+    session: AsyncSession, shop_rid: int | None, plan: Plan, *, quantity: int = 1
+) -> None:
+    """Refuse an order its PAYG shop cannot pay for, before the buyer pays.
+
+    A template plan's volume lives in the panel, so its price is only known at delivery,
+    which still charges atomically and refuses safely.
+    """
+    if shop_rid is None or not await shop_charges_at_creation(session, int(shop_rid)):
+        return
+    if plan.pg_template_id:
+        return
+    change = ServiceChange(
+        ChargeEvent.CREATE, data_limit_bytes=plan_limit_bytes(plan), days=int(plan.duration_days or 0)
+    )
+    await _assert_affordable(session, shop_rid, change, quantity=quantity)
+
+
+async def _assert_affordable(
+    session: AsyncSession, shop_rid: int, change: ServiceChange, *, quantity: int = 1
+) -> None:
+    try:
+        await assert_shop_can_afford(session, int(shop_rid), change, quantity=quantity)
+    except ProvisionError as e:
+        logger.warning("payg checkout refused shop=%s: %s", shop_rid, e.message)
+        raise ValueError(SHORTFALL_FOR_CUSTOMER) from e
+
+
 async def _hold_delivery_volume(
     session: AsyncSession, order: Order, plan: Plan, pg, *, data_limit: int | None, quantity: int
 ) -> HeldVolume | None:
@@ -1076,6 +1106,7 @@ async def create_wholesale_order(
     shop_rid = _shop_reseller_id()
     _ = reseller_id
     await _assert_plan_volume_available(session, shop_rid, plan, quantity=qty)
+    await _assert_shop_can_afford_plan(session, shop_rid, plan, quantity=qty)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -2592,6 +2623,12 @@ async def renew_service_with_plan(
     terms = await validate_renewal_selection(
         session, user_id=user_id, service=service, plan=plan, shop_id=shop_rid,
     )
+    if shop_rid is not None:
+        await _assert_affordable(session, int(shop_rid), ServiceChange(
+            ChargeEvent.RENEW,
+            data_limit_bytes=int(terms.get("volume_bytes") or 0),
+            days=-(-int(terms.get("duration_seconds") or 0) // 86400),
+        ))
 
     quote = await quote_product(session, plan, shop_id=shop_rid)
     assert_expected_price(quote, expected_price)

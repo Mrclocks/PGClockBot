@@ -95,6 +95,7 @@ class DeliveryCase(unittest.IsolatedAsyncioTestCase):
                 patch("app.services.orders.assert_provision_create", AsyncMock()),
                 patch("app.services.users.get_all_settings", AsyncMock(return_value={})),
                 patch("app.services.loyalty.on_order_delivered", AsyncMock()),
+                patch("app.services.billing_alerts._send", AsyncMock()),
             ):
                 return await deliver_order(session, order)
 
@@ -333,3 +334,67 @@ class TemplateTests(unittest.TestCase):
         # Charging at creation is offered switched on for a new package.
         self.assertIn('id="rp-payg-upfront" checked', new_plan_html)
         self.assertNotIn('id="edit-payg-upfront" checked', html)
+
+
+class CheckoutTests(DeliveryCase):
+    wallet = 5_000
+
+    async def plan(self, session, *, gb: float | None = 10, template: bool = False) -> Plan:
+        plan = Plan(name="p", price=100, data_limit_gb=gb, duration_days=30, pg_template_id=1 if template else None)
+        session.add(plan)
+        await session.flush()
+        return plan
+
+    async def test_buyer_is_stopped_before_paying_and_the_shop_is_told_once(self) -> None:
+        from app.services.orders import _assert_shop_can_afford_plan
+
+        sends = AsyncMock()
+        async with self.Session() as session:
+            plan = await self.plan(session)
+            with patch("app.services.billing_alerts._send", sends):
+                for _ in range(3):
+                    with self.assertRaises(ValueError) as ctx:
+                        await _assert_shop_can_afford_plan(session, SHOP, plan)
+                    self.assertEqual(str(ctx.exception), SHORTFALL_FOR_CUSTOMER)
+        # Reseller and owner each once, not once per refused buyer.
+        self.assertEqual(sends.await_count, 2)
+        self.assertEqual(await self.wallet_now(), 5_000)
+
+    async def test_affordable_order_and_template_plans_pass(self) -> None:
+        from app.services.orders import _assert_shop_can_afford_plan
+
+        async with self.Session() as session:
+            await _assert_shop_can_afford_plan(session, SHOP, await self.plan(session, gb=4))
+            await _assert_shop_can_afford_plan(session, SHOP, await self.plan(session, gb=500, template=True))
+            await _assert_shop_can_afford_plan(session, None, await self.plan(session, gb=500))
+
+    async def test_a_successful_charge_ends_the_episode(self) -> None:
+        from app.db.models import ResellerProfile as Profile
+        from app.services.payg_gate import charge_shop_change
+        from app.services.payg_pricing import ServiceChange
+
+        async with self.Session() as session:
+            profile = await session.get(Profile, 1)
+            profile.billing_tick_issue = "wallet_short"
+            await session.commit()
+            await charge_shop_change(
+                session, shop_id=SHOP, change=ServiceChange(ChargeEvent.CREATE, data_limit_bytes=2 * GB, days=30),
+                request_key="order:900", pg_username="c",
+            )
+            await session.refresh(profile)
+            self.assertIsNone(profile.billing_tick_issue)
+
+
+class RateSummaryTests(DeliveryCase):
+    async def test_staff_see_the_rates_and_the_charged_amount(self) -> None:
+        from app.services.payg_gate import charged_note, shop_rate_summary
+
+        async with self.Session() as session:
+            summary = await shop_rate_summary(session, SHOP)
+            self.assertIsNone(await shop_rate_summary(session, None))
+        self.assertTrue(summary.charges_reset)
+        self.assertIn("کل حجم", summary.reset_note)
+        self.assertTrue(any("هر گیگ" in line for line in summary.lines))
+        self.assertTrue(any("نامحدود: مجاز نیست" in line for line in summary.lines))
+        self.assertEqual(charged_note(None), "")
+        self.assertIn("از کیف پول کسر شد", charged_note([SimpleNamespace(amount=10_000)]))  # type: ignore[list-item]

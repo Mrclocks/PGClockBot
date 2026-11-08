@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import select
@@ -22,9 +23,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ResellerCharge, ResellerProfile
-from app.services.billing import is_payg
+from app.services.billing import SHORTFALL_MESSAGE, WalletShortfall, is_payg, payg_available_balance
+from app.services.billing_alerts import TickIssue, announce_wallet_short, clear_tick_issue
 from app.services.db_safe import rollback_quiet
-from app.services.formatting import parse_expire
+from app.services.formatting import format_toman, parse_expire
 from app.services.payg_charges import (
     ChargeRequest,
     new_request_key,
@@ -35,7 +37,7 @@ from app.services.payg_charges import (
     settle_charge,
     shop_rates,
 )
-from app.services.payg_pricing import ChargeEvent, ChargeQuote, PaygPriceError, ServiceChange
+from app.services.payg_pricing import RESET_EXPLANATION, ChargeEvent, ChargeQuote, PaygPriceError, ServiceChange
 from app.services.provision_gate import ProvisionError, reseller_id_from_staff
 from app.services.volume_allocation import HeldVolume, is_hard_panel_rejection, release_volume_hold
 
@@ -104,9 +106,44 @@ async def charge_shop_change(
         created_by=created_by,
     )
     try:
-        return await reserve_charge(session, profile, request)
+        charge = await reserve_charge(session, profile, request)
+    except WalletShortfall as exc:
+        await _announce_short_safely(session, profile)
+        raise ProvisionError(str(exc)) from exc
     except ValueError as exc:
         raise ProvisionError(str(exc)) from exc
+    if charge is not None:
+        await clear_tick_issue(session, profile, (TickIssue.WALLET_SHORT,))
+    return charge
+
+
+async def _announce_short_safely(session: AsyncSession, profile: ResellerProfile) -> None:
+    """Best effort (sends already log their own failures): a failed alert never hides the refusal."""
+    shop_id = int(profile.user_id)
+    try:
+        await announce_wallet_short(session, profile)
+    except Exception:  # noqa: BLE001 - optional alert; the caller raises the refusal right after
+        logger.warning("wallet short alert failed shop=%s", shop_id, exc_info=True)
+        await rollback_quiet(session)
+
+
+async def assert_shop_can_afford(
+    session: AsyncSession, shop_id: int | None, change: ServiceChange, *, quantity: int = 1
+) -> None:
+    """Checkout check: refuse a sale the shop cannot pay for, before the buyer pays.
+
+    Not a reservation; delivery still charges atomically. Raises ``ProvisionError``.
+    """
+    profile = await shop_profile(session, shop_id)
+    if profile is None or not is_payg(profile):
+        return
+    quote = await quote_shop_change(session, shop_id, change, quantity=quantity)
+    if quote is None:
+        return
+    if await payg_available_balance(session, profile) >= quote.amount:
+        return
+    await _announce_short_safely(session, profile)
+    raise ProvisionError(SHORTFALL_MESSAGE)
 
 
 async def finish_charge(session: AsyncSession, charge: ResellerCharge | None, *, commit: bool = True) -> None:
@@ -360,3 +397,43 @@ async def reset_with_charge(
         raise
     await finish_charges(session, charges)
     return result
+
+
+@dataclass(frozen=True, slots=True)
+class RateSummary:
+    """The shop's PAYG prices as staff see them before creating or changing a user."""
+
+    lines: tuple[str, ...]
+    charges_reset: bool
+
+    @property
+    def reset_note(self) -> str:
+        return RESET_EXPLANATION if self.charges_reset else ""
+
+
+async def shop_rate_summary(session: AsyncSession, shop_id: int | None) -> RateSummary | None:
+    """``None`` when the shop is not charged when users are created or changed."""
+    profile = await shop_profile(session, shop_id)
+    if profile is None or not is_payg(profile):
+        return None
+    rates = await shop_rates(session, profile)
+    if rates is None or not (rates.charges_traffic or rates.charges_users):
+        return None
+    lines: list[str] = []
+    if rates.charges_traffic:
+        lines.append(f"هر گیگ حجمی که روی کاربر زده می‌شود: {format_toman(rates.price_per_gb)}")
+    if rates.charges_users:
+        unit = "به ازای هر ۳۰ روز" if rates.user_price_per_30d else "برای هر کاربر"
+        lines.append(f"قیمت کاربر ({unit}): {format_toman(rates.user_price)}")
+    if rates.unlimited_price is None:
+        lines.append("کاربر نامحدود: مجاز نیست")
+    else:
+        lines.append(f"کاربر نامحدود: {format_toman(rates.unlimited_price)}")
+    return RateSummary(lines=tuple(lines), charges_reset=rates.charges_traffic)
+
+
+def charged_note(charges: ResellerCharge | list[ResellerCharge] | None) -> str:
+    """« — ۵۰٬۰۰۰ تومان از کیف پول کسر شد» for a success message; empty when nothing was charged."""
+    items = [charges] if isinstance(charges, ResellerCharge) else list(charges or [])
+    total = sum(int(c.amount) for c in items)
+    return f" — {format_toman(total)} از کیف پول کسر شد" if total else ""

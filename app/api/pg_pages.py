@@ -31,6 +31,8 @@ from app.services.pg_quota import (
     assert_can_mutate_owned_users,
 )
 from app.services.payg_gate import (
+    charged_note,
+    shop_rate_summary,
     charge_staff_create,
     charge_staff_edit,
     finish_charge,
@@ -46,6 +48,7 @@ from app.services.provision_gate import (
     finish_staff_edit,
     hold_staff_create,
     hold_staff_edit,
+    reseller_id_from_staff,
     settle_failed_hold,
 )
 from app.services.platform_identity import is_explicit_owner_staff
@@ -670,11 +673,13 @@ def register_pg_pages(
         )
         can_template = bool(actions["create"]) and bool(templates)
         groups_required = (not groups_fetch_failed) and staff_must_select_groups(groups)
+        payg_rates = await shop_rate_summary(session, reseller_id_from_staff(staff))
         return render(
             request,
             "pg_users.html",
             _pg_ctx(
                 staff,
+                payg_rates=payg_rates,
                 users=users,
                 templates=templates,
                 groups=groups,
@@ -885,7 +890,7 @@ def register_pg_pages(
             await settle_failed_charge(session, charge, e, panel_touched=True)
             msg = e.user_message(fallback="خطا در ساخت کاربر") if isinstance(e, PasarGuardError) else str(e)
             return _pg_form_err(msg, modal="create")
-        return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ساخته شد')}", status_code=303)
+        return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ساخته شد' + charged_note(charge))}", status_code=303)
 
     @app.get("/pg/users/{user_id}/link")
     async def pg_users_link(
@@ -1039,7 +1044,7 @@ def register_pg_pages(
             await settle_failed_charges(session, charges, e, panel_touched=True)
             msg = e.user_message(fallback="خطا در ویرایش") if isinstance(e, PasarGuardError) else str(e)
             return _pg_form_err(msg, modal="edit", uid=user_id)
-        return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ویرایش شد')}", status_code=303)
+        return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ویرایش شد' + charged_note(charges))}", status_code=303)
 
     async def _guard_owned_mutation(
         staff: dict, user_id: int, *, session: AsyncSession

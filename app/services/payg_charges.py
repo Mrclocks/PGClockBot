@@ -196,6 +196,10 @@ async def reserve_charge(
         if winner is None:
             raise
         return winner
+    except ValueError:
+        # The savepoint rollback expired the profile; reload it for the caller's alert.
+        await session.refresh(profile)
+        raise
     await session.commit()
     return charge
 

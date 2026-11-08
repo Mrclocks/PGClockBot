@@ -119,7 +119,7 @@
             <form method="post" action="/pg/users/{{ uid }}/enable" data-confirm="این کاربر فعال شود؟" data-confirm-title="فعال‌سازی" data-confirm-label="فعال"><button class="btn btn-ghost btn-sm" type="submit">فعال</button></form>
             {% endif %}
             {% if can_reset and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/reset" data-confirm="مصرف این کاربر ریست شود؟" data-confirm-title="ریست مصرف" data-confirm-warn="1" data-confirm-label="ریست"><button class="btn btn-ghost btn-sm" type="submit">ریست</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/reset" data-confirm="مصرف این کاربر ریست شود؟{% if payg_rates and payg_rates.reset_note %} {{ payg_rates.reset_note }}.{% endif %}" data-confirm-title="ریست مصرف" data-confirm-warn="1" data-confirm-label="ریست"><button class="btn btn-ghost btn-sm" type="submit">ریست</button></form>
             {% endif %}
             {% if can_revoke and uid %}
             <form method="post" action="/pg/users/{{ uid }}/revoke" data-confirm="سابسکرایب ابطال شود؟" data-confirm-title="ابطال سابسکرایب" data-confirm-warn="1" data-confirm-label="ابطال"><button class="btn btn-ghost btn-sm" type="submit">ابطال ساب</button></form>
@@ -176,6 +176,10 @@
       </div>
     </div>
     <form method="post" action="/pg/users" class="form-stack ds-body" id="pg-user-create-form">
+      {% if payg_rates %}
+      <div class="ds-note" role="note"><span>هزینهٔ این کار از کیف پول شما کم می‌شود:
+        {% for line in payg_rates.lines %}{{ line }}{% if not loop.last %} · {% endif %}{% endfor %}</span></div>
+      {% endif %}
         <input type="hidden" name="mode" value="template" />
       <section class="ds-sec ds-sec-first"><div class="ds-card">
       {% if form_err and form_modal == 'create' %}
@@ -270,6 +274,10 @@
       </div>
     </div>
     <form method="post" action="/pg/users/0/edit" class="form-stack ds-body" id="pg-user-edit-form">
+      {% if payg_rates %}
+      <div class="ds-note" role="note"><span>هزینهٔ این کار از کیف پول شما کم می‌شود:
+        {% for line in payg_rates.lines %}{{ line }}{% if not loop.last %} · {% endif %}{% endfor %}</span></div>
+      {% endif %}
       <section class="ds-sec ds-sec-first"><div class="ds-card">
       {% if form_err and form_modal == 'edit' %}
       <div class="flash err" id="pg-edit-form-err">{{ form_err }}</div>

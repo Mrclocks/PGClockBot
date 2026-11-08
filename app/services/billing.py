@@ -637,6 +637,9 @@ async def credit_topup(
     # Clear low-balance warn so next dip can notify again
     if profile.billing_low_warned_at is not None:
         profile.billing_low_warned_at = None
+    # A top-up ends a «wallet short» episode, so a new shortfall is announced again.
+    if profile.billing_tick_issue == TickIssue.WALLET_SHORT.value:
+        profile.billing_tick_issue = None
 
     tx = ResellerBillingTransaction(
         reseller_user_id=int(reseller_user_id),
@@ -744,6 +747,10 @@ async def debit_adjustment(
 SHORTFALL_MESSAGE = "موجودی کیف پول نماینده برای این کسر کافی نیست"
 
 
+class WalletShortfall(ValueError):
+    """The shop wallet cannot pay this debit; the message is safe for shop staff."""
+
+
 async def _move_payg_wallet(session: AsyncSession, profile: ResellerProfile, delta: int) -> int:
     """Add ``delta`` to the shop wallet in one statement; a debit never goes below zero.
 
@@ -762,7 +769,7 @@ async def _move_payg_wallet(session: AsyncSession, profile: ResellerProfile, del
             )
         )
     if result.rowcount != 1:
-        raise ValueError(SHORTFALL_MESSAGE)
+        raise WalletShortfall(SHORTFALL_MESSAGE)
     await session.refresh(user)
     profile.billing_balance = int(user.wallet_balance or 0)
     return int(user.wallet_balance or 0)
