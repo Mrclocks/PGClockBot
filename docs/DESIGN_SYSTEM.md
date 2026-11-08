@@ -1,7 +1,9 @@
 # قواعد طراحی وب پنل
 
-این سند تنها مرجع اندازه، فاصله، رنگ و رفتار اجزای وب پنل است. هر صفحه و هر مودال از همین قواعد پیروی می‌کند؛
-اگر جایی استثنا لازم شد، اول اینجا نوشته می‌شود. پیاده‌سازی: `app/web/static/panel-ds.css` (توکن‌های پایه در
+این سند **قانون** طراحی وب پنل است و تنها مرجع اندازه، فاصله، رنگ و رفتار اجزای آن. هر صفحه، مودال و فیچر
+تازه — چه یک نفر بنویسد چه یک ایجنت هوش مصنوعی — از همین قواعد پیروی می‌کند (`AGENTS.md` بند ۹ آن را اجباری کرده).
+اگر جایی الگوی تازه یا استثنا لازم شد، اول اینجا و در همان پول‌ریکوئست نوشته می‌شود؛ هیچ فاصله، اندازه یا رنگ
+یک‌باره‌ای خارج از این سند اضافه نمی‌شود. برای شروع هر صفحه یا مودال تازه، بند ۹ همین سند را ببینید. پیاده‌سازی: `app/web/static/panel-ds.css` (توکن‌های پایه در
 `panel.css` → `:root`). هر قاعده یک توکن دارد؛ عدد ثابت در CSS اجزا نوشته نمی‌شود.
 
 ## ۱. فاصله‌ها
@@ -79,3 +81,76 @@
 
 ## ۸. کش
 هر فایل CSS و JS با کلید محتوایش بارگذاری می‌شود (`asset_v`)، پس هر تغییر بلافاصله به مرورگر می‌رسد.
+
+## ۹. ساخت صفحه یا مودال جدید (Building a new page or modal)
+
+هر چیز تازه از این قالب‌ها و اجزای آماده شروع می‌شود؛ با استفاده از آن‌ها همهٔ قواعد بالا خودبه‌خود رعایت می‌شوند.
+ماکروها در `app/web/templates/_ds.html` و `macros.html` هستند.
+
+### صفحه
+```jinja
+{% extends "base.html" %}
+{% from "macros.html" import page_title %}
+{% block content %}
+<div class="page-head">
+  <div>{{ page_title('icon-name', 'عنوان صفحه', help='topic') }}</div>
+  <div class="page-head-actions"><button type="button" class="btn" data-modal-open="modal-x">افزودن</button></div>
+</div>
+<nav class="section-tabs">…</nav>            {# اختیاری؛ ۱۶ بالا و پایین خودکار #}
+<div class="card">…</div>                    {# هر بخش یک کارت؛ کارت‌ها ۲۴ از هم #}
+<div class="card card-flush">…جدول…</div>    {# جدول لبه‌به‌لبه؛ عنوان h2 و توضیح p.muted داخل همان کارت #}
+{% endblock %}
+```
+
+### مودال فرم
+```jinja
+{% from "_ds.html" import ds_modal_head, ds_sec, ds_switch, ds_foot %}
+<div class="ui-modal ds" id="modal-x" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-x-title">
+    {{ ds_modal_head('icon-name', 'عنوان مودال', 'modal-x-title') }}
+    <form method="post" action="…" class="form-stack ds-body">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% call ds_sec('مشخصات', extra_class='ds-sec-first') %}
+        <label class="form-field">نام <input name="name" required></label>
+        <div class="ds-grid-2">…دو فیلد کنار هم…</div>
+      {% endcall %}
+      {% call ds_sec('گزینه‌ها') %}
+        <div class="ds-rows">{{ ds_switch('enabled', 'فعال', 'توضیح کوتاه') }}</div>
+      {% endcall %}
+      {{ ds_foot('ذخیره') }}                   {# یک دکمهٔ تمام‌عرض؛ بدون «انصراف» #}
+    </form>
+  </div>
+</div>
+```
+
+### دیالوگ تأیید (حذف، ابطال، ری‌استارت)
+مثل مودال فرم، با این دو تفاوت: کلاس `ds-dialog` روی `.ui-modal` و `ds_foot('حذف', primary_class='btn btn-danger', cancel=true)`.
+
+### اجزای آماده
+
+| نیاز | از این استفاده کنید |
+|---|---|
+| بخش با عنوان و کارت | `ds_sec(title)` — اولین بخش مودال `extra_class='ds-sec-first'` |
+| سوییچ (یک یا چند) | `ds_switch(...)` داخل `<div class="ds-rows">` — فاصله و خط‌چین بین ردیف‌ها خودکار |
+| عدد با «نامحدود» | `ds_unlimited(label, name, id, unit)` |
+| دو فیلد کنار هم | `<div class="ds-grid-2">` — از بالا هم‌تراز؛ زیر ۳۷۵ پیکسل یک ستون |
+| تب صفحه | `<nav class="section-tabs">` با `a.active`؛ ردیف دوم: `section-tabs settings-subtabs` |
+| تب داخل مودال | `nav.section-tabs.modal-section-tabs` |
+| انتخاب چندگزینه‌ای در فرم | `div.sales-seg.ds-seg` با `data-ds-choice` |
+| گروه دسترسی‌ها | `ds_perm_groups(feature_perm_groups())` داخل `ds-card ds-card-flush` با `data-ds-perms` |
+| لیست قابل‌ویرایش (ردیف + افزودن) | `ds-list` با `ds-list-head` و `ds-list-row`، دکمهٔ `ds-add` |
+| یادداشت داخل فرم | `<div class="ds-note">` (اطلاع) یا `data-tone="danger"` (کار برگشت‌ناپذیر) |
+| بخش روشن/خاموش‌شونده | سوییچ در سربرگ کارت (بند ۶)، بدنه با `hidden` تا وقتی خاموش است |
+
+### ممنوع
+- `style="…"` در قالب‌ها، رنگ یا عدد ثابت در CSS اجزا (توکن‌های `var(--g1…g8)`، `var(--ctl-h)`، `var(--sel-fg)` و … را به کار ببرید).
+- `.ui-modal` بدون کلاس `ds`، دکمهٔ «انصراف» در مودال فرم، باکس داخل باکس داخل باکس.
+- فاصله با `margin` روی فرزندِ ظرفی که با `gap` فاصله می‌دهد.
+
+## ۱۰. بررسی خودکار
+
+`python scripts/design_check.py` قالب‌ها و فایل‌های CSS تغییرکرده را با شاخهٔ پایه مقایسه می‌کند و اگر یکی از
+این‌ها بیشتر شده باشد شکست می‌خورد: مودال بیرون از `.ds`، «انصراف» در مودال فرم، `style=` در قالب، رنگ ثابت در CSS
+(بیرون از تعریف توکن). موارد قدیمی تحمل می‌شوند، پس هر تغییر فقط می‌تواند پنل را یکدست‌تر کند. همین بررسی در
+CI روی هر پول‌ریکوئست اجرا می‌شود (`.github/workflows/design-rules.yml`). جزئیات: `--details`؛ شمارش همهٔ فایل‌ها: `--report`.
