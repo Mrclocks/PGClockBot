@@ -448,3 +448,5 @@ tests/test_shop_credit.py
 tests/test_credit_statements.py
 # Cashback: one grant per order, shop-isolated purse, budget atomic, credited and reversed once.
 tests/test_cashback.py
+# Cashback management: permission, shop isolation of rules and settings.
+tests/test_cashback_pages.py
