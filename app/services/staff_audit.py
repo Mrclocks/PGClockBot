@@ -54,6 +54,7 @@ ACTION_LABELS = {
     "service_renew": "تمدید دستی سرویس",
     "service_extend": "تغییر مانده سرویس",
     "service_delete": "حذف سرویس",
+    "customer_delete": "حذف مشتری",
 }
 
 TARGET_LABELS = {

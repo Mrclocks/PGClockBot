@@ -59,6 +59,7 @@ async def log_reasoned_action_as(
     target_type: str,
     target_id: int | None,
     reason: str,
+    amount: int | None = None,
 ) -> None:
     """Write the staff log record of an operation that already succeeded.
 
@@ -66,7 +67,9 @@ async def log_reasoned_action_as(
     a failed write is logged and never turns a successful operation into an error.
     """
     try:
-        add_staff_action(session, actor, action=action, target_type=target_type, target_id=target_id, reason=reason)
+        add_staff_action(
+            session, actor, action=action, target_type=target_type, target_id=target_id, reason=reason, amount=amount
+        )
         await session.commit()
     except Exception:  # noqa: BLE001 - the operation succeeded; the log write is best effort
         logger.warning("staff action log failed action=%s target=%s", action, target_id, exc_info=True)
@@ -81,6 +84,7 @@ async def log_reasoned_action(
     target_type: str,
     target_id: int | None,
     reason: str,
+    amount: int | None = None,
 ) -> None:
     """``log_reasoned_action_as`` for a web staff session; the shop comes from the session."""
     try:
@@ -89,7 +93,7 @@ async def log_reasoned_action(
         logger.warning("staff action actor unresolved action=%s target=%s", action, target_id, exc_info=True)
         return
     await log_reasoned_action_as(
-        session, actor, action=action, target_type=target_type, target_id=target_id, reason=reason
+        session, actor, action=action, target_type=target_type, target_id=target_id, reason=reason, amount=amount
     )
 
 

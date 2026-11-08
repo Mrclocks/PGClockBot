@@ -23,11 +23,11 @@
   {% else %}
   {% if can_disable or can_enable or can_reset or can_revoke or can_delete %}
   {{ table_bulk_bar('/pg/users/bulk-action', [
-    {'key': 'disable', 'label': 'غیرفعال', 'class': 'btn-warn', 'confirm': '{n} کاربر غیرفعال شوند؟', 'confirm_title': 'غیرفعال‌سازی گروهی', 'confirm_label': 'غیرفعال', 'warn': true},
-    {'key': 'enable', 'label': 'فعال', 'confirm': '{n} کاربر فعال شوند؟', 'confirm_title': 'فعال‌سازی گروهی', 'confirm_label': 'فعال'},
-    {'key': 'reset', 'label': 'ریست', 'confirm': 'مصرف {n} کاربر ریست شود؟', 'confirm_title': 'ریست گروهی', 'confirm_label': 'ریست', 'warn': true},
-    {'key': 'revoke', 'label': 'ابطال ساب', 'confirm': 'سابسکرایب {n} کاربر ابطال شود؟', 'confirm_title': 'ابطال گروهی', 'confirm_label': 'ابطال', 'warn': true},
-    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر پاسارگارد حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+    {'key': 'disable', 'label': 'غیرفعال', 'class': 'btn-warn', 'confirm': '{n} کاربر غیرفعال شوند؟', 'confirm_title': 'غیرفعال‌سازی گروهی', 'confirm_label': 'غیرفعال', 'warn': true, 'reason': true, 'reason_label': 'علت غیرفعال‌سازی'},
+    {'key': 'enable', 'label': 'فعال', 'confirm': '{n} کاربر فعال شوند؟', 'confirm_title': 'فعال‌سازی گروهی', 'confirm_label': 'فعال', 'reason': true, 'reason_label': 'علت فعال‌سازی'},
+    {'key': 'reset', 'label': 'ریست', 'confirm': 'مصرف {n} کاربر ریست شود؟', 'confirm_title': 'ریست گروهی', 'confirm_label': 'ریست', 'warn': true, 'reason': true, 'reason_label': 'علت ریست مصرف'},
+    {'key': 'revoke', 'label': 'ابطال ساب', 'confirm': 'سابسکرایب {n} کاربر ابطال شود؟', 'confirm_title': 'ابطال گروهی', 'confirm_label': 'ابطال', 'warn': true, 'reason': true, 'reason_label': 'علت ابطال اشتراک'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر پاسارگارد حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
   ]) }}
   {% endif %}
   <div class="table-wrap">
