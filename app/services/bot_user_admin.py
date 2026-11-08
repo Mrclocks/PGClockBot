@@ -1202,6 +1202,44 @@ async def _pg_user_presence(pg: Any, pg_uid: int) -> str:
     return "unknown"
 
 
+async def panel_client_for_service(session: AsyncSession, service: UserService) -> Any | None:
+    """The shop's own panel client for ``service``; ``None`` when it has no panel user or none can be built."""
+    if not service.pg_user_id:
+        return None
+    try:
+        return await _pg_client_for_bot_service(session, service)
+    except PANEL_READ_ERRORS:
+        logger.warning("panel client unavailable service=%s", service.id, exc_info=True)
+        return None
+
+
+async def _panel_login_is_valid(pg: Any) -> bool:
+    """True when the panel answers for the client's own admin, so its 404 on a user really means «gone»."""
+    try:
+        admin = await asyncio.wait_for(pg.get_current_admin(), timeout=SNAPSHOT_TIMEOUT_SECONDS)
+    except PANEL_READ_ERRORS:
+        return False
+    return isinstance(admin, dict)
+
+
+async def probe_panel_presence(pg: Any | None, pg_user_id: int | None) -> str:
+    """``present``, ``absent`` or ``unknown`` (no client, outage, timeout, refusal, unverified login).
+
+    A 404 only counts as ``absent`` when the same client can still read its own admin account: a
+    panel role that cannot see a user may answer 404 instead of 403, and an expired login must not
+    mark services as removed.
+    """
+    if pg is None or not pg_user_id:
+        return "unknown"
+    try:
+        presence = await asyncio.wait_for(_pg_user_presence(pg, int(pg_user_id)), timeout=SNAPSHOT_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        return "unknown"
+    if presence == "absent" and not await _panel_login_is_valid(pg):
+        return "unknown"
+    return presence
+
+
 def _raise_pg_not_removed(presence: str, *, cause: BaseException) -> None:
     """Fail closed; message distinguishes confirmed-present vs uncertain."""
     if presence == "present":

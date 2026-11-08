@@ -862,6 +862,7 @@ DEFAULT_SETTINGS = {
     "notify_panel_update": "1",
     "notify_panel_capacity": "1",
     "notify_panel_delivery_failures": "1",
+    "notify_service_panel_missing": "1",
     "notify_service_import_request": "1",
     "notify_auto_approve": "1",
     "notify_account_edits": "1",
