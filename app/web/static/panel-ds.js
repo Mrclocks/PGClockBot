@@ -272,6 +272,9 @@
       document.querySelectorAll("[data-ds-choice]").forEach((g) => { if (choiceTarget(g) === t) syncChoice(g); });
       document.querySelectorAll("[data-ds-show-when]").forEach(syncShowWhen);
       refreshForm(t);
+      if (event.type === "change" && t.matches && t.matches("[data-ds-submit-on-change]") && t.form) {
+        t.form.requestSubmit ? t.form.requestSubmit() : t.form.submit();
+      }
     };
     document.addEventListener("change", onEdit);
     document.addEventListener("input", onEdit);

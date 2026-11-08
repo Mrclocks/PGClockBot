@@ -141,6 +141,13 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds .ds-sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); margin: 0 0 var(--g2); }
 /* A title alone needs no room for an action, so the space above its letters is not padded out. */
 .ds .ds-sec-head:has(> :only-child) { min-height: 0; }
+/* The on/off switch of a section sits at the far end of its title row (rule 6). */
+.ds .ds-head-switch { display: inline-flex; align-items: center; flex: 0 0 auto; cursor: pointer; }
+/* A page form built of sections keeps the section gap to the box after it. */
+.ds .ds-page-form { margin: 0 0 var(--sec-gap); }
+/* While it is off only the title row shows: a card whose one body is hidden is not drawn. */
+.ds .ds-card:has(> [data-ds-show-when][hidden]:only-child) { display: none; }
+.ds .ds-sec:has(> .ds-card > [data-ds-show-when][hidden]:only-child) > .ds-sec-head { margin-bottom: 0; }
 .ds .ds-sec-title { margin: 0; padding-inline: var(--g1); font-size: 13px; font-weight: 600; color: var(--muted-fg); }
 .ds .ds-card, .ds .settings-card, .ds .edit-section, .ui-modal.ds .ui-modal-scroll > form > .card {
   display: flex; flex-direction: column; gap: var(--box-gap); margin: 0;

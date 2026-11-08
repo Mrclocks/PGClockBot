@@ -41,6 +41,17 @@
 </label>
 {%- endmacro %}
 
+{# Switch for a section that turns on and off (rule 6): passed as ds_sec(side=...). The
+   section title names it, so it has no visible label; the body (with its save button)
+   carries data-ds-show-when="#id:1" and stays hidden while the switch is off. Flipping
+   it saves its form at once, since the save button is hidden while it is off. #}
+{% macro ds_head_switch(name, label, id, checked=false, value='1') -%}
+<label class="ds-head-switch"><span class="ui-switch">
+  <input type="checkbox" name="{{ name }}" value="{{ value }}" id="{{ id }}" aria-label="{{ label }}" data-ds-submit-on-change{% if checked %} checked{% endif %} />
+  <span class="ui-switch-track" aria-hidden="true"></span>
+</span></label>
+{%- endmacro %}
+
 {# Number field where 0 means «no limit»: the «نامحدود» toggle sets 0 and locks the field. #}
 {% macro ds_unlimited(label, name, id, unit, value=0) -%}
 <div class="form-field">
