@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.action_reasons import ReasonRequired, log_reasoned_action, reason_from_form
 from app.services.bot_user_admin import may_manage_customer_services
+from app.services.customer_action_notices import NoticeTarget, notify_customers, pg_users_targets_for_shop
+from app.services.shop_scope import resolve_shop_scope_id
 from app.services.miniapp_shop import PERMISSION as MINIAPP_PERMISSION
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.shop_permission_grant import GRANT_MINIAPP_ACTION, grant_shop_permission, grant_summary
@@ -106,6 +108,7 @@ def register_bulk_pages(
             except ReasonRequired as exc:
                 return redirect_bulk(return_to, err=str(exc))
 
+        renewed: list[tuple[object, str]] = []
         if action == "block":
             ok, fail = await bulk_toggle_block(session, staff, ids, block=True)
             noun = "کاربر مسدود شد"
@@ -113,7 +116,7 @@ def register_bulk_pages(
             ok, fail = await bulk_toggle_block(session, staff, ids, block=False)
             noun = "رفع مسدودی"
         elif action == "renew":
-            ok, fail = await bulk_renew_users(session, staff, ids)
+            ok, fail = await bulk_renew_users(session, staff, ids, renewed=renewed)
             noun = "تمدید"
         elif action == "delete":
             from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
@@ -130,6 +133,13 @@ def register_bulk_pages(
             await log_reasoned_action(
                 session, staff, action=USERS_BULK_ACTIONS[action], target_type="customer", target_id=None,
                 reason=reason, amount=int(ok),
+            )
+        if renewed:
+            await notify_customers(
+                session,
+                [NoticeTarget(int(u.id), int(u.telegram_id or 0), resolve_shop_scope_id(staff), name) for u, name in renewed],
+                action="service_renew",
+                reason=reason,
             )
         return _bulk_result(return_to, ok, fail, done=noun, none="هیچ موردی انجام نشد")
 
@@ -525,11 +535,19 @@ def register_bulk_pages(
             reason = reason_from_form(form)
         except ReasonRequired as exc:
             return redirect_bulk(return_to, err=str(exc))
-        ok, fail = await bulk_pg_user_action(session, staff, ids, action)
+        targets = await pg_users_targets_for_shop(session, resolve_shop_scope_id(staff), pg_user_ids=ids)
+        done: list[int] = []
+        ok, fail = await bulk_pg_user_action(session, staff, ids, action, done_ids=done)
         if ok:
             await log_reasoned_action(
                 session, staff, action=PG_BULK_ACTIONS[action], target_type="pg_user", target_id=None,
                 reason=reason, amount=int(ok),
+            )
+            await notify_customers(
+                session,
+                [t for pg_id in done for t in targets.get(pg_id, [])],
+                action=PG_BULK_ACTIONS[action],
+                reason=reason,
             )
         labels = {
             "disable": "کاربر غیرفعال شد",

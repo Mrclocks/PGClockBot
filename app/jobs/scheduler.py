@@ -14,6 +14,7 @@ from app.jobs.bot_profile_photo import run_bot_profile_photo_sync
 from app.jobs.cancellation_notifications import run_cancellation_notifications
 from app.jobs.chat_message_purge import run_chat_message_purge
 from app.jobs.connection_status import run_connection_status
+from app.jobs.customer_notices import run_customer_notices
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
 from app.jobs.pg_link_watchdog import run_pg_link_watchdog
 from app.jobs.user_photo_cache import run_user_photo_prune
@@ -843,6 +844,10 @@ def start_scheduler(bot: Bot) -> None:
     start_background_scheduler()
     scheduler.add_job(
         run_cancellation_notifications, "interval", seconds=10, args=[bot], id="cancellation_notifications",
+        max_instances=1, coalesce=True, misfire_grace_time=60, replace_existing=True,
+    )
+    scheduler.add_job(
+        run_customer_notices, "interval", seconds=10, args=[bot], id="customer_notices",
         max_instances=1, coalesce=True, misfire_grace_time=60, replace_existing=True,
     )
     scheduler.add_job(

@@ -520,6 +520,31 @@ class UserService(Base):
     plan: Mapped[Optional["Plan"]] = relationship()
 
 
+class CustomerNotice(Base):
+    """A message telling a customer what staff did to their service, sent by a throttled worker.
+
+    ``pending`` -> ``sending`` (claimed before the network call) -> ``sent`` / ``skipped`` /
+    ``failed``. A row left ``sending`` by a crash becomes ``review``: Telegram may have accepted
+    it, so it is never sent again.
+    """
+
+    __tablename__ = "customer_notices"
+    __table_args__ = (Index("ix_customer_notices_status_due", "status", "next_attempt_at", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bot_user_id: Mapped[int] = mapped_column(Integer)
+    telegram_id: Mapped[int] = mapped_column(BigInteger)
+    action: Mapped[str] = mapped_column(String(32))
+    service_name: Mapped[str] = mapped_column(String(128), default="", server_default="")
+    reason: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    next_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class BotUserShop(Base):
     """A person is a customer of a shop (shop_id NULL = the platform).
 
