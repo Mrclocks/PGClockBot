@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import UserService
+from app.db.models import PanelAlertState, UserService
 from app.services.bot_user_admin import panel_client_for_service, probe_panel_presence
 from app.services.panel_alert_notifications import ALERT_PANEL_MISSING, KEY_PANEL_MISSING, Signal
 
@@ -50,29 +50,30 @@ async def record_presence(session: AsyncSession, service_id: int, presence: str,
     and an ``unknown`` result leaves the flag exactly as it was.
     """
     now = now or _utcnow()
-    values: dict[str, object] = {"panel_checked_at": now}
     condition = UserService.id == int(service_id)
-    changed_condition = None
-    if presence == ABSENT:
-        values["panel_missing_at"] = now
-        changed_condition = UserService.panel_missing_at.is_(None)
-    elif presence == PRESENT:
-        values["panel_missing_at"] = None
-        changed_condition = UserService.panel_missing_at.is_not(None)
-    if changed_condition is None:
-        return False
-    result = await session.execute(
-        update(UserService).where(condition, changed_condition).values(**values),
-        execution_options={"synchronize_session": False},
-    )
-    if result.rowcount == 0:
-        # Flag already correct: only note that the service was looked at.
+    flag_change = {
+        ABSENT: (UserService.panel_missing_at.is_(None), now),
+        PRESENT: (UserService.panel_missing_at.is_not(None), None),
+    }.get(presence)
+    changed = False
+    if flag_change is not None:
+        needs_change, flag_value = flag_change
+        result = await session.execute(
+            update(UserService)
+            .where(condition, needs_change)
+            .values(panel_missing_at=flag_value, panel_checked_at=now),
+            execution_options={"synchronize_session": False},
+        )
+        changed = result.rowcount == 1
+    if not changed:
+        # Every lookup, including an inconclusive one, moves the service to the back of the
+        # queue so services that never answer cannot starve the rest of the scan.
         await session.execute(
             update(UserService).where(condition).values(panel_checked_at=now),
             execution_options={"synchronize_session": False},
         )
     await session.commit()
-    return result.rowcount == 1
+    return changed
 
 
 async def refresh_service_presence(session: AsyncSession, service: UserService) -> str:
@@ -138,8 +139,6 @@ async def missing_signals(session: AsyncSession) -> list[Signal]:
         )
     ).all()
     counts = {(int(shop) if shop else None): int(n) for shop, n in rows}
-    from app.db.models import PanelAlertState
-
     known = (
         await session.execute(
             select(PanelAlertState.scope_key).where(

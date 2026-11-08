@@ -116,6 +116,15 @@ class PresenceCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(results), 2)
         self.assertEqual(len(set(panel.calls)), 2)
 
+    async def test_services_that_never_answer_cannot_starve_the_rest_of_the_scan(self) -> None:
+        panel = self.panel()
+        panel.answers = {10: PasarGuardError("down", 502), 11: PasarGuardError("down", 502), 12: PasarGuardError("down", 502), 13: {"id": 13}}
+        for _ in range(2):
+            with patch("app.services.bot_user_admin._pg_client_for_bot_service", AsyncMock(return_value=panel)):
+                async with self.Session() as session:
+                    await presence.scan_panel_presence(session, limit=2)
+        self.assertEqual(set(panel.calls), {10, 11, 12, 13})
+
     async def test_alert_counts_are_per_shop(self) -> None:
         await self.scan(self.panel())
         async with self.Session() as session:
