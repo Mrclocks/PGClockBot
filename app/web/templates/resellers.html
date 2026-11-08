@@ -45,17 +45,12 @@
              value="{{ custom_panel_url or '' }}"
              placeholder="{{ default_panel_url }}"
              dir="ltr" />
-      <small class="muted field-hint-stack">
+      <small class="muted field-hint-stack url-in-use">
         <span>
-          در حال استفاده:
+          {% if using_custom_panel_url %}<span class="badge approved">اختصاصی</span>{% else %}<span class="badge pending">پیش‌فرض</span>{% endif %}
           <code dir="ltr">{{ panel_url }}</code>
-          {% if using_custom_panel_url %}
-          <span class="badge approved">اختصاصی</span>
-          {% else %}
-          <span class="badge pending">پیش‌فرض</span>
-          {% endif %}
         </span>
-        <span>پیش‌فرض: <code dir="ltr">{{ default_panel_url }}</code></span>
+        {% if using_custom_panel_url %}<span>پیش‌فرض: <code dir="ltr">{{ default_panel_url }}</code></span>{% endif %}
       </small>
     </label>
     <label class="form-field">آدرس پنل پاسارگارد
@@ -63,17 +58,12 @@
              value="{{ custom_pg_panel_url or '' }}"
              placeholder="{{ default_pg_panel_url }}"
              dir="ltr" />
-      <small class="muted field-hint-stack">
+      <small class="muted field-hint-stack url-in-use">
         <span>
-          در حال استفاده:
+          {% if using_custom_pg_panel_url %}<span class="badge approved">اختصاصی</span>{% else %}<span class="badge pending">پیش‌فرض</span>{% endif %}
           <code dir="ltr">{{ pg_panel_url or '—' }}</code>
-          {% if using_custom_pg_panel_url %}
-          <span class="badge approved">اختصاصی</span>
-          {% else %}
-          <span class="badge pending">پیش‌فرض</span>
-          {% endif %}
         </span>
-        <span>پیش‌فرض: <code dir="ltr">{{ default_pg_panel_url or '— تنظیم نشده —' }}</code></span>
+        {% if using_custom_pg_panel_url %}<span>پیش‌فرض: <code dir="ltr">{{ default_pg_panel_url or '— تنظیم نشده —' }}</code></span>{% endif %}
       </small>
     </label>
     <div class="actions">
