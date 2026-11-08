@@ -434,3 +434,4 @@ tests/test_panel_nav.py
 tests/test_panel_search.py
 tests/test_addon_pack_batches.py
 tests/test_action_reasons.py
+tests/test_customer_action_notices.py
