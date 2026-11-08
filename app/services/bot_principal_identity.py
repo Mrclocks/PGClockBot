@@ -33,6 +33,7 @@ from app.services.org_principals import (
     list_principals_for_bot_user,
 )
 from app.services.org_scope import visible_principal_ids
+from app.services.pg_panel_access import apply_pg_panel_access
 
 
 @dataclass(frozen=True)
@@ -571,6 +572,7 @@ async def _staff_for_reseller_l1(
         or principal.pg_password_enc
         or getattr(principal, "pg_api_key_enc", None)
     )
+    staff = apply_pg_panel_access(staff, profile)
     return attach_org_principal_fields(
         staff, principal, visible_principal_ids=visible
     )
@@ -722,7 +724,7 @@ async def bot_staff_from_org_principal(
         )
         staff["web_owner"] = False
         staff["pg_is_owner"] = False
-        return staff
+        return apply_pg_panel_access(staff, profile)
 
     if depth != DEPTH_ONE:
         return None

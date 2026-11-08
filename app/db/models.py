@@ -859,6 +859,13 @@ class ResellerProfile(Base):
     pg_api_key_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     share_pg_panel_url: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Off: no PasarGuard pages, actions or direct panel password for this shop (see pg_panel_access).
+    allow_pg_panel_access: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    # New PasarGuard password saved before the panel call that sets it, so a retry
+    # after an unknown outcome sends the same secret (Fernet ciphertext).
+    pg_password_rotation_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     web_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True)
     web_password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # Unified feature permissions (web + bot must stay identical)
@@ -991,6 +998,10 @@ class ResellerPlan(Base):
     create_pg_admin: Mapped[bool] = mapped_column(Boolean, default=True)
     create_web_access: Mapped[bool] = mapped_column(Boolean, default=True)
     share_pg_panel_url: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Default «دسترسی به پاسارگارد» for resellers granted this package.
+    allow_pg_panel_access: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
     pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Default billing for new resellers on this package: fixed | payg
     billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")

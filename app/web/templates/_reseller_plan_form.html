@@ -125,7 +125,8 @@
       <div class="ds-divider"></div>
       <div class="ds-rows" id="reseller-provision-switches">
         {{ ds_switch('create_pg_admin', 'ساخت ادمین هنگام تأیید', 'مالکیت کاربران نماینده به این ادمین سپرده می‌شود', true) }}
-        {{ ds_switch('share_pg_panel_url', 'ارسال آدرس و رمز پنل', 'خاموش: نماینده فقط از وب‌پنل ربات کار می‌کند', false) }}
+        {{ ds_switch('allow_pg_panel_access', 'دسترسی به پاسارگارد', 'خاموش: منو و صفحه‌های پاسارگارد پنهان می‌شود و رمز پنل جدا از رمز وب‌پنل و ارسال‌نشدنی است', true) }}
+        {{ ds_switch('share_pg_panel_url', 'ارسال آدرس و رمز پنل', 'فقط وقتی دسترسی به پاسارگارد روشن است ارسال می‌شود', false) }}
       </div>
     {% endcall %}
 

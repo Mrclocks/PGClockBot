@@ -25,6 +25,14 @@ from app.db.models import (
 )
 from app.services.db_safe import rollback_quiet
 from app.services.chat_records import keeps_sent
+from app.services.pg_panel_access import (
+    ROTATION_FAILED_MESSAGE,
+    RotationOutcome,
+    may_share_pg_credentials,
+    pg_panel_allowed,
+    pg_password_follows_web,
+    set_pg_panel_access,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +299,18 @@ async def reseller_can_review_payment(
     return True
 
 
+# A closed-access shop's panel password is never shown, so it can be long.
+PRIVATE_PG_PASSWORD_LENGTH = 20
+
+
+def plan_allows_pg_panel_access(plan: ResellerPlan | None) -> bool:
+    """A plan's «دسترسی به پاسارگارد» default; no plan keeps access open."""
+    if plan is None:
+        return True
+    value = getattr(plan, "allow_pg_panel_access", True)
+    return True if value is None else bool(value)
+
+
 def _rand_password(length: int = 14) -> str:
     """PasarGuard-compatible password (Phase D1 shared generator)."""
     from app.services.credential_policy import generate_compliant_password
@@ -318,7 +338,7 @@ async def apply_reseller_panel_password(
     if not ok:
         raise ValueError(err)
     profile.web_password_hash = hash_password(pwd)
-    if not sync_pg or not (profile.pg_admin_username or "").strip():
+    if not sync_pg or not pg_password_follows_web(profile) or not (profile.pg_admin_username or "").strip():
         return
     enc = encrypt_secret(pwd)
     if not enc:
@@ -1178,6 +1198,8 @@ async def provision_reseller(
         share_pg = bool(getattr(plan, "share_pg_panel_url", False))
     else:
         share_pg = False
+    allow_pg_access = plan_allows_pg_panel_access(plan)
+    share_pg = may_share_pg_credentials(allow_access=allow_pg_access, share_panel_url=share_pg)
 
     # One username + password for Pasarguard admin AND bot web panel (when both created).
     from app.services.secret_box import encrypt_secret
@@ -1203,6 +1225,7 @@ async def provision_reseller(
             if await get_subscription(session, pg_username) is None:
                 await _start_new_subscription(session, plan, existing, pg_username)
         base = (panel_base_url or "").rstrip("/") or await get_reseller_panel_base_url(session)
+        share_pg = share_pg and pg_panel_allowed(existing)
         pg_panel = await get_reseller_pg_panel_base_url(session) if share_pg else ""
         return {
             "profile": existing,
@@ -1233,7 +1256,8 @@ async def provision_reseller(
     pg_password_enc = None
     if do_pg:
         pg_username = shared_username
-        pg_password = shared_password
+        # Closed access: the panel password is never the web password and never sent.
+        pg_password = shared_password if allow_pg_access else _rand_password(PRIVATE_PG_PASSWORD_LENGTH)
         pg_password_enc = encrypt_secret(pg_password)
         if not pg_password_enc:
             raise ValueError("رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید")
@@ -1293,6 +1317,7 @@ async def provision_reseller(
         issue_setup_token=True,
     )
     profile.share_pg_panel_url = share_pg
+    profile.allow_pg_panel_access = allow_pg_access
     await session.commit()
     await session.refresh(profile)
 
@@ -1303,14 +1328,15 @@ async def provision_reseller(
     if not base:
         base = await get_reseller_panel_base_url(session)
     pg_panel = await get_reseller_pg_panel_base_url(session) if share_pg else ""
-    unified = bool(do_pg and do_web and shared_username and shared_password)
+    unified = bool(allow_pg_access and do_pg and do_web and shared_username and shared_password)
 
     return {
         "profile": profile,
         "pg_username": pg_username,
-        "pg_password": pg_password if (share_pg or unified) else None,
+        "pg_password": pg_password if allow_pg_access and (share_pg or unified) else None,
         "pg_panel_url": pg_panel,
         "share_pg_panel_url": share_pg,
+        "pg_panel_access": allow_pg_access,
         "web_username": web_username,
         "web_password": web_password,
         "panel_username": shared_username if unified else (web_username or pg_username),
@@ -1347,8 +1373,11 @@ def format_credentials_message(creds: dict) -> str:
 
     panel = (creds.get("panel_url") or "").strip().rstrip("/")
     pg_panel = (creds.get("pg_panel_url") or "").strip().rstrip("/")
-    share_pg = bool(creds.get("share_pg_panel_url")) or bool(pg_panel and creds.get("pg_username"))
-    unified = bool(creds.get("unified_credentials"))
+    pg_access = bool(creds.get("pg_panel_access", True))
+    share_pg = pg_access and (
+        bool(creds.get("share_pg_panel_url")) or bool(pg_panel and creds.get("pg_username"))
+    )
+    unified = pg_access and bool(creds.get("unified_credentials"))
     panel_user = creds.get("panel_username") or creds.get("web_username") or creds.get("pg_username")
     panel_pass = creds.get("panel_password") or creds.get("web_password") or creds.get("pg_password")
 
@@ -1372,7 +1401,7 @@ def format_credentials_message(creds: dict) -> str:
             "💡 رمز را عوض کنید و در جای امن نگه دارید.",
         ]
     else:
-        if share_pg or creds.get("pg_username"):
+        if share_pg or (pg_access and creds.get("pg_username")):
             lines += ["🛡 <b>پنل پاسارگارد</b>", ""]
             if pg_panel:
                 lines += [f"آدرس:\n{copyable(pg_panel)}", ""]
@@ -2046,12 +2075,19 @@ async def provision_existing_pg_admin(
         # Store operator note on profile via unused field if present; else ignore
         pass
     profile.is_active = True
+    allow_pg_access = plan_allows_pg_panel_access(plan)
     if share_pg_panel_url is not None:
-        profile.share_pg_panel_url = bool(share_pg_panel_url)
+        share_pg = bool(share_pg_panel_url)
     elif getattr(plan, "share_pg_panel_url", None) is not None:
-        profile.share_pg_panel_url = bool(plan.share_pg_panel_url)
-    # Keep Pasarguard password in sync when operator sets a new shared password
-    if pwd:
+        share_pg = bool(plan.share_pg_panel_url)
+    else:
+        share_pg = bool(getattr(profile, "share_pg_panel_url", False))
+    profile.share_pg_panel_url = may_share_pg_credentials(
+        allow_access=allow_pg_access, share_panel_url=share_pg
+    )
+    # Keep Pasarguard password in sync when operator sets a new shared password;
+    # with access closed the panel password is replaced below instead.
+    if pwd and allow_pg_access and pg_panel_allowed(profile):
         from app.services.pasarguard import get_pg, reset_pg
         from app.services.secret_box import encrypt_secret
 
@@ -2084,6 +2120,11 @@ async def provision_existing_pg_admin(
             logger.exception("subscription start failed after provision_existing pg=%s", pg_u)
             await rollback_quiet(session)
             return profile, None, "نمایندگی فعال شد ولی اشتراک پلن ثبت نشد؛ اتصال پنل را بررسی و دوباره تلاش کنید"
+
+    if not allow_pg_access:
+        change = await set_pg_panel_access(session, profile, False)
+        if change.rotation == RotationOutcome.PENDING:
+            return profile, None, ROTATION_FAILED_MESSAGE
 
     setup_hint = None
     if not (profile.bot_token or "").strip():
