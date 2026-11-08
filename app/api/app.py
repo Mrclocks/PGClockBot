@@ -138,6 +138,7 @@ from app.api.payg_charge_pages import register_payg_charge_pages
 from app.api.shop_credit_pages import register_shop_credit_pages
 from app.api.cashback_pages import register_cashback_pages
 from app.api.reseller_finance_pages import register_reseller_finance_pages
+from app.api.billing_report_pages import register_billing_report_pages
 from app.api.shop_points_pages import register_shop_points_pages
 from app.api.shop_customer_block_pages import register_shop_customer_block_pages
 from app.api.panel_brand_pages import register_panel_brand_pages
@@ -1617,6 +1618,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_shop_credit_pages(app, require_admin=require_admin, get_db=get_db)
     register_cashback_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_reseller_finance_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_billing_report_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     register_shop_points_pages(app, require_staff=require_staff, get_db=get_db)
     register_shop_customer_block_pages(app, require_staff=require_staff, get_db=get_db)
     register_trial_users_pages(app, render=render, require_staff=require_staff, get_db=get_db)
