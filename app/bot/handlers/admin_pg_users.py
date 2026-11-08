@@ -20,10 +20,13 @@ from app.bot.auth import (
     can_platform_pg_page,
 )
 from app.bot.auth import is_platform_admin as _is_admin
+from app.bot.handlers.action_reason import ask_reason, take_reason
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
+from app.services.action_reasons import bot_actor
 from app.services.chat_records import keep_sent
+from app.services.customer_action_notices import NoticeTarget, log_and_notify, pg_user_targets_for_shop
 from app.services.formatting import format_message, service_card
 from app.services.pasarguard import (
     as_list,
@@ -788,6 +791,43 @@ async def pg_user_link(
             reply_markup=_user_actions_kb(uid),
         )
 
+PG_ACTION_LABELS = {
+    "pg_user_disable": "علت غیرفعال‌سازی",
+    "pg_user_enable": "علت فعال‌سازی",
+    "pg_user_reset_usage": "علت ریست مصرف",
+    "pg_user_revoke_sub": "علت ابطال اشتراک",
+    "pg_user_delete": "علت حذف کاربر",
+}
+
+
+async def _pg_notice_targets(session: AsyncSession | None, owner_id: int | None, uid: int) -> list[NoticeTarget]:
+    return [] if session is None else await pg_user_targets_for_shop(session, owner_id, pg_user_id=uid)
+
+
+async def _finish_reasoned_pg_action(
+    session: AsyncSession | None,
+    db_user: BotUser,
+    *,
+    owner_id: int | None,
+    uid: int,
+    action: str,
+    reason: str,
+    targets: list[NoticeTarget],
+) -> None:
+    """Staff log record and customer notice once the panel operation succeeded."""
+    if session is None:
+        return
+    await log_and_notify(
+        session,
+        bot_actor(db_user, shop_id=owner_id),
+        action=action,
+        target_type="pg_user",
+        target_id=uid,
+        reason=reason,
+        targets=targets,
+    )
+
+
 @router.callback_query(F.data.startswith("adm:pg:reset:"))
 async def pg_reset(
     callback: CallbackQuery,
@@ -796,6 +836,7 @@ async def pg_reset(
     is_reseller_bot: bool = False,
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
+    state: FSMContext | None = None,
 ):
     gate = await _pg_user_gate(
         db_user,
@@ -809,8 +850,16 @@ async def pg_reset(
     if not gate.allowed:
         return
     uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت ریست مصرف")
+        return
+    targets = await _pg_notice_targets(session, reseller_owner_id, uid)
     try:
         user = await gate.pg_client.reset_user_by_id(uid)
+        await _finish_reasoned_pg_action(
+            session, db_user, owner_id=reseller_owner_id, uid=uid, action="pg_user_reset_usage", reason=reason, targets=targets
+        )
         await callback.answer("ریست شد ✅", show_alert=True)
         if callback.message:
             if isinstance(user, dict) and user.get("id") is not None:
@@ -831,6 +880,7 @@ async def pg_dis(
     is_reseller_bot: bool = False,
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
+    state: FSMContext | None = None,
 ):
     """PG user disable via OrgPrincipal + AuthzContext."""
     gate = await _pg_user_gate(
@@ -845,8 +895,16 @@ async def pg_dis(
     if not gate.allowed:
         return
     uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت غیرفعال‌سازی")
+        return
+    targets = await _pg_notice_targets(session, reseller_owner_id, uid)
     try:
         user = await gate.pg_client.set_disabled_by_id(uid, True)
+        await _finish_reasoned_pg_action(
+            session, db_user, owner_id=reseller_owner_id, uid=uid, action="pg_user_disable", reason=reason, targets=targets
+        )
         await callback.answer("غیرفعال شد", show_alert=True)
         if callback.message:
             if isinstance(user, dict) and user.get("id") is not None:
@@ -867,6 +925,7 @@ async def pg_en(
     is_reseller_bot: bool = False,
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
+    state: FSMContext | None = None,
 ):
     gate = await _pg_user_gate(
         db_user,
@@ -880,8 +939,16 @@ async def pg_en(
     if not gate.allowed:
         return
     uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت فعال‌سازی")
+        return
+    targets = await _pg_notice_targets(session, reseller_owner_id, uid)
     try:
         user = await gate.pg_client.set_disabled_by_id(uid, False)
+        await _finish_reasoned_pg_action(
+            session, db_user, owner_id=reseller_owner_id, uid=uid, action="pg_user_enable", reason=reason, targets=targets
+        )
         await callback.answer("فعال شد", show_alert=True)
         if callback.message:
             if isinstance(user, dict) and user.get("id") is not None:
@@ -902,6 +969,7 @@ async def pg_rev(
     is_reseller_bot: bool = False,
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
+    state: FSMContext | None = None,
 ):
     gate = await _pg_user_gate(
         db_user,
@@ -915,8 +983,16 @@ async def pg_rev(
     if not gate.allowed:
         return
     uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت ابطال اشتراک")
+        return
+    targets = await _pg_notice_targets(session, reseller_owner_id, uid)
     try:
         user = await gate.pg_client.revoke_sub_by_id(uid)
+        await _finish_reasoned_pg_action(
+            session, db_user, owner_id=reseller_owner_id, uid=uid, action="pg_user_revoke_sub", reason=reason, targets=targets
+        )
         await callback.answer("ساب باطل شد", show_alert=True)
         if callback.message:
             if isinstance(user, dict) and user.get("id") is not None:
@@ -988,6 +1064,11 @@ async def pg_user_del(
     if not gate.allowed:
         return
     uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت حذف کاربر")
+        return
+    targets = await _pg_notice_targets(session, reseller_owner_id, uid)
     try:
         from app.services.bot_user_admin import (
             detach_local_services_for_pg_user,
@@ -999,6 +1080,9 @@ async def pg_user_del(
         )
         if session is not None:
             await detach_local_services_for_pg_user(session, uid, commit=True)
+        await _finish_reasoned_pg_action(
+            session, db_user, owner_id=reseller_owner_id, uid=uid, action="pg_user_delete", reason=reason, targets=targets
+        )
         await callback.answer(feedback.DELETED, show_alert=True)
         list_gate = await _pg_user_gate(
             db_user,
