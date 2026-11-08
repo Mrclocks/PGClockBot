@@ -859,7 +859,10 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         await log_reasoned_action(
             session, staff, action="service_delete", target_type="service", target_id=service_id, reason=reason
         )
-        await notify_customers(session, [target], action="service_delete", reason=reason)
+        detached_only = is_external_service(svc) and not delete_pg
+        await notify_customers(
+            session, [target], action="service_detach" if detached_only else "service_delete", reason=reason
+        )
         if is_external_service(svc) and not delete_pg:
             return _redirect_user(user_id, ok=f"سرویس #{service_id} از لیست مشتری جدا شد؛ حساب پاسارگارد حفظ شد")
         note = " (پاسارگارد حذف شد)" if info.get("pg_deleted") else (

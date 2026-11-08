@@ -42,6 +42,11 @@ class NoticeTextTests(unittest.TestCase):
         self.assertNotIn("<b>x</b>", text)
         self.assertIn("&lt;script&gt;", text)
 
+    def test_detaching_an_external_service_does_not_claim_it_was_deleted(self) -> None:
+        text = notice_text("service_detach", service_name="a", reason="انتقال به حساب دیگر")
+        self.assertNotIn("حذف شد", text)
+        self.assertIn("همچنان فعال", text)
+
     def test_revoking_the_link_tells_the_customer_to_fetch_the_new_one(self) -> None:
         self.assertIn("لینک جدید", notice_text("pg_user_revoke_sub", service_name="a", reason="ریسک لو رفتن"))
 
@@ -71,6 +76,16 @@ class NotifyCustomersTests(CustomerServicesWebPermissionTests):
         with patch("app.services.customer_action_notices.open_notify_bot_for_user", AsyncMock(return_value=(bot, True))):
             async with AsyncSession(bind=self.engine) as session:
                 self.assertEqual(await notify_customers(session, [target], action="service_renew", reason="تمدید دستی"), 0)
+
+    async def test_one_bot_is_opened_per_shop_for_several_customers(self) -> None:
+        bot = self.bot()
+        targets = [NoticeTarget(CUSTOMER_ID, 107, SHOP_ID, "a"), NoticeTarget(CUSTOMER_ID, 107, SHOP_ID, "b")]
+        opener = AsyncMock(return_value=(bot, True))
+        with patch("app.services.customer_action_notices.open_notify_bot_for_user", opener):
+            async with AsyncSession(bind=self.engine) as session:
+                self.assertEqual(await notify_customers(session, targets, action="service_renew", reason="تمدید دستی"), 2)
+        opener.assert_awaited_once()
+        bot.session.close.assert_awaited_once()
 
     async def test_an_unusable_bot_token_does_not_break_the_operation(self) -> None:
         from aiogram.utils.token import TokenValidationError
