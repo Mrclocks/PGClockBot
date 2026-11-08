@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ResellerBillingRate, ResellerBillingTransaction, ResellerPlan, ResellerProfile
 from app.services.payg_pricing import PaygPriceError, assert_billable_rates, rates_from_plan
-from app.services.shop_credit import shop_credit_limit
+from app.services.shop_credit import shop_credit_limit, shop_standing_limit
 from app.services.billing_alerts import (
     PANEL_TICK_ISSUES,
     TickIssue,
@@ -543,11 +543,18 @@ async def ensure_payg_shop_wallet(
 
 
 async def payg_available_balance(session: AsyncSession, profile: ResellerProfile) -> int:
-    """What the shop can still spend on PAYG: wallet balance plus its open credit line.
+    """Whether the shop still has standing on PAYG: wallet balance plus its credit line.
 
     Every «empty wallet» decision (suspend, restore, block provisioning, low balance)
-    reads this, so a shop working inside its credit is never treated as empty.
+    reads this, so a shop working inside its credit is never treated as empty; only the
+    last overdue step removes the line from it.
     """
+    _, bal = await ensure_payg_shop_wallet(session, profile)
+    return int(bal) + await shop_standing_limit(session, int(profile.user_id))
+
+
+async def payg_spendable_for_charges(session: AsyncSession, profile: ResellerProfile) -> int:
+    """What a new PAYG charge may take: balance plus credit the line still lends."""
     _, bal = await ensure_payg_shop_wallet(session, profile)
     return int(bal) + await shop_credit_limit(session, int(profile.user_id))
 

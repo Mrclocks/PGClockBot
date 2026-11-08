@@ -1002,9 +1002,37 @@ class ShopCreditAccount(Base):
     status: Mapped[str] = mapped_column(String(16), default="active", server_default=text("'active'"))
     # Highest «credit used» alert already sent (0, 70, 90, 100), claimed atomically.
     alert_level: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # Overdue ladder step now in force (credit_statements.LadderStep), 0 when nothing is overdue.
+    restriction: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class CreditStatement(Base):
+    """One closed calendar month of a shop's credit line, with the debt due and its due date.
+
+    Paid when the shop's balance plus the PAYG spending since ``period_end`` is no longer
+    negative: payments clear the oldest debt first. Never edited after issue except status.
+    """
+
+    __tablename__ = "credit_statements"
+    __table_args__ = (UniqueConstraint("shop_id", "period_start", name="uq_credit_statement_period"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    amount_due: Mapped[int] = mapped_column(Integer, default=0)
+    charges_total: Mapped[int] = mapped_column(Integer, default=0)
+    payments_total: Mapped[int] = mapped_column(Integer, default=0)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # issued | paid | written_off
+    status: Mapped[str] = mapped_column(String(16), default="issued", index=True)
+    # Highest notice already sent for this statement (issued, each ladder step), claimed atomically.
+    notified_step: Mapped[int] = mapped_column(Integer, default=0)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class CreditEvent(Base):
