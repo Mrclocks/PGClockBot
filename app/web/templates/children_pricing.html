@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title %}
+{% from "_ds.html" import ds_switch %}
+{% block title %}قیمت و اعتبار زیرمجموعه{% endblock %}
+{% block content %}
+<div class="ds ds-settings">
+<div class="page-head">
+  <div>{{ page_title('users', 'قیمت و اعتبار زیرمجموعه') }}</div>
+  <div class="actions"><a class="btn btn-ghost" href="/resellers">نمایندگان من</a></div>
+</div>
+{% if flash_ok %}<div class="flash ok" role="status">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err" role="alert">{{ flash_err }}</div>{% endif %}
+<p class="muted">هر هزینهٔ زیرمجموعه دو بار ثبت می‌شود: زیرمجموعه به قیمت پلن شما می‌پردازد و شما به قیمت پلن خودتان. اعتبار آزاد شما: <b dir="ltr">{{ free_credit | money }}</b></p>
+
+<div class="card">
+  <h2>پلن قیمت تازه</h2>
+  <form method="post" action="/resellers/children-pricing/plans" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="form-field">نام پلن <input name="name" required maxlength="128" /></label>
+    <div class="form-row">
+      <label class="form-field">مبنای هزینه
+        <select name="payg_basis"><option value="traffic">حجم</option><option value="user">کاربر</option><option value="user_traffic">کاربر + حجم</option></select>
+      </label>
+      <label class="form-field">نرخ هر گیگ
+        <span class="ds-unit"><input name="price_per_gb" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="0" /><span class="ds-unit-label">تومان</span></span>
+      </label>
+      <label class="form-field">قیمت هر کاربر
+        <span class="ds-unit"><input name="payg_user_price" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="0" /><span class="ds-unit-label">تومان</span></span>
+      </label>
+      <label class="form-field">قیمت کاربر نامحدود
+        <span class="ds-unit"><input name="payg_unlimited_price" type="number" data-money min="0" inputmode="numeric" dir="ltr" placeholder="خالی = ممنوع" /><span class="ds-unit-label">تومان</span></span>
+      </label>
+    </div>
+    <div class="ds-rows">{{ ds_switch('payg_user_price_per_30d', 'قیمت کاربر به ازای هر ۳۰ روز', '', false) }}</div>
+    <div class="actions"><button class="btn" type="submit">ساخت پلن</button></div>
+  </form>
+</div>
+
+<div class="card card-flush">
+  <div class="card-flush-head"><h2>زیرمجموعه‌ها</h2></div>
+  {% if not children %}<p class="muted empty-state">نمایندهٔ زیرمجموعه‌ای با فروشگاه ندارید.</p>{% else %}
+  <div class="table-wrap"><table class="table-compact table-list-sm">
+    <thead><tr><th>نماینده</th><th>پلن قیمت</th><th>سقف اعتبار</th><th><span class="sr-only">ذخیره</span></th></tr></thead>
+    <tbody>{% for c in children %}
+      <tr><form method="post" action="/resellers/children-pricing/{{ c.shop_id }}">
+        <td dir="ltr">{{ c.label }}</td>
+        <td><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <select name="plan_id" aria-label="پلن قیمت {{ c.label }}"><option value="">پکیج مالک</option>
+            {% for p in plans %}<option value="{{ p.id }}" {% if c.plan_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+          </select></td>
+        <td><span class="ds-unit"><input name="credit_limit" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ c.credit_limit }}" aria-label="سقف اعتبار {{ c.label }}" /><span class="ds-unit-label">تومان</span></span></td>
+        <td><button class="btn btn-sm" type="submit">ذخیره</button></td>
+      </form></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% endif %}
+</div>
+</div>
+{% endblock %}

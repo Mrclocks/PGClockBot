@@ -456,3 +456,5 @@ tests/test_reseller_finance_pages.py
 tests/test_billing_finishing.py
 # Owner PAYG report: owner only, CSV formula-safe.
 tests/test_billing_reports.py
+# Level-1/level-2: two-step charges, reserved credit, parent-only scope.
+tests/test_child_pricing.py

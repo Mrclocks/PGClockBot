@@ -215,3 +215,11 @@ def assert_quote_unchanged(expected_amount: int, quote: ChargeQuote) -> None:
     """Refuse to charge when the price changed between showing it and confirming it."""
     if isinstance(expected_amount, bool) or not isinstance(expected_amount, int) or expected_amount != quote.amount:
         raise PaygPriceError("قیمت این تغییر عوض شده است؛ قیمت تازه را ببینید و دوباره تأیید کنید")
+
+
+def child_plan_id_of(profile: Any) -> int | None:
+    """The level-1 price list a level-2 shop is priced with; ``None`` unless it is a real id."""
+    value = getattr(profile, "child_plan_id", None)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value

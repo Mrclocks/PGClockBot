@@ -866,6 +866,8 @@ class ResellerProfile(Base):
     # New PasarGuard password saved before the panel call that sets it, so a retry
     # after an unknown outcome sends the same secret (Fernet ciphertext).
     pg_password_rotation_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # A level-2 shop's PAYG price list, set by its level-1 parent (child_pricing).
+    child_plan_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     web_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True)
     web_password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # Unified feature permissions (web + bot must stay identical)
@@ -984,8 +986,31 @@ class ResellerCharge(Base):
     panel_target: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # A level-2 shop's charge points at its parent's charge for the same change; both move together.
+    linked_charge_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ChildPricePlan(Base):
+    """A level-1 shop's PAYG price list for its level-2 shops (never in the owner's catalog).
+
+    Same PAYG fields as ``ResellerPlan`` so ``payg_pricing.rates_from_plan`` reads it;
+    always charged at creation.
+    """
+
+    __tablename__ = "child_price_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_shop_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    payg_basis: Mapped[str] = mapped_column(String(16), default="traffic")
+    payg_charge_upfront: Mapped[bool] = mapped_column(Boolean, default=True)
+    price_per_gb: Mapped[int] = mapped_column(Integer, default=0)
+    payg_user_price: Mapped[int] = mapped_column(Integer, default=0)
+    payg_user_price_per_30d: Mapped[bool] = mapped_column(Boolean, default=False)
+    payg_unlimited_price: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ShopCreditAccount(Base):
