@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ResellerCharge, ResellerProfile
 from app.services.billing import SHORTFALL_MESSAGE, WalletShortfall, is_payg, payg_available_balance
-from app.services.billing_alerts import TickIssue, announce_wallet_short, clear_tick_issue
+from app.services.billing_alerts import TickIssue, announce_wallet_short, clear_tick_issue, notify_credit_use
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_toman, parse_expire
 from app.services.payg_charges import (
@@ -39,6 +39,7 @@ from app.services.payg_charges import (
 )
 from app.services.payg_pricing import RESET_EXPLANATION, ChargeEvent, ChargeQuote, PaygPriceError, ServiceChange
 from app.services.provision_gate import ProvisionError, reseller_id_from_staff
+from app.services.shop_credit import claim_credit_alert, credit_usage, shop_credit_limit
 from app.services.volume_allocation import HeldVolume, is_hard_panel_rejection, release_volume_hold
 
 logger = logging.getLogger(__name__)
@@ -114,7 +115,25 @@ async def charge_shop_change(
         raise ProvisionError(str(exc)) from exc
     if charge is not None:
         await clear_tick_issue(session, profile, (TickIssue.WALLET_SHORT,))
+        await _alert_credit_use(session, profile)
     return charge
+
+
+async def _alert_credit_use(session: AsyncSession, profile: ResellerProfile) -> None:
+    """After a charge: tell the shop once per level how much of its credit line is used."""
+    shop_id = int(profile.user_id)
+    try:
+        limit = await shop_credit_limit(session, shop_id)
+        if limit <= 0:
+            return
+        balance = int(profile.billing_balance or 0)
+        level = await claim_credit_alert(session, shop_id, balance=balance, limit=limit)
+        if level is not None:
+            used = credit_usage(balance, limit).used
+            await notify_credit_use(session, profile, level=level, used=used, limit=limit)
+    except Exception:  # noqa: BLE001 - optional alert after a committed charge; never undoes the sale
+        logger.warning("credit alert failed shop=%s", shop_id, exc_info=True)
+        await rollback_quiet(session)
 
 
 async def _announce_short_safely(session: AsyncSession, profile: ResellerProfile) -> None:

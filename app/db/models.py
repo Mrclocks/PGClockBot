@@ -988,6 +988,40 @@ class ResellerCharge(Base):
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ShopCreditAccount(Base):
+    """A PAYG shop's credit line: its wallet may go down to ``-limit`` for PAYG charges."""
+
+    __tablename__ = "shop_credit_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), unique=True)
+    credit_limit: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    temp_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    temp_limit_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # active | frozen | overdue | blocked; only active lends (see shop_credit.effective_limit).
+    status: Mapped[str] = mapped_column(String(16), default="active", server_default=text("'active'"))
+    # Highest «credit used» alert already sent (0, 70, 90, 100), claimed atomically.
+    alert_level: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class CreditEvent(Base):
+    """Audit row for every change to a shop's credit line (who, what, from, to, why)."""
+
+    __tablename__ = "credit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    old_value: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    new_value: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    actor: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class PaygPanelSnapshot(Base):
     """Last panel state of a PAYG shop's user that reconciliation has billed up to.
 
