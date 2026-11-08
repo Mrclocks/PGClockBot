@@ -137,6 +137,10 @@ def register_cashback_pages(app: FastAPI, *, render: Callable, require_staff: Ca
             return "تنظیمات کش‌بک ذخیره شد"
         return await _form_action(request, staff, action)
 
+    _register_rule_routes(app, form_action=_form_action, require_staff=require_staff, get_db=get_db)
+
+
+def _register_rule_routes(app: FastAPI, *, form_action: Callable, require_staff: Callable, get_db: Callable) -> None:
     @app.post(f"{PAGE}/rules")
     async def cashback_rule_create(
         request: Request, staff: dict = Depends(require_staff), session: AsyncSession = Depends(get_db),
@@ -144,7 +148,7 @@ def register_cashback_pages(app: FastAPI, *, render: Callable, require_staff: Ca
         async def action(shop_id: int | None, form: Mapping[str, Any]) -> str:
             await save_rule(session, shop_id, rule_from_form(form))
             return "قانون کش‌بک ساخته شد"
-        return await _form_action(request, staff, action)
+        return await form_action(request, staff, action)
 
     @app.post(PAGE + "/rules/{rule_id}")
     async def cashback_rule_edit(
@@ -153,7 +157,7 @@ def register_cashback_pages(app: FastAPI, *, render: Callable, require_staff: Ca
         async def action(shop_id: int | None, form: Mapping[str, Any]) -> str:
             await save_rule(session, shop_id, rule_from_form(form), rule_id=rule_id)
             return "قانون کش‌بک ذخیره شد"
-        return await _form_action(request, staff, action)
+        return await form_action(request, staff, action)
 
     @app.post(PAGE + "/rules/{rule_id}/toggle")
     async def cashback_rule_toggle(
@@ -162,7 +166,7 @@ def register_cashback_pages(app: FastAPI, *, render: Callable, require_staff: Ca
         async def action(shop_id: int | None, form: Mapping[str, Any]) -> str:
             await set_rule_enabled(session, shop_id, rule_id, bool(form.get("enabled")))
             return "وضعیت قانون ذخیره شد"
-        return await _form_action(request, staff, action)
+        return await form_action(request, staff, action)
 
     @app.post(PAGE + "/rules/{rule_id}/delete")
     async def cashback_rule_delete(
@@ -171,4 +175,4 @@ def register_cashback_pages(app: FastAPI, *, render: Callable, require_staff: Ca
         async def action(shop_id: int | None, form: Mapping[str, Any]) -> str:
             await delete_rule(session, shop_id, rule_id)
             return "قانون کش‌بک حذف شد"
-        return await _form_action(request, staff, action)
+        return await form_action(request, staff, action)
