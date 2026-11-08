@@ -6,24 +6,29 @@ import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.db.models import Base, BotUser, OrgPrincipal, ResellerCharge, ResellerPlan, ResellerProfile
+from app.db.models import Base, BotUser, ChildPricePlan, OrgPrincipal, ResellerCharge, ResellerPlan, ResellerProfile
 from app.services.billing import shop_bills_usage
 from app.services.child_pricing import (
     ChildPlanInput,
     ChildPricingError,
     assign_child_plan,
     create_child_plan,
+    delete_child_plan,
     parent_scope,
     set_child_credit,
+    update_child_plan,
 )
-from app.services.payg_charges import ChargeRequest, list_review_charges, refund_charge, reserve_charge, send_to_review, settle_charge
+from app.services.payg_charges import PARENT_SHORTFALL_MESSAGE, ChargeRequest, list_review_charges, refund_charge, reserve_charge, send_to_review, settle_charge
+from app.services.payg_gate import assert_shop_can_afford, charge_shop_change
 from app.services.payg_pricing import GB, ChargeEvent, ServiceChange
+from app.services.provision_gate import ProvisionError
 from app.services.shop_credit import CreditLimitChange, child_shop_ids, set_credit_limit, shop_credit_limit
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -105,6 +110,39 @@ class ScopeTests(CascadeCase):
             parent_scope({"role": "principal", "org_depth": 2, "bot_user_id": L2})
 
 
+class PlanEditTests(CascadeCase):
+    async def test_an_edit_prices_only_later_charges(self) -> None:
+        first = await self.reserve(10, "order:7101")
+        async with self.Session() as session:
+            await update_child_plan(session, L1, self.plan.id, plan_input(name="تازه", price_per_gb=2000))
+            with self.assertRaises(ChildPricingError):
+                await update_child_plan(session, OTHER_L1, self.plan.id, plan_input(price_per_gb=1))
+            with self.assertRaises(ChildPricingError):
+                await update_child_plan(session, L1, self.plan.id, plan_input(price_per_gb=0))
+        second = await self.reserve(10, "order:7102")
+        self.assertEqual((int(first.amount), int(second.amount)), (15_000, 20_000))
+
+    async def test_a_plan_in_use_or_of_another_parent_is_not_deleted(self) -> None:
+        async with self.Session() as session:
+            with self.assertRaises(ChildPricingError):
+                await delete_child_plan(session, L1, self.plan.id)  # still assigned to L2
+            with self.assertRaises(ChildPricingError):
+                await delete_child_plan(session, OTHER_L1, self.plan.id)
+            await assign_child_plan(session, L1, L2, None)
+            await delete_child_plan(session, L1, self.plan.id)
+            self.assertIsNone(await session.get(ChildPricePlan, self.plan.id))
+
+    async def test_a_lost_price_list_refuses_the_sale_instead_of_making_it_free(self) -> None:
+        async with self.Session() as session:
+            profile = await session.get(ResellerProfile, 2)
+            profile.child_plan_id = 999
+            await session.commit()
+            with self.assertRaises(ProvisionError):
+                await charge_shop_change(session, shop_id=L2, change=ServiceChange(ChargeEvent.CREATE, data_limit_bytes=GB, days=30),
+                                         request_key="order:7103", pg_username="c1")
+        self.assertEqual(await self.wallets(), (50_000, 50_000))
+
+
 class ChargeTests(CascadeCase):
     async def test_two_step_charge_moves_both_wallets_and_refunds_both(self) -> None:
         charge = await self.reserve(10, "order:7001")
@@ -131,6 +169,21 @@ class ChargeTests(CascadeCase):
             await session.commit()
         with self.assertRaises(ValueError):
             await self.reserve(10, "order:7003")
+        self.assertEqual(await self.wallets(), (1_000, 50_000))
+
+    async def test_a_parent_shortfall_alerts_the_parent_not_the_child(self) -> None:
+        async with self.Session() as session:
+            (await session.get(BotUser, L1)).wallet_balance = 1_000
+            await session.commit()
+        change = ServiceChange(ChargeEvent.CREATE, data_limit_bytes=10 * GB, days=30)
+        with patch("app.services.payg_gate.announce_wallet_short", new=AsyncMock()) as announce:
+            async with self.Session() as session:
+                with self.assertRaises(ProvisionError) as refused:
+                    await charge_shop_change(session, shop_id=L2, change=change, request_key="order:7004", pg_username="c1")
+                self.assertEqual(refused.exception.message, PARENT_SHORTFALL_MESSAGE)
+                with self.assertRaises(ProvisionError):
+                    await assert_shop_can_afford(session, L2, change)
+        self.assertEqual([int(c.args[1].user_id) for c in announce.await_args_list], [L1, L1])
         self.assertEqual(await self.wallets(), (1_000, 50_000))
 
     async def test_child_shops_are_never_billed_for_usage(self) -> None:

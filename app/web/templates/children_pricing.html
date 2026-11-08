@@ -1,6 +1,28 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_title %}
 {% from "_ds.html" import ds_switch %}
+{% macro plan_fields(p) %}
+    <label class="form-field">نام پلن <input name="name" required maxlength="128" value="{{ p.name if p else '' }}" /></label>
+    <div class="form-row">
+      <label class="form-field">مبنای هزینه
+        <select name="payg_basis">
+          {% for value, label in [('traffic', 'حجم'), ('user', 'کاربر'), ('user_traffic', 'کاربر + حجم')] %}
+          <option value="{{ value }}" {% if p and p.payg_basis == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="form-field">نرخ هر گیگ
+        <span class="ds-unit"><input name="price_per_gb" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ p.price_per_gb if p else 0 }}" /><span class="ds-unit-label">تومان</span></span>
+      </label>
+      <label class="form-field">قیمت هر کاربر
+        <span class="ds-unit"><input name="payg_user_price" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ p.payg_user_price if p else 0 }}" /><span class="ds-unit-label">تومان</span></span>
+      </label>
+      <label class="form-field">قیمت کاربر نامحدود
+        <span class="ds-unit"><input name="payg_unlimited_price" type="number" data-money min="0" inputmode="numeric" dir="ltr" placeholder="خالی = ممنوع" value="{{ p.payg_unlimited_price if p and p.payg_unlimited_price is not none else '' }}" /><span class="ds-unit-label">تومان</span></span>
+      </label>
+    </div>
+    <div class="ds-rows">{{ ds_switch('payg_user_price_per_30d', 'قیمت کاربر به ازای هر ۳۰ روز', '', p.payg_user_price_per_30d if p else false) }}</div>
+{% endmacro %}
 {% block title %}قیمت و اعتبار زیرمجموعه{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
@@ -16,25 +38,32 @@
   <h2>پلن قیمت تازه</h2>
   <form method="post" action="/resellers/children-pricing/plans" class="form-stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label class="form-field">نام پلن <input name="name" required maxlength="128" /></label>
-    <div class="form-row">
-      <label class="form-field">مبنای هزینه
-        <select name="payg_basis"><option value="traffic">حجم</option><option value="user">کاربر</option><option value="user_traffic">کاربر + حجم</option></select>
-      </label>
-      <label class="form-field">نرخ هر گیگ
-        <span class="ds-unit"><input name="price_per_gb" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="0" /><span class="ds-unit-label">تومان</span></span>
-      </label>
-      <label class="form-field">قیمت هر کاربر
-        <span class="ds-unit"><input name="payg_user_price" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="0" /><span class="ds-unit-label">تومان</span></span>
-      </label>
-      <label class="form-field">قیمت کاربر نامحدود
-        <span class="ds-unit"><input name="payg_unlimited_price" type="number" data-money min="0" inputmode="numeric" dir="ltr" placeholder="خالی = ممنوع" /><span class="ds-unit-label">تومان</span></span>
-      </label>
-    </div>
-    <div class="ds-rows">{{ ds_switch('payg_user_price_per_30d', 'قیمت کاربر به ازای هر ۳۰ روز', '', false) }}</div>
+    {{ plan_fields(none) }}
     <div class="actions"><button class="btn" type="submit">ساخت پلن</button></div>
   </form>
 </div>
+
+{% if plans %}
+<div class="card">
+  <h2>پلن‌های قیمت</h2>
+  <p class="muted">تغییر پلن فقط روی هزینه‌های بعدی اثر دارد. پلنی که به زیرمجموعه‌ای وصل است حذف نمی‌شود.</p>
+  {% for p in plans %}
+  <details class="ds-acc">
+    <summary>{{ p.name }}</summary>
+    <form method="post" action="/resellers/children-pricing/plans/{{ p.id }}" class="form-stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {{ plan_fields(p) }}
+      <div class="actions"><button class="btn" type="submit">ذخیرهٔ پلن</button></div>
+    </form>
+    <form method="post" action="/resellers/children-pricing/plans/{{ p.id }}/delete" class="actions"
+          data-confirm="پلن «{{ p.name }}» حذف شود؟ هزینه‌های قبلی تغییری نمی‌کنند.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-danger btn-sm" type="submit" aria-label="حذف پلن {{ p.name }}">حذف پلن</button>
+    </form>
+  </details>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="card card-flush">
   <div class="card-flush-head"><h2>زیرمجموعه‌ها</h2></div>

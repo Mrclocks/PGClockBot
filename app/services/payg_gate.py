@@ -29,7 +29,10 @@ from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_toman, parse_expire
 from app.services.payg_charges import (
     ChargeRequest,
+    PARENT_SHORTFALL_MESSAGE,
+    ParentWalletShortfall,
     new_request_key,
+    parent_share,
     quote_for_shop,
     refund_charge,
     reserve_charge,
@@ -78,7 +81,10 @@ async def shop_charges_at_creation(session: AsyncSession, shop_id: int | None) -
     profile = await shop_profile(session, shop_id)
     if profile is None or not is_payg(profile):
         return False
-    rates = await shop_rates(session, profile)
+    try:
+        rates = await shop_rates(session, profile)
+    except PaygPriceError:
+        return True  # the charge itself refuses the change with the safe message
     return rates is not None and (rates.charges_traffic or rates.charges_users)
 
 
@@ -116,6 +122,9 @@ async def charge_shop_change(
     )
     try:
         charge = await reserve_charge(session, profile, request)
+    except ParentWalletShortfall as exc:
+        await _announce_short_safely(session, exc.parent_profile)
+        raise ProvisionError(str(exc)) from exc
     except WalletShortfall as exc:
         await _announce_short_safely(session, profile)
         raise ProvisionError(str(exc)) from exc
@@ -174,10 +183,27 @@ async def assert_shop_can_afford(
     quote = await quote_shop_change(session, shop_id, change, quantity=quantity)
     if quote is None:
         return
-    if await payg_spendable_for_charges(session, profile) >= quote.amount:
+    if await payg_spendable_for_charges(session, profile) < quote.amount:
+        await _announce_short_safely(session, profile)
+        raise ProvisionError(SHORTFALL_MESSAGE)
+    await _assert_parent_affordable(session, profile, change, quantity=quantity)
+
+
+async def _assert_parent_affordable(
+    session: AsyncSession, profile: ResellerProfile, change: ServiceChange, *, quantity: int
+) -> None:
+    """A level-2 sale also needs its parent's half; a short parent is told, not the child."""
+    try:
+        share = await parent_share(session, profile, change, quantity=quantity)
+    except PaygPriceError as exc:
+        raise ProvisionError(str(exc)) from exc
+    if share is None:
         return
-    await _announce_short_safely(session, profile)
-    raise ProvisionError(SHORTFALL_MESSAGE)
+    parent_profile, parent_quote = share
+    if await payg_spendable_for_charges(session, parent_profile) >= parent_quote.amount:
+        return
+    await _announce_short_safely(session, parent_profile)
+    raise ProvisionError(PARENT_SHORTFALL_MESSAGE)
 
 
 async def finish_charge(session: AsyncSession, charge: ResellerCharge | None, *, commit: bool = True) -> None:
@@ -450,7 +476,10 @@ async def shop_rate_summary(session: AsyncSession, shop_id: int | None) -> RateS
     profile = await shop_profile(session, shop_id)
     if profile is None or not is_payg(profile):
         return None
-    rates = await shop_rates(session, profile)
+    try:
+        rates = await shop_rates(session, profile)
+    except PaygPriceError as exc:
+        return RateSummary(lines=(str(exc),), charges_reset=False)
     if rates is None or not (rates.charges_traffic or rates.charges_users):
         return None
     lines: list[str] = []
