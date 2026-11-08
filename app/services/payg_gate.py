@@ -40,7 +40,15 @@ from app.services.payg_charges import (
     settle_charge,
     shop_rates,
 )
-from app.services.payg_pricing import RESET_EXPLANATION, ChargeEvent, ChargeQuote, PaygPriceError, ServiceChange
+from app.services.child_pricing import parent_shop_profile
+from app.services.payg_pricing import (
+    RESET_EXPLANATION,
+    ChargeEvent,
+    ChargeQuote,
+    PaygPriceError,
+    ServiceChange,
+    child_plan_id_of,
+)
 from app.services.provision_gate import ProvisionError, reseller_id_from_staff
 from app.services.credit_statements import refusal_for, shop_restriction
 from app.services.shop_credit import claim_credit_alert, credit_usage, shop_credit_limit
@@ -53,6 +61,7 @@ REFUND_REASON = "پاسخ قطعی پنل: تغییر انجام نشد"
 TEMPLATE_UNREADABLE_MESSAGE = (
     "حجم و مدت قالب این پلن از پاسارگارد خوانده نشد؛ برای محاسبهٔ هزینه کمی بعد دوباره تلاش کنید"
 )
+PARENT_OVERDUE_MESSAGE = "فروش موقتاً متوقف است؛ نمایندهٔ بالادست شما بدهی سررسیدگذشته دارد"
 SHORTFALL_FOR_CUSTOMER = "این سرویس فعلاً قابل تحویل نیست؛ کمی بعد دوباره تلاش کنید"
 
 
@@ -110,7 +119,7 @@ async def charge_shop_change(
     if profile is None or not is_payg(profile):
         return None
     if not ladder_exempt:
-        await _assert_ladder_allows(session, int(profile.user_id), change)
+        await _assert_ladder_allows(session, profile, change)
     request = ChargeRequest(
         request_key=request_key,
         change=change,
@@ -153,10 +162,16 @@ async def _alert_credit_use(session: AsyncSession, profile: ResellerProfile) -> 
         await rollback_quiet(session)
 
 
-async def _assert_ladder_allows(session: AsyncSession, shop_id: int, change: ServiceChange) -> None:
-    refusal = refusal_for(await shop_restriction(session, shop_id), change.event)
+async def _assert_ladder_allows(session: AsyncSession, profile: ResellerProfile, change: ServiceChange) -> None:
+    """The overdue ladder of the shop, and of the level-1 parent that pays half of a level-2 charge."""
+    refusal = refusal_for(await shop_restriction(session, int(profile.user_id)), change.event)
     if refusal is not None:
         raise ProvisionError(refusal)
+    if child_plan_id_of(profile) is None:
+        return
+    parent = await parent_shop_profile(session, profile)
+    if parent is not None and refusal_for(await shop_restriction(session, int(parent.user_id)), change.event):
+        raise ProvisionError(PARENT_OVERDUE_MESSAGE)
 
 
 async def _announce_short_safely(session: AsyncSession, profile: ResellerProfile) -> None:
@@ -179,7 +194,7 @@ async def assert_shop_can_afford(
     profile = await shop_profile(session, shop_id)
     if profile is None or not is_payg(profile):
         return
-    await _assert_ladder_allows(session, int(profile.user_id), change)
+    await _assert_ladder_allows(session, profile, change)
     quote = await quote_shop_change(session, shop_id, change, quantity=quantity)
     if quote is None:
         return

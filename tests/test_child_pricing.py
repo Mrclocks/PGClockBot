@@ -13,7 +13,16 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.db.models import Base, BotUser, ChildPricePlan, OrgPrincipal, ResellerCharge, ResellerPlan, ResellerProfile
+from app.db.models import (
+    Base,
+    BotUser,
+    ChildPricePlan,
+    OrgPrincipal,
+    ResellerCharge,
+    ResellerPlan,
+    ResellerProfile,
+    ShopCreditAccount,
+)
 from app.services.billing import shop_bills_usage
 from app.services.child_pricing import (
     ChildPlanInput,
@@ -26,7 +35,8 @@ from app.services.child_pricing import (
     update_child_plan,
 )
 from app.services.payg_charges import PARENT_SHORTFALL_MESSAGE, ChargeRequest, list_review_charges, refund_charge, reserve_charge, send_to_review, settle_charge
-from app.services.payg_gate import assert_shop_can_afford, charge_shop_change
+from app.services.credit_statements import LadderStep
+from app.services.payg_gate import PARENT_OVERDUE_MESSAGE, assert_shop_can_afford, charge_shop_change
 from app.services.payg_pricing import GB, ChargeEvent, ServiceChange
 from app.services.provision_gate import ProvisionError
 from app.services.shop_credit import CreditLimitChange, child_shop_ids, set_credit_limit, shop_credit_limit
@@ -186,6 +196,22 @@ class ChargeTests(CascadeCase):
                     await assert_shop_can_afford(session, L2, change)
         self.assertEqual([int(c.args[1].user_id) for c in announce.await_args_list], [L1, L1])
         self.assertEqual(await self.wallets(), (1_000, 50_000))
+
+    async def test_an_overdue_parent_stops_its_childrens_sales(self) -> None:
+        async with self.Session() as session:
+            session.add(ShopCreditAccount(shop_id=L1, credit_limit=0, restriction=int(LadderStep.NO_CREATE)))
+            await session.commit()
+        change = ServiceChange(ChargeEvent.CREATE, data_limit_bytes=GB, days=30)
+        async with self.Session() as session:
+            with self.assertRaises(ProvisionError) as refused:
+                await charge_shop_change(session, shop_id=L2, change=change, request_key="order:7005", pg_username="c1")
+            self.assertEqual(refused.exception.message, PARENT_OVERDUE_MESSAGE)
+            with self.assertRaises(ProvisionError):
+                await assert_shop_can_afford(session, L2, change)
+            # Already in the panel (reconciliation): still charged, like the shop's own ladder.
+            self.assertIsNotNone(await charge_shop_change(session, shop_id=L2, change=change, request_key="recon:1:new:0",
+                                                          pg_username="c1", ladder_exempt=True))
+        self.assertEqual(await self.wallets(), (49_000, 48_500))
 
     async def test_child_shops_are_never_billed_for_usage(self) -> None:
         async with self.Session() as session:
