@@ -450,3 +450,5 @@ tests/test_credit_statements.py
 tests/test_cashback.py
 # Cashback management: permission, shop isolation of rules and settings.
 tests/test_cashback_pages.py
+# Reseller finance pages: owner only, own purse and own rows only.
+tests/test_reseller_finance_pages.py
