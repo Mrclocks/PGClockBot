@@ -268,9 +268,9 @@
         </p>
         {% if s.error %}<p class="muted svc-item-err">{{ s.error }}</p>{% endif %}
         <div class="svc-stat-row">
-          <div class="user-edit-wallet-pill svc-stat-pill" dir="ltr">
+          <div class="user-edit-wallet-pill svc-stat-pill">
             <span class="muted">حجم / مانده</span>
-            <strong class="num-ratio">{{ s.volume_text }} · {{ s.remain_gb_text }}</strong>
+            <strong class="num-ratio" dir="ltr"><span class="svc-stat-part">{{ s.volume_text }}</span> · <span class="svc-stat-part">{{ s.remain_gb_text }}</span></strong>
           </div>
           <div class="user-edit-wallet-pill svc-stat-pill">
             <span class="muted">مانده زمان</span>

@@ -151,7 +151,7 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds .ds-card > *, .ds .settings-card > *, .ds .edit-section > *, .ds .form-stack > *, .ds .settings-grid > * { margin-block: 0; }
 .ds .ds-card-flush { padding: 0; gap: 0; overflow: hidden; }
 .ds .ds-divider { height: 1px; background: var(--line); margin: 0 calc(-1 * var(--box-pad)); }
-.ds .ds-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--box-gap) var(--g3); align-items: end; }
+.ds .ds-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--box-gap) var(--g3); align-items: start; }
 .ds .ds-desc, .ds .settings-card > p.muted, .ds .edit-section-head p.muted { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--muted-fg); }
 .ds .settings-card > h2, .ds .edit-section-head h3, .ds .edit-section > h3 { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.4; }
 .ds .settings-card > h2 + p.muted { margin-top: calc(var(--g2) - var(--box-gap)); }
@@ -519,6 +519,11 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important;
   background: transparent !important; box-shadow: none !important;
 }
+/* …but a list of switches keeps its rows: 12 above and below each, and a dashed line between them. */
+.ds :is(.ds-rows, .ui-switch-list) > .ui-switch-row:not(.ui-switch-chip) { padding: var(--g3) 0 !important; }
+.ds :is(.ds-rows, .ui-switch-list) > .ui-switch-row:not(.ui-switch-chip):first-child { padding-top: 0 !important; }
+.ds :is(.ds-rows, .ui-switch-list) > .ui-switch-row:not(.ui-switch-chip):last-child { padding-bottom: 0 !important; }
+.ds :is(.ds-rows, .ui-switch-list) > .ui-switch-row:not(.ui-switch-chip) + .ui-switch-row { border-top: 1px dashed var(--dash) !important; }
 .ds .support-enabled { display: flex; align-items: center; justify-content: space-between; gap: var(--g3); min-height: var(--ctl-h); font-size: 14px; font-weight: 500; }
 .ds .ui-switch-section { display: flex; flex-direction: column; gap: var(--g2); }
 .ds .pay-dest-fields { display: flex; flex-direction: column; gap: var(--box-gap); margin: 0; }
@@ -569,3 +574,8 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 /* Buttons in a card's action row share the row and wrap to a second row before their text overflows. */
 .ds :is(.card, .settings-card) .actions:not(.ui-modal-sticky-save) { display: flex; flex-wrap: wrap; gap: var(--g2); }
 .ds :is(.card, .settings-card) .actions:not(.ui-modal-sticky-save) > .btn { flex: 1 1 160px; min-width: 0; white-space: nowrap; }
+/* Service stats (volume, time left): label above, value below, both from the reading edge, so the pills match. */
+.ds .svc-stat-pill { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: var(--g1); padding: var(--g3); }
+.ds .svc-stat-pill > .muted { font-size: 12px; line-height: 1.25; }
+.ds .svc-stat-pill > strong { align-self: stretch; font-size: 14px; line-height: 1.3; text-align: right; white-space: normal; overflow-wrap: anywhere; unicode-bidi: isolate; }
+.ds .svc-stat-part { white-space: nowrap; }
