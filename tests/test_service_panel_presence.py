@@ -30,6 +30,12 @@ class FakePanel:
     def __init__(self, answers: dict[int, object]) -> None:
         self.answers = answers
         self.calls: list[int] = []
+        self.admin: object = {"username": "shop-admin"}
+
+    async def get_current_admin(self) -> dict | None:
+        if isinstance(self.admin, BaseException):
+            raise self.admin
+        return self.admin  # type: ignore[return-value]
 
     async def get_user_by_id(self, user_id: int) -> dict:
         self.calls.append(user_id)
@@ -92,6 +98,13 @@ class PresenceCase(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(flags["gone"])
         self.assertFalse(flags["alive"])
         self.assertFalse(flags["outage"])
+
+    async def test_a_404_is_ignored_when_the_client_cannot_read_its_own_admin(self) -> None:
+        for broken in (PasarGuardError("expired", 401), None):
+            panel = self.panel()
+            panel.admin = broken
+            await self.scan(panel)
+            self.assertFalse((await self.flags())["gone"], broken)
 
     async def test_a_service_that_comes_back_is_unmarked(self) -> None:
         await self.scan(self.panel())
