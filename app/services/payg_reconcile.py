@@ -19,14 +19,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import PaygPanelSnapshot, ResellerCharge, ResellerProfile, UserService
 from app.services.billing import BILLING_MODE_PAYG, WalletShortfall
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import parse_expire
-from app.services.payg_charges import ChargeStatus, send_to_review
+from app.services.payg_charges import ChargeStatus, send_to_review, settle_charge
 from app.services.payg_gate import added_days, charge_shop_change, shop_charges_at_creation
 from app.services.payg_pricing import ChargeEvent, ServiceChange
 from app.services.provision_gate import ProvisionError
@@ -137,7 +137,7 @@ def paid_since(charges: list[ResellerCharge], since: datetime) -> Paid:
         paid.unlimited = paid.unlimited or bool(charge.is_unlimited)
         if event in _VOLUME_EVENTS:
             paid.bytes += int(charge.bytes_charged or 0) * max(1, int(charge.quantity or 1))
-        if event == ChargeEvent.ADD_DAYS:
+        if event == ChargeEvent.ADD_DAYS or event in _PERIOD_EVENTS:
             paid.days += int(charge.days_charged or 0)
     return paid
 
@@ -148,11 +148,13 @@ def _volume_change(snap: PaygPanelSnapshot, live: PanelUser, paid: Paid) -> Serv
             ChargeEvent.ADD_VOLUME, data_limit_bytes=0, previous_limit_bytes=int(snap.data_limit)
         )
     reset = live.used_traffic < int(snap.used_traffic)
-    needed = live.data_limit if reset else max(0, live.data_limit - int(snap.data_limit))
+    # A renewal grants its whole volume again, so what it paid is set against the full limit.
+    full = reset or paid.renewed
+    needed = live.data_limit if full else max(0, live.data_limit - int(snap.data_limit))
     remainder = needed - paid.bytes
     if remainder <= 0:
         return None
-    if reset:
+    if reset and not paid.renewed:
         return ServiceChange(ChargeEvent.RESET, data_limit_bytes=remainder)
     return ServiceChange(ChargeEvent.ADD_VOLUME, data_limit_bytes=remainder, previous_limit_bytes=0)
 
@@ -167,13 +169,12 @@ def _days_change(snap: PaygPanelSnapshot, live: PanelUser, paid: Paid, *, since_
 
 
 def uncovered_changes(snap: PaygPanelSnapshot, live: PanelUser, paid: Paid) -> list[ServiceChange]:
-    """Changes since ``snap`` that no bot charge paid for; a renewal covers the whole window.
+    """Changes since ``snap`` that no bot charge paid for.
 
-    A bot change racing the panel read may be subtracted in two windows; that can only
-    under-charge, never charge twice.
+    A renewal pays for the full volume and the days it set; anything added in the panel
+    on top of it in the same window is still charged. A bot change racing the panel
+    read may be subtracted in two windows; that can only under-charge, never charge twice.
     """
-    if paid.renewed:
-        return []
     since_ts = int(_as_utc(snap.seen_at).timestamp())
     return [c for c in (_volume_change(snap, live, paid), _days_change(snap, live, paid, since_ts=since_ts)) if c]
 
@@ -259,6 +260,9 @@ async def _charge_all(
             logger.warning("payg reconcile could not price shop=%s user=%s: %s", state.shop_id, live.id, exc.message)
             continue
         if charge is not None:
+            # The change already happened in the panel, so the charge is final at once;
+            # left pending it would be swept to review and could be refunded.
+            await settle_charge(session, charge)
             stats.charged += 1
     return True
 
@@ -290,9 +294,13 @@ async def reconcile_shop(
     shop_id = int(profile.user_id)
     users = await _panel_users(pg, str(profile.pg_admin_username))
     state = await _shop_state(session, shop_id, now)
-    first_run = not state.snapshots
+    # Shops that had snapshots before the marker existed already have their baseline.
+    first_run = profile.payg_baseline_at is None and not state.snapshots
     for live in users:
         await _reconcile_user(session, state, live, first_run=first_run, now=now, stats=stats)
+    if profile.payg_baseline_at is None:
+        profile.payg_baseline_at = now
+        await session.commit()
 
 
 async def sweep_stale_pending(session: AsyncSession, *, now: datetime, older_than: timedelta = HOLD_TTL) -> int:
@@ -344,5 +352,11 @@ async def run_payg_reconcile(session: AsyncSession, pg: Any, *, now: datetime | 
 async def _drop_snapshots(session: AsyncSession, shop_id: int) -> None:
     """A shop not charged at creation keeps no baseline, so switching it on starts afresh."""
     result = await session.execute(delete(PaygPanelSnapshot).where(PaygPanelSnapshot.shop_id == shop_id))
-    if result.rowcount:
+    marker = await session.execute(
+        update(ResellerProfile)
+        .where(ResellerProfile.user_id == shop_id, ResellerProfile.payg_baseline_at.is_not(None))
+        .values(payg_baseline_at=None)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount or marker.rowcount:
         await session.commit()

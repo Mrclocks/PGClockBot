@@ -258,6 +258,7 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             "allow_pg_panel_access": "BOOLEAN DEFAULT 1",
             "pg_password_rotation_enc": "TEXT",
             "child_plan_id": "INTEGER",
+            "payg_baseline_at": "DATETIME",
             "bot_admin_ids": "TEXT",
             "pg_admin_password_enc": "TEXT",
             "pg_api_key_enc": "TEXT",
