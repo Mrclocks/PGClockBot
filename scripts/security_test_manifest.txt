@@ -438,3 +438,5 @@ tests/test_pg_panel_access.py
 # PAYG charge ledger: one debit per confirmed change, refunds once, scoped to the shop.
 tests/test_payg_charges.py
 tests/test_payg_pricing.py
+# PAYG charging at creation: deliveries, renewals, packs, staff edits, resets, owner review.
+tests/test_payg_charging_flows.py

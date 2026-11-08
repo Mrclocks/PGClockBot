@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -177,27 +177,26 @@ async def reserve_charge(
     attempt = int(latest.attempt) + 1 if latest is not None else 1
     charge = _new_charge(profile, request, quote, request_key=request_key, attempt=attempt)
     try:
-        session.add(charge)
-        await session.flush()
-        await record_payg_ledger_entry(
-            session,
-            profile,
-            kind=KIND_CHARGE,
-            amount=-quote.amount,
-            idempotency_key=charge.idempotency_key,
-            note=f"{request.change.event} {request.pg_username}"[:255],
-            created_by=request.created_by,
-        )
-        await session.commit()
+        # A savepoint keeps a refusal (shortfall, racing key) from rolling back the
+        # caller's session and expiring the order or service it is working on.
+        async with session.begin_nested():
+            session.add(charge)
+            await session.flush()
+            await record_payg_ledger_entry(
+                session,
+                profile,
+                kind=KIND_CHARGE,
+                amount=-quote.amount,
+                idempotency_key=charge.idempotency_key,
+                note=f"{request.change.event} {request.pg_username}"[:255],
+                created_by=request.created_by,
+            )
     except IntegrityError:
-        await session.rollback()
         winner = _reusable(await _latest_attempt(session, shop_id, request_key))
         if winner is None:
             raise
         return winner
-    except ValueError:
-        await session.rollback()
-        raise
+    await session.commit()
     return charge
 
 
@@ -239,7 +238,7 @@ async def send_to_review(session: AsyncSession, charge: ResellerCharge) -> bool:
 async def refund_charge(session: AsyncSession, charge: ResellerCharge, *, reason: str) -> bool:
     """The panel definitely did not apply the change: return the money once."""
     if not await _claim(session, charge, allowed=_OPEN, to=ChargeStatus.REFUNDED):
-        await session.rollback()
+        # Already settled or refunded: the claim wrote nothing, so the caller's session is untouched.
         return False
     profile = await session.scalar(
         select(ResellerProfile).where(ResellerProfile.user_id == int(charge.shop_id))
@@ -278,3 +277,26 @@ async def list_review_charges(
     bounded = max(1, min(int(limit), REVIEW_PAGE_LIMIT))
     query = query.order_by(ResellerCharge.id.desc()).limit(bounded)
     return list((await session.scalars(query)).all())
+
+
+async def count_review_charges(session: AsyncSession) -> int:
+    """How many charges wait for an owner decision (all shops)."""
+    return int(
+        await session.scalar(
+            select(func.count()).select_from(ResellerCharge).where(ResellerCharge.status == str(ChargeStatus.REVIEW))
+        )
+        or 0
+    )
+
+
+async def resolve_review_charge(session: AsyncSession, charge_id: int, *, applied: bool, actor: str) -> bool:
+    """Owner decision on a charge in review: the change applied (settle) or not (refund).
+
+    False when the charge is not in review any more (already decided, or never was).
+    """
+    charge = await session.get(ResellerCharge, int(charge_id))
+    if charge is None or charge.status != ChargeStatus.REVIEW:
+        return False
+    if applied:
+        return await settle_charge(session, charge)
+    return await refund_charge(session, charge, reason=f"بازبینی: تغییر اعمال نشده بود ({actor})"[:255])

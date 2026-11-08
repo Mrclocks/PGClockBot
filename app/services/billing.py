@@ -14,7 +14,8 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, ResellerBillingRate, ResellerBillingTransaction, ResellerProfile
+from app.db.models import BotUser, ResellerBillingRate, ResellerBillingTransaction, ResellerPlan, ResellerProfile
+from app.services.payg_pricing import PaygPriceError, assert_billable_rates, rates_from_plan
 from app.services.billing_alerts import (
     PANEL_TICK_ISSUES,
     TickIssue,
@@ -62,6 +63,14 @@ class PaygRateError(ValueError):
 PAYG_RATE_REQUIRED_MESSAGE = (
     "نرخ هر گیگ پلن PAYG باید بیشتر از صفر باشد؛ با نرخ صفر مصرف نماینده رایگان می‌شود"
 )
+
+
+def require_billable_payg_plan(plan: ResellerPlan | None) -> None:
+    """Refuse a PAYG package that would bill nothing for what it sells (rate or user price)."""
+    try:
+        assert_billable_rates(rates_from_plan(plan))
+    except PaygPriceError as exc:
+        raise PaygRateError(str(exc)) from exc
 
 
 def require_positive_payg_rate(price_per_gb: int) -> int:
@@ -1069,6 +1078,12 @@ async def assert_billing_allows_provision(
 # ---------------------------------------------------------------------------
 
 
+async def shop_bills_usage(session: AsyncSession, profile: ResellerProfile) -> bool:
+    """Whether this PAYG shop pays for consumed traffic (not at creation, not per user only)."""
+    plan = await session.get(ResellerPlan, int(profile.plan_id)) if profile.plan_id else None
+    return plan is None or rates_from_plan(plan).bills_usage
+
+
 async def tick_reseller_usage(
     session: AsyncSession,
     profile: ResellerProfile,
@@ -1112,6 +1127,13 @@ async def tick_reseller_usage(
 
     delta = used - watermark
     if delta <= 0:
+        return None
+    if not await shop_bills_usage(session, profile):
+        # Traffic is paid when it is set on a user; keep the counter current so a later
+        # switch back to usage billing never charges traffic that was already paid for.
+        profile.billing_watermark_bytes = used
+        if commit:
+            await session.commit()
         return None
 
     ctx = rate_ctx or rate_context_for_profile(profile)

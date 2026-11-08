@@ -128,15 +128,19 @@ def _optional_int(value: Any, *, field: str) -> int:
 
 
 def rates_from_plan(plan: Any) -> PaygRates:
-    """Rates of a reseller package; unknown basis falls back to usage-billed traffic."""
+    """Rates of a reseller package; unknown basis falls back to usage-billed traffic.
+
+    Switches count only when they are really ``True``, so a malformed value never turns
+    usage billing off.
+    """
     basis = str(getattr(plan, "payg_basis", "") or BASIS_TRAFFIC).strip().lower()
     unlimited = getattr(plan, "payg_unlimited_price", None)
     return PaygRates(
         basis=basis if basis in PAYG_BASES else BASIS_TRAFFIC,
-        charge_upfront=bool(getattr(plan, "payg_charge_upfront", False)),
+        charge_upfront=getattr(plan, "payg_charge_upfront", False) is True,
         price_per_gb=_checked_int(int(getattr(plan, "price_per_gb", 0) or 0), field="نرخ هر گیگ"),
         user_price=_checked_int(int(getattr(plan, "payg_user_price", 0) or 0), field="قیمت هر کاربر"),
-        user_price_per_30d=bool(getattr(plan, "payg_user_price_per_30d", False)),
+        user_price_per_30d=getattr(plan, "payg_user_price_per_30d", False) is True,
         unlimited_price=None if unlimited is None else _checked_int(int(unlimited), field="قیمت کاربر نامحدود"),
     )
 

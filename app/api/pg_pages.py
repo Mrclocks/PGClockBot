@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from urllib.parse import quote
 
 from fastapi import Depends, Form, Request
@@ -28,6 +29,15 @@ from app.services.pg_read_cache import DASHBOARD_COUNT_MAX_AGE_SEC, NODE_LIST_MA
 from app.services.pg_quota import (
     PgQuotaError,
     assert_can_mutate_owned_users,
+)
+from app.services.payg_gate import (
+    charge_staff_create,
+    charge_staff_edit,
+    finish_charge,
+    finish_charges,
+    reset_with_charge,
+    settle_failed_charge,
+    settle_failed_charges,
 )
 from app.services.provision_gate import (
     ProvisionError,
@@ -740,6 +750,7 @@ def register_pg_pages(
                 modal="create",
             )
         hold = None
+        charge = None
         try:
             if mode == "template":
                 raw_tid = str(form.get("template_id") or form.get("pg_template_id") or "").strip()
@@ -756,6 +767,10 @@ def register_pg_pages(
                     return _pg_form_err(getattr(qe, "message", str(qe)), modal="create")
                 pg, as_owner = await _staff_pg(session, staff)
                 hold = await hold_staff_create(session, staff, pg=pg, template_id=tid, data_limit=None)
+                charge = await charge_staff_create(
+                    session, staff, pg=pg, hold=hold, template_id=tid, data_limit=None, expire_ts=None,
+                    username=uname, now_ts=int(time.time()),
+                )
                 await pg.create_user_from_template(
                     {
                         "username": uname,
@@ -845,6 +860,10 @@ def register_pg_pages(
                     return _pg_form_err("یکی از گروه‌های انتخاب‌شده مجاز نیست", modal="create")
 
                 hold = await hold_staff_create(session, staff, pg=pg, template_id=None, data_limit=data_limit)
+                charge = await charge_staff_create(
+                    session, staff, pg=pg, hold=hold, template_id=None, data_limit=data_limit,
+                    expire_ts=expire_ts, username=uname, now_ts=int(time.time()),
+                )
                 await pg.create_user(
                     build_user_create_payload(
                         username=uname,
@@ -860,8 +879,10 @@ def register_pg_pages(
             # reseller/pg_staff→own PG admin). Do not call get_pg() here for a
             # second owner-token transfer — that path bypassed staff ACL.
             _ = as_owner
+            await finish_charge(session, charge)
         except Exception as e:
             await settle_failed_hold(session, hold, e, panel_touched=True)
+            await settle_failed_charge(session, charge, e, panel_touched=True)
             msg = e.user_message(fallback="خطا در ساخت کاربر") if isinstance(e, PasarGuardError) else str(e)
             return _pg_form_err(msg, modal="create")
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ساخته شد')}", status_code=303)
@@ -947,6 +968,7 @@ def register_pg_pages(
                 hwid_limit = 0  # unlimited
 
         hold = None
+        charges: list = []
         try:
             current = await _assert_owned_user(staff, user_id, session=session)
             if current is None:
@@ -1004,11 +1026,17 @@ def register_pg_pages(
             hold = await hold_staff_edit(
                 session, staff, current_limit=current.get("data_limit"), new_limit=data_limit
             )
+            charges = await charge_staff_edit(
+                session, staff, hold=hold, current=current, data_limit=data_limit, expire_ts=expire_ts,
+                now_ts=int(time.time()),
+            )
             await pg.modify_user_by_id(user_id, payload)
             await finish_staff_edit(session, hold, pg_user_id=user_id, data_limit=data_limit)
+            await finish_charges(session, charges)
             uname = str(current.get("username") or user_id)
         except Exception as e:
             await settle_failed_hold(session, hold, e, panel_touched=True)
+            await settle_failed_charges(session, charges, e, panel_touched=True)
             msg = e.user_message(fallback="خطا در ویرایش") if isinstance(e, PasarGuardError) else str(e)
             return _pg_form_err(msg, modal="edit", uid=user_id)
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ویرایش شد')}", status_code=303)
@@ -1075,7 +1103,7 @@ def register_pg_pages(
             if denied is not None:
                 return denied
             pg, _ = await _staff_pg(session, staff)
-            await pg.reset_user_by_id(user_id)
+            await reset_with_charge(session, staff, pg=pg, pg_user_id=user_id, now_ts=int(time.time()))
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q('مصرف ریست شد')}", status_code=303)

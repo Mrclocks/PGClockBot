@@ -1054,9 +1054,9 @@ class ResellerPlan(Base):
         String(16), default="traffic", server_default=text("'traffic'")
     )
     # Traffic is charged for the volume set on a user when it is set, not as it is used.
-    # Rows that existed before keep usage billing (server default false).
+    # Stored default off (usage billing); the plan form offers it switched on for new plans.
     payg_charge_upfront: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default=text("false")
+        Boolean, default=False, server_default=text("false")
     )
     payg_user_price: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     # True: the user price is per started 30 days of the user's period.

@@ -33,6 +33,7 @@ from app.db.models import (
     TrialClaim,
     UserService,
     WalletTransaction,
+    ResellerCharge,
 )
 from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
 from app.services.pasarguard import (
@@ -45,6 +46,15 @@ from app.services.pasarguard import (
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
 from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
+from app.services.payg_gate import (
+    SHORTFALL_FOR_CUSTOMER,
+    charge_shop_change,
+    finish_charge,
+    read_template_volume,
+    settle_failed_charge,
+    shop_charges_at_creation,
+)
+from app.services.payg_pricing import ChargeEvent, ServiceChange
 from app.services.provision_gate import (
     ProvisionError,
     assert_provision_create,
@@ -974,6 +984,45 @@ async def _hold_delivery_volume(
         )
     except ProvisionError as e:
         raise ValueError(e.message) from e
+
+
+async def _charge_delivery(
+    session: AsyncSession, order: Order, plan: Plan, pg, *, data_limit: int | None, quantity: int
+) -> ResellerCharge | None:
+    """Take the shop's PAYG charge for a delivery before its panel calls; None when nothing is due."""
+    if not order.reseller_id or not await shop_charges_at_creation(session, int(order.reseller_id)):
+        return None
+    limit, days = int(data_limit or 0), int(plan.duration_days or 0)
+    try:
+        if plan.pg_template_id and _order_note(order) != CUSTOM_ORDER_NOTE:
+            limit, days = await read_template_volume(pg, int(plan.pg_template_id))
+        return await charge_shop_change(
+            session,
+            shop_id=int(order.reseller_id),
+            change=ServiceChange(ChargeEvent.CREATE, data_limit_bytes=limit, days=days),
+            request_key=f"order:{int(order.id)}",
+            pg_username=f"order:{int(order.id)}",
+            panel_target={"order_id": int(order.id), "plan_id": int(plan.id), "quantity": quantity},
+            quantity=quantity,
+            created_by="delivery",
+        )
+    except ProvisionError as e:
+        # The reseller's wallet or package detail stays with the shop staff, not the buyer.
+        logger.warning("payg delivery charge refused order=%s: %s", order.id, e.message)
+        raise ValueError(SHORTFALL_FOR_CUSTOMER) from e
+
+
+async def _hold_and_charge_delivery(
+    session: AsyncSession, order: Order, plan: Plan, pg, *, data_limit: int | None, quantity: int
+) -> tuple[HeldVolume | None, ResellerCharge | None]:
+    """Hold the delivery's volume, then take its PAYG charge; a refused charge frees the hold."""
+    hold = await _hold_delivery_volume(session, order, plan, pg, data_limit=data_limit, quantity=quantity)
+    try:
+        charge = await _charge_delivery(session, order, plan, pg, data_limit=data_limit, quantity=quantity)
+    except ValueError as exc:
+        await settle_failed_hold(session, hold, exc, panel_touched=False)
+        raise
+    return hold, charge
 
 
 def order_quantity(order: Order) -> int:
@@ -2299,7 +2348,9 @@ async def deliver_order(
                     "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
                 )
 
-        volume_hold = await _hold_delivery_volume(session, order, plan, pg, data_limit=data_limit, quantity=qty)
+        volume_hold, payg_charge = await _hold_and_charge_delivery(
+            session, order, plan, pg, data_limit=data_limit, quantity=qty
+        )
         created_pg_ids: list[int] = []
         services: list[UserService] = []
 
@@ -2421,12 +2472,14 @@ async def deliver_order(
             services.clear()
             # After the deletes, so this commit cannot persist services of deleted panel users.
             await settle_failed_hold(session, volume_hold, exc, panel_touched=panel["touched"])
+            await settle_failed_charge(session, payg_charge, exc, panel_touched=panel["touched"])
             raise
 
         order.service_id = services[0].id if services else None
         order.status = OrderStatus.DELIVERED.value
-        # The services now carry the volume; drop the hold in the same commit.
+        # The services now carry the volume; drop the hold and settle the charge in the same commit.
         await release_volume_hold(session, volume_hold)
+        await finish_charge(session, payg_charge, commit=False)
         await session.commit()
         await session.refresh(order)
         try:
@@ -2829,6 +2882,34 @@ async def _hold_renewal_volume(
         raise ValueError(e.message) from e
 
 
+async def _charge_renewal(
+    session: AsyncSession, order: Order, service: UserService, plan: Plan, pg, run: _RenewalRun
+) -> ResellerCharge | None:
+    """Take the shop's PAYG charge for a renewal: the period it sells, frozen on the order."""
+    if not order.reseller_id or not await shop_charges_at_creation(session, int(order.reseller_id)):
+        return None
+    try:
+        if run.snapshot is not None:
+            limit = int(run.snapshot.get("volume_bytes") or 0)
+            days = -(-int(run.snapshot.get("duration_seconds") or 0) // 86400)
+        elif plan.pg_template_id:
+            limit, days = await read_template_volume(pg, int(plan.pg_template_id))
+        else:
+            limit, days = plan_limit_bytes(plan), int(plan.duration_days or 0)
+        return await charge_shop_change(
+            session,
+            shop_id=int(order.reseller_id),
+            change=ServiceChange(ChargeEvent.RENEW, data_limit_bytes=limit, days=days),
+            request_key=f"renew:{int(order.id)}",
+            pg_username=str(service.pg_username or ""),
+            panel_target={"order_id": int(order.id), "service_id": int(service.id)},
+            created_by="renewal",
+        )
+    except ProvisionError as e:
+        logger.warning("payg renewal charge refused order=%s: %s", order.id, e.message)
+        raise ValueError(SHORTFALL_FOR_CUSTOMER) from e
+
+
 async def apply_renewal(
     session: AsyncSession, order: Order, service: UserService, plan: Plan,
     *, reset_traffic: bool = False,
@@ -2845,12 +2926,14 @@ async def apply_renewal(
     had_saved_target = bool(snapshot and snapshot.get("target"))
     run = _RenewalRun(snapshot=snapshot, had_saved_target=had_saved_target, write_attempted=had_saved_target)
     volume_hold: HeldVolume | None = None
+    payg_charge: ResellerCharge | None = None
     panel_touched = had_saved_target
     try:
         pg = await _renewal_panel_client(session, order, service)
         payload, data_limit, expire, gate_expire = await _renewal_targets(pg, service, plan, snapshot)
         await _assert_renewal_provision_gate(session, order, plan, run, data_limit=data_limit, gate_expire=gate_expire)
         volume_hold = await _hold_renewal_volume(session, order, service, plan, pg, run, data_limit=data_limit)
+        payg_charge = await _charge_renewal(session, order, service, plan, pg, run)
         panel_touched = True
         if snapshot is not None:
             pg_user = await _write_renewal_target(session, order, pg, service, run, payload)
@@ -2862,6 +2945,7 @@ async def apply_renewal(
         order.status = OrderStatus.DELIVERED.value
         order.service_mutation_pending = False
         await release_volume_hold(session, volume_hold)
+        await finish_charge(session, payg_charge, commit=False)
         await session.commit()
         await session.refresh(order)
         await _notify_renewal_delivered(session, order)
@@ -2869,6 +2953,7 @@ async def apply_renewal(
     except Exception as exc:
         pending_review = await _release_failed_renewal(session, order, run, exc)
         await settle_failed_hold(session, volume_hold, exc, panel_touched=panel_touched)
+        await settle_failed_charge(session, payg_charge, exc, panel_touched=panel_touched)
         if pending_review:
             raise RenewalPendingReview() from exc
         raise

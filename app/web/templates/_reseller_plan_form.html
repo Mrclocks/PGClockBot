@@ -2,6 +2,7 @@
    Field names and element ids are the ones /resellers/plans and the plans.html script expect. #}
 {% from "macros.html" import switch %}
 {% from "_ds.html" import ds_sec, ds_switch, ds_unlimited, ds_perm_groups, ds_foot_warn, ico %}
+{% from "_payg_pricing_fields.html" import payg_pricing_fields %}
 <form method="post" action="/resellers/plans" class="form-stack ds-body" id="reseller-plan-form" data-ds-form novalidate>
   <input type="hidden" name="billing_mode" id="reseller-billing-mode" value="fixed" />
   <input type="hidden" name="plan_kind" id="reseller-plan-kind" value="subscription" />
@@ -15,10 +16,13 @@
       <span class="ds-unit"><input name="price" type="number" data-money value="0" min="0" inputmode="numeric" dir="ltr" id="reseller-plan-price" /><span class="ds-unit-label">تومان</span></span>
       <small class="muted" id="reseller-price-hint">هزینه خرید پکیج نمایندگی — ۰ = رایگان؛ فقط تأیید ادمین</small>
     </label>
-    <label class="form-field" id="reseller-price-per-gb-field" hidden>نرخ هر گیگ
-      <span class="ds-unit"><input name="price_per_gb" id="reseller-price-per-gb-input" type="number" data-money min="0" value="0" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
-      <small class="muted">فقط برای PAYG — هر پلن می‌تواند نرخ جدا داشته باشد</small>
-    </label>
+    <div id="reseller-price-per-gb-field" hidden>
+      <label class="form-field">نرخ هر گیگ
+        <span class="ds-unit"><input name="price_per_gb" id="reseller-price-per-gb-input" type="number" data-money min="0" value="0" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
+        <small class="muted">فقط برای PAYG — هر پلن می‌تواند نرخ جدا داشته باشد</small>
+      </label>
+      {{ payg_pricing_fields('rp') }}
+    </div>
     <button type="button" class="ds-link-btn" data-ds-reveal="#reseller-desc-field">{{ ico('plus') }}افزودن توضیح برای نماینده</button>
     <label class="form-field" id="reseller-desc-field" hidden>توضیح
       <textarea name="description" rows="2"></textarea>
