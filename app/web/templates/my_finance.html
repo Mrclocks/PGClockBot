@@ -126,7 +126,7 @@
         <td class="li-title"><bdi dir="ltr">{{ st.period_start.strftime('%Y-%m') }}</bdi></td>
         <td class="col-hide-sm"><bdi dir="ltr">{{ st.charges_total | money }}</bdi></td>
         <td class="cell-tight li-value"><bdi dir="ltr">{{ st.amount_due | money }}</bdi></td>
-        <td class="col-hide-sm li-sub">سررسید <bdi dir="ltr">{{ st.due_at.strftime('%Y-%m-%d') }}</bdi></td>
+        <td class="col-hide-sm li-sub"><bdi dir="ltr">{{ st.due_at.strftime('%Y-%m-%d') }}</bdi></td>
         <td class="cell-tight li-badge"><span class="badge {{ statement_tones.get(st.status, 'neutral') }}">{{ statement_labels.get(st.status, st.status) }}</span></td>
       </tr>{% else %}<tr><td colspan="5" class="muted">هنوز صورت‌حسابی صادر نشده است</td></tr>{% endfor %}</tbody>
     </table></div>
