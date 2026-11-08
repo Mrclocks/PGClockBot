@@ -40,8 +40,9 @@ MAX_CHARGES_PER_SHOP = 5_000
 SHOP_LIMIT = 500
 SECONDS_PER_DAY = 86400
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
-_VOLUME_EVENTS = frozenset({ChargeEvent.CREATE, ChargeEvent.ADD_VOLUME, ChargeEvent.RESET})
 _PERIOD_EVENTS = frozenset({ChargeEvent.RENEW, ChargeEvent.REACTIVATE})
+# Every event whose charge paid for volume; a renewal pays for its whole new volume.
+_VOLUME_EVENTS = frozenset({ChargeEvent.CREATE, ChargeEvent.ADD_VOLUME, ChargeEvent.RESET}) | _PERIOD_EVENTS
 
 
 @dataclass(frozen=True, slots=True)

@@ -149,6 +149,27 @@ class ReconcileTests(ReconcileCase):
         await self.run_once([user(1, 10)], T0 + timedelta(minutes=10))
         self.assertEqual(await self.wallet(), 90_000)  # the first panel user is charged, not taken as baseline
 
+    async def renewed_by_bot(self, gb: int) -> None:
+        async with self.Session() as session:
+            session.add(ResellerCharge(
+                shop_id=SHOP, event="renew", status="settled", request_key="svc-renew:x", attempt=1,
+                quantity=1, pg_username="u1", bytes_charged=gb * GB, days_charged=30, amount=gb * 1000,
+                idempotency_key="payg:5:svc-renew:x#1", created_at=T0 + timedelta(minutes=5),
+            ))
+            await session.commit()
+
+    async def test_a_bot_renewal_is_not_charged_again(self) -> None:
+        await self.run_once([user(1, 10, used=8 * GB)], T0)
+        await self.renewed_by_bot(30)
+        await self.run_once([user(1, 30, used=0)], T0 + timedelta(minutes=10))
+        self.assertEqual(await self.wallet(), 100_000)
+
+    async def test_volume_added_in_the_panel_on_top_of_a_renewal_is_charged(self) -> None:
+        await self.run_once([user(1, 10, used=8 * GB)], T0)
+        await self.renewed_by_bot(30)
+        await self.run_once([user(1, 50, used=0)], T0 + timedelta(minutes=10))
+        self.assertEqual(await self.wallet(), 100_000 - 20_000)
+
     async def test_users_made_by_the_bot_are_not_charged_as_new(self) -> None:
         await self.run_once([user(1, 10)], T0)
         async with self.Session() as session:
