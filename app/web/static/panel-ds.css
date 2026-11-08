@@ -239,7 +239,8 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds .ds-seg button { flex: 1 1 0; }
 .ds .ds-seg button:disabled { opacity: .45; cursor: not-allowed; }
 .ds .ds-aud { flex: 0 0 auto; width: auto; }
-.ds .ds-aud button { flex: 0 0 auto; padding: 0 var(--g3); }
+/* The audience switch in a modal header: each choice is wide enough to read as a button, not a tag. */
+.ds .ds-aud button { flex: 0 0 auto; min-width: 76px; padding: 0 var(--g4); justify-content: center; }
 .ds .sales-seg { width: auto; display: inline-flex; }
 .ds .sales-seg button, .ds .sales-seg a { flex: 0 0 auto; padding: 0 var(--g3); font-size: 12.5px; }
 .ds .ds-tab-count {
@@ -248,8 +249,8 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 }
 /* Rows of tabs: 16 below every row; a topic row and its page chips sit 8 apart. */
 /* A page's tab track sits 16 below what is above it and 16 above what follows — never touching a box. */
-.ds nav.section-tabs:not(.settings-subtabs):not(.modal-section-tabs) { margin: 0 0 var(--g4) !important; }
-.ds :is(.main-body, .ds-settings) > :has(+ nav.section-tabs:not(.modal-section-tabs)) { margin-bottom: var(--g4) !important; }
+.ds .section-tabs:not(.settings-subtabs):not(.modal-section-tabs) { margin: 0 0 var(--g4) !important; }
+.ds :is(.main-body, .ds-settings) > :has(+ .section-tabs:not(.modal-section-tabs)) { margin-bottom: var(--g4) !important; }
 .ds .section-tabs.settings-subtabs {
   display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: var(--g2);
   min-height: 0; height: auto; padding: 0; border: 0; background: none; border-radius: 0;
@@ -559,3 +560,12 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .main-body > section.ticket-tg-section { margin-top: 0; }
 .ds .main-body .section-title { margin: 0 0 var(--g2); line-height: 1.25; }
 .ds .main-body .section-title + .page-sub { margin: 0 0 var(--g4); }
+/* Very narrow phones: the header title comes first, so the audience switch returns to its content width. */
+@media (max-width: 379px) { .ds .ds-aud button { min-width: 0; padding: 0 var(--g3); } }
+/* The address in use: its badge (default / custom) leads the line, so it sits in the same place for every field. */
+.ds .url-in-use > span { display: flex; align-items: center; gap: var(--g2); min-width: 0; }
+.ds .url-in-use > span > .badge { flex: 0 0 auto; }
+.ds .url-in-use code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Buttons in a card's action row share the row and wrap to a second row before their text overflows. */
+.ds :is(.card, .settings-card) .actions:not(.ui-modal-sticky-save) { display: flex; flex-wrap: wrap; gap: var(--g2); }
+.ds :is(.card, .settings-card) .actions:not(.ui-modal-sticky-save) > .btn { flex: 1 1 160px; min-width: 0; white-space: nowrap; }
