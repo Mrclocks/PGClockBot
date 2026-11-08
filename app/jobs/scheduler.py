@@ -306,6 +306,19 @@ async def run_reseller_billing_tick() -> None:
         await _run_payg_reconcile(session)
 
 
+async def run_cashback_mature_job() -> None:
+    """Every 5 minutes: credit cashback whose hold has passed, once each."""
+    async with SessionLocal() as session:
+        try:
+            from app.services.cashback import mature_grants
+
+            credited = await mature_grants(session)
+            if credited:
+                logger.info("cashback credited %s", credited)
+        except Exception:
+            logger.exception("cashback maturity failed")
+
+
 async def run_credit_cycle_job() -> None:
     """Hourly: close last month's credit statements, settle paid debt, apply the overdue ladder."""
     async with SessionLocal() as session:
@@ -826,6 +839,7 @@ def start_background_scheduler() -> None:
     jobs = (
         ("billing_tick", run_reseller_billing_tick, {"minutes": 1}, 120),
         ("credit_cycle", run_credit_cycle_job, {"hours": 1}, 3600),
+        ("cashback_mature", run_cashback_mature_job, {"minutes": 5}, 300),
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
         ("order_purge", run_auto_order_purge, {"hours": 1}, 3600),
         ("scheduled_receipt_approval", run_scheduled_receipt_approvals, {"seconds": 60}, 90),

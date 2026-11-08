@@ -33,6 +33,7 @@ from app.services.formatting import (
 )
 from app.services.numbers import to_fa_digits
 from app.services.plans_catalog import require_catalog_owner_id
+from app.services.cashback import grant_after_delivery
 from app.services.payg_charges import new_request_key
 from app.services.payg_gate import (
     SHORTFALL_FOR_CUSTOMER,
@@ -1326,6 +1327,7 @@ async def apply_service_addon(
         await consume_loyalty_discount_for_order(session, order)
         await session.commit()
         await session.refresh(order)
+        await grant_after_delivery(session, order)
         return order
     except Exception:
         if not pg_applied:

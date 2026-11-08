@@ -446,3 +446,5 @@ tests/test_payg_reconcile.py
 tests/test_shop_credit.py
 # Credit statements: oldest-first payment, overdue ladder enforced, write-off once.
 tests/test_credit_statements.py
+# Cashback: one grant per order, shop-isolated purse, budget atomic, credited and reversed once.
+tests/test_cashback.py

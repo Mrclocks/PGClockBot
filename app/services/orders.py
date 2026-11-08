@@ -46,6 +46,7 @@ from app.services.pasarguard import (
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
 from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
+from app.services.cashback import grant_after_delivery
 from app.services.payg_gate import (
     SHORTFALL_FOR_CUSTOMER,
     assert_shop_can_afford,
@@ -2525,6 +2526,7 @@ async def deliver_order(
             await on_order_delivered(session, order)
         except Exception:
             logger.warning("loyalty on_order_delivered failed order=%s", order.id, exc_info=True)
+        await grant_after_delivery(session, order)
         await record_order_funnel(session, order, STEP_DELIVERED, key=f"delivered:order:{order.id}")
         return order
     except Exception as exc:
@@ -2876,6 +2878,7 @@ async def _notify_renewal_delivered(session: AsyncSession, order: Order) -> None
         await on_order_delivered(session, order)
     except Exception:
         logger.warning("loyalty on_order_delivered renew failed order=%s", order.id, exc_info=True)
+    await grant_after_delivery(session, order)
 
 
 async def _release_failed_renewal(session: AsyncSession, order: Order, run: _RenewalRun, exc: Exception) -> bool:
