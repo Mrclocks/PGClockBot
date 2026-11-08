@@ -61,6 +61,8 @@ REFUND_REASON = "پاسخ قطعی پنل: تغییر انجام نشد"
 TEMPLATE_UNREADABLE_MESSAGE = (
     "حجم و مدت قالب این پلن از پاسارگارد خوانده نشد؛ برای محاسبهٔ هزینه کمی بعد دوباره تلاش کنید"
 )
+# The panel's own periodic reset looks the same as a manual one, so reconciliation charges both.
+AUTO_RESET_NOTE = "کاربری که در پاسارگارد ریست خودکار دارد، هر بار ریست هزینهٔ کل حجم دارد"
 PARENT_OVERDUE_MESSAGE = "فروش موقتاً متوقف است؛ نمایندهٔ بالادست شما بدهی سررسیدگذشته دارد"
 SHORTFALL_FOR_CUSTOMER = "این سرویس فعلاً قابل تحویل نیست؛ کمی بعد دوباره تلاش کنید"
 
@@ -507,6 +509,8 @@ async def shop_rate_summary(session: AsyncSession, shop_id: int | None) -> RateS
         lines.append("کاربر نامحدود: مجاز نیست")
     else:
         lines.append(f"کاربر نامحدود: {format_toman(rates.unlimited_price)}")
+    if rates.charges_traffic:
+        lines.append(AUTO_RESET_NOTE)
     return RateSummary(lines=tuple(lines), charges_reset=rates.charges_traffic)
 
 
