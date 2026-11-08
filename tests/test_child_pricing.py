@@ -32,6 +32,7 @@ from app.services.provision_gate import ProvisionError
 from app.services.shop_credit import CreditLimitChange, child_shop_ids, set_credit_limit, shop_credit_limit
 
 ROOT = Path(__file__).resolve().parents[1]
+PAGE = "/resellers/children-pricing"
 L1, L2, OTHER_L1, OTHER_L2 = 5, 6, 8, 9
 
 
@@ -202,6 +203,27 @@ class CreditTests(CascadeCase):
                 await set_child_credit(session, L1, L2, 30_001, actor="l1")
             await set_child_credit(session, L1, L2, 30_000, actor="l1")  # its own share is not double counted
             self.assertEqual(await shop_credit_limit(session, L1), 0)
+
+
+class TemplateTests(unittest.TestCase):
+    def test_plan_edit_and_delete_forms_are_escaped(self) -> None:
+        from types import SimpleNamespace
+
+        from jinja2 import ChainableUndefined
+
+        from app.api.app import templates
+
+        env = templates.env.overlay(undefined=ChainableUndefined)
+        plan = SimpleNamespace(id=4, name="<b>x</b>", payg_basis="user", price_per_gb=0, payg_user_price=900,
+                               payg_user_price_per_30d=True, payg_unlimited_price=None)
+        html = env.get_template("children_pricing.html").render(
+            request=SimpleNamespace(query_params={}, url=SimpleNamespace(path=PAGE), cookies={}),
+            staff={"role": "reseller"}, plans=[plan], children=[], free_credit=0, csrf_token="t",
+        )
+        self.assertNotIn("<b>x</b>", html)
+        self.assertIn(f'action="{PAGE}/plans/4"', html)
+        self.assertIn(f'action="{PAGE}/plans/4/delete"', html)
+        self.assertIn('value="user" selected', html)
 
 
 class MigrationTests(unittest.TestCase):

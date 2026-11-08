@@ -2,6 +2,43 @@
 {% from "macros.html" import page_title %}
 {% from "_ds.html" import ds_switch %}
 {% from "_marketing_tabs.html" import marketing_tabs %}
+{% macro rule_fields(r) %}
+{% set events = ((r.events or '') if r else '').split(',') %}
+    <label class="form-field">نام قانون <input name="name" required maxlength="128" placeholder="مثلاً: ۱۰٪ خرید اول" value="{{ r.name if r else '' }}" /></label>
+    <div class="form-row">
+      <label class="form-field">نوع
+        <select name="mode"><option value="percent">درصدی</option><option value="fixed" {% if r and r.mode == 'fixed' %}selected{% endif %}>مبلغ ثابت</option></select>
+      </label>
+      <label class="form-field">درصد
+        <span class="ds-unit"><input name="percent" type="number" min="0" max="100" step="0.01" inputmode="decimal" dir="ltr" placeholder="10" value="{{ ((r.percent_bps / 100) | round(2)) if r and r.mode != 'fixed' else '' }}" /><span class="ds-unit-label">٪</span></span>
+      </label>
+      <label class="form-field">مبلغ ثابت
+        <span class="ds-unit"><input name="fixed_amount" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ r.fixed_amount if r and r.mode == 'fixed' else '' }}" /><span class="ds-unit-label">تومان</span></span>
+      </label>
+      <label class="form-field">سقف هر سفارش
+        <span class="ds-unit"><input name="max_per_order" type="number" data-money min="0" inputmode="numeric" dir="ltr" placeholder="بدون سقف" value="{{ r.max_per_order if r and r.max_per_order is not none else '' }}" /><span class="ds-unit-label">تومان</span></span>
+      </label>
+    </div>
+    <div class="form-row">
+      <label class="form-field">حداقل خرید
+        <span class="ds-unit"><input name="min_order_amount" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ r.min_order_amount if r else 0 }}" /><span class="ds-unit-label">تومان</span></span>
+      </label>
+      <label class="form-field">سقف تعداد هر مشتری در ماه
+        <input name="customer_max_count" type="number" min="0" inputmode="numeric" dir="ltr" placeholder="بدون سقف" value="{{ r.customer_max_count if r and r.customer_max_count is not none else '' }}" />
+      </label>
+      <label class="form-field">سقف مبلغ هر مشتری در ماه
+        <span class="ds-unit"><input name="customer_max_amount" type="number" data-money min="0" inputmode="numeric" dir="ltr" placeholder="بدون سقف" value="{{ r.customer_max_amount if r and r.customer_max_amount is not none else '' }}" /><span class="ds-unit-label">تومان</span></span>
+      </label>
+      <label class="form-field">اولویت <input name="priority" type="number" min="0" max="1000" inputmode="numeric" dir="ltr" value="{{ r.priority if r else 0 }}" /></label>
+    </div>
+    <div class="ds-rows">
+      {{ ds_switch('event_new', 'خرید تازه', '', ('new' in events) if r else true) }}
+      {{ ds_switch('event_renew', 'تمدید', '', ('renew' in events) if r else true) }}
+      {{ ds_switch('event_addon', 'حجم یا زمان اضافه', '', ('addon' in events) if r else true) }}
+      {{ ds_switch('first_purchase_only', 'فقط اولین خرید مشتری', '', r.first_purchase_only if r else false) }}
+      {{ ds_switch('allow_with_discount', 'همراه با کد تخفیف هم بدهد', 'مبنای محاسبه مبلغ بعد از تخفیف است', r.allow_with_discount if r else true) }}
+    </div>
+{% endmacro %}
 {% block title %}کش‌بک{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
@@ -45,40 +82,7 @@
   <h2>قانون تازه</h2>
   <form method="post" action="/cashback/rules" class="form-stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label class="form-field">نام قانون <input name="name" required maxlength="128" placeholder="مثلاً: ۱۰٪ خرید اول" /></label>
-    <div class="form-row">
-      <label class="form-field">نوع
-        <select name="mode"><option value="percent">درصدی</option><option value="fixed">مبلغ ثابت</option></select>
-      </label>
-      <label class="form-field">درصد
-        <span class="ds-unit"><input name="percent" type="number" min="0" max="100" step="0.01" inputmode="decimal" dir="ltr" placeholder="10" /><span class="ds-unit-label">٪</span></span>
-      </label>
-      <label class="form-field">مبلغ ثابت
-        <span class="ds-unit"><input name="fixed_amount" type="number" data-money min="0" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
-      </label>
-      <label class="form-field">سقف هر سفارش
-        <span class="ds-unit"><input name="max_per_order" type="number" data-money min="0" inputmode="numeric" dir="ltr" placeholder="بدون سقف" /><span class="ds-unit-label">تومان</span></span>
-      </label>
-    </div>
-    <div class="form-row">
-      <label class="form-field">حداقل خرید
-        <span class="ds-unit"><input name="min_order_amount" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="0" /><span class="ds-unit-label">تومان</span></span>
-      </label>
-      <label class="form-field">سقف تعداد هر مشتری در ماه
-        <input name="customer_max_count" type="number" min="0" inputmode="numeric" dir="ltr" placeholder="بدون سقف" />
-      </label>
-      <label class="form-field">سقف مبلغ هر مشتری در ماه
-        <span class="ds-unit"><input name="customer_max_amount" type="number" data-money min="0" inputmode="numeric" dir="ltr" placeholder="بدون سقف" /><span class="ds-unit-label">تومان</span></span>
-      </label>
-      <label class="form-field">اولویت <input name="priority" type="number" min="0" max="1000" inputmode="numeric" dir="ltr" value="0" /></label>
-    </div>
-    <div class="ds-rows">
-      {{ ds_switch('event_new', 'خرید تازه', '', true) }}
-      {{ ds_switch('event_renew', 'تمدید', '', true) }}
-      {{ ds_switch('event_addon', 'حجم یا زمان اضافه', '', true) }}
-      {{ ds_switch('first_purchase_only', 'فقط اولین خرید مشتری', '', false) }}
-      {{ ds_switch('allow_with_discount', 'همراه با کد تخفیف هم بدهد', 'مبنای محاسبه مبلغ بعد از تخفیف است', true) }}
-    </div>
+    {{ rule_fields(none) }}
     <div class="actions"><button class="btn" type="submit">ساخت قانون</button></div>
   </form>
 </div>
@@ -99,6 +103,15 @@
         <td>{% for e in (r.events or '').split(',') %}{{ {'new': 'تازه', 'renew': 'تمدید', 'addon': 'اضافه'}.get(e, e) }}{% if not loop.last %}، {% endif %}{% endfor %}{% if r.first_purchase_only %} · فقط اولین خرید{% endif %}</td>
         <td>{{ 'روشن' if r.enabled else 'خاموش' }}</td>
         <td class="row-actions">
+          <details class="ds-acc">
+            <summary>ویرایش</summary>
+            <form method="post" action="/cashback/rules/{{ r.id }}" class="form-stack">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              {{ rule_fields(r) }}
+              <p class="muted">تغییر فقط روی خریدهای بعدی اثر دارد؛ کش‌بک‌های داده‌شده عوض نمی‌شوند.</p>
+              <div class="actions"><button class="btn btn-sm" type="submit">ذخیرهٔ قانون</button></div>
+            </form>
+          </details>
           <form method="post" action="/cashback/rules/{{ r.id }}/toggle">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             {% if not r.enabled %}<input type="hidden" name="enabled" value="1">{% endif %}

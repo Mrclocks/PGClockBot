@@ -146,6 +146,15 @@ def register_cashback_pages(app: FastAPI, *, render: Callable, require_staff: Ca
             return "قانون کش‌بک ساخته شد"
         return await _form_action(request, staff, action)
 
+    @app.post(PAGE + "/rules/{rule_id}")
+    async def cashback_rule_edit(
+        rule_id: int, request: Request, staff: dict = Depends(require_staff), session: AsyncSession = Depends(get_db),
+    ) -> RedirectResponse:
+        async def action(shop_id: int | None, form: Mapping[str, Any]) -> str:
+            await save_rule(session, shop_id, rule_from_form(form), rule_id=rule_id)
+            return "قانون کش‌بک ذخیره شد"
+        return await _form_action(request, staff, action)
+
     @app.post(PAGE + "/rules/{rule_id}/toggle")
     async def cashback_rule_toggle(
         rule_id: int, request: Request, staff: dict = Depends(require_staff), session: AsyncSession = Depends(get_db),
