@@ -28,7 +28,7 @@
     <span class="ds-unit"><input name="payg_user_price" type="number" data-money min="0" value="{{ (plan.payg_user_price if plan else 0) or 0 }}" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
   </label>
   <label class="form-field">قیمت کاربر نامحدود
-    <span class="ds-unit"><input name="payg_unlimited_price" type="number" data-money min="0" value="{{ plan.payg_unlimited_price if plan and plan.payg_unlimited_price is not none else '' }}" inputmode="numeric" dir="ltr" placeholder="خالی = ممنوع" /><span class="ds-unit-label">تومان</span></span>
+    <span class="ds-unit"><input name="payg_unlimited_price" type="number" data-money min="0" value="{{ plan.payg_unlimited_price if plan and plan.payg_unlimited_price is not none else '' }}" inputmode="numeric" dir="ltr" placeholder="ممنوع" /><span class="ds-unit-label">تومان</span></span>
     <small class="muted">خالی بماند تا ساخت کاربر نامحدود ممنوع باشد</small>
   </label>
 </div>
