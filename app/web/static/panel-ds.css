@@ -124,14 +124,22 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ui-modal.ds .ds-foot-warn-go { margin-inline-start: auto; color: var(--sel-fg); font-weight: 600; white-space: nowrap; }
 .ui-modal.ds .ds-summary { margin: 0; font-size: 12px; color: var(--muted-fg); text-align: center; }
 
-/* Motion: a sheet slides up on phones, a dialog settles in on wider screens. */
-@keyframes ds-sheet-in { from { transform: translateY(32px); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes ds-pop-in { from { transform: translateY(8px) scale(0.985); opacity: 0; } to { transform: none; opacity: 1; } }
+/* Motion: every modal slides up to open and slides down to close; the backdrop fades with it.
+   On phones the sheet travels from the bottom edge; on wider screens the centred panel travels a short way.
+   Closing stays under the 240ms panel.js waits before removing the modal. */
+@keyframes ds-slide-up { from { transform: translateY(var(--ds-slide)); opacity: var(--ds-slide-opacity); } to { transform: none; opacity: 1; } }
+@keyframes ds-slide-down { from { transform: none; opacity: 1; } to { transform: translateY(var(--ds-slide)); opacity: var(--ds-slide-opacity); } }
 @keyframes ds-fade-in { from { opacity: 0; } to { opacity: 1; } }
-.ui-modal.ds.open:not(.is-closing) .ui-modal-backdrop { animation: ds-fade-in 200ms ease-out both; }
-.ui-modal.ds.open:not(.is-closing) .ui-modal-panel { animation: ds-pop-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes ds-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.ui-modal.ds { --ds-slide: 48px; --ds-slide-opacity: 0; }
+.ui-modal.ds.open:not(.is-closing) .ui-modal-backdrop { animation: ds-fade-in 240ms ease-out both; }
+.ui-modal.ds.open:not(.is-closing) .ui-modal-panel { animation: ds-slide-up 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.ui-modal.ds.open.is-closing .ui-modal-backdrop { animation: ds-fade-out 220ms ease-in forwards; }
+.ui-modal.ds.open.is-closing .ui-modal-panel { animation: ds-slide-down 220ms cubic-bezier(0.4, 0, 1, 1) forwards; }
 @media (max-width: 640px) {
-  .ui-modal.ds.open:not(.is-closing) .ui-modal-panel { animation: ds-sheet-in 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  /* A phone sheet slides in whole, without fading. */
+  .ui-modal.ds { --ds-slide: 100%; --ds-slide-opacity: 1; }
+  .ui-modal.ds.open:not(.is-closing) .ui-modal-panel { animation-duration: 340ms; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ui-modal.ds.open .ui-modal-panel, .ui-modal.ds.open .ui-modal-backdrop { animation: none !important; }
