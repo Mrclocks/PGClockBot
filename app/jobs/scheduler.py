@@ -302,6 +302,21 @@ async def run_reseller_billing_tick() -> None:
                 logger.info("billing tick %s", stats)
         except Exception:
             logger.exception("billing tick failed")
+            return
+        await _run_payg_reconcile(session)
+
+
+async def _run_payg_reconcile(session) -> None:
+    """Charge PAYG shops for user changes made in the panel outside the bot."""
+    try:
+        from app.services.pasarguard import get_pg
+        from app.services.payg_reconcile import run_payg_reconcile
+
+        stats = await run_payg_reconcile(session, get_pg())
+        if stats.shops or stats.swept:
+            logger.info("payg reconcile %s", stats)
+    except Exception:
+        logger.exception("payg reconcile failed")
 
 
 async def run_auto_order_purge() -> None:
