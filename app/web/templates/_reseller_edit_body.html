@@ -139,6 +139,9 @@
       <button class="btn" type="submit">ذخیره</button>
     </div>
   </form>
+  {% if not profile.allow_pg_panel_access and pg_api_key_ready %}
+  <div class="flash warn" role="status">دسترسی به پاسارگارد بسته است، ولی کلید API این فروشگاه هنوز معتبر است. اگر نماینده این کلید را دیده، آن را در پاسارگارد باطل کنید و کلید تازه را بالا ثبت کنید.</div>
+  {% endif %}
   {% if profile.pg_password_rotation_enc %}
   <div class="flash warn">تغییر رمز ادمین پاسارگارد هنوز تأیید نشده؛ تا تأیید، رمز قبلی ممکن است کار کند.</div>
   <form method="post" action="/resellers/{{ user.id }}/pg-password-rotation" class="form-stack"
