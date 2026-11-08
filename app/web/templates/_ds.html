@@ -30,8 +30,9 @@
 </section>
 {%- endmacro %}
 
-{% macro ds_switch(name, label, help='', checked=false, id=None, value='1', default=None) -%}
-<label class="ui-switch-row ds-switch">
+{# show_when: "#field:value,value" shows the row only for those values (panel-ds.js). #}
+{% macro ds_switch(name, label, help='', checked=false, id=None, value='1', default=None, show_when='', hidden=false) -%}
+<label class="ui-switch-row ds-switch"{% if show_when %} data-ds-show-when="{{ show_when }}"{% endif %}{% if hidden %} hidden{% endif %}>
   <span class="ui-switch-copy"><strong>{{ label }}</strong>{% if help %}<small>{{ help }}</small>{% endif %}</span>
   <span class="ui-switch">
     <input type="checkbox" name="{{ name }}" value="{{ value }}"{% if id %} id="{{ id }}"{% endif %}{% if checked %} checked{% endif %}{% if default is not none %} data-default="{{ '1' if default else '0' }}"{% endif %} />

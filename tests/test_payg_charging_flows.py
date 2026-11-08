@@ -327,10 +327,13 @@ class TemplateTests(unittest.TestCase):
         for field in ("payg_fields_shown", "payg_basis", "payg_charge_upfront", "payg_user_price",
                       "payg_user_price_per_30d", "payg_unlimited_price"):
             self.assertIn(f'name="{field}"', html)
-        self.assertIn('id="edit-payg-basis" value="user"', html)
+        self.assertIn('id="edit-payg-basis"', html)
+        self.assertIn('<option value="user" selected>', html)
+        # The per-GB switch belongs to traffic bases, so a user-priced package hides it.
+        self.assertRegex(html, r'data-ds-show-when="#edit-payg-basis:traffic,user_traffic" hidden')
         self.assertIn('value="20000"', html)
         new_plan_html = str(macro("rp"))
-        self.assertIn('id="rp-payg-basis" value="traffic"', new_plan_html)
+        self.assertIn('<option value="traffic" selected>', new_plan_html)
         # Charging at creation is offered switched on for a new package.
         self.assertIn('id="rp-payg-upfront" checked', new_plan_html)
         self.assertNotIn('id="edit-payg-upfront" checked', html)

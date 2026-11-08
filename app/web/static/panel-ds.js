@@ -122,6 +122,26 @@
     syncPerms(box);
   }
 
+  /* ---------- Show when: [data-ds-show-when="#field:value,value"] follows another field ----------
+     Hidden, not disabled: the hidden field still posts, so its value survives switching back.
+     A checkbox reads as its value when checked and "0" when not. */
+  function showWhenMatches(rule, value) {
+    const cut = String(rule || "").lastIndexOf(":");
+    if (cut <= 0) return true;
+    return String(rule).slice(cut + 1).split(",").indexOf(String(value)) >= 0;
+  }
+
+  function fieldValue(field) {
+    if (field.type === "checkbox") return field.checked ? field.value : "0";
+    return field.value;
+  }
+
+  function syncShowWhen(el) {
+    const rule = el.getAttribute("data-ds-show-when") || "";
+    const field = qs(el.closest("form") || document, rule.slice(0, rule.lastIndexOf(":")));
+    if (field) el.hidden = !showWhenMatches(rule, fieldValue(field));
+  }
+
   /* ---------- Reveal: [data-ds-reveal="#id"] shows an optional field and hides itself ---------- */
   function reveal(btn) {
     const target = qs(document, btn.getAttribute("data-ds-reveal"));
@@ -225,6 +245,7 @@
     base.querySelectorAll("[data-ds-perms]").forEach(syncPerms);
     base.querySelectorAll("[data-ds-dot] select").forEach(syncDot);
     base.querySelectorAll("form[data-ds-form]").forEach(syncForm);
+    base.querySelectorAll("[data-ds-show-when]").forEach(syncShowWhen);
   }
 
   function bind() {
@@ -249,6 +270,7 @@
       const box = t.closest("[data-ds-perms]");
       if (box) syncPerms(box);
       document.querySelectorAll("[data-ds-choice]").forEach((g) => { if (choiceTarget(g) === t) syncChoice(g); });
+      document.querySelectorAll("[data-ds-show-when]").forEach(syncShowWhen);
       refreshForm(t);
     };
     document.addEventListener("change", onEdit);
@@ -262,7 +284,7 @@
     if (form) syncForm(form);
   }
 
-  const api = { syncAll, syncChoice, syncForm, missingFields, faDigits, resetPerms, syncPerms };
+  const api = { syncAll, syncChoice, syncForm, missingFields, faDigits, resetPerms, syncPerms, showWhenMatches };
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   } else {

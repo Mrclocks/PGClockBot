@@ -344,6 +344,8 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-rows > .ui-switch-row:first-child, .ds .ui-switch-list > .ui-switch-row:first-child { padding-top: 0 !important; }
 .ds .ds-rows > .ui-switch-row:last-child, .ds .ui-switch-list > .ui-switch-row:last-child { padding-bottom: 0 !important; }
 .ds .ds-rows > .ui-switch-row + .ui-switch-row, .ds .ui-switch-list > .ui-switch-row + .ui-switch-row { border-top: 1px dashed var(--dash) !important; }
+/* A row after a hidden one (show-when) starts the list: no line and no top padding. */
+.ds .ds-rows > .ui-switch-row[hidden]:first-child + .ui-switch-row { border-top: 0 !important; padding-top: 0 !important; }
 
 /* ===================================================================== 9. Accordion with counters */
 .ds .ds-acc-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--g1) var(--g3); padding: var(--g3) var(--g4); font-size: 13.5px; }
