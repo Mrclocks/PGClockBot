@@ -10,8 +10,9 @@ Order of a charged change:
    ``panel_target`` so a retry repeats exactly the same change.
 
 Every transition is an atomic status claim, so a repeated or concurrent call moves the
-money once. The request key comes from the caller (one per confirmed change) and is
-scoped to the shop.
+money once. The request key comes from the caller (one per confirmed change, for example
+``order:<id>``) and is scoped to the shop. A retry with the same key reuses an open or
+settled charge; only after a refund does it charge again, as the next ``attempt``.
 """
 
 from __future__ import annotations
@@ -49,7 +50,7 @@ from app.services.payg_pricing import (
 logger = logging.getLogger(__name__)
 
 REVIEW_PAGE_LIMIT = 50
-_REQUEST_KEY = re.compile(r"[A-Za-z0-9_-]{8,64}")
+_REQUEST_KEY = re.compile(r"[A-Za-z0-9_:-]{8,120}")
 
 
 class ChargeStatus(StrEnum):
@@ -70,6 +71,7 @@ class ChargeRequest:
     change: ServiceChange
     pg_username: str
     panel_target: Mapping[str, Any] = field(default_factory=dict)
+    quantity: int = 1
     expected_amount: int | None = None
     created_by: str | None = None
 
@@ -78,11 +80,15 @@ def new_request_key() -> str:
     return secrets.token_hex(16)
 
 
-def charge_key(shop_id: int, request_key: str) -> str:
+def checked_request_key(request_key: str) -> str:
     key = str(request_key or "")
     if not _REQUEST_KEY.fullmatch(key):
         raise ValueError("کلید یکتای عملیات نامعتبر است")
-    return f"payg:{int(shop_id)}:{key}"
+    return key
+
+
+def _idempotency_key(shop_id: int, request_key: str, attempt: int) -> str:
+    return f"payg:{int(shop_id)}:{request_key}#{int(attempt)}"
 
 
 async def shop_rates(session: AsyncSession, profile: ResellerProfile) -> PaygRates | None:
@@ -103,22 +109,36 @@ async def quote_for_shop(
     return quote_change(rates, change)
 
 
-async def _charge_by_key(session: AsyncSession, key: str) -> ResellerCharge | None:
-    return await session.scalar(select(ResellerCharge).where(ResellerCharge.idempotency_key == key))
+async def _latest_attempt(
+    session: AsyncSession, shop_id: int, request_key: str
+) -> ResellerCharge | None:
+    return await session.scalar(
+        select(ResellerCharge)
+        .where(ResellerCharge.shop_id == int(shop_id), ResellerCharge.request_key == request_key)
+        .order_by(ResellerCharge.attempt.desc())
+        .limit(1)
+    )
 
 
-def _own(charge: ResellerCharge, shop_id: int) -> ResellerCharge:
-    if int(charge.shop_id) != int(shop_id):
-        raise ValueError("کلید یکتای عملیات نامعتبر است")
-    return charge
+def _reusable(charge: ResellerCharge | None) -> ResellerCharge | None:
+    """An earlier attempt that still holds the money (or was settled) is the answer."""
+    if charge is not None and charge.status != ChargeStatus.REFUNDED:
+        return charge
+    return None
 
 
-def _new_charge(shop_id: int, profile: ResellerProfile, request: ChargeRequest, quote: ChargeQuote, key: str) -> ResellerCharge:
+def _new_charge(
+    profile: ResellerProfile, request: ChargeRequest, quote: ChargeQuote, *, request_key: str, attempt: int
+) -> ResellerCharge:
+    shop_id = int(profile.user_id)
     return ResellerCharge(
         shop_id=shop_id,
         plan_id=int(profile.plan_id) if profile.plan_id else None,
         event=str(request.change.event),
         status=ChargeStatus.PENDING,
+        request_key=request_key,
+        attempt=attempt,
+        quantity=int(request.quantity),
         pg_username=(request.pg_username or "")[:128] or None,
         bytes_charged=quote.bytes_charged,
         days_charged=quote.days_charged,
@@ -127,7 +147,7 @@ def _new_charge(shop_id: int, profile: ResellerProfile, request: ChargeRequest, 
         user_price=quote.user_price,
         is_unlimited=quote.is_unlimited,
         amount=quote.amount,
-        idempotency_key=key,
+        idempotency_key=_idempotency_key(shop_id, request_key, attempt),
         panel_target=json.dumps(dict(request.panel_target), sort_keys=True, ensure_ascii=False),
         created_by=(request.created_by or "")[:128] or None,
     )
@@ -139,20 +159,23 @@ async def reserve_charge(
     """Price the change and take the money before the panel call.
 
     Returns ``None`` when the change costs nothing. The same request key returns the
-    charge it already made. Raises ``ValueError`` (safe to show) on a shortfall, a price
-    that changed since it was shown, or a change the package may not sell.
+    charge it already made unless that one was refunded. Raises ``ValueError`` (safe to
+    show) on a shortfall, a price that changed since it was shown, or a change the package
+    may not sell.
     """
     shop_id = int(profile.user_id)
-    key = charge_key(shop_id, request.request_key)
-    existing = await _charge_by_key(session, key)
-    if existing is not None:
-        return _own(existing, shop_id)
-    quote = await quote_for_shop(session, profile, request.change)
-    if quote is None or quote.is_free:
+    request_key = checked_request_key(request.request_key)
+    latest = await _latest_attempt(session, shop_id, request_key)
+    if _reusable(latest) is not None:
+        return latest
+    unit_quote = await quote_for_shop(session, profile, request.change)
+    if unit_quote is None or unit_quote.is_free:
         return None
+    quote = unit_quote.for_quantity(request.quantity)
     if request.expected_amount is not None:
         assert_quote_unchanged(request.expected_amount, quote)
-    charge = _new_charge(shop_id, profile, request, quote, key)
+    attempt = int(latest.attempt) + 1 if latest is not None else 1
+    charge = _new_charge(profile, request, quote, request_key=request_key, attempt=attempt)
     try:
         session.add(charge)
         await session.flush()
@@ -161,17 +184,17 @@ async def reserve_charge(
             profile,
             kind=KIND_CHARGE,
             amount=-quote.amount,
-            idempotency_key=key,
+            idempotency_key=charge.idempotency_key,
             note=f"{request.change.event} {request.pg_username}"[:255],
             created_by=request.created_by,
         )
         await session.commit()
     except IntegrityError:
         await session.rollback()
-        winner = await _charge_by_key(session, key)
+        winner = _reusable(await _latest_attempt(session, shop_id, request_key))
         if winner is None:
             raise
-        return _own(winner, shop_id)
+        return winner
     except ValueError:
         await session.rollback()
         raise
@@ -195,10 +218,14 @@ async def _claim(
     return result.rowcount == 1
 
 
-async def settle_charge(session: AsyncSession, charge: ResellerCharge) -> bool:
-    """The panel applied the change. False when the charge was already resolved."""
+async def settle_charge(session: AsyncSession, charge: ResellerCharge, *, commit: bool = True) -> bool:
+    """The panel applied the change. False when the charge was already resolved.
+
+    ``commit=False`` joins the caller's transaction (for example the one that seals the order).
+    """
     claimed = await _claim(session, charge, allowed=_OPEN, to=ChargeStatus.SETTLED)
-    await session.commit()
+    if commit:
+        await session.commit()
     return claimed
 
 

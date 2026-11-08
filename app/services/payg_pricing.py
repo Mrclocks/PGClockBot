@@ -12,7 +12,7 @@ these quotes carry no traffic part.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from app.py_compat import StrEnum
@@ -21,6 +21,7 @@ GB = 1024**3
 DAYS_PER_USER_UNIT = 30
 # Prices and volumes are stored in 32-bit integer columns.
 MAX_PRICE = 2_000_000_000
+MAX_QUANTITY = 10_000
 
 BASIS_TRAFFIC = "traffic"
 BASIS_USER = "user"
@@ -104,6 +105,16 @@ class ChargeQuote:
     @property
     def is_free(self) -> bool:
         return self.amount == 0
+
+    def for_quantity(self, quantity: int) -> ChargeQuote:
+        """The same change made for ``quantity`` users (wholesale); per-unit fields stay per user."""
+        count = _checked_int(quantity, field="تعداد", upper=MAX_QUANTITY)
+        if count < 1:
+            raise PaygPriceError("تعداد نامعتبر است")
+        total = self.amount * count
+        if total > MAX_PRICE:
+            raise PaygPriceError("مبلغ این تغییر بیش از حد مجاز است؛ تعداد را کمتر کنید")
+        return replace(self, amount=total)
 
 
 def _checked_int(value: Any, *, field: str, upper: int = MAX_PRICE) -> int:

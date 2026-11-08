@@ -134,9 +134,48 @@ class ReserveTests(LedgerCase):
         self.assertEqual(await self.wallet(5), 50_000)
 
     async def test_hostile_request_key_is_refused(self) -> None:
-        for key in ("short", "x" * 65, "bad key!", "a1b2c3d4'; --"):
+        for key in ("short", "x" * 121, "bad key!", "a1b2c3d4'; --", "order:1%"):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 await self.reserve(create(10, key=key))
+
+
+class RetryTests(LedgerCase):
+    async def test_retry_after_a_refund_charges_again_as_a_new_attempt(self) -> None:
+        first = await self.reserve(create(10, key="order:77"))
+        async with self.Session() as session:
+            await refund_charge(session, first, reason="panel refused")
+        self.assertEqual(await self.wallet(5), 50_000)
+        second = await self.reserve(create(10, key="order:77"))
+        self.assertNotEqual(first.id, second.id)
+        self.assertEqual(second.attempt, 2)
+        self.assertEqual(await self.wallet(5), 40_000)
+
+    async def test_retry_after_an_unknown_outcome_reuses_the_held_charge(self) -> None:
+        first = await self.reserve(create(10, key="order:78"))
+        async with self.Session() as session:
+            await send_to_review(session, first)
+        again = await self.reserve(create(10, key="order:78"))
+        self.assertEqual(first.id, again.id)
+        self.assertEqual(await self.wallet(5), 40_000)
+
+    async def test_wholesale_quantity_is_charged_per_user(self) -> None:
+        request = ChargeRequest(
+            request_key="order:79",
+            change=ServiceChange(ChargeEvent.CREATE, data_limit_bytes=5 * GB, days=30),
+            pg_username="bulk", quantity=3,
+        )
+        charge = await self.reserve(request)
+        self.assertEqual((charge.amount, charge.quantity, charge.bytes_charged), (15_000, 3, 5 * GB))
+        self.assertEqual(await self.wallet(5), 35_000)
+
+    async def test_settle_can_join_the_callers_commit(self) -> None:
+        charge = await self.reserve(create(10, key="order:80"))
+        async with self.Session() as session:
+            self.assertTrue(await settle_charge(session, charge, commit=False))
+            await session.rollback()
+        async with self.Session() as session:
+            row = await session.get(ResellerCharge, charge.id)
+        self.assertEqual(row.status, ChargeStatus.PENDING)
 
 
 class TransitionTests(LedgerCase):

@@ -24,6 +24,7 @@ depends_on: Union[str, Sequence[str], None] = None
 PLANS = "reseller_plans"
 CHARGES = "reseller_charges"
 CHARGE_INDEXES = {
+    "ix_reseller_charges_shop_request": ["shop_id", "request_key"],
     "ix_reseller_charges_shop_created": ["shop_id", "created_at"],
     "ix_reseller_charges_status": ["status"],
 }
@@ -48,6 +49,9 @@ def _create_charges(bind: sa.Connection) -> None:
         sa.Column("plan_id", sa.Integer(), nullable=True),
         sa.Column("event", sa.String(16), nullable=False),
         sa.Column("status", sa.String(16), nullable=False, server_default=sa.text("'pending'")),
+        sa.Column("request_key", sa.String(160), nullable=False),
+        sa.Column("attempt", sa.Integer(), nullable=False, server_default=sa.text("1")),
+        sa.Column("quantity", sa.Integer(), nullable=False, server_default=sa.text("1")),
         sa.Column("pg_username", sa.String(128), nullable=True),
         sa.Column("bytes_charged", sa.BigInteger(), nullable=False, server_default=sa.text("0")),
         sa.Column("days_charged", sa.Integer(), nullable=False, server_default=sa.text("0")),

@@ -951,12 +951,14 @@ class ResellerCharge(Base):
 
     The row and the wallet debit are committed together before the panel call; the panel
     outcome then settles, refunds or sends it to review. ``panel_target`` keeps the exact
-    change so a retry after an unknown outcome repeats it unchanged.
+    change so a retry after an unknown outcome repeats it unchanged. Amounts are totals for
+    ``quantity`` users; the per-unit fields are for one user.
     """
 
     __tablename__ = "reseller_charges"
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_reseller_charges_idempotency"),
+        Index("ix_reseller_charges_shop_request", "shop_id", "request_key"),
         Index("ix_reseller_charges_shop_created", "shop_id", "created_at"),
         Index("ix_reseller_charges_status", "status"),
     )
@@ -966,6 +968,10 @@ class ResellerCharge(Base):
     plan_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     event: Mapped[str] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16), default="pending")
+    # One confirmed change of the shop; a refunded attempt is followed by attempt + 1.
+    request_key: Mapped[str] = mapped_column(String(160))
+    attempt: Mapped[int] = mapped_column(Integer, default=1)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
     pg_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     bytes_charged: Mapped[int] = mapped_column(BigInteger, default=0)
     days_charged: Mapped[int] = mapped_column(Integer, default=0)
