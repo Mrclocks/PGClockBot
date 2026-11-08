@@ -1202,6 +1202,27 @@ async def _pg_user_presence(pg: Any, pg_uid: int) -> str:
     return "unknown"
 
 
+async def panel_client_for_service(session: AsyncSession, service: UserService) -> Any | None:
+    """The shop's own panel client for ``service``; ``None`` when it has no panel user or none can be built."""
+    if not service.pg_user_id:
+        return None
+    try:
+        return await _pg_client_for_bot_service(session, service)
+    except PANEL_READ_ERRORS:
+        logger.warning("panel client unavailable service=%s", service.id, exc_info=True)
+        return None
+
+
+async def probe_panel_presence(pg: Any | None, pg_user_id: int | None) -> str:
+    """``present``, ``absent`` (clean HTTP 404) or ``unknown`` (no client, outage, timeout, refusal)."""
+    if pg is None or not pg_user_id:
+        return "unknown"
+    try:
+        return await asyncio.wait_for(_pg_user_presence(pg, int(pg_user_id)), timeout=SNAPSHOT_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        return "unknown"
+
+
 def _raise_pg_not_removed(presence: str, *, cause: BaseException) -> None:
     """Fail closed; message distinguishes confirmed-present vs uncertain."""
     if presence == "present":

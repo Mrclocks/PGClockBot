@@ -21,6 +21,15 @@ from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import get_catalog_plan, list_active_plans
 from app.services.pasarguard import absolutize_subscription_url, get_pg
 from app.services.service_import import is_external_service
+from app.services.service_panel_presence import (
+    ABSENT,
+    CUSTOMER_TEXT,
+    PRESENT,
+    STATUS_LABEL,
+    record_presence,
+    refresh_service_presence,
+)
+from app.services.support_button import SUPPORT_HOME_CALLBACK
 from app.services.service_scope import customer_may_use_service, list_customer_services
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
@@ -401,6 +410,30 @@ async def svc_reseller_view(
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
+async def _panel_user_is_gone(session: AsyncSession, svc: UserService) -> bool:
+    """Confirm with the shop's own panel client; a subscription 404 alone can also be a rotated link."""
+    return await refresh_service_presence(session, svc) == ABSENT
+
+
+async def _show_missing_service(callback: CallbackQuery, svc: UserService, ui: dict) -> None:
+    from app.bot.nav_inline import SERVICES_LIST_CALLBACK  # imported late: nav_inline imports this package
+
+    if not callback.message:
+        return
+    text = format_message(
+        "📦 سرویس شما",
+        f"👤 <code>{html.escape(svc.pg_username or '—')}</code>\n\n📶 وضعیت: <b>{STATUS_LABEL}</b>\n\n{CUSTOMER_TEXT}",
+    )
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🆘 پشتیبانی", callback_data=SUPPORT_HOME_CALLBACK)],
+            [InlineKeyboardButton(text="📝 درخواست لغو", callback_data=f"svc:cancel:{int(svc.id)}")],
+            [kb.back_button(ui, SERVICES_LIST_CALLBACK)],
+        ]
+    )
+    await safe_edit_text(callback.message, text, reply_markup=markup)
+
+
 @router.callback_query(F.data.startswith("svc:view:"))
 async def svc_view(
     callback: CallbackQuery,
@@ -416,9 +449,14 @@ async def svc_view(
         return
     await callback.answer()
     info = await fetch_live_service_info(svc, client_factory=get_pg)
+    if info.get("error_code") == "subscription_not_found" and await _panel_user_is_gone(session, svc):
+        await _show_missing_service(callback, svc, ui)
+        return
     if info.get("status") and "expire" in info:
         from app.services.bot_user_admin import sync_service_quota_cache
         sync_service_quota_cache(svc, info=info)
+        if svc.panel_missing_at is not None:
+            await record_presence(session, svc_id, PRESENT)
         await session.commit()
     # Display only, after the cache sync: saved values must never be written back as live.
     info = with_stored_quota(info, svc)

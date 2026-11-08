@@ -70,6 +70,12 @@ NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
         "1",
     ),
     (
+        "notify_service_panel_missing",
+        "سرویس حذف‌شده از پنل",
+        "وقتی سرویس مشتری از پاسارگارد حذف شده باشد؛ تعداد سرویس‌های حذف‌شده را گزارش می‌دهد و حداکثر هر ۶ ساعت تکرار می‌شود",
+        "1",
+    ),
+    (
         "notify_service_cancellation",
         "درخواست لغو سرویس",
         "وقتی مشتری درخواست لغو سرویس ثبت می‌کند؛ همراه دلیل و لینک بررسی در پنل",
@@ -144,7 +150,7 @@ PLATFORM_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset(
 SHOP_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset({"notify_panel_capacity"})
 
 # Alerts about the panel itself rather than a sale; the settings tab marks them «سیستم».
-SYSTEM_NOTIFY_KEYS: frozenset[str] = frozenset({"notify_panel_update", "notify_panel_delivery_failures"})
+SYSTEM_NOTIFY_KEYS: frozenset[str] = frozenset({"notify_panel_update", "notify_panel_delivery_failures", "notify_service_panel_missing"})
 
 # What the platform Owner sees and toggles.
 PLATFORM_NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
@@ -156,6 +162,7 @@ SHOP_NOTIFY_PERM_MAP: dict[str, frozenset[str]] = {
     "notify_service_cancellation": frozenset({"orders"}),
     "notify_panel_capacity": frozenset({"dashboard"}),
     "notify_panel_delivery_failures": frozenset({"orders"}),
+    "notify_service_panel_missing": frozenset({"orders"}),
     "notify_service_import_request": frozenset({"service_import"}),
     "notify_new_subscription": frozenset({"orders", "payments"}),
     "notify_pending_approval": frozenset({"payments"}),
