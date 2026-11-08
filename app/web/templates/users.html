@@ -240,7 +240,11 @@
             <form method="post" action="/users/{{ u.id }}/quick-renew"
                   data-confirm="سرویس بحرانی (نزدیک‌ترین انقضا) با پلن فعلی تمدید شود؟ مصرف ریست می‌شود."
                   data-confirm-title="تمدید سریع"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت تمدید"
+                  data-confirm-reason-name="reason"
                   data-confirm-label="تمدید">
+          <input type="hidden" name="reason" value="" />
               <input type="hidden" name="return_filter" value="{{ flt }}" />
               {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
               <button class="btn btn-sm" type="submit">تمدید</button>

@@ -113,19 +113,19 @@
               data-groups="{{ gids|join(',') }}">ویرایش</button>
             {% endif %}
             {% if can_disable and not disabled and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/disable" data-confirm="این کاربر غیرفعال شود؟" data-confirm-title="غیرفعال‌سازی" data-confirm-warn="1" data-confirm-label="غیرفعال"><button class="btn btn-ghost btn-sm" type="submit">غیرفعال</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/disable" data-confirm-reason="1" data-confirm-reason-label="علت غیرفعال‌سازی" data-confirm-reason-name="reason" data-confirm="این کاربر غیرفعال شود؟" data-confirm-title="غیرفعال‌سازی" data-confirm-warn="1" data-confirm-label="غیرفعال"><input type="hidden" name="reason" value="" /><button class="btn btn-ghost btn-sm" type="submit">غیرفعال</button></form>
             {% endif %}
             {% if can_enable and disabled and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/enable" data-confirm="این کاربر فعال شود؟" data-confirm-title="فعال‌سازی" data-confirm-label="فعال"><button class="btn btn-ghost btn-sm" type="submit">فعال</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/enable" data-confirm-reason="1" data-confirm-reason-label="علت فعال‌سازی" data-confirm-reason-name="reason" data-confirm="این کاربر فعال شود؟" data-confirm-title="فعال‌سازی" data-confirm-label="فعال"><input type="hidden" name="reason" value="" /><button class="btn btn-ghost btn-sm" type="submit">فعال</button></form>
             {% endif %}
             {% if can_reset and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/reset" data-confirm="مصرف این کاربر ریست شود؟" data-confirm-title="ریست مصرف" data-confirm-warn="1" data-confirm-label="ریست"><button class="btn btn-ghost btn-sm" type="submit">ریست</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/reset" data-confirm-reason="1" data-confirm-reason-label="علت ریست مصرف" data-confirm-reason-name="reason" data-confirm="مصرف این کاربر ریست شود؟" data-confirm-title="ریست مصرف" data-confirm-warn="1" data-confirm-label="ریست"><input type="hidden" name="reason" value="" /><button class="btn btn-ghost btn-sm" type="submit">ریست</button></form>
             {% endif %}
             {% if can_revoke and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/revoke" data-confirm="سابسکرایب ابطال شود؟" data-confirm-title="ابطال سابسکرایب" data-confirm-warn="1" data-confirm-label="ابطال"><button class="btn btn-ghost btn-sm" type="submit">ابطال ساب</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/revoke" data-confirm-reason="1" data-confirm-reason-label="علت ابطال اشتراک" data-confirm-reason-name="reason" data-confirm="سابسکرایب ابطال شود؟" data-confirm-title="ابطال سابسکرایب" data-confirm-warn="1" data-confirm-label="ابطال"><input type="hidden" name="reason" value="" /><button class="btn btn-ghost btn-sm" type="submit">ابطال ساب</button></form>
             {% endif %}
             {% if can_delete and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/delete" data-confirm="کاربر پاسارگارد حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
+            <form method="post" action="/pg/users/{{ uid }}/delete" data-confirm-reason="1" data-confirm-reason-label="علت حذف کاربر" data-confirm-reason-name="reason" data-confirm="کاربر پاسارگارد حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف"><input type="hidden" name="reason" value="" />
               <button class="btn btn-danger btn-sm" type="submit">حذف</button>
             </form>
             {% endif %}
