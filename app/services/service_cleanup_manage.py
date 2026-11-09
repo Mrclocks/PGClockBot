@@ -2,8 +2,8 @@
 
 Both change only the acting shop's own services (the scope is part of the UPDATE), take effect before the
 next run, and never touch the panel. Each is one transaction together with its staff log record, and each
-clears the lease of an earlier failed delete. A hold also lowers the warning stage to the notice, so the
-customer is warned again before the new deadline.
+clears the lease of an earlier failed delete. A hold also puts the warning stage back to none and clears the warning date, so the
+customer gets a fresh notice with the new deadline and the deletion cannot run without it.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import case, or_, select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, UserService
@@ -20,7 +20,7 @@ from app.services.service_cleanup import (
     KIND_VOLUME,
     MAX_DAYS,
     MIN_DAYS,
-    STAGE_NOTICE,
+    STAGE_NONE,
     USERNAME_PREVIEW_MAX,
     CleanupPolicy,
     CleanupPolicyError,
@@ -67,11 +67,6 @@ def _log(session: AsyncSession, audit: AuditEntry | None, service_id: int) -> No
         )
 
 
-def _lowered(column):
-    """SQL: ``min(column, STAGE_NOTICE)`` without a dialect-specific function."""
-    return case((column > STAGE_NOTICE, STAGE_NOTICE), else_=column)
-
-
 async def set_exempt(
     session: AsyncSession, *, shop_id: int | None, service_id: int, exempt: bool, audit: AuditEntry | None = None
 ) -> None:
@@ -96,8 +91,8 @@ async def extend_deadline(
     """Give one service ``days`` more days than it has now; returns the new deadline date.
 
     The new hold is the current deadline (or now, if that is earlier) plus ``days``. The UPDATE only moves a
-    hold later, so two clicks at once can never shorten the larger one. The warning stage drops to the notice so
-    the customer is warned again before the new deadline.
+    hold later, so two clicks at once can never shorten the larger one. The warning stage and date reset, so the customer
+    gets a fresh notice with the new deadline before anything can be deleted.
     """
     now = now or datetime.now(timezone.utc)
     service = await session.scalar(
@@ -120,8 +115,11 @@ async def extend_deadline(
         .values(
             cleanup_hold_until=hold,
             cleanup_claimed_at=None,
-            cleanup_warn_stage=_lowered(UserService.cleanup_warn_stage),
-            cleanup_volume_warn_stage=_lowered(UserService.cleanup_volume_warn_stage),
+            # Back to «not warned»: the next scan sends a fresh notice with the new date and dates it, and
+            # the deletion needs that fresh warning date before it may touch the service.
+            cleanup_warn_stage=STAGE_NONE,
+            cleanup_volume_warn_stage=STAGE_NONE,
+            cleanup_warned_at=None,
         ),
         execution_options={"synchronize_session": False},
     )

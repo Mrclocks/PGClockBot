@@ -51,12 +51,13 @@ class ManageServiceTests(CleanupCase):
             self.assertEqual(await manage.list_exempt(session, shop_id=SHOP), [])
 
     async def test_extending_adds_days_to_the_current_deadline_and_rewarns(self) -> None:
-        await self.add_service(1, 20, SHOP, quota_expire_at=NOW - timedelta(days=5), cleanup_warn_stage=3, cleanup_volume_warn_stage=2)
+        await self.add_service(1, 20, SHOP, quota_expire_at=NOW - timedelta(days=5), cleanup_warn_stage=3, cleanup_volume_warn_stage=2,
+                               cleanup_warned_at=NOW - timedelta(days=1))
         async with await self.session() as session:
             until = await manage.extend_deadline(session, shop_id=SHOP, service_id=1, days=10, policy=POLICY, now=NOW)
             row = await session.get(UserService, 1)
             self.assertEqual(until, (NOW + timedelta(days=2 + 10)).strftime("%Y-%m-%d"))  # deadline was in 2 days
-            self.assertEqual((row.cleanup_warn_stage, row.cleanup_volume_warn_stage), (1, 1))
+            self.assertEqual((row.cleanup_warn_stage, row.cleanup_volume_warn_stage, row.cleanup_warned_at), (0, 0, None))
 
     async def test_extending_an_overdue_service_counts_from_now_and_never_lowers_a_hold(self) -> None:
         await self.add_service(1, 20, SHOP, quota_expire_at=NOW - timedelta(days=50))
@@ -73,6 +74,41 @@ class ManageServiceTests(CleanupCase):
                 await manage.extend_deadline(session, shop_id=SHOP, service_id=2, days=5, policy=POLICY, now=NOW)
             row = await session.get(UserService, 2)
             self.assertEqual((row.cleanup_hold_until, row.cleanup_warn_stage), (None, 3))
+
+
+class HoldThenDeleteTests(CleanupCase):
+    async def test_a_service_is_never_deleted_when_its_hold_ends_without_a_fresh_warning(self) -> None:
+        from unittest.mock import AsyncMock, patch
+
+        from app.services import service_cleanup_delete as delete
+        from app.services import service_cleanup_notices as notices
+
+        policy = CleanupPolicy(time_on=True, time_days=7, warn_first=0, warn_last=0, time_enabled_at=NOW - timedelta(days=90))
+        expire = NOW - timedelta(days=9)
+        await self.add_service(1, 20, SHOP, quota_expire_at=expire, cleanup_warn_stage=1, cleanup_warned_at=NOW - timedelta(days=5))
+        async with await self.session() as session:
+            await manage.extend_deadline(session, shop_id=SHOP, service_id=1, days=7, policy=policy, now=NOW)
+        hold_ends = NOW + timedelta(days=7)
+
+        class Panel:
+            deleted: list[int] = []
+
+            async def get_user_by_id(self, user_id):
+                return {"status": "expired", "expire": int(expire.timestamp()), "data_limit": 1, "used_traffic": 0}
+
+            async def delete_user_by_id(self, user_id):
+                self.deleted.append(user_id)
+
+        panel = Panel()
+        with patch("app.services.bot_user_admin._pg_client_for_bot_service", AsyncMock(return_value=panel)):
+            async with await self.session() as session:  # the hold ended, but no fresh notice went out yet
+                outcome = await delete.delete_due_services(session, shop_id=SHOP, policy=policy, kind="time", now=hold_ends + timedelta(hours=1))
+            self.assertEqual((outcome.deleted, panel.deleted), (0, []))
+            async with await self.session() as session:  # the scan sends the notice first (dated then) ...
+                await notices.scan_notices(session, shop_id=SHOP, policy=policy, kind="time", now=hold_ends + timedelta(hours=1))
+            async with await self.session() as session:  # ... and the deletion still waits for the gap after it
+                early = await delete.delete_due_services(session, shop_id=SHOP, policy=policy, kind="time", now=hold_ends + timedelta(hours=2))
+            self.assertEqual((early.deleted, panel.deleted), (0, []))
 
 
 class ManageAtomicityTests(CleanupCase):
