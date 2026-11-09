@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title, setting_help %}
+{% block title %}پاکسازی سرویس‌ها{% endblock %}
+{% block content %}
+<div class="ds ds-settings">
+<div class="page-head">
+  <div>
+    {{ page_title('trash', 'پاکسازی سرویس‌ها', 'neutral') }}
+    <p class="muted">سرویس‌هایی که منقضی یا بی‌حجم شده‌اند و تمدید نشدند، بعد از مهلتی که تعیین می‌کنید حذف می‌شوند. قبل از حذف به مشتری هشدار می‌رسد.</p>
+  </div>
+</div>
+
+<div class="settings-domain-stack">
+<div class="card settings-card">
+  <h2>وضعیت فعلی</h2>
+  <p class="muted update-card-caption">{{ preview.cache_note }}</p>
+  <div class="home-panel-grid">
+    <div class="stat"><div class="stat-top"><span>منقضی‌شده</span></div><strong>{{ preview.expired_total | num }}</strong></div>
+    <div class="stat"><div class="stat-top"><span>حجم تمام‌شده</span></div><strong>{{ preview.volume_total | num }}</strong></div>
+    <div class="stat"><div class="stat-top"><span>آمادهٔ حذف</span></div><strong>{{ (preview.time_due_now + preview.volume_due_now) | num }}</strong></div>
+    <div class="stat"><div class="stat-top"><span>تا ۷ روز دیگر</span></div><strong>{{ (preview.time_due_soon + preview.volume_due_soon) | num }}</strong></div>
+  </div>
+</div>
+
+<form method="post" action="{{ save_action }}" class="settings-form" id="service-cleanup-form">
+  <div class="card settings-card">
+    <label class="toggle-row ui-switch-row settings-card-switch">
+      <span class="ui-switch-copy">
+        <h2>حذف سرویس منقضی</h2>
+        {{ setting_help("بعد از مهلت، سرویس و کاربر پنل آن حذف می‌شود.") }}
+      </span>
+      <span class="ui-switch">
+        <input type="checkbox" name="time_on" value="1" aria-label="حذف خودکار سرویس منقضی" {% if policy.time_on %}checked{% endif %} />
+        <span class="ui-switch-track" aria-hidden="true"></span>
+      </span>
+    </label>
+    <div class="settings-grid" data-show-when="time_on:1"{% if not policy.time_on %} hidden{% endif %}>
+      <div class="setting-item full">
+        <label>مهلت بعد از انقضا (روز)
+        <input name="time_days" type="number" min="{{ min_days }}" max="{{ max_days }}" value="{{ policy.time_days }}"
+               required dir="ltr" inputmode="numeric" aria-label="مهلت حذف سرویس منقضی به روز" />
+        {{ setting_help("اگر تا این مهلت تمدید نشود حذف می‌شود. روزها از زمان انقضا یا از لحظهٔ روشن‌کردن این قانون، هرکدام دیرتر بود، شمرده می‌شود.") }}
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>هشدار اول (روز مانده به حذف)
+        <input name="warn_first" type="number" min="0" max="{{ max_days }}" value="{{ policy.warn_first }}"
+               dir="ltr" inputmode="numeric" aria-label="هشدار اول به روز مانده به حذف" />
+        {{ setting_help("۰ یعنی خاموش.") }}
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>هشدار آخر (روز مانده به حذف)
+        <input name="warn_last" type="number" min="0" max="{{ max_days }}" value="{{ policy.warn_last }}"
+               dir="ltr" inputmode="numeric" aria-label="هشدار آخر به روز مانده به حذف" />
+        {{ setting_help("۰ یعنی خاموش.") }}
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card settings-card">
+    <label class="toggle-row ui-switch-row settings-card-switch">
+      <span class="ui-switch-copy">
+        <h2>حذف سرویس بی‌حجم</h2>
+        {{ setting_help("جدا از انقضا؛ سرویسی که حجمش تمام شده و بسته حجم نگرفته است.") }}
+      </span>
+      <span class="ui-switch">
+        <input type="checkbox" name="volume_on" value="1" aria-label="حذف خودکار سرویس بی‌حجم" {% if policy.volume_on %}checked{% endif %} />
+        <span class="ui-switch-track" aria-hidden="true"></span>
+      </span>
+    </label>
+    <div class="settings-grid" data-show-when="volume_on:1"{% if not policy.volume_on %} hidden{% endif %}>
+      <div class="setting-item full">
+        <label>مهلت بعد از اتمام حجم (روز)
+        <input name="volume_days" type="number" min="{{ min_days }}" max="{{ max_days }}" value="{{ policy.volume_days }}"
+               required dir="ltr" inputmode="numeric" aria-label="مهلت حذف سرویس بی‌حجم به روز" />
+        {{ setting_help("حجم تمام‌شده معمولاً با خرید بسته حجم برمی‌گردد؛ مهلت را بلندتر از مهلت انقضا بگذارید.") }}
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions sticky-actions ui-modal-sticky-save">
+    <button class="btn" type="submit">ذخیره تنظیمات</button>
+  </div>
+</form>
+
+<div class="card card-flush">
+  <h2>سرویس‌هایی که به‌زودی حذف می‌شوند</h2>
+  <p class="muted">حداکثر {{ preview.rows | length | num }} مورد، به ترتیب نزدیک‌ترین مهلت.</p>
+  {% if not preview.rows %}
+  <p class="muted empty-state">سرویسی نزدیک به حذف نیست.</p>
+  {% else %}
+  <div class="table-wrap">
+    <table class="table-compact table-list-sm">
+      <thead>
+        <tr>
+          <th class="li-head" scope="col"><span class="li-only">{{ preview.rows | length | num }} سرویس</span></th>
+          <th scope="col">سرویس</th><th scope="col">مشتری</th><th scope="col">دلیل</th><th scope="col">از تاریخ</th><th scope="col">حذف در</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in preview.rows %}
+        <tr>
+          <td class="li-title"><bdi dir="ltr" class="mono">{{ r.username }}</bdi></td>
+          <td class="li-sub"><span dir="auto">{{ r.customer }}</span></td>
+          <td class="li-badge"><span class="badge neutral">{{ r.kind }}</span></td>
+          <td><bdi dir="ltr" class="mono">{{ r.since }}</bdi></td>
+          <td class="li-value"><bdi dir="ltr" class="mono">{{ r.deadline }}</bdi></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+</div>
+<script src="/static/settings-show-when.js?v={{ asset_v('settings-show-when.js') if asset_v is defined else app_version }}" defer></script>
+</div>
+{% endblock %}

@@ -76,6 +76,8 @@ SNAPSHOT_CONCURRENCY = 4
 # A customer screen lists at most this many services with live status.
 SNAPSHOT_LIMIT = 30
 # Panel read failures that only mean «status unknown»: the stored row is shown instead.
+# PasarGuard status of a user whose data limit is used up.
+VOLUME_FINISHED_STATUS = "limited"
 PANEL_READ_ERRORS = (asyncio.TimeoutError, PasarGuardError, httpx.HTTPError, ValueError)
 MAX_TELEGRAM_ID = 9_007_199_254_740_991  # signed int64 safe upper bound
 # Shop feature key for viewing and changing a customer's services (bot and web).
@@ -848,6 +850,12 @@ def _cache_quota_status(service: UserService, info: dict[str, Any]) -> None:
     status = info.get("status")
     if isinstance(status, str):
         service.quota_status = status.strip().lower()[:32]
+        # The cleanup counts days from the moment the panel first reported the volume as finished.
+        if service.quota_status == VOLUME_FINISHED_STATUS:
+            if service.volume_exhausted_at is None:
+                service.volume_exhausted_at = datetime.now(timezone.utc)
+        else:
+            service.volume_exhausted_at = None
 
 
 def sync_service_quota_cache(

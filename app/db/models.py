@@ -453,6 +453,12 @@ class UserService(Base):
         ),
         # New services waiting for the first-use check; the check stamps the row, so it leaves the index.
         Index("ix_user_services_panel_checked_at", "panel_checked_at"),
+        Index("ix_user_services_quota_expire_at", "quota_expire_at"),
+        Index(
+            "ix_user_services_volume_exhausted", "volume_exhausted_at",
+            sqlite_where=text("volume_exhausted_at IS NOT NULL"),
+            postgresql_where=text("volume_exhausted_at IS NOT NULL"),
+        ),
         Index(
             "ix_user_services_panel_missing", "shop_id",
             sqlite_where=text("panel_missing_at IS NOT NULL"),
@@ -508,6 +514,16 @@ class UserService(Base):
     shop_needs_review: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("false"), index=True
     )
+    # Expired / volume-finished service cleanup (see service_cleanup.py).
+    cleanup_exempt: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # A staff-set date before which the service is not deleted, whatever the policy says.
+    cleanup_hold_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Highest warning stage already sent for the current expiry (0 = none); reset by a renewal.
+    cleanup_warn_stage: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # Lease taken before the delete call; a lease that never finished means the outcome is unknown.
+    cleanup_claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the panel first reported the volume as finished (status «limited»); cleared when it is not.
+    volume_exhausted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Set when the panel confirmed (HTTP 404 on the user lookup) that this service's panel user is gone.
     panel_missing_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Last time the presence scan looked this service up; the scan takes the oldest first.
