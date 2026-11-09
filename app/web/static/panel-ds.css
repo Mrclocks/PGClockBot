@@ -10,6 +10,8 @@
   --sec-gap: var(--g6);          /* between boxes / sections */
   --ctl-h: var(--btn-h);         /* 44: fields, selects, buttons, tabs, icon buttons */
   --cmp-h: var(--ctl-sm-h);      /* 36: compact controls */
+  --num-w: 96px;                 /* number box in a list row (amount); 72 on phones */
+  --money-w: 160px;              /* price box in a list row */
   --lbl-h: var(--tag-h);         /* 28: status tags, counters */
   --track-pad: 3px;              /* track border 1 + pad 3 + item 36 + 3 + 1 = 44 */
   --box-radius: var(--radius);
@@ -377,20 +379,25 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 /* ===================================================================== 10. Editable row lists (packs) */
 .ds .ds-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--inner-radius); overflow: visible; }
 .ds .ds-list-head, .ds .ds-list-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 96px var(--ctl-h);
+  display: grid; grid-template-columns: var(--num-w) minmax(0, 1fr) 96px var(--ctl-h);
   align-items: center; gap: var(--g2); padding: 0 var(--g3);
 }
 .ds .ds-list-head { min-height: var(--cmp-h); font-size: 12px; color: var(--muted-fg); border-bottom: 1px solid var(--line); }
 .ds .ds-list-head span { white-space: nowrap; }
-.ds .ds-list-head .ds-unit-head { display: none; }
+/* The number column is a compact box with its value centred; its unit lives in the column title. */
+.ds .ds-list-head > span:first-child, .ds .ds-list-head > span:nth-child(3) { text-align: center; overflow: hidden; text-overflow: ellipsis; }
+/* A price typed in a list row is a compact box too, wide enough for a seven-digit amount. */
+.ds .ds-list-value > input { display: block; width: 100%; max-width: var(--money-w); }
 .ds .ds-list-row { position: relative; padding-block: var(--g3); margin: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
 .ds .ds-list-row > * { margin: 0; }
 .ds .ds-list-row + .ds-list-row { border-top: 1px dashed var(--dash) !important; }
-.ds .ds-list-row input { height: var(--ctl-h); min-height: var(--ctl-h); font-size: 15px; font-weight: 600; text-align: center; }
+.ds .ds-list-row input { height: var(--ctl-h); min-height: var(--ctl-h); font-size: 15px; font-weight: 600; }
+/* Numbers in a list row sit in the middle of their box; the base input rules (long :not() chains) would push them to one side. */
+.ds .ds-list-row input { text-align: center !important; }
 .ds .ds-list-value { font-size: 13px; color: var(--muted-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ds .ds-list-value bdi { color: var(--foreground); font-weight: 600; font-variant-numeric: tabular-nums; }
-.ds .ds-pack-amt input { padding-inline: var(--g4) 44px; text-align: right; }
-.ds .ds-pack-amt .ds-unit-label { left: var(--g3); }
+.ds .ds-pack-amt input { padding-inline: var(--g2); }
+.ds .ds-pack-amt .ds-unit-label { display: none; }
 .ds .ds-del {
   width: var(--ctl-h); height: var(--ctl-h); padding: 0; border-radius: 999px; border: 1px solid transparent; background: none;
   color: var(--muted-fg); cursor: pointer; justify-self: center;
@@ -428,10 +435,9 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 /* «پیش‌فرض» has no colour of its own, so it shows no dot. */
 .ds .ds-dot-select:is([data-value="inherit"], :not([data-value])) .ui-select-toggle::before { display: none; }
 @media (max-width: 480px) {
-  .ds .ds-list-head, .ds .ds-list-row { grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) 96px 40px; gap: 6px; padding-inline: var(--g2); }
-  .ds .ds-list-head .ds-unit-head { display: inline; }
-  .ds .ds-pack-amt .ds-unit-label { display: none; }
-  .ds .ds-pack-amt input, .ds .ds-list-row input { padding-inline: var(--g2); text-align: center; }
+  .ds { --num-w: 72px; }
+  .ds .ds-list-head, .ds .ds-list-row { grid-template-columns: var(--num-w) minmax(0, 1fr) 96px 40px; gap: 6px; padding-inline: var(--g2); }
+  .ds .ds-list-row input { padding-inline: var(--g2); }
   .ds .ds-dot-select .ui-select-toggle { padding: 0 6px !important; }
 }
 
