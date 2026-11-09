@@ -92,23 +92,40 @@
   <p class="muted empty-state">سرویسی نزدیک به حذف نیست.</p>
   {% else %}
   <div class="table-wrap">
-    <table class="table-compact table-list-sm">
+    <table class="table-compact table-list-sm" data-sortable>
       <thead>
         <tr>
-          <th class="li-head" scope="col"><span class="li-only">{{ preview.rows | length | num }} سرویس</span></th>
-          <th scope="col">سرویس</th><th scope="col">مشتری</th><th scope="col">دلیل</th><th scope="col">از تاریخ</th><th scope="col">حذف در</th><th scope="col">عملیات</th>
+          <th class="col-name" data-sort-type="text" data-list-sort-label="مشتری" data-list-sort-dir="ascending" data-list-sort-order="2">مشتری</th>
+          <th class="col-svc" data-sort-type="text">سرویس</th>
+          <th class="col-status" data-sort-type="text">دلیل</th>
+          <th class="col-hide-sm" data-sort-type="text">از تاریخ</th>
+          <th class="col-exp" data-sort-type="num" data-list-sort-label="نزدیک‌ترین مهلت" data-list-sort-dir="ascending" data-list-sort-order="1">حذف در</th>
+          <th class="col-actions"></th>
+          <th class="li-head" scope="col">
+            <span class="li-count">{{ preview.rows | length | num }} سرویس</span>
+            <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
+          </th>
         </tr>
       </thead>
       <tbody>
       {% for r in preview.rows %}
-        <tr>
-          <td class="li-title"><bdi dir="ltr" class="mono">{{ r.username }}</bdi></td>
-          <td class="li-sub"><span dir="auto">{{ r.customer }}</span></td>
-          <td class="li-badge"><span class="badge {{ 'rejected' if r.retrying else 'neutral' }}">{{ 'تلاش مجدد' if r.retrying else r.kind }}</span></td>
-          <td><bdi dir="ltr" class="mono">{{ r.since }}</bdi></td>
-          <td class="li-value"><bdi dir="ltr" class="mono">{{ r.deadline }}</bdi></td>
+        <tr id="cleanup-{{ r.service_id }}">
+          <td class="col-name li-title" data-sort-value="{{ r.customer }}">
+            <div class="cell-name">
+              <span class="cell-name-primary">
+                <a class="cell-name-text cell-name-link" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}" dir="auto">{{ r.customer }}</a>
+              </span>
+            </div>
+          </td>
+          <td class="col-svc li-sub" data-sort-value="{{ r.username }}"><bdi dir="ltr" class="mono">{{ r.username }}</bdi></td>
+          <td class="col-status li-badge" data-sort-value="{{ r.kind }}"><span class="badge {{ 'blocked' if r.retrying else 'neutral' }}">{{ 'تلاش مجدد' if r.retrying else r.kind }}</span></td>
+          <td class="col-hide-sm" data-sort-value="{{ r.since }}"><bdi dir="ltr" class="mono">{{ r.since }}</bdi></td>
+          <td class="col-exp li-value li-tone-{{ 'danger' if r.days_left <= 1 else ('warn' if r.days_left <= 3 else 'none') }}" data-sort-value="{{ r.days_left }}">
+            <bdi dir="ltr" class="mono">{{ r.deadline }}</bdi>
+          </td>
           <td class="col-actions">
             {% call row_actions() %}
+              <a class="btn btn-ghost btn-sm" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}">مشاهده کاربر</a>
               {% for extra in (7, 30) %}
               <form method="post" action="/service-cleanup/{{ r.service_id }}/hold"
                     data-confirm="{{ extra }} روز به مهلت حذف سرویس {{ r.username }} اضافه شود؟" data-confirm-title="تمدید مهلت حذف" data-confirm-label="تمدید"
@@ -140,23 +157,40 @@
   <h2>سرویس‌های معاف از پاکسازی</h2>
   <p class="muted">این سرویس‌ها هیچ‌وقت خودکار حذف نمی‌شوند.</p>
   <div class="table-wrap">
-    <table class="table-compact table-list-sm">
+    <table class="table-compact table-list-sm" data-sortable>
       <thead>
-        <tr><th class="li-head" scope="col"><span class="li-only">{{ exempt | length | num }} سرویس</span></th><th scope="col">سرویس</th><th scope="col">مشتری</th><th scope="col">عملیات</th></tr>
+        <tr>
+          <th class="col-name" data-sort-type="text" data-list-sort-label="مشتری" data-list-sort-dir="ascending" data-list-sort-order="1">مشتری</th>
+          <th class="col-svc" data-sort-type="text">سرویس</th>
+          <th class="col-actions"></th>
+          <th class="li-head" scope="col">
+            <span class="li-count">{{ exempt | length | num }} سرویس</span>
+            <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
+          </th>
+        </tr>
       </thead>
       <tbody>
       {% for r in exempt %}
         <tr>
-          <td class="li-title"><bdi dir="ltr" class="mono">{{ r.username }}</bdi></td>
-          <td class="li-sub"><span dir="auto">{{ r.customer }}</span></td>
+          <td class="col-name li-title" data-sort-value="{{ r.customer }}">
+            <div class="cell-name">
+              <span class="cell-name-primary">
+                <a class="cell-name-text cell-name-link" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}" dir="auto">{{ r.customer }}</a>
+              </span>
+            </div>
+          </td>
+          <td class="col-svc li-sub" data-sort-value="{{ r.username }}"><bdi dir="ltr" class="mono">{{ r.username }}</bdi></td>
           <td class="col-actions">
-            <form method="post" action="/service-cleanup/{{ r.service_id }}/exempt" class="inline-form"
-                  data-confirm="سرویس {{ r.username }} دوباره در پاکسازی قرار گیرد؟" data-confirm-title="برگرداندن به پاکسازی" data-confirm-label="برگردان"
-                  data-confirm-reason="1" data-confirm-reason-label="علت برگرداندن" data-confirm-reason-name="reason">
-              <input type="hidden" name="reason" value="" />
-              <input type="hidden" name="value" value="0" />
-              <button class="btn btn-sm btn-ghost" type="submit">برگردان</button>
-            </form>
+            {% call row_actions() %}
+              <a class="btn btn-ghost btn-sm" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}">مشاهده کاربر</a>
+              <form method="post" action="/service-cleanup/{{ r.service_id }}/exempt"
+                    data-confirm="سرویس {{ r.username }} دوباره در پاکسازی قرار گیرد؟" data-confirm-title="برگرداندن به پاکسازی" data-confirm-label="برگردان"
+                    data-confirm-reason="1" data-confirm-reason-label="علت برگرداندن" data-confirm-reason-name="reason">
+                <input type="hidden" name="reason" value="" />
+                <input type="hidden" name="value" value="0" />
+                <button class="btn btn-ghost btn-sm" type="submit">برگردان به پاکسازی</button>
+              </form>
+            {% endcall %}
           </td>
         </tr>
       {% endfor %}

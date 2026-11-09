@@ -12,6 +12,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 from sqlalchemy import select
 
 from app.db.models import ShopStaffAction, UserService
+from app.services import service_cleanup as cleanup
 from app.services import service_cleanup_manage as manage
 from app.services.service_cleanup import CleanupPolicy, CleanupPolicyError
 from tests.test_service_cleanup import (
@@ -129,6 +130,20 @@ class ManageRoutesTests(CleanupCase):
             self.assertEqual(response.headers["location"], "/home")
         async with await self.session() as session:
             self.assertFalse((await session.get(UserService, 1)).cleanup_exempt)
+
+    async def test_each_row_links_its_own_customer_by_name_and_from_the_actions_menu(self) -> None:
+        await self.set_shop_permissions("dashboard,service_cleanup")
+        async with await self.session() as session:
+            await cleanup.save_policy(session, shop_id=SHOP, policy=cleanup.parse_policy_form(
+                {"time_on": "1", "time_days": "7", "volume_days": "30", "warn_first": "3", "warn_last": "1"}), now=NOW - timedelta(days=60))
+        await self.add_service(1, 20, SHOP, quota_expire_at=NOW - timedelta(days=20))
+        await self.add_service(2, 21, OTHER_SHOP, quota_expire_at=NOW - timedelta(days=20))
+        await self.add_service(3, 20, SHOP, cleanup_exempt=True)
+        response = await self.call("GET", ROUTE)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("/users?uid=20&amp;edit=20", response.text)
+        self.assertNotIn("uid=21", response.text)  # another shop's customer is never linked
+        self.assertGreaterEqual(response.text.count("مشاهده کاربر"), 2)  # a menu item in each table
 
     async def test_the_page_lists_exempt_services_and_escapes_their_names(self) -> None:
         await self.set_shop_permissions("dashboard,service_cleanup")

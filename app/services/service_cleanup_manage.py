@@ -35,6 +35,7 @@ NOT_FOUND_TEXT = "سرویس پیدا نشد"
 @dataclass(frozen=True, slots=True)
 class ExemptRow:
     service_id: int
+    user_id: int
     username: str
     customer: str
 
@@ -108,7 +109,7 @@ def _lowered(column):
 async def list_exempt(session: AsyncSession, *, shop_id: int | None) -> list[ExemptRow]:
     rows = (
         await session.execute(
-            select(UserService.id, UserService.pg_username, BotUser.full_name, BotUser.username)
+            select(UserService.id, UserService.pg_username, BotUser.full_name, BotUser.username, BotUser.id)
             .join(BotUser, BotUser.id == UserService.bot_user_id)
             .where(shop_services_clause(shop_id), UserService.cleanup_exempt.is_(True))
             .order_by(UserService.id)
@@ -116,6 +117,6 @@ async def list_exempt(session: AsyncSession, *, shop_id: int | None) -> list[Exe
         )
     ).all()
     return [
-        ExemptRow(int(i), str(name or "")[:USERNAME_PREVIEW_MAX], str(full or (f"@{handle}" if handle else "—"))[:USERNAME_PREVIEW_MAX])
-        for i, name, full, handle in rows
+        ExemptRow(int(i), int(uid), str(name or "")[:USERNAME_PREVIEW_MAX], str(full or (f"@{handle}" if handle else "—"))[:USERNAME_PREVIEW_MAX])
+        for i, name, full, handle, uid in rows
     ]
