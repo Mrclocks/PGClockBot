@@ -26,6 +26,7 @@ from app.db.models import BotUser, Order, OrderStatus, ServiceAutomation, UserSe
 from app.services.bot_user_admin import admin_delete_service
 from app.services.customer_notice_queue import add_notice
 from app.services.service_cleanup import (
+    LEASE,
     KIND_TIME,
     KIND_VOLUME,
     STAGE_NOTICE,
@@ -43,7 +44,6 @@ from app.services.staff_audit import ACTOR_SYSTEM, StaffActor, add_staff_action
 logger = logging.getLogger(__name__)
 
 DELETE_BATCH = 25
-LEASE = timedelta(hours=1)
 # The customer's last warning must be at least this old, so a warning and the deletion are never one run apart.
 MIN_WARNING_GAP = timedelta(hours=6)
 SYSTEM_LABEL = "سیستم · پاکسازی خودکار"

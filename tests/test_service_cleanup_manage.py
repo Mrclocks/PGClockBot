@@ -75,6 +75,68 @@ class ManageServiceTests(CleanupCase):
             self.assertEqual((row.cleanup_hold_until, row.cleanup_warn_stage), (None, 3))
 
 
+class ManageAtomicityTests(CleanupCase):
+    def audit(self, action: str = "service_cleanup_hold") -> manage.AuditEntry:
+        from app.services.staff_audit import StaffActor
+
+        return manage.AuditEntry(StaffActor(SHOP, "shop_owner", SHOP, "owner"), action, "درخواست مشتری")
+
+    async def log_rows(self):
+        async with await self.session() as session:
+            return list((await session.scalars(select(ShopStaffAction))).all())
+
+    async def test_the_change_and_its_log_record_are_one_transaction(self) -> None:
+        await self.add_service(1, 20, SHOP, quota_expire_at=NOW - timedelta(days=5))
+        await self.add_service(2, 21, OTHER_SHOP, quota_expire_at=NOW - timedelta(days=5))
+        async with await self.session() as session:
+            await manage.extend_deadline(session, shop_id=SHOP, service_id=1, days=3, policy=POLICY, now=NOW, audit=self.audit())
+            with self.assertRaises(ValueError):
+                await manage.set_exempt(session, shop_id=SHOP, service_id=2, exempt=True, audit=self.audit("service_cleanup_exempt"))
+        self.assertEqual([r.action for r in await self.log_rows()], ["service_cleanup_hold"])  # the refused change left no record
+
+    async def test_two_extensions_at_once_never_shorten_the_larger_hold(self) -> None:
+        await self.add_service(1, 20, SHOP, quota_expire_at=NOW - timedelta(days=5))
+        real = manage.deadline_for
+
+        def deadline_then_a_bigger_hold(service, policy, kind):
+            result = real(service, policy, kind)
+            if kind == "time" and not getattr(self, "raced", False):
+                self.raced = True
+                import sqlite3  # the other click lands between this read and the write below
+
+                con = sqlite3.connect(self.db_path)
+                con.execute("UPDATE user_services SET cleanup_hold_until = ? WHERE id = 1", ((NOW + timedelta(days=90)).strftime("%Y-%m-%d %H:%M:%S.%f"),))
+                con.commit()
+                con.close()
+            return result
+
+        from unittest.mock import patch
+
+        async with await self.session() as session:
+            with patch.object(manage, "deadline_for", deadline_then_a_bigger_hold):
+                with self.assertRaises(ValueError):
+                    await manage.extend_deadline(session, shop_id=SHOP, service_id=1, days=3, policy=POLICY, now=NOW)
+        async with await self.session() as session:
+            held = (await session.get(UserService, 1)).cleanup_hold_until
+        self.assertGreaterEqual(held.replace(tzinfo=None), (NOW + timedelta(days=90)).replace(tzinfo=None))
+
+    async def test_a_hold_or_exemption_clears_the_lease_of_an_earlier_failed_delete(self) -> None:
+        await self.add_service(1, 20, SHOP, quota_expire_at=NOW - timedelta(days=5), cleanup_claimed_at=NOW)
+        await self.add_service(2, 20, SHOP, quota_expire_at=NOW - timedelta(days=5), cleanup_claimed_at=NOW)
+        async with await self.session() as session:
+            await manage.extend_deadline(session, shop_id=SHOP, service_id=1, days=3, policy=POLICY, now=NOW)
+            await manage.set_exempt(session, shop_id=SHOP, service_id=2, exempt=True)
+            self.assertEqual([(await session.get(UserService, i)).cleanup_claimed_at for i in (1, 2)], [None, None])
+
+    async def test_the_retrying_badge_shows_only_while_the_lease_is_live(self) -> None:
+        policy = CleanupPolicy(time_on=True, time_days=7, time_enabled_at=NOW - timedelta(days=60))
+        await self.add_service(1, 20, SHOP, quota_expire_at=NOW - timedelta(days=9), cleanup_claimed_at=NOW - timedelta(minutes=10))
+        await self.add_service(2, 20, SHOP, quota_expire_at=NOW - timedelta(days=9), cleanup_claimed_at=NOW - timedelta(hours=3))
+        async with await self.session() as session:
+            rows = (await cleanup.build_preview(session, shop_id=SHOP, policy=policy, now=NOW)).rows
+        self.assertEqual({r.service_id: r.retrying for r in rows}, {1: True, 2: False})
+
+
 class ManageRoutesTests(CleanupCase):
     async def call(self, method: str, path: str, data: dict | None = None):
         cookie = f"session={self.signer.dumps(SHOP_SESSION)}; csrf=token"

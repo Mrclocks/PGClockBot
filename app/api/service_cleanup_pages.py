@@ -9,8 +9,10 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.action_reasons import ReasonRequired, log_reasoned_action, reason_from_form
-from app.services.service_cleanup_manage import extend_deadline, list_exempt, parse_hold_days, set_exempt
+from app.services.action_reasons import ReasonRequired, reason_from_form
+from app.services.service_cleanup_manage import AuditEntry, extend_deadline, list_exempt, parse_hold_days, set_exempt
+from app.services.shop_scope import resolve_shop_scope_id
+from app.services.staff_audit import actor_from_staff
 from app.services.service_cleanup import (
     MAX_DAYS,
     MIN_DAYS,
@@ -89,14 +91,15 @@ def register_service_cleanup_pages(
         except ReasonRequired as exc:
             return _back(err=str(exc))
         keep = str(form.get("value") or "") == "1"
+        audit = AuditEntry(
+            actor_from_staff(staff, shop_id=resolve_shop_scope_id(staff)),
+            "service_cleanup_exempt" if keep else "service_cleanup_unexempt",
+            reason,
+        )
         try:
-            await set_exempt(session, shop_id=shop_id, service_id=service_id, exempt=keep)
+            await set_exempt(session, shop_id=shop_id, service_id=service_id, exempt=keep, audit=audit)
         except ValueError as exc:
             return _back(err=str(exc))
-        await log_reasoned_action(
-            session, staff, action="service_cleanup_exempt" if keep else "service_cleanup_unexempt",
-            target_type="service", target_id=service_id, reason=reason,
-        )
         return _back(ok="سرویس از پاکسازی معاف شد" if keep else "سرویس دوباره در پاکسازی قرار گرفت")
 
     @app.post(SERVICE_CLEANUP_PATH + "/{service_id}/hold")
@@ -114,11 +117,11 @@ def register_service_cleanup_pages(
         except (ReasonRequired, CleanupPolicyError) as exc:
             return _back(err=str(exc))
         policy = await load_policy(session, shop_id=shop_id)
+        audit = AuditEntry(actor_from_staff(staff, shop_id=resolve_shop_scope_id(staff)), "service_cleanup_hold", reason)
         try:
-            until = await extend_deadline(session, shop_id=shop_id, service_id=service_id, days=days, policy=policy)
+            until = await extend_deadline(
+                session, shop_id=shop_id, service_id=service_id, days=days, policy=policy, audit=audit
+            )
         except ValueError as exc:
             return _back(err=str(exc))
-        await log_reasoned_action(
-            session, staff, action="service_cleanup_hold", target_type="service", target_id=service_id, reason=reason
-        )
         return _back(ok=f"مهلت حذف تا {until} تمدید شد")

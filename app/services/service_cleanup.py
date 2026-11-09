@@ -46,6 +46,8 @@ SETTING_DEFAULTS = {
     KEY_VOLUME_DAYS: "30",
     KEY_VOLUME_ENABLED_AT: "",
 }
+# A delete that failed keeps this lease; the same service is tried again only after it expired.
+LEASE = timedelta(hours=1)
 MIN_DAYS = 1
 MAX_DAYS = 365
 DEFAULT_TIME_DAYS = 7
@@ -328,7 +330,7 @@ async def _preview_rows(
                     since=local_date(since),
                     deadline=local_date(deadline),
                     days_left=max(0, -(-int((deadline - now).total_seconds()) // 86400)),
-                    retrying=claimed_at is not None,
+                    retrying=claimed_at is not None and _aware(claimed_at) > now - LEASE,
                 )
             )
     return rows[:PREVIEW_SAMPLE]
