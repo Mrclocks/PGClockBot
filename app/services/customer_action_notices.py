@@ -81,15 +81,26 @@ CLEANUP_NOTICE_TEXTS = {
         "⚠️ <b>هشدار حذف سرویس بی‌حجم</b>\nسرویس: <code>{name}</code>\nتاریخ حذف: <b>{date}</b>\n"
         "برای نگه‌داشتن سرویس، پیش از این تاریخ تمدید کنید یا بسته حجم بگیرید."
     ),
+    "cleanup_deleted": (
+        "🗑 <b>سرویس شما حذف شد</b>\nسرویس: <code>{name}</code>\n"
+        "این سرویس منقضی شده بود و در مهلت تعیین‌شده تمدید نشد. برای ادامه می‌توانید سرویس جدید بخرید."
+    ),
+    "cleanup_volume_deleted": (
+        "🗑 <b>سرویس شما حذف شد</b>\nسرویس: <code>{name}</code>\n"
+        "حجم این سرویس تمام شده بود و در مهلت تعیین‌شده تمدید نشد. برای ادامه می‌توانید سرویس جدید بخرید."
+    ),
 }
-RENEW_BUTTON_ACTIONS = frozenset(CLEANUP_NOTICE_TEXTS)
+# Only the warnings that leave the customer a way out carry the renew button.
+RENEW_BUTTON_ACTIONS = frozenset(
+    {"cleanup_expired", "cleanup_warning", "cleanup_volume_finished", "cleanup_volume_warning"}
+)
 
 
 def notice_text(action: str, *, service_name: str, reason: str) -> str:
     """The Persian message; every dynamic part is escaped for Telegram HTML."""
     template = CLEANUP_NOTICE_TEXTS.get(action)
     if template is not None:
-        return template.format(name=html.escape(service_name or "—"), date=html.escape(reason))
+        return template.format(name=html.escape(service_name or "—"), date=html.escape(reason or "—"))
     title = ACTION_NOTICE_TITLES[action]
     lines = [f"<b>{title}</b>", f"سرویس: <code>{html.escape(service_name or '—')}</code>", f"علت: {html.escape(reason)}"]
     hint = ACTION_NOTICE_HINTS.get(action)
