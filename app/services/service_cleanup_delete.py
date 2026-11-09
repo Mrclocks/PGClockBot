@@ -23,7 +23,11 @@ from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, ServiceAutomation, UserService
-from app.services.bot_user_admin import admin_delete_service
+from app.services.bot_user_admin import (
+    admin_delete_service,
+    ensure_pg_user_removed_or_absent,
+    panel_client_for_service,
+)
 from app.services.customer_notice_queue import add_notice
 from app.services.service_cleanup import (
     KIND_TIME,
@@ -194,14 +198,23 @@ async def _delete_one(
     """Delete one claimed service; on any failure the row and the lease stay as they were."""
     service_id, user_id = int(service.id), int(service.bot_user_id)
     name, owner_shop = service.pg_username or "", service.shop_id
+    pg_user_id = int(service.pg_user_id) if service.pg_user_id else None
     actor = StaffActor(shop_id=shop_id, kind=ACTOR_SYSTEM, user_id=None, label=SYSTEM_LABEL)
     try:
-        # The log record is added first: admin_delete_service commits the local delete, and this record
-        # with it, so there is never a deleted service without its record. A failure rolls both back.
-        add_staff_action(
-            session, actor, action="service_auto_delete", target_type="service", target_id=service_id, reason=_reason(kind, days)
-        )
-        await admin_delete_service(session, service, delete_pg=True, staff=None, allow_disable_fallback=False)
+        pg = await panel_client_for_service(session, service)
+        # End the read transaction first: no database transaction is open while the panel is called.
+        await session.commit()
+        if pg is None or pg_user_id is None:
+            raise ValueError("panel client unavailable")
+        await ensure_pg_user_removed_or_absent(pg, pg_user_id, staff=None, allow_disable_fallback=False)
+        service = await session.get(UserService, service_id)
+        if service is not None:
+            # The log record joins the local delete's own commit, so a deleted service always has its record.
+            add_staff_action(
+                session, actor, action="service_auto_delete", target_type="service", target_id=service_id,
+                reason=_reason(kind, days),
+            )
+            await admin_delete_service(session, service, delete_pg=False, staff=None)
     except Exception:  # noqa: BLE001 - unknown panel outcome: keep the row and the lease, retry after the lease expires
         logger.warning("service cleanup delete failed service=%s", service_id, exc_info=True)
         await session.rollback()

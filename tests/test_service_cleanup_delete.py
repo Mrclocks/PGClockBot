@@ -37,6 +37,7 @@ class FakePanel:
         self.users = users
         self.delete_error = delete_error
         self.deleted: list[int] = []
+        self.on_delete = None
         self.disabled: list[int] = []
         self.reads: list[int] = []
 
@@ -47,6 +48,8 @@ class FakePanel:
         return self.users[user_id]
 
     async def delete_user_by_id(self, user_id: int) -> None:
+        if self.on_delete is not None:
+            self.on_delete()
         if self.delete_error is not None:
             raise self.delete_error
         self.deleted.append(user_id)
@@ -199,6 +202,16 @@ class LastMomentChecksTests(DeleteCase):
         self.assertEqual(await self.table(ShopStaffAction), [])
         await self.sweep(FakePanel({1001: expired()}), at=NOW + timedelta(hours=2))
         self.assertEqual([a.action for a in await self.table(ShopStaffAction)], ["service_auto_delete"])
+
+
+class TransactionTests(DeleteCase):
+    async def test_no_database_connection_is_held_while_the_panel_is_called(self) -> None:
+        await self.add(1)
+        held: list[int] = []
+        panel = FakePanel({1001: expired()})
+        panel.on_delete = lambda: held.append(self.engine.pool.checkedout())
+        self.assertEqual((await self.sweep(panel)).deleted, 1)
+        self.assertEqual(held, [0])
 
 
 class NotYetDueTests(DeleteCase):
