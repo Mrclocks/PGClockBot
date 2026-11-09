@@ -520,6 +520,8 @@ class UserService(Base):
     cleanup_hold_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Highest warning stage already sent for the current expiry (0 = none); reset by a renewal.
     cleanup_warn_stage: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # When the last warning stage was queued; the deletion waits a while after it.
+    cleanup_warned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Same for the volume-finished rule, which has its own warnings.
     cleanup_volume_warn_stage: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     # Lease taken before the delete call; a lease that never finished means the outcome is unknown.

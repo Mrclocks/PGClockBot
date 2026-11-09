@@ -30,7 +30,6 @@ from app.services.service_cleanup import (
     deadline_for,
     eligible_clauses,
     local_date,
-    not_held_clause,
     shop_services_clause,
     target_stage,
     time_due_clause,
@@ -125,10 +124,10 @@ async def _live_refresh(session: AsyncSession, services: list[UserService]) -> s
     return fresh
 
 
-async def _claim_stage(session: AsyncSession, service_id: int, kind: str, stage: int) -> bool:
+async def _claim_stage(session: AsyncSession, service_id: int, kind: str, stage: int, now: datetime) -> bool:
     column = _stage_column(kind)
     result = await session.execute(
-        update(UserService).where(UserService.id == service_id, column < stage).values({column.key: stage}),
+        update(UserService).where(UserService.id == service_id, column < stage).values({column.key: stage, UserService.cleanup_warned_at.key: now}),
         execution_options={"synchronize_session": False},
     )
     return result.rowcount == 1
@@ -147,7 +146,8 @@ async def scan_notices(
         await session.execute(
             select(UserService, BotUser.telegram_id)
             .join(BotUser, BotUser.id == UserService.bot_user_id)
-            .where(shop_services_clause(shop_id), *eligible_clauses(), not_held_clause(now), BotUser.is_blocked.is_(False),
+            # A service under a hold is scanned too: its deadline is the hold's end, so its warnings come before it.
+            .where(shop_services_clause(shop_id), *eligible_clauses(), BotUser.is_blocked.is_(False),
                    _candidate_clause(kind, policy, now))
             .order_by(UserService.id)
             .limit(limit)
@@ -175,7 +175,7 @@ async def scan_notices(
         if deadline is None or not telegram[int(service.id)]:
             continue
         stage_now = target_stage(deadline, now=now, policy=policy, days=days)
-        if stage_now <= stage or not await _claim_stage(session, int(service.id), kind, stage_now):
+        if stage_now <= stage or not await _claim_stage(session, int(service.id), kind, stage_now, now):
             continue
         add_notice(
             session, shop_id=service.shop_id, bot_user_id=int(service.bot_user_id), telegram_id=telegram[int(service.id)],

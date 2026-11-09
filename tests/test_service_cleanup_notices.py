@@ -176,15 +176,14 @@ class RecheckTests(NoticeCase):
 
 
 class SkipTests(NoticeCase):
-    async def test_exempt_held_cancelled_blocked_and_unreviewed_services_are_never_warned(self) -> None:
+    async def test_exempt_cancelled_blocked_and_unreviewed_services_are_never_warned(self) -> None:
         old = NOW - timedelta(days=2)
         await self.add(1, quota_expire_at=old, cleanup_exempt=True)
-        await self.add(2, quota_expire_at=old, cleanup_hold_until=NOW + timedelta(days=9))
         await self.add(3, quota_expire_at=old, is_cancelled=True)
         await self.add(4, owner=22, quota_expire_at=old)  # blocked customer
         await self.add(5, quota_expire_at=old, shop_needs_review=True)
         await self.add(6, quota_expire_at=old, cancellation_pending=True)
-        panel = FakePanel({1000 + i: user_info(expire=old) for i in range(1, 7)})
+        panel = FakePanel({1000 + i: user_info(expire=old) for i in range(1, 7) if i != 2})
         await self.scan(panel)
         self.assertEqual((await self.queued(), panel.calls), ([], []))
 
@@ -235,6 +234,39 @@ class RenewalResetTests(unittest.TestCase):
                           quota_expire_at=NOW - timedelta(days=5), volume_exhausted_at=NOW, quota_status="limited")
         sync_service_quota_cache(svc, info={"status": "active", "expire": int((NOW + timedelta(days=30)).timestamp()), "data_limit": 10})
         self.assertEqual((svc.cleanup_warn_stage, svc.cleanup_volume_warn_stage), (0, 0))
+
+
+    def test_a_small_extension_that_leaves_the_service_expired_keeps_its_stage(self) -> None:
+        from app.services.bot_user_admin import sync_service_quota_cache
+
+        svc = UserService(id=1, bot_user_id=1, pg_user_id=1, pg_username="u", cleanup_warn_stage=2, quota_expire_at=NOW - timedelta(days=5))
+        sync_service_quota_cache(svc, info={"status": "expired", "expire": int((NOW - timedelta(days=5) + timedelta(hours=3)).timestamp()), "data_limit": 10})
+        self.assertEqual(svc.cleanup_warn_stage, 2)
+
+
+class HoldTests(NoticeCase):
+    async def test_a_held_service_is_warned_before_its_new_deadline_with_the_hold_date(self) -> None:
+        expire = NOW - timedelta(days=20)
+        hold = NOW + timedelta(days=2)
+        await self.add(1, quota_expire_at=expire, cleanup_hold_until=hold, cleanup_warn_stage=1)
+        await self.scan(FakePanel({1001: user_info(expire=expire)}))
+        rows = await self.queued()
+        self.assertEqual([(r.action, r.reason) for r in rows], [("cleanup_warning", hold.strftime("%Y-%m-%d"))])
+        self.assertEqual(await self.stage(1), 2)
+
+    async def test_a_service_held_far_into_the_future_is_not_warned_yet(self) -> None:
+        expire = NOW - timedelta(days=20)
+        await self.add(1, quota_expire_at=expire, cleanup_hold_until=NOW + timedelta(days=30), cleanup_warn_stage=1)
+        await self.scan(FakePanel({1001: user_info(expire=expire)}))
+        self.assertEqual(await self.queued(), [])
+
+    async def test_the_time_of_the_last_warning_is_recorded(self) -> None:
+        expire = NOW - timedelta(days=1)
+        await self.add(1, quota_expire_at=expire)
+        await self.scan(FakePanel({1001: user_info(expire=expire)}))
+        async with self.Session() as session:
+            warned = (await session.get(UserService, 1)).cleanup_warned_at
+        self.assertEqual(warned.replace(tzinfo=timezone.utc), NOW)
 
 
 class NoticeTextTests(NoticeCase):
@@ -303,5 +335,31 @@ class VolumeStageMigrationTests(unittest.TestCase):
                 with Operations.context(MigrationContext.configure(conn)):
                     (migration.downgrade if down else migration.upgrade)()
                 has = "cleanup_volume_warn_stage" in {c["name"] for c in sa.inspect(conn).get_columns("user_services")}
+                self.assertEqual(has, not down)
+            self.assertEqual(conn.execute(sa.text("SELECT id FROM user_services")).scalar(), 1)
+
+
+class WarnedAtMigrationTests(unittest.TestCase):
+    def test_upgrade_twice_and_downgrade_keep_rows(self) -> None:
+        import importlib.util
+
+        import sqlalchemy as sa
+        from alembic.migration import MigrationContext
+        from alembic.operations import Operations
+
+        path = Path(__file__).resolve().parents[1] / "alembic/versions/0100_cleanup_warned_at.py"
+        spec = importlib.util.spec_from_file_location("m0100", path)
+        migration = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(migration)
+        engine = sa.create_engine("sqlite:///:memory:")
+        self.addCleanup(engine.dispose)
+        with engine.begin() as conn:
+            conn.execute(sa.text("CREATE TABLE user_services (id INTEGER PRIMARY KEY)"))
+            conn.execute(sa.text("INSERT INTO user_services (id) VALUES (1)"))
+            for down in (False, False, True, True):
+                with Operations.context(MigrationContext.configure(conn)):
+                    (migration.downgrade if down else migration.upgrade)()
+                has = "cleanup_warned_at" in {c["name"] for c in sa.inspect(conn).get_columns("user_services")}
                 self.assertEqual(has, not down)
             self.assertEqual(conn.execute(sa.text("SELECT id FROM user_services")).scalar(), 1)
