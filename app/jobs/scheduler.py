@@ -42,6 +42,8 @@ scheduler = AsyncIOScheduler()
 
 # Bound concurrent PG subscription lookups during expiry scan
 _PG_FETCH_CONCURRENCY = 8
+# Where the next alert re-arm sweep continues (in memory: a restart simply starts from the beginning).
+_rearm_after_id = 0
 
 
 def _as_int(val, default: int) -> int:
@@ -293,7 +295,9 @@ async def check_expiring_services(bot: Bot) -> None:
             )
 
         try:
-            await rearm_flagged_alerts(session, pg, thresholds_for, now=now)
+            global _rearm_after_id
+            result = await rearm_flagged_alerts(session, pg, thresholds_for, now=now, after_id=_rearm_after_id)
+            _rearm_after_id = result.next_after_id
         except Exception:  # noqa: BLE001 - the sweep is best effort; the next run tries again
             logger.warning("alert re-arm sweep failed", exc_info=True)
             await session.rollback()
