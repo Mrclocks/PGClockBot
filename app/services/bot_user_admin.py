@@ -75,11 +75,11 @@ SNAPSHOT_TIMEOUT_SECONDS = 3.0
 SNAPSHOT_CONCURRENCY = 4
 # A customer screen lists at most this many services with live status.
 SNAPSHOT_LIMIT = 30
-# Panel read failures that only mean «status unknown»: the stored row is shown instead.
 # PasarGuard status of a user whose data limit is used up.
 VOLUME_FINISHED_STATUS = "limited"
 # A new expiry must be at least this much later to count as a renewal; smaller moves are clock noise.
 QUOTA_REARM_MIN_GAIN = timedelta(hours=1)
+# Panel read failures that only mean «status unknown»: the stored row is shown instead.
 PANEL_READ_ERRORS = (asyncio.TimeoutError, PasarGuardError, httpx.HTTPError, ValueError)
 MAX_TELEGRAM_ID = 9_007_199_254_740_991  # signed int64 safe upper bound
 # Shop feature key for viewing and changing a customer's services (bot and web).
