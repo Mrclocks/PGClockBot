@@ -59,6 +59,17 @@ class QueueCase(unittest.IsolatedAsyncioTestCase):
             return await queue.process_notice_batch(session, send, now=at, limit=limit)
 
 
+class ServiceLinkTests(QueueCase):
+    async def test_a_notice_remembers_the_service_it_is_about(self) -> None:
+        async with self.Session() as session:
+            queue.add_notice(session, shop_id=None, bot_user_id=1, telegram_id=1, action="service_renew",
+                             service_name="s", reason="تمدید دستی", service_id=42)
+            queue.add_notice(session, shop_id=None, bot_user_id=1, telegram_id=1, action="service_renew",
+                             service_name="s", reason="تمدید دستی")
+            await session.commit()
+        self.assertEqual([r.service_id for r in await self.rows()], [42, None])
+
+
 class ProcessBatchTests(QueueCase):
     async def test_a_sent_notice_is_marked_sent_and_not_sent_again(self) -> None:
         await self.add()

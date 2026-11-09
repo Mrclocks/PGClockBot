@@ -59,6 +59,7 @@ class NoticeTarget:
     telegram_id: int
     shop_id: int | None
     service_name: str
+    service_id: int | None = None
 
 
 def notice_text(action: str, *, service_name: str, reason: str) -> str:
@@ -131,6 +132,7 @@ async def notify_customers(session: AsyncSession, targets: list[NoticeTarget], *
                 action=action,
                 service_name=target.service_name,
                 reason=reason,
+                service_id=target.service_id,
             )
         await session.commit()
     except Exception:  # noqa: BLE001 - the operation succeeded; only the customer message is lost

@@ -54,13 +54,22 @@ def _utcnow() -> datetime:
 
 
 def add_notice(
-    session: AsyncSession, *, shop_id: int | None, bot_user_id: int, telegram_id: int, action: str, service_name: str, reason: str
+    session: AsyncSession,
+    *,
+    shop_id: int | None,
+    bot_user_id: int,
+    telegram_id: int,
+    action: str,
+    service_name: str,
+    reason: str,
+    service_id: int | None = None,
 ) -> CustomerNotice:
     """Add one pending notice to the session; the caller's commit stores it."""
     row = CustomerNotice(
         shop_id=shop_id,
         bot_user_id=int(bot_user_id),
         telegram_id=int(telegram_id),
+        service_id=int(service_id) if service_id else None,
         action=action,
         service_name=(service_name or "")[:SERVICE_NAME_MAX],
         reason=reason[:REASON_MAX],

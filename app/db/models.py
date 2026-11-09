@@ -535,6 +535,8 @@ class CustomerNotice(Base):
     shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     bot_user_id: Mapped[int] = mapped_column(Integer)
     telegram_id: Mapped[int] = mapped_column(BigInteger)
+    # The service the notice is about, when it has one (lets the message carry a renew button).
+    service_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     action: Mapped[str] = mapped_column(String(32))
     service_name: Mapped[str] = mapped_column(String(128), default="", server_default="")
     reason: Mapped[str] = mapped_column(String(255))
