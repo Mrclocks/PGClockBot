@@ -856,6 +856,7 @@ def _cache_quota_status(service: UserService, info: dict[str, Any]) -> None:
                 service.volume_exhausted_at = datetime.now(timezone.utc)
         else:
             service.volume_exhausted_at = None
+            service.cleanup_volume_warn_stage = 0
 
 
 def sync_service_quota_cache(
