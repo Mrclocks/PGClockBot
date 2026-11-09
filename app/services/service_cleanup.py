@@ -246,8 +246,11 @@ class CleanupPreview:
     cache_note: str = "بر اساس آخرین اطلاعات ذخیره‌شدهٔ سرویس‌ها؛ پیش از هر حذف، وضعیت دوباره از پنل خوانده می‌شود."
 
 
-async def _count(session: AsyncSession, shop_id: int | None, *clauses: ColumnElement[bool], now: datetime) -> int:
-    query = select(func.count(UserService.id)).where(shop_services_clause(shop_id), *_eligible(), _not_held(now), *clauses)
+async def _count(
+    session: AsyncSession, shop_id: int | None, *clauses: ColumnElement[bool], now: datetime, hold_until: datetime | None = None,
+) -> int:
+    """Count eligible services; one held beyond ``hold_until`` (default: now) is left out, ``None`` hold means free."""
+    query = select(func.count(UserService.id)).where(shop_services_clause(shop_id), *_eligible(), _not_held(hold_until or now), *clauses)
     return int(await session.scalar(query) or 0)
 
 
@@ -264,8 +267,12 @@ async def build_preview(
     """Counts and a short list from the cached quota columns; changes nothing and calls no panel."""
     now = now or datetime.now(timezone.utc)
     soon = timedelta(days=PREVIEW_SOON_DAYS)
-    expired_total = await _count(session, shop_id, UserService.quota_expire_at.is_not(None), UserService.quota_expire_at < now, now=now)
-    volume_total = await _count(session, shop_id, UserService.volume_exhausted_at.is_not(None), now=now)
+    # Totals include services under a hold: they are expired too, they just have more time.
+    forever = now + timedelta(days=MAX_DAYS * 10)
+    expired_total = await _count(
+        session, shop_id, UserService.quota_expire_at.is_not(None), UserService.quota_expire_at < now, now=now, hold_until=forever
+    )
+    volume_total = await _count(session, shop_id, UserService.volume_exhausted_at.is_not(None), now=now, hold_until=forever)
     counts = {"time_due_now": 0, "time_due_soon": 0, "volume_due_now": 0, "volume_due_soon": 0}
     for prefix, make in (("time", time_due_clause), ("volume", volume_due_clause)):
         due_now = make(policy, now)
@@ -273,7 +280,10 @@ async def build_preview(
         if due_now is not None:
             counts[f"{prefix}_due_now"] = await _count(session, shop_id, due_now, now=now)
         if due_soon is not None:
-            counts[f"{prefix}_due_soon"] = await _count(session, shop_id, due_soon, now=now) - counts[f"{prefix}_due_now"]
+            # A hold that ends inside the window moves the service into «due soon»; a later one keeps it out.
+            counts[f"{prefix}_due_soon"] = (
+                await _count(session, shop_id, due_soon, now=now, hold_until=now + soon) - counts[f"{prefix}_due_now"]
+            )
     rows = await _preview_rows(session, shop_id, policy, now, soon)
     return CleanupPreview(expired_total, counts["time_due_now"], counts["time_due_soon"], volume_total,
                           counts["volume_due_now"], counts["volume_due_soon"], rows)
@@ -292,16 +302,19 @@ async def _preview_rows(
             continue
         found = (
             await session.execute(
-                select(UserService.id, UserService.pg_username, column, BotUser.full_name, BotUser.username)
+                select(UserService.id, UserService.pg_username, column, BotUser.full_name, BotUser.username,
+                       UserService.cleanup_hold_until)
                 .join(BotUser, BotUser.id == UserService.bot_user_id)
-                .where(shop_services_clause(shop_id), *_eligible(), _not_held(now), clause)
+                .where(shop_services_clause(shop_id), *_eligible(), _not_held(now + soon), clause)
                 .order_by(column.asc(), UserService.id)
                 .limit(PREVIEW_SAMPLE)
             )
         ).all()
-        for service_id, username, since, full_name, handle in found:
+        for service_id, username, since, full_name, handle, hold in found:
             started = since if since.tzinfo else since.replace(tzinfo=timezone.utc)
             deadline = max(started, enabled_at or started) + timedelta(days=days)
+            if hold is not None:  # a staff hold can only push the deadline later
+                deadline = max(deadline, hold if hold.tzinfo else hold.replace(tzinfo=timezone.utc))
             rows.append(
                 PreviewRow(
                     service_id=int(service_id),

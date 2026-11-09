@@ -155,8 +155,9 @@ class PreviewTests(CleanupCase):
         await self.add_service(5, 20, SHOP, quota_expire_at=old, shop_needs_review=True)
         await self.add_service(6, 20, SHOP, quota_expire_at=old, cleanup_hold_until=NOW - timedelta(days=1))  # hold passed
         result = await self.preview(SHOP, self.policy())
-        self.assertEqual([r.service_id for r in result.rows], [6])
-        self.assertEqual(result.time_due_now, 1)
+        # Service 2 is held for 2 more days: it is listed with its hold date, but it is not due now.
+        self.assertEqual([r.service_id for r in result.rows], [2, 6])
+        self.assertEqual((result.time_due_now, result.time_due_soon), (1, 1))
 
     async def test_switching_the_rule_on_never_makes_an_old_backlog_due_at_once(self) -> None:
         await self.add_service(1, 20, SHOP, quota_expire_at=NOW - timedelta(days=100))
@@ -164,6 +165,15 @@ class PreviewTests(CleanupCase):
         result = await self.preview(SHOP, fresh)
         self.assertEqual((result.expired_total, result.time_due_now, result.time_due_soon), (1, 0, 1))
         self.assertEqual(result.rows[0].deadline, (NOW + timedelta(days=6)).strftime("%Y-%m-%d"))
+
+    async def test_a_held_service_stays_in_the_list_with_its_hold_date_once_the_hold_ends_within_the_window(self) -> None:
+        old = NOW - timedelta(days=20)
+        await self.add_service(1, 20, SHOP, quota_expire_at=old, cleanup_hold_until=NOW + timedelta(days=3))   # ends in 3 days
+        await self.add_service(2, 20, SHOP, quota_expire_at=old, cleanup_hold_until=NOW + timedelta(days=30))  # far away
+        result = await self.preview(SHOP, self.policy())
+        self.assertEqual([r.service_id for r in result.rows], [1])
+        self.assertEqual(result.rows[0].deadline, (NOW + timedelta(days=3)).strftime("%Y-%m-%d"))
+        self.assertEqual((result.expired_total, result.time_due_now, result.time_due_soon), (2, 0, 1))
 
     async def test_a_rule_that_is_off_has_no_due_services(self) -> None:
         await self.add_service(1, 20, SHOP, quota_expire_at=NOW - timedelta(days=100), volume_exhausted_at=NOW - timedelta(days=100))
