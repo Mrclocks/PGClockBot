@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db import Base
@@ -85,6 +85,7 @@ class DeleteCase(unittest.IsolatedAsyncioTestCase):
 
     async def add(self, service_id: int, owner: int = 20, shop: int | None = SHOP, **fields) -> None:
         fields.setdefault("cleanup_warn_stage", 1)
+        fields.setdefault("cleanup_warned_at", NOW - timedelta(days=3))
         async with self.Session() as session:
             session.add(UserService(id=service_id, bot_user_id=owner, pg_user_id=1000 + service_id, pg_username=f"svc{service_id}",
                                     shop_id=shop, quota_expire_at=fields.pop("quota_expire_at", OLD), **fields))
@@ -140,6 +141,64 @@ class DeletionTests(DeleteCase):
         panel = FakePanel({1000 + i: expired() for i in range(1, 6)})
         self.assertEqual((await self.sweep(panel, limit=2)).deleted, 2)
         self.assertEqual(len(panel.deleted), 2)
+
+
+class LastMomentChecksTests(DeleteCase):
+    async def test_a_warning_queued_a_moment_ago_is_never_followed_by_the_deletion(self) -> None:
+        await self.add(1, cleanup_warned_at=NOW - timedelta(hours=1))
+        panel = FakePanel({1001: expired()})
+        self.assertEqual((await self.sweep(panel)).deleted, 0)
+        self.assertEqual((await self.sweep(panel, at=NOW + timedelta(hours=6))).deleted, 1)
+
+    async def test_a_service_exempted_while_the_batch_runs_is_not_deleted(self) -> None:
+        await self.add(1)
+        await self.add(2)
+        original = delete._claim_lease
+
+        async def exempt_then_claim(session, service_id, **kwargs):
+            if service_id == 2:
+                async with self.Session() as other:
+                    await other.execute(update(UserService).where(UserService.id == 2).values(cleanup_exempt=True))
+                    await other.commit()
+            return await original(session, service_id, **kwargs)
+
+        panel = FakePanel({1001: expired(), 1002: expired()})
+        with patch.object(delete, "_claim_lease", exempt_then_claim):
+            result = await self.sweep(panel)
+        self.assertEqual((result.deleted, panel.deleted), (1, [1001]))
+        self.assertTrue(await self.exists(2))
+
+    async def test_a_service_given_more_days_while_the_batch_runs_is_not_deleted(self) -> None:
+        await self.add(1)
+        original = delete._claim_lease
+
+        async def hold_then_claim(session, service_id, **kwargs):
+            async with self.Session() as other:
+                await other.execute(update(UserService).where(UserService.id == 1).values(cleanup_hold_until=NOW + timedelta(days=7)))
+                await other.commit()
+            return await original(session, service_id, **kwargs)
+
+        panel = FakePanel({1001: expired()})
+        with patch.object(delete, "_claim_lease", hold_then_claim):
+            self.assertEqual((await self.sweep(panel)).deleted, 0)
+        self.assertEqual(panel.deleted, [])
+
+    async def test_an_order_opened_while_the_batch_runs_stops_the_deletion(self) -> None:
+        await self.add(1)
+        panel = FakePanel({1001: expired()})
+        checks = AsyncMock(side_effect=[set(), {1}])  # clear at the start of the batch, open right before the delete
+        with patch.object(delete, "_blocked_by_other_state", checks):
+            result = await self.sweep(panel)
+        self.assertEqual((result.deleted, panel.deleted), (0, []))
+        self.assertTrue(await self.exists(1))
+
+    async def test_the_log_record_is_written_with_the_delete_or_not_at_all(self) -> None:
+        await self.add(1)
+        failing = FakePanel({1001: expired()}, delete_error=PasarGuardError("bad gateway", 502))
+        await self.sweep(failing)
+        self.assertEqual(await self.table(ShopStaffAction), [])
+        await self.sweep(FakePanel({1001: expired()}), at=NOW + timedelta(hours=2))
+        self.assertEqual([a.action for a in await self.table(ShopStaffAction)], ["service_auto_delete"])
 
 
 class NotYetDueTests(DeleteCase):
