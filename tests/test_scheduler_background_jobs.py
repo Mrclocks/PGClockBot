@@ -27,6 +27,8 @@ OPERATIONS = {
     "psp_settlement_poll",
     "volume_external_sync",
     "chat_message_purge",
+    # Queues the warnings before an expired service is deleted; needs no running bot.
+    "service_cleanup",
     # Approves card receipts nobody reviewed in time; opens the bot it needs only when a receipt is due.
     "scheduled_receipt_approval",
     # Reads each converting shop's API rate into memory; needs no running bot.

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from aiogram import Bot
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,8 +63,33 @@ class NoticeTarget:
     service_id: int | None = None
 
 
+# Cleanup notices carry the deadline date in ``reason``; {name} and {date} are escaped before use.
+CLEANUP_NOTICE_TEXTS = {
+    "cleanup_expired": (
+        "⌛ <b>سرویس شما منقضی شد</b>\nسرویس: <code>{name}</code>\n"
+        "اگر تا <b>{date}</b> تمدید نشود، سرویس حذف می‌شود."
+    ),
+    "cleanup_warning": (
+        "⚠️ <b>هشدار حذف سرویس</b>\nسرویس: <code>{name}</code>\nتاریخ حذف: <b>{date}</b>\n"
+        "برای نگه‌داشتن سرویس، پیش از این تاریخ تمدید کنید."
+    ),
+    "cleanup_volume_finished": (
+        "📉 <b>حجم سرویس شما تمام شد</b>\nسرویس: <code>{name}</code>\n"
+        "اگر تا <b>{date}</b> تمدید نکنید یا بسته حجم نگیرید، سرویس حذف می‌شود."
+    ),
+    "cleanup_volume_warning": (
+        "⚠️ <b>هشدار حذف سرویس بی‌حجم</b>\nسرویس: <code>{name}</code>\nتاریخ حذف: <b>{date}</b>\n"
+        "برای نگه‌داشتن سرویس، پیش از این تاریخ تمدید کنید یا بسته حجم بگیرید."
+    ),
+}
+RENEW_BUTTON_ACTIONS = frozenset(CLEANUP_NOTICE_TEXTS)
+
+
 def notice_text(action: str, *, service_name: str, reason: str) -> str:
     """The Persian message; every dynamic part is escaped for Telegram HTML."""
+    template = CLEANUP_NOTICE_TEXTS.get(action)
+    if template is not None:
+        return template.format(name=html.escape(service_name or "—"), date=html.escape(reason))
     title = ACTION_NOTICE_TITLES[action]
     lines = [f"<b>{title}</b>", f"سرویس: <code>{html.escape(service_name or '—')}</code>", f"علت: {html.escape(reason)}"]
     hint = ACTION_NOTICE_HINTS.get(action)
@@ -145,6 +171,15 @@ async def notify_customers(session: AsyncSession, targets: list[NoticeTarget], *
 BotFor = Callable[[int | None], Awaitable[Bot | None]]
 
 
+def _renew_markup(notice: CustomerNotice) -> InlineKeyboardMarkup | None:
+    """A renew button on the warnings that tell the customer a service will be deleted."""
+    if notice.action not in RENEW_BUTTON_ACTIONS or not notice.service_id:
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="🔄 تمدید سرویس", callback_data=f"svc:renew:{int(notice.service_id)}")]]
+    )
+
+
 async def deliver_notice(session: AsyncSession, bot_for: BotFor, notice: CustomerNotice) -> NoticeOutcome:
     """Send one queued notice through its shop's bot and say what happened to it."""
     user = await session.get(BotUser, int(notice.bot_user_id))
@@ -156,7 +191,7 @@ async def deliver_notice(session: AsyncSession, bot_for: BotFor, notice: Custome
         return NoticeOutcome(OUTCOME_SKIPPED)
     text = notice_text(notice.action, service_name=notice.service_name, reason=notice.reason)
     try:
-        await bot.send_message(int(notice.telegram_id), text, parse_mode="HTML")
+        await bot.send_message(int(notice.telegram_id), text, parse_mode="HTML", reply_markup=_renew_markup(notice))
     except TelegramRetryAfter as exc:
         return NoticeOutcome(OUTCOME_RETRY, timedelta(seconds=int(exc.retry_after) + 1))
     except TelegramForbiddenError:

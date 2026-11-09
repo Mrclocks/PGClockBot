@@ -189,7 +189,7 @@ def shop_services_clause(shop_id: int | None) -> ColumnElement[bool]:
     return UserService.shop_id.is_(None) if shop_id is None else UserService.shop_id == int(shop_id)
 
 
-def _eligible() -> list[ColumnElement[bool]]:
+def eligible_clauses() -> list[ColumnElement[bool]]:
     return [
         UserService.pg_user_id.is_not(None),
         UserService.is_cancelled.is_(False),
@@ -199,7 +199,7 @@ def _eligible() -> list[ColumnElement[bool]]:
     ]
 
 
-def _not_held(now: datetime) -> ColumnElement[bool]:
+def not_held_clause(now: datetime) -> ColumnElement[bool]:
     return or_(UserService.cleanup_hold_until.is_(None), UserService.cleanup_hold_until <= now)
 
 
@@ -247,11 +247,11 @@ class CleanupPreview:
 
 
 async def _count(session: AsyncSession, shop_id: int | None, *clauses: ColumnElement[bool], now: datetime) -> int:
-    query = select(func.count(UserService.id)).where(shop_services_clause(shop_id), *_eligible(), _not_held(now), *clauses)
+    query = select(func.count(UserService.id)).where(shop_services_clause(shop_id), *eligible_clauses(), not_held_clause(now), *clauses)
     return int(await session.scalar(query) or 0)
 
 
-def _local(moment: datetime | None) -> str:
+def local_date(moment: datetime | None) -> str:
     if moment is None:
         return ""
     aware = moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
@@ -294,7 +294,7 @@ async def _preview_rows(
             await session.execute(
                 select(UserService.id, UserService.pg_username, column, BotUser.full_name, BotUser.username)
                 .join(BotUser, BotUser.id == UserService.bot_user_id)
-                .where(shop_services_clause(shop_id), *_eligible(), _not_held(now), clause)
+                .where(shop_services_clause(shop_id), *eligible_clauses(), not_held_clause(now), clause)
                 .order_by(column.asc(), UserService.id)
                 .limit(PREVIEW_SAMPLE)
             )
@@ -308,8 +308,93 @@ async def _preview_rows(
                     username=str(username or "")[:USERNAME_PREVIEW_MAX],
                     customer=str(full_name or (f"@{handle}" if handle else "—"))[:USERNAME_PREVIEW_MAX],
                     kind=label,
-                    since=_local(since),
-                    deadline=_local(deadline),
+                    since=local_date(since),
+                    deadline=local_date(deadline),
                 )
             )
     return rows[:PREVIEW_SAMPLE]
+
+
+# ---- deadlines and warning stages -------------------------------------------------------------
+
+STAGE_NONE = 0
+STAGE_NOTICE = 1  # the service expired / ran out of volume: tell the customer the deadline
+STAGE_FIRST_WARNING = 2
+STAGE_LAST_WARNING = 3
+KIND_TIME = "time"
+KIND_VOLUME = "volume"
+
+
+def _aware(moment: datetime) -> datetime:
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def deadline_for(service: UserService, policy: CleanupPolicy, kind: str) -> datetime | None:
+    """When the service is deleted if nothing changes, or ``None`` when the rule does not apply to it.
+
+    The later of the start (expiry / volume finished) and the moment the rule was switched on, plus
+    the rule's days; a staff-set hold can only push it later.
+    """
+    if kind == KIND_TIME:
+        start, enabled_at, days = service.quota_expire_at, policy.time_enabled_at, policy.time_days
+        active = policy.time_on
+    else:
+        start, enabled_at, days = service.volume_exhausted_at, policy.volume_enabled_at, policy.volume_days
+        active = policy.volume_on
+    if not active or start is None or enabled_at is None:
+        return None
+    deadline = max(_aware(start), enabled_at) + timedelta(days=days)
+    hold = service.cleanup_hold_until
+    return max(deadline, _aware(hold)) if hold is not None else deadline
+
+
+def target_stage(deadline: datetime, *, now: datetime, policy: CleanupPolicy, days: int) -> int:
+    """The highest warning stage that is due now for a service that already expired / ran out of volume.
+
+    A warning is only used when it is earlier than the rule's days, so a rule of 3 days never warns "3 days before".
+    """
+    left = deadline - now
+    stage = STAGE_NOTICE
+    first, last = policy.warn_first, policy.warn_last
+    if 0 < first < days and left <= timedelta(days=first):
+        stage = STAGE_FIRST_WARNING
+    if 0 < last < days and left <= timedelta(days=last):
+        stage = STAGE_LAST_WARNING
+    return stage
+
+
+SCOPE_SCAN_PAGE = 500
+
+
+async def enabled_scopes(session: AsyncSession) -> list[tuple[int | None, CleanupPolicy]]:
+    """Every scope (platform first, then each active shop) with at least one cleanup rule switched on."""
+    from app.db.models import ResellerProfile, ResellerSetting
+
+    scopes: list[tuple[int | None, CleanupPolicy]] = []
+    platform = await load_policy(session, shop_id=None)
+    if platform.time_on or platform.volume_on:
+        scopes.append((None, platform))
+    after_id = 0
+    while True:
+        shop_ids = (
+            await session.scalars(
+                select(ResellerSetting.reseller_user_id)
+                .join(ResellerProfile, ResellerProfile.user_id == ResellerSetting.reseller_user_id)
+                .where(
+                    ResellerSetting.key.in_((KEY_TIME_ON, KEY_VOLUME_ON)),
+                    ResellerSetting.value == "1",
+                    ResellerProfile.is_active.is_(True),
+                    ResellerSetting.reseller_user_id > after_id,
+                )
+                .distinct()
+                .order_by(ResellerSetting.reseller_user_id)
+                .limit(SCOPE_SCAN_PAGE)
+            )
+        ).all()
+        if not shop_ids:
+            return scopes
+        for shop_id in shop_ids:
+            policy = await load_policy(session, shop_id=int(shop_id))
+            if policy.time_on or policy.volume_on:
+                scopes.append((int(shop_id), policy))
+        after_id = int(shop_ids[-1])
