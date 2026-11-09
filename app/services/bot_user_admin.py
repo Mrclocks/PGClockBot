@@ -77,8 +77,6 @@ SNAPSHOT_CONCURRENCY = 4
 SNAPSHOT_LIMIT = 30
 # PasarGuard status of a user whose data limit is used up.
 VOLUME_FINISHED_STATUS = "limited"
-# A new expiry must be at least this much later to count as a renewal; smaller moves are clock noise.
-QUOTA_REARM_MIN_GAIN = timedelta(hours=1)
 # Panel read failures that only mean «status unknown»: the stored row is shown instead.
 PANEL_READ_ERRORS = (asyncio.TimeoutError, PasarGuardError, httpx.HTTPError, ValueError)
 MAX_TELEGRAM_ID = 9_007_199_254_740_991  # signed int64 safe upper bound
@@ -886,7 +884,6 @@ def sync_service_quota_cache(
 
     touched = False
     previous_expire = service.quota_expire_at
-    previous_limit = service.quota_data_limit_bytes
     if isinstance(info, dict):
         _cache_quota_status(service, info)
         has_expire = "expire" in info or "expire_date" in info
@@ -950,27 +947,22 @@ def sync_service_quota_cache(
             touched = True
     if touched:
         service.quota_synced_at = datetime.now(timezone.utc)
-        _rearm_alerts_after_quota_increase(service, previous_expire, previous_limit)
+        _reset_cleanup_stage_after_renewal(service, previous_expire)
 
 
-def _rearm_alerts_after_quota_increase(
-    service: UserService, previous_expire: datetime | None, previous_limit: int | None
-) -> None:
-    """A later expiry or a bigger volume limit lets the low-time / low-volume alert fire again.
+def _reset_cleanup_stage_after_renewal(service: UserService, previous_expire: datetime | None) -> None:
+    """A service that is no longer expired starts its cleanup warnings over at the next expiry.
 
-    Every path that changes the quota (renewal, extension, add-on pack, edit in the panel) ends in
-    ``sync_service_quota_cache``, so re-arming here covers them all without touching each one.
+    Only a real renewal counts: the new expiry is later and in the future. A service that is still
+    expired after a small extension keeps its stage, so its warnings are not sent twice.
     """
     new_expire = service.quota_expire_at
-    if previous_expire is not None and new_expire is not None:
-        old = previous_expire if previous_expire.tzinfo else previous_expire.replace(tzinfo=timezone.utc)
-        new = new_expire if new_expire.tzinfo else new_expire.replace(tzinfo=timezone.utc)
-        if new - old >= QUOTA_REARM_MIN_GAIN:
-            service.notified_expire = False
-            service.cleanup_warn_stage = 0
-    new_limit = service.quota_data_limit_bytes
-    if previous_limit and new_limit and new_limit > previous_limit:
-        service.notified_traffic = False
+    if previous_expire is None or new_expire is None:
+        return
+    old = previous_expire if previous_expire.tzinfo else previous_expire.replace(tzinfo=timezone.utc)
+    new = new_expire if new_expire.tzinfo else new_expire.replace(tzinfo=timezone.utc)
+    if new > old and new > datetime.now(timezone.utc):
+        service.cleanup_warn_stage = 0
 
 
 async def _hold_assign_volume(
