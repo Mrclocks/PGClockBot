@@ -92,7 +92,9 @@ def _candidate_clause(kind: str, policy: CleanupPolicy, now: datetime):
         if days > 0:
             ahead = make(policy, now, ahead=timedelta(days=days))
             if ahead is not None:
-                options.append(and_(ahead, column < stage))
+                # A hold moves the deadline: the service is a candidate only once the hold ends within the window.
+                hold_near = or_(UserService.cleanup_hold_until.is_(None), UserService.cleanup_hold_until <= now + timedelta(days=days))
+                options.append(and_(ahead, hold_near, column < stage))
     return or_(*options)
 
 

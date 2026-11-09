@@ -244,6 +244,19 @@ class RenewalResetTests(unittest.TestCase):
         self.assertEqual(svc.cleanup_warn_stage, 2)
 
 
+class HoldCandidateTests(NoticeCase):
+    async def test_services_held_far_away_are_not_read_from_the_panel_again_and_again(self) -> None:
+        expire = NOW - timedelta(days=20)
+        for i in range(1, 4):
+            await self.add(i, quota_expire_at=expire, cleanup_hold_until=NOW + timedelta(days=30), cleanup_warn_stage=1,
+                           quota_synced_at=NOW - timedelta(hours=1))
+        await self.add(4, quota_expire_at=expire, cleanup_hold_until=NOW + timedelta(days=2), cleanup_warn_stage=1,
+                       quota_synced_at=NOW - timedelta(hours=1))
+        panel = FakePanel({1000 + i: user_info(expire=expire) for i in range(1, 5)})
+        await self.scan(panel, limit=100)
+        self.assertEqual(panel.calls, [1004])  # only the one whose hold ends inside the warning window
+
+
 class HoldTests(NoticeCase):
     async def test_a_held_service_is_warned_before_its_new_deadline_with_the_hold_date(self) -> None:
         expire = NOW - timedelta(days=20)
@@ -355,11 +368,35 @@ class WarnedAtMigrationTests(unittest.TestCase):
         engine = sa.create_engine("sqlite:///:memory:")
         self.addCleanup(engine.dispose)
         with engine.begin() as conn:
-            conn.execute(sa.text("CREATE TABLE user_services (id INTEGER PRIMARY KEY)"))
-            conn.execute(sa.text("INSERT INTO user_services (id) VALUES (1)"))
+            conn.execute(sa.text("CREATE TABLE user_services (id INTEGER PRIMARY KEY, cleanup_warn_stage INTEGER, cleanup_volume_warn_stage INTEGER)"))
+            conn.execute(sa.text("INSERT INTO user_services VALUES (1, 0, 0), (2, 2, 0), (3, 0, 1)"))
             for down in (False, False, True, True):
                 with Operations.context(MigrationContext.configure(conn)):
                     (migration.downgrade if down else migration.upgrade)()
                 has = "cleanup_warned_at" in {c["name"] for c in sa.inspect(conn).get_columns("user_services")}
                 self.assertEqual(has, not down)
-            self.assertEqual(conn.execute(sa.text("SELECT id FROM user_services")).scalar(), 1)
+                if not down and not has:
+                    continue
+            self.assertEqual(conn.execute(sa.text("SELECT COUNT(*) FROM user_services")).scalar(), 3)
+
+    def test_services_already_warned_get_a_warning_date_and_the_others_stay_empty(self) -> None:
+        import importlib.util
+
+        import sqlalchemy as sa
+        from alembic.migration import MigrationContext
+        from alembic.operations import Operations
+
+        path = Path(__file__).resolve().parents[1] / "alembic/versions/0100_cleanup_warned_at.py"
+        spec = importlib.util.spec_from_file_location("m0100b", path)
+        migration = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(migration)
+        engine = sa.create_engine("sqlite:///:memory:")
+        self.addCleanup(engine.dispose)
+        with engine.begin() as conn:
+            conn.execute(sa.text("CREATE TABLE user_services (id INTEGER PRIMARY KEY, cleanup_warn_stage INTEGER, cleanup_volume_warn_stage INTEGER)"))
+            conn.execute(sa.text("INSERT INTO user_services VALUES (1, 0, 0), (2, 2, 0), (3, 0, 1)"))
+            with Operations.context(MigrationContext.configure(conn)):
+                migration.upgrade()
+            dated = {row[0]: row[1] is not None for row in conn.execute(sa.text("SELECT id, cleanup_warned_at FROM user_services"))}
+        self.assertEqual(dated, {1: False, 2: True, 3: True})
