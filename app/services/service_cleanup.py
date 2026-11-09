@@ -232,6 +232,7 @@ class PreviewRow:
     kind: str
     since: str
     deadline: str
+    retrying: bool = False  # a delete was tried and failed; the next try waits for the lease to expire
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,14 +293,15 @@ async def _preview_rows(
             continue
         found = (
             await session.execute(
-                select(UserService.id, UserService.pg_username, column, BotUser.full_name, BotUser.username)
+                select(UserService.id, UserService.pg_username, column, BotUser.full_name, BotUser.username,
+                       UserService.cleanup_claimed_at)
                 .join(BotUser, BotUser.id == UserService.bot_user_id)
                 .where(shop_services_clause(shop_id), *eligible_clauses(), not_held_clause(now), clause)
                 .order_by(column.asc(), UserService.id)
                 .limit(PREVIEW_SAMPLE)
             )
         ).all()
-        for service_id, username, since, full_name, handle in found:
+        for service_id, username, since, full_name, handle, claimed_at in found:
             started = since if since.tzinfo else since.replace(tzinfo=timezone.utc)
             deadline = max(started, enabled_at or started) + timedelta(days=days)
             rows.append(
@@ -310,6 +312,7 @@ async def _preview_rows(
                     kind=label,
                     since=local_date(since),
                     deadline=local_date(deadline),
+                    retrying=claimed_at is not None,
                 )
             )
     return rows[:PREVIEW_SAMPLE]

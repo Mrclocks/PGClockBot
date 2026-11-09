@@ -9,6 +9,8 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.action_reasons import ReasonRequired, log_reasoned_action, reason_from_form
+from app.services.service_cleanup_manage import extend_deadline, list_exempt, parse_hold_days, set_exempt
 from app.services.service_cleanup import (
     MAX_DAYS,
     MIN_DAYS,
@@ -42,6 +44,7 @@ def register_service_cleanup_pages(
             return RedirectResponse("/home", status_code=303)
         policy = await load_policy(session, shop_id=shop_id)
         preview = await build_preview(session, shop_id=shop_id, policy=policy)
+        exempt = await list_exempt(session, shop_id=shop_id)
         return render(
             request,
             "service_cleanup.html",
@@ -49,6 +52,7 @@ def register_service_cleanup_pages(
                 "staff": staff,
                 "policy": policy,
                 "preview": preview,
+                "exempt": exempt,
                 "min_days": MIN_DAYS,
                 "max_days": MAX_DAYS,
                 "save_action": SERVICE_CLEANUP_PATH,
@@ -70,3 +74,51 @@ def register_service_cleanup_pages(
             return _back(err=str(exc))
         await save_policy(session, shop_id=shop_id, policy=policy)
         return _back(ok=SAVED_TEXT)
+
+    @app.post(SERVICE_CLEANUP_PATH + "/{service_id}/exempt")
+    async def service_cleanup_exempt(
+        service_id: int, request: Request, staff: dict = Depends(require_staff), session: AsyncSession = Depends(get_db)
+    ) -> Response:
+        try:
+            shop_id = cleanup_scope(staff)
+        except PermissionError:
+            return RedirectResponse("/home", status_code=303)
+        form = await request.form()
+        try:
+            reason = reason_from_form(form)
+        except ReasonRequired as exc:
+            return _back(err=str(exc))
+        keep = str(form.get("value") or "") == "1"
+        try:
+            await set_exempt(session, shop_id=shop_id, service_id=service_id, exempt=keep)
+        except ValueError as exc:
+            return _back(err=str(exc))
+        await log_reasoned_action(
+            session, staff, action="service_cleanup_exempt" if keep else "service_cleanup_unexempt",
+            target_type="service", target_id=service_id, reason=reason,
+        )
+        return _back(ok="سرویس از پاکسازی معاف شد" if keep else "سرویس دوباره در پاکسازی قرار گرفت")
+
+    @app.post(SERVICE_CLEANUP_PATH + "/{service_id}/hold")
+    async def service_cleanup_hold(
+        service_id: int, request: Request, staff: dict = Depends(require_staff), session: AsyncSession = Depends(get_db)
+    ) -> Response:
+        try:
+            shop_id = cleanup_scope(staff)
+        except PermissionError:
+            return RedirectResponse("/home", status_code=303)
+        form = await request.form()
+        try:
+            reason = reason_from_form(form)
+            days = parse_hold_days(form.get("days"))
+        except (ReasonRequired, CleanupPolicyError) as exc:
+            return _back(err=str(exc))
+        policy = await load_policy(session, shop_id=shop_id)
+        try:
+            until = await extend_deadline(session, shop_id=shop_id, service_id=service_id, days=days, policy=policy)
+        except ValueError as exc:
+            return _back(err=str(exc))
+        await log_reasoned_action(
+            session, staff, action="service_cleanup_hold", target_type="service", target_id=service_id, reason=reason
+        )
+        return _back(ok=f"مهلت حذف تا {until} تمدید شد")
