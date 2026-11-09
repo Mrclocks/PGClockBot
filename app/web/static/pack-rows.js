@@ -34,8 +34,18 @@
     }
   }
 
+  const FALLBACK_STYLE_OPTION = '<option value="inherit">پیش‌فرض</option>';
+
+  /** The colour <option>s for a new pack line: the editor's full list, else an existing line's, else only the default. */
+  function styleOptionsHtml(editor) {
+    const list = editor && editor.querySelector("template[data-pack-style-options]");
+    if (list && list.innerHTML.trim()) return list.innerHTML;
+    const sample = editor && editor.querySelector("select.extra-pack-style");
+    return sample ? sample.innerHTML : FALLBACK_STYLE_OPTION;
+  }
+
   /** One pack line. spec: {rowAttr, removeAttr, amountName, styleName, amountMax, unit, amountLabel, styleLabel, removeLabel} */
-  function buildRow(spec, amount, styleValue, styleOptionsHtml) {
+  function buildRow(spec, amount, styleValue, optionsHtml) {
     const wrap = document.createElement("div");
     wrap.className = "ds-list-row extra-pack-row";
     wrap.setAttribute(spec.rowAttr, "");
@@ -46,7 +56,7 @@
       `<span class="ds-unit-label">${escapeAttr(spec.unit)}</span></span>` +
       `<span class="ds-list-value" data-pack-price></span>` +
       `<span class="ds-dot-select" data-ds-dot data-menu-min-width="168"><select name="${spec.styleName}" ` +
-      `class="btn-color-select extra-pack-style" data-tone="default" aria-label="${escapeAttr(spec.styleLabel)}">${styleOptionsHtml}</select></span>` +
+      `class="btn-color-select extra-pack-style" data-tone="default" aria-label="${escapeAttr(spec.styleLabel)}">${optionsHtml}</select></span>` +
       `<button type="button" class="ds-del extra-pack-remove" ${spec.removeAttr} aria-label="${escapeAttr(spec.removeLabel)}">${TRASH_ICON}</button>`;
     const select = wrap.querySelector("select");
     if (select) {
@@ -122,7 +132,7 @@
     refresh(editor);
   }
 
-  const api = { packPrice, faDigits, syncSelectTone, buildRow, refresh, showTab, bindView, TRASH_ICON };
+  const api = { packPrice, faDigits, syncSelectTone, styleOptionsHtml, buildRow, refresh, showTab, bindView, TRASH_ICON };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.PackRows = api;
 })(typeof window !== "undefined" ? window : globalThis);
