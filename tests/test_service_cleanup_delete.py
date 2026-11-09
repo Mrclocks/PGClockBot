@@ -41,6 +41,9 @@ class FakePanel:
         self.disabled: list[int] = []
         self.reads: list[int] = []
 
+    async def get_current_admin(self):
+        return {"username": "shop-admin"}
+
     async def get_user_by_id(self, user_id: int):
         self.reads.append(user_id)
         if user_id not in self.users:
@@ -52,6 +55,8 @@ class FakePanel:
             self.on_delete()
         if self.delete_error is not None:
             raise self.delete_error
+        if user_id not in self.users:
+            raise PasarGuardError("not found", 404)
         self.deleted.append(user_id)
         self.users.pop(user_id, None)
 
@@ -294,6 +299,78 @@ class LiveCheckTests(DeleteCase):
         self.assertEqual((await self.sweep(panel)).deleted, 0)
         self.assertEqual(panel.deleted, [])
         self.assertTrue(await self.exists(1))
+
+
+class LeftoverRowTests(DeleteCase):
+    async def test_a_panel_user_deleted_before_a_local_failure_is_cleaned_up_by_the_next_run(self) -> None:
+        await self.add(1)
+        panel = FakePanel({1001: expired()})
+        real = delete.admin_delete_service
+        calls = {"n": 0}
+
+        async def fail_once(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("database went away before the local commit")
+            return await real(*args, **kwargs)
+
+        with patch.object(delete, "admin_delete_service", fail_once):
+            first = await self.sweep(panel)
+            self.assertEqual((first.deleted, first.failed, panel.deleted), (0, 1, [1001]))  # gone in the panel, row left
+            self.assertTrue(await self.exists(1))
+            self.assertEqual(panel.users, {})
+            second = await self.sweep(panel, at=NOW + timedelta(hours=2))                    # lease expired: the row goes
+        self.assertEqual((second.deleted, second.failed), (1, 0))
+        self.assertFalse(await self.exists(1))
+        self.assertEqual([a.action for a in await self.table(ShopStaffAction)], ["service_auto_delete"])
+        self.assertEqual(len(await self.table(CustomerNotice)), 1)
+
+    async def test_a_timeout_is_not_taken_for_a_missing_panel_user(self) -> None:
+        await self.add(1)
+
+        class Slow(FakePanel):
+            async def get_user_by_id(self, user_id):
+                raise TimeoutError()
+
+        panel = Slow({1001: expired()})
+        self.assertEqual((await self.sweep(panel)).deleted, 0)
+        self.assertTrue(await self.exists(1))
+
+    async def test_a_404_does_not_count_when_the_client_cannot_read_its_own_admin(self) -> None:
+        await self.add(1)
+
+        class Blind(FakePanel):
+            async def get_current_admin(self):
+                raise PasarGuardError("expired login", 401)
+
+        panel = Blind({})  # the panel answers 404 for the user, but the login is not valid
+        self.assertEqual((await self.sweep(panel)).deleted, 0)
+        self.assertTrue(await self.exists(1))
+
+    async def test_another_shops_service_is_never_cleaned_up_even_when_its_panel_user_is_missing(self) -> None:
+        await self.add(1, owner=21, shop=6)
+        panel = FakePanel({})
+        self.assertEqual((await self.sweep(panel, shop=SHOP)).deleted, 0)
+        self.assertTrue(await self.exists(1))
+
+
+class FinalReadTests(DeleteCase):
+    async def test_a_renewal_made_after_the_first_read_stops_the_deletion_and_frees_the_lease(self) -> None:
+        await self.add(1)
+
+        class Renews(FakePanel):
+            async def get_user_by_id(self, user_id):
+                self.reads.append(user_id)
+                if len(self.reads) == 1:
+                    return expired()
+                return {"status": "active", "expire": int((NOW + timedelta(days=30)).timestamp()), "data_limit": 100, "used_traffic": 1}
+
+        panel = Renews({1001: expired()})
+        result = await self.sweep(panel)
+        self.assertEqual((result.deleted, panel.deleted), (0, []))
+        self.assertTrue(await self.exists(1))
+        async with self.Session() as session:
+            self.assertIsNone((await session.get(UserService, 1)).cleanup_claimed_at)
 
 
 class FailureTests(DeleteCase):

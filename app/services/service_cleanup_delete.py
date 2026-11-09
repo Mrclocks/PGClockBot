@@ -15,6 +15,7 @@ lease expires, and deleting an already deleted panel user is a clean success, so
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -24,11 +25,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, ServiceAutomation, UserService
 from app.services.bot_user_admin import (
+    VOLUME_FINISHED_STATUS,
     admin_delete_service,
     ensure_pg_user_removed_or_absent,
     panel_client_for_service,
+    probe_panel_presence,
 )
 from app.services.customer_notice_queue import add_notice
+from app.services.formatting import parse_expire
+from app.services.pasarguard import PasarGuardError, is_pg_not_found
 from app.services.service_cleanup import (
     LEASE,
     KIND_TIME,
@@ -48,6 +53,8 @@ from app.services.staff_audit import ACTOR_SYSTEM, StaffActor, add_staff_action
 logger = logging.getLogger(__name__)
 
 DELETE_BATCH = 25
+GONE_CONCURRENCY = 4
+READ_TIMEOUT_SECONDS = 12
 # The customer's last warning must be at least this old, so a warning and the deletion are never one run apart.
 MIN_WARNING_GAP = timedelta(hours=6)
 SYSTEM_LABEL = "سیستم · پاکسازی خودکار"
@@ -159,6 +166,9 @@ async def delete_due_services(
     telegram = {int(service.id): int(tg or 0) for service, tg in rows}
     blocked = await _blocked_by_other_state(session, [int(s.id) for s in services])
     fresh = await live_refresh(session, services)
+    # A service the panel could not be read for may simply have no panel user any more (an earlier run deleted it
+    # there and then failed locally): confirm that with the shop's own client, so the leftover row is cleaned up.
+    gone = await _confirmed_gone(session, [s for s in services if int(s.id) not in fresh])
     await session.commit()
     # Decide for every service first, from the freshly read data: a failed delete rolls the session back,
     # which would expire the other loaded rows.
@@ -168,7 +178,7 @@ async def delete_due_services(
         service_id = int(service.id)
         deadline = deadline_for(service, policy, kind)
         still_due = (
-            service_id in fresh and service_id not in blocked and is_over(service, kind, now)
+            (service_id in fresh or service_id in gone) and service_id not in blocked and is_over(service, kind, now)
             and deadline is not None and deadline <= now and stage_of(service, kind) >= STAGE_NOTICE
             and not service.cleanup_exempt and service.cleanup_warned_at is not None
             and _aware(service.cleanup_warned_at) <= now - MIN_WARNING_GAP
@@ -186,14 +196,58 @@ async def delete_due_services(
         service = await session.get(UserService, service_id)
         if service is None:
             continue
-        outcome = await _delete_one(session, service, kind=kind, days=days, telegram_id=telegram_id, shop_id=shop_id)
+        outcome = await _delete_one(session, service, kind=kind, days=days, telegram_id=telegram_id, shop_id=shop_id, now=now)
         deleted += outcome == "deleted"
         failed += outcome == "failed"
+        skipped += outcome == "skipped"
     return DeleteResult(deleted=deleted, skipped=skipped, failed=failed)
 
 
+async def _read_panel_user(pg, pg_user_id: int) -> dict | None:
+    """The panel user record, ``None`` when the panel says it does not exist; any other failure raises."""
+    try:
+        record = await asyncio.wait_for(pg.get_user_by_id(int(pg_user_id)), timeout=READ_TIMEOUT_SECONDS)
+    except PasarGuardError as exc:
+        if is_pg_not_found(exc):
+            return None
+        raise
+    return record if isinstance(record, dict) else None
+
+
+async def _confirmed_gone(session: AsyncSession, services: list[UserService]) -> set[int]:
+    """Services whose panel user is confirmed missing: a clean 404 from the shop's own client, which can read its own admin."""
+    if not services:
+        return set()
+    clients = [await panel_client_for_service(session, service) for service in services]
+    gate = asyncio.Semaphore(GONE_CONCURRENCY)
+
+    async def probe(pg, service: UserService) -> bool:
+        async with gate:
+            return await probe_panel_presence(pg, service.pg_user_id) == "absent"
+
+    answers = await asyncio.gather(*(probe(pg, s) for pg, s in zip(clients, services, strict=True)))
+    return {int(s.id) for s, gone in zip(services, answers, strict=True) if gone}
+
+
+def _still_over(info: dict, kind: str, now: datetime) -> bool:
+    """Whether a panel user record still shows the service as expired / out of volume."""
+    if kind == KIND_TIME:
+        expire = parse_expire(info.get("expire"))
+        return expire is not None and (expire if expire.tzinfo else expire.replace(tzinfo=timezone.utc)) < now
+    return str(info.get("status") or "").strip().lower() == VOLUME_FINISHED_STATUS
+
+
+async def _release_lease(session: AsyncSession, service_id: int) -> None:
+    await session.execute(
+        update(UserService).where(UserService.id == service_id).values(cleanup_claimed_at=None),
+        execution_options={"synchronize_session": False},
+    )
+    await session.commit()
+
+
 async def _delete_one(
-    session: AsyncSession, service: UserService, *, kind: str, days: int, telegram_id: int, shop_id: int | None
+    session: AsyncSession, service: UserService, *, kind: str, days: int, telegram_id: int, shop_id: int | None,
+    now: datetime,
 ) -> str:
     """Delete one claimed service; on any failure the row and the lease stay as they were."""
     service_id, user_id = int(service.id), int(service.bot_user_id)
@@ -206,6 +260,12 @@ async def _delete_one(
         await session.commit()
         if pg is None or pg_user_id is None:
             raise ValueError("panel client unavailable")
+        # One last read right before the irreversible step: a renewal made in the panel meanwhile stops it.
+        # A clean 404 means the panel user is already gone and only the local row is left to remove.
+        record = await _read_panel_user(pg, pg_user_id)
+        if record is not None and not _still_over(record, kind, now):
+            await _release_lease(session, service_id)
+            return "skipped"
         await ensure_pg_user_removed_or_absent(pg, pg_user_id, staff=None, allow_disable_fallback=False)
         service = await session.get(UserService, service_id)
         if service is not None:
