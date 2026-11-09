@@ -33,6 +33,7 @@ def upgrade() -> None:
             sa.Column("shop_id", sa.Integer(), nullable=True),
             sa.Column("bot_user_id", sa.Integer(), nullable=False),
             sa.Column("telegram_id", sa.BigInteger(), nullable=False),
+            sa.Column("service_id", sa.Integer(), nullable=True),
             sa.Column("action", sa.String(32), nullable=False),
             sa.Column("service_name", sa.String(128), nullable=False, server_default=""),
             sa.Column("reason", sa.String(255), nullable=False),
