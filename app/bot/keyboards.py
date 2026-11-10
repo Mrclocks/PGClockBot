@@ -20,6 +20,7 @@ from app.services.support_contacts import (
 from app.services.users import DEFAULT_SETTINGS, on
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 from app.services import bot_feedback_texts as feedback
+from app.services.staff_cards import SERVICE_BUTTON_LIMIT
 
 # Default order for user menu items (drag-and-drop in web panel edits menu_order)
 # guide/faq removed from keyboard — keep texts available via /help if needed.
@@ -1489,8 +1490,17 @@ def _pay_method_button(
     )
 
 
-def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
+STAFF_FREE_BUTTON_TEXT = "🎁 دریافت رایگان (مدیر)"
+
+
+def pay_methods(
+    order_id: int, ui: dict | None = None, *, staff_free: bool = False
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
+    if staff_free:
+        rows.append(
+            [InlineKeyboardButton(text=STAFF_FREE_BUTTON_TEXT, callback_data=f"pay:staff:{order_id}")]
+        )
     if on(_t(ui, "pay_wallet_enabled")):
         rows.append([_pay_method_button(ui, order_id, "wallet", "success")])
     others = [
@@ -2232,6 +2242,14 @@ def admin_user_actions(
         ],
         [
             InlineKeyboardButton(
+                text="⭐ امتیاز +", callback_data=f"adm:users:pcredit:{user_id}"
+            ),
+            InlineKeyboardButton(
+                text="⭐ امتیاز −", callback_data=f"adm:users:pdebit:{user_id}"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
                 text="📦 سرویس‌ها", callback_data=f"adm:users:svcs:{user_id}"
             ),
             InlineKeyboardButton(
@@ -2247,8 +2265,9 @@ def admin_user_actions(
         ],
     ]
     if has_services:
+        # After wallet + points rows so امتیاز stays next to کیف پول.
         rows.insert(
-            1,
+            2,
             [
                 InlineKeyboardButton(
                     text="🔄 تمدید سریع",
@@ -2331,7 +2350,7 @@ def admin_user_services_keyboard(
     user_id: int, service_ids: list[int]
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
-    for sid in service_ids[:20]:
+    for sid in service_ids[:SERVICE_BUTTON_LIMIT]:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -2547,10 +2566,12 @@ def reseller_app_review(
     ui: dict | None = None,
     *,
     allow_approve: bool = True,
+    user_id: int | None = None,
 ) -> InlineKeyboardMarkup:
     """Message-scoped approve/reject (notifications). No nav chrome.
 
     ``allow_approve=False`` for unpaid (pending_payment) apps — reject only.
+    Optional ``user_id`` adds a platform customer-card button under the review row.
     """
     row: list[InlineKeyboardButton] = []
     if allow_approve:
@@ -2568,7 +2589,17 @@ def reseller_app_review(
             style=_style(ui, "reject", fallback="danger"),
         )
     )
-    return InlineKeyboardMarkup(inline_keyboard=[row])
+    rows: list[list[InlineKeyboardButton]] = [row]
+    if user_id:
+        rows.append(
+            [
+                _ikb(
+                    "👤 کاربر",
+                    callback_data=f"adm:users:view:{int(user_id)}",
+                )
+            ]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def reseller_home(profile=None, ui: dict | None = None) -> InlineKeyboardMarkup:

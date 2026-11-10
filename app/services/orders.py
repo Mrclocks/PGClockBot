@@ -6,6 +6,7 @@ import math
 import secrets
 import string
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
@@ -17,15 +18,6 @@ from sqlalchemy.orm import selectinload
 
 from app.services.custom_plans import discard_unsold_custom_plan
 from app.services.funnel_events import STEP_DELIVERED, STEP_RECEIPT, record_order_funnel
-from app.services.stale_order_cleanup import (
-    StaleOrderPolicy,
-    cancellable_statuses,
-    clamp_hours,
-    policy_from_settings,
-    record_cleanup_run,
-    scope_to_shop,
-    stale_orders_clause,
-)
 from app.services.catalog_pricing import PriceTarget, active_discounts, annotate_prices, assert_expected_price, displayed_quote, quote_price, quote_product, sale_price
 from app.db.models import (
     BotUser,
@@ -43,7 +35,13 @@ from app.db.models import (
     WalletTransaction,
 )
 from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
-from app.services.pasarguard import extract_sub_token, get_pg, parse_group_ids, user_subscription_url
+from app.services.pasarguard import (
+    PasarGuardError,
+    extract_sub_token,
+    get_pg,
+    parse_group_ids,
+    user_subscription_url,
+)
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
 from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
@@ -79,6 +77,8 @@ def is_mutation_order_note(note: str | None) -> bool:
         n.startswith("renew:")
         or n.startswith("reseller_app:")
         or n.startswith("svc_addon:")
+        or n.startswith("res_cap:")
+        or n.startswith("res_pkg:")
     )
 
 
@@ -86,7 +86,9 @@ def is_addon_order_note(note: str | None) -> bool:
     return (note or "").strip().startswith("svc_addon:")
 
 
-async def fulfill_paid_order(session: AsyncSession, order: Order) -> Order:
+async def fulfill_paid_order(
+    session: AsyncSession, order: Order, *, attempt: DeliveryAttempt | None = None
+) -> Order:
     """Route a PAID order to renew / addon / reseller_app / new-mint delivery.
 
     Callers that previously used ``deliver_order`` for PAID recovery must use
@@ -114,7 +116,15 @@ async def fulfill_paid_order(session: AsyncSession, order: Order) -> Order:
         from app.services.service_addons import apply_service_addon
 
         return await apply_service_addon(session, order)
-    return await deliver_order(session, order)
+    if note.startswith("res_cap:"):
+        from app.services.reseller_capacity_orders import apply_capacity_order
+
+        return await apply_capacity_order(session, order)
+    if note.startswith("res_pkg:"):
+        from app.services.reseller_package_orders import apply_package_order
+
+        return await apply_package_order(session, order)
+    return await deliver_order(session, order, attempt=attempt)
 
 
 async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None:
@@ -205,9 +215,23 @@ async def _reseller_pg_link(
     )
 
 
+DEFAULT_USERNAME_PATTERN = "{prefix}_{random}{suffix}"
+# PasarGuard answers 409 when the username exists; nothing is created.
+USERNAME_TAKEN_STATUS = 409
+# Longest buyer-chosen name; a taken name keeps this length after its random ending.
+CHOSEN_NAME_MAX_LENGTH = 20
+CHOSEN_NAME_ENDING_LENGTH = 4
+
+
 def _random_alnum(length: int = 8) -> str:
     alphabet = string.ascii_lowercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def chosen_name_variant(name: str) -> str:
+    """The buyer's name with a short random ending, for when the name is taken."""
+    keep = CHOSEN_NAME_MAX_LENGTH - CHOSEN_NAME_ENDING_LENGTH - 1
+    return f"{name[:keep]}_{_random_alnum(CHOSEN_NAME_ENDING_LENGTH)}"
 
 
 PG_USERNAME_MIN_LENGTH = 3
@@ -251,6 +275,7 @@ def _random_username(
     username: str | None = None,
     plan_volume: str = "unlimited",
     plan_unit: str = "GB",
+    chosen_name: str | None = None,
 ) -> str:
     """Build a PG username from prefix/suffix or an optional pattern.
 
@@ -261,10 +286,13 @@ def _random_username(
     not be used as a ``BotUser`` primary key — pass ``buyer_id`` / ``user``
     separately for ``{username}``.
     """
-    random_part = _random_alnum(8)
+    random_part = chosen_name or _random_alnum(8)
     id_part = "" if user_id is None else str(user_id)
     prefix = (prefix or "clk").strip() or "clk"
     suffix = suffix or ""
+    if chosen_name and "{random}" not in (pattern or ""):
+        # A pattern without {random} would drop the buyer's name; use the default shape.
+        pattern = DEFAULT_USERNAME_PATTERN
     if pattern and pattern.strip():
         from app.services.message_variables import DOMAIN_NAMING, render_message_template
 
@@ -354,8 +382,11 @@ async def generate_pg_username(
     plan_pattern: str | None = None,
     reseller_id: int | None = None,
     user: BotUser | None = None,
+    chosen_name: str | None = None,
 ) -> str:
     """Generate a Pasarguard username using plan overrides when set, else globals.
+
+    ``chosen_name`` (the buyer's validated name) takes the place of ``{random}``.
 
     ``user_id`` fills ``{id}`` (order id on delivery; bot-user id on manual
     assign).  ``buyer_id`` / ``user`` resolve ``{username}`` — never look up
@@ -388,6 +419,7 @@ async def generate_pg_username(
         user_id=user_id,
         username=getattr(user, "username", None) or tg_fallback,
         plan_volume=f"{volume:g}" if volume is not None and volume > 0 else "unlimited",
+        chosen_name=chosen_name,
     )
 
 
@@ -1147,6 +1179,14 @@ async def manual_fulfill_unpaid_order(
 
         delivered = await apply_service_addon(session, order)
         return delivered, payment
+    if note_txt.startswith("res_cap:"):
+        from app.services.reseller_capacity_orders import apply_capacity_order
+
+        return await apply_capacity_order(session, order), payment
+    if note_txt.startswith("res_pkg:"):
+        from app.services.reseller_package_orders import apply_package_order
+
+        return await apply_package_order(session, order), payment
     delivered = await deliver_order(session, order)
     return delivered, payment
 
@@ -1163,13 +1203,19 @@ def wallet_purchase_reason(order: Order) -> str:
         return f"افزونه سرویس #{order.id}"
     if note.startswith("reseller_app:"):
         return f"هزینه نمایندگی #{order.id}"
+    if note.startswith("res_cap:"):
+        return f"ظرفیت نمایندگی #{order.id}"
+    if note.startswith("res_pkg:"):
+        return f"تمدید بسته نمایندگی #{order.id}"
     return f"خرید سفارش #{order.id}"
 
 
-async def _resume_paid_wallet_order(session: AsyncSession, order: Order, user) -> Order:
+async def _resume_paid_wallet_order(
+    session: AsyncSession, order: Order, user, *, attempt: DeliveryAttempt | None = None
+) -> Order:
     """Continue delivery for an already-PAID wallet order (crash recovery)."""
     _ = user
-    return await fulfill_paid_order(session, order)
+    return await fulfill_paid_order(session, order, attempt=attempt)
 
 
 async def _require_checkout_contact(session: AsyncSession, order: Order) -> None:
@@ -1180,6 +1226,37 @@ async def _require_checkout_contact(session: AsyncSession, order: Order) -> None
     is_trial = await session.scalar(select(Plan.is_trial).where(Plan.id == order.plan_id))
     if not is_trial:
         raise ValueError(CONTACT_REQUIRED_MESSAGE)
+
+
+async def _resume_unfinished_wallet_order(session: AsyncSession, order: Order, user) -> Order | None:
+    """Crash recovery: PAID wallet order with an approved payment whose delivery never finished.
+
+    Returns None when the order is not in that state. Refuses to deliver again when an
+    earlier attempt left the panel outcome unknown; staff decide that case.
+    """
+    if not (
+        order.status == OrderStatus.PAID.value
+        and (order.payment_method or "") == PaymentMethod.WALLET.value
+    ):
+        return None
+    existing = (
+        await session.execute(
+            select(Payment)
+            .where(
+                Payment.order_id == order.id,
+                Payment.method == PaymentMethod.WALLET.value,
+                Payment.status == PaymentStatus.APPROVED.value,
+            )
+            .order_by(Payment.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        return None
+    if existing.review_note == UNKNOWN_DELIVERY_NOTE:
+        # The panel may already hold this buyer's account; staff decide, not a re-tap.
+        raise DeliveryOutcomeUnknown()
+    return await _resume_paid_wallet_order(session, order, user)
 
 
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
@@ -1194,25 +1271,9 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     if payer <= 0 or oid_user != payer:
         raise ValueError("سفارش متعلق به این کاربر نیست")
 
-    # Crash recovery: PAID wallet order with approved payment, delivery never finished.
-    if (
-        order.status == OrderStatus.PAID.value
-        and (order.payment_method or "") == PaymentMethod.WALLET.value
-    ):
-        existing = (
-            await session.execute(
-                select(Payment)
-                .where(
-                    Payment.order_id == order.id,
-                    Payment.method == PaymentMethod.WALLET.value,
-                    Payment.status == PaymentStatus.APPROVED.value,
-                )
-                .order_by(Payment.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if existing is not None:
-            return await _resume_paid_wallet_order(session, order, user)
+    resumed = await _resume_unfinished_wallet_order(session, order, user)
+    if resumed is not None:
+        return resumed
 
     if order.status not in _PAYABLE_ORDER_STATUSES:
         raise ValueError("این سفارش قابل پرداخت با کیف پول نیست")
@@ -1220,6 +1281,7 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
 
     payment: Payment | None = None
     debited = False
+    attempt = DeliveryAttempt()
     order = await _claim_payable_order(
         session, order, payment_method=PaymentMethod.WALLET.value
     )
@@ -1251,13 +1313,16 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
         await session.commit()
         await session.refresh(order)
         await session.refresh(payment)
-        return await _resume_paid_wallet_order(session, order, user)
+        return await _resume_paid_wallet_order(session, order, user, attempt=attempt)
     except Exception as exc:
         from app.services.service_renewals import RenewalPendingReview
 
         if isinstance(exc, RenewalPendingReview):
             # A lost panel response is not evidence that the paid renewal failed.
             raise
+        if attempt.panel_may_hold_account:
+            # The panel may have created the account: refunding now would sell it for free.
+            raise await hold_unknown_delivery_for_review(session, order, error=str(exc)) from exc
         if getattr(order, "renewal_snapshot", None):
             await session.refresh(order)
             await session.refresh(user)
@@ -1312,8 +1377,50 @@ class DeliveryAttempt:
     panel_may_hold_account: bool = False
 
 
+UNKNOWN_DELIVERY_NOTE = "delivery_outcome_unknown"
+
+
+class DeliveryOutcomeUnknown(ValueError):
+    """A paid delivery failed after the panel may have created the account."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "پرداخت شما ثبت شد اما نتیجه تحویل سرویس نیاز به بررسی پشتیبانی دارد. "
+            "دوباره خرید نکنید."
+        )
+
+
+async def hold_unknown_delivery_for_review(
+    session: AsyncSession, order: Order, *, error: str
+) -> DeliveryOutcomeUnknown:
+    """Keep the paid order for staff after an unknown panel outcome; never refund or retry.
+
+    The approved payment is stamped so automatic re-entry (a buyer tapping pay again)
+    is refused, and the order is listed under failed deliveries for a staff decision.
+    """
+    payment = await session.scalar(
+        select(Payment)
+        .where(Payment.order_id == int(order.id), Payment.status == PaymentStatus.APPROVED.value)
+        .order_by(Payment.id.desc())
+        .limit(1)
+    )
+    if payment is not None:
+        payment.review_note = UNKNOWN_DELIVERY_NOTE
+        await session.commit()
+    # Local import: ux20 imports this module.
+    from app.services.ux20 import note_delivery_send_failure
+
+    await note_delivery_send_failure(session, order=order, payment=payment, error=error)
+    return DeliveryOutcomeUnknown()
+
+
 async def settle_failed_free_delivery(
-    session: AsyncSession, order: Order, *, attempt: DeliveryAttempt, error: str
+    session: AsyncSession,
+    order: Order,
+    *,
+    attempt: DeliveryAttempt,
+    error: str,
+    reopen: bool = True,
 ) -> Payment | None:
     """After a free order's delivery failed: revert it for a retry, or keep it for staff.
 
@@ -1323,7 +1430,7 @@ async def settle_failed_free_delivery(
     None when the order was reverted and the buyer may try again.
     """
     if not attempt.panel_may_hold_account:
-        await revert_failed_free_delivery(session, order)
+        await revert_failed_free_delivery(session, order, reopen=reopen)
         return None
     payment = await session.scalar(
         select(Payment)
@@ -1338,11 +1445,17 @@ async def settle_failed_free_delivery(
     return payment
 
 
-async def revert_failed_free_delivery(session: AsyncSession, order: Order) -> None:
-    """Undo mark_order_free_paid so the user can retry after a delivery failure."""
+async def revert_failed_free_delivery(
+    session: AsyncSession, order: Order, *, reopen: bool = True
+) -> None:
+    """Undo a free claim after a delivery failure.
+
+    ``reopen`` puts the order back to pending so the buyer can retry; otherwise it is
+    cancelled (a staff free order keeps a zero amount and must not be paid later).
+    """
     if getattr(order, "service_mutation_pending", False):
         return
-    order.status = OrderStatus.PENDING.value
+    order.status = OrderStatus.PENDING.value if reopen else OrderStatus.CANCELLED.value
     pays = await session.execute(
         select(Payment).where(
             Payment.order_id == order.id,
@@ -1525,94 +1638,6 @@ async def release_unpaid_order_holds(session: AsyncSession, order: Order, *, rea
         await cancel_application_for_order(session, order, reason=reason, commit=False)
 
 
-async def cancel_stale_pending_orders(
-    session: AsyncSession,
-    *,
-    older_than_hours: int,
-    reseller_id: int | None = None,
-    include_awaiting_approval: bool = False,
-    approval_older_than_hours: int | None = None,
-    limit: int = 500,
-) -> int:
-    """Cancel unpaid/abandoned orders older than TTL. Returns count cancelled.
-
-    Uses CANCELLED (not REJECTED) so orders leave the payable set and cannot be
-    completed later. Concurrent approve/pay wins via conditional UPDATE. Orders
-    waiting for receipt approval use ``approval_older_than_hours`` (default: the same TTL).
-    """
-    hours = clamp_hours(older_than_hours, 1)
-    approval_hours = None
-    if include_awaiting_approval:
-        approval_hours = clamp_hours(approval_older_than_hours or hours, hours)
-    policy = StaleOrderPolicy(hours=hours, approval_hours=approval_hours)
-    statuses = cancellable_statuses(policy)
-
-    q = (
-        select(Order)
-        .where(stale_orders_clause(policy))
-        .order_by(Order.id.asc())
-        .limit(max(1, min(2000, int(limit or 500))))
-    )
-    q = scope_to_shop(q, reseller_id)
-
-    orders = list((await session.execute(q)).scalars().all())
-    cancelled = 0
-    for order in orders:
-        order_id = int(order.id)
-        with session.no_autoflush:
-            claim = await session.execute(
-                update(Order)
-                .where(
-                    Order.id == order_id,
-                    Order.status.in_(tuple(statuses)),
-                )
-                .values(status=OrderStatus.CANCELLED.value)
-                .execution_options(synchronize_session=False)
-            )
-        if claim.rowcount != 1:
-            continue
-        # Reject sibling pending payments
-        pend = await session.execute(
-            select(Payment).where(
-                Payment.order_id == order_id,
-                Payment.status == PaymentStatus.PENDING.value,
-            )
-        )
-        for pay in pend.scalars().all():
-            pay.status = PaymentStatus.REJECTED.value
-            pay.review_note = pay.review_note or "auto-cancelled stale pending order"
-        await release_unpaid_order_holds(session, order, reason="auto-cancelled stale pending order")
-        cancelled += 1
-
-    if cancelled:
-        await session.commit()
-    return cancelled
-
-
-async def cancel_stale_pending_for_settings(
-    session: AsyncSession,
-    *,
-    reseller_id: int | None = None,
-    force: bool = False,
-) -> int:
-    """Read shop/platform settings, cancel stale pending orders and record the run."""
-    from app.services.users import get_all_settings, on
-
-    ui = await get_all_settings(session, reseller_id=reseller_id)
-    if not force and not on(ui.get("pending_order_cleanup_enabled", "0")):
-        return 0
-    policy = policy_from_settings(ui)
-    cancelled = await cancel_stale_pending_orders(
-        session,
-        older_than_hours=policy.hours,
-        reseller_id=reseller_id,
-        include_awaiting_approval=policy.approval_hours is not None,
-        approval_older_than_hours=policy.approval_hours,
-    )
-    await record_cleanup_run(session, cancelled=cancelled, reseller_id=reseller_id)
-    return cancelled
-
-
 async def attach_receipt(
     session: AsyncSession, payment: Payment, file_id: str, *, first_only: bool = False
 ) -> Payment:
@@ -1667,6 +1692,11 @@ def _wallet_topup_credit_reason(payment_id: int) -> str:
     return f"شارژ کیف پول #{int(payment_id)}"
 
 
+def _wallet_topup_idempotency_key(payment_id: int) -> str:
+    """Ledger key that makes a second credit for the same top-up payment a no-op."""
+    return f"topup:payment:{int(payment_id)}"
+
+
 async def _wallet_topup_already_credited(
     session: AsyncSession, payment: Payment
 ) -> bool:
@@ -1693,7 +1723,7 @@ async def _wallet_topup_already_credited(
 
 
 async def _resume_approved_payment(
-    session: AsyncSession, payment: Payment
+    session: AsyncSession, payment: Payment, *, attempt: DeliveryAttempt | None = None
 ) -> Order | None:
     """Continue after APPROVED claim when credit/delivery never finished.
 
@@ -1728,6 +1758,7 @@ async def _resume_approved_payment(
                 payment.amount,
                 _wallet_topup_credit_reason(int(payment.id)),
                 shop_id=topup_shop,
+                idempotency_key=_wallet_topup_idempotency_key(int(payment.id)),
             )
         except Exception:
             payment.status = PaymentStatus.PENDING.value
@@ -1817,7 +1848,7 @@ async def _resume_approved_payment(
             await session.refresh(order)
 
     if order.status == OrderStatus.PAID.value:
-        return await fulfill_paid_order(session, order)
+        return await fulfill_paid_order(session, order, attempt=attempt)
 
     raise ValueError("این پرداخت قبلاً تأیید شده")
 
@@ -1835,7 +1866,12 @@ async def _sync_payment_review_messages(
 
 
 async def approve_payment(
-    session: AsyncSession, payment: Payment, reviewer_tg: int, *, bot=None
+    session: AsyncSession,
+    payment: Payment,
+    reviewer_tg: int,
+    *,
+    bot=None,
+    attempt: DeliveryAttempt | None = None,
 ) -> Order | None:
     payment_id = int(payment.id)
     # DB-only claim: disable autoflush so a dirty in-memory status cannot
@@ -1862,7 +1898,7 @@ async def approve_payment(
         if fresh and fresh.status == PaymentStatus.APPROVED.value:
             await _sync_payment_review_messages(session, payment_id, bot=bot)
             # Approved but credit/delivery may still be incomplete — resume safely.
-            return await _resume_approved_payment(session, fresh)
+            return await _resume_approved_payment(session, fresh, attempt=attempt)
         raise ValueError("این پرداخت قابل تأیید نیست")
     await session.refresh(payment)
 
@@ -1892,6 +1928,7 @@ async def approve_payment(
                 payment.amount,
                 _wallet_topup_credit_reason(int(payment.id)),
                 shop_id=topup_shop,
+                idempotency_key=_wallet_topup_idempotency_key(int(payment.id)),
             )
         except Exception:
             payment.status = PaymentStatus.PENDING.value
@@ -1973,7 +2010,7 @@ async def approve_payment(
     await session.commit()
     await session.refresh(order)
     await _sync_payment_review_messages(session, payment_id, bot=bot)
-    return await fulfill_paid_order(session, order)
+    return await fulfill_paid_order(session, order, attempt=attempt)
 
 
 async def reject_payment(
@@ -2291,19 +2328,21 @@ async def deliver_order(
         created_pg_ids: list[int] = []
         services: list[UserService] = []
 
-        async def _create_one(index: int) -> UserService:
+        chosen_name = (getattr(order, "requested_username", None) or None) if qty == 1 else None
+
+        async def _username(name: str | None) -> str:
             # ``{id}`` = order id (catalog); ``buyer_id`` resolves ``{username}``.
-            username = await generate_pg_username(
+            return await generate_pg_username(
                 session,
                 user_id=int(order.id),
                 buyer_id=int(order.user_id),
                 plan=plan,
                 reseller_id=order.reseller_id,
                 user=order.user,
+                chosen_name=name,
             )
-            note = f"PGClockBot order #{order.id}"
-            if qty > 1:
-                note = f"{note} ({index}/{qty})"
+
+        async def _create_panel_user(username: str, note: str) -> dict:
             panel["touched"] = True
             if plan.pg_template_id:
                 payload = {
@@ -2322,6 +2361,18 @@ async def deliver_order(
                         note=note,
                     )
                 )
+            return pg_user
+
+        async def _create_one(index: int) -> UserService:
+            username = await _username(chosen_name)
+            note = f"PGClockBot order #{order.id}"
+            if qty > 1:
+                note = f"{note} ({index}/{qty})"
+            pg_user, username = await create_with_name_fallback(
+                lambda name: _create_panel_user(name, note),
+                username,
+                regenerate=(lambda: _username(chosen_name_variant(chosen_name))) if chosen_name else None,
+            )
             pg_uid = pg_user.get("id")
             if pg_uid:
                 created_pg_ids.append(int(pg_uid))
@@ -2426,6 +2477,28 @@ async def deliver_order(
         except Exception:
             logger.debug("deliver_order: ignored failure", exc_info=True)
         raise
+
+
+async def create_with_name_fallback(
+    create: Callable[[str], Awaitable[dict]],
+    username: str,
+    *,
+    regenerate: Callable[[], Awaitable[str]] | None,
+) -> tuple[dict, str]:
+    """Create the panel user; a chosen name the panel already holds gets a random ending.
+
+    Returns the panel reply and the username actually used. The panel answers 409 before
+    creating anything, so the second call cannot duplicate a user, and a paid order is
+    never left undelivered because of the buyer's name.
+    """
+    try:
+        return await create(username), username
+    except PasarGuardError as exc:
+        if regenerate is None or exc.status_code != USERNAME_TAKEN_STATUS:
+            raise
+        logger.info("chosen service name taken on the panel; adding a random ending")
+    generated = await regenerate()
+    return await create(generated), generated
 
 
 MIN_TOPUP_AMOUNT = 1000

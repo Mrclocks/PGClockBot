@@ -143,6 +143,9 @@ PLATFORM_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset(
 # Keys that only make sense for a reseller shop (nothing to announce for the platform itself).
 SHOP_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset({"notify_panel_capacity"})
 
+# Alerts about the panel itself rather than a sale; the settings tab marks them «سیستم».
+SYSTEM_NOTIFY_KEYS: frozenset[str] = frozenset({"notify_panel_update", "notify_panel_delivery_failures"})
+
 # What the platform Owner sees and toggles.
 PLATFORM_NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
     item for item in NOTIFY_PREFS if item[0] not in SHOP_ONLY_NOTIFY_KEYS
@@ -655,6 +658,47 @@ def _approval_markup(
     )
 
 
+def _merge_markups(*parts: InlineKeyboardMarkup | None) -> InlineKeyboardMarkup | None:
+    """Stack non-empty keyboard rows; return None when nothing remains."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for part in parts:
+        if part is not None:
+            rows.extend(part.inline_keyboard)
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+
+
+def _panel_url_markup(
+    label: str,
+    path: str,
+    *,
+    shop_id: int | None = None,
+) -> InlineKeyboardMarkup | None:
+    """HTTPS panel deep-link for platform staff only.
+
+    Shop bots do not share the platform finance pages, so a shop-scoped notice
+    never gets a panel URL (even when PUBLIC_BASE_URL is https).
+    """
+    if shop_id is not None:
+        return None
+    base = str(getattr(get_settings(), "public_base_url", "") or "").rstrip("/")
+    if not base.startswith("https://"):
+        return None
+    if not path.startswith("/"):
+        path = "/" + path
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=label[:64], url=base + path)]]
+    )
+
+
+def _payment_customer_shop_id(
+    payment: Payment, order: Order | None
+) -> int | None:
+    """Shop scope for customer-card buttons under a payment notice."""
+    if payment.is_wallet_topup:
+        return payment.wallet_shop_id
+    return order.reseller_id if order is not None else None
+
+
 def _buyer_lines(user: BotUser | None, telegram_id: int | None = None) -> list[str]:
     """Who the report is about: name, @username and numeric Telegram id, each on its own line.
 
@@ -716,7 +760,17 @@ async def notify_new_subscription(
     else:
         title = "🆕 اشتراک جدید"
     text = format_message(title, info_block(lines))
-    markup = _approval_markup(order_id=order.id) if needs_approval else None
+    if needs_approval:
+        markup = _approval_markup(order_id=order.id)
+    else:
+        # Delivered notices open the customer card (and the service card on the platform bot).
+        note_raw = (order.note or "").strip()
+        is_agency_fee = note_raw.startswith("reseller_app:")
+        markup = customer_markup(
+            user_id=order.user_id,
+            service_id=None if is_agency_fee else order.service_id,
+            shop_id=order.reseller_id,
+        )
     await _dispatch_dual_notify(
         bot,
         session,
@@ -753,6 +807,7 @@ async def notify_pending_approval(
     settings = get_settings()
     user = await session.get(BotUser, payment.user_id) if payment.user_id else None
     _ = user_name  # kept for callers; the report is built from the user row
+    order: Order | None = None
 
     lines = [
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
@@ -765,7 +820,6 @@ async def notify_pending_approval(
         lines.append(kv_line("📦", "نوع", "شارژ کیف پول"))
         lines.append(kv_line("📝", "بابت", "افزایش موجودی کیف پول کاربر"))
     else:
-        order = None
         if payment.order_id:
             order = await session.get(Order, payment.order_id)
         kind, detail_lines = await _pending_order_detail_lines(session, order, payment)
@@ -780,7 +834,11 @@ async def notify_pending_approval(
         tail = f"{note}\n\n{tail}"
     text = format_message("⏳ نیاز به تأیید", info_block(lines) + "\n\n" + tail)
     # Always payrev so shop staff can act on their own bot; ordrev is platform-only.
-    markup = _approval_markup(payment_id=payment.id)
+    shop_id = _payment_customer_shop_id(payment, order)
+    markup = _merge_markups(
+        _approval_markup(payment_id=payment.id),
+        customer_markup(user_id=payment.user_id, service_id=None, shop_id=shop_id),
+    )
     # A shop's wallet top-up is reviewed by that shop; only the platform's own top-ups are platform-only.
     await _dispatch_dual_notify(
         bot,
@@ -792,6 +850,38 @@ async def notify_pending_approval(
         payment=payment,
         shop=not payment.is_wallet_topup or payment.wallet_shop_id is not None,
     )
+
+
+def _capacity_order_detail_lines(order: Order, note: str) -> tuple[str, list[str]]:
+    """Kind and kv lines for a reseller capacity order, from its frozen entitlement."""
+    from app.services.reseller_capacity_orders import describe, parse_note
+
+    label = "خرید ظرفیت نمایندگی"
+    lines = [kv_line("📝", "بابت", label)]
+    parsed = parse_note(note)
+    if parsed is not None:
+        lines.append(kv_line("➕", "مقدار افزایش", describe(parsed)))
+    if order.payment_method:
+        from app.services.payment_method_labels import payment_method_fa
+
+        lines.append(kv_line("💳", "روش", html.escape(payment_method_fa(order.payment_method))))
+    return label, lines
+
+
+def _package_order_detail_lines(order: Order, note: str) -> tuple[str, list[str]]:
+    """Kind and kv lines for a reseller package renew/upgrade order."""
+    from app.services.reseller_package_orders import parse_note
+
+    label = "تمدید بسته نمایندگی"
+    lines = [kv_line("📝", "بابت", label)]
+    parsed = parse_note(note)
+    if parsed is not None:
+        lines.append(kv_line("📦", "شناسه بسته", str(parsed[0])))
+    if order.payment_method:
+        from app.services.payment_method_labels import payment_method_fa
+
+        lines.append(kv_line("💳", "روش", html.escape(payment_method_fa(order.payment_method))))
+    return label, lines
 
 
 async def _addon_order_detail_lines(
@@ -808,6 +898,10 @@ async def _addon_order_detail_lines(
     )
 
     note = (order.note or "").strip()
+    if note.startswith("res_cap:"):
+        return _capacity_order_detail_lines(order, note)
+    if note.startswith("res_pkg:"):
+        return _package_order_detail_lines(order, note)
     if not note.startswith("svc_addon:"):
         return None
     parsed = parse_addon_note(note)
@@ -997,6 +1091,11 @@ async def notify_new_order(
         session,
         "notify_new_order",
         text,
+        markup=customer_markup(
+            user_id=order.user_id,
+            service_id=None,
+            shop_id=order.reseller_id,
+        ),
         order=order,
     )
 
@@ -1034,6 +1133,11 @@ async def notify_wallet_topup_ok(
         session,
         "notify_wallet_topup",
         text,
+        markup=customer_markup(
+            user_id=payment.user_id,
+            service_id=None,
+            shop_id=None,
+        ),
         payment=payment,
         shop=False,
     )
@@ -1170,7 +1274,7 @@ def _receipt_photo(payment: Payment) -> str | None:
 VOID_CALLBACK_PREFIX = "payvoid:v:"
 
 
-def _customer_markup(
+def customer_markup(
     *,
     user_id: int | None,
     service_id: int | None,
@@ -1250,7 +1354,7 @@ async def notify_auto_approve(
         session,
         "notify_auto_approve",
         format_message("⚡ تأیید خودکار", info_block(lines)),
-        markup=_customer_markup(
+        markup=customer_markup(
             user_id=payment.user_id,
             service_id=None if is_agency_fee or order is None else order.service_id,
             shop_id=shop_id,
@@ -1270,8 +1374,12 @@ async def notify_settlement_review(
     reason: str,
     title: str = "⚠️ پرداخت «بزن به کارت» نیاز به بررسی دارد",
 ) -> int:
-    """Staff of the payment's shop (platform admins for the platform): an automatic
-    payment needs a person. Never approves or rejects anything itself."""
+    """Tell staff an automatic settlement needs a person — never approve from this notice.
+
+    ``payrev:ok`` on a still-pending payment would call ``execute_payment_approve`` and
+    could credit a mismatched BBC/PSP amount. This notice only opens the customer card;
+    staff resolve the settlement from the finance review queue.
+    """
     # Local import: app.bot imports the handler modules, which import this module.
     from app.bot import create_bot
 
@@ -1285,14 +1393,29 @@ async def notify_settlement_review(
     if payment.order_id:
         lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
     text = format_message(title, info_block(lines) + f"\n\n{reason}")
+    # No payment= : avoid remember_review_message / commit mid-notice for a non-receipt flow.
+    markup = customer_markup(user_id=payment.user_id, service_id=None, shop_id=shop_id)
     bot = create_bot()
     try:
         # The settlement's shop is passed as the explicit scope, so shop events never reach platform admins.
         return await _dispatch_dual_notify(
-            bot, session, "notify_pending_approval", text, ticket_reseller_id=shop_id
+            bot,
+            session,
+            "notify_pending_approval",
+            text,
+            markup=markup,
+            ticket_reseller_id=shop_id,
         )
     finally:
         await bot.session.close()
+
+
+def _stars_refund_status(*, refunded: bool, held: bool) -> str:
+    if refunded:
+        return "انجام شد"
+    if held:
+        return "نگه داشته شد — پس از بررسی تحویل دستی تصمیم بگیرید"
+    return "ناموفق — دستی بررسی شود"
 
 
 async def notify_stars_delivery_failed(
@@ -1304,6 +1427,7 @@ async def notify_stars_delivery_failed(
     charge_id: str | None,
     refunded: bool,
     error: str,
+    held: bool = False,
 ) -> int:
     """Staff of the payment's shop (platform admins for the platform): a paid Stars
     payment could not be delivered; never reaches another shop's or the platform's staff."""
@@ -1315,17 +1439,45 @@ async def notify_stars_delivery_failed(
             kv_line("🧾", "پرداخت", f"#{payment.id}"),
             kv_line("👤", "کاربر", f"<code>{int(telegram_id)}</code>"),
             kv_line("🔖", "شناسهٔ پرداخت", f"<code>{html_mod.escape(charge_id or '—')}</code>"),
-            kv_line("↩️", "بازگشت استارز", "انجام شد" if refunded else "ناموفق — دستی بررسی شود"),
+            kv_line("↩️", "بازگشت استارز", _stars_refund_status(refunded=refunded, held=held)),
         ]) + f"\n\n<code>{html_mod.escape(error[:300])}</code>",
     )
+    order = await session.get(Order, payment.order_id) if payment.order_id else None
+    shop_id = _payment_customer_shop_id(payment, order)
+    markup = _merge_markups(
+        _panel_url_markup(
+            "بررسی تحویل‌های ناموفق",
+            "/finance?tab=delivery",
+            shop_id=shop_id,
+        ),
+        customer_markup(user_id=payment.user_id, service_id=None, shop_id=shop_id),
+    )
     # A delivery failure, not a review request: no approve buttons to keep in sync.
-    return await _dispatch_dual_notify(bot, session, "notify_panel_delivery_failures", text, payment=payment)
+    return await _dispatch_dual_notify(
+        bot,
+        session,
+        "notify_panel_delivery_failures",
+        text,
+        markup=markup,
+        payment=payment,
+    )
 
 
 async def notify_wireguard_missing(bot: Bot, session: AsyncSession, detail: str) -> int:
     """Platform admins: a customer who should get WireGuard files got none."""
     text = format_message("⚠️ فایل WireGuard تحویل نشد", detail)
-    return await _dispatch_dual_notify(bot, session, "notify_panel_delivery_failures", text, shop=False)
+    return await _dispatch_dual_notify(
+        bot,
+        session,
+        "notify_panel_delivery_failures",
+        text,
+        markup=_panel_url_markup(
+            "بررسی تحویل‌های ناموفق",
+            "/finance?tab=delivery",
+            shop_id=None,
+        ),
+        shop=False,
+    )
 
 
 async def notify_approved_delivery_stuck(
@@ -1738,7 +1890,10 @@ async def notify_account_edit(
 
             bot = create_bot()
             try:
-                await _send_admins(bot, admin_text)
+                await _send_admins(
+                    bot, admin_text,
+                    markup=customer_markup(user_id=user.id, service_id=None, shop_id=None),
+                )
                 result["admins"] = True
             finally:
                 await bot.session.close()

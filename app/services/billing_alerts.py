@@ -12,6 +12,7 @@ import html
 import logging
 from datetime import datetime, timezone
 
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +22,9 @@ from app.py_compat import StrEnum
 from app.services.org_principals import DEPTH_OWNER, get_principal_by_reseller_profile
 from app.services.platform_identity import deliverable_telegram_id
 from app.services.reseller_access import parse_telegram_ids
+
+# Opens the shop operator's billing screen (the reseller hub entry ``res_billing``).
+BILLING_SCREEN_CALLBACK = "nv:res:ra:res_billing"
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +180,10 @@ async def report_tick_issue(
         return False
     await session.refresh(profile)
     owner_shop_id, owner_chat_ids = await _owner_recipients(session, profile)
-    await _send(session, owner_shop_id, owner_chat_ids, _tick_issue_text(profile, issue))
+    await _send(
+        session, owner_shop_id, owner_chat_ids, _tick_issue_text(profile, issue),
+        markup=_reseller_card_markup(profile, owner_shop_id),
+    )
     return True
 
 
@@ -247,8 +254,25 @@ async def notify_low_balance(
     reseller_tid = deliverable_telegram_id(getattr(reseller, "telegram_id", None))
     owner_shop_id, owner_chat_ids = await _owner_recipients(session, profile)
     if reseller_tid is not None:
-        await _send(session, int(profile.user_id), [reseller_tid], _reseller_text(level, balance))
-    await _send(session, owner_shop_id, owner_chat_ids, _owner_text(profile, level, balance))
+        await _send(
+            session, int(profile.user_id), [reseller_tid], _reseller_text(level, balance),
+            markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="💳 صورتحساب و شارژ", callback_data=BILLING_SCREEN_CALLBACK),
+            ]]),
+        )
+    await _send(
+        session, owner_shop_id, owner_chat_ids, _owner_text(profile, level, balance),
+        markup=_reseller_card_markup(profile, owner_shop_id),
+    )
+
+
+def _reseller_card_markup(profile: ResellerProfile, owner_shop_id: int | None) -> InlineKeyboardMarkup | None:
+    """The platform owner opens the reseller card; a parent shop has no such screen."""
+    if owner_shop_id is not None:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🤝 کارت نماینده", callback_data=f"adm:resellers:view:{int(profile.user_id)}"),
+    ]])
 
 
 async def _send(
@@ -256,6 +280,8 @@ async def _send(
     shop_user_id: int | None,
     chat_ids: list[int],
     text: str,
+    *,
+    markup: InlineKeyboardMarkup | None = None,
 ) -> None:
     if not chat_ids:
         return
@@ -269,7 +295,7 @@ async def _send(
     if bot is None:
         bot, owned = create_bot(), True
     try:
-        await _send_to_chats(bot, chat_ids, text)
+        await _send_to_chats(bot, chat_ids, text, markup=markup)
     finally:
         if owned:
             await bot.session.close()

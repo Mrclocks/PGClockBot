@@ -33,6 +33,7 @@ from app.services.volume_allocation import apply_create_form_oversell, apply_ove
 from app.services.billing import require_positive_payg_rate
 from app.services.pasarguard import get_pg
 from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
+from app.services.support_button import support_markup
 from app.services.resellers import (
     DEFAULT_FEATURE_PERMS,
     FEATURE_PERMS,
@@ -856,6 +857,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
         perms = _feature_perms_from_form(form)
         miniapp_before = _shop_miniapp_may_open(profile)
+        was_active = bool(profile.is_active)
         profile.web_permissions = perms
         profile.bot_permissions = perms  # must stay identical
         profile.can_approve_receipts = "payments" in parse_perms(perms)
@@ -947,6 +949,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 return _redirect_reseller_edit(user_id, err=str(e))
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
         await session.commit()
+        if was_active != bool(profile.is_active):
+            from app.services.reseller_bots import sync_reseller_bot_runtime
+
+            await sync_reseller_bot_runtime(profile)
         _resync_menu_if_miniapp_changed(profile, miniapp_before)
         return _redirect_reseller_edit(user_id, ok='ذخیره شد')
 
@@ -1171,6 +1177,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             profile.is_active = False
             user.role = Role.ADMIN.value
             await session.commit()
+            from app.services.reseller_bots import sync_reseller_bot_runtime
+
+            await sync_reseller_bot_runtime(profile)
             await notify_account_edit(
                 session,
                 user=user,
@@ -1192,6 +1201,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         profile.is_active = True
         user.role = Role.RESELLER.value
         await session.commit()
+        from app.services.reseller_bots import sync_reseller_bot_runtime
+
+        await sync_reseller_bot_runtime(profile)
         await notify_account_edit(
             session,
             user=user,
@@ -1443,6 +1455,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 allow_buy_extra=bool(form.get("allow_buy_extra")) if billing_mode == "fixed" else False,
             ),
             renew_price=_parse_nonneg_int(form, "renew_price"),
+            carry_remaining_period=bool(form.get("carry_remaining_period")),
+            keep_extras_on_renew=bool(form.get("keep_extras_on_renew")),
             can_approve_receipts="payments" in parse_perms(perms),
             web_permissions=perms,
             bot_permissions=perms,
@@ -1458,8 +1472,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         session.add(plan)
         await session.flush()
         from app.services.billing import sync_plan_billing_rate
+        from app.services.reseller_plan_extra_packs import apply_extra_packs_from_form
 
         await sync_plan_billing_rate(session, plan)
+        try:
+            await apply_extra_packs_from_form(session, plan, form)
+        except ValueError as e:
+            await session.rollback()
+            return RedirectResponse(
+                f"/plans?err={_q(str(e))}#reseller-plans",
+                status_code=303,
+            )
         await session.commit()
         return RedirectResponse(f"/plans?ok={_q('پلن نمایندگی ذخیره شد')}#reseller-plans", status_code=303)
 
@@ -1492,15 +1515,18 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             if x.strip()
         }
         snap = await load_staff_limit_snapshot(staff, session=session)
-        from app.services.button_styles import PLAN_BUTTON_STYLE_OPTIONS
+        from app.services.button_styles import ITEM_BUTTON_STYLE_OPTIONS, PLAN_BUTTON_STYLE_OPTIONS
         from app.services.plan_categories import (
             AUDIENCE_RESELLERS,
             list_categories,
         )
+        from app.services.reseller_plan_extra_packs import KIND_GB, KIND_USERS, list_packs
 
         plan_categories = await list_categories(
             session, staff, audience=AUDIENCE_RESELLERS
         )
+        gb_packs = await list_packs(session, int(plan.id), kind=KIND_GB, active_only=True)
+        user_packs = await list_packs(session, int(plan.id), kind=KIND_USERS, active_only=True)
 
         return render(
             request,
@@ -1516,6 +1542,13 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "pg_limit_cards": limit_snapshot_cards(snap),
                 "pg_roles": roles,
                 "groups": groups,
+                "pack_style_options": ITEM_BUTTON_STYLE_OPTIONS,
+                "extra_gb_packs": [
+                    {"amount": int(p.amount), "button_style": p.button_style} for p in gb_packs
+                ],
+                "extra_user_packs": [
+                    {"amount": int(p.amount), "button_style": p.button_style} for p in user_packs
+                ],
                 "plan_group_ids": plan_group_ids,
                 "plan_style_options": PLAN_BUTTON_STYLE_OPTIONS,
                 "plan_categories": plan_categories,
@@ -1578,6 +1611,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             plan.renew_pricing_mode = _parse_renew_pricing_mode(
                 form, allow_buy_extra=bool(plan.allow_buy_extra)
             )
+            plan.carry_remaining_period = bool(form.get("carry_remaining_period"))
+            plan.keep_extras_on_renew = bool(form.get("keep_extras_on_renew"))
             plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
             perms = _feature_perms_from_form(form)
             plan.web_permissions = perms
@@ -1588,8 +1623,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
 
             plan.name = CURRENT_CAPACITY_PLAN_NAME
             from app.services.billing import sync_plan_billing_rate
+            from app.services.reseller_plan_extra_packs import apply_extra_packs_from_form
 
             await sync_plan_billing_rate(session, plan)
+            try:
+                await apply_extra_packs_from_form(session, plan, form)
+            except ValueError as e:
+                await session.rollback()
+                return RedirectResponse(
+                    f"/resellers/plans/{plan_id}/edit?err={_q(str(e))}",
+                    status_code=303,
+                )
             await session.commit()
             return RedirectResponse(
                 f"/plans?ok={_q('پلن ظرفیت فعلی ذخیره شد')}#reseller-plans",
@@ -1732,6 +1776,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         plan.create_pg_admin = bool(form.get("create_pg_admin"))
         plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
         plan.renew_price = _parse_nonneg_int(form, "renew_price")
+        plan.carry_remaining_period = bool(form.get("carry_remaining_period"))
+        plan.keep_extras_on_renew = bool(form.get("keep_extras_on_renew"))
         plan.plan_kind = "subscription"
         plan.duration_days = _parse_nonneg_int(form, "duration_days")
         plan.included_gb = _parse_nonneg_int(form, "included_gb")
@@ -1769,8 +1815,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 status_code=303,
             )
         from app.services.billing import sync_plan_billing_rate
+        from app.services.reseller_plan_extra_packs import apply_extra_packs_from_form
 
         await sync_plan_billing_rate(session, plan)
+        try:
+            await apply_extra_packs_from_form(session, plan, form)
+        except ValueError as e:
+            await session.rollback()
+            return RedirectResponse(
+                f"/resellers/plans/{plan_id}/edit?err={_q(str(e))}",
+                status_code=303,
+            )
         await session.commit()
         return RedirectResponse(
             f"/plans?ok={_q('پلن نمایندگی ذخیره شد')}#reseller-plans", status_code=303
@@ -1907,6 +1962,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                     await bot.send_message(
                         user.telegram_id,
                         "❌ درخواست نمایندگی شما رد شد.\nدر صورت نیاز با پشتیبانی در ارتباط باشید.",
+                        reply_markup=support_markup(),
                     )
                 finally:
                     await bot.session.close()

@@ -244,6 +244,7 @@ BTN_RESELLER_HUB: list[Field] = [
 BTN_RESELLER_HUB_MORE: list[Field] = [
     ("btn_res_tickets", "تیکت‌های مشتریان", "text"),
     ("btn_res_loyalty", "باشگاه مشتریان", "text"),
+    ("btn_res_broadcast", "پیام گروهی", "text"),
     ("btn_res_settings", "تنظیمات فروشگاه", "text"),
     ("btn_res_billing", "کیف پول PAYG", "text"),
     ("btn_res_addon_packs", "بسته‌های حجم/کاربر", "text"),

@@ -49,6 +49,7 @@ class PaymentMethod(str, Enum):
     STARS = "stars"
     PSP = "psp"  # Iranian/online PSP with request→verify (additive)
     BBC = "bbc"  # BezanBeCard card-to-card match (per-shop API key)
+    STAFF_FREE = "staff_free"  # platform owner / shop operator took their own order free
 
 
 class PaymentStatus(str, Enum):
@@ -174,6 +175,21 @@ class Plan(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
+    # When true (default), renewal/upgrade/downgrade adds leftover volume and time.
+    # When false, the new period is exactly this plan's volume and duration.
+    carry_remaining_quota: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    # Plan-scoped customer extra stairs (volume GB / duration months), like reseller fixed.
+    allow_buy_extra: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    extra_gb_price: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0")
+    )  # toman per extra GB
+    extra_month_price: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0")
+    )  # toman per extra month (stored packs use days = months * 30)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -181,10 +197,9 @@ class Plan(Base):
 class ServiceAddonPack(Base):
     """Customer add-on packs: extra volume (GB) or duration (days) on an existing service.
 
-    ``is_general`` packs apply to every plan category of the shop. Otherwise
-    ``category_id`` ties the pack to the plan category of the service's sales
-    plan, so VIP and economy packs can be priced differently. A pack that is
-    neither general nor tied to a category matches nothing.
+    Scope (narrowest wins at purchase time):
+    - ``plan_id`` set → only services of that sales plan see the pack.
+    - else ``category_id`` / ``is_general`` → category or shop-wide (legacy).
     """
 
     __tablename__ = "service_addon_packs"
@@ -205,21 +220,46 @@ class ServiceAddonPack(Base):
         nullable=True,
         index=True,
     )
+    # When set, the pack is exclusive to this sales plan (overrides category/general listing).
+    plan_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("plans.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    # NULL = inherit plan button style; "" = Telegram default; primary|success|danger
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     is_general: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+# Orders whose chosen service name is still held: unpaid, paid, or being delivered.
+OPEN_NAMED_ORDER_SQL = (
+    "requested_username IS NOT NULL AND status IN "
+    "('pending', 'rejected', 'awaiting_receipt', 'paid', 'delivering')"
+)
+
+
 class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         Index("uq_orders_renewal_request_key", "renewal_request_key", unique=True),
+        Index("uq_orders_addon_request_key", "addon_request_key", unique=True),
         Index("ix_orders_created_at", "created_at"),
         Index(
             "uq_orders_service_quota_mutation", "service_id", unique=True,
             sqlite_where=text("service_mutation_pending = true"),
             postgresql_where=text("service_mutation_pending = true"),
+        ),
+        # One open order per shop may hold a chosen service name (platform orders: shop 0).
+        Index(
+            "uq_orders_open_requested_username",
+            text("coalesce(reseller_id, 0)"),
+            "requested_username",
+            unique=True,
+            sqlite_where=text(OPEN_NAMED_ORDER_SQL),
+            postgresql_where=text(OPEN_NAMED_ORDER_SQL),
         ),
     )
 
@@ -239,10 +279,14 @@ class Order(Base):
     status: Mapped[str] = mapped_column(String(32), default=OrderStatus.PENDING.value, index=True)
     payment_method: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     discount_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Name the buyer chose for the new service; fills the naming pattern's {random} part.
+    requested_username: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Purchased terms and an absolute target, persisted before panel mutation.
     renewal_snapshot: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     renewal_request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Mini App addon preview idempotency — same role as renewal_request_key for packs.
+    addon_request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # Serialize quota changes and retain exclusion while a renewal needs review.
     service_mutation_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     service_id: Mapped[Optional[int]] = mapped_column(
@@ -573,6 +617,22 @@ class PanelAlertState(Base):
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class PgLinkHealthState(Base):
+    """Single platform row: last known PasarGuard link-health summary across restarts."""
+
+    __tablename__ = "pg_link_health_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    pause_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    kind_totals_24h: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
 class VolumeHold(Base):
     """Volume a shop has promised but not yet recorded on a service, while a panel call runs.
 
@@ -752,8 +812,20 @@ class DiscountCode(Base):
 
 class BroadcastLog(Base):
     __tablename__ = "broadcast_logs"
+    __table_args__ = (
+        Index("ix_broadcast_logs_shop_id", "shop_id"),
+        Index(
+            "uq_broadcast_logs_request_key",
+            "request_key",
+            unique=True,
+            sqlite_where=text("request_key IS NOT NULL"),
+            postgresql_where=text("request_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # None = platform/owner broadcast; a shop id never shares history or audience with another shop.
+    shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
     audience: Mapped[str] = mapped_column(String(32), default="all")
     text: Mapped[str] = mapped_column(Text)
     total: Mapped[int] = mapped_column(Integer, default=0)
@@ -770,6 +842,8 @@ class BroadcastLog(Base):
     lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Client nonce scoped by the service (``shop-<id>-<nonce>``); unique when set.
+    request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
 class ResellerProfile(Base):
@@ -940,6 +1014,14 @@ class ResellerPlan(Base):
     extra_gb_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra GB
     extra_user_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra user slot
     renew_price: Mapped[int] = mapped_column(Integer, default=0)  # 0 = use plan.price
+    # When true (default), renew extends from a future expiry instead of from now.
+    carry_remaining_period: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    # When true (default), purchased extra GB/user slots survive into the next period.
+    keep_extras_on_renew: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
     # NULL = inherit plan-kind btn_style_*; "" = explicit Telegram default (white)
     button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     # Optional category label (audience=resellers); NULL = uncategorized
@@ -953,6 +1035,43 @@ class ResellerPlan(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    extra_packs: Mapped[list["ResellerPlanExtraPack"]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan"
+    )
+
+
+class ResellerPlanExtraPack(Base):
+    """Per-plan quick-buy stairs for reseller extra GB / user slots.
+
+    Amounts are priced with the parent plan's unit rates (``extra_gb_price`` /
+    ``extra_user_price``). Packs never leak across plans: every list and purchase
+    path filters by ``plan_id``.
+    """
+
+    __tablename__ = "reseller_plan_extra_packs"
+    __table_args__ = (
+        UniqueConstraint(
+            "plan_id", "kind", "amount", name="uq_reseller_plan_extra_pack_amount"
+        ),
+        Index("ix_reseller_plan_extra_packs_plan_kind", "plan_id", "kind"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(
+        ForeignKey("reseller_plans.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # gb | users
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    # NULL = inherit plan button style; "" = Telegram default; primary|success|danger
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    plan: Mapped["ResellerPlan"] = relationship(back_populates="extra_packs")
 
 
 class PgAdminSubscription(Base):
@@ -993,6 +1112,8 @@ class PgAdminSubscription(Base):
 class ResellerApplicationStatus(str, Enum):
     PENDING_PAYMENT = "pending_payment"
     AWAITING_APPROVAL = "awaiting_approval"
+    # Claimed for provision; prevents a second approve from creating another PG admin.
+    PROVISIONING = "provisioning"
     APPROVED = "approved"
     REJECTED = "rejected"
     CANCELLED = "cancelled"
@@ -1031,6 +1152,15 @@ class Setting(Base):
 
 class WalletTransaction(Base):
     __tablename__ = "wallet_transactions"
+    __table_args__ = (
+        Index(
+            "uq_wallet_tx_idempotency",
+            "idempotency_key",
+            unique=True,
+            sqlite_where=text("idempotency_key IS NOT NULL"),
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
@@ -1041,6 +1171,8 @@ class WalletTransaction(Base):
     reseller_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True, index=True
     )
+    # Optional: repeated admin/form submits with the same key insert once.
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -1732,6 +1864,13 @@ class ServiceCancellation(Base):
 
 class TargetedCampaign(Base):
     __tablename__ = "targeted_campaigns"
+    __table_args__ = (
+        Index(
+            "uq_targeted_campaigns_request_key", "request_key", unique=True,
+            sqlite_where=text("request_key IS NOT NULL"),
+            postgresql_where=text("request_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     reseller_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True, index=True)
@@ -1740,6 +1879,8 @@ class TargetedCampaign(Base):
     text: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
     created_by: Mapped[str] = mapped_column(String(128))
+    # Set by callers that can be repeated (a confirmation tap); one campaign per key.
+    request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

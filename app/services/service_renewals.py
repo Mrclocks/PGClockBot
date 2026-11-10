@@ -59,6 +59,11 @@ class RenewalPendingReview(ValueError):
         super().__init__("نتیجه تمدید نیاز به بررسی پشتیبانی دارد؛ پرداخت شما ثبت شده است. دوباره خرید نکنید.")
 
 
+def plan_carries_remaining_quota(plan) -> bool:
+    """Whether renewing onto ``plan`` keeps leftover volume and time (default yes)."""
+    return bool(getattr(plan, "carry_remaining_quota", True))
+
+
 def renewal_terms(plan) -> dict:
     volume = plan.data_limit_gb
     days = plan.duration_days
@@ -75,6 +80,8 @@ def renewal_terms(plan) -> dict:
         "version": 1,
         "volume_bytes": volume_bytes,
         "duration_seconds": int(days) * 86400,
+        # Frozen on the order so a later plan edit cannot change a paid renewal.
+        "carry_remaining": plan_carries_remaining_quota(plan),
     }
 
 
@@ -83,11 +90,13 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
     if info.get("error"):
         raise ValueError("اطلاعات زمان یا حجم سرویس کامل نیست؛ دوباره به‌روزرسانی کنید")
     now = int(time.time()) if now is None else int(now)
+    carry = bool(terms.get("carry_remaining", True))
     used = info["used_traffic"]
     old_limit = info["data_limit"]
     remaining = max(0, old_limit - used) if old_limit else None
     added = terms["volume_bytes"]
-    new_remaining = None if added is None else (remaining or 0) + added
+    transferred = (remaining or 0) if carry and added is not None else 0
+    new_remaining = None if added is None else transferred + added
     limit = None if new_remaining is None else used + new_remaining
     old_expire = parse_expire(info.get("expire", info.get("expire_date")))
     if old_expire is not None and old_expire.tzinfo is None:
@@ -98,7 +107,8 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
     old_seconds = hold_duration_from_info(info) if on_hold else (
         max(0, expire_ts - now) if expire_ts is not None else None
     )
-    new_seconds = None if seconds == 0 else (old_seconds or 0) + seconds
+    carried_seconds = (old_seconds or 0) if carry and seconds else 0
+    new_seconds = None if seconds == 0 else carried_seconds + seconds
     target_expire = None if new_seconds is None or on_hold else now + new_seconds
     pending_start = on_hold and new_seconds is not None
     payload = {"status": "on_hold" if pending_start else "active", "data_limit": limit or 0, "expire": target_expire or 0}
@@ -106,17 +116,20 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
         payload["on_hold_expire_duration"] = new_seconds
     volume_label = lambda value: "نامحدود" if value is None else format_bytes(value)
     time_label = lambda value: "نامحدود" if value is None else f"{value / 86400:.2f}".rstrip("0").rstrip(".") + " روز"
+    carry_note = " (منتقل می‌شود)" if carry else " (منتقل نمی‌شود)"
     lines = [
-        f"حجم مانده: {volume_label(remaining)}",
+        f"حجم مانده: {volume_label(remaining)}{carry_note}",
         f"حجم پلن: {volume_label(added)}",
         f"حجم پس از تمدید: {volume_label(new_remaining)}",
-        f"زمان مانده: {time_label(old_seconds)}",
+        f"زمان مانده: {time_label(old_seconds)}{carry_note}",
         f"زمان پلن: {time_label(seconds or None)}",
         f"زمان پس از تمدید: {time_label(new_seconds)}" + (" پس از اتصال" if pending_start else ""),
     ]
     if target_expire:
         lines.append(f"انقضای جدید: {format_expire_short(target_expire)}")
     warnings = []
+    if not carry:
+        warnings.append("مانده حجم و زمان به دوره جدید منتقل نمی‌شود؛ فقط سهمیه همین پلن اعمال می‌شود.")
     if on_hold and new_seconds is None:
         warnings.append("پلن زمان نامحدود، سرویس را بدون انتظار برای اتصال فعال می‌کند.")
     if remaining is None and added is not None:
@@ -126,6 +139,7 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
     return {
         "payload": payload, "remaining_bytes": remaining,
         "result_remaining_bytes": new_remaining, "result_seconds": new_seconds,
+        "carry_remaining": carry,
         "lines": lines, "warnings": warnings, "notice": PREVIEW_NOTICE,
     }
 

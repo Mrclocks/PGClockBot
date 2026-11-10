@@ -151,7 +151,17 @@ async def adjust_shop_points(session: AsyncSession, *, staff: dict, request: Sho
         # After the checks above, the ledger refuses only a deduction larger than the balance.
         await rollback_quiet(session)
         raise ManualAdjustError(SHORTFALL if request.direction == "debit" else FAILED) from exc
-    return ShopPointsChange(
+    change = ShopPointsChange(
         customer_id=int(customer.id), points=request.points, direction=request.direction,
         balance_after=int(await points_balance(session, customer, shop_id)), replayed=False,
     )
+    from app.services.manual_adjust_notices import schedule_points_notice
+
+    schedule_points_notice(
+        user_id=change.customer_id,
+        mode=change.direction,
+        points=change.points,
+        balance=change.balance_after,
+        shop_id=shop_id,
+    )
+    return change

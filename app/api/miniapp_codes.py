@@ -12,7 +12,10 @@ import logging
 from fastapi import Depends, FastAPI, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.miniapp_buy_extras import service_name_field
 from app.api.miniapp_pages import _no_store, _require_commerce_ready, _scope_ui, _scope_wallet
+from app.db.models import Order
+from app.services.custom_service_name import name_order_at_checkout
 from app.services.db_safe import rollback_quiet
 from app.services.discount_checkout import (
     CodeError,
@@ -52,6 +55,23 @@ async def _require_wallet_pay(session: AsyncSession, request: Request) -> None:
         raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
 
 
+async def _optional_json_object(request: Request) -> dict:
+    """Paying a checkout historically sends no body; a body, when sent, must be a JSON object."""
+    if not await request.body():
+        return {}
+    return await _json_object(request)
+
+
+async def _name_checkout_order(
+    session: AsyncSession, user_id: int, shop_id: int | None, order_id: int, service_name: str | None
+) -> None:
+    """A discounted order is created before payment; its required name is stored here."""
+    order = await session.get(Order, order_id)
+    if order is None or int(order.user_id) != user_id or int(order.reseller_id or 0) != int(shop_id or 0):
+        raise ValueError("سفارش یافت نشد")
+    await name_order_at_checkout(session, order, buyer_id=user_id, raw=service_name)
+
+
 def register_miniapp_codes(app: FastAPI, *, get_db) -> None:
     @app.post("/api/mini/checkout")
     async def mini_checkout(request: Request, session: AsyncSession = Depends(get_db)):
@@ -75,7 +95,9 @@ def register_miniapp_codes(app: FastAPI, *, get_db) -> None:
         await _require_commerce_ready(session, user)
         await _require_wallet_pay(session, request)
         user_id = int(user.id)
+        service_name = service_name_field(await _optional_json_object(request))
         try:
+            await _name_checkout_order(session, user_id, mini_scope(request).shop_id, _valid_id(order_id), service_name)
             order = await pay_checkout(
                 session, user=user, shop_id=mini_scope(request).shop_id, order_id=_valid_id(order_id)
             )

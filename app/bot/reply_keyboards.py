@@ -601,6 +601,8 @@ def _reseller_submenu_entries(
         entries.append(("res_tickets", _t(ui, "btn_res_tickets")))
     if shop_feature_allowed(key="loyalty", profile=profile):
         entries.append(("res_loyalty", _t(ui, "btn_res_loyalty")))
+    if shop_feature_allowed(key="broadcast", profile=profile):
+        entries.append(("res_broadcast", _t(ui, "btn_res_broadcast")))
     if shop_feature_allowed(key="shop_settings", profile=profile):
         entries.append(("res_settings", _t(ui, "btn_res_settings")))
     # Preview lives on thin reply KB (reseller_hub_main_keyboard), not manage hub.

@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_title, action_center_icon, inbox_dismiss_btn %}
-{% block title %}اعلان‌ها و مرکز اقدام{% endblock %}
+{% block title %}مرکز اقدام{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 {% set ac = action_center or {} %}
 {% set pr = payg_risk or {} %}
 
 <div class="page-head">
   <div>
-    {{ page_title('inbox', 'اعلان‌ها و مرکز اقدام', 'neutral', help='inbox') }}
+    {{ page_title('inbox', 'مرکز اقدام', 'neutral', help='inbox') }}
   </div>
 </div>
 
@@ -138,4 +139,5 @@
 {% endif %}
 
 {% endif %}
+</div>
 {% endblock %}

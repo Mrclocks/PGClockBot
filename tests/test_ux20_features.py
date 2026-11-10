@@ -76,11 +76,12 @@ class Ux20SettingsCatalogTests(unittest.TestCase):
         ):
             self.assertIn(key, DEFAULT_SETTINGS)
         self.assertNotIn("brand_primary_color", DEFAULT_SETTINGS)
-        self.assertIn("حالت تعمیرات و رسید", SETTING_GROUPS)
+        self.assertIn("وضعیت فروش", SETTING_GROUPS)
+        self.assertIn("رسیدها", SETTING_GROUPS)
         self.assertIn("گزارش و عملیات", SETTING_GROUPS)
         self.assertIn("گزارش روزانه", SETTING_GROUPS)
         self.assertIn("بکاپ زمان‌بندی", SETTING_GROUPS)
-        self.assertIn("حالت تعمیرات و رسید", TAB_SETTING_GROUPS["payment"])
+        self.assertIn("وضعیت فروش", TAB_SETTING_GROUPS["payment"])
         self.assertIn("بکاپ زمان‌بندی", TAB_SETTING_GROUPS["backup"])
         self.assertIn("گزارش روزانه", TAB_SETTING_GROUPS["daily_report"])
         self.assertNotIn("admin_daily_report_enabled", TAB_SETTING_GROUPS["notifications"])
@@ -130,20 +131,17 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
     def test_inbox_page_and_sidebar(self):
         inbox = Path("app/web/templates/inbox.html").read_text(encoding="utf-8")
         self.assertIn("مرکز اقدام امروز", inbox)
-        self.assertIn("اعلان‌ها و مرکز اقدام", inbox)
+        self.assertIn("'مرکز اقدام'", inbox)
         self.assertIn("نماینده PAYG", inbox)
         self.assertIn("payg_risk", inbox)
         self.assertIn("ac.entries", inbox)
         self.assertNotIn("bot_token", inbox)
         self.assertNotIn("webhook_secret", inbox)
-        base = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn('href="/inbox"', base)
-        self.assertIn("inbox_alert", base)
-        self.assertIn("nav-dot", base)
-        # Inbox sits between dashboard and panel settings in both admin/reseller blocks
-        home_at = base.find('href="/home"')
-        inbox_at = base.find('href="/inbox"')
-        self.assertGreater(inbox_at, home_at)
+        from tests.sidebar_view import hrefs, owner_sidebar, sidebar
+
+        # Inbox sits between dashboard and settings for the owner and for everyone else
+        for system in (owner_sidebar()["system"], sidebar("reseller")["system"]):
+            self.assertEqual(hrefs(system)[:2], ["/home", "/inbox"])
         home_src = Path("app/api/home_pages.py").read_text(encoding="utf-8")
         self.assertIn('"/inbox"', home_src)
         self.assertIn("build_inbox_context", home_src)
@@ -216,10 +214,12 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         macros = Path("app/web/templates/macros.html").read_text(encoding="utf-8")
         self.assertIn("panel-settings", macros)
         self.assertIn("bot-settings", macros)
-        base = Path("app/web/templates/base.html").read_text(encoding="utf-8")
+        from app.services.panel_nav import build_sidebar, viewer_from_context
+
         # Panel settings: sliders; bot settings: robot face (not identical gear).
-        self.assertIn("M4 7h9M17 5v4", base)
-        self.assertIn('rx="2.5"', base)
+        owner = build_sidebar(viewer_from_context({"role": "admin"}, {}, is_owner=True), path="/home")
+        icons = {i.key: i.icon for s in owner for i in s.items}
+        self.assertEqual((icons["system_settings"], icons["bot_settings"]), ("sliders", "bot"))
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("panel-settings", settings)
         self.assertIn("bot-settings", settings)
@@ -395,8 +395,8 @@ class ButtonStyleTests(unittest.TestCase):
         from app.services.resellers import RESELLER_SETTINGS_TABS
         from app.services.users import DEFAULT_SETTINGS, SETTINGS_TABS, keys_for_tab
 
-        self.assertIn(("colors", "رنگبندی دکمه‌ها"), SETTINGS_TABS)
-        self.assertIn(("colors", "رنگبندی دکمه‌ها"), RESELLER_SETTINGS_TABS)
+        self.assertIn(("colors", "رنگ دکمه‌ها"), SETTINGS_TABS)
+        self.assertIn(("colors", "رنگ دکمه‌ها"), RESELLER_SETTINGS_TABS)
         self.assertIn(("appearance", "هویت ربات"), SETTINGS_TABS)
         self.assertIn(("appearance", "هویت ربات"), RESELLER_SETTINGS_TABS)
         keys = keys_for_tab("colors")

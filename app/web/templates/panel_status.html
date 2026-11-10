@@ -19,8 +19,8 @@
     } catch (e) {}
   })();
   </script>
-  <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
-  <link rel="stylesheet" href="/static/panel.css?v={{ app_version }}" />
+  <link rel="stylesheet" href="/static/fonts.css?v={{ asset_v('fonts.css') if asset_v is defined else app_version }}" />
+  <link rel="stylesheet" href="/static/panel.css?v={{ asset_v('panel.css') if asset_v is defined else app_version }}" />
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
 </head>
 <body class="panel-status-body">

@@ -7,10 +7,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from app.services.pg_access import (
-    _ROLE_CACHE,
     acl_from_admin_payload,
     clear_platform_pg_capability_cache,
-    map_pg_role_to_features,
 )
 
 
@@ -57,11 +55,9 @@ class AclFromAdminPayloadTests(unittest.TestCase):
 class NestedRoleBeatsRoleCacheTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         clear_platform_pg_capability_cache()
-        _ROLE_CACHE.clear()
 
     async def asyncTearDown(self):
         clear_platform_pg_capability_cache()
-        _ROLE_CACHE.clear()
 
     async def test_revoked_nodes_on_nested_role_not_restored_by_cached_role(self):
         from app.services.pg_access import resolve_platform_pg_capabilities
@@ -69,7 +65,6 @@ class NestedRoleBeatsRoleCacheTests(unittest.IsolatedAsyncioTestCase):
         stale = _role(nodes=True)
         live = _role(nodes=False)
         admin = {"username": "lim", "role": live, "is_sudo": False}
-        _ROLE_CACHE[4] = (9999999999.0, map_pg_role_to_features(stale), stale)
         with patch("app.services.pasarguard.get_pg") as gp:
             client = AsyncMock()
             client.ensure_token = AsyncMock(return_value="tok")
@@ -89,8 +84,10 @@ class NestedRoleBeatsRoleCacheTests(unittest.IsolatedAsyncioTestCase):
 
 class SurfaceContractTests(unittest.TestCase):
     def test_sidebar_and_tabs_use_pg_permissions_only(self):
-        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("'pg_nodes' in pg_nav", base)
+        from tests.sidebar_view import labels, sidebar
+
+        self.assertNotIn("pg", sidebar("admin"))
+        self.assertEqual(labels(sidebar("admin", pg=frozenset({"pg_nodes"}))["pg"]), ["نودها"])
         macros = (ROOT / "app/web/templates/macros.html").read_text(encoding="utf-8")
         self.assertNotIn("admin or 'pg_nodes'", macros)
         self.assertIn("'pg_nodes' in perms", macros)

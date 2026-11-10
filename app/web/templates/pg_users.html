@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "macros.html" import row_actions, switch_chip, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
-{% block title %}کاربران پنل{% endblock %}
+{% block title %}کاربران پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    {{ page_title('user', 'کاربران پنل', 'pg', help='pg-users') }}
+    {{ page_title('user', 'کاربران پاسارگارد', 'pg', help='pg-users') }}
   </div>
   {% if can_create %}
   <button type="button" class="btn" data-modal-open="modal-pg-user-create">ساخت کاربر</button>
@@ -166,14 +166,18 @@
 
 {% if can_create %}
 {% set default_mode = 'template' if require_template or (can_template_create and not can_custom_create) else 'custom' %}
-<div class="ui-modal" id="modal-pg-user-create" hidden>
+<div class="ui-modal ds" id="modal-pg-user-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="pg-user-create-title">
-    <div class="ui-modal-head">
-      {{ modal_title('users', 'ساخت کاربر پاسارگارد', caption='کاربر مستقیم در پاسارگارد', tone='pg', heading_id='pg-user-create-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('users', 'ساخت کاربر پاسارگارد', tone='pg', heading_id='pg-user-create-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/pg/users" class="form-stack" id="pg-user-create-form">
+    <form method="post" action="/pg/users" class="form-stack ds-body" id="pg-user-create-form">
+        <input type="hidden" name="mode" value="template" />
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       {% if form_err and form_modal == 'create' %}
       <div class="flash err" id="pg-create-form-err">{{ form_err }}</div>
       {% else %}
@@ -188,7 +192,6 @@
 
       <label class="form-field">حالت ساخت
         {% if require_template %}
-        <input type="hidden" name="mode" value="template" />
         <select id="pg-user-mode" disabled>
           <option value="template" selected>از تمپلیت آماده</option>
         </select>
@@ -220,16 +223,16 @@
           <input name="hwid_limit" type="number" min="0" step="1" placeholder="مثلاً 2" inputmode="numeric" />
           <small class="muted">خالی = طبق سقف نقش (در صورت وجود) یا نامحدود</small>
         </label>
+        {% if groups %}
         <div class="form-field">
           <span class="form-field-label">گروه‌های پاسارگارد (حداقل یکی)</span>
           <div class="ui-switch-grid">
             {% for g in groups %}
             {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
-            {% else %}
-            <span class="muted">گروهی در دسترس نیست.</span>
             {% endfor %}
           </div>
         </div>
+        {% endif %}
       </div>
 
       <div id="pg-user-mode-template" class="form-stack" {% if default_mode != 'template' %}style="display:none"{% endif %}>
@@ -245,26 +248,29 @@
         <p class="muted">تمپلیتی در دسترس نیست.</p>
         {% endif %}
       </div>
-
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" id="pg-user-create-btn"
           {% if not can_custom_create and not can_template_create %}disabled{% endif %}>ساخت</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+
+      </div></div>
     </form>
   </div>
 </div>
 {% endif %}
 
 {% if can_modify %}
-<div class="ui-modal" id="modal-pg-user-edit" hidden>
+<div class="ui-modal ds" id="modal-pg-user-edit" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="pg-user-edit-title">
-    <div class="ui-modal-head">
-      {{ modal_title('users', 'ویرایش کاربر', caption='کیف پول، سرویس و دسترسی‌ها', tone='brand', heading_id='pg-user-edit-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('users', 'ویرایش کاربر', tone='brand', heading_id='pg-user-edit-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/pg/users/0/edit" class="form-stack" id="pg-user-edit-form">
+    <form method="post" action="/pg/users/0/edit" class="form-stack ds-body" id="pg-user-edit-form">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       {% if form_err and form_modal == 'edit' %}
       <div class="flash err" id="pg-edit-form-err">{{ form_err }}</div>
       {% else %}
@@ -288,31 +294,34 @@
         <input id="pg-edit-hwid" name="hwid_limit" type="number" min="0" step="1" placeholder="مثلاً 2" inputmode="numeric" />
         <small class="muted">۰ یا خالی = نامحدود</small>
       </label>
+      {% if groups %}
       <div class="form-field">
         <span class="form-field-label">گروه‌ها (حداقل یکی)</span>
         <div class="ui-switch-grid" id="pg-edit-groups">
           {% for g in groups %}
           {{ switch_chip('edit_group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
-          {% else %}
-          <span class="muted">گروهی در دسترس نیست.</span>
           {% endfor %}
         </div>
       </div>
-      <div class="actions">
+      {% endif %}
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit">ذخیره</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+
+      </div></div>
     </form>
   </div>
 </div>
 {% endif %}
 
-<div class="ui-modal" id="modal-pg-user-link" hidden>
+<div class="ui-modal ds" id="modal-pg-user-link" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-user-link-title">
-    <div class="ui-modal-head">
-      {{ modal_title('settings', 'لینک اشتراک', caption='تنظیمات پنل', tone='brand', heading_id='pg-user-link-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('settings', 'لینک اشتراک', tone='brand', heading_id='pg-user-link-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     <div class="form-stack">
       <p id="pg-user-link-user" class="muted"></p>
@@ -324,7 +333,7 @@
       <div class="actions" id="pg-user-link-actions" hidden>
         <button type="button" class="btn" id="pg-user-link-copy">کپی لینک</button>
         <a class="btn btn-ghost" id="pg-user-link-open" href="#" target="_blank" rel="noopener">باز کردن</a>
-        <button type="button" class="btn btn-ghost" data-modal-close>بستن</button>
+
       </div>
     </div>
   </div>
@@ -365,6 +374,7 @@
     mode.addEventListener('change', sync);
     sync();
   }
+  const groupsRequired = {{ (groups_required|default(false))|tojson }};
   if (form) {
     form.addEventListener('submit', function(e){
       const unameEl = document.getElementById('pg-create-username');
@@ -375,7 +385,7 @@
         if (unameEl) unameEl.focus();
         return;
       }
-      if (mode && mode.value === 'custom') {
+      if (groupsRequired && mode && mode.value === 'custom') {
         const chips = form.querySelectorAll('input[name^="group_"]:checked');
         if (!chips.length) {
           e.preventDefault();
@@ -410,6 +420,7 @@
       }
     });
     editForm.addEventListener('submit', function(e){
+      if (!groupsRequired) return;
       const chips = editForm.querySelectorAll('input[name^="edit_group_"]:checked');
       if (!chips.length) {
         e.preventDefault();

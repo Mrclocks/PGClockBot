@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
 {#- Declared at template top level (outside any block) so both {% block content %}
    and {% block page_scripts %} share the same values — {% set %} inside a block
    is local to that block only and would silently leave `manage` etc. undefined
@@ -12,11 +13,11 @@
 {% set pg_update = can_pg_update if can_pg_update is defined else false %}
 {% set ops = can_user_ops if can_user_ops is defined else true %}
 {% set bulk_count = rows|length if flt != 'all' else 0 %}
-{% block title %}کاربران بات{% endblock %}
+{% block title %}کاربران ربات{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    {{ page_title('users', 'کاربران بات', help='users') }}
+    {{ page_title('users', 'کاربران ربات', help='users') }}
   </div>
   <div class="page-head-actions">
     {% if provision %}
@@ -306,104 +307,94 @@
 </div>
 
 {% if ops %}
-<div class="ui-modal" id="modal-user-message" hidden>
+<div class="ui-modal ds" id="modal-user-message" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-msg-title">
-    <div class="ui-modal-head">
-      {{ modal_title('users', 'پیام به کاربر', caption='ارسال پیام مستقیم از پنل', tone='brand', heading_id='user-msg-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-    <form method="post" action="/users/0/message" class="form-stack" id="user-msg-form">
+    {{ ds_modal_head('users', 'پیام به کاربر', 'user-msg-title') }}
+    <form method="post" action="/users/0/message" class="form-stack ds-body" id="user-msg-form">
       <input type="hidden" name="return_filter" value="{{ flt }}" />
       {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
-      <p class="muted" id="user-msg-target">—</p>
-      <label class="form-field">متن پیام
-        <textarea name="body" rows="5" required maxlength="2000" placeholder="پیام کوتاه پشتیبانی…"></textarea>
-      </label>
-      <div class="actions">
-        <button type="submit" class="btn">ارسال</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      {% call ds_sec('پیام', extra_class='ds-sec-first') %}
+        <p class="ds-desc">گیرنده: <b id="user-msg-target">—</b></p>
+        <label class="form-field"><span>متن پیام <span class="ds-req" aria-hidden="true">*</span></span>
+          <textarea name="body" rows="6" required maxlength="2000" placeholder="پیام کوتاه پشتیبانی…"></textarea>
+        </label>
+      {% endcall %}
+      {{ ds_foot('ارسال') }}
     </form>
   </div>
 </div>
 
-<div class="ui-modal" id="modal-users-bulk" hidden>
+<div class="ui-modal ds" id="modal-users-bulk" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="users-bulk-title">
-    <div class="ui-modal-head">
-      {{ modal_title('nodes', 'پیام گروهی فیلتر', caption='مدیریت پاسارگارد', tone='pg', heading_id='users-bulk-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-    <form method="post" action="/users/bulk-message" class="form-stack"
+    {{ ds_modal_head('users', 'پیام به فیلتر', 'users-bulk-title') }}
+    <form method="post" action="/users/bulk-message" class="form-stack ds-body"
           data-confirm="پیام به کاربران همین فیلتر ارسال شود؟ (حداکثر ۴۰ نفر)"
           data-confirm-title="تأیید پیام گروهی"
           data-confirm-warn="1"
           data-confirm-label="ارسال گروهی">
       <input type="hidden" name="return_filter" value="{{ flt }}" />
       {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
-      <p class="muted">فیلتر فعال: <strong>{{ flt }}</strong> · تا {{ bulk_count | num }} گیرنده (سقف ۴۰)</p>
-      <label class="form-field">متن پیام
-        <textarea name="body" rows="5" required maxlength="2000" placeholder="مثلاً سرویس شما به‌زودی منقضی می‌شود…"></textarea>
-      </label>
-      <div class="actions">
-        <button type="submit" class="btn">ارسال گروهی</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      {% call ds_sec('پیام', extra_class='ds-sec-first') %}
+        <p class="ds-desc">فیلتر فعال: <strong>{{ flt }}</strong> · تا {{ bulk_count | num }} گیرنده (سقف ۴۰)</p>
+        <label class="form-field"><span>متن پیام <span class="ds-req" aria-hidden="true">*</span></span>
+          <textarea name="body" rows="6" required maxlength="2000" placeholder="مثلاً سرویس شما به‌زودی منقضی می‌شود…"></textarea>
+        </label>
+      {% endcall %}
+      {{ ds_foot('ارسال گروهی') }}
     </form>
   </div>
 </div>
 {% endif %}
 
 {% if provision %}
-<div class="ui-modal" id="modal-user-create" hidden>
+<div class="ui-modal ds" id="modal-user-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-create-title">
-    <div class="ui-modal-head">
-      {{ modal_title('users', 'ساخت کاربر بات', caption='مدیریت کاربر', tone='brand', heading_id='user-create-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-    <form method="post" action="/users/create" class="form-stack"
+    {{ ds_modal_head('users', 'ساخت کاربر ربات', 'user-create-title') }}
+    <form method="post" action="/users/create" class="form-stack ds-body"
           data-confirm="کاربر جدید با این شناسه تلگرام ساخته شود؟"
           data-confirm-title="تأیید ساخت کاربر"
           data-confirm-label="ساخت کاربر">
       <input type="hidden" name="return_filter" value="{{ flt }}" />
       {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
-      <p class="muted">کاربر با نقش «کاربر» ساخته می‌شود. اگر بعداً در ربات /start بزند، پروفایل تلگرام به‌روز می‌شود.</p>
-      <label class="form-field">شناسه تلگرام (عددی)
-        <input name="telegram_id" type="number" required min="1" step="1" inputmode="numeric"
-               placeholder="مثلاً 123456789" dir="ltr" autocomplete="off" />
-        <small class="muted">همان عددی که در @userinfobot یا پروفایل تلگرام می‌بینید — نه @username</small>
-      </label>
-      <label class="form-field">نام کاربری تلگرام
-        <input name="username" type="text" maxlength="64" placeholder="@username (اختیاری)" dir="ltr" autocomplete="off" />
-      </label>
-      <label class="form-field">نام نمایشی
-        <input name="full_name" type="text" maxlength="255" placeholder="نام کامل (اختیاری)" autocomplete="off" />
-      </label>
+      {% call ds_sec('حساب تلگرام', extra_class='ds-sec-first') %}
+        <p class="ds-desc">کاربر با نقش «کاربر» ساخته می‌شود. اگر بعداً در ربات /start بزند، پروفایل تلگرام به‌روز می‌شود.</p>
+        <label class="form-field"><span>شناسه تلگرام (عددی) <span class="ds-req" aria-hidden="true">*</span></span>
+          <input name="telegram_id" type="number" required min="1" step="1" inputmode="numeric"
+                 placeholder="مثلاً 123456789" dir="ltr" autocomplete="off" />
+          <small class="muted">همان عددی که در @userinfobot یا پروفایل تلگرام می‌بینید — نه @username</small>
+        </label>
+        <label class="form-field">نام کاربری تلگرام
+          <input name="username" type="text" maxlength="64" placeholder="@username (اختیاری)" dir="ltr" autocomplete="off" />
+        </label>
+        <label class="form-field">نام نمایشی
+          <input name="full_name" type="text" maxlength="255" placeholder="نام کامل (اختیاری)" autocomplete="off" />
+        </label>
+      {% endcall %}
       {% if color_tags is defined and color_tags %}
-      <div class="form-field">
-        <span class="form-label">تگ ریسک</span>
+      {% call ds_sec('تگ ریسک') %}
         {% set selected_color = 'green' %}
         {% include "_color_tag_picker.html" %}
-      </div>
+        <small class="muted">فقط برای اسکن سریع فهرست است؛ کاربر آن را نمی‌بیند.</small>
+      {% endcall %}
       {% endif %}
-      <div class="actions">
-        <button class="btn" type="submit">ساخت کاربر</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      {{ ds_foot('ساخت کاربر') }}
     </form>
   </div>
 </div>
 
 {% endif %}
 {% if edit_svc %}
-<div class="ui-modal" id="modal-user-card" hidden>
+<div class="ui-modal ds" id="modal-user-card" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-card-title">
-    <div class="ui-modal-head">
-      {{ modal_title('users', 'اطلاعات کاربر', tone='brand', heading_id='user-card-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('users', 'اطلاعات کاربر', tone='brand', heading_id='user-card-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     <div id="user-card-body" data-load-fragment>
       <p class="muted">در حال بارگذاری…</p>
@@ -411,13 +402,15 @@
   </div>
 </div>
 
-<div class="ui-modal" id="modal-user-edit" hidden
+<div class="ui-modal ds" id="modal-user-edit" hidden
      data-modal-strip-keys="edit,ok,err,_">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl" role="dialog" aria-modal="true" aria-labelledby="user-edit-title">
-    <div class="ui-modal-head">
-      {{ modal_title('users', 'ویرایش کاربر', caption='کیف پول، سرویس و دسترسی‌ها', tone='brand', heading_id='user-edit-title') }}
-      <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('users', 'ویرایش کاربر', tone='brand', heading_id='user-edit-title') }}
+        <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     <div id="user-edit-body" class="edit-modal-body">
       <p class="muted">در حال بارگذاری…</p>

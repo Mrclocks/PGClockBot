@@ -1,0 +1,54 @@
+{# Per-plan quick-buy packs (volume / users): one line per pack with its computed price.
+   Requires: pack_style_options (ITEM or PLAN button style options)
+   Optional: extra_gb_packs, extra_user_packs — list of {amount, button_style}
+   Optional: packs_editor_id (default reseller-extra-packs), packs_hidden (bool)
+   Optional: packs_rate_gb, packs_rate_users — selectors of the unit price inputs #}
+{% from "_ds.html" import ico %}
+{% set editor_id = packs_editor_id if packs_editor_id is defined else 'reseller-extra-packs' %}
+{% set gb_rows = extra_gb_packs if extra_gb_packs is defined else [{'amount': 1, 'button_style': none}, {'amount': 5, 'button_style': none}, {'amount': 10, 'button_style': none}, {'amount': 50, 'button_style': none}] %}
+{% set user_rows = extra_user_packs if extra_user_packs is defined else [{'amount': 1, 'button_style': none}, {'amount': 5, 'button_style': none}, {'amount': 10, 'button_style': none}, {'amount': 20, 'button_style': none}] %}
+{% set style_opts = pack_style_options if pack_style_options is defined else plan_style_options %}
+{% set packs_are_hidden = packs_hidden if packs_hidden is defined else true %}
+{% set kinds = [
+  ('gb', 'حجم', 'گیگ', 'extra_gb_amount', 'extra_gb_style', 'مقدار حجم بسته', 'رنگ دکمه بسته حجم', 'حذف بسته حجم', 'افزودن بستهٔ حجم', gb_rows, packs_rate_gb if packs_rate_gb is defined else '[name="extra_gb_price"]'),
+  ('users', 'کاربر', 'نفر', 'extra_user_amount', 'extra_user_style', 'تعداد کاربر بسته', 'رنگ دکمه بسته کاربر', 'حذف بسته کاربر', 'افزودن بستهٔ کاربر', user_rows, packs_rate_users if packs_rate_users is defined else '[name="extra_user_price"]'),
+] %}
+
+<div id="{{ editor_id }}" class="ds extra-packs-editor" {% if packs_are_hidden %}hidden{% endif %}
+     data-extra-packs-root
+     data-default-gb="1,5,10,50"
+     data-default-users="1,5,10,20">
+  <div class="sales-seg ds-seg" role="tablist" aria-label="نوع بسته">
+    {% for key, title in [('gb', 'حجم'), ('users', 'کاربر')] %}
+    <button type="button" role="tab" class="{% if loop.first %}on{% endif %}" aria-selected="{{ 'true' if loop.first else 'false' }}" data-pack-tab="{{ key }}">{{ title }} <span class="ds-tab-count" data-pack-count="{{ key }}"></span></button>
+    {% endfor %}
+  </div>
+  {% for kind, title, unit, amount_name, style_name, amount_label, style_label, remove_label, add_label, rows, rate_sel in kinds %}
+  <div class="ds-list" data-extra-packs-kind="{{ kind }}" data-pack-list="{{ kind }}" data-rate="{{ rate_sel }}" role="tabpanel"{% if not loop.first %} hidden{% endif %}>
+    <div class="ds-list-head" aria-hidden="true"><span>مقدار<span class="ds-unit-head"> ({{ unit }})</span></span><span>قیمت<span class="ds-head-long"> (تومان)</span></span><span>رنگ</span><span></span></div>
+    <div class="extra-packs-rows" data-extra-packs-rows="{{ kind }}">
+      {% for row in rows %}
+      {% set cur = 'inherit' if row.button_style is none else (row.button_style or '') %}
+      {% set cur_tone = 'default' if cur in ('inherit', '') else cur %}
+      <div class="ds-list-row extra-pack-row" data-extra-pack-row>
+        <span class="ds-unit ds-pack-amt"><input name="{{ amount_name }}" class="extra-pack-amount" type="number" min="1" max="100000" step="1"
+               inputmode="numeric" dir="ltr" value="{{ row.amount }}" aria-label="{{ amount_label }}" placeholder="مقدار"
+               {% if packs_are_hidden %}disabled{% else %}required{% endif %} /><span class="ds-unit-label">{{ unit }}</span></span>
+        <span class="ds-list-value" data-pack-price></span>
+        <span class="ds-dot-select" data-ds-dot data-menu-min-width="168" data-value="{{ cur }}" data-tone="{{ cur_tone }}">
+          <select name="{{ style_name }}" class="btn-color-select extra-pack-style" data-tone="{{ cur_tone }}" aria-label="{{ style_label }}"
+                  {% if packs_are_hidden %}disabled{% endif %}>
+            {% for opt_val, opt_label, opt_tone in style_opts %}
+            <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if cur == opt_val %}selected{% endif %}>{{ 'پیش‌فرض' if opt_val == 'inherit' else opt_label }}</option>
+            {% endfor %}
+          </select>
+        </span>
+        <button type="button" class="ds-del extra-pack-remove" data-extra-pack-remove aria-label="{{ remove_label }}"
+                {% if packs_are_hidden %}disabled{% endif %}>{{ ico('trash') }}</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="ds-add" data-extra-pack-add="{{ kind }}" {% if packs_are_hidden %}disabled hidden{% endif %}>{{ ico('plus') }}{{ add_label }}</button>
+  </div>
+  {% endfor %}
+</div>

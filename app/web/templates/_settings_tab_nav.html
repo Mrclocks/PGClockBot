@@ -1,5 +1,6 @@
-{# Two-level tabs for bot settings: groups on top, the active group's tabs below.
-   `groups` comes from settings_tab_groups.group_settings_tabs and only holds tabs the role already has. #}
+{# Two-level tabs for bot settings: groups on top, the active group's tabs below, and the sections
+   of a merged tab under it. `groups` comes from settings_tab_groups.group_settings_tabs and only
+   holds tabs the role already has. #}
 {% macro grouped_settings_tabs(groups, active, base, aria_label) -%}
 <nav class="section-tabs settings-tabs settings-tabs-groups" aria-label="{{ aria_label }}">
   {% for group in groups %}
@@ -9,8 +10,17 @@
 {% for group in groups if group.is_active and group.tabs|length > 1 %}
 <nav class="section-tabs settings-tabs settings-subtabs" aria-label="{{ group.label }}">
   {% for tab in group.tabs %}
-  <a href="{{ tab.href or (base ~ '?tab=' ~ tab.key) }}" class="{% if tab.key == active %}active{% endif %}">{{ tab.label }}</a>
+  <a href="{{ tab.href or (base ~ '?tab=' ~ tab.key) }}" class="{% if tab.shows(active) %}active{% endif %}">{{ tab.label }}</a>
   {% endfor %}
 </nav>
+{% endfor %}
+{% for group in groups if group.is_active %}
+{% for tab in group.tabs if tab.sections and tab.shows(active) %}
+<nav class="section-tabs settings-tabs settings-subtabs settings-sections" aria-label="{{ tab.label }}">
+  {% for section in tab.sections %}
+  <a href="{{ section.href or (base ~ '?tab=' ~ section.key) }}" class="{% if section.key == active %}active{% endif %}"{% if section.key == active %} aria-current="page"{% endif %}>{{ section.label }}</a>
+  {% endfor %}
+</nav>
+{% endfor %}
 {% endfor %}
 {%- endmacro %}

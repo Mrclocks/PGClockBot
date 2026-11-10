@@ -1,5 +1,6 @@
 {% from "macros.html" import num_stepper %}
 {% set wallet_amt = display_wallet if display_wallet is defined else (user.wallet_balance or 0) %}
+{% set points_amt = display_points if display_points is defined else 0 %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
@@ -20,6 +21,10 @@
          dir="ltr">
       <span class="user-edit-wallet-label muted">کیف پول</span>
       <strong class="user-edit-wallet-amt"><span dir="ltr">{{ wallet_amt | money }}</span> تومان</strong>
+    </div>
+    <div class="user-edit-wallet-pill" dir="ltr">
+      <span class="user-edit-wallet-label muted">امتیاز</span>
+      <strong class="user-edit-wallet-amt"><span dir="ltr">{{ points_amt | num }}</span></strong>
     </div>
   </div>
 </section>
@@ -104,10 +109,42 @@
 <section class="edit-section" id="user-wallet">
   <header class="edit-section-head">
     <h3>تنظیم کیف پول</h3>
-    <p class="muted">مبلغ را وارد کنید، سپس افزایش یا کاهش را بزنید. موجودی منفی مجاز نیست.</p>
+    <p class="muted">مبلغ را وارد کنید، سپس افزایش یا کاهش را بزنید. موجودی منفی مجاز نیست. علت الزامی است و فقط در گزارش کارکنان/دفترکل ثبت می‌شود؛ برای مشتری ارسال نمی‌شود.</p>
   </header>
   {% from "_wallet_adjust_form.html" import wallet_adjust_form %}
-  {{ wallet_adjust_form('/users/' ~ user.id ~ '/wallet-credit', 'موجودی کیف پول این کاربر مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟', nonce=wallet_nonce) }}
+  {{ wallet_adjust_form('/users/' ~ user.id ~ '/wallet-credit', 'موجودی کیف پول این کاربر مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟', nonce=wallet_nonce, note_label='علت', note_required=true) }}
+</section>
+
+<section class="edit-section" id="user-points">
+  <header class="edit-section-head">
+    <h3>تنظیم امتیاز</h3>
+    <p class="muted">امتیاز پلتفرم این کاربر. دلیل الزامی است و فقط در دفترکل ثبت می‌شود؛ برای مشتری ارسال نمی‌شود.</p>
+  </header>
+  <form method="post" action="/users/{{ user.id }}/points-adjust" class="form-stack"
+        data-confirm="امتیاز این کاربر مطابق مقدار و نوع انتخاب‌شده تغییر کند؟"
+        data-confirm-title="تأیید تغییر امتیاز"
+        data-confirm-label="اعمال">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="nonce" value="{{ points_nonce }}" />
+    <div class="user-edit-fields">
+      <label class="form-field">امتیاز
+        <input name="points" type="number" min="1" required dir="ltr" inputmode="numeric" placeholder="مثلاً ۱۰۰" />
+      </label>
+      <div class="wallet-adjust-modes" role="group" aria-label="نوع تنظیم امتیاز">
+        <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">
+          <span class="wallet-mode-swatch" aria-hidden="true"></span>
+          <span class="wallet-mode-label">کاهش</span>
+        </button>
+        <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">
+          <span class="wallet-mode-swatch" aria-hidden="true"></span>
+          <span class="wallet-mode-label">افزایش</span>
+        </button>
+      </div>
+      <label class="form-field">دلیل
+        <input name="reason" type="text" required minlength="3" maxlength="200" placeholder="الزامی" />
+      </label>
+    </div>
+  </form>
 </section>
 
 {% endif %}
@@ -144,6 +181,39 @@
   {{ wallet_adjust_form('/users/' ~ user.id ~ '/shop-wallet', 'کیف پول این مشتری در فروشگاه شما مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟ این کار در گزارش کارکنان ثبت می‌شود.', nonce=shop_wallet_nonce, note_label='علت', note_required=true) }}
 </section>
 {% endif %}
+{% if can_adjust_shop_points|default(false) %}
+<section class="edit-section" id="user-shop-points">
+  <header class="edit-section-head">
+    <h3>تغییر امتیاز در این فروشگاه</h3>
+    <p class="muted">فقط امتیاز همین فروشگاه تغییر می‌کند. هر بار حداکثر {{ shop_points_max | num }} امتیاز و روزانه برای کل فروشگاه {{ shop_points_daily | num }} امتیاز. علت در گزارش کارکنان ثبت می‌شود.</p>
+  </header>
+  <form method="post" action="/users/{{ user.id }}/shop-points" class="form-stack"
+        data-confirm="امتیاز این مشتری در فروشگاه شما تغییر کند؟ این کار در گزارش کارکنان ثبت می‌شود."
+        data-confirm-title="تأیید تغییر امتیاز"
+        data-confirm-label="اعمال">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="nonce" value="{{ shop_points_nonce }}" />
+    <div class="user-edit-fields">
+      <label class="form-field">امتیاز
+        <input name="points" type="number" min="1" max="{{ shop_points_max }}" required dir="ltr" inputmode="numeric" />
+      </label>
+      <div class="wallet-adjust-modes" role="group" aria-label="نوع تنظیم امتیاز فروشگاه">
+        <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">
+          <span class="wallet-mode-swatch" aria-hidden="true"></span>
+          <span class="wallet-mode-label">کاهش</span>
+        </button>
+        <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">
+          <span class="wallet-mode-swatch" aria-hidden="true"></span>
+          <span class="wallet-mode-label">افزایش</span>
+        </button>
+      </div>
+      <label class="form-field">علت
+        <input name="reason" type="text" required minlength="3" maxlength="200" placeholder="الزامی" />
+      </label>
+    </div>
+  </form>
+</section>
+{% endif %}
 
 {% if can_pg_create %}
 <section class="edit-section">
@@ -176,6 +246,7 @@
 </section>
 
 {% endif %}
+{% if can_view_services|default(false) %}
 <section class="edit-section" id="user-services">
   <header class="edit-section-head">
     <h3>سرویس‌ها</h3>
@@ -197,9 +268,9 @@
         </p>
         {% if s.error %}<p class="muted svc-item-err">{{ s.error }}</p>{% endif %}
         <div class="svc-stat-row">
-          <div class="user-edit-wallet-pill svc-stat-pill" dir="ltr">
+          <div class="user-edit-wallet-pill svc-stat-pill">
             <span class="muted">حجم / مانده</span>
-            <strong class="num-ratio">{{ s.volume_text }} · {{ s.remain_gb_text }}</strong>
+            <strong class="num-ratio" dir="ltr"><span class="svc-stat-part">{{ s.volume_text }}</span> · <span class="svc-stat-part">{{ s.remain_gb_text }}</span></strong>
           </div>
           <div class="user-edit-wallet-pill svc-stat-pill">
             <span class="muted">مانده زمان</span>
@@ -216,7 +287,7 @@
       <div class="svc-item-ops">
 {% if can_pg_update %}
         <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/renew" class="form-stack"
-              data-confirm="سرویس با پلن انتخابی تمدید شود؟ مصرف ریست می‌شود."
+              data-confirm="سرویس با پلن انتخابی تمدید شود؟ تمدید دستی ادمین همیشه از الان شروع می‌شود و مصرف ریست می‌شود (سوییچ انتقال مانده فقط برای تمدید مشتری است)."
               data-confirm-title="تمدید با پلن"
               data-confirm-label="تمدید">
           <div class="user-edit-inline-row">
@@ -290,6 +361,7 @@
   </ul>
   {% endif %}
 </section>
+{% endif %}
 
 {% if wallet_txs %}
 <section class="edit-section">

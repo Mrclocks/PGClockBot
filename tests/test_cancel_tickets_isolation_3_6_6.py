@@ -120,7 +120,7 @@ class MiddlewareFailClosedTests(unittest.TestCase):
     def test_unknown_shop_token_rejected(self):
         src = (ROOT / "app/bot/middlewares.py").read_text(encoding="utf-8")
         chunk = src.split("class UserMiddleware")[1].split("class ")[0]
-        self.assertIn("not a known reseller shop", chunk)
+        self.assertIn("not an active reseller shop", chunk)
         self.assertIn("return None", chunk)
 
 

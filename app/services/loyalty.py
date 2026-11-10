@@ -546,6 +546,14 @@ async def reverse_points_tx(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class AdminPointsChange:
+    """Result of ``admin_adjust_points``; ``replayed`` means the request key already ran."""
+
+    tx: PointsTransaction
+    replayed: bool
+
+
 async def admin_adjust_points(
     session: AsyncSession,
     user: BotUser,
@@ -555,13 +563,18 @@ async def admin_adjust_points(
     admin_identity: str,
     shop_id: int | None,
     request_key: str,
-) -> PointsTransaction:
+) -> AdminPointsChange:
     """Owner adjust; ``request_key`` comes from the form, so a repeated submit is applied once."""
     if not reason or not str(reason).strip():
         raise ValueError("دلیل الزامی است")
     if delta == 0:
         raise ValueError("مقدار نمی‌تواند صفر باشد")
     key = f"admin_adjust:{request_key}"
+    existing = (
+        await session.execute(select(PointsTransaction).where(PointsTransaction.idempotency_key == key))
+    ).scalar_one_or_none()
+    if existing is not None:
+        return AdminPointsChange(tx=existing, replayed=True)
     prev = await points_balance(session, user, shop_id)
     if delta > 0:
         tx = await credit_points(
@@ -596,7 +609,7 @@ async def admin_adjust_points(
         )
     if tx is None:
         raise ValueError("تعدیل انجام نشد")
-    return tx
+    return AdminPointsChange(tx=tx, replayed=False)
 
 
 async def get_tier_for_points(session: AsyncSession, points: int) -> TierInfo:
@@ -824,7 +837,7 @@ async def on_user_referred(
 
 async def _is_first_delivered_purchase(session: AsyncSession, order: Order) -> bool:
     note = (order.note or "").strip()
-    if note.startswith("renew:") or note.startswith("reseller_app:"):
+    if note.startswith(("renew:", "reseller_app:", "res_cap:", "res_pkg:")):
         return False
     prior = (
         await session.execute(
@@ -843,7 +856,7 @@ async def _is_first_delivered_purchase(session: AsyncSession, order: Order) -> b
 async def on_order_delivered(session: AsyncSession, order: Order) -> None:
     """Award purchase / referral points after successful delivery. Idempotent."""
     note = (order.note or "").strip()
-    if note.startswith("reseller_app:"):
+    if note.startswith(("reseller_app:", "res_cap:", "res_pkg:")):
         return
     # Prefer already-loaded relationships; never trigger async lazy-load (xd2s).
     user = order.__dict__.get("user")

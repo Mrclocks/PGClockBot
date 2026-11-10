@@ -225,10 +225,9 @@ class PanelShellFirstContractTests(unittest.TestCase):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".panel-load-clock-face", css)
         self.assertNotIn("html.page-loading", css)
-        # PG ACL cache stays short — speed must not stale sidebar permissions.
-        acl = (ROOT / "app/services/pg_access.py").read_text(encoding="utf-8")
-        self.assertIn("_ROLE_CACHE_TTL = 8.0", acl)
-        self.assertIn("_PLATFORM_CAPS_TTL = 8.0", acl)
+        # Capability probe cache is bounded (~3 min) and identity-scoped in pg_read_cache.
+        cache = (ROOT / "app/services/pg_read_cache.py").read_text(encoding="utf-8")
+        self.assertIn("CAPABILITY_PROBE_MAX_AGE_SEC = 180.0", cache)
 
 
 if __name__ == "__main__":

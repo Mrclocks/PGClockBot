@@ -137,14 +137,17 @@
 {% endif %}
 
 {% if can_create %}
-<div class="ui-modal{% if open_new %} open{% endif %}" id="modal-ticket-new" {% if not open_new %}hidden{% endif %}>
+<div class="ui-modal ds{% if open_new %} open{% endif %}" id="modal-ticket-new" {% if not open_new %}hidden{% endif %}>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="ticket-new-title">
-    <div class="ui-modal-head">
-      {{ modal_title('tickets', 'تیکت جدید', caption='گفتگو و وضعیت تیکت', tone='brand', heading_id='ticket-new-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('tickets', 'تیکت جدید', tone='brand', heading_id='ticket-new-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/tickets/panel/create" class="form-stack" enctype="multipart/form-data">
+    <form method="post" action="/tickets/panel/create" class="form-stack ds-body" enctype="multipart/form-data">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <label class="form-field">موضوع
         <input name="subject" required maxlength="255" minlength="3" placeholder="مثلاً مشکل اتصال به نود" autocomplete="off" />
       </label>
@@ -167,10 +170,11 @@
         <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
         <span class="upload-box-progress" hidden aria-hidden="true"><i class="upload-box-progress-bar"></i></span>
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button type="submit" class="btn">ثبت تیکت</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+
+      </div></div>
     </form>
   </div>
 </div>
@@ -178,12 +182,14 @@
 
 {% if active_ticket %}
 {% set t = active_ticket %}
-<div class="ui-modal open" id="modal-ticket-view" data-modal-escape-href="/tickets">
+<div class="ui-modal ds ds open" id="modal-ticket-view" data-modal-escape-href="/tickets">
   <div class="ui-modal-backdrop" data-modal-close-nav="/tickets"></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="ticket-view-title">
-    <div class="ui-modal-head">
-      {{ modal_title('tickets', 'تیکت #' ~ t.id, caption=t.subject, tone='brand', heading_id='ticket-view-title') }}
-      <a class="icon-btn" href="/tickets" aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('tickets', 'تیکت #' ~ t.id, caption=t.subject, tone='brand', heading_id='ticket-view-title') }}
+        <a class="icon-btn" href="/tickets" aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+      </div>
     </div>
 
     <div class="ticket-meta">
@@ -213,7 +219,8 @@
     </div>
 
     {% if t.status != 'closed' %}
-    <form method="post" action="/tickets/panel/{{ t.id }}/reply" class="form-stack ticket-reply" enctype="multipart/form-data">
+    <form method="post" action="/tickets/panel/{{ t.id }}/reply" class="form-stack ds-body ticket-reply" enctype="multipart/form-data">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <label class="form-field">پاسخ
         <textarea name="body" rows="3" placeholder="متن پاسخ…"></textarea>
       </label>
@@ -225,9 +232,10 @@
         <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
         <span class="upload-box-progress" hidden aria-hidden="true"><i class="upload-box-progress-bar"></i></span>
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button type="submit" class="btn">ارسال پاسخ</button>
-      </div>
+      </div></div>
     </form>
     {% else %}
     <p class="muted ticket-closed-note">این تیکت بسته شده است.</p>
@@ -262,12 +270,14 @@
 
 {% if active_tg_ticket %}
 {% set t = active_tg_ticket %}
-<div class="ui-modal open" id="modal-tg-ticket-view" data-modal-escape-href="/tickets">
+<div class="ui-modal ds ds open" id="modal-tg-ticket-view" data-modal-escape-href="/tickets">
   <div class="ui-modal-backdrop" data-modal-close-nav="/tickets"></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="tg-ticket-view-title">
-    <div class="ui-modal-head">
-      {{ modal_title('tickets', 'تیکت ربات #' ~ t.id, caption=t.subject, tone='brand', heading_id='tg-ticket-view-title') }}
-      <a class="icon-btn" href="/tickets" aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('tickets', 'تیکت ربات #' ~ t.id, caption=t.subject, tone='brand', heading_id='tg-ticket-view-title') }}
+        <a class="icon-btn" href="/tickets" aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+      </div>
     </div>
 
     <div class="ticket-meta">
@@ -296,13 +306,15 @@
     </div>
 
     {% if t.status != 'closed' %}
-    <form method="post" action="/tickets/bot/{{ t.id }}/reply" class="form-stack ticket-reply">
+    <form method="post" action="/tickets/bot/{{ t.id }}/reply" class="form-stack ds-body ticket-reply">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <label class="form-field">پاسخ (ارسال به تلگرام کاربر)
         <textarea name="body" rows="3" required placeholder="متن پاسخ…"></textarea>
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button type="submit" class="btn">ارسال پاسخ</button>
-      </div>
+      </div></div>
     </form>
     <div class="ticket-status-actions">
       <form method="post" action="/tickets/bot/{{ t.id }}/close" class="ticket-close-form"

@@ -175,6 +175,9 @@ class BotCreateUserQuotaWiringTests(unittest.IsolatedAsyncioTestCase):
         import app.bot.handlers.admin_pg_users as mod
 
         fake_pg = AsyncMock()
+        fake_pg.get_groups_simple = AsyncMock(
+            return_value=[{"id": 1, "name": "g1"}, {"id": 2, "name": "g2"}]
+        )
         fake_pg.create_user = AsyncMock(return_value={"id": 43})
         state = _fake_state(
             {
@@ -191,6 +194,7 @@ class BotCreateUserQuotaWiringTests(unittest.IsolatedAsyncioTestCase):
         ):
             await mod.pg_create_days(message, state, db_user=SimpleNamespace(telegram_id=999999))
         fake_pg.create_user.assert_awaited_once()
+        self.assertEqual(fake_pg.create_user.await_args.args[0].get("group_ids"), [1, 2])
 
 
 class PlatformPgQuotaStaffTests(unittest.IsolatedAsyncioTestCase):

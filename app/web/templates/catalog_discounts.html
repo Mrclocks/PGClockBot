@@ -3,6 +3,7 @@
 {% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}تخفیف‌ها{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 {% set announcement_labels = {'running': 'در صف ارسال', 'paused': 'متوقف', 'completed': 'تکمیل‌شده', 'review': 'نیازمند بررسی'} %}
 {% set announcement_tones = {'running': 'info', 'paused': 'warn', 'completed': 'ok', 'review': 'danger'} %}
 <div class="page-head">
@@ -129,5 +130,6 @@
     </table>
   </div>
   {% if next_before %}<div class="actions"><a class="btn btn-ghost" href="/catalog-discounts?before={{ next_before }}">تاریخچهٔ قدیمی‌تر</a></div>{% endif %}
+</div>
 </div>
 {% endblock %}

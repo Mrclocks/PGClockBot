@@ -4,6 +4,7 @@
 {% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}کد هدیه{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>
     {{ page_title('gift', 'کد هدیه', help='gift-codes') }}
@@ -90,8 +91,9 @@
   </form>
 </div>
 {% endfor %}
+</div>
 {% endblock %}
 
 {% block page_scripts %}
-<script src="/static/gift-codes.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/gift-codes.js?v={{ asset_v('gift-codes.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 {% endblock %}

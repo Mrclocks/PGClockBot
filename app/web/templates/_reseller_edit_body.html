@@ -1,4 +1,5 @@
 {% from "macros.html" import switch %}
+{% from "_ds.html" import ds_perm_groups %}
 {% from "_list_input.html" import list_input %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
@@ -75,12 +76,12 @@
     </div>
 
     <div class="ui-switch-section">
-      <span class="ui-switch-section-title">سطح دسترسی (وب = بات)</span>
+      <span class="ds-label-row"><span class="ui-switch-section-title">سطح دسترسی (وب = بات)</span>
+        <button type="button" class="ds-link-btn" data-ds-perms-reset="#reseller-edit-perms">بازگشت به پیشنهادی</button></span>
       <p class="ui-switch-section-hint">هر مورد برای هر دو محیط یکسان اعمال می‌شود؛ نماینده از ربات بیشتر از وب نمی‌تواند.</p>
-      <div class="ui-switch-list">
-        {% for key, label in feature_perms %}
-        {{ switch('perm_' ~ key, label, checked=(key in selected_perms)) }}
-        {% endfor %}
+      <div class="ds-card ds-card-flush" id="reseller-edit-perms" data-ds-perms>
+        <div class="ds-acc-top"><span><b data-ds-total></b> از <span data-ds-of></span> دسترسی روشن</span></div>
+        {{ ds_perm_groups(feature_perm_groups(), checked_keys=selected_perms) }}
       </div>
       {% if miniapp_status %}
       <p class="ui-switch-section-hint" role="status">وضعیت مینی‌اپ فروشگاه: {{ miniapp_status }}</p>
@@ -139,18 +140,19 @@
 </section>
 
 {% if pg_limits and pg_limits.ready %}
-{% from "_pg_quota_gauges.html" import pg_quota_gauge %}
-<section class="edit-section">
-  <header class="edit-section-head">
+{% from "_pg_quota_gauges.html" import pg_quota_gauge, pg_quota_exhausted_banners %}
+<section class="edit-section reseller-usage">
+  <header class="edit-section-head reseller-section-head">
     <h3>مصرف و محدودیت پاسارگارد</h3>
-    <p class="muted">حجم و تعداد کاربران نماینده به‌همراه سقف‌های نقش/ادمین</p>
+    {% if pg_limits.status_label %}<span class="badge {{ pg_limits.status_badge or 'neutral' }}">{{ pg_limits.status_label }}</span>{% endif %}
   </header>
-  {% if pg_limits.username %}
-  <p class="muted reseller-pg-admin-line">ادمین: <code dir="ltr">{{ pg_limits.username }}</code>
-    {% if pg_limits.status_label %} · <span class="badge {{ pg_limits.status_badge or 'neutral' }}">{{ pg_limits.status_label }}</span>{% endif %}
-    {% if pg_limits.role_name %} · {{ pg_limits.role_name }}{% endif %}
-  </p>
+  {% if pg_limits.username or pg_limits.role_name %}
+  <div class="reseller-usage-meta">
+    {% if pg_limits.username %}<span class="reseller-chip">ادمین <code dir="ltr">{{ pg_limits.username }}</code></span>{% endif %}
+    {% if pg_limits.role_name %}<span class="reseller-chip">نقش <bdi>{{ pg_limits.role_name }}</bdi></span>{% endif %}
+  </div>
   {% endif %}
+  {{ pg_quota_exhausted_banners(pg_limits.users, pg_limits.traffic) }}
   {% if pg_limits.users or pg_limits.traffic %}
   <div class="home-gauges pg-quota-gauges pg-quota-gauges-embed">
     {% if pg_limits.users %}
@@ -162,7 +164,10 @@
   </div>
   {% endif %}
   {% if pg_limits.lifetime_text %}
-  <p class="muted payg-lifetime-note">مصرف lifetime (مبنای صورتحساب PAYG): <b class="num-ratio">{{ pg_limits.lifetime_text }}</b></p>
+  <div class="reseller-usage-total">
+    <span>مصرف کل از ابتدا{% if is_payg %} · مبنای صورتحساب{% endif %}</span>
+    <strong class="num-ratio">{{ pg_limits.lifetime_text }}</strong>
+  </div>
   {% endif %}
 </section>
 {% endif %}
@@ -282,8 +287,14 @@
 <section class="edit-section" id="reseller-wallet">
   <header class="edit-section-head">
     <h3>کیف پول</h3>
-    <p class="muted">موجودی فعلی: <b><span dir="ltr">{{ (user.wallet_balance or 0) | money }}</span> تومان</b> — مبلغ را وارد کنید، سپس افزایش یا کاهش را بزنید. موجودی منفی مجاز نیست.</p>
+    <p class="muted">مبلغ را وارد کنید و افزایش یا کاهش را بزنید؛ موجودی منفی مجاز نیست.</p>
   </header>
+  <div class="reseller-stat-grid">
+    <div class="stat">
+      <div class="stat-top"><span>موجودی کیف پول</span></div>
+      <strong><span dir="ltr">{{ (user.wallet_balance or 0) | money }}</span> تومان</strong>
+    </div>
+  </div>
   {% from "_wallet_adjust_form.html" import wallet_adjust_form %}
   {{ wallet_adjust_form('/resellers/' ~ user.id ~ '/billing-topup', 'موجودی کیف پول این نماینده مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟', nonce=topup_nonce, note_max=200) }}
 </section>
@@ -291,37 +302,41 @@
 
 {% if is_payg %}
 <section class="edit-section">
-  <header class="edit-section-head">
+  <header class="edit-section-head reseller-section-head">
     <h3>مدیریت PAYG</h3>
     {% if profile.billing_suspended_at %}
-    <p class="muted">وضعیت: <span class="badge rejected">مسدود</span> — موجودی کیف پول صفر (با تگ «فعال» نماینده فرق دارد)</p>
+    <span class="badge rejected" aria-label="وضعیت: مسدود">مسدود</span>
     {% else %}
-    <p class="muted">وضعیت: <span class="badge approved">فعال</span></p>
+    <span class="badge approved" aria-label="وضعیت: فعال">فعال</span>
     {% endif %}
   </header>
   {% if profile.billing_suspended_at %}
-  <div class="flash err">حساب به‌خاطر موجودی صفر مسدود است — حداقل شارژ برای رفع مسدودی: <b><span dir="ltr">{{ (min_unsuspend or 0) | money }}</span> تومان</b></div>
+  <div class="flash err" role="alert">
+    <div class="flash-copy">
+      <strong>نماینده به‌خاطر موجودی صفر مسدود است</strong>
+      <span>با شارژ دست‌کم <b><span dir="ltr">{{ (min_unsuspend or 0) | money }}</span> تومان</b> مسدودی برداشته می‌شود. این وضعیت از سوییچ «نماینده فعال» جداست.</span>
+    </div>
+  </div>
   {% endif %}
-  <ul class="payg-meta">
-    <li>
-      <span class="payg-meta-label">موجودی کیف پول</span>
-      <span class="payg-meta-value"><span dir="ltr">{{ (wallet_balance or user.wallet_balance or 0) | money }}</span> تومان</span>
-    </li>
-    <li>
-      <span class="payg-meta-label">نرخ پلن</span>
-      <span class="payg-meta-value"><span class="num-ratio"><span dir="ltr">{{ (billing_rate or 0) | money }}</span> تومان</span> / گیگ</span>
-    </li>
-    <li>
-      <span class="payg-meta-label">آخرین مصرف صورتحساب‌شده</span>
-      <span class="payg-meta-value num-ratio">{{ (profile.billing_watermark_bytes or 0) | bytes }}</span>
-    </li>
-  </ul>
-  <p class="muted payg-help">مصرف ترافیک از کیف پول فروشگاه نماینده کم می‌شود و افزایش یا کاهش دستی هم روی همان کیف پول اعمال می‌شود؛ موجودی منفی مجاز نیست. ستون «مانده» موجودی بعد از هر تراکنش است.</p>
+  <div class="reseller-stat-grid">
+    <div class="stat">
+      <div class="stat-top"><span>موجودی کیف پول</span></div>
+      <strong><span dir="ltr">{{ (wallet_balance or user.wallet_balance or 0) | money }}</span> تومان</strong>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>نرخ پلن</span></div>
+      <strong class="num-ratio"><span dir="ltr">{{ (billing_rate or 0) | money }}</span> تومان / گیگ</strong>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>آخرین مصرف صورتحساب‌شده</span></div>
+      <strong class="num-ratio">{{ (profile.billing_watermark_bytes or 0) | bytes }}</strong>
+    </div>
+  </div>
+  <p class="muted payg-help">مصرف ترافیک و تغییر دستی هر دو از همین کیف پول است؛ موجودی منفی مجاز نیست.</p>
   {% from "_wallet_adjust_form.html" import wallet_adjust_form %}
   {{ wallet_adjust_form('/resellers/' ~ user.id ~ '/billing-topup',
        'موجودی کیف پول این نماینده تغییر کند؟ اگر با کاهش موجودی صفر شود، ادمین پاسارگارد نماینده و همهٔ کاربرانش همان لحظه قطع می‌شوند.',
-       nonce=topup_nonce, amount_value=(min_unsuspend or ''), note_max=200,
-       hint=(('حداقل شارژ برای رفع مسدودی: ' ~ (min_unsuspend | money) ~ ' تومان (۲× آستانه هشدار)') if min_unsuspend else none)) }}
+       nonce=topup_nonce, amount_value=(min_unsuspend or ''), note_max=200) }}
   {% if wallet_txs %}
   <div class="wallet-tx-block">
     <header class="edit-section-head">
@@ -392,7 +407,12 @@
     <p class="muted">حساب، نمایندگی، ادمین پاسارگارد و همهٔ سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های او حذف می‌شود و برگشت ندارد. اگر دوباره به ربات پیام بدهد، حساب خالی جدیدی ساخته می‌شود.</p>
   </header>
   {% if (user.wallet_balance or 0) > 0 %}
-  <div class="flash warn">موجودی کیف پول: <span dir="ltr">{{ user.wallet_balance | money }}</span> تومان — با حذف کامل از بین می‌رود.</div>
+  <div class="flash warn user-edit-wallet-delete-warn" role="alert">
+    <div class="flash-copy">
+      <strong class="user-edit-wallet-delete-warn-amt">موجودی کیف پول: <span dir="ltr">{{ user.wallet_balance | money }}</span> تومان</strong>
+      <span class="user-edit-wallet-delete-warn-note">با حذف کامل کاربر این موجودی از بین می‌رود.</span>
+    </div>
+  </div>
   {% endif %}
   <form method="post" action="/resellers/{{ user.id }}/delete-user" class="form-stack"
         data-confirm="{% if (user.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | money }} تومان از بین می‌رود. {% endif %}کاربر کامل به‌همراه نمایندگی، ادمین پاسارگارد، سفارش‌ها و سرویس‌ها حذف شود؟ برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."

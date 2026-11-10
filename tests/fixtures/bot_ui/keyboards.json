@@ -56,6 +56,12 @@
       ],
       [
         {
+          "callback_data": "bch:l",
+          "text": "📜 تاریخچهٔ ارسال‌ها"
+        }
+      ],
+      [
+        {
           "callback_data": "nv:adm:marketing",
           "text": "⬅️ بازگشت"
         }
@@ -289,6 +295,12 @@
       ],
       [
         {
+          "callback_data": "tru:l:all:0",
+          "text": "🧪 کاربران تست"
+        }
+      ],
+      [
+        {
           "callback_data": "nv:adm:home",
           "text": "⬅️ بازگشت"
         }
@@ -419,6 +431,16 @@
           "callback_data": "adm:pg:template",
           "style": "primary",
           "text": "📋 ساخت تمپلیت"
+        },
+        {
+          "callback_data": "adm:pg:hosts",
+          "text": "🌐 هاست‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:pg:inbounds",
+          "text": "📡 اینباندها"
         }
       ],
       [
@@ -463,6 +485,16 @@
           "callback_data": "adm:pg:template",
           "style": "primary",
           "text": "📋 ساخت تمپلیت"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:pg:hosts",
+          "text": "🌐 هاست‌ها"
+        },
+        {
+          "callback_data": "adm:pg:inbounds",
+          "text": "📡 اینباندها"
         }
       ],
       [
@@ -781,6 +813,16 @@
         {
           "callback_data": "nv:adm:preview",
           "text": "👁 پیش‌نمایش منوی کاربر"
+        },
+        {
+          "callback_data": "saud:l:0",
+          "text": "🧾 گزارش اقدامات کارکنان"
+        }
+      ],
+      [
+        {
+          "callback_data": "ssr:l:0",
+          "text": "🏷 تعیین فروشگاه سرویس"
         }
       ],
       [
@@ -1282,6 +1324,13 @@
       ],
       [
         {
+          "callback_data": "nv:loy:home",
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        }
+      ],
+      [
+        {
           "callback_data": "menu:home",
           "text": "⬅️ بازگشت"
         }
@@ -1729,7 +1778,7 @@
         {
           "callback_data": "adm:plans:noop",
           "style": "primary",
-          "text": "پلنی نیست"
+          "text": "هنوز پلنی ساخته نشده است"
         }
       ],
       [
@@ -1751,6 +1800,16 @@
         {
           "callback_data": "adm:users:wdebit:5",
           "text": "➖ کاهش کیف"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:pcredit:5",
+          "text": "⭐ امتیاز +"
+        },
+        {
+          "callback_data": "adm:users:pdebit:5",
+          "text": "⭐ امتیاز −"
         }
       ],
       [
@@ -1804,6 +1863,16 @@
         {
           "callback_data": "adm:users:wdebit:5",
           "text": "➖ کاهش کیف"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:pcredit:5",
+          "text": "⭐ امتیاز +"
+        },
+        {
+          "callback_data": "adm:users:pdebit:5",
+          "text": "⭐ امتیاز −"
         }
       ],
       [

@@ -203,7 +203,7 @@ async def failure_signals(session: AsyncSession) -> list[Signal]:
 
 
 def failures_text(count: int) -> str:
-    return f"📦 <b>{int(count)}</b> تحویل ناموفق در انتظار بررسی است.\nاز مدیریت مالی ← تحویل ناموفق ادامه تحویل بدهید یا از لیست حذف کنید."
+    return f"📦 <b>{int(count)}</b> تحویل ناموفق در انتظار بررسی است.\nاز مالی ← تحویل ناموفق ادامه تحویل بدهید یا از لیست حذف کنید."
 
 
 def update_signal(info: dict | None) -> Signal | None:

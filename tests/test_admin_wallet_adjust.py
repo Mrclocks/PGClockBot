@@ -228,10 +228,11 @@ class AdminWalletAdjustUiContractTests(unittest.TestCase):
         self.assertIn("mode=mode", pages)
 
     def test_bot_has_credit_and_debit_entry(self):
-        admin = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        self.assertIn("adm_users_wallet_debit_ask", admin)
-        self.assertIn("admin_wallet_mode", admin)
-        ask = admin.split("async def _adm_users_wallet_adjust_ask", 1)[1].split(
+        wallet = Path("app/bot/handlers/admin_wallet_adjust.py").read_text(encoding="utf-8")
+        self.assertIn("adm_users_wallet_debit_ask", wallet)
+        self.assertIn("admin_wallet_mode", wallet)
+        self.assertIn("user_wallet_reason", wallet)
+        ask = wallet.split("async def _adm_users_wallet_adjust_ask", 1)[1].split(
             "async def ", 1
         )[0]
         self.assertNotIn("منفی = کسر", ask)
@@ -268,3 +269,341 @@ class AdminWalletAdjustUiContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlatformWalletIdempotencyTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        from app.db import Base
+        import app.db.models  # noqa: F401
+        from app.db.models import BotUser, Role
+
+        self._tmpdir = tempfile.TemporaryDirectory()
+        db_path = Path(self._tmpdir.name) / "wallet-idem.db"
+        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        async with self.Session() as session:
+            session.add(
+                BotUser(
+                    id=1,
+                    telegram_id=101,
+                    referral_code="u1",
+                    role=Role.USER.value,
+                    wallet_balance=10_000,
+                )
+            )
+            session.add(
+                BotUser(
+                    id=2,
+                    telegram_id=202,
+                    referral_code="u2",
+                    role=Role.USER.value,
+                    wallet_balance=50_000,
+                )
+            )
+            await session.commit()
+
+    async def asyncTearDown(self):
+        await self.engine.dispose()
+        self._tmpdir.cleanup()
+
+    async def test_same_request_key_credits_once(self):
+        import secrets
+
+        from app.db.models import BotUser, WalletTransaction
+        from app.services.bot_user_admin import admin_adjust_user_wallet
+        from sqlalchemy import func, select
+
+        key = secrets.token_hex(8)
+        async with self.Session() as session:
+            user = await session.get(BotUser, 1)
+            first = await admin_adjust_user_wallet(
+                session, user, 5_000, mode="credit", actor="a", note="once", request_key=key
+            )
+            again = await admin_adjust_user_wallet(
+                session, user, 5_000, mode="credit", actor="a", note="once", request_key=key
+            )
+            await session.refresh(user)
+            count = await session.scalar(
+                select(func.count()).select_from(WalletTransaction).where(
+                    WalletTransaction.user_id == 1
+                )
+            )
+        self.assertFalse(first.replayed)
+        self.assertTrue(again.replayed)
+        self.assertEqual(first.balance_after, 15_000)
+        self.assertEqual(again.balance_after, 15_000)
+        self.assertEqual(int(user.wallet_balance or 0), 15_000)
+        self.assertEqual(int(count or 0), 1)
+
+    async def test_concurrent_same_key_credits_once(self):
+        import asyncio
+        import secrets
+
+        from app.db.models import BotUser, WalletTransaction
+        from app.services.bot_user_admin import admin_adjust_user_wallet
+        from sqlalchemy import func, select
+
+        key = secrets.token_hex(8)
+
+        async def once() -> int:
+            async with self.Session() as session:
+                user = await session.get(BotUser, 1)
+                change = await admin_adjust_user_wallet(
+                    session, user, 3_000, mode="credit", actor="a", note="race", request_key=key
+                )
+                return change.balance_after
+
+        balances = await asyncio.gather(once(), once())
+        async with self.Session() as session:
+            user = await session.get(BotUser, 1)
+            from app.services.bot_user_admin import build_admin_wallet_idempotency_key
+
+            expected_key = build_admin_wallet_idempotency_key(
+                request_key=key, user_id=1, mode="credit", shop_id=None
+            )
+            count = await session.scalar(
+                select(func.count()).select_from(WalletTransaction).where(
+                    WalletTransaction.user_id == 1,
+                    WalletTransaction.idempotency_key == expected_key,
+                )
+            )
+        self.assertEqual(int(user.wallet_balance or 0), 13_000)
+        self.assertEqual(int(count or 0), 1)
+        self.assertTrue(all(b == 13_000 for b in balances))
+
+    async def test_same_nonce_does_not_collide_across_users_or_shops(self):
+        """Identical form nonces for different users/shops must not share a ledger key."""
+        from app.db.models import BotUser, ShopWallet, WalletTransaction
+        from app.services.bot_user_admin import (
+            admin_adjust_user_wallet,
+            build_admin_wallet_idempotency_key,
+        )
+        from app.services.wallet import get_wallet_balance
+        from sqlalchemy import func, select
+
+        nonce = "aabbccddeeff0011"
+        key_user1 = build_admin_wallet_idempotency_key(
+            request_key=nonce, user_id=1, mode="credit", shop_id=None
+        )
+        key_user2 = build_admin_wallet_idempotency_key(
+            request_key=nonce, user_id=2, mode="credit", shop_id=None
+        )
+        key_shop = build_admin_wallet_idempotency_key(
+            request_key=nonce, user_id=1, mode="credit", shop_id=2
+        )
+        key_debit = build_admin_wallet_idempotency_key(
+            request_key=nonce, user_id=1, mode="debit", shop_id=None
+        )
+        self.assertNotEqual(key_user1, key_user2)
+        self.assertNotEqual(key_user1, key_shop)
+        self.assertNotEqual(key_user1, key_debit)
+
+        async with self.Session() as session:
+            session.add(ShopWallet(user_id=1, reseller_id=2, balance=0))
+            await session.commit()
+            u1 = await session.get(BotUser, 1)
+            u2 = await session.get(BotUser, 2)
+            a = await admin_adjust_user_wallet(
+                session, u1, 1_000, mode="credit", actor="a", note="u1", request_key=nonce
+            )
+            b = await admin_adjust_user_wallet(
+                session, u2, 1_000, mode="credit", actor="a", note="u2", request_key=nonce
+            )
+            c = await admin_adjust_user_wallet(
+                session,
+                u1,
+                1_000,
+                mode="credit",
+                actor="a",
+                note="shop",
+                request_key=nonce,
+                shop_id=2,
+                min_abs=1_000,
+            )
+            await session.refresh(u1)
+            await session.refresh(u2)
+            shop_bal = await get_wallet_balance(session, 1, shop_id=2)
+            rows = await session.scalar(select(func.count()).select_from(WalletTransaction))
+        self.assertFalse(a.replayed)
+        self.assertFalse(b.replayed)
+        self.assertFalse(c.replayed)
+        self.assertEqual(int(u1.wallet_balance or 0), 11_000)
+        self.assertEqual(int(u2.wallet_balance or 0), 51_000)
+        self.assertEqual(int(shop_bal), 1_000)
+        self.assertEqual(int(rows or 0), 3)
+
+    async def test_different_keys_apply_separately(self):
+        import secrets
+
+        from app.db.models import BotUser
+        from app.services.bot_user_admin import admin_adjust_user_wallet
+
+        async with self.Session() as session:
+            user = await session.get(BotUser, 1)
+            a = await admin_adjust_user_wallet(
+                session, user, 2_000, mode="credit", actor="a", note="a", request_key=secrets.token_hex(8)
+            )
+            b = await admin_adjust_user_wallet(
+                session, user, 2_000, mode="credit", actor="a", note="b", request_key=secrets.token_hex(8)
+            )
+            await session.refresh(user)
+        self.assertFalse(a.replayed)
+        self.assertFalse(b.replayed)
+        self.assertEqual(int(user.wallet_balance or 0), 14_000)
+
+    async def test_other_customer_balance_unchanged(self):
+        import secrets
+
+        from app.db.models import BotUser
+        from app.services.bot_user_admin import admin_adjust_user_wallet
+
+        async with self.Session() as session:
+            user = await session.get(BotUser, 1)
+            await admin_adjust_user_wallet(
+                session, user, 1_000, mode="debit", actor="a", note="only-1", request_key=secrets.token_hex(8)
+            )
+            other = await session.get(BotUser, 2)
+            self.assertEqual(int(other.wallet_balance or 0), 50_000)
+
+    async def test_web_replay_skips_second_notice(self):
+        import secrets
+
+        from fastapi import FastAPI
+        import httpx
+        from app.api.user_pages import register_user_pages
+        from app.db.models import BotUser
+
+        staff = {
+            "role": "admin",
+            "username": "root",
+            "org_principal_id": 1,
+            "org_depth": 0,
+            "org_parent_id": None,
+            "org_status": "active",
+        }
+
+        async def get_db():
+            async with self.Session() as session:
+                yield session
+
+        app = FastAPI()
+        register_user_pages(app, render=lambda *a, **k: None, require_admin=lambda: staff, get_db=get_db)
+        nonce = secrets.token_hex(8)
+        with patch("app.services.manual_adjust_notices.schedule_customer_notice") as schedule:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                for _ in range(2):
+                    resp = await client.post(
+                        "/users/1/wallet-credit",
+                        data={
+                            "amount": "2000",
+                            "mode": "credit",
+                            "note": "idem note",
+                            "nonce": nonce,
+                        },
+                    )
+                    self.assertEqual(resp.status_code, 303)
+                    self.assertIn("ok=", resp.headers["location"])
+        sent = [c for c in schedule.call_args_list if not c.kwargs.get("replayed")]
+        self.assertEqual(len(sent), 1)
+        async with self.Session() as session:
+            self.assertEqual(int((await session.get(BotUser, 1)).wallet_balance or 0), 12_000)
+
+
+class PlatformWalletRejectBadAmountTests(unittest.TestCase):
+    def test_parse_rejects_bool_nan_negative(self):
+        from app.services.bot_user_admin import (
+            _require_admin_wallet_amount,
+            parse_admin_wallet_amount,
+        )
+
+        for raw in ("-1000", "NaN", "12.5", "1e3", "0"):
+            with self.subTest(raw=raw):
+                with self.assertRaises(ValueError):
+                    parse_admin_wallet_amount(raw)
+        for amount in (True, False, 1.5, float("nan")):
+            with self.subTest(amount=amount):
+                with self.assertRaises(ValueError):
+                    _require_admin_wallet_amount(amount)
+        self.assertEqual(_require_admin_wallet_amount(-5), -5)  # type gate only
+        with self.assertRaises(ValueError):
+            parse_admin_wallet_amount("-5")
+
+
+class WalletIdempotencyCommitFalseTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        from app.db import Base
+        import app.db.models  # noqa: F401
+        from app.db.models import BotUser, Role
+
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.engine = create_async_engine(
+            f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'cf.db'}"
+        )
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        async with self.Session() as session:
+            session.add(
+                BotUser(
+                    id=1,
+                    telegram_id=101,
+                    referral_code="u1",
+                    role=Role.USER.value,
+                    wallet_balance=10_000,
+                )
+            )
+            await session.commit()
+
+    async def asyncTearDown(self):
+        await self.engine.dispose()
+        self._tmpdir.cleanup()
+
+    async def test_idempotency_key_rejected_when_commit_false(self):
+        from app.db.models import BotUser, WalletTransaction
+        from app.services.wallet import credit_wallet, debit_wallet
+        from sqlalchemy import func, select
+
+        async with self.Session() as session:
+            user = await session.get(BotUser, 1)
+            # Unrelated pending work in the caller's unit of work.
+            session.add(
+                WalletTransaction(
+                    user_id=1,
+                    amount=1,
+                    balance_after=10_001,
+                    reason="pending-marker",
+                    reseller_id=None,
+                )
+            )
+            with self.assertRaises(ValueError) as ctx:
+                await credit_wallet(
+                    session,
+                    user,
+                    1_000,
+                    "keyed",
+                    commit=False,
+                    idempotency_key="admin_wallet:p:1:credit:deadbeefdeadbeef",
+                )
+            self.assertIn("commit=True", str(ctx.exception))
+            with self.assertRaises(ValueError):
+                await debit_wallet(
+                    session,
+                    user,
+                    1_000,
+                    "keyed",
+                    commit=False,
+                    idempotency_key="admin_wallet:p:1:debit:deadbeefdeadbeef",
+                )
+            # Caller transaction still open — pending marker can still commit.
+            await session.commit()
+            count = await session.scalar(
+                select(func.count()).select_from(WalletTransaction).where(
+                    WalletTransaction.reason == "pending-marker"
+                )
+            )
+            await session.refresh(user)
+        self.assertEqual(int(count or 0), 1)
+        self.assertEqual(int(user.wallet_balance or 0), 10_000)

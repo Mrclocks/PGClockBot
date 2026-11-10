@@ -248,15 +248,18 @@
   {% endif %}
 </div>
 
-<div class="ui-modal" id="modal-backup-restore" hidden>
+<div class="ui-modal ds ds-dialog" id="modal-backup-restore" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="backup-restore-title">
-    <div class="ui-modal-head">
-      {{ modal_title('overview', 'تأیید ریستور بکاپ', caption='این عمل را تأیید کنید', tone='neutral', heading_id='backup-restore-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('overview', 'تأیید ریستور بکاپ', tone='neutral', heading_id='backup-restore-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/backup/restore/0" class="form-stack" id="backup-restore-form">
+    <form method="post" action="/backup/restore/0" class="form-stack ds-body" id="backup-restore-form">
       <input type="hidden" name="confirm" value="1" />
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <p class="muted">
         همه داده‌های فعلی با بکاپ
         <strong id="backup-restore-name">—</strong>
@@ -269,10 +272,11 @@
           <span class="ui-switch-track" aria-hidden="true"></span>
         </span>
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn btn-danger" type="submit" id="backup-restore-btn">تأیید ریستور</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      </div></div>
     </form>
   </div>
 </div>

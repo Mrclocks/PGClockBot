@@ -10,6 +10,7 @@ from aiogram.types import Message
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.user_errors import domain_error_text
 from app.services.catalog_pricing import displayed_quote, price_html, quote_product, sale_price
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
@@ -64,7 +65,7 @@ async def svc_cancel(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         service_id = int(callback.data.split(":")[-1])
         status = await cancellation_status(session, db_user, service_id, shop_id=current_shop_reseller_id())
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     text = "📝 درخواست لغو سرویس\nاپراتور مبلغ اعتبار برگشتی را تعیین می‌کند. پس از تأیید، سرویس غیرفعال و اعتبار به کیف پول همین فروشگاه برمی‌گردد. ثبت درخواست به‌تنهایی سرویس را غیرفعال نمی‌کند."
     buttons = []
@@ -92,7 +93,7 @@ async def svc_cancel_new(callback: CallbackQuery, session: AsyncSession, db_user
         service_id = int(callback.data.split(":")[-1])
         await owned_cancellation_service(session, db_user, service_id, current_shop_reseller_id())
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     await state.update_data(cancellation_service_id=service_id)
     await callback.answer()
@@ -127,7 +128,7 @@ async def svc_cancel_reason(message: Message, session: AsyncSession, db_user: Bo
             reason=message.text,
         )
     except ValueError as exc:
-        await message.answer(str(exc))
+        await message.answer(domain_error_text(exc))
         return
     await state.set_state(None)
     await finish_text_step(
@@ -204,7 +205,7 @@ async def svc_auto(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         service_id = int(callback.data.split(":")[-1])
         await _show_automation(callback, session, db_user, service_id)
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     await callback.answer()
 
@@ -221,7 +222,7 @@ async def svc_auto_pick(callback: CallbackQuery, session: AsyncSession, db_user:
         if not choices:
             raise ValueError("پلن یا بسته فعالی موجود نیست")
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     from app.services.plan_categories import shop_category_map
     from app.services.service_addons import amount_label
@@ -264,7 +265,7 @@ async def svc_auto_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         await configure_automation(session, db_user, service_id, action, enabled=enabled)
         await _show_automation(callback, session, db_user, service_id)
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     await callback.answer(feedback.SAVED)
 
@@ -277,7 +278,7 @@ async def svc_auto_set(callback: CallbackQuery, session: AsyncSession, db_user: 
         await configure_automation(session, db_user, service_id, action, enabled=True, choice_id=int(choice_id))
         await _show_automation(callback, session, db_user, service_id)
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     await callback.answer("انتخاب شد و قابلیت روشن شد")
 
@@ -441,7 +442,7 @@ async def svc_view(
 @router.callback_query(F.data.startswith("guide:svc:"))
 async def svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     """Open per-platform guides when the catalog has entries; else plain guide_text."""
-    from app.bot.handlers.guides import _audience_for_user, show_guides_list
+    from app.bot.handlers.guides import show_guides_list
     from app.services.connection_guides import get_connection_guides, guides_for_audience
     from app.services.rich_text import outbound_setting_text, rich_plain_text
 
@@ -454,10 +455,9 @@ async def svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
-    aud = await _audience_for_user(session, db_user)
-    items = guides_for_audience(await get_connection_guides(session), aud)
+    items = guides_for_audience(await get_connection_guides(session), "user")
     if items:
-        await show_guides_list(callback, session, db_user, svc_id=svc_id, audience=aud)
+        await show_guides_list(callback, session, db_user, svc_id=svc_id, audience="user")
         return
     ui = await get_all_settings(session)
     raw = ui.get("guide_text")
@@ -723,25 +723,31 @@ async def svc_renew_pay(
 async def svc_addon(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
 ):
-    """List shop-scoped volume/duration packs for an owned service.
+    """Type picker, then packs of one kind for an owned service.
 
-    Packs are filtered to the service's sales-plan category so multi-service
-    users only see prices that match that service.
+    Callbacks: ``svc:addon:{svc_id}`` (kinds) or ``svc:addon:{svc_id}:{kind}``.
+    With a single available kind, skip the picker and open that list.
     """
+    from app.services.button_styles import normalize_style
+    from app.services.plan_categories import shop_category_map
     from app.services.service_addons import (
-        amount_label,
+        available_addon_kinds_for_service,
         kind_label,
         list_packs_for_service,
+        pack_purchase_button_text,
     )
 
     ui = await get_all_settings(session)
     parts = (callback.data or "").split(":")
     # svc:addon:{svc_id} or svc:addon:{svc_id}:{kind}
-    if len(parts) < 3:
+    if len(parts) < 3 or not parts[2].isdigit():
         await callback.answer(feedback.INVALID, show_alert=True)
         return
     svc_id = int(parts[2])
     kind_filter = parts[3] if len(parts) > 3 else None
+    if kind_filter is not None and kind_filter not in ("volume", "duration"):
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
     svc = await session.get(UserService, svc_id)
     if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
@@ -752,69 +758,90 @@ async def svc_addon(
             show_alert=True,
         )
         return
+
+    svc_label = html.escape((svc.pg_username or svc.remark or f"#{svc_id}").strip())
+
+    if kind_filter is None:
+        kinds = await available_addon_kinds_for_service(session, svc)
+        if not kinds:
+            await callback.answer(
+                "بسته‌ای برای این سرویس فعال نیست — از کارت همین سرویس دوباره تلاش کنید",
+                show_alert=True,
+            )
+            return
+        if len(kinds) == 1:
+            kind_filter = kinds[0]
+        else:
+            await callback.answer()
+            rows: list[list[InlineKeyboardButton]] = []
+            if "volume" in kinds:
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            text="📦 افزایش حجم",
+                            callback_data=f"svc:addon:{svc_id}:volume",
+                        )
+                    ]
+                )
+            if "duration" in kinds:
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            text="⏱ افزایش زمان",
+                            callback_data=f"svc:addon:{svc_id}:duration",
+                        )
+                    ]
+                )
+            rows.append([kb.back_button(ui, f"svc:view:{svc_id}")])
+            if callback.message:
+                await safe_edit_text(
+                    callback.message,
+                    format_message(
+                        f"➕ افزایش سرویس {svc_label}",
+                        "نوع بسته را انتخاب کنید.",
+                    ),
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+                )
+            return
+
     packs = await list_packs_for_service(
         session, svc, active_only=True, kind=kind_filter
     )
     if not packs:
         await callback.answer(
-            "بسته‌ای برای دستهٔ این سرویس فعال نیست — از کارت همین سرویس دوباره تلاش کنید",
+            "بسته‌ای برای این نوع فعال نیست — نوع دیگری را امتحان کنید",
             show_alert=True,
         )
         return
     await callback.answer()
-    from app.services.plan_categories import shop_category_map
-
     categories = await shop_category_map(session)
-    rows = [
-        [
-            InlineKeyboardButton(
-                text=(
-                    f"{'📦' if p.kind == 'volume' else '⏱'} {p.name} "
-                    f"(+{amount_label(p)}) — {format_toman(sale_price(p), get_settings().currency)}"
-                ),
-                callback_data=f"svc:addonpay:{svc_id}:{p.id}",
-                icon_custom_emoji_id=kb.category_icon_for(p, categories),
-            )
-        ]
-        for p in packs
-    ]
-    if kind_filter is None:
-        has_vol = any(p.kind == "volume" for p in packs)
-        has_dur = any(p.kind == "duration" for p in packs)
-        filter_row = []
-        if has_vol:
-            filter_row.append(
-                InlineKeyboardButton(
-                    text="فقط حجم", callback_data=f"svc:addon:{svc_id}:volume"
-                )
-            )
-        if has_dur:
-            filter_row.append(
-                InlineKeyboardButton(
-                    text="فقط زمان", callback_data=f"svc:addon:{svc_id}:duration"
-                )
-            )
-        if filter_row:
-            rows.insert(0, filter_row)
-    else:
-        rows.insert(
-            0,
+    currency = get_settings().currency
+    rows = []
+    for p in packs:
+        style = normalize_style(getattr(p, "button_style", None) or "") or None
+        kwargs: dict = {
+            "text": pack_purchase_button_text(
+                p, price_text=format_toman(sale_price(p), currency)
+            ),
+            "callback_data": f"svc:addonpay:{svc_id}:{p.id}",
+            "icon_custom_emoji_id": kb.category_icon_for(p, categories),
+        }
+        if style:
+            kwargs["style"] = style
+        rows.append([InlineKeyboardButton(**kwargs)])
+    kinds_available = await available_addon_kinds_for_service(session, svc)
+    if len(kinds_available) > 1:
+        rows.append(
             [
                 InlineKeyboardButton(
-                    text="همه بسته‌ها", callback_data=f"svc:addon:{svc_id}"
+                    text="◀️ انتخاب نوع بسته",
+                    callback_data=f"svc:addon:{svc_id}",
                 )
-            ],
+            ]
         )
-    title = "افزونه سرویس"
-    if kind_filter:
-        title = f"افزونه {kind_label(kind_filter)}"
-
-    rows.append(
-        [
-            kb.back_button(ui, f"svc:view:{svc_id}")
-        ]
-    )
-    body = "بسته را انتخاب کنید؛ پس از پرداخت به همین سرویس اضافه می‌شود."
+    rows.append([kb.back_button(ui, f"svc:view:{svc_id}")])
+    title = f"افزایش {kind_label(kind_filter)} سرویس {svc_label}"
+    body = "یک بسته انتخاب کنید؛ پس از پرداخت به همین سرویس اضافه می‌شود."
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -833,7 +860,7 @@ async def svc_addon_pay(
 ):
     ui = await get_all_settings(session)
     parts = (callback.data or "").split(":")
-    if len(parts) < 4:
+    if len(parts) < 4 or not parts[2].isdigit() or not parts[3].isdigit():
         await callback.answer(feedback.INVALID, show_alert=True)
         return
     svc_id = int(parts[2])
@@ -1057,7 +1084,7 @@ def _register_services_cancel_codes() -> None:
                 session, db_user, service_id, shop_id=current_shop_reseller_id()
             )
         except ValueError as exc:
-            await present_inline_only(message, text=str(exc), inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "svc:list")]]))
+            await present_inline_only(message, text=domain_error_text(exc), inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "svc:list")]]))
             return
         text = (
             "📝 درخواست لغو سرویس\n"
