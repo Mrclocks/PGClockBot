@@ -324,7 +324,9 @@ class AdminDeleteChoiceTests(ImportCase):
         register_user_pages(app, render=lambda *a, **k: None, require_admin=lambda: owner, get_db=get_db)
         with patch("app.services.bot_user_admin.admin_delete_service", AsyncMock(return_value={})) as delete:
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-                response = await client.post(f"/users/1/services/{service_id}/delete", data=form)
+                response = await client.post(
+                    f"/users/1/services/{service_id}/delete", data={"reason": "درخواست مشتری", **form}
+                )
         return delete, response
 
     async def test_web_delete_of_a_sold_service_still_removes_the_panel_user(self):

@@ -11,6 +11,7 @@ from fastapi import Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.action_reasons import ReasonRequired, log_reasoned_action, reason_from_form
 from app.services.formatting import data_limit_to_gb, pg_expire_fields
 from app.services.numbers import normalize_number_text, parse_float, parse_int, parse_optional_float, parse_optional_int
 from app.services.pasarguard import (
@@ -1060,12 +1061,17 @@ def register_pg_pages(
 
     @app.post("/pg/users/{user_id}/disable")
     async def pg_users_disable(
+        request: Request,
         user_id: int,
         staff: dict = Depends(require_pg_perm("pg_users")),
         session: AsyncSession = Depends(get_db),
     ):
         if not staff_user_actions(staff)["disable"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
+        try:
+            reason = reason_from_form(await request.form())
+        except ReasonRequired as exc:
+            return RedirectResponse(f"/pg/users?err={_q(str(exc))}", status_code=303)
         try:
             denied = await _guard_owned_mutation(staff, user_id, session=session)
             if denied is not None:
@@ -1074,16 +1080,24 @@ def register_pg_pages(
             await pg.set_disabled_by_id(user_id, True)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
+        await log_reasoned_action(
+            session, staff, action="pg_user_disable", target_type="pg_user", target_id=user_id, reason=reason
+        )
         return RedirectResponse(f"/pg/users?ok={_q('کاربر غیرفعال شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/enable")
     async def pg_users_enable(
+        request: Request,
         user_id: int,
         staff: dict = Depends(require_pg_perm("pg_users")),
         session: AsyncSession = Depends(get_db),
     ):
         if not staff_user_actions(staff)["enable"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
+        try:
+            reason = reason_from_form(await request.form())
+        except ReasonRequired as exc:
+            return RedirectResponse(f"/pg/users?err={_q(str(exc))}", status_code=303)
         try:
             denied = await _guard_owned_mutation(staff, user_id, session=session)
             if denied is not None:
@@ -1092,10 +1106,14 @@ def register_pg_pages(
             await pg.set_disabled_by_id(user_id, False)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
+        await log_reasoned_action(
+            session, staff, action="pg_user_enable", target_type="pg_user", target_id=user_id, reason=reason
+        )
         return RedirectResponse(f"/pg/users?ok={_q('کاربر فعال شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/reset")
     async def pg_users_reset(
+        request: Request,
         user_id: int,
         staff: dict = Depends(require_pg_perm("pg_users")),
         session: AsyncSession = Depends(get_db),
@@ -1104,6 +1122,10 @@ def register_pg_pages(
         if not acts["reset_usage"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
         try:
+            reason = reason_from_form(await request.form())
+        except ReasonRequired as exc:
+            return RedirectResponse(f"/pg/users?err={_q(str(exc))}", status_code=303)
+        try:
             denied = await _guard_owned_mutation(staff, user_id, session=session)
             if denied is not None:
                 return denied
@@ -1111,10 +1133,14 @@ def register_pg_pages(
             await reset_with_charge(session, staff, pg=pg, pg_user_id=user_id, now_ts=int(time.time()))
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
+        await log_reasoned_action(
+            session, staff, action="pg_user_reset_usage", target_type="pg_user", target_id=user_id, reason=reason
+        )
         return RedirectResponse(f"/pg/users?ok={_q('مصرف ریست شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/revoke")
     async def pg_users_revoke(
+        request: Request,
         user_id: int,
         staff: dict = Depends(require_pg_perm("pg_users")),
         session: AsyncSession = Depends(get_db),
@@ -1123,6 +1149,10 @@ def register_pg_pages(
         if not acts["revoke_sub"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
         try:
+            reason = reason_from_form(await request.form())
+        except ReasonRequired as exc:
+            return RedirectResponse(f"/pg/users?err={_q(str(exc))}", status_code=303)
+        try:
             denied = await _guard_owned_mutation(staff, user_id, session=session)
             if denied is not None:
                 return denied
@@ -1130,6 +1160,9 @@ def register_pg_pages(
             await pg.revoke_sub_by_id(user_id)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
+        await log_reasoned_action(
+            session, staff, action="pg_user_revoke_sub", target_type="pg_user", target_id=user_id, reason=reason
+        )
         return RedirectResponse(f"/pg/users?ok={_q('سابسکرایب ابطال شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/delete")
@@ -1141,6 +1174,10 @@ def register_pg_pages(
     ):
         if not staff_user_actions(staff)["delete"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه حذف ندارید')}", status_code=303)
+        try:
+            reason = reason_from_form(await request.form())
+        except ReasonRequired as exc:
+            return RedirectResponse(f"/pg/users?err={_q(str(exc))}", status_code=303)
         try:
             denied = await _guard_owned_mutation(staff, user_id, session=session)
             if denied is not None:
@@ -1158,6 +1195,9 @@ def register_pg_pages(
             await detach_local_services_for_pg_user(session, user_id, commit=True)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
+        await log_reasoned_action(
+            session, staff, action="pg_user_delete", target_type="pg_user", target_id=user_id, reason=reason
+        )
         return RedirectResponse(f"/pg/users?ok={_q('کاربر حذف شد')}", status_code=303)
 
     # ---- templates ----

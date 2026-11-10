@@ -30,6 +30,8 @@ class ConfirmReasonOnlyOnAccountDeletes(unittest.TestCase):
         "_reseller_edit_body.html",
         "_user_edit_body.html",
         "pg_admins.html",
+        # Every panel-user operation (disable, reset, revoke, delete ...) asks for a reason.
+        "pg_users.html",
         # Not a delete: the message to trial users reuses the prompt as a text box (own label).
         "trial_users.html",
     }

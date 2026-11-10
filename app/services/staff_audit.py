@@ -46,11 +46,21 @@ ACTION_LABELS = {
     "points_debit": "کسر دستی امتیاز",
     "customer_block": "مسدود کردن مشتری در فروشگاه",
     "customer_unblock": "رفع مسدودی مشتری در فروشگاه",
+    "pg_user_disable": "غیرفعال‌سازی کاربر پاسارگارد",
+    "pg_user_enable": "فعال‌سازی کاربر پاسارگارد",
+    "pg_user_reset_usage": "ریست مصرف کاربر پاسارگارد",
+    "pg_user_revoke_sub": "ابطال اشتراک کاربر پاسارگارد",
+    "pg_user_delete": "حذف کاربر پاسارگارد",
+    "service_renew": "تمدید دستی سرویس",
+    "service_extend": "تغییر مانده سرویس",
+    "service_delete": "حذف سرویس",
 }
 
 TARGET_LABELS = {
     "gift_code": "کد هدیه",
     "customer": "مشتری",
+    "pg_user": "کاربر پاسارگارد",
+    "service": "سرویس",
 }
 
 
