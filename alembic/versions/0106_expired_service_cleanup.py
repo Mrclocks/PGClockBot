@@ -1,7 +1,7 @@
 """Columns for the expired and volume-finished service cleanup.
 
-Revision ID: 0098_expired_service_cleanup
-Revises: 0097_customer_notice_queue
+Revision ID: 0106_expired_service_cleanup
+Revises: 0105_customer_notice_queue
 
 Adds to ``user_services``: ``cleanup_exempt``, ``cleanup_hold_until``, ``cleanup_warn_stage``,
 ``cleanup_claimed_at`` and ``volume_exhausted_at``, an index on ``quota_expire_at`` for the
@@ -16,8 +16,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0098_expired_service_cleanup"
-down_revision: Union[str, None] = "0097_customer_notice_queue"
+revision: str = "0106_expired_service_cleanup"
+down_revision: Union[str, None] = "0105_customer_notice_queue"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

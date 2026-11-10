@@ -245,7 +245,7 @@ class CleanupRoutesTests(CleanupCase):
 
 class CleanupMigrationTests(unittest.TestCase):
     def test_upgrade_twice_and_downgrade_keep_rows(self) -> None:
-        spec = importlib.util.spec_from_file_location("m0098", ROOT / "alembic/versions/0098_expired_service_cleanup.py")
+        spec = importlib.util.spec_from_file_location("m0098", ROOT / "alembic/versions/0106_expired_service_cleanup.py")
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(migration)
