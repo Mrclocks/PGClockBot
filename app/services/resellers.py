@@ -951,9 +951,9 @@ async def create_application(
     from app.services.billing import BillingError, assert_payg_purchase_wallet
 
     if reseller_plan_mode_of(plan) == "payg":
-        from app.services.billing import require_positive_payg_rate
+        from app.services.billing import require_billable_payg_plan
 
-        require_positive_payg_rate(int(getattr(plan, "price_per_gb", 0) or 0))
+        require_billable_payg_plan(plan)
         try:
             await assert_payg_purchase_wallet(session, int(user.wallet_balance or 0))
         except BillingError as e:
@@ -1171,9 +1171,9 @@ async def provision_reseller(
     if plan_billing not in {"fixed", "payg"}:
         plan_billing = "fixed"
     if plan_billing == "payg":
-        from app.services.billing import require_positive_payg_rate
+        from app.services.billing import require_billable_payg_plan
 
-        require_positive_payg_rate(int(getattr(plan, "price_per_gb", 0) or 0))
+        require_billable_payg_plan(plan)
     perms = normalize_feature_perms(
         web_permissions
         or bot_permissions
@@ -1925,10 +1925,10 @@ async def provision_existing_pg_admin(
     if not plan or not plan.is_active:
         return None, None, "پلن نمایندگی معتبر نیست — ابتدا یک پلن فعال بسازید"
     if reseller_plan_mode_of(plan) == "payg":
-        from app.services.billing import PaygRateError, require_positive_payg_rate
+        from app.services.billing import PaygRateError, require_billable_payg_plan
 
         try:
-            require_positive_payg_rate(int(getattr(plan, "price_per_gb", 0) or 0))
+            require_billable_payg_plan(plan)
         except PaygRateError as exc:
             return None, None, str(exc)
     if is_current_capacity_plan(plan):
