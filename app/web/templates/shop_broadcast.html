@@ -12,9 +12,6 @@
 
 {{ marketing_tabs(marketing_sections|default(()), 'shop_broadcast') }}
 
-{% if flash_ok %}<div class="flash ok" role="status">{{ flash_ok }}</div>{% endif %}
-{% if flash_err %}<div class="flash err" role="alert">{{ flash_err }}</div>{% endif %}
-
 <div class="card">
   <h2>ارسال پیام</h2>
   <form method="post" action="/shop-broadcast" class="form-stack">
