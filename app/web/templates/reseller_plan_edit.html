@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "macros.html" import switch_chip, page_title %}
 {% from "_ds.html" import ds_sec, ds_switch, ds_unlimited, ds_perm_groups %}
+{% from "_payg_pricing_fields.html" import payg_pricing_fields %}
 {% block title %}ویرایش پلن نمایندگی{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
@@ -67,6 +68,7 @@
         <span class="ds-unit"><input name="price_per_gb" id="edit-price-per-gb-input" type="number" data-money min="0" value="{{ plan.price_per_gb or 0 }}" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
         <small class="muted">نرخ مصرف این پلن PAYG — برای گروه‌های با قیمت متفاوت، پلن جدا بسازید</small>
       </label>
+      {{ payg_pricing_fields('edit', plan) }}
     </div>
   {% endcall %}
 
