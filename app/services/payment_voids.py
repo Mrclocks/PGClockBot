@@ -29,6 +29,7 @@ from app.db.models import (
     UserService,
 )
 from app.services.formatting import format_toman
+from app.services.cashback import reverse_after_refund
 from app.services.loyalty import reverse_order_points
 from app.services.orders import _order_note, _wallet_topup_already_credited, is_mutation_order_note
 from app.services.pasarguard import get_pg, get_pg_for_reseller, is_pg_not_found
@@ -305,6 +306,7 @@ async def _reverse_points(session: AsyncSession, order: Order | None, payment_id
     except Exception:
         logger.warning("loyalty reversal failed for voided payment %s", payment_id, exc_info=True)
         await session.rollback()
+    await reverse_after_refund(session, order_id=int(order.id), reason=f"ابطال پرداخت #{payment_id}")
 
 
 async def void_approved_payment(

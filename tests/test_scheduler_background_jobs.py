@@ -18,6 +18,8 @@ OPERATIONS = {
     "billing_tick",
     # Closes last month's credit statements and applies the overdue ladder; needs no running bot.
     "credit_cycle",
+    # Credits cashback whose hold has passed; needs no running bot.
+    "cashback_mature",
     "pg_admin_subscription",
     # Deletes the order and payment rows each shop chose for automatic deletion; needs no running bot.
     "order_purge",
