@@ -39,6 +39,7 @@ def svc():
         subscription_url="https://pg.example:8443/apilog/test-token",
         plan_id=2,
         remark=None,
+        panel_missing_at=None,
     )
 
 
