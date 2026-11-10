@@ -245,12 +245,36 @@ def chosen_name_variant(name: str) -> str:
     return f"{name[:keep]}_{_random_alnum(CHOSEN_NAME_ENDING_LENGTH)}"
 
 
+PG_USERNAME_MIN_LENGTH = 3
+PG_USERNAME_MAX_LENGTH = 32
+_PG_USERNAME_ALLOWED = frozenset(string.ascii_letters + string.digits + "_")
+
+
 def _sanitize_naming_username(raw: str | None, *, fallback: str) -> str:
-    """Strip @ and keep characters safe for Pasarguard usernames."""
+    """Strip @ and keep only characters the panel accepts in usernames."""
     cleaned = "".join(
-        ch for ch in (raw or "").strip().lstrip("@") if ch.isalnum() or ch in "._-"
+        ch for ch in (raw or "").strip().lstrip("@") if ch in _PG_USERNAME_ALLOWED
     )
     return cleaned or fallback
+
+
+def _fit_panel_username(built: str, *, keep_unique: bool) -> str:
+    """Coerce a rendered pattern into the panel's ``[A-Za-z0-9_]{3,32}`` format.
+
+    Admin patterns can contain ``.``/``-``/spaces or a fractional ``{plan_volume}``
+    (``0.5``), and ``{username}`` alone can be too short; the panel rejects those
+    with HTTP 422. A random tail keeps names unique when the pattern has no
+    per-purchase variable.
+    """
+    name = "".join(ch if ch in _PG_USERNAME_ALLOWED else "_" for ch in built.strip())
+    if keep_unique:
+        name = f"{name}_{_random_alnum(4)}" if name else _random_alnum(8)
+    if len(name) > PG_USERNAME_MAX_LENGTH:
+        tail = name[-8:]
+        name = name[: PG_USERNAME_MAX_LENGTH - len(tail)] + tail
+    if len(name) < PG_USERNAME_MIN_LENGTH:
+        name = f"{name}_{_random_alnum(PG_USERNAME_MIN_LENGTH)}"[:PG_USERNAME_MAX_LENGTH]
+    return name
 
 
 def _random_username(
@@ -296,9 +320,10 @@ def _random_username(
             html=False,
         ).strip()
         if built and "{" not in built:
-            return built
+            is_per_purchase = "{random}" in pattern or "{id}" in pattern
+            return _fit_panel_username(built, keep_unique=not is_per_purchase)
     base = f"{prefix}_{random_part}"
-    return f"{base}{suffix}" if suffix else base
+    return _fit_panel_username(f"{base}{suffix}" if suffix else base, keep_unique=False)
 
 
 def resolve_username_naming(

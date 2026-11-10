@@ -10,6 +10,7 @@ from aiogram.types import Message
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.user_errors import domain_error_text
 from app.services.catalog_pricing import displayed_quote, price_html, quote_product, sale_price
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
@@ -64,7 +65,7 @@ async def svc_cancel(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         service_id = int(callback.data.split(":")[-1])
         status = await cancellation_status(session, db_user, service_id, shop_id=current_shop_reseller_id())
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     text = "📝 درخواست لغو سرویس\nاپراتور مبلغ اعتبار برگشتی را تعیین می‌کند. پس از تأیید، سرویس غیرفعال و اعتبار به کیف پول همین فروشگاه برمی‌گردد. ثبت درخواست به‌تنهایی سرویس را غیرفعال نمی‌کند."
     buttons = []
@@ -92,7 +93,7 @@ async def svc_cancel_new(callback: CallbackQuery, session: AsyncSession, db_user
         service_id = int(callback.data.split(":")[-1])
         await owned_cancellation_service(session, db_user, service_id, current_shop_reseller_id())
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     await state.update_data(cancellation_service_id=service_id)
     await callback.answer()
@@ -127,7 +128,7 @@ async def svc_cancel_reason(message: Message, session: AsyncSession, db_user: Bo
             reason=message.text,
         )
     except ValueError as exc:
-        await message.answer(str(exc))
+        await message.answer(domain_error_text(exc))
         return
     await state.set_state(None)
     await finish_text_step(
@@ -204,7 +205,7 @@ async def svc_auto(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         service_id = int(callback.data.split(":")[-1])
         await _show_automation(callback, session, db_user, service_id)
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     await callback.answer()
 
@@ -221,7 +222,7 @@ async def svc_auto_pick(callback: CallbackQuery, session: AsyncSession, db_user:
         if not choices:
             raise ValueError("پلن یا بسته فعالی موجود نیست")
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     from app.services.plan_categories import shop_category_map
     from app.services.service_addons import amount_label
@@ -264,7 +265,7 @@ async def svc_auto_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         await configure_automation(session, db_user, service_id, action, enabled=enabled)
         await _show_automation(callback, session, db_user, service_id)
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     await callback.answer(feedback.SAVED)
 
@@ -277,7 +278,7 @@ async def svc_auto_set(callback: CallbackQuery, session: AsyncSession, db_user: 
         await configure_automation(session, db_user, service_id, action, enabled=True, choice_id=int(choice_id))
         await _show_automation(callback, session, db_user, service_id)
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     await callback.answer("انتخاب شد و قابلیت روشن شد")
 
@@ -1083,7 +1084,7 @@ def _register_services_cancel_codes() -> None:
                 session, db_user, service_id, shop_id=current_shop_reseller_id()
             )
         except ValueError as exc:
-            await present_inline_only(message, text=str(exc), inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "svc:list")]]))
+            await present_inline_only(message, text=domain_error_text(exc), inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "svc:list")]]))
             return
         text = (
             "📝 درخواست لغو سرویس\n"
