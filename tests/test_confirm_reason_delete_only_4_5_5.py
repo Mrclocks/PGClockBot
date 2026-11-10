@@ -34,6 +34,8 @@ class ConfirmReasonOnlyOnAccountDeletes(unittest.TestCase):
         "pg_users.html",
         # Not a delete: the message to trial users reuses the prompt as a text box (own label).
         "trial_users.html",
+        # Staff cleanup hold/exempt asks why before changing a service's deadline.
+        "service_cleanup.html",
     }
 
     def test_only_allowed_templates_set_data_confirm_reason(self):
