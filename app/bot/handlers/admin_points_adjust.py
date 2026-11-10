@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner_handler
 from app.db.models import BotUser
+from app.services.user_errors import domain_error_text
 from app.services import bot_feedback_texts as feedback
 from app.services.formatting import format_number
 from app.services.loyalty import admin_adjust_points, points_balance
@@ -141,7 +142,7 @@ async def adm_users_points_amount(
     try:
         amount = _parse_points_amount(message.text or "")
     except ValueError as exc:
-        await message.answer(str(exc))
+        await message.answer(domain_error_text(exc))
         return
     await state.update_data(admin_points_amount=amount)
     from app.bot.nav_input import ask_text

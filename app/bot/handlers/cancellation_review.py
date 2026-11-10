@@ -22,6 +22,7 @@ from app.bot.nav_input import CancelEntry, ask_text, finish_text_step, register_
 from app.bot.tg_utils import parse_bot_int, safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, ServiceCancellation
+from app.services.user_errors import domain_error_text
 from app.services import bot_feedback_texts as feedback
 from app.services.cancellation_context import cancellation_detail_lines, load_cancellation_parts, reason_block
 from app.services.formatting import format_message, format_toman
@@ -231,7 +232,7 @@ async def approve_run(
         await approve_cancellation(session, request_id, shop_id=shop_id, amount=amount, actor=f"tg:{db_user.telegram_id}")
     except ValueError as exc:
         await session.rollback()
-        await callback.answer(str(exc)[:190], show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         await show_card(callback, session, db_user, request_id, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id, answer=False)
         return
     await callback.answer("لغو تأیید شد", show_alert=True)
@@ -284,7 +285,7 @@ async def reject_run(
         await reject_cancellation(session, request_id, shop_id=shop_id, actor=f"tg:{db_user.telegram_id}", note=REJECT_NOTES[key])
     except ValueError as exc:
         await session.rollback()
-        await callback.answer(str(exc)[:190], show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         await show_card(callback, session, db_user, request_id, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id, answer=False)
         return
     await callback.answer("درخواست رد شد", show_alert=True)

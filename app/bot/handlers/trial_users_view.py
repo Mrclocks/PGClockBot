@@ -20,6 +20,7 @@ from app.bot.nav_input import CancelEntry, ask_text, finish_text_step, register_
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser
+from app.services.user_errors import domain_error_text
 from app.services import bot_feedback_texts as feedback
 from app.services.formatting import format_message, format_toman, info_block, kv_line
 from app.services.campaigns import clean_campaign_text
@@ -173,7 +174,7 @@ async def receive_message_text(
     try:
         text = clean_campaign_text(message.text)
     except ValueError as exc:
-        await message.answer(str(exc))
+        await message.answer(domain_error_text(exc))
         return
     staff, shop_id = scope
     ids = await _audience_ids(session, staff, shop_id, str(data.get("tru_filter") or "all"))
@@ -224,7 +225,7 @@ async def _send_confirmed(
         )
     except ValueError as exc:
         await session.rollback()
-        await callback.answer(str(exc)[:190], show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     await callback.answer(f"پیام در صف ارسال قرار گرفت (کمپین #{campaign.id}) ✅", show_alert=True)
     if callback.message:

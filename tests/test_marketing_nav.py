@@ -289,7 +289,7 @@ class MarketingNavRenderedPageTests(unittest.TestCase):
 
     def test_owner_gets_sidebar_entry_and_full_strip_on_broadcast(self):
         html = _page("broadcast.html", "/broadcast", OWNER)
-        self.assertIn("بازاریابی و وفاداری", html)
+        self.assertIn('aria-label="بازاریابی"', html)
         self.assertIn('href="/loyalty?tab=overview"', html)
         self.assertIn('href="/campaigns"', html)
         self.assertIn('href="/broadcast" class="active" aria-current="page"', html)
@@ -311,11 +311,11 @@ class MarketingNavRenderedPageTests(unittest.TestCase):
         self.assertIn('href="/campaigns"', html)
         self.assertNotIn('href="/broadcast"', html)
         self.assertNotIn('href="/loyalty', html)
-        self.assertNotIn('aria-label="بازاریابی و وفاداری"', html)
+        self.assertNotIn('aria-label="بازاریابی"', html)
 
     def test_reseller_without_marketing_permissions_gets_no_entry(self):
         html = _page("broadcast.html", "/broadcast", _reseller(["dashboard"]))
-        self.assertNotIn("بازاریابی و وفاداری", html)
+        self.assertNotIn('aria-label="بازاریابی"', html)
         self.assertNotIn('href="/broadcast"', html)
         self.assertNotIn('href="/campaigns"', html)
 
@@ -337,6 +337,6 @@ class MarketingNavDiscountsPageTests(unittest.TestCase):
             modes={},
             request_key="k",
         )
-        self.assertIn("بازاریابی و وفاداری", html)
+        self.assertIn('aria-label="بازاریابی"', html)
         self.assertIn('href="/catalog-discounts" class="active" aria-current="page"', html)
         self.assertNotIn('href="/broadcast"', html)
