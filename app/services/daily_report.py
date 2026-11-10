@@ -14,13 +14,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, UserService
+from app.db.models import BotUser, Order, UserService
+from app.services.demo_users import non_demo_customer
 from app.services.home_overview import bot_panel_summary, reseller_shop_summary
 from app.services.safe_format import safe_format
 from app.services.service_scope import shop_services_clause
+from app.services.shop_membership import shop_member_clause
 
 DOMAIN_DAILY_REPORT = "daily_report"
 
@@ -47,6 +49,27 @@ def is_report_due(now: datetime, hour_raw: object) -> bool:
     even when the bot was down or restarting during the configured hour.
     """
     return now.hour >= report_hour(hour_raw)
+
+
+def previous_tehran_day_bounds(
+    now: datetime | None = None,
+) -> tuple[datetime, datetime, datetime]:
+    """UTC half-open window ``[start, end)`` for the previous Asia/Tehran calendar day.
+
+    Also returns that day's local midnight (for Jalali header labels). Default send hour
+    ``0`` UTC (= 03:30 Tehran) is after that day has closed, so the digest is complete.
+    """
+    now_utc = now or datetime.now(timezone.utc)
+    if now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=timezone.utc)
+    local_now = now_utc.astimezone(_TEHRAN)
+    today_start_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_start_local = today_start_local - timedelta(days=1)
+    return (
+        day_start_local.astimezone(timezone.utc),
+        today_start_local.astimezone(timezone.utc),
+        day_start_local,
+    )
 
 
 @dataclass(frozen=True)
@@ -110,7 +133,7 @@ _METRICS: tuple[DailyMetric, ...] = (
         key="date_from",
         title_fa="از تاریخ",
         group="header",
-        description_fa="شروع بازهٔ گزارش (شمسی).",
+        description_fa="تاریخ روز گزارش (شمسی؛ روز کامل قبل به وقت تهران).",
         example="۱۴۰۵/۵/۲۹",
         actors=frozenset({ACTOR_OWNER, ACTOR_SHOP}),
         default_on=True,
@@ -119,48 +142,48 @@ _METRICS: tuple[DailyMetric, ...] = (
         key="date_to",
         title_fa="تا تاریخ",
         group="header",
-        description_fa="پایان بازهٔ گزارش (شمسی).",
-        example="۱۴۰۵/۵/۳۰",
+        description_fa="همان روز گزارش (بازه یک‌روزهٔ کامل).",
+        example="۱۴۰۵/۵/۲۹",
         actors=frozenset({ACTOR_OWNER, ACTOR_SHOP}),
         default_on=True,
     ),
     DailyMetric(
         key="users_new",
-        title_fa="کاربران جدید امروز",
+        title_fa="کاربران جدید روز گزارش",
         group="activity",
-        description_fa="کاربران ربات که امروز در محدودهٔ فروشگاه ساخته شده‌اند.",
+        description_fa="کاربران ربات که در روز کامل قبل (تقویم تهران) در محدودهٔ فروشگاه ساخته شده‌اند.",
         example="۳",
         actors=frozenset({ACTOR_OWNER, ACTOR_SHOP}),
     ),
     DailyMetric(
         key="orders_new",
-        title_fa="سفارش‌های امروز",
+        title_fa="سفارش‌های روز گزارش",
         group="activity",
-        description_fa="تعداد سفارش ثبت‌شده امروز.",
+        description_fa="تعداد سفارش ثبت‌شده در روز کامل قبل (تقویم تهران).",
         example="۵",
         actors=frozenset({ACTOR_OWNER, ACTOR_SHOP}),
     ),
     DailyMetric(
         key="orders_delivered",
-        title_fa="تحویل امروز",
+        title_fa="تحویل روز گزارش",
         group="activity",
-        description_fa="سفارش‌های تحویل‌شده امروز.",
+        description_fa="سفارش‌هایی که در روز کامل قبل (تقویم تهران) تحویل شده‌اند.",
         example="۴",
         actors=frozenset({ACTOR_OWNER, ACTOR_SHOP}),
     ),
     DailyMetric(
         key="revenue_today",
-        title_fa="درآمد امروز",
+        title_fa="درآمد روز گزارش",
         group="activity",
-        description_fa="جمع مبلغ سفارش‌های تحویل‌شده امروز (فرمت پول).",
+        description_fa="جمع مبلغ سفارش‌های تحویل‌شده در روز کامل قبل (فرمت پول).",
         example="۱٬۲۰۰٬۰۰۰ تومان",
         actors=frozenset({ACTOR_OWNER, ACTOR_SHOP}),
     ),
     DailyMetric(
         key="services_new",
-        title_fa="سرویس جدید امروز",
+        title_fa="سرویس جدید روز گزارش",
         group="activity",
-        description_fa="سرویس‌های ساخته‌شده امروز در محدودهٔ فروشگاه.",
+        description_fa="سرویس‌های ساخته‌شده در روز کامل قبل در محدودهٔ فروشگاه.",
         example="۴",
         actors=frozenset({ACTOR_OWNER, ACTOR_SHOP}),
     ),
@@ -453,36 +476,74 @@ async def _scoped_totals(session: AsyncSession, *, reseller_id: int | None) -> d
 
 
 async def _today_activity(session: AsyncSession, *, reseller_id: int | None) -> dict[str, int]:
-    from app.services.home_overview import shop_period_stats
-
-    periods = await shop_period_stats(session, reseller_id=reseller_id)
-    # shop_period_stats keys are day/week/month (not "today").
-    today = periods.get("day") or {}
-    # Services created today (shop-scoped)
-    since = datetime.now(timezone.utc).astimezone(_TEHRAN).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    ).astimezone(timezone.utc)
+    """Previous Tehran calendar day: new orders by ``created_at``, deliveries by ``updated_at``."""
+    start, end, _ = previous_tehran_day_bounds()
     if reseller_id is None:
-        svc_q = (
-            select(func.count())
-            .select_from(UserService)
-            .join(BotUser, BotUser.id == UserService.bot_user_id)
-            .where(UserService.created_at >= since, shop_services_clause(None), BotUser.is_demo.is_(False))
-        )
+        scope_orders = Order.reseller_id.is_(None)
+        scope_users = shop_member_clause(None)
+        scope_svc = shop_services_clause(None)
     else:
         rid = int(reseller_id)
-        svc_q = (
-            select(func.count())
-            .select_from(UserService)
-            .join(BotUser, BotUser.id == UserService.bot_user_id)
-            .where(UserService.created_at >= since, shop_services_clause(rid), BotUser.is_demo.is_(False))
+        scope_orders = Order.reseller_id == rid
+        scope_users = shop_member_clause(rid)
+        scope_svc = shop_services_clause(rid)
+
+    created_in_day = and_(Order.created_at >= start, Order.created_at < end)
+    delivered = Order.status == "delivered"
+    delivered_in_day = and_(delivered, Order.updated_at >= start, Order.updated_at < end)
+
+    orders_row = (
+        await session.execute(
+            select(
+                func.coalesce(func.sum(case((created_in_day, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((delivered_in_day, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((delivered_in_day, Order.amount), else_=0)), 0),
+            )
+            .select_from(Order)
+            .where(
+                scope_orders,
+                non_demo_customer(Order.user_id),
+                or_(created_in_day, delivered_in_day),
+            )
         )
-    services_new = int((await session.execute(svc_q)).scalar() or 0)
+    ).one()
+
+    users_new = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(BotUser)
+                .where(
+                    scope_users,
+                    BotUser.is_demo.is_(False),
+                    BotUser.created_at >= start,
+                    BotUser.created_at < end,
+                )
+            )
+        ).scalar()
+        or 0
+    )
+    services_new = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(UserService)
+                .join(BotUser, BotUser.id == UserService.bot_user_id)
+                .where(
+                    scope_svc,
+                    BotUser.is_demo.is_(False),
+                    UserService.created_at >= start,
+                    UserService.created_at < end,
+                )
+            )
+        ).scalar()
+        or 0
+    )
     return {
-        "users_new": int(today.get("new_users") or 0),
-        "orders_new": int(today.get("orders") or 0),
-        "orders_delivered": int(today.get("delivered") or 0),
-        "revenue_today": int(today.get("revenue") or 0),
+        "users_new": users_new,
+        "orders_new": int(orders_row[0] or 0),
+        "orders_delivered": int(orders_row[1] or 0),
+        "revenue_today": int(orders_row[2] or 0),
         "services_new": services_new,
     }
 
@@ -505,8 +566,8 @@ async def collect_report_values(
     keys = [k for k in keys if k in allowed]
 
     now = datetime.now(timezone.utc)
-    j_from = format_jalali_parts(now)
-    j_to = format_jalali_parts(now + timedelta(days=1))
+    _start, _end, report_local = previous_tehran_day_bounds(now)
+    j_day = format_jalali_parts(report_local)
 
     need_activity = any(
         k in keys for k in ("users_new", "orders_new", "orders_delivered", "revenue_today", "services_new")
@@ -546,11 +607,12 @@ async def collect_report_values(
     raw: dict[str, Any] = {
         "admin_name": admin_name or "—",
         "period_label": "روزانه",
-        "day": j_from["day"],
-        "month_name": j_from["month_name"],
-        "year": j_from["year"],
-        "date_from": j_from["date"],
-        "date_to": j_to["date"],
+        "day": j_day["day"],
+        "month_name": j_day["month_name"],
+        "year": j_day["year"],
+        # Full previous Tehran day — from/to are the same calendar date.
+        "date_from": j_day["date"],
+        "date_to": j_day["date"],
         "users_new": activity.get("users_new", 0),
         "orders_new": activity.get("orders_new", 0),
         "orders_delivered": activity.get("orders_delivered", 0),
