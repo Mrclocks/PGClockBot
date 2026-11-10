@@ -871,6 +871,15 @@ DEFAULT_SETTINGS = {
     "user_alert_low_traffic_pct": "20",
     "user_alert_low_time_pct": "20",
     "first_use_nudge_enabled": "0",
+    # Expired / volume-finished service cleanup (service_cleanup.py keeps the same defaults).
+    "expired_cleanup_enabled": "0",
+    "expired_cleanup_days": "7",
+    "expired_cleanup_enabled_at": "",
+    "expired_cleanup_warn_first": "3",
+    "expired_cleanup_warn_last": "1",
+    "volume_cleanup_enabled": "0",
+    "volume_cleanup_days": "30",
+    "volume_cleanup_enabled_at": "",
     # Reseller panel URLs (setup links + messages). Empty = system defaults
     "reseller_panel_base_url": "",
     "reseller_pg_panel_base_url": "",

@@ -64,6 +64,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("connection_status_manage", "مدیریت تست اتصال"),
     ("service_import", "تأیید افزودن سرویس قبلی"),
     ("orders_purge", "حذف کامل سفارش‌ها و پرداخت‌ها"),
+    ("service_cleanup", "پاکسازی خودکار سرویس‌های منقضی"),
     ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
     ("free_checkout", "دریافت رایگان سفارش خود توسط مالک فروشگاه"),
     ("custom_service_name", "نام دلخواه سرویس هنگام خرید (اجباری)"),
@@ -96,7 +97,7 @@ FEATURE_PERM_LAYOUT: tuple[tuple[str, bool, tuple[str, ...]], ...] = (
                                    "loyalty")),
     ("فروشگاه و فنی", False, ("shop_settings", "miniapp", "service_import", "connection_status",
                              "connection_status_manage")),
-    ("عملیات حساس مالی", True, ("payment_void", "wallet_adjust", "loyalty_adjust", "orders_purge", "free_checkout")),
+    ("عملیات حساس مالی", True, ("payment_void", "wallet_adjust", "loyalty_adjust", "orders_purge", "service_cleanup", "free_checkout")),
 )
 
 

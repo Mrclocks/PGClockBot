@@ -187,6 +187,8 @@ _SHOP_ITEMS: tuple[_ItemSpec, ...] = (
               lambda v: v.is_owner or "tickets" in v.perms, _starts("/tickets"), DOT_TICKETS),
     # Placeholder: href and visibility come from marketing_nav (see _marketing_item).
     _ItemSpec(MARKETING_KEY, "بازاریابی", "", "megaphone", lambda v: False, lambda loc: False),
+    _ItemSpec("service_cleanup", "پاکسازی سرویس‌ها", "/service-cleanup", "trash",
+              lambda v: v.is_owner or "service_cleanup" in v.perms, _starts("/service-cleanup")),
     _ItemSpec("staff_actions", "گزارش کارکنان", "/staff-actions", "receipt",
               lambda v: v.is_owner or v.role in ("reseller", "principal"), _starts("/staff-actions")),
     _ItemSpec("bot_settings", "تنظیمات ربات", "/settings", "bot", _owner, _bot_settings_active),
