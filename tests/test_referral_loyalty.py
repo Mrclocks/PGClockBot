@@ -184,6 +184,88 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(buyer.points_balance, buyer_pts)
             self.assertEqual(ref.points_balance, ref_pts)
 
+    async def test_trial_delivery_awards_no_points_and_keeps_first_purchase(self):
+        from app.db.models import Order, OrderStatus, Plan, ReferralEvent
+        from app.services.loyalty import ensure_loyalty_defaults, on_order_delivered
+        from sqlalchemy import func, select
+
+        async with self.Session() as session:
+            await ensure_loyalty_defaults(session)
+            ref = await self._user(session, 4101, "TRIALREF1")
+            buyer = await self._user(session, 4102, "TRIALBUY1", referred_by=ref.id)
+            trial = Plan(
+                name="trial",
+                price=0,
+                duration_days=1,
+                data_limit_gb=1,
+                is_active=True,
+                is_trial=True,
+            )
+            paid = Plan(
+                name="paid",
+                price=10000,
+                duration_days=30,
+                data_limit_gb=10,
+                is_active=True,
+                is_trial=False,
+            )
+            session.add_all([trial, paid])
+            await session.commit()
+            await session.refresh(trial)
+            await session.refresh(paid)
+
+            trial_order = Order(
+                user_id=buyer.id,
+                plan_id=trial.id,
+                amount=0,
+                status=OrderStatus.DELIVERED.value,
+            )
+            session.add(trial_order)
+            await session.commit()
+            await session.refresh(trial_order)
+            trial_order.user = buyer
+            trial_order.plan = trial
+
+            await on_order_delivered(session, trial_order)
+            await session.refresh(buyer)
+            await session.refresh(ref)
+            self.assertEqual(buyer.points_balance, 0)
+            self.assertEqual(ref.points_balance, 0)
+            qual_count = await session.scalar(
+                select(func.count()).select_from(ReferralEvent).where(
+                    ReferralEvent.referred_id == buyer.id,
+                    ReferralEvent.event_key == "referral_qualification",
+                )
+            )
+            self.assertEqual(int(qual_count or 0), 0)
+
+            paid_order = Order(
+                user_id=buyer.id,
+                plan_id=paid.id,
+                amount=10000,
+                status=OrderStatus.DELIVERED.value,
+            )
+            session.add(paid_order)
+            await session.commit()
+            await session.refresh(paid_order)
+            paid_order.user = buyer
+            paid_order.plan = paid
+
+            await on_order_delivered(session, paid_order)
+            await session.refresh(buyer)
+            await session.refresh(ref)
+            # purchase (10 GB) + first_purchase (50)
+            self.assertEqual(buyer.points_balance, 60)
+            # referral_first_purchase (50)
+            self.assertEqual(ref.points_balance, 50)
+            qual_count = await session.scalar(
+                select(func.count()).select_from(ReferralEvent).where(
+                    ReferralEvent.referred_id == buyer.id,
+                    ReferralEvent.event_key == "referral_qualification",
+                )
+            )
+            self.assertEqual(int(qual_count or 0), 1)
+
     async def test_wallet_credit_redeem_atomic(self):
         from app.db.models import LoyaltyReward
         from app.services.loyalty import credit_points, ensure_loyalty_defaults, redeem_reward
