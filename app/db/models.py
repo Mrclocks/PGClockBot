@@ -868,6 +868,8 @@ class ResellerProfile(Base):
     pg_password_rotation_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # A level-2 shop's PAYG price list, set by its level-1 parent (child_pricing).
     child_plan_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # When panel reconciliation took this shop's baseline; a shop with no users still has one.
+    payg_baseline_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     web_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True)
     web_password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # Unified feature permissions (web + bot must stay identical)

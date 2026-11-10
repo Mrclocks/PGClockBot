@@ -458,3 +458,4 @@ tests/test_billing_finishing.py
 tests/test_billing_reports.py
 # Level-1/level-2: two-step charges, reserved credit, parent-only scope.
 tests/test_child_pricing.py
+tests/test_reseller_plan_payg.py

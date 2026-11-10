@@ -64,8 +64,12 @@ class PureTests(unittest.TestCase):
         [change] = uncovered_changes(self.snap(30, used=20 * GB), self.live(30, used=0), Paid())
         self.assertEqual((change.event, change.data_limit_bytes), (ChargeEvent.RESET, 30 * GB))
 
-    def test_a_renewal_covers_the_whole_window(self) -> None:
-        self.assertEqual(uncovered_changes(self.snap(10, used=GB), self.live(50, used=0), Paid(renewed=True)), [])
+    def test_a_renewal_covers_only_what_it_paid_for(self) -> None:
+        renewed = self.live(50, used=0)
+        self.assertEqual(uncovered_changes(self.snap(10, used=GB), renewed, Paid(renewed=True, bytes=50 * GB)), [])
+        # Renewed for 30 GB, then 20 GB more added directly in the panel in the same window.
+        [extra] = uncovered_changes(self.snap(10, used=GB), renewed, Paid(renewed=True, bytes=30 * GB))
+        self.assertEqual((extra.event, extra.data_limit_bytes), (ChargeEvent.ADD_VOLUME, 20 * GB))
 
     def test_extra_days_and_unlimited(self) -> None:
         start = int(T0.timestamp())
@@ -130,6 +134,41 @@ class ReconcileTests(ReconcileCase):
         # Nothing new happened: a rerun charges nothing.
         await self.run_once(later, T0 + timedelta(minutes=20))
         self.assertEqual(await self.wallet(), 60_000)
+
+    async def test_panel_charges_are_settled_and_never_swept_to_review(self) -> None:
+        await self.run_once([user(1, 10)], T0)
+        await self.run_once([user(1, 30), user(2, 20)], T0 + timedelta(minutes=10))
+        await self.run_once([user(1, 30), user(2, 20)], T0 + timedelta(hours=4))  # past the pending sweep
+        async with self.Session() as session:
+            statuses = sorted((await session.scalars(select(ResellerCharge.status))).all())
+        self.assertEqual(statuses, ["settled", "settled"])
+
+    async def test_a_shop_with_no_users_still_takes_its_baseline(self) -> None:
+        stats = await self.run_once([], T0)
+        self.assertEqual(stats.baseline, 0)
+        await self.run_once([user(1, 10)], T0 + timedelta(minutes=10))
+        self.assertEqual(await self.wallet(), 90_000)  # the first panel user is charged, not taken as baseline
+
+    async def renewed_by_bot(self, gb: int) -> None:
+        async with self.Session() as session:
+            session.add(ResellerCharge(
+                shop_id=SHOP, event="renew", status="settled", request_key="svc-renew:x", attempt=1,
+                quantity=1, pg_username="u1", bytes_charged=gb * GB, days_charged=30, amount=gb * 1000,
+                idempotency_key="payg:5:svc-renew:x#1", created_at=T0 + timedelta(minutes=5),
+            ))
+            await session.commit()
+
+    async def test_a_bot_renewal_is_not_charged_again(self) -> None:
+        await self.run_once([user(1, 10, used=8 * GB)], T0)
+        await self.renewed_by_bot(30)
+        await self.run_once([user(1, 30, used=0)], T0 + timedelta(minutes=10))
+        self.assertEqual(await self.wallet(), 100_000)
+
+    async def test_volume_added_in_the_panel_on_top_of_a_renewal_is_charged(self) -> None:
+        await self.run_once([user(1, 10, used=8 * GB)], T0)
+        await self.renewed_by_bot(30)
+        await self.run_once([user(1, 50, used=0)], T0 + timedelta(minutes=10))
+        self.assertEqual(await self.wallet(), 100_000 - 20_000)
 
     async def test_users_made_by_the_bot_are_not_charged_as_new(self) -> None:
         await self.run_once([user(1, 10)], T0)
@@ -208,6 +247,28 @@ class MigrationTests(unittest.TestCase):
                 module.downgrade()
             self.assertFalse(sa.inspect(conn).has_table("payg_panel_snapshots"))
             self.assertTrue(sa.inspect(conn).has_table("bot_users"))
+
+
+class BaselineMigrationTests(unittest.TestCase):
+    def test_upgrade_twice_and_downgrade_keep_rows(self) -> None:
+        path = ROOT / "alembic/versions/0103_payg_baseline_at.py"
+        spec = importlib.util.spec_from_file_location("payg_baseline_migration", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        engine = sa.create_engine("sqlite:///:memory:")
+        self.addCleanup(engine.dispose)
+        with engine.begin() as conn:
+            conn.execute(sa.text("CREATE TABLE reseller_profiles (id INTEGER PRIMARY KEY, user_id INTEGER)"))
+            conn.execute(sa.text("INSERT INTO reseller_profiles (id, user_id) VALUES (1, 5)"))
+            for step in (module.upgrade, module.upgrade):
+                with Operations.context(MigrationContext.configure(conn)):
+                    step()
+            self.assertIn("payg_baseline_at", {c["name"] for c in sa.inspect(conn).get_columns("reseller_profiles")})
+            with Operations.context(MigrationContext.configure(conn)):
+                module.downgrade()
+            self.assertNotIn("payg_baseline_at", {c["name"] for c in sa.inspect(conn).get_columns("reseller_profiles")})
+            self.assertEqual(conn.execute(sa.text("SELECT user_id FROM reseller_profiles")).scalar(), 5)
 
 
 if __name__ == "__main__":

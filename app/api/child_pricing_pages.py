@@ -18,9 +18,11 @@ from app.services.child_pricing import (
     ChildPricingError,
     assign_child_plan,
     create_child_plan,
+    delete_child_plan,
     list_child_plans,
     parent_scope,
     set_child_credit,
+    update_child_plan,
 )
 from app.services.numbers import parse_int
 from app.services.shop_credit import child_shop_ids, shop_credit_limit
@@ -96,6 +98,32 @@ def register_child_pricing_pages(app: FastAPI, *, render: Callable, require_staf
         except ChildPricingError as exc:
             return _back(err=str(exc))
         return _back(ok="پلن قیمت ساخته شد")
+
+    @app.post(f"{PAGE}/plans/{{plan_id}}")
+    async def children_pricing_plan_edit(plan_id: int, request: Request, staff: dict = Depends(require_staff),
+                                         session: AsyncSession = Depends(get_db)) -> RedirectResponse:
+        try:
+            parent = parent_scope(staff)
+        except PermissionError:
+            return RedirectResponse("/home", status_code=303)
+        try:
+            await update_child_plan(session, parent, int(plan_id), plan_from_form(await request.form()))
+        except ChildPricingError as exc:
+            return _back(err=str(exc))
+        return _back(ok="پلن قیمت ذخیره شد؛ از هزینهٔ بعدی اعمال می‌شود")
+
+    @app.post(f"{PAGE}/plans/{{plan_id}}/delete")
+    async def children_pricing_plan_delete(plan_id: int, staff: dict = Depends(require_staff),
+                                           session: AsyncSession = Depends(get_db)) -> RedirectResponse:
+        try:
+            parent = parent_scope(staff)
+        except PermissionError:
+            return RedirectResponse("/home", status_code=303)
+        try:
+            await delete_child_plan(session, parent, int(plan_id))
+        except ChildPricingError as exc:
+            return _back(err=str(exc))
+        return _back(ok="پلن قیمت حذف شد")
 
     @app.post(PAGE + "/{child_shop_id}")
     async def children_pricing_child(child_shop_id: int, request: Request, staff: dict = Depends(require_staff),

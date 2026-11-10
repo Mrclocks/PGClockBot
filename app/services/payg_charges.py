@@ -35,12 +35,14 @@ from app.py_compat import StrEnum
 from app.services.billing import (
     KIND_CHARGE,
     KIND_CHARGE_REFUND,
+    WalletShortfall,
     is_payg,
     record_payg_ledger_entry,
 )
 from app.services.child_pricing import parent_shop_profile
 from app.services.payg_pricing import (
     ChargeQuote,
+    PaygPriceError,
     PaygRates,
     ServiceChange,
     assert_quote_unchanged,
@@ -53,6 +55,22 @@ logger = logging.getLogger(__name__)
 
 REVIEW_PAGE_LIMIT = 50
 _REQUEST_KEY = re.compile(r"[A-Za-z0-9_:-]{8,120}")
+MISSING_CHILD_PLAN_MESSAGE = "پلن قیمت این فروشگاه یافت نشد؛ نمایندهٔ بالادست باید پلن تازه‌ای تعیین کند"
+PARENT_SHORTFALL_MESSAGE = (
+    "فروش موقتاً متوقف است؛ نمایندهٔ بالادست شما باید کیف پول خود را شارژ کند"
+)
+
+
+class ParentWalletShortfall(WalletShortfall):
+    """The level-1 parent cannot pay its half of a level-2 charge; nobody was charged.
+
+    ``parent_profile`` is the shop that has to top up, so the alert reaches it and not
+    the level-2 shop, which can do nothing about it.
+    """
+
+    def __init__(self, parent_profile: ResellerProfile) -> None:
+        super().__init__(PARENT_SHORTFALL_MESSAGE)
+        self.parent_profile = parent_profile
 
 
 class ChargeStatus(StrEnum):
@@ -94,14 +112,20 @@ def _idempotency_key(shop_id: int, request_key: str, attempt: int) -> str:
 
 
 async def shop_rates(session: AsyncSession, profile: ResellerProfile) -> PaygRates | None:
-    """The shop's PAYG rates, or ``None`` for a fixed-package shop."""
+    """The shop's PAYG rates, or ``None`` for a fixed-package shop.
+
+    Raises ``PaygPriceError`` when a level-2 shop's price list is gone, so a sale is
+    refused instead of being free.
+    """
     if not is_payg(profile):
         return None
     child_plan_id = child_plan_id_of(profile)
     if child_plan_id is not None:
         # A level-2 shop priced by its parent: the parent's list, always charged at creation.
         child_plan = await session.get(ChildPricePlan, child_plan_id)
-        return rates_from_plan(child_plan) if child_plan is not None else None
+        if child_plan is None:
+            raise PaygPriceError(MISSING_CHILD_PLAN_MESSAGE)
+        return rates_from_plan(child_plan)
     plan = await session.get(ResellerPlan, int(profile.plan_id)) if profile.plan_id else None
     return rates_from_plan(plan)
 
@@ -196,12 +220,17 @@ async def reserve_charge(
                 session.add(parent_charge)
                 await session.flush()
                 charge.linked_charge_id = int(parent_charge.id)
-                await _debit(session, parent_profile, parent_charge, request)
+                await _debit_parent(session, parent_profile, parent_charge, request)
     except IntegrityError:
         winner = _reusable(await _latest_attempt(session, shop_id, request_key))
         if winner is None:
             raise
         return winner
+    except ParentWalletShortfall as exc:
+        # The savepoint rollback expired both profiles; reload them for the caller's alert.
+        await session.refresh(profile)
+        await session.refresh(exc.parent_profile)
+        raise
     except ValueError:
         # The savepoint rollback expired the profile; reload it for the caller's alert.
         await session.refresh(profile)
@@ -223,10 +252,30 @@ async def _debit(session: AsyncSession, profile: ResellerProfile, charge: Resell
     )
 
 
+async def _debit_parent(
+    session: AsyncSession, parent_profile: ResellerProfile, charge: ResellerCharge, request: ChargeRequest
+) -> None:
+    try:
+        await _debit(session, parent_profile, charge, request)
+    except WalletShortfall as exc:
+        raise ParentWalletShortfall(parent_profile) from exc
+
+
 async def _parent_charge(
     session: AsyncSession, profile: ResellerProfile, request: ChargeRequest, *, request_key: str, attempt: int
 ) -> tuple[ResellerProfile, ResellerCharge] | None:
     """The level-1 parent's charge (owner's price) for a change its level-2 shop is charged for."""
+    share = await parent_share(session, profile, request.change, quantity=request.quantity)
+    if share is None:
+        return None
+    parent_profile, quote = share
+    return parent_profile, _new_charge(parent_profile, request, quote, request_key=request_key, attempt=attempt)
+
+
+async def parent_share(
+    session: AsyncSession, profile: ResellerProfile, change: ServiceChange, *, quantity: int = 1
+) -> tuple[ResellerProfile, ChargeQuote] | None:
+    """What the level-1 parent pays the owner for its level-2 shop's change, or ``None``."""
     if child_plan_id_of(profile) is None:
         return None
     parent_profile = await parent_shop_profile(session, profile)
@@ -235,10 +284,10 @@ async def _parent_charge(
     rates = await shop_rates(session, parent_profile)
     if rates is None or not (rates.charges_traffic or rates.charges_users):
         return None
-    quote = quote_change(rates, request.change).for_quantity(request.quantity)
+    quote = quote_change(rates, change).for_quantity(quantity)
     if quote.is_free:
         return None
-    return parent_profile, _new_charge(parent_profile, request, quote, request_key=request_key, attempt=attempt)
+    return parent_profile, quote
 
 
 async def _with_linked(session: AsyncSession, charge: ResellerCharge) -> list[ResellerCharge]:

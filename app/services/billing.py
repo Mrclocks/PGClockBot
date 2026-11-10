@@ -653,6 +653,11 @@ async def credit_topup(
     if profile.billing_tick_issue == TickIssue.WALLET_SHORT.value:
         profile.billing_tick_issue = None
 
+    # Local import: credit_lift reaches billing_suspend, which imports this module.
+    from app.services.credit_lift import mark_restricted_shop_paid
+
+    await mark_restricted_shop_paid(session, int(reseller_user_id))
+
     tx = ResellerBillingTransaction(
         reseller_user_id=int(reseller_user_id),
         kind=KIND_TOPUP,

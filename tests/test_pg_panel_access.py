@@ -27,7 +27,10 @@ from app.services.panel_nav import build_sidebar, viewer_from_context
 from app.services.pasarguard import PasarGuardError
 from app.services.pg_access import PG_FEATURE_KEYS
 from app.services.pg_panel_access import (
+    API_KEY_STILL_VALID_MESSAGE,
+    ROTATION_FAILED_MESSAGE,
     RotationOutcome,
+    close_access_warning,
     apply_pg_panel_access,
     finish_pg_password_rotation,
     is_pg_panel_blocked,
@@ -257,6 +260,25 @@ class RotationTests(DbCase):
         panel.modify_admin.assert_not_awaited()
         self.assertEqual(decrypt_secret(row.pg_admin_password_enc), "Known-Old-1")
         self.assertTrue(row.web_password_hash)
+
+
+class ApiKeyWarningTests(DbCase):
+    async def close(self, pid: int, *, failures: int = 0):
+        async with self.Session() as session:
+            profile = await self.profile(session, pid)
+            with patch("app.services.pg_panel_access.get_pg", return_value=FakeOwnerPanel(failures=failures)):
+                change = await set_pg_panel_access(session, profile, False)
+            return await close_access_warning(session, profile, change)
+
+    async def test_closing_a_shop_that_uses_an_api_key_tells_the_owner_to_revoke_it(self) -> None:
+        async with self.Session() as session:
+            (await self.profile(session)).pg_api_key_enc = encrypt_secret("key-1")
+            await session.commit()
+        self.assertEqual(await self.close(1), API_KEY_STILL_VALID_MESSAGE)
+        self.assertIsNone(await self.close(2))  # password-only shop: the rotation is enough
+
+    async def test_a_pending_rotation_is_reported_first(self) -> None:
+        self.assertEqual(await self.close(2, failures=1), ROTATION_FAILED_MESSAGE)
 
 
 class PrincipalSessionTests(DbCase):

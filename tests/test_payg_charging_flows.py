@@ -387,7 +387,7 @@ class CheckoutTests(DeliveryCase):
 
 class RateSummaryTests(DeliveryCase):
     async def test_staff_see_the_rates_and_the_charged_amount(self) -> None:
-        from app.services.payg_gate import charged_note, shop_rate_summary
+        from app.services.payg_gate import AUTO_RESET_NOTE, charged_note, shop_rate_summary
 
         async with self.Session() as session:
             summary = await shop_rate_summary(session, SHOP)
@@ -396,5 +396,6 @@ class RateSummaryTests(DeliveryCase):
         self.assertIn("کل حجم", summary.reset_note)
         self.assertTrue(any("هر گیگ" in line for line in summary.lines))
         self.assertTrue(any("نامحدود: مجاز نیست" in line for line in summary.lines))
+        self.assertIn(AUTO_RESET_NOTE, summary.lines)  # the panel's own reset is charged too
         self.assertEqual(charged_note(None), "")
         self.assertIn("از کیف پول کسر شد", charged_note([SimpleNamespace(amount=10_000)]))  # type: ignore[list-item]

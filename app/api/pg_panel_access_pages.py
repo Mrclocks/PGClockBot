@@ -15,6 +15,7 @@ from app.db.models import ResellerProfile
 from app.services.pg_panel_access import (
     ROTATION_FAILED_MESSAGE,
     RotationOutcome,
+    close_access_warning,
     finish_pg_password_rotation,
     may_share_pg_credentials,
     open_pg_panel_access,
@@ -53,9 +54,7 @@ async def apply_access_after_save(
     if target or not pg_panel_allowed(profile):
         return None
     change = await set_pg_panel_access(session, profile, False)
-    if change.rotation == RotationOutcome.PENDING:
-        return ROTATION_FAILED_MESSAGE
-    return None
+    return await close_access_warning(session, profile, change)
 
 
 def _edit_redirect(user_id: int, *, ok: str = "", err: str = "") -> RedirectResponse:

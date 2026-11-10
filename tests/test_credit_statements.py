@@ -23,7 +23,9 @@ from app.db.models import (
     ResellerProfile,
     ShopCreditAccount,
 )
+from app.services.billing import credit_topup
 from app.services.credit_cycle import run_credit_cycle
+from app.services.credit_lift import lift_paid_restriction
 from app.services.credit_statements import (
     LadderDays,
     LadderStep,
@@ -180,6 +182,39 @@ class StatementTests(StatementCase):
             self.assertFalse(await write_off_statement(session, statement.id, actor="owner", now=NOV_1))
             self.assertEqual(int((await session.get(BotUser, 5)).wallet_balance), 0)
             self.assertEqual(int((await session.get(BotUser, 6)).wallet_balance), -9_000)
+
+
+class ImmediateLiftTests(StatementCase):
+    async def block(self) -> None:
+        await self.cycle(NOV_1 + timedelta(hours=2))
+        await self.cycle(NOV_1 + timedelta(days=22))
+        self.assertEqual((await self.account()).restriction, LadderStep.BLOCKED)
+
+    async def test_a_payment_lifts_the_ladder_right_after_it_commits(self) -> None:
+        await self.block()
+        with patch("app.services.credit_lift.schedule_lift") as schedule:
+            async with self.Session() as session:
+                await credit_topup(session, 5, 20_000, idempotency_key="topup:lift:1")
+        schedule.assert_called_once_with(5)
+        async with self.Session() as session:
+            self.assertEqual(await lift_paid_restriction(session, 5, now=NOV_1 + timedelta(days=22)), LadderStep.NONE)
+        self.assertEqual((await self.account()).status, "active")
+
+    async def test_a_rolled_back_or_unrestricted_credit_schedules_nothing(self) -> None:
+        with patch("app.services.credit_lift.schedule_lift") as schedule:
+            async with self.Session() as session:
+                await credit_topup(session, 6, 1_000, idempotency_key="topup:lift:2")  # shop 6 is not restricted
+            await self.block()
+            async with self.Session() as session:
+                await credit_topup(session, 5, 1_000, idempotency_key="topup:lift:3", commit=False)
+                await session.rollback()
+        schedule.assert_not_called()
+
+    async def test_a_partial_payment_keeps_the_restriction(self) -> None:
+        await self.block()
+        await self.set_balance(-1_000)
+        async with self.Session() as session:
+            self.assertEqual(await lift_paid_restriction(session, 5, now=NOV_1 + timedelta(days=22)), LadderStep.BLOCKED)
 
 
 class MigrationTests(unittest.TestCase):

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ChildPricePlan, OrgPrincipal, ResellerProfile
@@ -113,6 +113,45 @@ async def create_child_plan(session: AsyncSession, parent_shop_id: int, data: Ch
     return plan
 
 
+async def _own_plan(session: AsyncSession, parent_shop_id: int, plan_id: int) -> ChildPricePlan:
+    plan = await session.scalar(select(ChildPricePlan).where(
+        ChildPricePlan.id == int(plan_id), ChildPricePlan.owner_shop_id == int(parent_shop_id)))
+    if plan is None:
+        raise ChildPricingError("پلن قیمت یافت نشد")
+    return plan
+
+
+async def update_child_plan(
+    session: AsyncSession, parent_shop_id: int, plan_id: int, data: ChildPlanInput
+) -> ChildPricePlan:
+    """Change a price list; charges already taken keep the amount they were taken at."""
+    data = _validated(data)
+    plan = await _own_plan(session, parent_shop_id, plan_id)
+    plan.name = data.name.strip()[:128]
+    plan.payg_basis = data.basis
+    plan.price_per_gb = data.price_per_gb
+    plan.payg_user_price = data.user_price
+    plan.payg_user_price_per_30d = data.user_price_per_30d
+    plan.payg_unlimited_price = data.unlimited_price
+    await session.commit()
+    return plan
+
+
+async def delete_child_plan(session: AsyncSession, parent_shop_id: int, plan_id: int) -> None:
+    """Delete a price list no level-2 shop is priced with; one in use is refused."""
+    await _own_plan(session, parent_shop_id, plan_id)
+    in_use = exists().where(ResellerProfile.child_plan_id == ChildPricePlan.id)
+    result = await session.execute(
+        delete(ChildPricePlan)
+        .where(ChildPricePlan.id == int(plan_id), ChildPricePlan.owner_shop_id == int(parent_shop_id), ~in_use)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        await session.rollback()
+        raise ChildPricingError("این پلن به زیرمجموعه‌ای وصل است؛ اول پلن آن زیرمجموعه را عوض کنید")
+    await session.commit()
+
+
 async def _own_child(session: AsyncSession, parent_shop_id: int, child_shop_id: int) -> ResellerProfile:
     if int(child_shop_id) not in await child_shop_ids(session, parent_shop_id):
         raise ChildPricingError("این فروشگاه زیرمجموعهٔ شما نیست")
@@ -131,10 +170,7 @@ async def assign_child_plan(
         profile.child_plan_id = None
         profile.billing_mode = BILLING_MODE_FIXED
     else:
-        plan = await session.scalar(select(ChildPricePlan).where(
-            ChildPricePlan.id == int(plan_id), ChildPricePlan.owner_shop_id == int(parent_shop_id)))
-        if plan is None:
-            raise ChildPricingError("پلن قیمت یافت نشد")
+        plan = await _own_plan(session, parent_shop_id, int(plan_id))
         profile.child_plan_id = int(plan.id)
         profile.billing_mode = BILLING_MODE_PAYG
         profile.payg_wallet_linked = True

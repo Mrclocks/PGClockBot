@@ -99,6 +99,13 @@ class IsolationTests(unittest.IsolatedAsyncioTestCase):
             stored = await session.get(CashbackRule, rule.id)
             self.assertTrue(stored.enabled)
 
+    async def test_an_edit_changes_the_same_rule_in_place(self) -> None:
+        async with self.Session() as session:
+            rule = await save_rule(session, 5, rule_from_form(VALID))
+            await save_rule(session, 5, rule_from_form({**VALID, "name": "۵٪", "percent": "5"}), rule_id=rule.id)
+            rules = await list_rules(session, 5)
+        self.assertEqual([(r.id, r.name, r.percent_bps) for r in rules], [(rule.id, "۵٪", 500)])
+
 
 class TemplateTests(unittest.TestCase):
     def test_page_escapes_rule_names(self) -> None:
@@ -117,6 +124,8 @@ class TemplateTests(unittest.TestCase):
         )
         self.assertNotIn("<script>x</script>", html)
         self.assertIn('action="/cashback/rules/3/delete"', html)
+        self.assertIn('action="/cashback/rules/3"', html)  # in-place edit form
+        self.assertEqual(html.count('value="&lt;script&gt;x&lt;/script&gt;"'), 1)
 
 
 if __name__ == "__main__":
