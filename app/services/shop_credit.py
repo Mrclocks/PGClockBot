@@ -16,7 +16,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import CreditEvent, ShopCreditAccount
+from app.db.models import CreditEvent, CreditStatement, ShopCreditAccount
 from app.py_compat import StrEnum
 
 logger = logging.getLogger(__name__)
@@ -52,10 +52,7 @@ def _aware(value: datetime | None) -> datetime | None:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def effective_limit(account: ShopCreditAccount | None, *, now: datetime) -> int:
-    """Credit the shop may use now; an account that is not active lends nothing."""
-    if account is None or account.status != CreditStatus.ACTIVE:
-        return 0
+def _line(account: ShopCreditAccount, *, now: datetime) -> int:
     limit = max(0, int(account.credit_limit or 0))
     until = _aware(account.temp_limit_until)
     if account.temp_limit is not None and until is not None and until > now:
@@ -63,12 +60,36 @@ def effective_limit(account: ShopCreditAccount | None, *, now: datetime) -> int:
     return limit
 
 
+def effective_limit(account: ShopCreditAccount | None, *, now: datetime) -> int:
+    """Credit new PAYG charges may use now; only an active line lends."""
+    if account is None or account.status != CreditStatus.ACTIVE:
+        return 0
+    return _line(account, now=now)
+
+
+def standing_limit(account: ShopCreditAccount | None, *, now: datetime) -> int:
+    """Debt a shop may carry without being treated as empty (suspended, blocked).
+
+    A frozen or overdue line lends nothing new, but the debt inside it is not «empty»:
+    only the last overdue step (``blocked``) lets the empty-wallet suspension act.
+    """
+    if account is None or account.status == CreditStatus.BLOCKED:
+        return 0
+    return _line(account, now=now)
+
+
 async def credit_account(session: AsyncSession, shop_id: int) -> ShopCreditAccount | None:
     return await session.scalar(select(ShopCreditAccount).where(ShopCreditAccount.shop_id == int(shop_id)))
 
 
 async def shop_credit_limit(session: AsyncSession, shop_id: int, *, now: datetime | None = None) -> int:
+    """Credit new PAYG charges of this shop may use now."""
     return effective_limit(await credit_account(session, shop_id), now=now or datetime.now(timezone.utc))
+
+
+async def shop_standing_limit(session: AsyncSession, shop_id: int, *, now: datetime | None = None) -> int:
+    """Debt this shop may carry before the empty-wallet rules apply."""
+    return standing_limit(await credit_account(session, shop_id), now=now or datetime.now(timezone.utc))
 
 
 def credit_usage(balance: int, limit: int) -> CreditUsage:
@@ -197,6 +218,7 @@ class CreditOverview:
     usage: CreditUsage
     balance: int
     events: tuple[CreditEvent, ...]
+    statements: tuple[CreditStatement, ...] = ()
 
     @property
     def status(self) -> str:
@@ -208,4 +230,9 @@ async def credit_overview(session: AsyncSession, shop_id: int, *, balance: int) 
     account = await credit_account(session, shop_id)
     limit = effective_limit(account, now=datetime.now(timezone.utc))
     events = tuple(await recent_credit_events(session, shop_id, limit=10))
-    return CreditOverview(account=account, usage=credit_usage(balance, limit), balance=int(balance), events=events)
+    statements = tuple((await session.scalars(
+        select(CreditStatement).where(CreditStatement.shop_id == int(shop_id))
+        .order_by(CreditStatement.period_start.desc()).limit(6)
+    )).all())
+    return CreditOverview(account=account, usage=credit_usage(balance, limit), balance=int(balance), events=events,
+                          statements=statements)

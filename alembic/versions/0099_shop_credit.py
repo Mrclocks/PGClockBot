@@ -43,6 +43,7 @@ def upgrade() -> None:
             sa.Column("temp_limit_until", sa.DateTime(timezone=True), nullable=True),
             sa.Column("status", sa.String(16), nullable=False, server_default=sa.text("'active'")),
             sa.Column("alert_level", sa.Integer(), nullable=False, server_default=sa.text("0")),
+            sa.Column("restriction", sa.Integer(), nullable=False, server_default=sa.text("0")),
             sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         )
     if not inspector.has_table(EVENTS):

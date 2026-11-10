@@ -12,14 +12,17 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ResellerProfile
+from app.db.models import CreditStatement, ResellerProfile
 from app.services.billing import is_payg
+from app.services.credit_statements import write_off_statement
 from app.services.numbers import parse_int
 from app.services.shop_credit import CreditLimitChange, CreditStatus, set_credit_limit, set_credit_status
 
 MAX_TEMP_DAYS = 365
 SAVED_MESSAGE = "اعتبار نماینده ذخیره شد"
 NOT_PAYG_MESSAGE = "اعتبار فقط برای نمایندهٔ PAYG است"
+WRITTEN_OFF_MESSAGE = "بدهی این صورت‌حساب بخشیده شد"
+STATEMENT_MISSING_MESSAGE = "این صورت‌حساب باز نیست"
 
 
 def _back(user_id: int, *, ok: str = "", err: str = "") -> RedirectResponse:
@@ -88,3 +91,18 @@ def register_shop_credit_pages(app: FastAPI, *, require_admin: Callable, get_db:
         status = CreditStatus.FROZEN if form.get("frozen") else CreditStatus.ACTIVE
         await set_credit_status(session, int(user_id), status, actor=str(staff.get("username") or "owner"))
         return _back(user_id, ok=SAVED_MESSAGE)
+
+    @app.post("/resellers/{user_id}/credit/statements/{statement_id}/writeoff")
+    async def shop_credit_writeoff(
+        user_id: int,
+        statement_id: int,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ) -> RedirectResponse:
+        statement = await session.get(CreditStatement, int(statement_id))
+        if statement is None or int(statement.shop_id) != int(user_id):
+            return _back(user_id, err=STATEMENT_MISSING_MESSAGE)
+        done = await write_off_statement(
+            session, int(statement_id), actor=str(staff.get("username") or "owner"), now=datetime.now(timezone.utc)
+        )
+        return _back(user_id, ok=WRITTEN_OFF_MESSAGE) if done else _back(user_id, err=STATEMENT_MISSING_MESSAGE)

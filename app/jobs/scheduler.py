@@ -333,6 +333,19 @@ async def run_reseller_billing_tick() -> None:
         await _run_payg_reconcile(session)
 
 
+async def run_credit_cycle_job() -> None:
+    """Hourly: close last month's credit statements, settle paid debt, apply the overdue ladder."""
+    async with SessionLocal() as session:
+        try:
+            from app.services.credit_cycle import run_credit_cycle
+
+            stats = await run_credit_cycle(session)
+            if stats.get("shops"):
+                logger.info("credit cycle %s", stats)
+        except Exception:
+            logger.exception("credit cycle failed")
+
+
 async def _run_payg_reconcile(session) -> None:
     """Charge PAYG shops for user changes made in the panel outside the bot."""
     try:
@@ -839,6 +852,7 @@ def start_background_scheduler() -> None:
     """Run financial and maintenance jobs as soon as the database is ready."""
     jobs = (
         ("billing_tick", run_reseller_billing_tick, {"minutes": 1}, 120),
+        ("credit_cycle", run_credit_cycle_job, {"hours": 1}, 3600),
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
         ("order_purge", run_auto_order_purge, {"hours": 1}, 3600),
         ("scheduled_receipt_approval", run_scheduled_receipt_approvals, {"seconds": 60}, 90),
