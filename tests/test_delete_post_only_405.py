@@ -7,7 +7,6 @@ import unittest
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("BOT_TOKEN", "1:test")
-os.environ.setdefault("ADMIN_IDS", "1")
 
 
 class DeletePostOnly405Tests(unittest.TestCase):
