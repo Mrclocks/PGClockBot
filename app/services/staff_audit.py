@@ -58,6 +58,9 @@ ACTION_LABELS = {
     "service_delete": "حذف سرویس",
     "customer_delete": "حذف مشتری",
     "service_auto_delete": "حذف خودکار سرویس",
+    "service_cleanup_exempt": "معاف‌کردن سرویس از پاکسازی",
+    "service_cleanup_unexempt": "برگرداندن سرویس به پاکسازی",
+    "service_cleanup_hold": "تمدید مهلت حذف سرویس",
 }
 
 TARGET_LABELS = {

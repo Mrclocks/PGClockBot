@@ -35,6 +35,7 @@ from app.services.customer_notice_queue import add_notice
 from app.services.formatting import parse_expire
 from app.services.pasarguard import PasarGuardError, is_pg_not_found
 from app.services.service_cleanup import (
+    LEASE,
     KIND_TIME,
     KIND_VOLUME,
     STAGE_NOTICE,
@@ -54,7 +55,6 @@ logger = logging.getLogger(__name__)
 DELETE_BATCH = 25
 GONE_CONCURRENCY = 4
 READ_TIMEOUT_SECONDS = 12
-LEASE = timedelta(hours=1)
 # The customer's last warning must be at least this old, so a warning and the deletion are never one run apart.
 MIN_WARNING_GAP = timedelta(hours=6)
 SYSTEM_LABEL = "سیستم · پاکسازی خودکار"

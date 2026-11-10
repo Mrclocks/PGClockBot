@@ -46,6 +46,8 @@ SETTING_DEFAULTS = {
     KEY_VOLUME_DAYS: "30",
     KEY_VOLUME_ENABLED_AT: "",
 }
+# A delete that failed keeps this lease; the same service is tried again only after it expired.
+LEASE = timedelta(hours=1)
 MIN_DAYS = 1
 MAX_DAYS = 365
 DEFAULT_TIME_DAYS = 7
@@ -227,11 +229,14 @@ class PreviewRow:
     """One service that is already past its deadline or will be within the preview window."""
 
     service_id: int
+    user_id: int
     username: str
     customer: str
     kind: str
     since: str
     deadline: str
+    days_left: int = 0  # whole days to the deadline, 0 once it is due
+    retrying: bool = False  # a delete was tried and failed; the next try waits for the lease to expire
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,14 +308,14 @@ async def _preview_rows(
         found = (
             await session.execute(
                 select(UserService.id, UserService.pg_username, column, BotUser.full_name, BotUser.username,
-                       UserService.cleanup_hold_until)
+                       UserService.cleanup_claimed_at, BotUser.id, UserService.cleanup_hold_until)
                 .join(BotUser, BotUser.id == UserService.bot_user_id)
                 .where(shop_services_clause(shop_id), *eligible_clauses(), not_held_clause(now + soon), clause)
                 .order_by(column.asc(), UserService.id)
                 .limit(PREVIEW_SAMPLE)
             )
         ).all()
-        for service_id, username, since, full_name, handle, hold in found:
+        for service_id, username, since, full_name, handle, claimed_at, user_id, hold in found:
             started = since if since.tzinfo else since.replace(tzinfo=timezone.utc)
             deadline = max(started, enabled_at or started) + timedelta(days=days)
             if hold is not None:  # a staff hold can only push the deadline later
@@ -318,11 +323,14 @@ async def _preview_rows(
             rows.append(
                 PreviewRow(
                     service_id=int(service_id),
+                    user_id=int(user_id),
                     username=str(username or "")[:USERNAME_PREVIEW_MAX],
                     customer=str(full_name or (f"@{handle}" if handle else "—"))[:USERNAME_PREVIEW_MAX],
                     kind=label,
                     since=local_date(since),
                     deadline=local_date(deadline),
+                    days_left=max(0, -(-int((deadline - now).total_seconds()) // 86400)),
+                    retrying=claimed_at is not None and _aware(claimed_at) > now - LEASE,
                 )
             )
     return rows[:PREVIEW_SAMPLE]
