@@ -1,7 +1,7 @@
 """Remember which services the panel no longer knows.
 
-Revision ID: 0096_service_panel_presence
-Revises: 0095_broadcast_shop_id
+Revision ID: 0104_service_panel_presence
+Revises: 0103_payg_baseline_at
 
 Adds ``panel_missing_at`` (a confirmed HTTP 404 on the panel user lookup) and
 ``panel_checked_at`` (when the presence scan last looked) to ``user_services``, with an
@@ -16,8 +16,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0096_service_panel_presence"
-down_revision: Union[str, None] = "0095_broadcast_shop_id"
+revision: str = "0104_service_panel_presence"
+down_revision: Union[str, None] = "0103_payg_baseline_at"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

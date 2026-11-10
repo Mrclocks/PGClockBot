@@ -157,7 +157,7 @@ class PresenceCase(unittest.IsolatedAsyncioTestCase):
 
 class PresenceMigrationTests(unittest.TestCase):
     def test_upgrade_twice_and_downgrade_keep_rows(self) -> None:
-        spec = importlib.util.spec_from_file_location("m0096", ROOT / "alembic/versions/0096_service_panel_presence.py")
+        spec = importlib.util.spec_from_file_location("m0104", ROOT / "alembic/versions/0104_service_panel_presence.py")
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(migration)
