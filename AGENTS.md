@@ -113,6 +113,8 @@ PGClockBot serves many shops and customers from one process and one PasarGuard p
 
 ## 9. User interface, Persian text and accessibility
 
+- **MUST** build every web panel page, modal and component to [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md). It is the single source for sizes, spacing, dividers, colours, motion and the cancel-button rule, and its "Building a new page or modal" section lists the markup and macros to start from. A new UI pattern is added to that document first, in the same pull request; do not invent one-off spacing, sizes or colours.
+- **MUST** keep `python scripts/design_check.py` passing: a template or stylesheet you change must not gain design findings (modal outside `.ds`, «انصراف» in a form modal, inline `style=`, literal colours in CSS). CI runs it on every pull request.
 - User-facing strings are Persian and RTL. Use `dir="ltr"` for URLs, usernames and numbers inside RTL text. Use the shared number and date formatters instead of hand-formatting.
 - Reuse the existing CSS variables (`var(--space-*)`, `var(--card)`, `var(--border)`) and component classes (`.card`, `.btn`, `.form-field`). Do not add one-off colors or inline styles.
 - Templates extend `base.html`, include the CSRF token in every POST form, and rely on autoescape. Inline scripts must be compatible with the CSP nonce handling in `csp_nonce.py`; prefer an external file.
@@ -138,6 +140,7 @@ python -m pytest tests/test_<area>.py -q          # focused tests first
 node tests/<name>.test.cjs                        # browser logic, if touched
 bash scripts/run_security_tests.sh               # what CI runs
 scripts/lint_changed.sh                          # lint ratchet, see section 11
+python scripts/design_check.py --details         # design ratchet for templates and CSS, see section 9
 python -m pytest tests -q -p no:cacheprovider    # full suite before opening the PR
 ```
 
@@ -178,4 +181,5 @@ scripts/lint_changed.sh --details  # also prints the findings of the failing fil
 - [ ] Migration added, idempotent, works on SQLite and PostgreSQL, has a downgrade, and the revision number is current.
 - [ ] Focused tests, the security manifest, and the full suite were run; no new failures.
 - [ ] `scripts/lint_changed.sh` passes.
+- [ ] UI changes follow docs/DESIGN_SYSTEM.md and `python scripts/design_check.py` passes; new patterns are documented there.
 - [ ] No stray files in the diff; the description is complete and accurate.
