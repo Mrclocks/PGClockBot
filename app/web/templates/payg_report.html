@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title %}
+{% block title %}نمایندگان PAYG{% endblock %}
+{% block content %}
+<div class="ds ds-settings">
+<div class="page-head">
+  <div>{{ page_title('cart', 'نمایندگان PAYG') }}</div>
+  <div class="actions">
+    <a class="btn btn-ghost" href="/finance">مالی</a>
+    <a class="btn btn-ghost" href="/payg/charges/review">بازبینی هزینه‌ها</a>
+    <a class="btn" href="/finance/payg.csv">خروجی CSV</a>
+  </div>
+</div>
+{% set ns = namespace(debt=0, charges=0, cashback=0) %}
+{% for r in rows %}{% set ns.debt = ns.debt + r.debt %}{% set ns.charges = ns.charges + r.month_charges %}{% set ns.cashback = ns.cashback + r.month_cashback %}{% endfor %}
+<div class="grid">
+  <div class="stat"><span>بدهی فعلی نمایندگان</span><strong dir="ltr">{{ ns.debt | money }}</strong></div>
+  <div class="stat"><span>هزینه‌های PAYG این ماه</span><strong dir="ltr">{{ ns.charges | money }}</strong></div>
+  <div class="stat"><span>کش‌بک این ماه</span><strong dir="ltr">{{ ns.cashback | money }}</strong></div>
+</div>
+<div class="card card-flush">
+  {% if not rows %}<p class="muted empty-state">نمایندهٔ PAYG وجود ندارد.</p>{% else %}
+  <div class="table-wrap"><table class="table-compact table-list-sm">
+    <thead><tr><th>نماینده</th><th>موجودی</th><th>سقف اعتبار</th><th>هزینهٔ این ماه</th><th>بدهی صورت‌حساب</th><th>کش‌بک این ماه</th><th><span class="sr-only">اقدام</span></th></tr></thead>
+    <tbody>{% for r in rows %}<tr>
+      <td dir="ltr">{{ r.label }}</td>
+      <td dir="ltr">{{ r.balance | money }}</td>
+      <td dir="ltr">{{ r.credit_limit | money }}{% if r.credit_status and r.credit_status != 'active' %} · {{ {'frozen': 'منجمد', 'overdue': 'سررسید گذشته', 'blocked': 'مسدود'}.get(r.credit_status, r.credit_status) }}{% endif %}</td>
+      <td dir="ltr">{{ r.month_charges | money }}</td>
+      <td dir="ltr">{{ r.open_debt | money }}</td>
+      <td dir="ltr">{{ r.month_cashback | money }}</td>
+      <td><a class="btn btn-ghost btn-sm" href="/resellers?edit={{ r.shop_id }}">کارت</a></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% endif %}
+</div>
+</div>
+{% endblock %}
