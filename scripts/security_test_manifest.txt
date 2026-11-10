@@ -452,3 +452,5 @@ tests/test_cashback.py
 tests/test_cashback_pages.py
 # Reseller finance pages: owner only, own purse and own rows only.
 tests/test_reseller_finance_pages.py
+# Cashback preview and notices, ladder day settings.
+tests/test_billing_finishing.py

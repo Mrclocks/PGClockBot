@@ -9,6 +9,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
@@ -101,6 +102,9 @@ class CashbackCase(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             await set_setting(session, "cashback_enabled", "1", reseller_id=SHOP_A)
             await session.commit()
+        notices = patch("app.services.cashback.notify_credited", AsyncMock())
+        notices.start()
+        self.addCleanup(notices.stop)
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()

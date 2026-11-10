@@ -14,6 +14,7 @@ cashback; the money only ever moves inside that shop's wallet purse.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -25,6 +26,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, CashbackBudget, CashbackGrant, CashbackRule, Order, OrderStatus
 from app.py_compat import StrEnum
 from app.services.db_safe import rollback_quiet
+from app.services.formatting import format_toman
+from app.services.platform_identity import deliverable_telegram_id
+from app.services.reseller_bots import ShopBotUnavailable, open_notify_bot_for_user
 from app.services.users import get_setting
 from app.services.wallet import credit_wallet, debit_wallet, get_wallet_balance
 
@@ -35,6 +39,8 @@ MATURE_BATCH = 500
 BPS = 10_000
 DEFAULT_HOLD_HOURS = 24
 MAX_HOLD_HOURS = 24 * 90
+# Below Telegram's per-bot limit (about 30 messages a second).
+SEND_INTERVAL_SECONDS = 0.05
 
 
 class GrantStatus(StrEnum):
@@ -274,7 +280,7 @@ async def mature_grants(session: AsyncSession, *, now: datetime | None = None) -
         .where(CashbackGrant.status == str(GrantStatus.PENDING), CashbackGrant.available_at <= now)
         .order_by(CashbackGrant.id).limit(MATURE_BATCH)
     )).all()
-    credited = 0
+    credited: list[CashbackGrant] = []
     for grant in due:
         try:
             if not await _claim_status(session, grant, frm=GrantStatus.PENDING, to=GrantStatus.AVAILABLE, at=now):
@@ -283,11 +289,57 @@ async def mature_grants(session: AsyncSession, *, now: datetime | None = None) -
             # One commit for the claim and the credit: a failure rolls both back.
             await credit_wallet(session, user, int(grant.amount), f"کش‌بک سفارش #{int(grant.order_id)}",
                                 shop_id=grant.shop_id, commit=True, idempotency_key=f"cashback:{int(grant.id)}")
-            credited += 1
+            credited.append(grant)
         except Exception:  # noqa: BLE001 - per-row isolation in a background job; the row stays pending
             logger.warning("cashback credit failed grant=%s", grant.id, exc_info=True)
             await rollback_quiet(session)
-    return credited
+    await notify_credited(session, credited)
+    return len(credited)
+
+
+def credited_text(grant: CashbackGrant) -> str:
+    return (
+        f"🎁 <b>کش‌بک {format_toman(int(grant.amount))}</b> به کیف پول شما اضافه شد\n"
+        f"برای سفارش #{int(grant.order_id)}"
+    )
+
+
+async def _send_shop_batch(session: AsyncSession, shop_id: int | None, grants: list[CashbackGrant]) -> None:
+    users = {int(u.id): u for u in (await session.scalars(
+        select(BotUser).where(BotUser.id.in_({int(g.user_id) for g in grants})))).all()}
+    first = users.get(int(grants[0].user_id))
+    if first is None:
+        return
+    try:
+        bot, should_close = await open_notify_bot_for_user(session, first, shop_id=shop_id)
+    except ShopBotUnavailable:
+        logger.info("cashback notice skipped: shop bot unavailable shop=%s", shop_id)
+        return
+    try:
+        for grant in grants:
+            chat_id = deliverable_telegram_id(getattr(users.get(int(grant.user_id)), "telegram_id", None))
+            if chat_id is None:
+                continue
+            try:
+                await bot.send_message(chat_id, credited_text(grant), parse_mode="HTML")
+            except Exception:  # noqa: BLE001 - one undeliverable chat never stops the others; logged
+                logger.debug("cashback notice failed grant=%s", grant.id, exc_info=True)
+            await asyncio.sleep(SEND_INTERVAL_SECONDS)
+    finally:
+        if should_close:
+            await bot.session.close()
+
+
+async def notify_credited(session: AsyncSession, grants: list[CashbackGrant]) -> None:
+    """Tell each buyer once, after the credits committed: one bot per shop, paced under Telegram limits."""
+    by_shop: dict[int | None, list[CashbackGrant]] = {}
+    for grant in grants:
+        by_shop.setdefault(grant.shop_id, []).append(grant)
+    for shop_id, batch in by_shop.items():
+        try:
+            await _send_shop_batch(session, shop_id, batch)
+        except Exception:  # noqa: BLE001 - notices are optional; the money is already credited
+            logger.warning("cashback notices failed shop=%s", shop_id, exc_info=True)
 
 
 async def reverse_order_cashback(session: AsyncSession, order_id: int, *, reason: str,
