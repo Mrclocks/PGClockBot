@@ -34,6 +34,15 @@ from app.services.pasarguard import (
     user_subscription_url,
 )
 from app.services.pg_quota import PgQuotaError, assert_can_create_user
+from app.services.payg_gate import (
+    charge_staff_create,
+    charge_staff_edit,
+    finish_charge,
+    finish_charges,
+    reset_with_charge,
+    settle_failed_charge,
+    settle_failed_charges,
+)
 from app.services.provision_gate import finish_staff_edit, hold_staff_create, hold_staff_edit, settle_failed_hold
 from app.services.redact import user_safe_error
 from app.services import bot_feedback_texts as feedback
@@ -810,7 +819,9 @@ async def pg_reset(
         return
     uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
     try:
-        user = await gate.pg_client.reset_user_by_id(uid)
+        user = await reset_with_charge(
+            session, gate.staff, pg=gate.pg_client, pg_user_id=uid, now_ts=int(time.time())
+        )
         await callback.answer("ریست شد ✅", show_alert=True)
         if callback.message:
             if isinstance(user, dict) and user.get("id") is not None:
@@ -1418,6 +1429,7 @@ async def pg_create_username(
         await message.answer(f"❌ {qe.message}")
         return
     hold = None
+    charge = None
     try:
         payload = sanitize_pg_user_write_payload(
             {
@@ -1430,8 +1442,14 @@ async def pg_create_username(
             hold = await hold_staff_create(
                 session, gate.staff, pg=gate.pg_client, template_id=int(tid), data_limit=None
             )
+            charge = await charge_staff_create(
+                session, gate.staff, pg=gate.pg_client, hold=hold, template_id=int(tid), data_limit=None,
+                expire_ts=None, username=uname, now_ts=int(time.time()),
+            )
         user = await gate.pg_client.create_user_from_template(payload)
+        await finish_charge(session, charge)
     except Exception as e:
+        await settle_failed_charge(session, charge, e, panel_touched=True)
         if session is not None:
             await settle_failed_hold(session, hold, e, panel_touched=True)
         # Keep create_username so the operator can retry with another name
@@ -1606,13 +1624,21 @@ async def pg_create_days(
         await message.answer(f"❌ {qe.message}")
         return
     hold = None
+    charge = None
     try:
         if session is not None:
             hold = await hold_staff_create(
                 session, gate.staff, pg=gate.pg_client, template_id=None, data_limit=data_limit
             )
+            charge = await charge_staff_create(
+                session, gate.staff, pg=gate.pg_client, hold=hold, template_id=None,
+                data_limit=data_limit if gb > 0 else None, expire_ts=expire_ts if days > 0 else None,
+                username=str(payload.get("username") or ""), now_ts=int(time.time()),
+            )
         user = await gate.pg_client.create_user(payload)
+        await finish_charge(session, charge)
     except Exception as e:
+        await settle_failed_charge(session, charge, e, panel_touched=True)
         if session is not None:
             await settle_failed_hold(session, hold, e, panel_touched=True)
         # Recoverable (e.g. duplicate username): go back to username step.
@@ -1870,6 +1896,7 @@ async def pg_edit_gb_save(
         await state.clear()
         return
     hold = None
+    charges: list = []
     new_limit = int(gb * (1024**3)) if gb > 0 else 0
     try:
         current = gate.pg_user or {}
@@ -1886,10 +1913,16 @@ async def pg_edit_gb_save(
         if session is not None:
             current_limit = current.get("data_limit") if isinstance(current, dict) else None
             hold = await hold_staff_edit(session, gate.staff, current_limit=current_limit, new_limit=new_limit)
+            charges = await charge_staff_edit(
+                session, gate.staff, hold=hold, current=current, data_limit=new_limit, expire_ts=None,
+                now_ts=int(time.time()),
+            )
         await gate.pg_client.modify_user_by_id(uid, payload)
         if session is not None:
             await finish_staff_edit(session, hold, pg_user_id=uid, data_limit=new_limit)
+            await finish_charges(session, charges)
     except Exception as e:
+        await settle_failed_charges(session, charges, e, panel_touched=True)
         if session is not None:
             await settle_failed_hold(session, hold, e, panel_touched=True)
         await message.answer(f"❌ {_err_msg(e)}")
@@ -1988,6 +2021,7 @@ async def pg_edit_days_save(
         await state.clear()
         return
     expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
+    charges: list = []
     try:
         current = gate.pg_user or {}
         groups = user_group_ids(current if isinstance(current, dict) else {})
@@ -2000,8 +2034,14 @@ async def pg_edit_days_save(
                 status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
             )
         )
+        charges = await charge_staff_edit(
+            session, gate.staff, hold=None, current=current, data_limit=None, expire_ts=expire_ts,
+            now_ts=int(time.time()),
+        )
         await gate.pg_client.modify_user_by_id(uid, payload)
+        await finish_charges(session, charges)
     except Exception as e:
+        await settle_failed_charges(session, charges, e, panel_touched=True)
         await message.answer(f"❌ {_err_msg(e)}")
         return
     await state.clear()

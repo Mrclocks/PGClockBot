@@ -22,6 +22,7 @@ from app.db.models import (
     Plan,
     ServiceAddonPack,
     UserService,
+    ResellerCharge,
 )
 from app.services.formatting import (
     format_bytes,
@@ -32,6 +33,16 @@ from app.services.formatting import (
 )
 from app.services.numbers import to_fa_digits
 from app.services.plans_catalog import require_catalog_owner_id
+from app.services.payg_charges import new_request_key
+from app.services.payg_gate import (
+    SHORTFALL_FOR_CUSTOMER,
+    assert_shop_can_afford,
+    charge_shop_change,
+    finish_charge,
+    settle_failed_charge,
+    shop_charges_at_creation,
+)
+from app.services.payg_pricing import ChargeEvent, ServiceChange
 from app.services.provision_gate import ProvisionError, hold_limit_change, new_hold_key
 from app.services.service_live_info import validate_service_info
 from app.services.volume_allocation import (
@@ -1157,6 +1168,7 @@ async def create_addon_order(
     await validate_addon_selection(
         session, user_id=user_id, service=service, pack=pack, shop_id=shop_rid,
     )
+    await _assert_pack_affordable(session, shop_rid, service, pack)
 
     quote = await quote_product(session, pack, shop_id=shop_rid)
     assert_expected_price(quote, expected_price)
@@ -1389,6 +1401,60 @@ async def _hold_pack_volume(
         raise ValueError(e.message) from e
 
 
+async def _charge_pack(
+    session: AsyncSession,
+    service: UserService,
+    *,
+    shop_id: int | None,
+    change: ServiceChange,
+    order_id: int | None,
+    hold: HeldVolume | None,
+) -> ResellerCharge | None:
+    """Take the shop's PAYG charge for a pack before the panel write; frees the hold on refusal."""
+    if not shop_id or not await shop_charges_at_creation(session, int(shop_id)):
+        return None
+    try:
+        return await charge_shop_change(
+            session,
+            shop_id=int(shop_id),
+            change=change,
+            request_key=f"addon:{int(order_id)}" if order_id else f"addon:{new_request_key()}",
+            pg_username=str(service.pg_username or ""),
+            panel_target={"service_id": int(service.id), "order_id": order_id},
+            created_by="addon",
+        )
+    except ProvisionError as e:
+        log.warning("payg pack charge refused service=%s: %s", service.id, e.message)
+        await release_volume_hold(session, hold)
+        await session.commit()
+        raise ValueError(SHORTFALL_FOR_CUSTOMER) from e
+
+
+async def _assert_pack_affordable(session: AsyncSession, shop_id: int | None, service: UserService, pack) -> None:
+    """Refuse a pack order its PAYG shop cannot pay for, before the buyer pays (cached limits)."""
+    if not shop_id:
+        return
+    current = int(service.quota_data_limit_bytes or 0)
+    if pack.kind == KIND_VOLUME:
+        new_limit = current + pack_volume_bytes(float(pack.amount))
+        change = _pack_change(KIND_VOLUME, current_limit=current, new_limit=new_limit, days=0)
+    else:
+        change = _pack_change(pack.kind, current_limit=current, new_limit=None, days=int(float(pack.amount)))
+    try:
+        await assert_shop_can_afford(session, int(shop_id), change)
+    except ProvisionError as e:
+        log.warning("payg pack checkout refused shop=%s: %s", shop_id, e.message)
+        raise ValueError(SHORTFALL_FOR_CUSTOMER) from e
+
+
+def _pack_change(kind: str, *, current_limit: int | None, new_limit: int | None, days: int) -> ServiceChange:
+    if kind == KIND_VOLUME:
+        return ServiceChange(
+            ChargeEvent.ADD_VOLUME, data_limit_bytes=int(new_limit or 0), previous_limit_bytes=int(current_limit or 0)
+        )
+    return ServiceChange(ChargeEvent.ADD_DAYS, days=days)
+
+
 async def _write_pack(
     session: AsyncSession, pg: Any, service: UserService, payload: dict[str, Any], hold: HeldVolume | None
 ) -> None:
@@ -1401,6 +1467,19 @@ async def _write_pack(
             await release_volume_hold(session, hold)
         raise
     await release_volume_hold(session, hold)
+
+
+async def _write_charged_pack(
+    session: AsyncSession, pg: Any, service: UserService, payload: dict[str, Any],
+    hold: HeldVolume | None, charge: ResellerCharge | None,
+) -> None:
+    """Write the pack; its charge settles in the caller's commit of the new limit, like the hold."""
+    try:
+        await _write_pack(session, pg, service, payload, hold)
+    except Exception as exc:
+        await settle_failed_charge(session, charge, exc, panel_touched=True)
+        raise
+    await finish_charge(session, charge, commit=False)
 
 
 async def _apply_pack_to_service(
@@ -1439,6 +1518,8 @@ async def _apply_pack_to_service(
     payload: dict[str, Any] = {"status": "active"}
     expire_ts = None
     data_limit_bytes = None
+    current_limit: int | None = None
+    pack_days = 0
 
     if kind == KIND_VOLUME:
         add_bytes = pack_volume_bytes(amount)
@@ -1450,6 +1531,7 @@ async def _apply_pack_to_service(
             current = 0
         if current <= 0:
             raise ValueError("این سرویس حجم نامحدود دارد — بسته حجم قابل اعمال نیست")
+        current_limit = current
         data_limit_bytes = current + add_bytes
         payload["data_limit"] = data_limit_bytes
         if is_on_hold_status(info.get("status")):
@@ -1462,6 +1544,7 @@ async def _apply_pack_to_service(
         days = int(float(amount))
         if days <= 0:
             raise ValueError("مدت نامعتبر است")
+        pack_days = days
         now = int(time.time())
         cur = parse_expire(info.get("expire") or info.get("expire_date"))
         if cur is None and is_on_hold_status(info.get("status")):
@@ -1492,7 +1575,11 @@ async def _apply_pack_to_service(
         session, service, shop_id=order_reseller_id,
         new_limit=data_limit_bytes if kind == KIND_VOLUME else None, key=f"addon:{int(order_id)}" if order_id else new_hold_key("addon"),
     )
-    await _write_pack(session, pg, service, payload, hold)
+    charge = await _charge_pack(
+        session, service, shop_id=order_reseller_id, order_id=order_id, hold=hold,
+        change=_pack_change(kind, current_limit=current_limit, new_limit=data_limit_bytes, days=pack_days),
+    )
+    await _write_charged_pack(session, pg, service, payload, hold, charge)
     # Cache sync is best-effort — PG already mutated. Never fail the delivery
     # claim here or a retry would double-apply the same addon.
     try:

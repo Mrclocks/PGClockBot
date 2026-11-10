@@ -14,7 +14,8 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, ResellerBillingRate, ResellerBillingTransaction, ResellerProfile
+from app.db.models import BotUser, ResellerBillingRate, ResellerBillingTransaction, ResellerPlan, ResellerProfile
+from app.services.payg_pricing import PaygPriceError, assert_billable_rates, rates_from_plan
 from app.services.billing_alerts import (
     PANEL_TICK_ISSUES,
     TickIssue,
@@ -34,6 +35,8 @@ BILLING_MODE_PAYG = "payg"
 KIND_TOPUP = "topup"
 KIND_USAGE = "usage"
 KIND_ADJUSTMENT = "adjustment"
+KIND_CHARGE = "charge"
+KIND_CHARGE_REFUND = "charge_refund"
 
 ON_EMPTY_BLOCK_PROVISION = "block_provision"
 
@@ -60,6 +63,14 @@ class PaygRateError(ValueError):
 PAYG_RATE_REQUIRED_MESSAGE = (
     "نرخ هر گیگ پلن PAYG باید بیشتر از صفر باشد؛ با نرخ صفر مصرف نماینده رایگان می‌شود"
 )
+
+
+def require_billable_payg_plan(plan: ResellerPlan | None) -> None:
+    """Refuse a PAYG package that would bill nothing for what it sells (rate or user price)."""
+    try:
+        assert_billable_rates(rates_from_plan(plan))
+    except PaygPriceError as exc:
+        raise PaygRateError(str(exc)) from exc
 
 
 def require_positive_payg_rate(price_per_gb: int) -> int:
@@ -626,6 +637,9 @@ async def credit_topup(
     # Clear low-balance warn so next dip can notify again
     if profile.billing_low_warned_at is not None:
         profile.billing_low_warned_at = None
+    # A top-up ends a «wallet short» episode, so a new shortfall is announced again.
+    if profile.billing_tick_issue == TickIssue.WALLET_SHORT.value:
+        profile.billing_tick_issue = None
 
     tx = ResellerBillingTransaction(
         reseller_user_id=int(reseller_user_id),
@@ -697,26 +711,17 @@ async def debit_adjustment(
     if existing:
         return existing
 
-    user, _bal = await ensure_payg_shop_wallet(session, profile)
-    with session.no_autoflush:
-        # Atomic shortfall check: a concurrent usage charge cannot push the wallet negative.
-        result = await session.execute(
-            update(BotUser)
-            .where(BotUser.id == int(user.id), BotUser.wallet_balance >= int(amount))
-            .values(wallet_balance=BotUser.wallet_balance - int(amount))
-            .execution_options(synchronize_session=False)
-        )
-    if result.rowcount != 1:
+    try:
+        balance_after = await _move_payg_wallet(session, profile, -int(amount))
+    except ValueError:
         await session.rollback()
-        raise ValueError("موجودی کیف پول نماینده برای این کسر کافی نیست")
-    await session.refresh(user)
-    profile.billing_balance = int(user.wallet_balance or 0)
+        raise
 
     tx = ResellerBillingTransaction(
         reseller_user_id=int(reseller_user_id),
         kind=KIND_ADJUSTMENT,
         amount=-int(amount),
-        balance_after=int(user.wallet_balance or 0),
+        balance_after=balance_after,
         idempotency_key=idempotency_key,
         note=(note or "")[:255] or None,
         created_by=(created_by or "")[:128] or None,
@@ -736,6 +741,73 @@ async def debit_adjustment(
         if existing:
             return existing
         raise
+    return tx
+
+
+SHORTFALL_MESSAGE = "موجودی کیف پول نماینده برای این کسر کافی نیست"
+
+
+class WalletShortfall(ValueError):
+    """The shop wallet cannot pay this debit; the message is safe for shop staff."""
+
+
+async def _move_payg_wallet(session: AsyncSession, profile: ResellerProfile, delta: int) -> int:
+    """Add ``delta`` to the shop wallet in one statement; a debit never goes below zero.
+
+    Returns the balance after the change. Raises ``ValueError`` on a shortfall; the caller
+    owns the transaction.
+    """
+    user, _bal = await ensure_payg_shop_wallet(session, profile)
+    stmt = update(BotUser).where(BotUser.id == int(user.id))
+    if delta < 0:
+        # Atomic shortfall check: a concurrent charge cannot push the wallet negative.
+        stmt = stmt.where(BotUser.wallet_balance >= -int(delta))
+    with session.no_autoflush:
+        result = await session.execute(
+            stmt.values(wallet_balance=BotUser.wallet_balance + int(delta)).execution_options(
+                synchronize_session=False
+            )
+        )
+    if result.rowcount != 1:
+        raise WalletShortfall(SHORTFALL_MESSAGE)
+    await session.refresh(user)
+    profile.billing_balance = int(user.wallet_balance or 0)
+    return int(user.wallet_balance or 0)
+
+
+async def record_payg_ledger_entry(
+    session: AsyncSession,
+    profile: ResellerProfile,
+    *,
+    kind: str,
+    amount: int,
+    idempotency_key: str,
+    note: str | None = None,
+    created_by: str | None = None,
+) -> ResellerBillingTransaction:
+    """Move ``amount`` (signed) on the shop wallet and write its ledger row, without committing.
+
+    A key already used by this shop returns that row and moves nothing.
+    """
+    if isinstance(amount, bool) or not isinstance(amount, int) or amount == 0:
+        raise ValueError("مبلغ تراکنش نامعتبر است")
+    if not idempotency_key:
+        raise ValueError("کلید یکتای تراکنش الزامی است")
+    existing = await _idempotent_tx_for_reseller(session, idempotency_key, int(profile.user_id))
+    if existing is not None:
+        return existing
+    balance_after = await _move_payg_wallet(session, profile, int(amount))
+    tx = ResellerBillingTransaction(
+        reseller_user_id=int(profile.user_id),
+        kind=kind,
+        amount=int(amount),
+        balance_after=balance_after,
+        idempotency_key=idempotency_key,
+        note=(note or "")[:255] or None,
+        created_by=(created_by or "")[:128] or None,
+    )
+    session.add(tx)
+    await session.flush()
     return tx
 
 
@@ -1013,6 +1085,12 @@ async def assert_billing_allows_provision(
 # ---------------------------------------------------------------------------
 
 
+async def shop_bills_usage(session: AsyncSession, profile: ResellerProfile) -> bool:
+    """Whether this PAYG shop pays for consumed traffic (not at creation, not per user only)."""
+    plan = await session.get(ResellerPlan, int(profile.plan_id)) if profile.plan_id else None
+    return plan is None or rates_from_plan(plan).bills_usage
+
+
 async def tick_reseller_usage(
     session: AsyncSession,
     profile: ResellerProfile,
@@ -1056,6 +1134,13 @@ async def tick_reseller_usage(
 
     delta = used - watermark
     if delta <= 0:
+        return None
+    if not await shop_bills_usage(session, profile):
+        # Traffic is paid when it is set on a user; keep the counter current so a later
+        # switch back to usage billing never charges traffic that was already paid for.
+        profile.billing_watermark_bytes = used
+        if commit:
+            await session.commit()
         return None
 
     ctx = rate_ctx or rate_context_for_profile(profile)
