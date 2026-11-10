@@ -433,6 +433,16 @@ SELECT_CYCLE_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
 }
 
+# Integer ranges for PAYG settings (consumers clamp the same bounds).
+NUMBER_INT_RANGES: dict[str, tuple[int, int]] = {
+    "billing_low_balance": (0, 10_000_000_000),
+    "billing_tick_minutes": (1, 1440),
+    "credit_due_days": (0, 365),
+    "credit_block_create_days": (0, 365),
+    "credit_block_changes_days": (0, 365),
+    "credit_block_days": (0, 365),
+}
+
 NOTIFY_KEYS: frozenset[str] = frozenset(key for key, *_ in NOTIFY_PREFS)
 
 # Extra toggles rendered outside SECTIONS field lists
@@ -452,6 +462,19 @@ def _is_toggleable_setting_key(key: str) -> bool:
         return True
     meta = FIELDS.get(key)
     return bool(meta and meta[2] == "toggle")
+
+
+def _parse_bounded_int(raw: str, lo: int, hi: int) -> int:
+    """Whole number in ``[lo, hi]``; rejects floats, NaN, and signs outside the range."""
+    from app.services.numbers import normalize_number_text
+
+    text = normalize_number_text(raw)
+    if not text or text in {".", "-", "+"} or any(ch in text for ch in ".eE"):
+        raise ValueError("not an integer")
+    value = int(text)
+    if value < lo or value > hi:
+        raise ValueError("out of range")
+    return value
 
 
 def _preview(value: str | None, *, limit: int = 120) -> str:
@@ -1245,7 +1268,13 @@ async def settings_edit_ask(
     loc = _owner_screen_for_key(key)
     await callback.answer()
     await state.update_data(edit_key=key, edit_loc=loc)
-    hint = "عدد بفرستید." if kind == "number" else feedback.ENTER_NEW_TEXT
+    if kind == "number" and key in NUMBER_INT_RANGES:
+        lo, hi = NUMBER_INT_RANGES[key]
+        hint = f"یک عدد صحیح بین {lo} و {hi} بفرستید."
+    elif kind == "number":
+        hint = "عدد بفرستید."
+    else:
+        hint = feedback.ENTER_NEW_TEXT
     if key == "force_join_channel":
         hint = "هر خط یک کانال (@channel یا آیدی).\nعضویت همه الزامی ذخیره می‌شود.\nبرای انصراف: انصراف"
     else:
@@ -1303,12 +1332,21 @@ async def settings_edit_save(
         await set_setting(session, key, text)
     elif kind == "number":
         raw = text.replace(",", "").replace("٬", "")
-        try:
-            float(raw)
-        except ValueError:
-            await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
-            return
-        text = raw
+        bounds = NUMBER_INT_RANGES.get(key)
+        if bounds is not None:
+            try:
+                text = str(_parse_bounded_int(raw, bounds[0], bounds[1]))
+            except ValueError:
+                lo, hi = bounds
+                await message.answer(f"یک عدد صحیح بین {lo} و {hi} بفرستید.")
+                return
+        else:
+            try:
+                float(raw)
+            except ValueError:
+                await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
+                return
+            text = raw
         await set_setting(session, key, text)
     elif key == "force_join_channel":
         from app.services.users import normalize_force_join_channel_value

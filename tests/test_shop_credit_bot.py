@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
@@ -13,8 +14,10 @@ from app.bot.handlers.shop_credit_bot import (
     TEMP_LIMIT_MAX_DAYS,
     STATUS_LABELS,
     ShopCreditStates,
+    _active_temp_limit,
     _credit_keyboard,
     credit_summary_lines,
+    permanent_limit_change,
 )
 from app.bot.keyboards import admin_reseller_actions
 from app.services.shop_credit import CreditStatus, CreditUsage
@@ -54,6 +57,27 @@ class ShopCreditBotUiTests(unittest.TestCase):
         self.assertTrue(str(ShopCreditStates.waiting_temp_amount.state).endswith("waiting_temp_amount"))
         self.assertTrue(str(ShopCreditStates.waiting_temp_days.state).endswith("waiting_temp_days"))
         self.assertEqual(TEMP_LIMIT_MAX_DAYS, 365)
+
+    def test_active_temp_limit_keeps_future_ceiling_only(self):
+        future = datetime.now(timezone.utc) + timedelta(days=3)
+        past = datetime.now(timezone.utc) - timedelta(days=1)
+        keep = _active_temp_limit(SimpleNamespace(temp_limit=50_000, temp_limit_until=future))
+        self.assertEqual(keep, (50_000, future))
+        self.assertEqual(_active_temp_limit(SimpleNamespace(temp_limit=50_000, temp_limit_until=past)), (None, None))
+        self.assertEqual(_active_temp_limit(None), (None, None))
+
+    def test_permanent_limit_change_preserves_active_temp_ceiling(self):
+        until = datetime.now(timezone.utc) + timedelta(days=5)
+        account = SimpleNamespace(credit_limit=10_000, temp_limit=50_000, temp_limit_until=until)
+        change = permanent_limit_change(account, 20_000)
+        self.assertEqual(change.limit, 20_000)
+        self.assertEqual(change.temp_limit, 50_000)
+        self.assertEqual(change.temp_limit_until, until)
+        cleared = permanent_limit_change(
+            SimpleNamespace(credit_limit=10_000, temp_limit=50_000, temp_limit_until=until - timedelta(days=6)),
+            20_000,
+        )
+        self.assertEqual((cleared.limit, cleared.temp_limit, cleared.temp_limit_until), (20_000, None, None))
 
 
 if __name__ == "__main__":

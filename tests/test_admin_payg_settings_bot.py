@@ -86,6 +86,17 @@ class AdminPaygSettingsBotTests(unittest.TestCase):
         self.assertEqual(_owner_screen_for_key("credit_due_days"), ("pay", "payg_credit"))
         self.assertEqual(_owner_screen_for_key("billing_on_empty"), ("pay", "payg"))
 
+    def test_payg_number_keys_require_int_in_consumer_range(self) -> None:
+        from app.bot.handlers.admin_settings import NUMBER_INT_RANGES, _parse_bounded_int
+
+        self.assertEqual(NUMBER_INT_RANGES["billing_tick_minutes"], (1, 1440))
+        self.assertEqual(NUMBER_INT_RANGES["credit_due_days"], (0, 365))
+        self.assertEqual(_parse_bounded_int("15", 1, 1440), 15)
+        self.assertEqual(_parse_bounded_int("۰", 0, 365), 0)
+        for bad in ("-5", "1.5", "nan", "1441", "", ".", "1e3"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                _parse_bounded_int(bad, 1, 1440)
+
 
 if __name__ == "__main__":
     unittest.main()

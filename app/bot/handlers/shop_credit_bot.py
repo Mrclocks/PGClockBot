@@ -113,6 +113,30 @@ def _credit_keyboard(user_id: int, *, frozen: bool) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _active_temp_limit(account) -> tuple[int | None, datetime | None]:
+    """Keep an unexpired temporary ceiling when only the permanent limit changes."""
+    if account is None or account.temp_limit is None:
+        return None, None
+    until = account.temp_limit_until
+    if until is None:
+        return None, None
+    if until.tzinfo is None:
+        until = until.replace(tzinfo=timezone.utc)
+    if until <= datetime.now(timezone.utc):
+        return None, None
+    return int(account.temp_limit), until
+
+
+def permanent_limit_change(account, amount: int) -> CreditLimitChange:
+    """Update the permanent ceiling without clearing an active temporary one."""
+    temp_limit, temp_until = _active_temp_limit(account)
+    return CreditLimitChange(
+        limit=int(amount),
+        temp_limit=temp_limit,
+        temp_limit_until=temp_until,
+    )
+
+
 async def _load_reseller(session: AsyncSession, user_id: int) -> BotUser | None:
     user = await session.get(BotUser, int(user_id))
     if user is None or user.role != Role.RESELLER.value:
@@ -273,11 +297,12 @@ async def save_credit_limit(
     if amount < 0:
         await message.answer("سقف اعتبار نمی‌تواند منفی باشد.")
         return
+    account = await credit_account(session, int(user.id))
     try:
         await set_credit_limit(
             session,
             int(user.id),
-            CreditLimitChange(limit=amount),
+            permanent_limit_change(account, amount),
             actor=f"tg:{db_user.telegram_id}",
         )
     except ValueError as exc:
