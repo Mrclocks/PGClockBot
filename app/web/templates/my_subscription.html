@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_title, card_title, row_actions %}
+{% from "_my_account_tabs.html" import my_account_tabs %}
 {% block title %}اشتراک من{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
@@ -8,6 +9,8 @@
     {{ page_title('payments', 'اشتراک من') }}
   </div>
 </div>
+
+{{ my_account_tabs('subscription') }}
 
 {% if unavailable %}
 <div class="card">

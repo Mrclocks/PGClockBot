@@ -48,7 +48,7 @@ class SidebarPerRoleTests(unittest.TestCase):
         nav = labels(OWNER)
         self.assertEqual(nav["system"], ["داشبورد", "مرکز اقدام", "تنظیمات سیستم"])
         self.assertEqual(nav["shop"], ["نمای کلی فروشگاه", "کاربران ربات", "نمایندگان", "مالی", "پلن‌ها", "پشتیبانی",
-                                       "بازاریابی", "گزارش کارکنان", "تنظیمات ربات"])
+                                       "بازاریابی", "پاکسازی سرویس‌ها", "گزارش کارکنان", "تنظیمات ربات"])
         self.assertEqual(nav["pg"][0], "نمای کلی پاسارگارد")
         self.assertEqual(nav["pg"][-1], "تست اتصال سرویس")
 

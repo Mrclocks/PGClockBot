@@ -358,7 +358,10 @@ async def bulk_pg_user_action(
     staff: dict,
     user_ids: list[int],
     action: str,
+    *,
+    done_ids: list[int] | None = None,
 ) -> tuple[int, int]:
+    """Apply ``action`` to each panel user; ``done_ids``, when given, receives the ids that succeeded."""
     from app.services.pg_access import staff_user_actions
     from app.services.pg_quota import PgQuotaError, assert_can_mutate_owned_users
     from app.services.pg_user_scope import (
@@ -445,6 +448,8 @@ async def bulk_pg_user_action(
                 fail += 1
                 continue
             ok += 1
+            if done_ids is not None:
+                done_ids.append(uid)
         except Exception:
             logger.debug("bulk pg user %s failed id=%s", action, uid, exc_info=True)
             fail += 1

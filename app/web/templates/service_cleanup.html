@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title, setting_help, row_actions %}
+{% block title %}پاکسازی سرویس‌ها{% endblock %}
+{% block content %}
+<div class="ds ds-settings">
+<div class="page-head">
+  <div>
+    {{ page_title('trash', 'پاکسازی سرویس‌ها', 'neutral') }}
+    <p class="muted">سرویس‌هایی که منقضی یا بی‌حجم شده‌اند و تمدید نشدند، بعد از مهلتی که تعیین می‌کنید حذف می‌شوند. قبل از حذف به مشتری هشدار می‌رسد.</p>
+  </div>
+</div>
+
+<div class="settings-domain-stack">
+<div class="card settings-card">
+  <h2>وضعیت فعلی</h2>
+  <p class="muted update-card-caption">{{ preview.cache_note }}</p>
+  <div class="home-panel-grid">
+    <div class="stat"><div class="stat-top"><span>منقضی‌شده</span></div><strong>{{ preview.expired_total | num }}</strong></div>
+    <div class="stat"><div class="stat-top"><span>حجم تمام‌شده</span></div><strong>{{ preview.volume_total | num }}</strong></div>
+    <div class="stat"><div class="stat-top"><span>آمادهٔ حذف</span></div><strong>{{ (preview.time_due_now + preview.volume_due_now) | num }}</strong></div>
+  </div>
+</div>
+
+<form method="post" action="{{ save_action }}" class="settings-form" id="service-cleanup-form">
+  <div class="card settings-card">
+    <label class="toggle-row ui-switch-row settings-card-switch">
+      <span class="ui-switch-copy">
+        <h2>حذف سرویس منقضی</h2>
+        {{ setting_help("بعد از مهلت، سرویس و کاربر پنل آن حذف می‌شود.") }}
+      </span>
+      <span class="ui-switch">
+        <input type="checkbox" name="time_on" value="1" aria-label="حذف خودکار سرویس منقضی" {% if policy.time_on %}checked{% endif %} />
+        <span class="ui-switch-track" aria-hidden="true"></span>
+      </span>
+    </label>
+    <div class="settings-grid" data-show-when="time_on:1"{% if not policy.time_on %} hidden{% endif %}>
+      <div class="setting-item full">
+        <label>مهلت بعد از انقضا (روز)
+        <input name="time_days" type="number" min="{{ min_days }}" max="{{ max_days }}" value="{{ policy.time_days }}"
+               required dir="ltr" inputmode="numeric" aria-label="مهلت حذف سرویس منقضی به روز" />
+        {{ setting_help("اگر تا این مهلت تمدید نشود حذف می‌شود. روزها از زمان انقضا یا از لحظهٔ روشن‌کردن این قانون، هرکدام دیرتر بود، شمرده می‌شود.") }}
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>هشدار اول (روز مانده به حذف)
+        <input name="warn_first" type="number" min="0" max="{{ max_days }}" value="{{ policy.warn_first }}"
+               dir="ltr" inputmode="numeric" aria-label="هشدار اول به روز مانده به حذف" />
+        {{ setting_help("۰ یعنی خاموش.") }}
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>هشدار آخر (روز مانده به حذف)
+        <input name="warn_last" type="number" min="0" max="{{ max_days }}" value="{{ policy.warn_last }}"
+               dir="ltr" inputmode="numeric" aria-label="هشدار آخر به روز مانده به حذف" />
+        {{ setting_help("۰ یعنی خاموش.") }}
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card settings-card">
+    <label class="toggle-row ui-switch-row settings-card-switch">
+      <span class="ui-switch-copy">
+        <h2>حذف سرویس بی‌حجم</h2>
+        {{ setting_help("جدا از انقضا؛ سرویسی که حجمش تمام شده و بسته حجم نگرفته است.") }}
+      </span>
+      <span class="ui-switch">
+        <input type="checkbox" name="volume_on" value="1" aria-label="حذف خودکار سرویس بی‌حجم" {% if policy.volume_on %}checked{% endif %} />
+        <span class="ui-switch-track" aria-hidden="true"></span>
+      </span>
+    </label>
+    <div class="settings-grid" data-show-when="volume_on:1"{% if not policy.volume_on %} hidden{% endif %}>
+      <div class="setting-item full">
+        <label>مهلت بعد از اتمام حجم (روز)
+        <input name="volume_days" type="number" min="{{ min_days }}" max="{{ max_days }}" value="{{ policy.volume_days }}"
+               required dir="ltr" inputmode="numeric" aria-label="مهلت حذف سرویس بی‌حجم به روز" />
+        {{ setting_help("حجم تمام‌شده معمولاً با خرید بسته حجم برمی‌گردد؛ مهلت را بلندتر از مهلت انقضا بگذارید.") }}
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions sticky-actions ui-modal-sticky-save">
+    <button class="btn" type="submit">ذخیره تنظیمات</button>
+  </div>
+</form>
+
+<div class="card card-flush">
+  <h2>سرویس‌هایی که به‌زودی حذف می‌شوند</h2>
+  <p class="muted">{{ (preview.time_due_soon + preview.volume_due_soon) | num }} سرویس تا ۷ روز دیگر به مهلتشان می‌رسند. حداکثر {{ preview.rows | length | num }} مورد، به ترتیب نزدیک‌ترین مهلت. «معاف» سرویس را برای همیشه از پاکسازی بیرون می‌برد؛ «مهلت» چند روز به مهلتش اضافه می‌کند و دوباره به مشتری هشدار می‌رسد.</p>
+  {% if not preview.rows %}
+  <p class="muted empty-state">سرویسی نزدیک به حذف نیست.</p>
+  {% else %}
+  <div class="table-wrap">
+    <table class="table-compact table-list-sm" data-sortable>
+      <thead>
+        <tr>
+          <th class="col-name" data-sort-type="text" data-list-sort-label="مشتری" data-list-sort-dir="ascending" data-list-sort-order="2">مشتری</th>
+          <th class="col-svc" data-sort-type="text">سرویس</th>
+          <th class="col-status" data-sort-type="text">دلیل</th>
+          <th class="col-hide-sm" data-sort-type="text">از تاریخ</th>
+          <th class="col-exp" data-sort-type="num" data-list-sort-label="نزدیک‌ترین مهلت" data-list-sort-dir="ascending" data-list-sort-order="1">حذف در</th>
+          <th class="col-actions"></th>
+          <th class="li-head" scope="col">
+            <span class="li-count">{{ preview.rows | length | num }} سرویس</span>
+            <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in preview.rows %}
+        <tr id="cleanup-{{ r.service_id }}">
+          <td class="col-name li-title" data-sort-value="{{ r.customer }}">
+            <div class="cell-name">
+              <span class="cell-name-primary">
+                <a class="cell-name-text cell-name-link" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}" dir="auto">{{ r.customer }}</a>
+              </span>
+            </div>
+          </td>
+          <td class="col-svc li-sub" data-sort-value="{{ r.username }}"><bdi dir="ltr" class="mono">{{ r.username }}</bdi></td>
+          <td class="col-status li-badge" data-sort-value="{{ r.kind }}"><span class="badge {{ 'blocked' if r.retrying else 'neutral' }}">{{ 'تلاش مجدد' if r.retrying else r.kind }}</span></td>
+          <td class="col-hide-sm" data-sort-value="{{ r.since }}"><bdi dir="ltr" class="mono">{{ r.since }}</bdi></td>
+          <td class="col-exp li-value li-tone-{{ 'danger' if r.days_left <= 1 else ('warn' if r.days_left <= 3 else 'none') }}" data-sort-value="{{ r.days_left }}">
+            <bdi dir="ltr" class="mono">{{ r.deadline }}</bdi>
+          </td>
+          <td class="col-actions">
+            {% call row_actions() %}
+              <a class="btn btn-ghost btn-sm" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}">مشاهده کاربر</a>
+              {% for extra in (7, 30) %}
+              <form method="post" action="/service-cleanup/{{ r.service_id }}/hold"
+                    data-confirm="{{ extra }} روز به مهلت حذف سرویس {{ r.username }} اضافه شود؟" data-confirm-title="تمدید مهلت حذف" data-confirm-label="تمدید"
+                    data-confirm-reason="1" data-confirm-reason-label="علت تمدید مهلت" data-confirm-reason-name="reason">
+                <input type="hidden" name="reason" value="" />
+                <input type="hidden" name="days" value="{{ extra }}" />
+                <button class="btn btn-ghost btn-sm" type="submit">{{ extra }} روز مهلت</button>
+              </form>
+              {% endfor %}
+              <form method="post" action="/service-cleanup/{{ r.service_id }}/exempt"
+                    data-confirm="سرویس {{ r.username }} برای همیشه از پاکسازی معاف شود؟" data-confirm-title="معاف‌کردن از پاکسازی" data-confirm-label="معاف شود"
+                    data-confirm-reason="1" data-confirm-reason-label="علت معافیت" data-confirm-reason-name="reason">
+                <input type="hidden" name="reason" value="" />
+                <input type="hidden" name="value" value="1" />
+                <button class="btn btn-ghost btn-sm" type="submit">معاف از پاکسازی</button>
+              </form>
+            {% endcall %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% if exempt %}
+<div class="card card-flush">
+  <h2>سرویس‌های معاف از پاکسازی</h2>
+  <p class="muted">این سرویس‌ها هیچ‌وقت خودکار حذف نمی‌شوند.</p>
+  <div class="table-wrap">
+    <table class="table-compact table-list-sm" data-sortable>
+      <thead>
+        <tr>
+          <th class="col-name" data-sort-type="text" data-list-sort-label="مشتری" data-list-sort-dir="ascending" data-list-sort-order="1">مشتری</th>
+          <th class="col-svc" data-sort-type="text">سرویس</th>
+          <th class="col-actions"></th>
+          <th class="li-head" scope="col">
+            <span class="li-count">{{ exempt | length | num }} سرویس</span>
+            <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in exempt %}
+        <tr>
+          <td class="col-name li-title" data-sort-value="{{ r.customer }}">
+            <div class="cell-name">
+              <span class="cell-name-primary">
+                <a class="cell-name-text cell-name-link" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}" dir="auto">{{ r.customer }}</a>
+              </span>
+            </div>
+          </td>
+          <td class="col-svc li-sub" data-sort-value="{{ r.username }}"><bdi dir="ltr" class="mono">{{ r.username }}</bdi></td>
+          <td class="col-actions">
+            {% call row_actions() %}
+              <a class="btn btn-ghost btn-sm" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}">مشاهده کاربر</a>
+              <form method="post" action="/service-cleanup/{{ r.service_id }}/exempt"
+                    data-confirm="سرویس {{ r.username }} دوباره در پاکسازی قرار گیرد؟" data-confirm-title="برگرداندن به پاکسازی" data-confirm-label="برگردان"
+                    data-confirm-reason="1" data-confirm-reason-label="علت برگرداندن" data-confirm-reason-name="reason">
+                <input type="hidden" name="reason" value="" />
+                <input type="hidden" name="value" value="0" />
+                <button class="btn btn-ghost btn-sm" type="submit">برگردان به پاکسازی</button>
+              </form>
+            {% endcall %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+</div>
+<script src="/static/settings-show-when.js?v={{ asset_v('settings-show-when.js') if asset_v is defined else app_version }}" defer></script>
+</div>
+{% endblock %}

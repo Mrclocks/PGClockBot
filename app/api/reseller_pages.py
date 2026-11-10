@@ -24,13 +24,19 @@ from app.services.miniapp_shop import (
     STATE_SHOP_OFF,
     shop_miniapp_state,
 )
+from app.api.payg_plan_form import apply_payg_settings, payg_rate_and_settings
+from app.services.shop_credit import credit_overview
+from app.api.pg_panel_access_pages import (
+    access_target_from_form,
+    apply_access_after_save,
+    apply_access_before_save,
+)
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
 from app.services.db_safe import rollback_quiet
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.reseller_capacity_view import allocation_view_for_shop
 from app.services.volume_allocation import apply_create_form_oversell, apply_oversell_switch, list_oversold_shop_ids
-from app.services.billing import require_positive_payg_rate
 from app.services.pasarguard import get_pg
 from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
 from app.services.support_button import support_markup
@@ -145,15 +151,6 @@ def _feature_perms_from_form(form) -> str:
         if form.get(f"perm_{key}"):
             selected.append(key)
     return normalize_feature_perms(join_perms(selected) or DEFAULT_FEATURE_PERMS)
-
-
-def _parse_price_per_gb(form) -> int:
-    from app.services.numbers import parse_int
-
-    try:
-        return max(0, parse_int(str(form.get("price_per_gb") or "0"), default=0))
-    except ValueError:
-        return 0
 
 
 def _parse_nonneg_int(form, key: str, default: int = 0) -> int:
@@ -735,6 +732,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             "color_tags": color_tags_for_ui(),
             "pg_api_key_ready": False,
             "owner_can_toggle_oversell": is_explicit_owner_staff(staff),
+            "credit": await credit_overview(session, int(user.id), balance=int(user.wallet_balance or 0))
+            if is_payg(profile)
+            else None,
         }
         if (getattr(profile, "pg_api_key_enc", None) or "").strip():
             ctx["pg_api_key_ready"] = True
@@ -862,7 +862,12 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         profile.bot_permissions = perms  # must stay identical
         profile.can_approve_receipts = "payments" in parse_perms(perms)
         profile.is_active = bool(form.get("is_active"))
-        profile.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
+        pg_access_target = access_target_from_form(form, profile)
+        apply_access_before_save(
+            profile,
+            target=pg_access_target,
+            share_panel_url=bool(form.get("share_pg_panel_url")),
+        )
         # An unchecked switch is not posted; the marker says the switch was on the form.
         apply_oversell_switch(
             profile,
@@ -954,6 +959,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
 
             await sync_reseller_bot_runtime(profile)
         _resync_menu_if_miniapp_changed(profile, miniapp_before)
+        access_warning = await apply_access_after_save(session, profile, target=pg_access_target)
+        if access_warning:
+            return _redirect_reseller_edit(user_id, err=access_warning)
         return _redirect_reseller_edit(user_id, ok='ذخیره شد')
 
     @app.post("/resellers/{user_id}/billing-topup")
@@ -1382,12 +1390,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         billing_mode = str(form.get("billing_mode") or "fixed").strip().lower()
         if billing_mode not in {"fixed", "payg"}:
             billing_mode = "fixed"
-        price_per_gb = _parse_price_per_gb(form) if billing_mode == "payg" else 0
-        if billing_mode == "payg":
-            try:
-                require_positive_payg_rate(price_per_gb)
-            except ValueError as e:
-                return RedirectResponse(f"/plans?err={_q(str(e))}#reseller-plans", status_code=303)
+        try:
+            price_per_gb, payg_settings = payg_rate_and_settings(form, billing_mode=billing_mode)
+        except ValueError as e:
+            return RedirectResponse(f"/plans?err={_q(str(e))}#reseller-plans", status_code=303)
         pg_group_ids = _parse_pg_group_ids(form)
         if not pg_group_ids:
             return RedirectResponse(
@@ -1463,12 +1469,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             create_pg_admin=bool(form.get("create_pg_admin")),
             create_web_access=True,
             share_pg_panel_url=bool(form.get("share_pg_panel_url")),
+            allow_pg_panel_access=bool(form.get("allow_pg_panel_access")),
             pg_role_id=int(pg_role_raw) if pg_role_raw.isdigit() else None,
             button_style=button_style,
             category_id=category_id,
             is_active=bool(form.get("is_active", "1")),
             sort_order=sort_order,
         )
+        apply_payg_settings(plan, payg_settings)
         session.add(plan)
         await session.flush()
         from app.services.billing import sync_plan_billing_rate
@@ -1614,6 +1622,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             plan.carry_remaining_period = bool(form.get("carry_remaining_period"))
             plan.keep_extras_on_renew = bool(form.get("keep_extras_on_renew"))
             plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
+            plan.allow_pg_panel_access = bool(form.get("allow_pg_panel_access"))
             perms = _feature_perms_from_form(form)
             plan.web_permissions = perms
             plan.bot_permissions = perms
@@ -1747,11 +1756,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 status_code=303,
             )
         try:
-            payg_rate = (
-                require_positive_payg_rate(_parse_price_per_gb(form))
-                if billing_mode == "payg"
-                else 0
-            )
+            payg_rate, payg_settings = payg_rate_and_settings(form, billing_mode=billing_mode)
         except ValueError as e:
             return RedirectResponse(
                 f"/resellers/plans/{plan_id}/edit?err={_q(str(e))}",
@@ -1759,6 +1764,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             )
         if billing_mode == "payg":
             plan.price_per_gb = payg_rate
+            apply_payg_settings(plan, payg_settings)
             plan.pg_group_ids = pg_group_ids
             plan.allow_buy_extra = False
             plan.extra_gb_price = 0
@@ -1775,6 +1781,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         plan.can_approve_receipts = "payments" in parse_perms(perms)
         plan.create_pg_admin = bool(form.get("create_pg_admin"))
         plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
+        plan.allow_pg_panel_access = bool(form.get("allow_pg_panel_access"))
         plan.renew_price = _parse_nonneg_int(form, "renew_price")
         plan.carry_remaining_period = bool(form.get("carry_remaining_period"))
         plan.keep_extras_on_renew = bool(form.get("keep_extras_on_renew"))

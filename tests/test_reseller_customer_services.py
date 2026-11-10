@@ -12,6 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
 
+from app.bot.handlers.action_reason import KEY_DONE_FOR, KEY_REASON
+from tests.reason_support import ReasonedState
 from app.bot.handlers import reseller_customer_services as handler
 from app.db.models import Base, BotUser, Plan, ResellerProfile, Role, UserService
 from app.services import bot_feedback_texts as feedback
@@ -238,10 +240,7 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
         callback = self._callback(f"res:svcrenew:{self.customer.id}:11")
         edit = AsyncMock()
         owned = AsyncMock(return_value=await self.session.get(UserService, 11))
-        state = AsyncMock()
-        state.get_data = AsyncMock(return_value={})
-        state.update_data = AsyncMock()
-        state.set_data = AsyncMock()
+        state = ReasonedState(callback.data)
         with patch.object(handler, "safe_edit_text", edit), patch.object(
             handler, "get_owned_service", owned
         ), patch.object(
@@ -267,7 +266,11 @@ class ResellerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
     async def test_adjust_confirm_claims_deltas_so_a_second_confirm_is_empty(self) -> None:
         """Before the panel call, stored days/gb are zeroed so a concurrent confirm cannot reuse them."""
         callback = self._callback(f"res:svcadj:{self.customer.id}:11:confirm")
-        store: dict = {f"rsvcadj:{self.customer.id}:11": {"days": 3, "gb": 1.0}}
+        store: dict = {
+            f"rsvcadj:{self.customer.id}:11": {"days": 3, "gb": 1.0},
+            KEY_REASON: "جبران قطعی سرویس",
+            KEY_DONE_FOR: callback.data,
+        }
 
         async def get_data():
             return dict(store)

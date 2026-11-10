@@ -862,6 +862,7 @@ DEFAULT_SETTINGS = {
     "notify_panel_update": "1",
     "notify_panel_capacity": "1",
     "notify_panel_delivery_failures": "1",
+    "notify_service_panel_missing": "1",
     "notify_service_import_request": "1",
     "notify_auto_approve": "1",
     "notify_account_edits": "1",
@@ -870,6 +871,15 @@ DEFAULT_SETTINGS = {
     "user_alert_low_traffic_pct": "20",
     "user_alert_low_time_pct": "20",
     "first_use_nudge_enabled": "0",
+    # Expired / volume-finished service cleanup (service_cleanup.py keeps the same defaults).
+    "expired_cleanup_enabled": "0",
+    "expired_cleanup_days": "7",
+    "expired_cleanup_enabled_at": "",
+    "expired_cleanup_warn_first": "3",
+    "expired_cleanup_warn_last": "1",
+    "volume_cleanup_enabled": "0",
+    "volume_cleanup_days": "30",
+    "volume_cleanup_enabled_at": "",
     # Reseller panel URLs (setup links + messages). Empty = system defaults
     "reseller_panel_base_url": "",
     "reseller_pg_panel_base_url": "",
@@ -1132,6 +1142,11 @@ DEFAULT_SETTINGS = {
     "billing_low_balance": "10000",
     "billing_on_empty": "block_provision",
     "billing_tick_minutes": "15",
+    # Credit statements: days after month end, then days after due for each ladder step.
+    "credit_due_days": "7",
+    "credit_block_create_days": "3",
+    "credit_block_changes_days": "7",
+    "credit_block_days": "14",
     "volume_external_sync_minutes": "15",
     # UX20 ops
     "shop_maintenance_enabled": "0",
@@ -1468,6 +1483,30 @@ SETTING_GROUPS = {
             "number",
             "فاصله اجرای billing tick برای کسر مصرف تفاضلی (دلتا) از watermark نماینده",
         ),
+        (
+            "credit_due_days",
+            "مهلت پرداخت صورت‌حساب (روز)",
+            "number",
+            "روز بعد از پایان ماه تا سررسید صورت‌حساب اعتبار؛ از سررسید، اعتبار تازه داده نمی‌شود",
+        ),
+        (
+            "credit_block_create_days",
+            "بستن ساخت کاربر (روز بعد از سررسید)",
+            "number",
+            "از این روز، نمایندهٔ بدهکار کاربر تازه نمی‌سازد",
+        ),
+        (
+            "credit_block_changes_days",
+            "بستن تمدید و تغییر (روز بعد از سررسید)",
+            "number",
+            "از این روز، تمدید، افزایش حجم و ریست هم بسته است",
+        ),
+        (
+            "credit_block_days",
+            "مسدودسازی کامل (روز بعد از سررسید)",
+            "number",
+            "از این روز حساب نماینده تعلیق می‌شود؛ با پرداخت خودکار باز می‌شود",
+        ),
     ],
     "هشدار سرویس کاربر": [
         (
@@ -1500,7 +1539,7 @@ SETTING_GROUPS = {
             "admin_daily_report_enabled",
             "ارسال گزارش روزانه در تلگرام",
             "toggle",
-            "هر روز در ساعت مشخص‌شده خلاصهٔ انتخابی به ادمین‌ها فرستاده می‌شود",
+            "هر روز در ساعت مشخص‌شده، خلاصهٔ روز کامل قبل (تقویم تهران) فرستاده می‌شود",
         ),
         (
             "subordinate_report_enabled",
@@ -1512,7 +1551,7 @@ SETTING_GROUPS = {
             "admin_daily_report_hour",
             "ساعت ارسال (۰–۲۳، UTC)",
             "number",
-            "ساعت تهران = UTC + ۳:۳۰ · مثلاً ۲۰ = ۲۳:۳۰ تهران · اگر ربات در آن ساعت خاموش باشد، گزارش همان روز بعداً فرستاده می‌شود",
+            "گزارش روز کامل قبل تهران را می‌فرستد · تهران = UTC + ۳:۳۰ · پیش‌فرض ۰ = ۰۳:۳۰ تهران · اگر ربات خاموش باشد همان روز بعداً فرستاده می‌شود",
         ),
         (
             "admin_daily_report_template",

@@ -289,7 +289,11 @@
         <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/renew" class="form-stack"
               data-confirm="سرویس با پلن انتخابی تمدید شود؟ تمدید دستی ادمین همیشه از الان شروع می‌شود و مصرف ریست می‌شود (سوییچ انتقال مانده فقط برای تمدید مشتری است)."
               data-confirm-title="تمدید با پلن"
+              data-confirm-reason="1"
+              data-confirm-reason-label="علت تمدید"
+              data-confirm-reason-name="reason"
               data-confirm-label="تمدید">
+          <input type="hidden" name="reason" value="" />
           <div class="user-edit-inline-row">
             <label class="form-field user-edit-grow">تمدید با پلن
               <select name="plan_id" required class="select-block">
@@ -308,7 +312,11 @@
         <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/extend" class="form-stack"
               data-confirm="روز/حجم سرویس فعلی تغییر کند؟ (مثبت = افزایش، منفی = کاهش)"
               data-confirm-title="تغییر مانده سرویس"
+              data-confirm-reason="1"
+              data-confirm-reason-label="علت تغییر مانده"
+              data-confirm-reason-name="reason"
               data-confirm-label="اعمال">
+          <input type="hidden" name="reason" value="" />
           <div class="user-edit-fields user-edit-fields--2">
             <label class="form-field">روز
               {{ num_stepper('extra_days', value=0, step=1, min=-3650, max=3650, inputmode='numeric', aria_label='روز') }}
@@ -328,7 +336,11 @@
         <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/delete" class="form-stack"
               data-confirm="سرویس #{{ s.service.id }}{% if s.service.pg_username %} ({{ s.service.pg_username }}){% endif %} فقط از لیست مشتری جدا شود؟ حساب VPN در پاسارگارد حفظ می‌شود و مشتری دیگر آن را در ربات نمی‌بیند."
               data-confirm-title="جدا کردن سرویس از مشتری"
+              data-confirm-reason="1"
+              data-confirm-reason-label="علت حذف سرویس"
+              data-confirm-reason-name="reason"
               data-confirm-label="جدا شود">
+          <input type="hidden" name="reason" value="" />
           <div class="actions user-edit-actions">
             <button class="btn btn-sm btn-ghost" type="submit">جدا کردن از مشتری</button>
           </div>
@@ -337,7 +349,11 @@
               data-confirm="سرویس #{{ s.service.id }}{% if s.service.pg_username %} ({{ s.service.pg_username }}){% endif %} از بیرون ربات اضافه شده است. حساب VPN آن در پاسارگارد هم برای همیشه حذف شود؟ این عمل برگشت‌ناپذیر است."
               data-confirm-title="حذف همراه حساب پاسارگارد"
               data-confirm-danger="1"
+              data-confirm-reason="1"
+              data-confirm-reason-label="علت حذف سرویس"
+              data-confirm-reason-name="reason"
               data-confirm-label="حذف با حساب پاسارگارد">
+          <input type="hidden" name="reason" value="" />
           <input type="hidden" name="delete_pg" value="1" />
           <div class="actions user-edit-actions">
             <button class="btn btn-sm btn-danger" type="submit">حذف همراه حساب پاسارگارد</button>
@@ -348,7 +364,11 @@
               data-confirm="سرویس #{{ s.service.id }}{% if s.service.pg_username %} ({{ s.service.pg_username }}){% endif %} و کاربر پاسارگارد مرتبط برای همیشه حذف شوند؟ این عمل برگشت‌ناپذیر است."
               data-confirm-title="تأیید حذف سرویس"
               data-confirm-danger="1"
+              data-confirm-reason="1"
+              data-confirm-reason-label="علت حذف سرویس"
+              data-confirm-reason-name="reason"
               data-confirm-label="حذف سرویس">
+          <input type="hidden" name="reason" value="" />
           <div class="actions user-edit-actions">
             <button class="btn btn-sm btn-danger" type="submit">حذف سرویس</button>
           </div>
