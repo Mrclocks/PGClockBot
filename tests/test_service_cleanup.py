@@ -62,6 +62,7 @@ class CleanupCase(RoutesHarness):
         await super().asyncSetUp()
         clear_settings_cache()
         self.addCleanup(clear_settings_cache)
+        self.db_path = Path(self._tmp.name) / "u.db"
         async with AsyncSession(bind=self.engine, expire_on_commit=False) as session:
             session.add_all([
                 BotUser(id=6, telegram_id=106, referral_code="shop6", role="reseller"),
