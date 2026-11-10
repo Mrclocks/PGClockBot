@@ -454,3 +454,5 @@ tests/test_cashback_pages.py
 tests/test_reseller_finance_pages.py
 # Cashback preview and notices, ladder day settings.
 tests/test_billing_finishing.py
+# Owner PAYG report: owner only, CSV formula-safe.
+tests/test_billing_reports.py

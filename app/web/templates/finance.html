@@ -37,6 +37,7 @@
     <span class="nav-item-label"><span>درخواست‌های لغو</span>{% if cancel_alert %}<i class="nav-dot" aria-label="درخواست لغو در انتظار"></i>{% endif %}</span>
   </a>
   <a class="{% if finance_tab=='automation' %}active{% endif %}" href="/finance?tab=automation">تمدید خودکار</a>
+  {% if staff and staff.get('web_owner') %}<a href="/finance/payg">نمایندگان PAYG</a>{% endif %}
   {% endif %}
 </nav>
 
