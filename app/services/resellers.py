@@ -27,8 +27,7 @@ from app.db.models import (
 from app.services.db_safe import rollback_quiet
 from app.services.chat_records import keeps_sent
 from app.services.pg_panel_access import (
-    ROTATION_FAILED_MESSAGE,
-    RotationOutcome,
+    close_access_warning,
     may_share_pg_credentials,
     pg_panel_allowed,
     pg_password_follows_web,
@@ -2126,8 +2125,9 @@ async def provision_existing_pg_admin(
 
     if not allow_pg_access:
         change = await set_pg_panel_access(session, profile, False)
-        if change.rotation == RotationOutcome.PENDING:
-            return profile, None, ROTATION_FAILED_MESSAGE
+        warning = await close_access_warning(session, profile, change)
+        if warning:
+            return profile, None, warning
 
     setup_hint = None
     if not (profile.bot_token or "").strip():

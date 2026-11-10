@@ -29,7 +29,10 @@ from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_toman, parse_expire
 from app.services.payg_charges import (
     ChargeRequest,
+    PARENT_SHORTFALL_MESSAGE,
+    ParentWalletShortfall,
     new_request_key,
+    parent_share,
     quote_for_shop,
     refund_charge,
     reserve_charge,
@@ -37,7 +40,15 @@ from app.services.payg_charges import (
     settle_charge,
     shop_rates,
 )
-from app.services.payg_pricing import RESET_EXPLANATION, ChargeEvent, ChargeQuote, PaygPriceError, ServiceChange
+from app.services.child_pricing import parent_shop_profile
+from app.services.payg_pricing import (
+    RESET_EXPLANATION,
+    ChargeEvent,
+    ChargeQuote,
+    PaygPriceError,
+    ServiceChange,
+    child_plan_id_of,
+)
 from app.services.provision_gate import ProvisionError, reseller_id_from_staff
 from app.services.credit_statements import refusal_for, shop_restriction
 from app.services.shop_credit import claim_credit_alert, credit_usage, shop_credit_limit
@@ -50,6 +61,9 @@ REFUND_REASON = "پاسخ قطعی پنل: تغییر انجام نشد"
 TEMPLATE_UNREADABLE_MESSAGE = (
     "حجم و مدت قالب این پلن از پاسارگارد خوانده نشد؛ برای محاسبهٔ هزینه کمی بعد دوباره تلاش کنید"
 )
+# The panel's own periodic reset looks the same as a manual one, so reconciliation charges both.
+AUTO_RESET_NOTE = "کاربری که در پاسارگارد ریست خودکار دارد، هر بار ریست هزینهٔ کل حجم دارد"
+PARENT_OVERDUE_MESSAGE = "فروش موقتاً متوقف است؛ نمایندهٔ بالادست شما بدهی سررسیدگذشته دارد"
 SHORTFALL_FOR_CUSTOMER = "این سرویس فعلاً قابل تحویل نیست؛ کمی بعد دوباره تلاش کنید"
 
 
@@ -78,7 +92,10 @@ async def shop_charges_at_creation(session: AsyncSession, shop_id: int | None) -
     profile = await shop_profile(session, shop_id)
     if profile is None or not is_payg(profile):
         return False
-    rates = await shop_rates(session, profile)
+    try:
+        rates = await shop_rates(session, profile)
+    except PaygPriceError:
+        return True  # the charge itself refuses the change with the safe message
     return rates is not None and (rates.charges_traffic or rates.charges_users)
 
 
@@ -104,7 +121,7 @@ async def charge_shop_change(
     if profile is None or not is_payg(profile):
         return None
     if not ladder_exempt:
-        await _assert_ladder_allows(session, int(profile.user_id), change)
+        await _assert_ladder_allows(session, profile, change)
     request = ChargeRequest(
         request_key=request_key,
         change=change,
@@ -116,6 +133,9 @@ async def charge_shop_change(
     )
     try:
         charge = await reserve_charge(session, profile, request)
+    except ParentWalletShortfall as exc:
+        await _announce_short_safely(session, exc.parent_profile)
+        raise ProvisionError(str(exc)) from exc
     except WalletShortfall as exc:
         await _announce_short_safely(session, profile)
         raise ProvisionError(str(exc)) from exc
@@ -144,10 +164,16 @@ async def _alert_credit_use(session: AsyncSession, profile: ResellerProfile) -> 
         await rollback_quiet(session)
 
 
-async def _assert_ladder_allows(session: AsyncSession, shop_id: int, change: ServiceChange) -> None:
-    refusal = refusal_for(await shop_restriction(session, shop_id), change.event)
+async def _assert_ladder_allows(session: AsyncSession, profile: ResellerProfile, change: ServiceChange) -> None:
+    """The overdue ladder of the shop, and of the level-1 parent that pays half of a level-2 charge."""
+    refusal = refusal_for(await shop_restriction(session, int(profile.user_id)), change.event)
     if refusal is not None:
         raise ProvisionError(refusal)
+    if child_plan_id_of(profile) is None:
+        return
+    parent = await parent_shop_profile(session, profile)
+    if parent is not None and refusal_for(await shop_restriction(session, int(parent.user_id)), change.event):
+        raise ProvisionError(PARENT_OVERDUE_MESSAGE)
 
 
 async def _announce_short_safely(session: AsyncSession, profile: ResellerProfile) -> None:
@@ -170,14 +196,31 @@ async def assert_shop_can_afford(
     profile = await shop_profile(session, shop_id)
     if profile is None or not is_payg(profile):
         return
-    await _assert_ladder_allows(session, int(profile.user_id), change)
+    await _assert_ladder_allows(session, profile, change)
     quote = await quote_shop_change(session, shop_id, change, quantity=quantity)
     if quote is None:
         return
-    if await payg_spendable_for_charges(session, profile) >= quote.amount:
+    if await payg_spendable_for_charges(session, profile) < quote.amount:
+        await _announce_short_safely(session, profile)
+        raise ProvisionError(SHORTFALL_MESSAGE)
+    await _assert_parent_affordable(session, profile, change, quantity=quantity)
+
+
+async def _assert_parent_affordable(
+    session: AsyncSession, profile: ResellerProfile, change: ServiceChange, *, quantity: int
+) -> None:
+    """A level-2 sale also needs its parent's half; a short parent is told, not the child."""
+    try:
+        share = await parent_share(session, profile, change, quantity=quantity)
+    except PaygPriceError as exc:
+        raise ProvisionError(str(exc)) from exc
+    if share is None:
         return
-    await _announce_short_safely(session, profile)
-    raise ProvisionError(SHORTFALL_MESSAGE)
+    parent_profile, parent_quote = share
+    if await payg_spendable_for_charges(session, parent_profile) >= parent_quote.amount:
+        return
+    await _announce_short_safely(session, parent_profile)
+    raise ProvisionError(PARENT_SHORTFALL_MESSAGE)
 
 
 async def finish_charge(session: AsyncSession, charge: ResellerCharge | None, *, commit: bool = True) -> None:
@@ -450,7 +493,10 @@ async def shop_rate_summary(session: AsyncSession, shop_id: int | None) -> RateS
     profile = await shop_profile(session, shop_id)
     if profile is None or not is_payg(profile):
         return None
-    rates = await shop_rates(session, profile)
+    try:
+        rates = await shop_rates(session, profile)
+    except PaygPriceError as exc:
+        return RateSummary(lines=(str(exc),), charges_reset=False)
     if rates is None or not (rates.charges_traffic or rates.charges_users):
         return None
     lines: list[str] = []
@@ -463,6 +509,8 @@ async def shop_rate_summary(session: AsyncSession, shop_id: int | None) -> RateS
         lines.append("کاربر نامحدود: مجاز نیست")
     else:
         lines.append(f"کاربر نامحدود: {format_toman(rates.unlimited_price)}")
+    if rates.charges_traffic:
+        lines.append(AUTO_RESET_NOTE)
     return RateSummary(lines=tuple(lines), charges_reset=rates.charges_traffic)
 
 

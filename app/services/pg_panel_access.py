@@ -54,6 +54,13 @@ ROTATION_FAILED_MESSAGE = (
 )
 
 
+API_KEY_STILL_VALID_MESSAGE = (
+    "دسترسی به پاسارگارد بسته شد، ولی این فروشگاه با کلید API کار می‌کند و تغییر رمز "
+    "آن کلید را باطل نمی‌کند؛ اگر نماینده این کلید را دیده است، آن را در پاسارگارد باطل "
+    "کنید و کلید تازه را در همین صفحه ثبت کنید"
+)
+
+
 class RotationOutcome(StrEnum):
     DONE = "done"
     PENDING = "pending"
@@ -192,6 +199,25 @@ async def finish_pg_password_rotation(
     await session.commit()
     _drop_cached_clients(profile, holder)
     return RotationOutcome.DONE
+
+
+async def shop_uses_pg_api_key(session: AsyncSession, profile: ResellerProfile) -> bool:
+    """Whether shop operations log in with a stored API key, which a password change leaves valid."""
+    if (getattr(profile, "pg_api_key_enc", None) or "").strip():
+        return True
+    linked = await get_principal_by_reseller_profile(session, int(profile.id))
+    return linked is not None and bool((getattr(linked, "pg_api_key_enc", None) or "").strip())
+
+
+async def close_access_warning(
+    session: AsyncSession, profile: ResellerProfile, change: AccessChange
+) -> str | None:
+    """What the owner must still do after closing access, if anything."""
+    if change.rotation == RotationOutcome.PENDING:
+        return ROTATION_FAILED_MESSAGE
+    if change.changed and await shop_uses_pg_api_key(session, profile):
+        return API_KEY_STILL_VALID_MESSAGE
+    return None
 
 
 def open_pg_panel_access(profile: ResellerProfile) -> None:
