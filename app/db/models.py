@@ -1009,6 +1009,79 @@ class ShopCreditAccount(Base):
     )
 
 
+class CashbackRule(Base):
+    """One cashback rule of a shop (``shop_id`` NULL is the platform shop)."""
+
+    __tablename__ = "cashback_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # percent (basis points, 1000 = 10%) | fixed (toman)
+    mode: Mapped[str] = mapped_column(String(16), default="percent")
+    percent_bps: Mapped[int] = mapped_column(Integer, default=0)
+    fixed_amount: Mapped[int] = mapped_column(Integer, default=0)
+    max_per_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    min_order_amount: Mapped[int] = mapped_column(Integer, default=0)
+    # CSV of new | renew | addon
+    events: Mapped[str] = mapped_column(String(64), default="new,renew,addon")
+    plan_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    payment_methods: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    first_purchase_only: Mapped[bool] = mapped_column(Boolean, default=False)
+    starts_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Per customer and calendar month.
+    customer_max_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    customer_max_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    allow_with_discount: Mapped[bool] = mapped_column(Boolean, default=True)
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CashbackGrant(Base):
+    """Cashback of one delivered order: pending, then credited to the buyer's shop wallet.
+
+    One per order (unique ``order_id``). The rule's numbers are stored, so a later rule
+    edit never changes a grant.
+    """
+
+    __tablename__ = "cashback_grants"
+    __table_args__ = (
+        UniqueConstraint("order_id", name="uq_cashback_grant_order"),
+        Index("ix_cashback_grants_status_available", "status", "available_at"),
+        Index("ix_cashback_grants_shop_user_created", "shop_id", "user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
+    order_id: Mapped[int] = mapped_column(Integer)
+    rule_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    base_amount: Mapped[int] = mapped_column(Integer)
+    amount: Mapped[int] = mapped_column(Integer)
+    # pending | available | cancelled | reversed
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    reversed_amount: Mapped[int] = mapped_column(Integer, default=0)
+    unrecoverable_amount: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CashbackBudget(Base):
+    """Cashback a shop granted in one calendar month, checked atomically against its budget."""
+
+    __tablename__ = "cashback_budgets"
+    __table_args__ = (UniqueConstraint("shop_key", "month", name="uq_cashback_budget_month"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # The shop's user id, or 0 for the platform shop.
+    shop_key: Mapped[int] = mapped_column(Integer)
+    month: Mapped[str] = mapped_column(String(7))
+    used: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class CreditStatement(Base):
     """One closed calendar month of a shop's credit line, with the debt due and its due date.
 
