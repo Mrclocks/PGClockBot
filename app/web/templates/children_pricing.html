@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title, row_actions %}
+{% from "_ds.html" import ds_switch, ds_sec, ds_modal_head, ds_foot %}
+{% set basis_labels = {'traffic': 'حجم', 'user': 'کاربر', 'user_traffic': 'کاربر + حجم'} %}
+{% set page_path = '/resellers/children-pricing' %}
+
+{# Plan form body; key makes the ids unique when several plan modals share the page. #}
+{% macro plan_fields(p, key) %}
+{% set basis = (p.payg_basis if p else 'traffic') or 'traffic' %}
+{% set basis_id = 'cp-basis-' ~ key %}
+{% call ds_sec('پلن', extra_class='ds-sec-first') %}
+  <label class="form-field">نام پلن <input name="name" required maxlength="128" value="{{ p.name if p else '' }}" /></label>
+  <div class="form-field">
+    <span class="ds-label-text">مبنای هزینه</span>
+    <select name="payg_basis" id="{{ basis_id }}" data-ui-select="1" hidden>
+      {% for value in ('traffic', 'user', 'user_traffic') %}<option value="{{ value }}"{% if basis == value %} selected{% endif %}>{{ value }}</option>{% endfor %}
+    </select>
+    <div class="sales-seg ds-seg" role="radiogroup" aria-label="مبنای هزینه" data-ds-choice data-ds-target="#{{ basis_id }}">
+      {% for value, label in basis_labels.items() %}<button type="button" role="radio" data-value="{{ value }}">{{ label }}</button>{% endfor %}
+    </div>
+  </div>
+{% endcall %}
+{% call ds_sec('قیمت') %}
+  <div class="ds-grid-2">
+    <label class="form-field" data-ds-show-when="#{{ basis_id }}:traffic,user_traffic"{% if basis == 'user' %} hidden{% endif %}>نرخ هر گیگ
+      <span class="ds-unit"><input name="price_per_gb" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ p.price_per_gb if p else 0 }}" /><span class="ds-unit-label">تومان</span></span>
+    </label>
+    <label class="form-field" data-ds-show-when="#{{ basis_id }}:user,user_traffic"{% if basis == 'traffic' %} hidden{% endif %}>قیمت هر کاربر
+      <span class="ds-unit"><input name="payg_user_price" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ p.payg_user_price if p else 0 }}" /><span class="ds-unit-label">تومان</span></span>
+    </label>
+    <label class="form-field">قیمت کاربر نامحدود
+      <span class="ds-unit"><input name="payg_unlimited_price" type="number" data-money min="0" inputmode="numeric" dir="ltr" placeholder="ممنوع" value="{{ p.payg_unlimited_price if p and p.payg_unlimited_price is not none else '' }}" /><span class="ds-unit-label">تومان</span></span>
+    </label>
+  </div>
+  <div class="ds-rows">{{ ds_switch('payg_user_price_per_30d', 'قیمت کاربر به ازای هر ۳۰ روز', '', p.payg_user_price_per_30d if p else false, show_when='#' ~ basis_id ~ ':user,user_traffic', hidden=(basis == 'traffic')) }}</div>
+{% endcall %}
+{% endmacro %}
+
+{% macro plan_modal(p) %}
+{% set key = p.id if p else 'new' %}
+<div class="ui-modal ds" id="modal-cp-plan-{{ key }}" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-cp-plan-{{ key }}-title">
+    {{ ds_modal_head('users', 'ویرایش پلن قیمت' if p else 'پلن قیمت تازه', 'modal-cp-plan-' ~ key ~ '-title') }}
+    <form method="post" action="{{ page_path ~ '/plans/' ~ p.id if p else page_path ~ '/plans' }}" class="form-stack ds-body">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {{ plan_fields(p, key) }}
+      {% if p %}<div class="ds-note">تغییر فقط روی هزینه‌های بعدی اثر دارد.</div>{% endif %}
+      {{ ds_foot('ذخیرهٔ پلن' if p else 'ساخت پلن') }}
+    </form>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro child_modal(c) %}
+<div class="ui-modal ds" id="modal-cp-child-{{ c.shop_id }}" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-cp-child-{{ c.shop_id }}-title">
+    {{ ds_modal_head('users', 'قیمت و اعتبار ' ~ c.label, 'modal-cp-child-' ~ c.shop_id ~ '-title') }}
+    <form method="post" action="{{ page_path }}/{{ c.shop_id }}" class="form-stack ds-body">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% call ds_sec('قیمت و اعتبار', extra_class='ds-sec-first') %}
+        <label class="form-field">پلن قیمت
+          <select name="plan_id"><option value="">پکیج مالک</option>
+            {% for p in plans %}<option value="{{ p.id }}"{% if c.plan_id == p.id %} selected{% endif %}>{{ p.name }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="form-field">سقف اعتبار
+          <span class="ds-unit"><input name="credit_limit" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ c.credit_limit }}" /><span class="ds-unit-label">تومان</span></span>
+          <small class="muted">از اعتبار آزاد شما کم می‌شود؛ آزاد: <bdi dir="ltr">{{ free_credit | money }}</bdi></small>
+        </label>
+      {% endcall %}
+      {{ ds_foot('ذخیره') }}
+    </form>
+  </div>
+</div>
+{% endmacro %}
+
+{% block title %}قیمت و اعتبار زیرمجموعه{% endblock %}
+{% block content %}
+{% set plan_names = {} %}{% for p in plans %}{% set _ = plan_names.update({p.id: p.name}) %}{% endfor %}
+<div class="ds ds-settings">
+<div class="page-head">
+  <div>{{ page_title('users', 'قیمت و اعتبار زیرمجموعه') }}</div>
+  <div class="page-head-actions">
+    <button type="button" class="btn" data-modal-open="modal-cp-plan-new">پلن قیمت تازه</button>
+  </div>
+</div>
+{% if flash_ok %}<div class="flash ok" role="status">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err" role="alert">{{ flash_err }}</div>{% endif %}
+
+<div class="home-panels">
+  <section class="home-panel home-panel-neutral">
+    <div class="home-panel-grid">
+      <div class="stat">
+        <div class="stat-top"><span class="stat-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v18M7 7.5h7a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h8"/></svg></span><span>اعتبار آزاد شما</span></div>
+        <strong><bdi dir="ltr">{{ free_credit | money }}</bdi></strong>
+      </div>
+      <div class="stat">
+        <div class="stat-top"><span class="stat-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg></span><span>زیرمجموعه‌ها</span></div>
+        <strong>{{ children | length | num }}</strong>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="card card-flush">
+  <div class="card-flush-head">
+    <h2>پلن‌های قیمت</h2>
+    <p class="muted">زیرمجموعه به قیمت پلن شما می‌پردازد و شما به قیمت پلن خودتان. پلنی که به زیرمجموعه‌ای وصل است حذف نمی‌شود.</p>
+  </div>
+  <div class="table-wrap"><table class="table-compact table-list-sm">
+    <thead><tr>
+      <th>نام</th><th>مبنا</th><th class="col-hide-sm">نرخ هر گیگ</th><th class="col-hide-sm">قیمت هر کاربر</th>
+      <th class="col-actions"><span class="sr-only">اقدام</span></th>
+      <th class="li-head" scope="col"><span class="li-count">{{ plans | length | num }} پلن</span></th>
+    </tr></thead>
+    <tbody>{% for p in plans %}<tr>
+      <td class="li-title"><span dir="auto">{{ p.name }}</span></td>
+      <td class="li-sub">{{ basis_labels.get(p.payg_basis, p.payg_basis) }}<span class="li-only"> · گیگ <bdi dir="ltr">{{ p.price_per_gb | money }}</bdi></span></td>
+      <td class="col-hide-sm"><bdi dir="ltr">{{ p.price_per_gb | money }}</bdi></td>
+      <td class="col-hide-sm"><bdi dir="ltr">{{ p.payg_user_price | money }}</bdi></td>
+      <td class="col-actions">
+        {% call row_actions() %}
+        <button type="button" class="btn btn-sm" data-modal-open="modal-cp-plan-{{ p.id }}">ویرایش</button>
+        <form method="post" action="{{ page_path }}/plans/{{ p.id }}/delete"
+              data-confirm="پلن «{{ p.name }}» حذف شود؟ هزینه‌های قبلی تغییری نمی‌کنند." data-confirm-title="حذف پلن"
+              data-confirm-danger="1" data-confirm-label="حذف">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn btn-danger btn-sm" type="submit" aria-label="حذف پلن {{ p.name }}">حذف</button>
+        </form>
+        {% endcall %}
+      </td>
+    </tr>{% else %}<tr><td colspan="5" class="muted">هنوز پلن قیمتی نساخته‌اید</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+
+<div class="card card-flush">
+  <div class="card-flush-head"><h2>زیرمجموعه‌ها</h2></div>
+  <div class="table-wrap"><table class="table-compact table-list-sm">
+    <thead><tr>
+      <th>نماینده</th><th>پلن قیمت</th><th>سقف اعتبار</th>
+      <th class="col-actions"><span class="sr-only">اقدام</span></th>
+      <th class="li-head" scope="col"><span class="li-count">{{ children | length | num }} زیرمجموعه</span></th>
+    </tr></thead>
+    <tbody>{% for c in children %}<tr>
+      <td class="li-title"><bdi dir="ltr">{{ c.label }}</bdi></td>
+      <td class="li-sub">{{ plan_names.get(c.plan_id, 'پکیج مالک') }}</td>
+      <td class="cell-tight li-value"><bdi dir="ltr">{{ c.credit_limit | money }}</bdi></td>
+      <td class="col-actions">
+        <button type="button" class="btn btn-sm btn-ghost li-hide" data-modal-open="modal-cp-child-{{ c.shop_id }}">ویرایش</button>
+        <button type="button" class="li-only li-open" data-modal-open="modal-cp-child-{{ c.shop_id }}" aria-label="ویرایش {{ c.label }}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
+      </td>
+    </tr>{% else %}<tr><td colspan="4" class="muted">نمایندهٔ زیرمجموعه‌ای با فروشگاه ندارید</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+</div>
+
+{{ plan_modal(none) }}
+{% for p in plans %}{{ plan_modal(p) }}{% endfor %}
+{% for c in children %}{{ child_modal(c) }}{% endfor %}
+{% endblock %}

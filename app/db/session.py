@@ -255,6 +255,10 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             "bot_username": "VARCHAR(64)",
             "bot_telegram_id": "BIGINT",
             "share_pg_panel_url": "BOOLEAN DEFAULT 0",
+            "allow_pg_panel_access": "BOOLEAN DEFAULT 1",
+            "pg_password_rotation_enc": "TEXT",
+            "child_plan_id": "INTEGER",
+            "payg_baseline_at": "DATETIME",
             "bot_admin_ids": "TEXT",
             "pg_admin_password_enc": "TEXT",
             "pg_api_key_enc": "TEXT",
@@ -342,6 +346,23 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             sync_conn.execute(
                 sql_text(
                     "ALTER TABLE reseller_plans ADD COLUMN keep_extras_on_renew BOOLEAN DEFAULT 1"
+                )
+            )
+        for col, typ in (
+            ("payg_basis", "VARCHAR(16) DEFAULT 'traffic'"),
+            ("payg_charge_upfront", "BOOLEAN DEFAULT 0"),
+            ("payg_user_price", "INTEGER DEFAULT 0"),
+            ("payg_user_price_per_30d", "BOOLEAN DEFAULT 0"),
+            ("payg_unlimited_price", "INTEGER"),
+        ):
+            if col not in pcols:
+                sync_conn.execute(
+                    sql_text(f"ALTER TABLE reseller_plans ADD COLUMN {col} {typ}")
+                )
+        if "allow_pg_panel_access" not in pcols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE reseller_plans ADD COLUMN allow_pg_panel_access BOOLEAN DEFAULT 1"
                 )
             )
 

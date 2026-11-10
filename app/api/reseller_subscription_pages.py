@@ -45,7 +45,7 @@ def _back(*, ok: str = "", err: str = "") -> RedirectResponse:
     return RedirectResponse(f"{PAGE}?{query}", status_code=303)
 
 
-async def _owner_context(session: AsyncSession, staff: dict) -> tuple[BotUser, ResellerProfile]:
+async def shop_owner_context(session: AsyncSession, staff: dict) -> tuple[BotUser, ResellerProfile]:
     """The shop owner's profile; staff sessions and other roles get a 403.
 
     Do not require ``profile.is_active`` here: the expiry tick flips that flag off, and the
@@ -79,7 +79,7 @@ def register_reseller_subscription_pages(app, *, render, require_staff, get_db) 
     async def my_subscription(
         request: Request, staff: dict = Depends(require_staff), session: AsyncSession = Depends(get_db),
     ):
-        owner, profile = await _owner_context(session, staff)
+        owner, profile = await shop_owner_context(session, staff)
         ctx: dict = {
             "staff": staff,
             "wallet": int(owner.wallet_balance or 0),
@@ -115,7 +115,7 @@ def register_reseller_subscription_pages(app, *, render, require_staff, get_db) 
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        owner, profile = await _owner_context(session, staff)
+        owner, profile = await shop_owner_context(session, staff)
         try:
             result = await renew_package(
                 session, owner=owner, profile=profile, plan_id=_valid_id(plan_id),
@@ -136,7 +136,7 @@ def register_reseller_subscription_pages(app, *, render, require_staff, get_db) 
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        owner, profile = await _owner_context(session, staff)
+        owner, profile = await shop_owner_context(session, staff)
         current = await session.get(ResellerPlan, int(profile.plan_id)) if profile.plan_id else None
         if kind not in {"gb", "users"} or current is None:
             return _back(err="درخواست نامعتبر است")

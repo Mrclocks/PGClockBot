@@ -8,6 +8,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import BotUser, Order, ServiceAutomation, ServiceCancellation, ShopWallet, UserService
+from app.services.cashback import reverse_after_refund
 from app.services.cancellation_customer_notice import notify_cancellation_decision
 from app.services.pasarguard import get_pg, get_pg_for_reseller
 from app.services.service_automation import service_shop_id
@@ -207,5 +208,7 @@ async def approve_cancellation(session, request_id, *, shop_id, amount, actor, n
         await session.commit()
         raise ValueError("نتیجهٔ پنل نامشخص است؛ اعتبار واریز نشده و درخواست برای تلاش مجدد محفوظ است") from None
     # Reached only when this call moved the request to approved: the failure branch above raises.
+    if amount:
+        await reverse_after_refund(session, service_id=int(service.id), reason=f"لغو سرویس #{int(service.id)}")
     await notify_cancellation_decision(session, request_id)
     return row

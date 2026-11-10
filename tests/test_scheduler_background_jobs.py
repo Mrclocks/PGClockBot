@@ -16,6 +16,10 @@ from app.jobs import scheduler as jobs
 
 OPERATIONS = {
     "billing_tick",
+    # Closes last month's credit statements and applies the overdue ladder; needs no running bot.
+    "credit_cycle",
+    # Credits cashback whose hold has passed; needs no running bot.
+    "cashback_mature",
     "pg_admin_subscription",
     # Deletes the order and payment rows each shop chose for automatic deletion; needs no running bot.
     "order_purge",
@@ -27,6 +31,8 @@ OPERATIONS = {
     "psp_settlement_poll",
     "volume_external_sync",
     "chat_message_purge",
+    # Queues the warnings before an expired service is deleted; needs no running bot.
+    "service_cleanup",
     # Approves card receipts nobody reviewed in time; opens the bot it needs only when a receipt is due.
     "scheduled_receipt_approval",
     # Reads each converting shop's API rate into memory; needs no running bot.
@@ -36,7 +42,7 @@ OPERATIONS = {
     # Removes cached customer profile photos for the user card; needs no running bot.
     "user_photo_prune",
 }
-NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "broadcast", "first_use_nudge", "cancellation_notifications", "panel_alert_notifications"}
+NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "broadcast", "first_use_nudge", "cancellation_notifications", "panel_alert_notifications", "customer_notices"}
 
 
 class BackgroundSchedulerTests(unittest.IsolatedAsyncioTestCase):

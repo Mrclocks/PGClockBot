@@ -14,10 +14,13 @@ from app.jobs.bot_profile_photo import run_bot_profile_photo_sync
 from app.jobs.cancellation_notifications import run_cancellation_notifications
 from app.jobs.chat_message_purge import run_chat_message_purge
 from app.jobs.connection_status import run_connection_status
+from app.jobs.customer_notices import run_customer_notices
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
 from app.jobs.pg_link_watchdog import run_pg_link_watchdog
+from app.jobs.service_cleanup import run_service_cleanup
 from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
+from app.services.alert_rearm import rearm_flagged_alerts
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
 from app.services.replaceable_notices import DAILY_REPORT_KEY, SUBORDINATE_REPORT_KEY, send_replacing_report
@@ -26,9 +29,13 @@ from app.services.usage_alerts import (
     ALERT_TRAFFIC,
     SentAlert,
     alert_extras,
+    period_seconds,
+    plan_durations,
     replace_previous_alerts,
     time_alert_markup,
+    time_remaining_pct,
     traffic_alert_markup,
+    traffic_remaining_pct,
     usage_alert_key,
 )
 
@@ -37,6 +44,8 @@ scheduler = AsyncIOScheduler()
 
 # Bound concurrent PG subscription lookups during expiry scan
 _PG_FETCH_CONCURRENCY = 8
+# Where the next alert re-arm sweep continues (in memory: a restart simply starts from the beginning).
+_rearm_after_id = 0
 
 
 def _as_int(val, default: int) -> int:
@@ -178,6 +187,7 @@ async def check_expiring_services(bot: Bot) -> None:
                 shop: await alert_extras(session, [item[0] for item in eligible if item[5] == shop], shop_id=shop)
                 for shop in {item[5] for item in eligible}
             }
+            plan_days = await plan_durations(session, [item[0] for item in eligible])
             sem = asyncio.Semaphore(_PG_FETCH_CONCURRENCY)
             sent_alerts: list[SentAlert] = []
 
@@ -213,11 +223,14 @@ async def check_expiring_services(bot: Bot) -> None:
                     created = svc.created_at
                     if created and created.tzinfo is None:
                         created = created.replace(tzinfo=timezone.utc)
-                    if expire and created and expire > created:
-                        total = (expire - created).total_seconds()
-                        remaining = (expire - now).total_seconds()
-                        if total > 0 and remaining >= 0:
-                            rem_pct = (remaining / total) * 100
+                    if expire:
+                        period = period_seconds(
+                            plan_days=plan_days.get(int(svc.plan_id)) if svc.plan_id else None,
+                            created_at=created,
+                            expire=expire,
+                        )
+                        rem_pct = time_remaining_pct(expire, now=now, period=period)
+                        if rem_pct is not None:
                             if rem_pct <= time_pct:
                                 try:
                                     one_tap = on(_ui.get("one_tap_renew_enabled", "1"))
@@ -248,10 +261,10 @@ async def check_expiring_services(bot: Bot) -> None:
                     if limit:
                         try:
                             limit_f = float(limit)
-                        except Exception:
+                        except (TypeError, ValueError):
                             limit_f = 0
-                        if limit_f > 0:
-                            rem_pct = max(0.0, (1.0 - (used / limit_f)) * 100)
+                        rem_pct = traffic_remaining_pct(used, limit_f)
+                        if rem_pct is not None:
                             if rem_pct <= traffic_pct:
                                 try:
                                     alert = await send_bot.send_message(
@@ -274,6 +287,22 @@ async def check_expiring_services(bot: Bot) -> None:
             await replace_previous_alerts(session, sent_alerts)
             if len(services) < batch_size:
                 break
+
+        async def thresholds_for(shop_id: int | None) -> tuple[bool, int, int]:
+            shop_ui = await ui_for(shop_id)
+            return (
+                on(shop_ui.get("user_alert_low_enabled", "0")),
+                max(1, min(99, _as_int(shop_ui.get("user_alert_low_traffic_pct"), 20))),
+                max(1, min(99, _as_int(shop_ui.get("user_alert_low_time_pct"), 20))),
+            )
+
+        try:
+            global _rearm_after_id
+            result = await rearm_flagged_alerts(session, pg, thresholds_for, now=now, after_id=_rearm_after_id)
+            _rearm_after_id = result.next_after_id
+        except Exception:  # noqa: BLE001 - the sweep is best effort; the next run tries again
+            logger.warning("alert re-arm sweep failed", exc_info=True)
+            await session.rollback()
 
 
 
@@ -302,6 +331,47 @@ async def run_reseller_billing_tick() -> None:
                 logger.info("billing tick %s", stats)
         except Exception:
             logger.exception("billing tick failed")
+            return
+        await _run_payg_reconcile(session)
+
+
+async def run_cashback_mature_job() -> None:
+    """Every 5 minutes: credit cashback whose hold has passed, once each."""
+    async with SessionLocal() as session:
+        try:
+            from app.services.cashback import mature_grants
+
+            credited = await mature_grants(session)
+            if credited:
+                logger.info("cashback credited %s", credited)
+        except Exception:
+            logger.exception("cashback maturity failed")
+
+
+async def run_credit_cycle_job() -> None:
+    """Hourly: close last month's credit statements, settle paid debt, apply the overdue ladder."""
+    async with SessionLocal() as session:
+        try:
+            from app.services.credit_cycle import run_credit_cycle
+
+            stats = await run_credit_cycle(session)
+            if stats.get("shops"):
+                logger.info("credit cycle %s", stats)
+        except Exception:
+            logger.exception("credit cycle failed")
+
+
+async def _run_payg_reconcile(session) -> None:
+    """Charge PAYG shops for user changes made in the panel outside the bot."""
+    try:
+        from app.services.pasarguard import get_pg
+        from app.services.payg_reconcile import run_payg_reconcile
+
+        stats = await run_payg_reconcile(session, get_pg())
+        if stats.shops or stats.swept:
+            logger.info("payg reconcile %s", stats)
+    except Exception:
+        logger.exception("payg reconcile failed")
 
 
 async def run_auto_order_purge() -> None:
@@ -797,6 +867,8 @@ def start_background_scheduler() -> None:
     """Run financial and maintenance jobs as soon as the database is ready."""
     jobs = (
         ("billing_tick", run_reseller_billing_tick, {"minutes": 1}, 120),
+        ("credit_cycle", run_credit_cycle_job, {"hours": 1}, 3600),
+        ("cashback_mature", run_cashback_mature_job, {"minutes": 5}, 300),
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
         ("order_purge", run_auto_order_purge, {"hours": 1}, 3600),
         ("scheduled_receipt_approval", run_scheduled_receipt_approvals, {"seconds": 60}, 90),
@@ -809,6 +881,7 @@ def start_background_scheduler() -> None:
         # Ticks often; each shop is recounted on the period set in volume_external_sync_minutes.
         ("volume_external_sync", run_volume_external_sync, {"minutes": 1}, 120),
         ("chat_message_purge", run_chat_message_purge, {"hours": 1}, 3600),
+        ("service_cleanup", run_service_cleanup, {"minutes": 30}, 1800),
     )
     for job_id, func, interval, grace in jobs:
         if scheduler.get_job(job_id) is None:
@@ -843,6 +916,10 @@ def start_scheduler(bot: Bot) -> None:
     start_background_scheduler()
     scheduler.add_job(
         run_cancellation_notifications, "interval", seconds=10, args=[bot], id="cancellation_notifications",
+        max_instances=1, coalesce=True, misfire_grace_time=60, replace_existing=True,
+    )
+    scheduler.add_job(
+        run_customer_notices, "interval", seconds=10, args=[bot], id="customer_notices",
         max_instances=1, coalesce=True, misfire_grace_time=60, replace_existing=True,
     )
     scheduler.add_job(

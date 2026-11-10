@@ -2630,7 +2630,9 @@ a.btn.btn-ghost:hover {
     height: 32px;
     border: 1px solid var(--border);
     border-radius: var(--control-radius);
+    background: transparent;
     color: var(--foreground);
+    cursor: pointer;
   }
   .table-list-sm .li-open .ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   /* Time-left colours already flag the row; the dot would only crowd the name. */

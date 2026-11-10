@@ -306,6 +306,10 @@ async def credit_wallet(
             logger.exception(
                 "PAYG restore-after-wallet-credit failed user=%s", uid
             )
+        # Local import: credit_lift reaches billing_suspend, which imports this module.
+        from app.services.credit_lift import mark_restricted_shop_paid
+
+        await mark_restricted_shop_paid(session, uid)
 
     session.add(
         WalletTransaction(

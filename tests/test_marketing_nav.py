@@ -21,6 +21,7 @@ from app.api.shop_broadcast_pages import shop_broadcast_scope
 from app.services.marketing_nav import (
     BROADCAST,
     CAMPAIGNS,
+    CASHBACK,
     CLUB,
     CLUB_TRANSACTIONS,
     DISCOUNTS,
@@ -120,7 +121,10 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         self.assertEqual(marketing_sections({}), ())
 
     def test_owner_sees_every_section_in_order(self):
-        self.assertEqual(_keys(OWNER), [CLUB, CLUB_TRANSACTIONS, DISCOUNTS, GIFT_CODES, CAMPAIGNS, TRIAL_USERS, FUNNEL, BROADCAST])
+        self.assertEqual(
+            _keys(OWNER),
+            [CLUB, CLUB_TRANSACTIONS, DISCOUNTS, GIFT_CODES, CASHBACK, CAMPAIGNS, TRIAL_USERS, FUNNEL, BROADCAST],
+        )
 
     def test_legacy_admin_without_owner_principal_gets_no_tenant_sections(self):
         self.assertEqual(marketing_sections(LEGACY_ADMIN), ())

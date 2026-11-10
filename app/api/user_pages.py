@@ -12,6 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Plan
+from app.services.customer_action_notices import NoticeTarget, notify_customers
+from app.services.action_reasons import ReasonRequired, log_reasoned_action, reason_from_form
 from app.services.authz import authz_from_staff, can_shop
 from app.services.bot_user_admin import (
     CUSTOMER_SERVICES_PERMISSION,
@@ -603,6 +605,10 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                 form, err="نقش پاسارگارد شما اجازه تمدید ندارد", uid=user_id
             )
 
+        try:
+            reason = reason_from_form(form)
+        except ReasonRequired as exc:
+            return _redirect_list_form(form, err=str(exc), uid=user_id)
         loaded = await _require_scoped_user(session, staff, user_id)
         if isinstance(loaded, RedirectResponse):
             return loaded
@@ -618,6 +624,15 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return _redirect_list_form(form, err=str(e), uid=user_id)
         except Exception as e:
             return _redirect_list_form(form, err=_op_err(e, prefix="تمدید ناموفق"), uid=user_id)
+        await log_reasoned_action(
+            session, staff, action="service_renew", target_type="service", target_id=svc.id, reason=reason
+        )
+        await notify_customers(
+            session,
+            [NoticeTarget(int(user.id), int(user.telegram_id or 0), svc.shop_id, svc.pg_username or "")],
+            action="service_renew",
+            reason=reason,
+        )
         return _redirect_list_form(
             form, ok=f"سرویس {label} تمدید شد", uid=user_id
         )
@@ -703,6 +718,10 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
 
         form = await request.form()
         try:
+            reason = reason_from_form(form)
+        except ReasonRequired as exc:
+            return _redirect_user(user_id, err=str(exc))
+        try:
             svc = await get_owned_service(
                 session, bot_user_id=user_id, service_id=service_id,
                 shop_id=resolve_shop_scope_id(staff),
@@ -723,6 +742,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         if plan is None:
             return _redirect_user(user_id, err="پلن تمدید را انتخاب کنید")
 
+        target = NoticeTarget(int(user_id), int(loaded.telegram_id or 0), svc.shop_id, svc.pg_username or "")
         try:
             await admin_renew_service(
                 session,
@@ -737,6 +757,10 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return _redirect_user(user_id, err=str(e))
         except Exception as e:
             return _redirect_user(user_id, err=_op_err(e, prefix="تمدید ناموفق"))
+        await log_reasoned_action(
+            session, staff, action="service_renew", target_type="service", target_id=service_id, reason=reason
+        )
+        await notify_customers(session, [target], action="service_renew", reason=reason)
         return _redirect_user(user_id, ok=f"سرویس #{service_id} تمدید شد")
 
     @app.post("/users/{user_id}/services/{service_id}/extend")
@@ -755,6 +779,10 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
 
         form = await request.form()
         try:
+            reason = reason_from_form(form)
+        except ReasonRequired as exc:
+            return _redirect_user(user_id, err=str(exc))
+        try:
             svc = await get_owned_service(
                 session, bot_user_id=user_id, service_id=service_id,
                 shop_id=resolve_shop_scope_id(staff),
@@ -770,6 +798,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             extra_gb = parse_float(gb_raw)
         except ValueError:
             return _redirect_user(user_id, err="مقادیر تغییر مانده نامعتبر است")
+        target = NoticeTarget(int(user_id), int(loaded.telegram_id or 0), svc.shop_id, svc.pg_username or "")
         try:
             await admin_extend_service(
                 session,
@@ -782,6 +811,10 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return _redirect_user(user_id, err=str(e))
         except Exception as e:
             return _redirect_user(user_id, err=_op_err(e, prefix="تغییر مانده ناموفق"))
+        await log_reasoned_action(
+            session, staff, action="service_extend", target_type="service", target_id=service_id, reason=reason
+        )
+        await notify_customers(session, [target], action="service_extend", reason=reason)
         return _redirect_user(user_id, ok=f"مانده سرویس #{service_id} به‌روز شد")
 
     @app.post("/users/{user_id}/services/{service_id}/delete")
@@ -798,6 +831,11 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         if isinstance(loaded, RedirectResponse):
             return loaded
 
+        form = await request.form()
+        try:
+            reason = reason_from_form(form)
+        except ReasonRequired as exc:
+            return _redirect_user(user_id, err=str(exc))
         try:
             svc = await get_owned_service(
                 session, bot_user_id=user_id, service_id=service_id,
@@ -806,11 +844,10 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
 
-
         from app.services.service_import import admin_delete_pg_flag, is_external_service
 
-        form = await request.form()
         delete_pg = admin_delete_pg_flag(svc, explicit=form.get("delete_pg") == "1")
+        target = NoticeTarget(int(user_id), int(loaded.telegram_id or 0), svc.shop_id, svc.pg_username or "")
         try:
             info = await admin_delete_service(
                 session, svc, delete_pg=delete_pg, staff=staff
@@ -819,6 +856,13 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return _redirect_user(user_id, err=str(e))
         except Exception as e:
             return _redirect_user(user_id, err=_op_err(e, prefix="حذف سرویس ناموفق"))
+        await log_reasoned_action(
+            session, staff, action="service_delete", target_type="service", target_id=service_id, reason=reason
+        )
+        detached_only = is_external_service(svc) and not delete_pg
+        await notify_customers(
+            session, [target], action="service_detach" if detached_only else "service_delete", reason=reason
+        )
         if is_external_service(svc) and not delete_pg:
             return _redirect_user(user_id, ok=f"سرویس #{service_id} از لیست مشتری جدا شد؛ حساب پاسارگارد حفظ شد")
         note = " (پاسارگارد حذف شد)" if info.get("pg_deleted") else (

@@ -11,6 +11,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
 
+from tests.reason_support import ReasonedState
 from app.bot import service_import_ui as ui_mod
 from app.bot.handlers import service_import as flow
 from app.bot.handlers import services as services_handlers
@@ -324,7 +325,9 @@ class AdminDeleteChoiceTests(ImportCase):
         register_user_pages(app, render=lambda *a, **k: None, require_admin=lambda: owner, get_db=get_db)
         with patch("app.services.bot_user_admin.admin_delete_service", AsyncMock(return_value={})) as delete:
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-                response = await client.post(f"/users/1/services/{service_id}/delete", data=form)
+                response = await client.post(
+                    f"/users/1/services/{service_id}/delete", data={"reason": "درخواست مشتری", **form}
+                )
         return delete, response
 
     async def test_web_delete_of_a_sold_service_still_removes_the_panel_user(self):
@@ -357,7 +360,7 @@ class AdminDeleteChoiceTests(ImportCase):
         self.assertEqual(html.count("جدا کردن از مشتری"), 2)
         self.assertEqual(html.count(">حذف سرویس<"), 1)
 
-    async def _bot(self, callback_data: str, handler):
+    async def _bot(self, callback_data: str, handler, *, reason: bool = True):
         from app.bot.handlers import admin
 
         callback = _callback(callback_data)
@@ -365,8 +368,14 @@ class AdminDeleteChoiceTests(ImportCase):
         with patch("app.bot.auth.is_bot_owner_principal", AsyncMock(return_value=True)):
             async with self.Session() as session:
                 with patch("app.services.bot_user_admin.admin_delete_service", AsyncMock(return_value={})) as delete:
-                    await getattr(admin, handler)(callback, session, user)
+                    extra = {"state": ReasonedState(callback_data if reason else None)} if handler == "adm_users_service_delete" else {}
+                    await getattr(admin, handler)(callback, session, user, **extra)
         return callback, delete
+
+    async def test_bot_delete_without_a_reason_asks_for_one_and_deletes_nothing(self):
+        callback, delete = await self._bot("adm:users:svcdel:1:901", "adm_users_service_delete", reason=False)
+        delete.assert_not_awaited()
+        self.assertIn("علت", callback.message.edit_text.await_args.args[0])
 
     async def test_bot_confirmation_offers_the_two_choices_for_external_services(self):
         callback, _ = await self._bot("adm:users:svcdelask:1:903", "adm_users_service_delete_ask")
