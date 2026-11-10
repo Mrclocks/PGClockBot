@@ -99,7 +99,8 @@ class CustomerServicesWebPermissionTests(RoutesHarness):
         await self.set_shop_permissions("dashboard,customer_services")
         mocks = self.patched_service_ops()
         response = await self.post(
-            f"/users/{CUSTOMER_ID}/services/{SERVICE_ID}/extend", {"extra_days": "5", "extra_gb": "0"}
+            f"/users/{CUSTOMER_ID}/services/{SERVICE_ID}/extend",
+            {"extra_days": "5", "extra_gb": "0", "reason": "جبران قطعی سرویس"},
         )
         self.assertEqual(response.status_code, 303)
         mocks["admin_extend_service"].assert_awaited_once()

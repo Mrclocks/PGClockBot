@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title %}
+{% from "_finance_tabs.html" import finance_tabs %}
+{% block title %}نمایندگان PAYG{% endblock %}
+{% set credit_labels = {'frozen': 'منجمد', 'overdue': 'سررسید گذشته', 'blocked': 'مسدود'} %}
+{% set credit_tones = {'frozen': 'info', 'overdue': 'warn', 'blocked': 'danger'} %}
+{% macro stat(label, value, ico) %}
+<div class="stat">
+  <div class="stat-top"><span class="stat-ico" aria-hidden="true">{{ ico }}</span><span>{{ label }}</span></div>
+  <strong><bdi dir="ltr">{{ value | money }}</bdi></strong>
+</div>
+{% endmacro %}
+{% block content %}
+<div class="page-head">
+  <div>{{ page_title('orders', 'مالی', help='finance') }}</div>
+  <div class="page-head-actions">
+    <a class="btn btn-ghost" href="/payg/charges/review">بازبینی هزینه‌ها</a>
+    <a class="btn" href="/finance/payg.csv">خروجی CSV</a>
+  </div>
+</div>
+
+{{ finance_tabs('payg', can_orders=can_orders, can_payments=can_payments, staff=staff) }}
+
+{% set ico_debt %}<svg viewBox="0 0 24 24"><path d="M12 3v18M7 7.5h7a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h8"/></svg>{% endset %}
+{% set ico_payg %}<svg viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg>{% endset %}
+{% set ico_gift %}<svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8c-2-4-6-4-6-1.5S9 8 12 8zm0 0c2-4 6-4 6-1.5S15 8 12 8z"/></svg>{% endset %}
+{% set ns = namespace(debt=0, charges=0, cashback=0) %}
+{% for r in rows %}{% set ns.debt = ns.debt + r.debt %}{% set ns.charges = ns.charges + r.month_charges %}{% set ns.cashback = ns.cashback + r.month_cashback %}{% endfor %}
+<div class="home-panels">
+  <section class="home-panel home-panel-neutral">
+    <div class="home-panel-grid">
+      {{ stat('بدهی نمایندگان', ns.debt, ico_debt) }}
+      {{ stat('هزینهٔ این ماه', ns.charges, ico_payg) }}
+      {{ stat('کش‌بک این ماه', ns.cashback, ico_gift) }}
+    </div>
+  </section>
+</div>
+
+<div class="card card-flush">
+  <div class="card-flush-head"><h2>نمایندگان PAYG</h2></div>
+  <div class="table-wrap"><table class="table-compact table-list-sm">
+    <thead><tr>
+      <th>نماینده</th><th>موجودی</th><th class="col-hide-sm">سقف اعتبار</th><th class="col-hide-sm">هزینهٔ این ماه</th>
+      <th class="col-hide-sm">بدهی صورت‌حساب</th><th class="col-hide-sm">کش‌بک این ماه</th><th class="col-status">اعتبار</th>
+      <th class="col-actions"><span class="sr-only">اقدام</span></th>
+      <th class="li-head" scope="col"><span class="li-count">{{ rows | length | num }} نماینده</span></th>
+    </tr></thead>
+    <tbody>{% for r in rows %}<tr>
+      <td class="li-title"><bdi dir="ltr">{{ r.label }}</bdi></td>
+      <td class="cell-tight li-value"><bdi dir="ltr">{{ r.balance | money }}</bdi></td>
+      <td class="col-hide-sm li-sub">
+        {#- On phones line two: this month's charges and the open statement debt. -#}
+        <span class="li-only">این ماه <bdi dir="ltr">{{ r.month_charges | money }}</bdi> · بدهی <bdi dir="ltr">{{ r.open_debt | money }}</bdi></span>
+        <bdi class="li-hide" dir="ltr">{{ r.credit_limit | money }}</bdi>
+      </td>
+      <td class="col-hide-sm"><bdi dir="ltr">{{ r.month_charges | money }}</bdi></td>
+      <td class="col-hide-sm"><bdi dir="ltr">{{ r.open_debt | money }}</bdi></td>
+      <td class="col-hide-sm"><bdi dir="ltr">{{ r.month_cashback | money }}</bdi></td>
+      <td class="cell-tight li-badge">{% if r.credit_status and r.credit_status != 'active' %}<span class="badge {{ credit_tones.get(r.credit_status, 'neutral') }}">{{ credit_labels.get(r.credit_status, r.credit_status) }}</span>{% else %}<span class="badge ok">عادی</span>{% endif %}</td>
+      <td class="col-actions">
+        <a class="btn btn-sm btn-ghost li-hide" href="/resellers?edit={{ r.shop_id }}">کارت نماینده</a>
+        <a class="li-only li-open" href="/resellers?edit={{ r.shop_id }}" aria-label="کارت نماینده {{ r.label }}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></a>
+      </td>
+    </tr>{% else %}<tr><td colspan="8" class="muted">نمایندهٔ PAYG وجود ندارد</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}

@@ -183,8 +183,10 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
 
     def test_behavior_panel_moved_out_of_finance(self):
         html = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
-        self.assertIn("finance?tab=reports", html)
+        tabs = Path("app/web/templates/_finance_tabs.html").read_text(encoding="utf-8")
+        self.assertIn("finance?tab=reports", tabs)
         self.assertNotIn("finance?tab=behavior", html)
+        self.assertNotIn("finance?tab=behavior", tabs)
         self.assertNotIn("_funnel_panel.html", html)
         self.assertIn("_funnel_panel.html", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
         self.assertIn("تحویل ناموفق", html)

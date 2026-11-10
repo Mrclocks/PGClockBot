@@ -13,16 +13,19 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ResellerProfile
+from app.db.models import ResellerPlan, ResellerProfile
 from app.services.billing import (
     BILLING_MODE_FIXED,
     BILLING_MODE_PAYG,
     PaygRateError,
     ensure_billing_enabled,
     get_traffic_source,
+    require_billable_payg_plan,
     rate_context_for_profile,
     resolve_price_per_gb,
 )
+
+from app.services.payg_pricing import BASIS_USER, rates_from_plan
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +113,21 @@ async def finish_mode_change(
         await restore_payg_reseller(session, profile, commit=True, force=True)
 
 
+async def _assert_shop_billable(session: AsyncSession, profile: ResellerProfile) -> None:
+    """A shop moved to PAYG must have a package that bills it (per-GB rate or user price)."""
+    plan = await session.get(ResellerPlan, int(profile.plan_id)) if profile.plan_id else None
+    if plan is not None and str(getattr(plan, "billing_mode", "") or "").lower() == BILLING_MODE_PAYG:
+        require_billable_payg_plan(plan)
+        if rates_from_plan(plan).basis == BASIS_USER:
+            return
+    rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
+    if rate <= 0:
+        raise PaygRateError(
+            "برای این نماینده نرخ هر گیگ تعریف نشده؛ پلن PAYG با نرخ مثبت را از "
+            "«اعطای نماینده» به او بدهید"
+        )
+
+
 async def switch_billing_mode(
     session: AsyncSession,
     profile: ResellerProfile,
@@ -126,12 +144,7 @@ async def switch_billing_mode(
 
     watermark: int | None = None
     if target == BILLING_MODE_PAYG:
-        rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
-        if rate <= 0:
-            raise PaygRateError(
-                "برای این نماینده نرخ هر گیگ تعریف نشده؛ پلن PAYG با نرخ مثبت را از "
-                "«اعطای نماینده» به او بدهید"
-            )
+        await _assert_shop_billable(session, profile)
         watermark = await starting_watermark(profile.pg_admin_username)
 
     apply_mode_fields(profile, target, watermark_bytes=watermark)

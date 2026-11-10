@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import Select, func, select, update
+from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -836,16 +836,19 @@ async def on_user_referred(
 
 
 async def _is_first_delivered_purchase(session: AsyncSession, order: Order) -> bool:
+    """True when this is the buyer's first non-trial delivered purchase (not renew/app fee)."""
     note = (order.note or "").strip()
     if note.startswith(("renew:", "reseller_app:", "res_cap:", "res_pkg:")):
         return False
     prior = (
         await session.execute(
             select(Order.id)
+            .outerjoin(Plan, Plan.id == Order.plan_id)
             .where(
                 Order.user_id == order.user_id,
                 Order.status == "delivered",
                 Order.id != order.id,
+                or_(Plan.id.is_(None), Plan.is_trial.is_(False)),
             )
             .limit(1)
         )
@@ -867,6 +870,9 @@ async def on_order_delivered(session: AsyncSession, order: Order) -> None:
     plan = order.__dict__.get("plan")
     if plan is None and order.plan_id:
         plan = await session.get(Plan, order.plan_id)
+    # Trial claims are not purchases: no points, no referral qualification.
+    if plan is not None and bool(getattr(plan, "is_trial", False)):
+        return
     reseller_id = order.reseller_id
     try:
         await ensure_loyalty_defaults(session, reseller_id=reseller_id)

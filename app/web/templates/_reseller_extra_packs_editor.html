@@ -18,6 +18,8 @@
      data-extra-packs-root
      data-default-gb="1,5,10,50"
      data-default-users="1,5,10,20">
+  {# Every colour, so a pack row added in the browser offers them all even when the editor starts empty. #}
+  <template data-pack-style-options>{% for opt_val, opt_label, opt_tone in style_opts %}<option value="{{ opt_val }}" data-tone="{{ opt_tone }}">{{ 'پیش‌فرض' if opt_val == 'inherit' else opt_label }}</option>{% endfor %}</template>
   <div class="sales-seg ds-seg" role="tablist" aria-label="نوع بسته">
     {% for key, title in [('gb', 'حجم'), ('users', 'کاربر')] %}
     <button type="button" role="tab" class="{% if loop.first %}on{% endif %}" aria-selected="{{ 'true' if loop.first else 'false' }}" data-pack-tab="{{ key }}">{{ title }} <span class="ds-tab-count" data-pack-count="{{ key }}"></span></button>

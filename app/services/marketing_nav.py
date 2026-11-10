@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.services.authz import authz_from_staff, can_shop
+from app.services.cashback_rules import cashback_scope
 from app.services.funnel_access import funnel_shop_scope
 from app.services.gift_codes import gift_code_scope
 from app.services.platform_identity import is_explicit_owner_staff
@@ -22,6 +23,7 @@ CLUB = "club"
 CLUB_TRANSACTIONS = "club_transactions"
 DISCOUNTS = "discounts"
 GIFT_CODES = "gift_codes"
+CASHBACK = "cashback"
 FUNNEL = "funnel"
 CAMPAIGNS = "campaigns"
 TRIAL_USERS = "trial_users"
@@ -42,6 +44,7 @@ _CLUB_SECTIONS: tuple[MarketingSection, ...] = (
 )
 _DISCOUNT_SECTION = MarketingSection(DISCOUNTS, "تخفیف‌ها", "/catalog-discounts")
 _GIFT_CODE_SECTION = MarketingSection(GIFT_CODES, "کد هدیه", "/gift-codes")
+_CASHBACK_SECTION = MarketingSection(CASHBACK, "کش‌بک", "/cashback")
 _FUNNEL_SECTION = MarketingSection(FUNNEL, "رفتار کاربر", "/funnel")
 _CAMPAIGN_SECTION = MarketingSection(CAMPAIGNS, "کمپین هدفمند", "/campaigns")
 _TRIAL_USERS_SECTION = MarketingSection(TRIAL_USERS, "کاربران تست", "/trial-users")
@@ -67,6 +70,15 @@ def _can_open_gift_codes(staff: Mapping[str, Any]) -> bool:
     """Same rule as the gift-code page and its POST routes (``gift_code_scope``)."""
     try:
         gift_code_scope(staff)
+    except PermissionError:
+        return False
+    return True
+
+
+def _can_open_cashback(staff: Mapping[str, Any]) -> bool:
+    """Same rule as the cashback page and its POST routes (``cashback_scope``)."""
+    try:
+        cashback_scope(staff)
     except PermissionError:
         return False
     return True
@@ -107,6 +119,8 @@ def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSectio
         sections.append(_DISCOUNT_SECTION)
     if _can_open_gift_codes(staff):
         sections.append(_GIFT_CODE_SECTION)
+    if _can_open_cashback(staff):
+        sections.append(_CASHBACK_SECTION)
     if _can_open_feature(staff, "campaigns"):
         sections.append(_CAMPAIGN_SECTION)
     if _can_open_feature(staff, "trial_users"):
@@ -136,7 +150,7 @@ class MarketingGroup:
 # (group key, label, section keys in display order)
 _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("club", "باشگاه مشتریان", (CLUB, CLUB_TRANSACTIONS)),
-    ("offers", "تخفیف و کد هدیه", (DISCOUNTS, GIFT_CODES)),
+    ("offers", "تخفیف و کد هدیه", (DISCOUNTS, GIFT_CODES, CASHBACK)),
     ("messages", "پیام و کمپین", (BROADCAST, SHOP_BROADCAST, CAMPAIGNS)),
     ("trials", "کاربران تست", (TRIAL_USERS,)),
     ("funnel", "رفتار کاربر", (FUNNEL,)),

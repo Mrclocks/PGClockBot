@@ -25,9 +25,12 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.handlers.action_reason import ask_reason, take_reason
+from app.services.action_reasons import bot_actor
+from app.services.customer_action_notices import NoticeTarget, log_and_notify
 from app.bot.nav_input import ask_text, finish_text_step, try_legacy_cancel
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
-from app.db.models import BotUser, Plan, ResellerProfile
+from app.db.models import BotUser, Plan, ResellerProfile, UserService
 from app.services import bot_feedback_texts as feedback
 from app.services.bot_principal_identity import shop_bot_panel_staff
 from app.services.bot_user_admin import (
@@ -62,6 +65,7 @@ router = Router(name="reseller_customer_services")
 
 PERMISSION = CUSTOMER_SERVICES_PERMISSION
 CANCEL_CODE = "rs_svc"
+NOTHING_TO_ADJUST = "حداقل یک مقدار غیرصفر وارد کنید"
 PREFIX = "res"
 UNKNOWN_OUTCOME = (
     "وضعیت نامشخص است — ممکن است اعمال شده باشد. دوباره نزنید؛ "
@@ -398,6 +402,31 @@ async def res_user_service_link(
             )
 
 
+async def _log_and_tell_customer(
+    session: AsyncSession,
+    db_user: BotUser,
+    target: ShopServiceTarget,
+    svc: UserService,
+    *,
+    action: str,
+    reason: str,
+    notice_action: str | None = None,
+) -> None:
+    """Staff log record plus the customer notice for a finished reasoned operation."""
+    customer = await session.get(BotUser, int(target.user_id))
+    notice = [NoticeTarget(int(target.user_id), int(customer.telegram_id or 0), target.owner_id, svc.pg_username or "")]
+    await log_and_notify(
+        session,
+        bot_actor(db_user, shop_id=target.owner_id),
+        action=action,
+        target_type="service",
+        target_id=int(target.service_id or 0),
+        reason=reason,
+        targets=notice,
+        notice_action=notice_action,
+    )
+
+
 @router.callback_query(F.data.startswith(f"{PREFIX}:svcrenew:"))
 async def res_user_service_renew(
     callback: CallbackQuery,
@@ -417,6 +446,10 @@ async def res_user_service_renew(
         need_service=True,
     )
     if target is None or target.service_id is None:
+        return
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت تمدید")
         return
     busy_key = f"rsvcbusy:renew:{target.user_id}:{target.service_id}"
     if not await _fsm_try_busy(state, busy_key):
@@ -450,6 +483,7 @@ async def res_user_service_renew(
             logger.warning("shop service renew failed sid=%s", target.service_id, exc_info=True)
             await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
             return
+        await _log_and_tell_customer(session, db_user, target, svc, action="service_renew", reason=reason)
         await callback.answer(feedback.RENEWED)
         if callback.message:
             await safe_edit_text(
@@ -519,6 +553,7 @@ async def res_user_service_delete(
     db_user: BotUser,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
+    state: FSMContext | None = None,
 ) -> None:
     target = await _resolve_target(
         callback,
@@ -532,6 +567,10 @@ async def res_user_service_delete(
         return
     parts = (callback.data or "").split(":")
     explicit_pg = len(parts) > 4 and parts[4] == "pg"
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت حذف سرویس")
+        return
     try:
         svc = await get_owned_service(
             session,
@@ -561,6 +600,10 @@ async def res_user_service_delete(
         f"سرویس #{target.service_id} از لیست مشتری جدا شد؛ حساب پاسارگارد حفظ شد."
         if detach_only
         else f"سرویس #{target.service_id} حذف شد."
+    )
+    await _log_and_tell_customer(
+        session, db_user, target, svc, action="service_delete", reason=reason,
+        notice_action="service_detach" if detach_only else "service_delete",
     )
     await callback.answer(done, show_alert=True)
     if callback.message:
@@ -642,15 +685,15 @@ async def _adj_confirm(
     adj_key: str,
     days: int,
     gb: float,
-) -> None:
+) -> UserService | None:
     assert target.service_id is not None
     if days == 0 and gb == 0:
-        await callback.answer("حداقل یک مقدار غیرصفر وارد کنید", show_alert=True)
-        return
+        await callback.answer(NOTHING_TO_ADJUST, show_alert=True)
+        return None
     busy_key = f"rsvcbusy:adj:{target.user_id}:{target.service_id}"
     if not await _fsm_try_busy(state, busy_key):
         await callback.answer(IN_FLIGHT, show_alert=True)
-        return
+        return None
     # Claim the deltas before the panel call so a second confirm cannot reuse them.
     await state.update_data(**{adj_key: {"days": 0, "gb": 0.0}})
     try:
@@ -664,22 +707,22 @@ async def _adj_confirm(
             staff = await _panel_staff(callback, session, db_user, target)
             if staff is None:
                 await state.update_data(**{adj_key: {"days": days, "gb": gb}})
-                return
+                return None
             await admin_extend_service(session, svc, extra_days=days, extra_gb=gb, staff=staff)
             snap = await service_snapshot(session, svc)
         except ValueError as exc:
             await state.update_data(**{adj_key: {"days": days, "gb": gb}})
             await _fail_known(callback, session, exc)
-            return
+            return None
         except PANEL_UNCERTAIN:
             # The panel may have applied it: re-staging would let a second confirm add it again.
             await _fail_uncertain(callback, session, sid=target.service_id, op="extend")
-            return
+            return None
         except Exception as exc:
             await rollback_quiet(session)
             logger.warning("shop service extend failed sid=%s", target.service_id, exc_info=True)
             await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
-            return
+            return None
         await _fsm_clear(state, adj_key, "rsvcadj_uid", "rsvcadj_sid")
         await callback.answer("مانده به‌روز شد")
         if callback.message:
@@ -688,6 +731,7 @@ async def _adj_confirm(
                 "✅ مانده سرویس به‌روز شد\n\n" + snapshot_telegram_lines(snap),
                 reply_markup=_service_actions(target.user_id, target.service_id),
             )
+        return svc
     finally:
         await _fsm_clear(state, busy_key)
 
@@ -738,9 +782,18 @@ async def res_user_service_adjust(
         )
         return
     elif action == "confirm":
-        await _adj_confirm(
+        if days == 0 and gb == 0:
+            await callback.answer(NOTHING_TO_ADJUST, show_alert=True)
+            return
+        reason = await take_reason(state, callback)
+        if reason is None:
+            await ask_reason(callback, state, label="علت تغییر مانده سرویس")
+            return
+        applied = await _adj_confirm(
             callback, state, session, db_user, target=target, adj_key=adj_key, days=days, gb=gb
         )
+        if applied is not None:
+            await _log_and_tell_customer(session, db_user, target, applied, action="service_extend", reason=reason)
         return
     else:
         await state.update_data(**{adj_key: {"days": days, "gb": gb}})

@@ -48,8 +48,11 @@ class DomainSettingsRedirectTests(unittest.TestCase):
 class DomainModalTemplateTests(unittest.TestCase):
     def test_finance_page_modal(self):
         html = (TEMPLATES / "finance.html").read_text(encoding="utf-8")
+        tabs = (TEMPLATES / "_finance_tabs.html").read_text(encoding="utf-8")
         self.assertIn('data-modal-open="modal-finance-settings"', html)
-        self.assertIn("section-tabs", html)
+        # Page tabs live in the shared partial used by finance and PAYG report.
+        self.assertIn("finance_tabs(", html)
+        self.assertIn("section-tabs", tabs)
         self.assertIn("_modal_finance_settings.html", html)
         self.assertTrue((TEMPLATES / "_modal_finance_settings.html").is_file())
 

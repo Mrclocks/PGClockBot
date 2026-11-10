@@ -1501,6 +1501,7 @@ def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
         [
             [InlineKeyboardButton(text="✏️ توضیح", callback_data=f"adm:resplan:edit:desc:{pid}")],
             [InlineKeyboardButton(text="🔐 دسترسی‌ها", callback_data=f"adm:resplan:perms:{pid}")],
+            [InlineKeyboardButton(text="💳 PAYG و دسترسی پاسارگارد", callback_data=f"adm:rpg:{pid}")],
             [
                 InlineKeyboardButton(
                     text="🎨 رنگ دکمه",

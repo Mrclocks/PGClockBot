@@ -105,26 +105,26 @@
   </form>
   {% if manage and ops and pg_update %}
   {{ table_bulk_bar('/users/bulk-action', [
-    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true},
-    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
-    {'key': 'renew', 'label': 'تمدید', 'confirm': 'سرویس بحرانی {n} کاربر با پلن فعلی تمدید شود؟ مصرف ریست می‌شود.', 'confirm_title': 'تمدید گروهی', 'confirm_label': 'تمدید'},
+    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true, 'reason': true, 'reason_label': 'علت مسدودسازی'},
+    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی', 'reason': true, 'reason_label': 'علت رفع مسدودی'},
+    {'key': 'renew', 'label': 'تمدید', 'confirm': 'سرویس بحرانی {n} کاربر با پلن فعلی تمدید شود؟ مصرف ریست می‌شود.', 'confirm_title': 'تمدید گروهی', 'confirm_label': 'تمدید', 'reason': true, 'reason_label': 'علت تمدید'},
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر و داده‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است.', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
   ]) }}
   {% elif manage and ops %}
   {{ table_bulk_bar('/users/bulk-action', [
-    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true},
-    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
+    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true, 'reason': true, 'reason_label': 'علت مسدودسازی'},
+    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی', 'reason': true, 'reason_label': 'علت رفع مسدودی'},
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر و داده‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است.', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
   ]) }}
   {% elif manage %}
   {{ table_bulk_bar('/users/bulk-action', [
-    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true},
-    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
+    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true, 'reason': true, 'reason_label': 'علت مسدودسازی'},
+    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی', 'reason': true, 'reason_label': 'علت رفع مسدودی'},
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر و داده‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است.', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
   ]) }}
   {% elif ops and pg_update %}
   {{ table_bulk_bar('/users/bulk-action', [
-    {'key': 'renew', 'label': 'تمدید', 'confirm': 'سرویس بحرانی {n} کاربر با پلن فعلی تمدید شود؟ مصرف ریست می‌شود.', 'confirm_title': 'تمدید گروهی', 'confirm_label': 'تمدید'},
+    {'key': 'renew', 'label': 'تمدید', 'confirm': 'سرویس بحرانی {n} کاربر با پلن فعلی تمدید شود؟ مصرف ریست می‌شود.', 'confirm_title': 'تمدید گروهی', 'confirm_label': 'تمدید', 'reason': true, 'reason_label': 'علت تمدید'},
   ]) }}
   {% endif %}
   <div class="table-wrap">
@@ -240,7 +240,11 @@
             <form method="post" action="/users/{{ u.id }}/quick-renew"
                   data-confirm="سرویس بحرانی (نزدیک‌ترین انقضا) با پلن فعلی تمدید شود؟ مصرف ریست می‌شود."
                   data-confirm-title="تمدید سریع"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت تمدید"
+                  data-confirm-reason-name="reason"
                   data-confirm-label="تمدید">
+          <input type="hidden" name="reason" value="" />
               <input type="hidden" name="return_filter" value="{{ flt }}" />
               {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
               <button class="btn btn-sm" type="submit">تمدید</button>

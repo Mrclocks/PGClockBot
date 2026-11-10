@@ -43,18 +43,13 @@
     });
   }
 
-  function styleOptionsFrom(root) {
-    const sample = root.querySelector("select.extra-pack-style");
-    return sample ? sample.innerHTML : '<option value="inherit">ارث از پیش‌فرض</option>';
-  }
-
   const ROW_SPECS = {
     volume: { rowAttr: "data-user-pack-row", removeAttr: "data-user-pack-remove", amountName: "plan_vol_amount", styleName: "plan_vol_style", amountMax: "100000", unit: "گیگ", amountLabel: "مقدار حجم بسته", styleLabel: "رنگ دکمه بسته حجم", removeLabel: "حذف بسته حجم" },
     duration: { rowAttr: "data-user-pack-row", removeAttr: "data-user-pack-remove", amountName: "plan_dur_amount", styleName: "plan_dur_style", amountMax: "120", unit: "ماه", amountLabel: "مقدار ماه بسته", styleLabel: "رنگ دکمه بسته زمان", removeLabel: "حذف بسته زمان" },
   };
 
-  function buildRow(kind, amount, styleValue, styleOptionsHtml) {
-    return PackRows.buildRow(ROW_SPECS[kind], amount, styleValue, styleOptionsHtml);
+  function buildRow(kind, amount, styleValue, optionsHtml) {
+    return PackRows.buildRow(ROW_SPECS[kind], amount, styleValue, optionsHtml);
   }
 
   function seedDefaultsIfEmpty(root) {
@@ -64,7 +59,7 @@
       if (!box || box.querySelector("[data-user-pack-row]")) return;
       const attr = kind === "volume" ? "data-default-volume" : "data-default-duration";
       const amounts = parseCsvInts(root.getAttribute(attr), DEFAULTS[kind]);
-      const html = styleOptionsFrom(root);
+      const html = PackRows.styleOptionsHtml(root);
       amounts.forEach((n) => box.appendChild(buildRow(kind, n, "inherit", html)));
     });
     PackRows.refresh(root);
@@ -80,7 +75,7 @@
         const kind = add.getAttribute("data-user-pack-add");
         const box = root.querySelector(`[data-user-pack-rows="${kind}"]`);
         if (!box) return;
-        box.appendChild(buildRow(kind, 1, "inherit", styleOptionsFrom(root)));
+        box.appendChild(buildRow(kind, 1, "inherit", PackRows.styleOptionsHtml(root)));
         PackRows.refresh(root);
         return;
       }

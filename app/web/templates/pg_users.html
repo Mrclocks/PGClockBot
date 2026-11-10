@@ -23,11 +23,11 @@
   {% else %}
   {% if can_disable or can_enable or can_reset or can_revoke or can_delete %}
   {{ table_bulk_bar('/pg/users/bulk-action', [
-    {'key': 'disable', 'label': 'غیرفعال', 'class': 'btn-warn', 'confirm': '{n} کاربر غیرفعال شوند؟', 'confirm_title': 'غیرفعال‌سازی گروهی', 'confirm_label': 'غیرفعال', 'warn': true},
-    {'key': 'enable', 'label': 'فعال', 'confirm': '{n} کاربر فعال شوند؟', 'confirm_title': 'فعال‌سازی گروهی', 'confirm_label': 'فعال'},
-    {'key': 'reset', 'label': 'ریست', 'confirm': 'مصرف {n} کاربر ریست شود؟', 'confirm_title': 'ریست گروهی', 'confirm_label': 'ریست', 'warn': true},
-    {'key': 'revoke', 'label': 'ابطال ساب', 'confirm': 'سابسکرایب {n} کاربر ابطال شود؟', 'confirm_title': 'ابطال گروهی', 'confirm_label': 'ابطال', 'warn': true},
-    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر پاسارگارد حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+    {'key': 'disable', 'label': 'غیرفعال', 'class': 'btn-warn', 'confirm': '{n} کاربر غیرفعال شوند؟', 'confirm_title': 'غیرفعال‌سازی گروهی', 'confirm_label': 'غیرفعال', 'warn': true, 'reason': true, 'reason_label': 'علت غیرفعال‌سازی'},
+    {'key': 'enable', 'label': 'فعال', 'confirm': '{n} کاربر فعال شوند؟', 'confirm_title': 'فعال‌سازی گروهی', 'confirm_label': 'فعال', 'reason': true, 'reason_label': 'علت فعال‌سازی'},
+    {'key': 'reset', 'label': 'ریست', 'confirm': 'مصرف {n} کاربر ریست شود؟', 'confirm_title': 'ریست گروهی', 'confirm_label': 'ریست', 'warn': true, 'reason': true, 'reason_label': 'علت ریست مصرف'},
+    {'key': 'revoke', 'label': 'ابطال ساب', 'confirm': 'سابسکرایب {n} کاربر ابطال شود؟', 'confirm_title': 'ابطال گروهی', 'confirm_label': 'ابطال', 'warn': true, 'reason': true, 'reason_label': 'علت ابطال اشتراک'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر پاسارگارد حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
   ]) }}
   {% endif %}
   <div class="table-wrap">
@@ -113,19 +113,19 @@
               data-groups="{{ gids|join(',') }}">ویرایش</button>
             {% endif %}
             {% if can_disable and not disabled and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/disable" data-confirm="این کاربر غیرفعال شود؟" data-confirm-title="غیرفعال‌سازی" data-confirm-warn="1" data-confirm-label="غیرفعال"><button class="btn btn-ghost btn-sm" type="submit">غیرفعال</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/disable" data-confirm-reason="1" data-confirm-reason-label="علت غیرفعال‌سازی" data-confirm-reason-name="reason" data-confirm="این کاربر غیرفعال شود؟" data-confirm-title="غیرفعال‌سازی" data-confirm-warn="1" data-confirm-label="غیرفعال"><input type="hidden" name="reason" value="" /><button class="btn btn-ghost btn-sm" type="submit">غیرفعال</button></form>
             {% endif %}
             {% if can_enable and disabled and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/enable" data-confirm="این کاربر فعال شود؟" data-confirm-title="فعال‌سازی" data-confirm-label="فعال"><button class="btn btn-ghost btn-sm" type="submit">فعال</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/enable" data-confirm-reason="1" data-confirm-reason-label="علت فعال‌سازی" data-confirm-reason-name="reason" data-confirm="این کاربر فعال شود؟" data-confirm-title="فعال‌سازی" data-confirm-label="فعال"><input type="hidden" name="reason" value="" /><button class="btn btn-ghost btn-sm" type="submit">فعال</button></form>
             {% endif %}
             {% if can_reset and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/reset" data-confirm="مصرف این کاربر ریست شود؟" data-confirm-title="ریست مصرف" data-confirm-warn="1" data-confirm-label="ریست"><button class="btn btn-ghost btn-sm" type="submit">ریست</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/reset" data-confirm-reason="1" data-confirm-reason-label="علت ریست مصرف" data-confirm-reason-name="reason" data-confirm="مصرف این کاربر ریست شود؟{% if payg_rates and payg_rates.reset_note %} {{ payg_rates.reset_note }}.{% endif %}" data-confirm-title="ریست مصرف" data-confirm-warn="1" data-confirm-label="ریست"><input type="hidden" name="reason" value="" /><button class="btn btn-ghost btn-sm" type="submit">ریست</button></form>
             {% endif %}
             {% if can_revoke and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/revoke" data-confirm="سابسکرایب ابطال شود؟" data-confirm-title="ابطال سابسکرایب" data-confirm-warn="1" data-confirm-label="ابطال"><button class="btn btn-ghost btn-sm" type="submit">ابطال ساب</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/revoke" data-confirm-reason="1" data-confirm-reason-label="علت ابطال اشتراک" data-confirm-reason-name="reason" data-confirm="سابسکرایب ابطال شود؟" data-confirm-title="ابطال سابسکرایب" data-confirm-warn="1" data-confirm-label="ابطال"><input type="hidden" name="reason" value="" /><button class="btn btn-ghost btn-sm" type="submit">ابطال ساب</button></form>
             {% endif %}
             {% if can_delete and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/delete" data-confirm="کاربر پاسارگارد حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
+            <form method="post" action="/pg/users/{{ uid }}/delete" data-confirm-reason="1" data-confirm-reason-label="علت حذف کاربر" data-confirm-reason-name="reason" data-confirm="کاربر پاسارگارد حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف"><input type="hidden" name="reason" value="" />
               <button class="btn btn-danger btn-sm" type="submit">حذف</button>
             </form>
             {% endif %}
@@ -176,6 +176,10 @@
       </div>
     </div>
     <form method="post" action="/pg/users" class="form-stack ds-body" id="pg-user-create-form">
+      {% if payg_rates %}
+      <div class="ds-note" role="note"><span>هزینهٔ این کار از کیف پول شما کم می‌شود:
+        {% for line in payg_rates.lines %}{{ line }}{% if not loop.last %} · {% endif %}{% endfor %}</span></div>
+      {% endif %}
         <input type="hidden" name="mode" value="template" />
       <section class="ds-sec ds-sec-first"><div class="ds-card">
       {% if form_err and form_modal == 'create' %}
@@ -270,6 +274,10 @@
       </div>
     </div>
     <form method="post" action="/pg/users/0/edit" class="form-stack ds-body" id="pg-user-edit-form">
+      {% if payg_rates %}
+      <div class="ds-note" role="note"><span>هزینهٔ این کار از کیف پول شما کم می‌شود:
+        {% for line in payg_rates.lines %}{{ line }}{% if not loop.last %} · {% endif %}{% endfor %}</span></div>
+      {% endif %}
       <section class="ds-sec ds-sec-first"><div class="ds-card">
       {% if form_err and form_modal == 'edit' %}
       <div class="flash err" id="pg-edit-form-err">{{ form_err }}</div>
