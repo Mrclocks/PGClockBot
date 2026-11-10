@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ResellerBillingRate, ResellerBillingTransaction, ResellerPlan, ResellerProfile
-from app.services.payg_pricing import PaygPriceError, assert_billable_rates, rates_from_plan
+from app.services.payg_pricing import PaygPriceError, assert_billable_rates, child_plan_id_of, rates_from_plan
 from app.services.shop_credit import shop_credit_limit, shop_standing_limit
 from app.services.billing_alerts import (
     PANEL_TICK_ISSUES,
@@ -1104,6 +1104,9 @@ async def assert_billing_allows_provision(
 
 async def shop_bills_usage(session: AsyncSession, profile: ResellerProfile) -> bool:
     """Whether this PAYG shop pays for consumed traffic (not at creation, not per user only)."""
+    if child_plan_id_of(profile) is not None:
+        # Level-2 shops priced by their parent are always charged at creation.
+        return False
     plan = await session.get(ResellerPlan, int(profile.plan_id)) if profile.plan_id else None
     return plan is None or rates_from_plan(plan).bills_usage
 

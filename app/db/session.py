@@ -257,6 +257,7 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             "share_pg_panel_url": "BOOLEAN DEFAULT 0",
             "allow_pg_panel_access": "BOOLEAN DEFAULT 1",
             "pg_password_rotation_enc": "TEXT",
+            "child_plan_id": "INTEGER",
             "bot_admin_ids": "TEXT",
             "pg_admin_password_enc": "TEXT",
             "pg_api_key_enc": "TEXT",

@@ -30,7 +30,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ResellerCharge, ResellerPlan, ResellerProfile
+from app.db.models import ChildPricePlan, ResellerCharge, ResellerPlan, ResellerProfile
 from app.py_compat import StrEnum
 from app.services.billing import (
     KIND_CHARGE,
@@ -38,11 +38,13 @@ from app.services.billing import (
     is_payg,
     record_payg_ledger_entry,
 )
+from app.services.child_pricing import parent_shop_profile
 from app.services.payg_pricing import (
     ChargeQuote,
     PaygRates,
     ServiceChange,
     assert_quote_unchanged,
+    child_plan_id_of,
     quote_change,
     rates_from_plan,
 )
@@ -95,6 +97,11 @@ async def shop_rates(session: AsyncSession, profile: ResellerProfile) -> PaygRat
     """The shop's PAYG rates, or ``None`` for a fixed-package shop."""
     if not is_payg(profile):
         return None
+    child_plan_id = child_plan_id_of(profile)
+    if child_plan_id is not None:
+        # A level-2 shop priced by its parent: the parent's list, always charged at creation.
+        child_plan = await session.get(ChildPricePlan, child_plan_id)
+        return rates_from_plan(child_plan) if child_plan is not None else None
     plan = await session.get(ResellerPlan, int(profile.plan_id)) if profile.plan_id else None
     return rates_from_plan(plan)
 
@@ -176,22 +183,20 @@ async def reserve_charge(
         assert_quote_unchanged(request.expected_amount, quote)
     attempt = int(latest.attempt) + 1 if latest is not None else 1
     charge = _new_charge(profile, request, quote, request_key=request_key, attempt=attempt)
+    parent = await _parent_charge(session, profile, request, request_key=request_key, attempt=attempt)
     try:
         # A savepoint keeps a refusal (shortfall, racing key) from rolling back the
         # caller's session and expiring the order or service it is working on.
         async with session.begin_nested():
             session.add(charge)
             await session.flush()
-            await record_payg_ledger_entry(
-                session,
-                profile,
-                kind=KIND_CHARGE,
-                amount=-quote.amount,
-                idempotency_key=charge.idempotency_key,
-                note=f"{request.change.event} {request.pg_username}"[:255],
-                created_by=request.created_by,
-                use_credit=True,
-            )
+            await _debit(session, profile, charge, request)
+            if parent is not None:
+                parent_profile, parent_charge = parent
+                session.add(parent_charge)
+                await session.flush()
+                charge.linked_charge_id = int(parent_charge.id)
+                await _debit(session, parent_profile, parent_charge, request)
     except IntegrityError:
         winner = _reusable(await _latest_attempt(session, shop_id, request_key))
         if winner is None:
@@ -203,6 +208,43 @@ async def reserve_charge(
         raise
     await session.commit()
     return charge
+
+
+async def _debit(session: AsyncSession, profile: ResellerProfile, charge: ResellerCharge, request: ChargeRequest) -> None:
+    await record_payg_ledger_entry(
+        session,
+        profile,
+        kind=KIND_CHARGE,
+        amount=-int(charge.amount),
+        idempotency_key=charge.idempotency_key,
+        note=f"{request.change.event} {request.pg_username}"[:255],
+        created_by=request.created_by,
+        use_credit=True,
+    )
+
+
+async def _parent_charge(
+    session: AsyncSession, profile: ResellerProfile, request: ChargeRequest, *, request_key: str, attempt: int
+) -> tuple[ResellerProfile, ResellerCharge] | None:
+    """The level-1 parent's charge (owner's price) for a change its level-2 shop is charged for."""
+    if child_plan_id_of(profile) is None:
+        return None
+    parent_profile = await parent_shop_profile(session, profile)
+    if parent_profile is None:
+        return None
+    rates = await shop_rates(session, parent_profile)
+    if rates is None or not (rates.charges_traffic or rates.charges_users):
+        return None
+    quote = quote_change(rates, request.change).for_quantity(request.quantity)
+    if quote.is_free:
+        return None
+    return parent_profile, _new_charge(parent_profile, request, quote, request_key=request_key, attempt=attempt)
+
+
+async def _with_linked(session: AsyncSession, charge: ResellerCharge) -> list[ResellerCharge]:
+    """A level-2 charge and the parent charge it moves with."""
+    linked = await session.get(ResellerCharge, int(charge.linked_charge_id)) if charge.linked_charge_id else None
+    return [charge] + ([linked] if linked is not None else [])
 
 
 async def _claim(
@@ -227,7 +269,10 @@ async def settle_charge(session: AsyncSession, charge: ResellerCharge, *, commit
 
     ``commit=False`` joins the caller's transaction (for example the one that seals the order).
     """
-    claimed = await _claim(session, charge, allowed=_OPEN, to=ChargeStatus.SETTLED)
+    charges = await _with_linked(session, charge)
+    claimed = await _claim(session, charges[0], allowed=_OPEN, to=ChargeStatus.SETTLED)
+    for linked in charges[1:]:
+        await _claim(session, linked, allowed=_OPEN, to=ChargeStatus.SETTLED)
     if commit:
         await session.commit()
     return claimed
@@ -235,30 +280,37 @@ async def settle_charge(session: AsyncSession, charge: ResellerCharge, *, commit
 
 async def send_to_review(session: AsyncSession, charge: ResellerCharge) -> bool:
     """The panel outcome is unknown: keep the money and the target for a retry."""
-    claimed = await _claim(session, charge, allowed=(ChargeStatus.PENDING,), to=ChargeStatus.REVIEW)
+    charges = await _with_linked(session, charge)
+    claimed = await _claim(session, charges[0], allowed=(ChargeStatus.PENDING,), to=ChargeStatus.REVIEW)
+    for linked in charges[1:]:
+        await _claim(session, linked, allowed=(ChargeStatus.PENDING,), to=ChargeStatus.REVIEW)
     await session.commit()
     return claimed
 
 
 async def refund_charge(session: AsyncSession, charge: ResellerCharge, *, reason: str) -> bool:
-    """The panel definitely did not apply the change: return the money once."""
-    if not await _claim(session, charge, allowed=_OPEN, to=ChargeStatus.REFUNDED):
+    """The panel definitely did not apply the change: return the money once (to the parent too)."""
+    charges = await _with_linked(session, charge)
+    if not await _claim(session, charges[0], allowed=_OPEN, to=ChargeStatus.REFUNDED):
         # Already settled or refunded: the claim wrote nothing, so the caller's session is untouched.
         return False
-    profile = await session.scalar(
-        select(ResellerProfile).where(ResellerProfile.user_id == int(charge.shop_id))
-    )
-    if profile is None:
-        await session.rollback()
-        raise ValueError("نماینده یافت نشد")
-    await record_payg_ledger_entry(
-        session,
-        profile,
-        kind=KIND_CHARGE_REFUND,
-        amount=int(charge.amount),
-        idempotency_key=f"payg-refund:{int(charge.id)}",
-        note=(reason or "")[:255],
-    )
+    for item in charges:
+        if item is not charges[0] and not await _claim(session, item, allowed=_OPEN, to=ChargeStatus.REFUNDED):
+            continue
+        profile = await session.scalar(
+            select(ResellerProfile).where(ResellerProfile.user_id == int(item.shop_id))
+        )
+        if profile is None:
+            await session.rollback()
+            raise ValueError("نماینده یافت نشد")
+        await record_payg_ledger_entry(
+            session,
+            profile,
+            kind=KIND_CHARGE_REFUND,
+            amount=int(item.amount),
+            idempotency_key=f"payg-refund:{int(item.id)}",
+            note=(reason or "")[:255],
+        )
     await session.commit()
     return True
 
@@ -276,7 +328,11 @@ async def list_review_charges(
     session: AsyncSession, *, shop_id: int | None, limit: int = REVIEW_PAGE_LIMIT
 ) -> list[ResellerCharge]:
     """Charges waiting for review, newest first; ``shop_id=None`` is the owner's view of all shops."""
-    query = select(ResellerCharge).where(ResellerCharge.status == str(ChargeStatus.REVIEW))
+    # A parent's half of a two-step charge moves with its level-2 charge, so only that one is listed.
+    linked_parents = select(ResellerCharge.linked_charge_id).where(ResellerCharge.linked_charge_id.is_not(None))
+    query = select(ResellerCharge).where(
+        ResellerCharge.status == str(ChargeStatus.REVIEW), ResellerCharge.id.not_in(linked_parents)
+    )
     if shop_id is not None:
         query = query.where(ResellerCharge.shop_id == int(shop_id))
     bounded = max(1, min(int(limit), REVIEW_PAGE_LIMIT))
@@ -288,7 +344,12 @@ async def count_review_charges(session: AsyncSession) -> int:
     """How many charges wait for an owner decision (all shops)."""
     return int(
         await session.scalar(
-            select(func.count()).select_from(ResellerCharge).where(ResellerCharge.status == str(ChargeStatus.REVIEW))
+            select(func.count()).select_from(ResellerCharge).where(
+                ResellerCharge.status == str(ChargeStatus.REVIEW),
+                ResellerCharge.id.not_in(
+                    select(ResellerCharge.linked_charge_id).where(ResellerCharge.linked_charge_id.is_not(None))
+                ),
+            )
         )
         or 0
     )
