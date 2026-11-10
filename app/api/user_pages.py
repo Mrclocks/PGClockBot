@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Plan
+from app.services.customer_action_notices import NoticeTarget, notify_customers
 from app.services.action_reasons import ReasonRequired, log_reasoned_action, reason_from_form
 from app.services.authz import authz_from_staff, can_shop
 from app.services.bot_user_admin import (
@@ -626,6 +627,12 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         await log_reasoned_action(
             session, staff, action="service_renew", target_type="service", target_id=svc.id, reason=reason
         )
+        await notify_customers(
+            session,
+            [NoticeTarget(int(user.id), int(user.telegram_id or 0), svc.shop_id, svc.pg_username or "")],
+            action="service_renew",
+            reason=reason,
+        )
         return _redirect_list_form(
             form, ok=f"سرویس {label} تمدید شد", uid=user_id
         )
@@ -735,6 +742,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         if plan is None:
             return _redirect_user(user_id, err="پلن تمدید را انتخاب کنید")
 
+        target = NoticeTarget(int(user_id), int(loaded.telegram_id or 0), svc.shop_id, svc.pg_username or "")
         try:
             await admin_renew_service(
                 session,
@@ -752,6 +760,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         await log_reasoned_action(
             session, staff, action="service_renew", target_type="service", target_id=service_id, reason=reason
         )
+        await notify_customers(session, [target], action="service_renew", reason=reason)
         return _redirect_user(user_id, ok=f"سرویس #{service_id} تمدید شد")
 
     @app.post("/users/{user_id}/services/{service_id}/extend")
@@ -789,6 +798,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             extra_gb = parse_float(gb_raw)
         except ValueError:
             return _redirect_user(user_id, err="مقادیر تغییر مانده نامعتبر است")
+        target = NoticeTarget(int(user_id), int(loaded.telegram_id or 0), svc.shop_id, svc.pg_username or "")
         try:
             await admin_extend_service(
                 session,
@@ -804,6 +814,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         await log_reasoned_action(
             session, staff, action="service_extend", target_type="service", target_id=service_id, reason=reason
         )
+        await notify_customers(session, [target], action="service_extend", reason=reason)
         return _redirect_user(user_id, ok=f"مانده سرویس #{service_id} به‌روز شد")
 
     @app.post("/users/{user_id}/services/{service_id}/delete")
@@ -836,6 +847,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         from app.services.service_import import admin_delete_pg_flag, is_external_service
 
         delete_pg = admin_delete_pg_flag(svc, explicit=form.get("delete_pg") == "1")
+        target = NoticeTarget(int(user_id), int(loaded.telegram_id or 0), svc.shop_id, svc.pg_username or "")
         try:
             info = await admin_delete_service(
                 session, svc, delete_pg=delete_pg, staff=staff
@@ -846,6 +858,10 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return _redirect_user(user_id, err=_op_err(e, prefix="حذف سرویس ناموفق"))
         await log_reasoned_action(
             session, staff, action="service_delete", target_type="service", target_id=service_id, reason=reason
+        )
+        detached_only = is_external_service(svc) and not delete_pg
+        await notify_customers(
+            session, [target], action="service_detach" if detached_only else "service_delete", reason=reason
         )
         if is_external_service(svc) and not delete_pg:
             return _redirect_user(user_id, ok=f"سرویس #{service_id} از لیست مشتری جدا شد؛ حساب پاسارگارد حفظ شد")
