@@ -11,6 +11,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.redact import user_safe_error
 from app.db.models import (
     BotUser,
     Order,
@@ -341,7 +342,7 @@ async def apply_reseller_panel_password(
             client = await get_pg_for_principal(session, principal_id=int(linked.id))
             await client.modify_admin(profile.pg_admin_username, {"password": pwd})
         except Exception as e:
-            raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
+            raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {user_safe_error(e)}") from e
         linked.pg_password_enc = enc
         profile.pg_admin_password_enc = None
         try:
@@ -358,7 +359,7 @@ async def apply_reseller_panel_password(
             client = await get_pg_for_reseller(session, int(profile.user_id))
             await client.modify_admin(profile.pg_admin_username, {"password": pwd})
         except Exception as e:
-            raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
+            raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {user_safe_error(e)}") from e
         profile.pg_admin_password_enc = enc
         try:
             invalidate_pg_reseller_cache(int(profile.user_id))
@@ -370,7 +371,7 @@ async def apply_reseller_panel_password(
     try:
         await get_pg().modify_admin(profile.pg_admin_username, {"password": pwd})
     except Exception as e:
-        raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
+        raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {user_safe_error(e)}") from e
     # Drop cached PG clients so next shop op uses the new password
     try:
         reset_pg()
@@ -1265,9 +1266,9 @@ async def provision_reseller(
                 try:
                     await get_pg().create_admin(payload)
                 except Exception as e2:
-                    raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {e2}") from e2
+                    raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e2)}") from e2
             else:
-                raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {e}") from e
+                raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e)}") from e
 
     web_username = None
     web_password = None
@@ -2063,7 +2064,7 @@ async def provision_existing_pg_admin(
             await get_pg().modify_admin(pg_u, {"password": pwd})
             reset_pg()
         except Exception as e:
-            return None, None, f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}"
+            return None, None, f"به‌روزرسانی رمز پاسارگارد ناموفق: {user_safe_error(e)}"
     await session.commit()
     await session.refresh(profile)
 
@@ -2079,7 +2080,7 @@ async def provision_existing_pg_admin(
             await session.commit()
         except ValueError as exc:
             await rollback_quiet(session)
-            return profile, None, f"نمایندگی فعال شد ولی اشتراک پلن ثبت نشد: {exc}"
+            return profile, None, f"نمایندگی فعال شد ولی اشتراک پلن ثبت نشد: {user_safe_error(exc)}"
         except Exception:  # noqa: BLE001 - the panel/DB detail stays in the log, the admin sees a safe text
             logger.exception("subscription start failed after provision_existing pg=%s", pg_u)
             await rollback_quiet(session)
