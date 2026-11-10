@@ -249,6 +249,7 @@ async def _charge_all(
                 session, shop_id=state.shop_id, change=change, request_key=f"{key_base}:{index}",
                 pg_username=live.username, panel_target={"pg_user_id": live.id, "source": "panel"},
                 created_by="reconcile",
+                ladder_exempt=True,
             )
         except ProvisionError as exc:
             if isinstance(exc.__cause__, WalletShortfall):

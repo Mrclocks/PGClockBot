@@ -345,6 +345,28 @@
     {% if credit.status != 'frozen' %}<input type="hidden" name="frozen" value="1" />{% endif %}
     <div class="actions"><button class="btn btn-ghost" type="submit">{{ 'باز کردن اعتبار' if credit.status == 'frozen' else 'منجمد کردن اعتبار' }}</button></div>
   </form>
+  {% if credit.statements %}
+  <h4 class="edit-section-sub">صورت‌حساب‌ها</h4>
+  <div class="table-wrap"><table class="table-compact table-list-sm">
+    <thead><tr><th>دوره</th><th>مبلغ</th><th>سررسید</th><th>وضعیت</th><th><span class="sr-only">اقدام</span></th></tr></thead>
+    <tbody>
+    {% for st in credit.statements %}
+      <tr>
+        <td dir="ltr">{{ st.period_start.strftime('%Y-%m') }}</td>
+        <td dir="ltr">{{ st.amount_due | money }}</td>
+        <td dir="ltr">{{ st.due_at.strftime('%Y-%m-%d') }}</td>
+        <td>{{ {'issued': 'پرداخت‌نشده', 'paid': 'پرداخت‌شده', 'written_off': 'بخشیده‌شده'}.get(st.status, st.status) }}</td>
+        <td>{% if st.status == 'issued' %}
+          <form method="post" action="/resellers/{{ user.id }}/credit/statements/{{ st.id }}/writeoff"
+                data-confirm="بدهی این صورت‌حساب بخشیده شود؟ همین مبلغ به کیف پول نماینده برمی‌گردد و قابل برگشت نیست."
+                data-confirm-title="بخشودگی بدهی" data-confirm-danger="1">
+            <button class="btn btn-ghost btn-sm" type="submit">بخشودگی</button>
+          </form>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
   {% if credit.events %}
   <h4 class="edit-section-sub">تغییرهای اخیر اعتبار</h4>
   <ul class="muted">

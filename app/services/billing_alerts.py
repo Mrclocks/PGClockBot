@@ -360,3 +360,39 @@ async def notify_credit_use(session: AsyncSession, profile: ResellerProfile, *, 
         f"⚠️ <b>اعتبار نماینده: {level}٪</b>\nنماینده: <code>{_reseller_label(profile)}</code>\n{detail}",
         markup=_reseller_card_markup(profile, owner_shop_id),
     )
+
+
+STATEMENT_NOTICES: dict[int, str] = {
+    1: "🧾 <b>صورت‌حساب اعتبار صادر شد</b>",
+    2: "⏰ <b>سررسید صورت‌حساب گذشت</b>\nتا پرداخت، اعتبار تازه‌ای داده نمی‌شود.",
+    3: "⛔️ <b>ساخت کاربر تازه بسته شد</b>\nبه دلیل بدهی سررسیدگذشته.",
+    4: "⛔️ <b>تمدید و تغییر کاربران بسته شد</b>\nبه دلیل بدهی سررسیدگذشته.",
+    5: "🚫 <b>حساب مسدود شد</b>\nبه دلیل بدهی سررسیدگذشته؛ با پرداخت خودکار باز می‌شود.",
+}
+
+
+async def notify_statement(
+    session: AsyncSession, profile: ResellerProfile, *, notice: int, amount_due: int, due_text: str
+) -> None:
+    """Tell the reseller and their owner about a statement step (the caller claims it first)."""
+    from app.services.formatting import format_toman
+
+    headline = STATEMENT_NOTICES.get(int(notice))
+    if headline is None:
+        return
+    detail = f"مبلغ: {format_toman(int(amount_due))} · سررسید: <span dir=\"ltr\">{html.escape(due_text)}</span>"
+    reseller = await session.get(BotUser, int(profile.user_id))
+    reseller_tid = deliverable_telegram_id(getattr(reseller, "telegram_id", None))
+    if reseller_tid is not None:
+        await _send(
+            session, int(profile.user_id), [reseller_tid], f"{headline}\n{detail}",
+            markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="💳 صورتحساب و شارژ", callback_data=BILLING_SCREEN_CALLBACK),
+            ]]),
+        )
+    owner_shop_id, owner_chat_ids = await _owner_recipients(session, profile)
+    await _send(
+        session, owner_shop_id, owner_chat_ids,
+        f"{headline}\nنماینده: <code>{_reseller_label(profile)}</code>\n{detail}",
+        markup=_reseller_card_markup(profile, owner_shop_id),
+    )

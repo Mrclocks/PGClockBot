@@ -23,7 +23,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ResellerCharge, ResellerProfile
-from app.services.billing import SHORTFALL_MESSAGE, WalletShortfall, is_payg, payg_available_balance
+from app.services.billing import SHORTFALL_MESSAGE, WalletShortfall, is_payg, payg_spendable_for_charges
 from app.services.billing_alerts import TickIssue, announce_wallet_short, clear_tick_issue, notify_credit_use
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_toman, parse_expire
@@ -39,6 +39,7 @@ from app.services.payg_charges import (
 )
 from app.services.payg_pricing import RESET_EXPLANATION, ChargeEvent, ChargeQuote, PaygPriceError, ServiceChange
 from app.services.provision_gate import ProvisionError, reseller_id_from_staff
+from app.services.credit_statements import refusal_for, shop_restriction
 from app.services.shop_credit import claim_credit_alert, credit_usage, shop_credit_limit
 from app.services.volume_allocation import HeldVolume, is_hard_panel_rejection, release_volume_hold
 
@@ -92,11 +93,18 @@ async def charge_shop_change(
     quantity: int = 1,
     expected_amount: int | None = None,
     created_by: str | None = None,
+    ladder_exempt: bool = False,
 ) -> ResellerCharge | None:
-    """Take the shop's PAYG charge for ``change`` before the panel call; raises ``ProvisionError``."""
+    """Take the shop's PAYG charge for ``change`` before the panel call; raises ``ProvisionError``.
+
+    ``ladder_exempt`` is for changes that already happened in the panel (reconciliation):
+    the overdue ladder may not refuse a charge for something the shop already took.
+    """
     profile = await shop_profile(session, shop_id)
     if profile is None or not is_payg(profile):
         return None
+    if not ladder_exempt:
+        await _assert_ladder_allows(session, int(profile.user_id), change)
     request = ChargeRequest(
         request_key=request_key,
         change=change,
@@ -136,6 +144,12 @@ async def _alert_credit_use(session: AsyncSession, profile: ResellerProfile) -> 
         await rollback_quiet(session)
 
 
+async def _assert_ladder_allows(session: AsyncSession, shop_id: int, change: ServiceChange) -> None:
+    refusal = refusal_for(await shop_restriction(session, shop_id), change.event)
+    if refusal is not None:
+        raise ProvisionError(refusal)
+
+
 async def _announce_short_safely(session: AsyncSession, profile: ResellerProfile) -> None:
     """Best effort (sends already log their own failures): a failed alert never hides the refusal."""
     shop_id = int(profile.user_id)
@@ -156,10 +170,11 @@ async def assert_shop_can_afford(
     profile = await shop_profile(session, shop_id)
     if profile is None or not is_payg(profile):
         return
+    await _assert_ladder_allows(session, int(profile.user_id), change)
     quote = await quote_shop_change(session, shop_id, change, quantity=quantity)
     if quote is None:
         return
-    if await payg_available_balance(session, profile) >= quote.amount:
+    if await payg_spendable_for_charges(session, profile) >= quote.amount:
         return
     await _announce_short_safely(session, profile)
     raise ProvisionError(SHORTFALL_MESSAGE)
