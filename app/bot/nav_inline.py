@@ -766,7 +766,11 @@ def admin_product_hub_keyboard(
 @editable_screen("a.marketing")
 def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     """Club and broadcast leaves reuse ``nv:adm:*``; gift codes and campaigns are inline-only."""
-    from app.bot.marketing_panels import CAMPAIGN_PANEL_CALLBACK, GIFT_PANEL_CALLBACK
+    from app.bot.marketing_panels import (
+        CAMPAIGN_PANEL_CALLBACK,
+        CASHBACK_PANEL_CALLBACK,
+        GIFT_PANEL_CALLBACK,
+    )
 
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADMIN_BROADCAST,
@@ -804,6 +808,13 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
                 ui=ui,
                 label_key="btn_adm_campaigns",
                 style_id="adm_campaigns",
+            ),
+            _ikb(
+                _t(ui, "btn_adm_cashback"),
+                callback_data=CASHBACK_PANEL_CALLBACK,
+                ui=ui,
+                label_key="btn_adm_cashback",
+                style_id="adm_cashback",
             ),
             _ikb(TRIAL_USERS_LABEL, callback_data=TRIAL_USERS_CALLBACK, ui=ui),
         ]
@@ -937,13 +948,20 @@ def admin_loyalty_manage_hub_keyboard(
 def _reseller_entry_buttons(
     entries: list[tuple[str, str]], ui: dict | None, badge_for: dict[str, int]
 ) -> list[InlineKeyboardButton]:
+    from app.bot.handlers.cashback_tools import SHOP_CASHBACK_PANEL_CALLBACK
+    from app.bot.handlers.child_pricing_bot import PANEL_CALLBACK as CHILD_PRICING_HUB
     from app.bot.handlers.shop_broadcast import CB_HUB as SHOP_BROADCAST_HUB
     from app.services.admin_counters import with_badge
 
+    # Dedicated leaf callbacks stay off the generic ``nv:res:ra:*`` soft path (like broadcast).
+    dedicated = {
+        "res_broadcast": SHOP_BROADCAST_HUB,
+        "res_cashback": SHOP_CASHBACK_PANEL_CALLBACK,
+        "res_child_pricing": CHILD_PRICING_HUB,
+    }
     buttons: list[InlineKeyboardButton] = []
     for key, text in entries:
-        # Dedicated shop-broadcast callbacks stay off the owner ``nv:adm:*`` / reply_nav path.
-        callback = SHOP_BROADCAST_HUB if key == "res_broadcast" else f"nv:res:ra:{key}"
+        callback = dedicated.get(key) or f"nv:res:ra:{key}"
         buttons.append(
             _ikb(
                 with_badge(text, badge_for.get(key, 0)),

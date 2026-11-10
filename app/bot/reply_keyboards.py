@@ -562,6 +562,19 @@ def _reseller_capacity_entries(profile=None, ui: dict | None = None) -> list[tup
     return entries
 
 
+_RESELLER_FEATURE_LEAVES: tuple[tuple[str, str, str], ...] = (
+    ("stats", "res_stats", "btn_res_stats"),
+    ("plans", "res_plans", "btn_res_plans"),
+    ("orders", "res_orders", "btn_res_orders"),
+    ("payments", "res_payments", "btn_res_payments"),
+    ("tickets", "res_tickets", "btn_res_tickets"),
+    ("loyalty", "res_loyalty", "btn_res_loyalty"),
+    ("broadcast", "res_broadcast", "btn_res_broadcast"),
+    ("cashback", "res_cashback", "btn_res_cashback"),
+    ("shop_settings", "res_settings", "btn_res_settings"),
+)
+
+
 def _reseller_submenu_entries(
     profile=None, *, can_add_representative: bool = False, ui: dict | None = None
 ) -> list[tuple[str, str]]:
@@ -576,6 +589,7 @@ def _reseller_submenu_entries(
         entries.append(("res_users", _t(ui, "btn_res_users")))
     if can_add_representative:
         entries.append((REPLY_ACTION_RES_ADD_REP, _t(ui, "btn_res_add_rep")))
+        entries.append(("res_child_pricing", _t(ui, "btn_res_child_pricing")))
     # PAYG billing wallet — only when mode is payg
     try:
         from app.services.billing import is_payg
@@ -589,22 +603,9 @@ def _reseller_submenu_entries(
         key="payments", profile=profile
     ):
         entries.append(("res_reports", _t(ui, "btn_res_reports")))
-    if shop_feature_allowed(key="stats", profile=profile):
-        entries.append(("res_stats", _t(ui, "btn_res_stats")))
-    if shop_feature_allowed(key="plans", profile=profile):
-        entries.append(("res_plans", _t(ui, "btn_res_plans")))
-    if shop_feature_allowed(key="orders", profile=profile):
-        entries.append(("res_orders", _t(ui, "btn_res_orders")))
-    if shop_feature_allowed(key="payments", profile=profile):
-        entries.append(("res_payments", _t(ui, "btn_res_payments")))
-    if shop_feature_allowed(key="tickets", profile=profile):
-        entries.append(("res_tickets", _t(ui, "btn_res_tickets")))
-    if shop_feature_allowed(key="loyalty", profile=profile):
-        entries.append(("res_loyalty", _t(ui, "btn_res_loyalty")))
-    if shop_feature_allowed(key="broadcast", profile=profile):
-        entries.append(("res_broadcast", _t(ui, "btn_res_broadcast")))
-    if shop_feature_allowed(key="shop_settings", profile=profile):
-        entries.append(("res_settings", _t(ui, "btn_res_settings")))
+    for perm, action, label_key in _RESELLER_FEATURE_LEAVES:
+        if shop_feature_allowed(key=perm, profile=profile):
+            entries.append((action, _t(ui, label_key)))
     # Preview lives on thin reply KB (reseller_hub_main_keyboard), not manage hub.
     return entries
 

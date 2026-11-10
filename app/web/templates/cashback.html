@@ -85,9 +85,6 @@
 
 {{ marketing_tabs(marketing_sections|default(()), 'cashback') }}
 
-{% if flash_ok %}<div class="flash ok" role="status">{{ flash_ok }}</div>{% endif %}
-{% if flash_err %}<div class="flash err" role="alert">{{ flash_err }}</div>{% endif %}
-
 <form method="post" action="/cashback/settings" class="form-stack ds-page-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   {% set enabled_switch %}{{ ds_head_switch('enabled', 'کش‌بک روشن', 'cb-enabled', settings.enabled) }}{% endset %}

@@ -154,6 +154,12 @@ class RenderedSidebarTests(unittest.TestCase):
             self.assertIn(f'data-nav-collapse="{key}" aria-expanded="false"', html)
             self.assertIn(f'id="nav-panel-{key}"', html)
 
+    def test_service_cleanup_sidebar_item_has_an_icon(self) -> None:
+        html = self.render({"role": "admin", "permissions": []}, {"kind": "owner"}, is_owner=True)
+        link = re.search(r'<a href="/service-cleanup" class="nav-item[^"]*"[^>]*>.*?</a>', html, re.S)
+        self.assertIsNotNone(link)
+        self.assertRegex(link.group(0), r'<svg class="nav-ico"[^>]*>\s*<path ')
+
 
 if __name__ == "__main__":
     unittest.main()

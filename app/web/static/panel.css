@@ -1866,7 +1866,12 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .form-row > div {
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
   min-width: 0;
+}
+/* Parent column gap owns rhythm — same as .form-stack > .ui-switch-list */
+.form-row > div > .ui-switch-list {
+  margin: 0;
 }
 /* form-field already spaces title→control via gap; don't double-offset custom selects */
 .form-field > .ui-select,
