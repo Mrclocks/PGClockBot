@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import ShopStaffAction
 from app.services.action_reasons import REASON_MIN, ReasonRequired, clean_reason, reason_from_form
 from app.services.staff_audit import REASON_MAX
+from tests.test_update_owner_only import OWNER_SESSION
 from tests.test_customer_services_web_permission import (
     CUSTOMER_ID,
     SERVICE_ID,
@@ -81,6 +83,30 @@ class ReasonedServiceActionTests(CustomerServicesWebPermissionTests):
         mocks["admin_delete_service"].side_effect = ValueError("سرویس پیدا نشد")
         await self.post(DELETE_PATH, {"reason": "درخواست مشتری"})
         self.assertEqual(await self.logged(), [])
+
+    async def post_as_owner(self, path: str, data: dict):
+        cookie = f"session={self.signer.dumps(OWNER_SESSION)}; csrf=token"
+        headers = {"cookie": cookie, "x-csrf-token": "token", "origin": "http://panel.test"}
+        return await self.client.post(path, headers=headers, data=data)
+
+    async def test_a_bulk_block_without_a_reason_changes_nothing(self) -> None:
+        with patch("app.services.table_bulk.bulk_toggle_block", AsyncMock(return_value=(1, 0))) as bulk:
+            response = await self.post_as_owner(
+                "/users/bulk-action", {"action": "block", "ids": str(CUSTOMER_ID), "reason": "x"}
+            )
+        self.assertIn("err=", response.headers["location"])
+        bulk.assert_not_awaited()
+        self.assertEqual(await self.logged(), [])
+
+    async def test_a_reasoned_bulk_block_is_logged_once_with_the_count(self) -> None:
+        with patch("app.services.table_bulk.bulk_toggle_block", AsyncMock(return_value=(1, 0))) as bulk:
+            response = await self.post_as_owner(
+                "/users/bulk-action", {"action": "block", "ids": str(CUSTOMER_ID), "reason": "ارسال هرزنامه"}
+            )
+        self.assertEqual(response.status_code, 303)
+        bulk.assert_awaited_once()
+        rows = await self.logged()
+        self.assertEqual([(r.action, r.amount, r.reason) for r in rows], [("customer_block", 1, "ارسال هرزنامه")])
 
 
 # The inherited permission tests run again in this module; keep only the new cases here.

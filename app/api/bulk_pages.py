@@ -5,10 +5,26 @@ from __future__ import annotations
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.action_reasons import ReasonRequired, log_reasoned_action, reason_from_form
 from app.services.bot_user_admin import may_manage_customer_services
 from app.services.miniapp_shop import PERMISSION as MINIAPP_PERMISSION
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.shop_permission_grant import GRANT_MINIAPP_ACTION, grant_shop_permission, grant_summary
+
+# Bulk action key -> staff log action; one record per bulk call, with the number of changed rows.
+USERS_BULK_ACTIONS = {
+    "block": "customer_block",
+    "unblock": "customer_unblock",
+    "renew": "service_renew",
+    "delete": "customer_delete",
+}
+PG_BULK_ACTIONS = {
+    "disable": "pg_user_disable",
+    "enable": "pg_user_enable",
+    "reset": "pg_user_reset_usage",
+    "revoke": "pg_user_revoke_sub",
+    "delete": "pg_user_delete",
+}
 
 
 def _bulk_result(
@@ -83,6 +99,13 @@ def register_bulk_pages(
                     return_to, err="نقش پاسارگارد شما اجازه تمدید ندارد"
                 )
 
+        reason = ""
+        if action in {"block", "unblock", "renew"}:
+            try:
+                reason = reason_from_form(form)
+            except ReasonRequired as exc:
+                return redirect_bulk(return_to, err=str(exc))
+
         if action == "block":
             ok, fail = await bulk_toggle_block(session, staff, ids, block=True)
             noun = "کاربر مسدود شد"
@@ -103,6 +126,11 @@ def register_bulk_pages(
         else:
             return redirect_bulk(return_to, err="عملیات نامعتبر")
 
+        if ok:
+            await log_reasoned_action(
+                session, staff, action=USERS_BULK_ACTIONS[action], target_type="customer", target_id=None,
+                reason=reason, amount=int(ok),
+            )
         return _bulk_result(return_to, ok, fail, done=noun, none="هیچ موردی انجام نشد")
 
     @app.post("/finance/orders/bulk-action")
@@ -493,7 +521,16 @@ def register_bulk_pages(
             return redirect_bulk(return_to, err="هیچ کاربری انتخاب نشده")
         if action not in {"disable", "enable", "reset", "revoke", "delete"}:
             return redirect_bulk(return_to, err="عملیات نامعتبر")
+        try:
+            reason = reason_from_form(form)
+        except ReasonRequired as exc:
+            return redirect_bulk(return_to, err=str(exc))
         ok, fail = await bulk_pg_user_action(session, staff, ids, action)
+        if ok:
+            await log_reasoned_action(
+                session, staff, action=PG_BULK_ACTIONS[action], target_type="pg_user", target_id=None,
+                reason=reason, amount=int(ok),
+            )
         labels = {
             "disable": "کاربر غیرفعال شد",
             "enable": "کاربر فعال شد",

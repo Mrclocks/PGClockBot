@@ -63,6 +63,9 @@ from app.services.bot_user_admin import (
 )
 from app.services.support_button import support_markup
 from app.services.volume_allocation import set_shop_oversell
+from app.bot.handlers.action_reason import ask_reason, take_reason
+from app.services.action_reasons import bot_actor
+from app.services.customer_action_notices import NoticeTarget, log_and_notify
 from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
 from app.bot.handlers import stuck_orders
@@ -80,6 +83,7 @@ from app.bot.service_adjust import (
     NOTHING_STAGED,
     UNKNOWN_ADJUST_OUTCOME,
     StagedAdjustment,
+    read_staged,
     restore_staged,
     service_adjust_lock,
     take_staged,
@@ -2871,7 +2875,7 @@ async def adm_users_service_link(
 @router.callback_query(F.data.startswith("adm:users:svcrenew:"))
 @require_bot_owner_handler
 async def adm_users_service_renew(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext | None = None
 ):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
@@ -2890,6 +2894,10 @@ async def adm_users_service_renew(
         snapshot_telegram_lines,
     )
 
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت تمدید")
+        return
     try:
         svc = await get_owned_service(
             session, bot_user_id=user_id, service_id=service_id, shop_id=None
@@ -2906,6 +2914,15 @@ async def adm_users_service_renew(
     except Exception as e:
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
+    await log_and_notify(
+        session,
+        bot_actor(db_user, shop_id=None),
+        action="service_renew",
+        target_type="service",
+        target_id=service_id,
+        reason=reason,
+        targets=[NoticeTarget(user_id, int(_user.telegram_id or 0), None, svc.pg_username or "")],
+    )
     await callback.answer(feedback.RENEWED)
     if callback.message:
         await safe_edit_text(
@@ -2965,7 +2982,7 @@ async def adm_users_service_delete_ask(
 @router.callback_query(F.data.startswith("adm:users:svcdel:"))
 @require_bot_owner_handler
 async def adm_users_service_delete(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext | None = None
 ):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
@@ -2985,11 +3002,16 @@ async def adm_users_service_delete(
     from app.services.service_import import admin_delete_pg_flag, is_external_service
 
     explicit_pg = len(parts) > 5 and parts[5] == "pg"
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت حذف سرویس")
+        return
     try:
         svc = await get_owned_service(
             session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
         detach_only = is_external_service(svc) and not explicit_pg
+        notice_target = NoticeTarget(user_id, int(_user.telegram_id or 0), None, svc.pg_username or "")
         await admin_delete_service(
             session, svc, delete_pg=admin_delete_pg_flag(svc, explicit=explicit_pg)
         )
@@ -3000,6 +3022,16 @@ async def adm_users_service_delete(
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     done = f"سرویس #{service_id} از لیست مشتری جدا شد؛ حساب پاسارگارد حفظ شد." if detach_only else f"سرویس #{service_id} حذف شد."
+    await log_and_notify(
+        session,
+        bot_actor(db_user, shop_id=None),
+        action="service_delete",
+        target_type="service",
+        target_id=service_id,
+        reason=reason,
+        targets=[notice_target],
+        notice_action="service_detach" if detach_only else "service_delete",
+    )
     await callback.answer(done, show_alert=True)
     if callback.message:
         await safe_edit_text(
@@ -3013,6 +3045,11 @@ async def adm_users_service_delete(
                 ]
             ),
         )
+
+
+async def _service_name(session: AsyncSession, service_id: int) -> str:
+    service = await session.get(UserService, int(service_id))
+    return (service.pg_username or "") if service is not None else ""
 
 
 async def _adm_apply_staged_adjust(
@@ -3049,17 +3086,18 @@ async def _adm_confirm_service_adjust(
     user_id: int,
     service_id: int,
     adj_key: str,
-) -> None:
+) -> bool:
+    """Apply the staged change; True only when the panel accepted it."""
     async with service_adjust_lock(service_id):
         staged = await take_staged(state, adj_key)
         if staged.is_empty:
             await callback.answer(NOTHING_STAGED, show_alert=True)
-            return
+            return False
         snap = await _adm_apply_staged_adjust(
             callback, state, session, user_id=user_id, service_id=service_id, adj_key=adj_key, staged=staged
         )
     if snap is None:
-        return
+        return False
     await callback.answer("مانده به‌روز شد")
     if callback.message:
         await safe_edit_text(
@@ -3067,6 +3105,41 @@ async def _adm_confirm_service_adjust(
             "✅ مانده سرویس به‌روز شد\n\n" + snapshot_telegram_lines(snap),
             reply_markup=kb.admin_user_service_actions(user_id, service_id),
         )
+    return True
+
+
+async def _adm_confirm_with_reason(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    customer: BotUser,
+    service_id: int,
+    adj_key: str,
+) -> None:
+    """Ask for the reason, apply the staged change, then log it and tell the customer."""
+    if read_staged(await state.get_data(), adj_key).is_empty:
+        await callback.answer(NOTHING_STAGED, show_alert=True)
+        return
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت تغییر مانده سرویس")
+        return
+    user_id = int(customer.id)
+    if not await _adm_confirm_service_adjust(
+        callback, state, session, user_id=user_id, service_id=service_id, adj_key=adj_key
+    ):
+        return
+    await log_and_notify(
+        session,
+        bot_actor(db_user, shop_id=None),
+        action="service_extend",
+        target_type="service",
+        target_id=service_id,
+        reason=reason,
+        targets=[NoticeTarget(user_id, int(customer.telegram_id or 0), None, await _service_name(session, service_id))],
+    )
 
 
 @router.callback_query(F.data.startswith("adm:users:svcadj:"))
@@ -3163,8 +3236,8 @@ async def adm_users_service_adjust(
             )
         return
     elif action == "confirm":
-        await _adm_confirm_service_adjust(
-            callback, state, session, user_id=user_id, service_id=service_id, adj_key=adj_key
+        await _adm_confirm_with_reason(
+            callback, state, session, db_user, customer=_user, service_id=service_id, adj_key=adj_key
         )
         return
     else:
