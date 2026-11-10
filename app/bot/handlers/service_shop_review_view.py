@@ -16,6 +16,7 @@ from app.bot.hub_entries import SERVICE_SHOP_REVIEW_CALLBACK
 from app.bot.nav_inline import with_inline_back
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
+from app.services.user_errors import domain_error_text
 from app.services import bot_feedback_texts as feedback
 from app.services.formatting import format_message, info_block, kv_line
 from app.services.service_shop_review import (
@@ -165,7 +166,7 @@ async def run_assign(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         await assign_service_shop(session, int(raw_id), None if choice == PLATFORM_CHOICE else int(choice))
     except ValueError as exc:
         await session.rollback()
-        await callback.answer(str(exc)[:190], show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     await callback.answer("فروشگاه سرویس تعیین شد ✅", show_alert=True)
     remaining = await list_services_under_review(session)
