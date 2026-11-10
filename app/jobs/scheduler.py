@@ -17,6 +17,7 @@ from app.jobs.connection_status import run_connection_status
 from app.jobs.customer_notices import run_customer_notices
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
 from app.jobs.pg_link_watchdog import run_pg_link_watchdog
+from app.jobs.service_cleanup import run_service_cleanup
 from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
 from app.services.alert_rearm import rearm_flagged_alerts
@@ -880,6 +881,7 @@ def start_background_scheduler() -> None:
         # Ticks often; each shop is recounted on the period set in volume_external_sync_minutes.
         ("volume_external_sync", run_volume_external_sync, {"minutes": 1}, 120),
         ("chat_message_purge", run_chat_message_purge, {"hours": 1}, 3600),
+        ("service_cleanup", run_service_cleanup, {"minutes": 30}, 1800),
     )
     for job_id, func, interval, grace in jobs:
         if scheduler.get_job(job_id) is None:
