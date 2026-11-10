@@ -37,7 +37,9 @@ SHOP_STAFF = {"role": "reseller", "bot_user_id": SHOP_ID, "reseller_id": SHOP_ID
 class NoticeTextTests(unittest.TestCase):
     def test_every_logged_service_action_has_a_customer_message(self) -> None:
         for action in ACTION_LABELS:
-            # The automatic cleanup has its own notices (CLEANUP_NOTICE_TEXTS).
+            # Cleanup warnings/deletes use CLEANUP_NOTICE_TEXTS; exempt/hold are staff-only.
+            if action.startswith(("service_cleanup_", "cleanup_")):
+                continue
             if action.startswith(("service_", "pg_user_")) and action != "service_auto_delete":
                 self.assertIn(action, ACTION_NOTICE_TITLES)
 

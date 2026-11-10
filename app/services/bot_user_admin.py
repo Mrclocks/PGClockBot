@@ -899,7 +899,8 @@ def sync_service_quota_cache(
     from app.services.formatting import parse_expire
 
     touched = False
-    previous_expire = service.quota_expire_at
+    # Tests and lightweight fixtures may pass a SimpleNamespace without quota columns.
+    previous_expire = getattr(service, "quota_expire_at", None)
     if isinstance(info, dict):
         _cache_quota_status(service, info)
         has_expire = "expire" in info or "expire_date" in info
@@ -972,8 +973,10 @@ def _reset_cleanup_stage_after_renewal(service: UserService, previous_expire: da
     Only a real renewal counts: the new expiry is later and in the future. A service that is still
     expired after a small extension keeps its stage, so its warnings are not sent twice.
     """
-    new_expire = service.quota_expire_at
+    new_expire = getattr(service, "quota_expire_at", None)
     if previous_expire is None or new_expire is None:
+        return
+    if not hasattr(service, "cleanup_warn_stage"):
         return
     old = previous_expire if previous_expire.tzinfo else previous_expire.replace(tzinfo=timezone.utc)
     new = new_expire if new_expire.tzinfo else new_expire.replace(tzinfo=timezone.utc)
