@@ -31,22 +31,30 @@ from app.services.chat_records import keeps_sent
 logger = logging.getLogger(__name__)
 
 
-def ticket_action_markup(ticket_id: int) -> InlineKeyboardMarkup:
-    """Reply / close buttons under ticket notification messages."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="💬 پاسخ",
-                    callback_data=f"tkt:reply:{int(ticket_id)}",
-                ),
-                InlineKeyboardButton(
-                    text="🗃 بستن",
-                    callback_data=f"tkt:close:{int(ticket_id)}",
-                ),
-            ]
+def ticket_action_markup(
+    ticket_id: int,
+    *,
+    user_id: int | None = None,
+    shop_id: int | None = None,
+) -> InlineKeyboardMarkup:
+    """Reply / close under ticket notices; optional customer-card button for wallet/services."""
+    rows: list[list[InlineKeyboardButton]] = []
+    customer = customer_markup(user_id=user_id, service_id=None, shop_id=shop_id)
+    if customer is not None:
+        rows.extend(customer.inline_keyboard)
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="💬 پاسخ",
+                callback_data=f"tkt:reply:{int(ticket_id)}",
+            ),
+            InlineKeyboardButton(
+                text="🗃 بستن",
+                callback_data=f"tkt:close:{int(ticket_id)}",
+            ),
         ]
     )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 # (setting_key, title, description, default "1"|"0")
@@ -1155,12 +1163,21 @@ async def notify_new_ticket(
 ) -> int:
     import html as html_mod
 
+    _ = user_name  # kept for callers; identity is built from the user row
+    user = await session.get(BotUser, int(ticket_user_id)) if ticket_user_id else None
+    if ticket_reseller_id is not _TICKET_RID_UNSET:
+        shop_id = int(ticket_reseller_id) if ticket_reseller_id is not None else None
+    else:
+        from app.db.models import Ticket as TicketModel
+
+        trow = await session.get(TicketModel, int(ticket_id))
+        shop_id = int(trow.reseller_id) if trow is not None and trow.reseller_id else None
     text = format_message(
         "🎫 تیکت جدید",
         info_block(
             [
                 kv_line("🔢", "شماره", f"#{ticket_id}"),
-                kv_line("👤", "از", html_mod.escape(user_name or "—")),
+                *_buyer_lines(user),
                 kv_line("📝", "موضوع", html_mod.escape(subject or "—")),
             ]
         ),
@@ -1170,7 +1187,11 @@ async def notify_new_ticket(
         session,
         "notify_new_ticket",
         text,
-        markup=ticket_action_markup(ticket_id),
+        markup=ticket_action_markup(
+            ticket_id,
+            user_id=int(ticket_user_id) if ticket_user_id else None,
+            shop_id=shop_id,
+        ),
         ticket_user_id=ticket_user_id,
         ticket_reseller_id=ticket_reseller_id,
         replace_key=ticket_notice_key(ticket_id),
@@ -1242,12 +1263,21 @@ async def notify_ticket_message(
                     logger.debug("notify_ticket_message: ignored failure", exc_info=True)
         return
 
+    _ = actor_name  # kept for callers; identity is built from the user row
+    opener = await session.get(BotUser, int(ticket_user_id)) if ticket_user_id else None
+    if ticket_reseller_id is not _TICKET_RID_UNSET:
+        shop_id = int(ticket_reseller_id) if ticket_reseller_id is not None else None
+    else:
+        from app.db.models import Ticket as TicketModel
+
+        trow = await session.get(TicketModel, int(ticket_id))
+        shop_id = int(trow.reseller_id) if trow is not None and trow.reseller_id else None
     text = format_message(
         "🎫 پیام جدید تیکت",
         info_block(
             [
                 kv_line("🔢", "تیکت", f"#{ticket_id}"),
-                kv_line("👤", "از", html_mod.escape(actor_name or "کاربر")),
+                *_buyer_lines(opener),
                 kv_line("📝", "موضوع", html_mod.escape(subject or "—")),
                 kv_line("💬", "پیام", html_mod.escape(preview or "—")),
             ]
@@ -1258,7 +1288,11 @@ async def notify_ticket_message(
         session,
         "notify_new_ticket",
         text,
-        markup=markup,
+        markup=ticket_action_markup(
+            ticket_id,
+            user_id=int(ticket_user_id) if ticket_user_id else None,
+            shop_id=shop_id,
+        ),
         ticket_user_id=ticket_user_id,
         ticket_reseller_id=ticket_reseller_id,
         replace_key=ticket_notice_key(ticket_id),
