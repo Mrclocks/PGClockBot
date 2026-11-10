@@ -1,29 +1,35 @@
 {# PAYG pricing of a reseller package; shared by the create modal and the edit page.
-   Shown only for PAYG packages (inside the per-GB rate block the page scripts toggle). #}
+   Shown only for PAYG packages (inside the per-GB rate block the page scripts toggle).
+   The basis is a single choice (44px bar over a hidden select); each field shows only
+   for the bases it prices, and still posts while hidden. #}
 {% from "_ds.html" import ds_switch %}
 {% macro payg_pricing_fields(prefix, plan=none) -%}
 {% set basis = (plan.payg_basis if plan else 'traffic') or 'traffic' %}
+{% set basis_id = prefix ~ '-payg-basis' %}
 <input type="hidden" name="payg_fields_shown" value="1" />
-<input type="hidden" name="payg_basis" id="{{ prefix }}-payg-basis" value="{{ basis }}" />
 <div class="form-field">
   <span class="ds-label-text">مبنای هزینه</span>
-  <div class="ds-chips" role="radiogroup" aria-label="مبنای هزینهٔ PAYG" data-ds-choice data-ds-target="#{{ prefix }}-payg-basis">
-    <button type="button" role="radio" data-value="traffic" aria-checked="{{ 'true' if basis == 'traffic' else 'false' }}">حجم</button>
-    <button type="button" role="radio" data-value="user" aria-checked="{{ 'true' if basis == 'user' else 'false' }}">کاربر</button>
-    <button type="button" role="radio" data-value="user_traffic" aria-checked="{{ 'true' if basis == 'user_traffic' else 'false' }}">کاربر + حجم</button>
+  <select name="payg_basis" id="{{ basis_id }}" data-ui-select="1" hidden>
+    {% for value in ('traffic', 'user', 'user_traffic') %}<option value="{{ value }}"{% if basis == value %} selected{% endif %}>{{ value }}</option>{% endfor %}
+  </select>
+  <div class="sales-seg ds-seg" role="radiogroup" aria-label="مبنای هزینهٔ PAYG" data-ds-choice data-ds-target="#{{ basis_id }}">
+    <button type="button" role="radio" data-value="traffic">حجم</button>
+    <button type="button" role="radio" data-value="user">کاربر</button>
+    <button type="button" role="radio" data-value="user_traffic">کاربر + حجم</button>
   </div>
   <small class="muted">حجم: نرخ هر گیگ · کاربر: قیمت هر کاربر · هر دو: جمع آن دو</small>
 </div>
 <div class="ds-rows">
-  {{ ds_switch('payg_charge_upfront', 'کسر هزینهٔ حجم هنگام ساخت کاربر', 'روشن: حجمی که روی کاربر زده می‌شود همان لحظه از کیف پول نماینده کم می‌شود · خاموش: بر اساس مصرف', plan.payg_charge_upfront if plan else true, id=prefix ~ '-payg-upfront') }}
-  {{ ds_switch('payg_user_price_per_30d', 'قیمت کاربر به ازای هر ۳۰ روز', 'روشن: کاربر ۹۰ روزه سه برابر · خاموش: یک قیمت برای هر کاربر', plan.payg_user_price_per_30d if plan else false, id=prefix ~ '-payg-per30') }}
+  {{ ds_switch('payg_charge_upfront', 'کسر هزینهٔ حجم هنگام ساخت کاربر', 'روشن: حجمی که روی کاربر زده می‌شود همان لحظه از کیف پول نماینده کم می‌شود · خاموش: بر اساس مصرف', plan.payg_charge_upfront if plan else true, id=prefix ~ '-payg-upfront', show_when='#' ~ basis_id ~ ':traffic,user_traffic', hidden=(basis == 'user')) }}
+  {{ ds_switch('payg_user_price_per_30d', 'قیمت کاربر به ازای هر ۳۰ روز', 'روشن: کاربر ۹۰ روزه سه برابر · خاموش: یک قیمت برای هر کاربر', plan.payg_user_price_per_30d if plan else false, id=prefix ~ '-payg-per30', show_when='#' ~ basis_id ~ ':user,user_traffic', hidden=(basis == 'traffic')) }}
 </div>
-<label class="form-field">قیمت هر کاربر
-  <span class="ds-unit"><input name="payg_user_price" type="number" data-money min="0" value="{{ (plan.payg_user_price if plan else 0) or 0 }}" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
-  <small class="muted">برای مبنای «کاربر» و «کاربر + حجم» بیشتر از صفر باشد</small>
-</label>
-<label class="form-field">قیمت کاربر نامحدود
-  <span class="ds-unit"><input name="payg_unlimited_price" type="number" data-money min="0" value="{{ plan.payg_unlimited_price if plan and plan.payg_unlimited_price is not none else '' }}" inputmode="numeric" dir="ltr" placeholder="خالی = ممنوع" /><span class="ds-unit-label">تومان</span></span>
-  <small class="muted">خالی بماند تا ساخت کاربر با حجم یا زمان نامحدود ممنوع باشد</small>
-</label>
+<div class="ds-grid-2">
+  <label class="form-field" data-ds-show-when="#{{ basis_id }}:user,user_traffic"{% if basis == 'traffic' %} hidden{% endif %}>قیمت هر کاربر
+    <span class="ds-unit"><input name="payg_user_price" type="number" data-money min="0" value="{{ (plan.payg_user_price if plan else 0) or 0 }}" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
+  </label>
+  <label class="form-field">قیمت کاربر نامحدود
+    <span class="ds-unit"><input name="payg_unlimited_price" type="number" data-money min="0" value="{{ plan.payg_unlimited_price if plan and plan.payg_unlimited_price is not none else '' }}" inputmode="numeric" dir="ltr" placeholder="ممنوع" /><span class="ds-unit-label">تومان</span></span>
+    <small class="muted">خالی بماند تا ساخت کاربر نامحدود ممنوع باشد</small>
+  </label>
+</div>
 {%- endmacro %}

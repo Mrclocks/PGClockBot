@@ -16,9 +16,10 @@ from app.db.models import CreditStatement, ResellerProfile
 from app.services.billing import is_payg
 from app.services.credit_statements import write_off_statement
 from app.services.numbers import parse_int
-from app.services.shop_credit import CreditLimitChange, CreditStatus, set_credit_limit, set_credit_status
+from app.services.shop_credit import CreditLimitChange, set_credit_frozen, set_credit_limit
 
 MAX_TEMP_DAYS = 365
+FROZEN_SHOWN_FIELD = "frozen_shown"
 SAVED_MESSAGE = "اعتبار نماینده ذخیره شد"
 NOT_PAYG_MESSAGE = "اعتبار فقط برای نمایندهٔ PAYG است"
 WRITTEN_OFF_MESSAGE = "بدهی این صورت‌حساب بخشیده شد"
@@ -71,25 +72,15 @@ def register_shop_credit_pages(app: FastAPI, *, require_admin: Callable, get_db:
         if await _payg_shop(session, user_id) is None:
             return _back(user_id, err=NOT_PAYG_MESSAGE)
         form = await request.form()
+        actor = str(staff.get("username") or "owner")
         try:
             change = credit_change_from_form(form, now=datetime.now(timezone.utc))
-            await set_credit_limit(session, int(user_id), change, actor=str(staff.get("username") or "owner"))
+            await set_credit_limit(session, int(user_id), change, actor=actor)
         except ValueError as exc:
             return _back(user_id, err=str(exc))
-        return _back(user_id, ok=SAVED_MESSAGE)
-
-    @app.post("/resellers/{user_id}/credit/status")
-    async def shop_credit_status(
-        user_id: int,
-        request: Request,
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ) -> RedirectResponse:
-        if await _payg_shop(session, user_id) is None:
-            return _back(user_id, err=NOT_PAYG_MESSAGE)
-        form = await request.form()
-        status = CreditStatus.FROZEN if form.get("frozen") else CreditStatus.ACTIVE
-        await set_credit_status(session, int(user_id), status, actor=str(staff.get("username") or "owner"))
+        # Hidden marker: an unchecked switch posts nothing, so its absence alone must not unfreeze.
+        if form.get(FROZEN_SHOWN_FIELD):
+            await set_credit_frozen(session, int(user_id), bool(form.get("frozen")), actor=actor)
         return _back(user_id, ok=SAVED_MESSAGE)
 
     @app.post("/resellers/{user_id}/credit/statements/{statement_id}/writeoff")

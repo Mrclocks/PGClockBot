@@ -201,6 +201,16 @@ async def set_credit_status(
     return account
 
 
+async def set_credit_frozen(session: AsyncSession, shop_id: int, frozen: bool, *, actor: str) -> ShopCreditAccount:
+    """Freeze or unfreeze only; an overdue or blocked line set by the ladder keeps its status."""
+    account = await _account_for_update(session, shop_id)
+    if frozen and account.status == CreditStatus.ACTIVE:
+        return await set_credit_status(session, shop_id, CreditStatus.FROZEN, actor=actor)
+    if not frozen and account.status == CreditStatus.FROZEN:
+        return await set_credit_status(session, shop_id, CreditStatus.ACTIVE, actor=actor)
+    return account
+
+
 def _alert_level_for(percent: int) -> int:
     reached = [level for level in ALERT_LEVELS if percent >= level]
     return max(reached) if reached else 0

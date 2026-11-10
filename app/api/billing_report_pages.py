@@ -24,7 +24,9 @@ def register_billing_report_pages(app: FastAPI, *, render: Callable, require_adm
     async def payg_report(request: Request, staff: dict = Depends(require_admin),
                           session: AsyncSession = Depends(get_db)) -> Any:
         rows = await shop_finance_rows(session, month_start=_month_start())
-        return render(request, "payg_report.html", {"staff": staff, "rows": rows})
+        # Owner admins reach every finance tab, so the shared tab strip shows them all.
+        return render(request, "payg_report.html",
+                      {"staff": staff, "rows": rows, "can_orders": True, "can_payments": True})
 
     @app.get(f"{PAGE}.csv")
     async def payg_report_csv(staff: dict = Depends(require_admin), session: AsyncSession = Depends(get_db)) -> Response:

@@ -2,6 +2,12 @@
 {% from "macros.html" import page_title %}
 {% from "_my_account_tabs.html" import my_account_tabs %}
 {% block title %}اشتراک من{% endblock %}
+{% set charge_events = {'create': 'ساخت', 'renew': 'تمدید', 'add_volume': 'افزایش حجم', 'add_days': 'افزایش روز', 'reset': 'ریست ترافیک', 'reactivate': 'فعال‌سازی دوباره'} %}
+{% set charge_labels = {'pending': 'در حال انجام', 'settled': 'قطعی', 'refunded': 'برگشت داده شد', 'review': 'در بررسی'} %}
+{% set charge_tones = {'pending': 'info', 'settled': 'ok', 'refunded': 'neutral', 'review': 'warn'} %}
+{% set statement_labels = {'issued': 'پرداخت‌نشده', 'paid': 'پرداخت‌شده', 'written_off': 'بخشیده‌شده'} %}
+{% set statement_tones = {'issued': 'warn', 'paid': 'ok', 'written_off': 'neutral'} %}
+{% set topup_tones = {'pending': 'info', 'approved': 'ok', 'rejected': 'danger'} %}
 {% block content %}
 <div class="ds ds-settings">
 <div class="page-head"><div>{{ page_title('payments', 'اشتراک من') }}</div></div>
@@ -10,15 +16,24 @@
 {% if flash_err %}<div class="flash err" role="alert">{{ flash_err }}</div>{% endif %}
 
 {% set balance = owner.wallet_balance or 0 %}
-<div class="grid">
-  <div class="stat"><span>موجودی کیف پول</span><strong dir="ltr">{{ balance | money }}</strong></div>
-  {% if credit and credit.usage.limit %}
-  <div class="stat"><span>اعتبار استفاده‌شده</span><strong dir="ltr">{{ credit.usage.used | money }}</strong></div>
-  <div class="stat"><span>اعتبار قابل استفاده</span><strong dir="ltr">{{ credit.usage.available | money }}</strong></div>
-  {% endif %}
+{% set ico_wallet %}<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M16 12.5h2M3 9.5h18"/></svg>{% endset %}
+{% set ico_credit %}<svg viewBox="0 0 24 24"><path d="M12 3v18M7 7.5h7a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h8"/></svg>{% endset %}
+{% macro stat(label, value, ico) %}
+<div class="stat">
+  <div class="stat-top"><span class="stat-ico" aria-hidden="true">{{ ico }}</span><span>{{ label }}</span></div>
+  <strong><bdi dir="ltr">{{ value | money }}</bdi></strong>
 </div>
+{% endmacro %}
+{% macro stats() %}
+<div class="home-panels">
+  <section class="home-panel home-panel-neutral">
+    <div class="home-panel-grid">{{ caller() }}</div>
+  </section>
+</div>
+{% endmacro %}
 
 {% if tab == 'wallet' %}
+  {% call stats() %}{{ stat('موجودی کیف پول', balance, ico_wallet) }}{% if credit and credit.usage.limit %}{{ stat('اعتبار قابل استفاده', credit.usage.available, ico_credit) }}{% endif %}{% endcall %}
   {% if topup %}
   <div class="card" id="topup-instructions">
     <h2>پرداخت <span dir="ltr">{{ topup.amount | money }}</span></h2>
@@ -47,11 +62,11 @@
   <div class="card">
     <h2>شارژ کیف پول</h2>
     {% if not options.methods %}
-    <p class="muted empty-state">روش پرداختی برای شارژ از وب‌پنل فعال نیست؛ از ربات شارژ کنید.</p>
+    <p class="muted">روش پرداختی برای شارژ از وب‌پنل فعال نیست؛ از ربات شارژ کنید.</p>
     {% else %}
     <form method="post" action="/my-subscription/wallet/topup" class="form-stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <div class="form-row">
+      <div class="ds-grid-2">
         <label class="form-field">مبلغ
           <span class="ds-unit"><input name="amount" type="number" data-money min="{{ options.min_amount }}" max="{{ options.max_amount }}" required inputmode="numeric" dir="ltr" list="topup-presets" /><span class="ds-unit-label">تومان</span></span>
           <datalist id="topup-presets">{% for p in options.presets %}<option value="{{ p }}"></option>{% endfor %}</datalist>
@@ -75,54 +90,64 @@
 
   <div class="card card-flush">
     <div class="card-flush-head"><h2>شارژهای اخیر</h2></div>
-    {% if not recent %}<p class="muted empty-state">هنوز شارژی ثبت نشده است.</p>{% else %}
     <div class="table-wrap"><table class="table-compact table-list-sm">
-      <thead><tr><th>شماره</th><th>مبلغ</th><th>وضعیت</th></tr></thead>
-      <tbody>{% for r in recent %}<tr><td dir="ltr">#{{ r.id }}</td><td dir="ltr">{{ r.amount | money }}</td><td>{{ r.status_fa }}</td></tr>{% endfor %}</tbody>
+      <thead><tr><th>شماره</th><th>مبلغ</th><th class="col-status">وضعیت</th>
+        <th class="li-head" scope="col"><span class="li-count">{{ recent | length | num }} شارژ</span></th></tr></thead>
+      <tbody>{% for r in recent %}<tr>
+        <td class="li-title"><bdi dir="ltr">#{{ r.id }}</bdi></td>
+        <td class="cell-tight li-value"><bdi dir="ltr">{{ r.amount | money }}</bdi></td>
+        <td class="cell-tight li-badge"><span class="badge {{ topup_tones.get(r.status, 'neutral') }}">{{ r.status_fa }}</span></td>
+      </tr>{% else %}<tr><td colspan="3" class="muted">هنوز شارژی ثبت نشده است</td></tr>{% endfor %}</tbody>
     </table></div>
-    {% endif %}
   </div>
 
 {% elif tab == 'credit' %}
-  <div class="card">
-    <h2>اعتبار</h2>
-    {% if credit and credit.usage.limit %}
-    <p>سقف <b dir="ltr">{{ credit.usage.limit | money }}</b> · استفاده‌شده <b dir="ltr">{{ credit.usage.used | money }}</b> (<span dir="ltr">{{ credit.usage.percent }}٪</span>)</p>
-    {% if credit.status == 'frozen' %}<p class="flash warn">اعتبار شما منجمد است؛ تا باز شدن، فقط با موجودی خودتان می‌فروشید.</p>{% endif %}
-    {% if credit.status in ('overdue', 'blocked') %}<p class="flash err">صورت‌حساب سررسیدگذشته دارید؛ با شارژ کیف پول همهٔ محدودیت‌ها خودکار برداشته می‌شود.</p>{% endif %}
-    {% else %}<p class="muted">اعتباری برای شما تعریف نشده است.</p>{% endif %}
-  </div>
+  {% if credit and credit.status == 'frozen' %}<div class="flash warn" role="status">اعتبار شما منجمد است؛ تا باز شدن، فقط با موجودی خودتان می‌فروشید.</div>{% endif %}
+  {% if credit and credit.status in ('overdue', 'blocked') %}<div class="flash err" role="alert">صورت‌حساب سررسیدگذشته دارید؛ با شارژ کیف پول همهٔ محدودیت‌ها خودکار برداشته می‌شود.</div>{% endif %}
+  {% if credit and credit.usage.limit %}
+  {% call stats() %}
+    {{ stat('سقف اعتبار', credit.usage.limit, ico_credit) }}
+    {{ stat('اعتبار استفاده‌شده', credit.usage.used, ico_credit) }}
+    {{ stat('اعتبار قابل استفاده', credit.usage.available, ico_credit) }}
+    {{ stat('موجودی کیف پول', balance, ico_wallet) }}
+  {% endcall %}
+  {% else %}
+  <div class="card"><p class="muted">اعتباری برای شما تعریف نشده است.</p></div>
+  {% endif %}
   <div class="card card-flush">
-    <div class="card-flush-head"><h2>صورت‌حساب‌ها</h2></div>
-    {% if not statements %}<p class="muted empty-state">هنوز صورت‌حسابی صادر نشده است.</p>{% else %}
+    <div class="card-flush-head">
+      <h2>صورت‌حساب‌ها</h2>
+      <p class="muted">برای پرداخت بدهی کیف پول را شارژ کنید؛ پرداخت اول قدیمی‌ترین صورت‌حساب را صاف می‌کند.</p>
+    </div>
     <div class="table-wrap"><table class="table-compact table-list-sm">
-      <thead><tr><th>دوره</th><th>هزینه‌های دوره</th><th>مبلغ بدهی</th><th>سررسید</th><th>وضعیت</th></tr></thead>
+      <thead><tr><th>دوره</th><th class="col-hide-sm">هزینه‌های دوره</th><th>مبلغ بدهی</th><th class="col-hide-sm">سررسید</th><th class="col-status">وضعیت</th>
+        <th class="li-head" scope="col"><span class="li-count">{{ statements | length | num }} صورت‌حساب</span></th></tr></thead>
       <tbody>{% for st in statements %}<tr>
-        <td dir="ltr">{{ st.period_start.strftime('%Y-%m') }}</td><td dir="ltr">{{ st.charges_total | money }}</td>
-        <td dir="ltr">{{ st.amount_due | money }}</td><td dir="ltr">{{ st.due_at.strftime('%Y-%m-%d') }}</td>
-        <td>{{ {'issued': 'پرداخت‌نشده', 'paid': 'پرداخت‌شده', 'written_off': 'بخشیده‌شده'}.get(st.status, st.status) }}</td>
-      </tr>{% endfor %}</tbody>
+        <td class="li-title"><bdi dir="ltr">{{ st.period_start.strftime('%Y-%m') }}</bdi></td>
+        <td class="col-hide-sm"><bdi dir="ltr">{{ st.charges_total | money }}</bdi></td>
+        <td class="cell-tight li-value"><bdi dir="ltr">{{ st.amount_due | money }}</bdi></td>
+        <td class="col-hide-sm li-sub"><bdi dir="ltr">{{ st.due_at.strftime('%Y-%m-%d') }}</bdi></td>
+        <td class="cell-tight li-badge"><span class="badge {{ statement_tones.get(st.status, 'neutral') }}">{{ statement_labels.get(st.status, st.status) }}</span></td>
+      </tr>{% else %}<tr><td colspan="5" class="muted">هنوز صورت‌حسابی صادر نشده است</td></tr>{% endfor %}</tbody>
     </table></div>
-    <p class="muted">برای پرداخت بدهی کیف پول را شارژ کنید؛ پرداخت اول قدیمی‌ترین صورت‌حساب را صاف می‌کند.</p>
-    {% endif %}
   </div>
 
 {% elif tab == 'charges' %}
+  {% call stats() %}{{ stat('موجودی کیف پول', balance, ico_wallet) }}{% endcall %}
   <div class="card card-flush">
     <div class="card-flush-head"><h2>هزینه‌های PAYG</h2></div>
-    {% if not charges %}<p class="muted empty-state">هزینه‌ای ثبت نشده است.</p>{% else %}
     <div class="table-wrap"><table class="table-compact table-list-sm">
-      <thead><tr><th>زمان</th><th>تغییر</th><th>کاربر</th><th>مبلغ</th><th>وضعیت</th></tr></thead>
+      <thead><tr><th>تغییر</th><th class="col-hide-sm">کاربر</th><th class="col-hide-sm">زمان</th><th>مبلغ</th><th class="col-status">وضعیت</th>
+        <th class="li-head" scope="col"><span class="li-count">هزینه‌ها</span></th></tr></thead>
       <tbody>{% for c in charges %}<tr>
-        <td dir="ltr">{{ c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '—' }}</td>
-        <td>{{ {'create': 'ساخت', 'renew': 'تمدید', 'add_volume': 'افزایش حجم', 'add_days': 'افزایش روز', 'reset': 'ریست ترافیک', 'reactivate': 'فعال‌سازی دوباره'}.get(c.event, c.event) }}{% if c.quantity and c.quantity > 1 %} × <span dir="ltr">{{ c.quantity }}</span>{% endif %}</td>
-        <td dir="ltr">{{ c.pg_username or '—' }}</td>
-        <td dir="ltr">{{ c.amount | money }}</td>
-        <td>{{ {'pending': 'در حال انجام', 'settled': 'قطعی', 'refunded': 'برگشت داده شد', 'review': 'در بررسی'}.get(c.status, c.status) }}</td>
-      </tr>{% endfor %}</tbody>
+        <td class="li-title">{{ charge_events.get(c.event, c.event) }}{% if c.quantity and c.quantity > 1 %} × <bdi dir="ltr">{{ c.quantity }}</bdi>{% endif %}</td>
+        <td class="col-hide-sm li-sub"><bdi dir="ltr">{{ c.pg_username or '—' }}</bdi><span class="li-only"> · <bdi dir="ltr">{{ c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '—' }}</bdi></span></td>
+        <td class="col-hide-sm mono" dir="ltr">{{ c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '—' }}</td>
+        <td class="cell-tight li-value"><bdi dir="ltr">{{ c.amount | money }}</bdi></td>
+        <td class="cell-tight li-badge"><span class="badge {{ charge_tones.get(c.status, 'neutral') }}">{{ charge_labels.get(c.status, c.status) }}</span></td>
+      </tr>{% else %}<tr><td colspan="5" class="muted">هزینه‌ای ثبت نشده است</td></tr>{% endfor %}</tbody>
     </table></div>
     {% if next_before %}<div class="actions"><a class="btn btn-ghost" href="/my-subscription/charges?before={{ next_before }}">قدیمی‌تر</a></div>{% endif %}
-    {% endif %}
   </div>
 {% endif %}
 </div>
