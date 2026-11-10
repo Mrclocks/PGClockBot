@@ -462,3 +462,4 @@ tests/test_reseller_plan_payg.py
 tests/test_billing_pages_design.py
 # Action reasons: staff must give a reason for service and panel-user operations.
 tests/test_action_reasons.py
+tests/test_customer_action_notices.py
