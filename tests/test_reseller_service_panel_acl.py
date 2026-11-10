@@ -7,11 +7,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.base import StorageKey
-from aiogram.fsm.storage.memory import MemoryStorage
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from tests.reason_support import ReasonedState
 from app.bot.handlers import reseller_customer_services as handler
 from app.db.models import Base, BotUser, Plan, ResellerProfile, Role, UserService
 from app.services import bot_feedback_texts as feedback
@@ -82,8 +80,8 @@ class ShopBotServicePanelAclTests(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
         self.tmp.cleanup()
 
-    def fsm(self) -> FSMContext:
-        return FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=1, user_id=1))
+    def fsm(self, callback: MagicMock) -> ReasonedState:
+        return ReasonedState(callback.data)
 
     def callback(self, data: str) -> MagicMock:
         return MagicMock(data=data, answer=AsyncMock(), message=MagicMock())
@@ -95,7 +93,8 @@ class ShopBotServicePanelAclTests(unittest.IsolatedAsyncioTestCase):
         callback = self.callback(data)
         with self.with_panel_staff(staff), patch.object(handler, "safe_edit_text", AsyncMock()):
             await handler.res_user_service_delete(
-                callback, self.session, self.shop, is_reseller_bot=True, reseller_owner_id=SHOP_ID
+                callback, self.session, self.shop, is_reseller_bot=True, reseller_owner_id=SHOP_ID,
+                state=self.fsm(callback),
             )
         return callback
 
@@ -133,7 +132,7 @@ class ShopBotServicePanelAclTests(unittest.IsolatedAsyncioTestCase):
             patch.object(handler, "safe_edit_text", AsyncMock()),
         ):
             await handler.res_user_service_renew(
-                callback, self.fsm(), self.session, self.shop, is_reseller_bot=True, reseller_owner_id=SHOP_ID
+                callback, self.fsm(callback), self.session, self.shop, is_reseller_bot=True, reseller_owner_id=SHOP_ID
             )
 
         renew.assert_awaited_once()
@@ -142,7 +141,7 @@ class ShopBotServicePanelAclTests(unittest.IsolatedAsyncioTestCase):
     async def test_renew_changes_nothing_when_the_shop_panel_role_cannot_be_resolved(self) -> None:
         renew = AsyncMock()
         callback = self.callback(f"res:svcrenew:{CUSTOMER_ID}:{SOLD_SERVICE_ID}")
-        state = self.fsm()
+        state = self.fsm(callback)
         with (
             self.with_panel_staff(None),
             patch.object(handler, "admin_renew_service", renew),
@@ -162,9 +161,9 @@ class ShopBotServicePanelAclTests(unittest.IsolatedAsyncioTestCase):
             get_user_by_id=AsyncMock(return_value={"data_limit": 0, "expire": None}),
             modify_user_by_id=AsyncMock(),
         )
-        state = self.fsm()
-        await state.update_data(**{f"rsvcadj:{CUSTOMER_ID}:{SOLD_SERVICE_ID}": {"days": 5, "gb": 0}})
         callback = self.callback(f"res:svcadj:{CUSTOMER_ID}:{SOLD_SERVICE_ID}:confirm")
+        state = self.fsm(callback)
+        await state.update_data(**{f"rsvcadj:{CUSTOMER_ID}:{SOLD_SERVICE_ID}": {"days": 5, "gb": 0}})
         with (
             self.with_panel_staff(shop_staff(update=False)),
             patch("app.services.bot_user_admin._pg_client_for_bot_service", AsyncMock(return_value=panel)),

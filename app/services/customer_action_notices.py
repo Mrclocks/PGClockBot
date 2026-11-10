@@ -18,8 +18,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, UserService
+from app.services.action_reasons import log_reasoned_action_as
 from app.services.reseller_bots import ShopBotUnavailable, open_notify_bot_for_user
 from app.services.shop_scope import resolve_shop_scope_id
+from app.services.staff_audit import StaffActor
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +62,11 @@ def notice_text(action: str, *, service_name: str, reason: str) -> str:
     return "\n".join(lines)
 
 
-async def pg_user_targets(session: AsyncSession, staff: dict, *, pg_user_id: int) -> list[NoticeTarget]:
-    """Customers whose local service is the panel user, limited to the acting shop's own services."""
-    shop_id = resolve_shop_scope_id(staff)
+async def pg_user_targets_for_shop(session: AsyncSession, shop_id: int | None, *, pg_user_id: int) -> list[NoticeTarget]:
+    """Customers whose local service is the panel user; ``shop_id`` limits it to that shop's services.
+
+    ``None`` means no limit and is only for the platform owner, who may act on every shop.
+    """
     query = (
         select(BotUser.id, BotUser.telegram_id, UserService.shop_id, UserService.pg_username)
         .join(UserService, UserService.bot_user_id == BotUser.id)
@@ -73,6 +77,11 @@ async def pg_user_targets(session: AsyncSession, staff: dict, *, pg_user_id: int
         query = query.where(UserService.shop_id == int(shop_id))
     rows = (await session.execute(query)).all()
     return [NoticeTarget(int(uid), int(tg), (int(shop) if shop else None), str(name or "")) for uid, tg, shop, name in rows if tg]
+
+
+async def pg_user_targets(session: AsyncSession, staff: dict, *, pg_user_id: int) -> list[NoticeTarget]:
+    """``pg_user_targets_for_shop`` for a web staff session, limited to the acting shop."""
+    return await pg_user_targets_for_shop(session, resolve_shop_scope_id(staff), pg_user_id=pg_user_id)
 
 
 async def notify_customers(session: AsyncSession, targets: list[NoticeTarget], *, action: str, reason: str) -> int:
@@ -111,3 +120,21 @@ async def notify_customers(session: AsyncSession, targets: list[NoticeTarget], *
             if opened is not None and opened[1]:
                 await opened[0].session.close()
     return delivered
+
+
+async def log_and_notify(
+    session: AsyncSession,
+    actor: StaffActor,
+    *,
+    action: str,
+    target_type: str,
+    target_id: int | None,
+    reason: str,
+    targets: list[NoticeTarget],
+    notice_action: str | None = None,
+) -> None:
+    """Record a finished reasoned operation in the staff log, then tell the affected customers."""
+    await log_reasoned_action_as(
+        session, actor, action=action, target_type=target_type, target_id=target_id, reason=reason
+    )
+    await notify_customers(session, targets, action=notice_action or action, reason=reason)
