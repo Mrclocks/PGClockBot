@@ -235,7 +235,6 @@ BTN_RESELLER_HUB: list[Field] = [
     ("btn_res_dash", "خانه نماینده", "text"),
     ("btn_res_users", "مشتریان من", "text"),
     ("btn_res_add_rep", "افزودن نماینده", "text"),
-    ("btn_res_child_pricing", "قیمت زیرمجموعه", "text"),
     ("btn_res_reports", "گزارش‌ها", "text"),
     ("btn_res_stats", "آمار", "text"),
     ("btn_res_plans", "پلن‌های فروش", "text"),
@@ -246,12 +245,17 @@ BTN_RESELLER_HUB: list[Field] = [
 BTN_RESELLER_HUB_MORE: list[Field] = [
     ("btn_res_tickets", "تیکت‌های مشتریان", "text"),
     ("btn_res_loyalty", "باشگاه مشتریان", "text"),
-    ("btn_res_cashback", "کش‌بک", "text"),
     ("btn_res_broadcast", "پیام گروهی", "text"),
     ("btn_res_settings", "تنظیمات فروشگاه", "text"),
     ("btn_res_billing", "کیف پول PAYG", "text"),
     ("btn_res_addon_packs", "بسته‌های حجم/کاربر", "text"),
     ("btn_res_renew", "تمدید سرویس", "text"),
+]
+
+# Kept separate so hub / hub_more stay within the Telegram 8-field screen budget.
+BTN_RESELLER_HUB_EXTRA: list[Field] = [
+    ("btn_res_child_pricing", "قیمت زیرمجموعه", "text"),
+    ("btn_res_cashback", "کش‌بک", "text"),
 ]
 
 BTN_RESELLER_PLANS_SUB: list[Field] = [
@@ -357,6 +361,7 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
         ("btn_res_groups", "دکمه‌های پنل نماینده — گروه‌ها", BTN_RESELLER_GROUPS),
         ("btn_res_hub", "دکمه‌های پنل نماینده", BTN_RESELLER_HUB),
         ("btn_res_hub_more", "دکمه‌های پنل نماینده — مشتریان و حساب", BTN_RESELLER_HUB_MORE),
+        ("btn_res_hub_extra", "دکمه‌های پنل نماینده — قیمت و کش‌بک", BTN_RESELLER_HUB_EXTRA),
         ("btn_res_plans_sub", "دکمه‌های پلن‌های فروش", BTN_RESELLER_PLANS_SUB),
         ("btn_res_st_sub", "دکمه‌های تنظیمات فروشگاه", BTN_RESELLER_SETTINGS_SUB),
         ("btn_res_st_more", "دکمه‌های تنظیمات فروشگاه — قوانین و ربات", BTN_RESELLER_SETTINGS_MORE),
