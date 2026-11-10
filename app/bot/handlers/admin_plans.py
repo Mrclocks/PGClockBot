@@ -2696,6 +2696,8 @@ async def _save_reseller_plan(
         price=int(data.get("res_plan_price") or 0),
         billing_mode=mode,
         price_per_gb=int(price_per_gb or data.get("res_plan_rate_gb") or 0) if is_payg else 0,
+        # Match the web create form: new PAYG packages charge volume at provision time.
+        payg_charge_upfront=True if is_payg else False,
         pg_group_ids=pg_group_ids,
         pg_role_id=int(role_id),
         plan_kind="subscription",

@@ -10,6 +10,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot.handlers.shop_credit_bot import (
     HELP_LINE,
+    TEMP_LIMIT_MAX_DAYS,
     STATUS_LABELS,
     ShopCreditStates,
     _credit_keyboard,
@@ -46,9 +47,13 @@ class ShopCreditBotUiTests(unittest.TestCase):
         self.assertIn("adm:resellers:credit:freeze:7:0", frozen)
         self.assertIn("adm:resellers:credit:freeze:7:1", open_)
         self.assertIn("adm:resellers:credit:limit:7", open_)
+        self.assertIn("adm:resellers:credit:temp:7", open_)
 
     def test_limit_prompt_uses_named_fsm_state(self):
         self.assertTrue(str(ShopCreditStates.waiting_limit.state).endswith("waiting_limit"))
+        self.assertTrue(str(ShopCreditStates.waiting_temp_amount.state).endswith("waiting_temp_amount"))
+        self.assertTrue(str(ShopCreditStates.waiting_temp_days.state).endswith("waiting_temp_days"))
+        self.assertEqual(TEMP_LIMIT_MAX_DAYS, 365)
 
 
 if __name__ == "__main__":

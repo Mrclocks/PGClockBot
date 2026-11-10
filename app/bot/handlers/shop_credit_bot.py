@@ -9,6 +9,7 @@ from __future__ import annotations
 import html
 import logging
 import re
+from datetime import datetime, timedelta, timezone
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -31,6 +32,7 @@ from app.services.redact import user_safe_error
 from app.services.shop_credit import (
     CreditLimitChange,
     CreditStatus,
+    credit_account,
     credit_overview,
     set_credit_frozen,
     set_credit_limit,
@@ -42,17 +44,22 @@ router = Router(name="shop_credit_bot")
 CREDIT_OPEN = re.compile(r"^adm:resellers:credit:(\d{1,9})\Z")
 CREDIT_FREEZE = re.compile(r"^adm:resellers:credit:freeze:(\d{1,9}):([01])\Z")
 CREDIT_LIMIT_ASK = re.compile(r"^adm:resellers:credit:limit:(\d{1,9})\Z")
+CREDIT_TEMP_ASK = re.compile(r"^adm:resellers:credit:temp:(\d{1,9})\Z")
+# Same ceiling as the web reseller credit form.
+TEMP_LIMIT_MAX_DAYS = 365
 STATUS_LABELS = {
     CreditStatus.ACTIVE: "فعال",
     CreditStatus.FROZEN: "مسدود موقت",
     CreditStatus.OVERDUE: "معوق",
     CreditStatus.BLOCKED: "مسدود",
 }
-HELP_LINE = "تغییر سقف و مسدود موقت از همین‌جا؛ صورتحساب و بخشش از وب‌پنل."
+HELP_LINE = "تغییر سقف، سقف موقت و مسدود موقت از همین‌جا؛ صورتحساب و بخشش از وب‌پنل."
 
 
 class ShopCreditStates(StatesGroup):
     waiting_limit = State()
+    waiting_temp_amount = State()
+    waiting_temp_days = State()
 
 
 def _is_admin(user: BotUser) -> bool:
@@ -87,6 +94,12 @@ def _credit_keyboard(user_id: int, *, frozen: bool) -> InlineKeyboardMarkup:
             InlineKeyboardButton(
                 text="✏️ تنظیم سقف اعتبار",
                 callback_data=f"adm:resellers:credit:limit:{user_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="⏳ سقف موقت",
+                callback_data=f"adm:resellers:credit:temp:{user_id}",
             )
         ],
         [
@@ -276,6 +289,169 @@ async def save_credit_limit(
     currency = get_settings().currency
     frozen = overview.status == CreditStatus.FROZEN
     lines = ["✅ سقف اعتبار ذخیره شد.", ""] + credit_summary_lines(
+        overview, currency=currency, with_help=True
+    )
+    await finish_text_step(
+        message,
+        state,
+        text="\n".join(lines),
+        inline=_credit_keyboard(int(user.id), frozen=frozen),
+    )
+
+
+@router.callback_query(F.data.regexp(CREDIT_TEMP_ASK.pattern))
+@require_bot_owner_handler
+@require_platform_rep_mgmt
+async def ask_temp_credit_limit(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+) -> None:
+    if not _is_admin(db_user):
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
+        return
+    match = CREDIT_TEMP_ASK.match(callback.data or "")
+    if match is None:
+        await callback.answer()
+        return
+    user = await _load_reseller(session, int(match.group(1)))
+    if user is None:
+        await callback.answer("نماینده یافت نشد", show_alert=True)
+        return
+    await state.update_data(shop_credit_user_id=int(user.id))
+    await callback.answer()
+    await ask_text(
+        callback,
+        state,
+        prompt=(
+            f"⏳ سقف موقت برای نماینده #{user.id}\n\n"
+            "مبلغ را به تومان بفرستید (۰ برای حذف سقف موقت)."
+        ),
+        cancel_code="adm_res",
+        return_to=f"adm:resellers:credit:{user.id}",
+        fsm_state=ShopCreditStates.waiting_temp_amount,
+        edit=True,
+    )
+
+
+@router.message(ShopCreditStates.waiting_temp_amount)
+@require_bot_owner_handler
+async def save_temp_credit_amount(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+) -> None:
+    if not _is_admin(db_user):
+        await state.clear()
+        return
+    if kb.is_cancel_text(message.text):
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
+        await state.clear()
+        await message.answer(feedback.CANCELLED)
+        return
+    data = await state.get_data()
+    user_id = int(data.get("shop_credit_user_id") or 0)
+    user = await _load_reseller(session, user_id) if user_id else None
+    if user is None:
+        await state.clear()
+        await message.answer("نماینده یافت نشد")
+        return
+    try:
+        amount = parse_int(str(message.text or "").strip())
+    except ValueError:
+        await message.answer("یک عدد صحیح نامنفی بفرستید.")
+        return
+    if amount < 0:
+        await message.answer("سقف موقت نمی‌تواند منفی باشد.")
+        return
+    if amount == 0:
+        account = await credit_account(session, int(user.id))
+        try:
+            await set_credit_limit(
+                session,
+                int(user.id),
+                CreditLimitChange(limit=int(account.credit_limit if account else 0)),
+                actor=f"tg:{db_user.telegram_id}",
+            )
+        except ValueError as exc:
+            await rollback_quiet(session)
+            await message.answer(f"⚠️ {user_safe_error(exc)}")
+            return
+        balance = await _wallet_balance(session, user)
+        overview = await credit_overview(session, int(user.id), balance=balance)
+        currency = get_settings().currency
+        frozen = overview.status == CreditStatus.FROZEN
+        lines = ["✅ سقف موقت حذف شد.", ""] + credit_summary_lines(
+            overview, currency=currency, with_help=True
+        )
+        await finish_text_step(
+            message,
+            state,
+            text="\n".join(lines),
+            inline=_credit_keyboard(int(user.id), frozen=frozen),
+        )
+        return
+    await state.update_data(shop_credit_temp_amount=amount)
+    await ask_text(
+        message,
+        state,
+        prompt=f"مدت سقف موقت را به روز بفرستید (۱ تا {TEMP_LIMIT_MAX_DAYS}).",
+        cancel_code="adm_res",
+        return_to=f"adm:resellers:credit:{user.id}",
+        fsm_state=ShopCreditStates.waiting_temp_days,
+        edit=False,
+    )
+
+
+@router.message(ShopCreditStates.waiting_temp_days)
+@require_bot_owner_handler
+async def save_temp_credit_days(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+) -> None:
+    if not _is_admin(db_user):
+        await state.clear()
+        return
+    if kb.is_cancel_text(message.text):
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
+        await state.clear()
+        await message.answer(feedback.CANCELLED)
+        return
+    data = await state.get_data()
+    user_id = int(data.get("shop_credit_user_id") or 0)
+    amount = int(data.get("shop_credit_temp_amount") or 0)
+    user = await _load_reseller(session, user_id) if user_id else None
+    if user is None or amount <= 0:
+        await state.clear()
+        await message.answer("نماینده یافت نشد")
+        return
+    try:
+        days = parse_int(str(message.text or "").strip())
+    except ValueError:
+        await message.answer(f"یک عدد بین ۱ و {TEMP_LIMIT_MAX_DAYS} بفرستید.")
+        return
+    if days < 1 or days > TEMP_LIMIT_MAX_DAYS:
+        await message.answer(f"مدت سقف موقت باید بین ۱ تا {TEMP_LIMIT_MAX_DAYS} روز باشد.")
+        return
+    account = await credit_account(session, int(user.id))
+    until = datetime.now(timezone.utc) + timedelta(days=days)
+    try:
+        await set_credit_limit(
+            session,
+            int(user.id),
+            CreditLimitChange(
+                limit=int(account.credit_limit if account else 0),
+                temp_limit=amount,
+                temp_limit_until=until,
+            ),
+            actor=f"tg:{db_user.telegram_id}",
+        )
+    except ValueError as exc:
+        await rollback_quiet(session)
+        await message.answer(f"⚠️ {user_safe_error(exc)}")
+        return
+    balance = await _wallet_balance(session, user)
+    overview = await credit_overview(session, int(user.id), balance=balance)
+    currency = get_settings().currency
+    frozen = overview.status == CreditStatus.FROZEN
+    lines = ["✅ سقف موقت ذخیره شد.", ""] + credit_summary_lines(
         overview, currency=currency, with_help=True
     )
     await finish_text_step(
