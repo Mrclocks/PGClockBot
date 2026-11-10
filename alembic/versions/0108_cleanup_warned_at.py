@@ -1,7 +1,7 @@
 """When the last cleanup warning was queued.
 
-Revision ID: 0100_cleanup_warned_at
-Revises: 0099_cleanup_volume_warn_stage
+Revision ID: 0108_cleanup_warned_at
+Revises: 0107_cleanup_volume_warn_stage
 
 Adds ``user_services.cleanup_warned_at`` and dates the services that already are in a warning stage with
 the moment of the upgrade. Idempotent; the downgrade drops only that column and keeps
@@ -15,8 +15,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0100_cleanup_warned_at"
-down_revision: Union[str, None] = "0099_cleanup_volume_warn_stage"
+revision: str = "0108_cleanup_warned_at"
+down_revision: Union[str, None] = "0107_cleanup_volume_warn_stage"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

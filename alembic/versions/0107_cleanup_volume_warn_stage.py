@@ -1,7 +1,7 @@
 """Warning stage of the volume-finished cleanup rule.
 
-Revision ID: 0099_cleanup_volume_warn_stage
-Revises: 0098_expired_service_cleanup
+Revision ID: 0107_cleanup_volume_warn_stage
+Revises: 0106_expired_service_cleanup
 
 Adds ``user_services.cleanup_volume_warn_stage``. Idempotent; the downgrade drops only that
 column and keeps every row.
@@ -14,8 +14,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0099_cleanup_volume_warn_stage"
-down_revision: Union[str, None] = "0098_expired_service_cleanup"
+revision: str = "0107_cleanup_volume_warn_stage"
+down_revision: Union[str, None] = "0106_expired_service_cleanup"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

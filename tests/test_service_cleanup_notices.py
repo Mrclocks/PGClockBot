@@ -334,7 +334,7 @@ class VolumeStageMigrationTests(unittest.TestCase):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
-        path = Path(__file__).resolve().parents[1] / "alembic/versions/0099_cleanup_volume_warn_stage.py"
+        path = Path(__file__).resolve().parents[1] / "alembic/versions/0107_cleanup_volume_warn_stage.py"
         spec = importlib.util.spec_from_file_location("m0099", path)
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
@@ -360,7 +360,7 @@ class WarnedAtMigrationTests(unittest.TestCase):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
-        path = Path(__file__).resolve().parents[1] / "alembic/versions/0100_cleanup_warned_at.py"
+        path = Path(__file__).resolve().parents[1] / "alembic/versions/0108_cleanup_warned_at.py"
         spec = importlib.util.spec_from_file_location("m0100", path)
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
@@ -386,7 +386,7 @@ class WarnedAtMigrationTests(unittest.TestCase):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
-        path = Path(__file__).resolve().parents[1] / "alembic/versions/0100_cleanup_warned_at.py"
+        path = Path(__file__).resolve().parents[1] / "alembic/versions/0108_cleanup_warned_at.py"
         spec = importlib.util.spec_from_file_location("m0100b", path)
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
