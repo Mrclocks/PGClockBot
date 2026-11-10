@@ -452,6 +452,12 @@ class UserService(Base):
             postgresql_where=text("remark = 'imported'"),
         ),
         # New services waiting for the first-use check; the check stamps the row, so it leaves the index.
+        Index("ix_user_services_panel_checked_at", "panel_checked_at"),
+        Index(
+            "ix_user_services_panel_missing", "shop_id",
+            sqlite_where=text("panel_missing_at IS NOT NULL"),
+            postgresql_where=text("panel_missing_at IS NOT NULL"),
+        ),
         Index(
             "ix_user_services_first_use_pending", "created_at",
             sqlite_where=text("first_use_checked_at IS NULL"),
@@ -502,6 +508,10 @@ class UserService(Base):
     shop_needs_review: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("false"), index=True
     )
+    # Set when the panel confirmed (HTTP 404 on the user lookup) that this service's panel user is gone.
+    panel_missing_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Last time the presence scan looked this service up; the scan takes the oldest first.
+    panel_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     owner: Mapped["BotUser"] = relationship(

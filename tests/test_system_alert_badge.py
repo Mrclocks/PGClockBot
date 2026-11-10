@@ -29,7 +29,7 @@ def render(name: str, items: list[tuple[str, str, str, str]]) -> str:
 class SystemAlertBadgeTests(unittest.TestCase):
     def test_owner_tab_marks_only_panel_alerts(self) -> None:
         html = render("_settings_notifications.html", PLATFORM_NOTIFY_PREFS)
-        self.assertEqual(badged_keys(html), {"notify_panel_update", "notify_panel_delivery_failures"})
+        self.assertEqual(badged_keys(html), {"notify_panel_update", "notify_panel_delivery_failures", "notify_service_panel_missing"})
 
     def test_shop_tab_marks_its_panel_alert(self) -> None:
         items = shop_notify_catalog(["orders", "payments", "tickets", "dashboard"])
