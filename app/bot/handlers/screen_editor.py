@@ -31,6 +31,7 @@ from app.bot.reply_keyboard_state import is_menu_tap
 from app.bot.screen_registry import SCREENS, ScreenButton, ScreenContext, ScreenSpec, screen_buttons
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
+from app.services.user_errors import domain_error_text
 from app.services import bot_feedback_texts as feedback
 from app.services.button_color_editor import (
     COLOR_NAMES,
@@ -449,7 +450,7 @@ async def _handle(
         else:
             await _screen_views(callback, session, actor, request, state)
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
 
 
 async def _is_menu_tap(message: Message, session: AsyncSession, actor: EditorActor) -> bool:
@@ -490,7 +491,7 @@ async def _save_label_message(message: Message, state: FSMContext, session: Asyn
         await save_button_label(session, actor, label_key=key, stored_value=stored)
         edit_mode_store.extend(actor)
     except ValueError as exc:
-        await message.answer(str(exc))
+        await message.answer(domain_error_text(exc))
         return
     await state.set_state(None)
     await _answer_with_panel(message, session, actor, screen_id, TEXT_LABEL_SAVED)
@@ -510,7 +511,7 @@ async def _save_screen_text_message(
         )
         edit_mode_store.extend(actor)
     except ValueError as exc:
-        await message.answer(str(exc))
+        await message.answer(domain_error_text(exc))
         return
     await state.set_state(None)
     await _answer_with_panel(message, session, actor, screen_id, TEXT_TITLE_SAVED if part == "title" else TEXT_CAPTION_SAVED)
