@@ -16,13 +16,15 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import CreditEvent, CreditStatement, ShopCreditAccount
+from app.db.models import CreditEvent, CreditStatement, OrgPrincipal, ResellerProfile, ShopCreditAccount
+from app.services.org_principals import DEPTH_ONE, DEPTH_TWO, STATUS_ACTIVE
 from app.py_compat import StrEnum
 
 logger = logging.getLogger(__name__)
 
 MAX_CREDIT = 2_000_000_000
 ALERT_LEVELS: tuple[int, ...] = (70, 90, 100)
+CHILD_LIMIT = 1_000
 
 
 class CreditStatus(StrEnum):
@@ -82,9 +84,39 @@ async def credit_account(session: AsyncSession, shop_id: int) -> ShopCreditAccou
     return await session.scalar(select(ShopCreditAccount).where(ShopCreditAccount.shop_id == int(shop_id)))
 
 
+async def child_shop_ids(session: AsyncSession, shop_id: int) -> list[int]:
+    """User ids of the active level-2 shops under this level-1 shop (bounded)."""
+    parent_profiles = select(ResellerProfile.id).where(ResellerProfile.user_id == int(shop_id))
+    parents = select(OrgPrincipal.id).where(
+        OrgPrincipal.reseller_profile_id.in_(parent_profiles), OrgPrincipal.depth == DEPTH_ONE
+    )
+    child_profiles = select(OrgPrincipal.reseller_profile_id).where(
+        OrgPrincipal.parent_id.in_(parents), OrgPrincipal.depth == DEPTH_TWO,
+        OrgPrincipal.status == STATUS_ACTIVE, OrgPrincipal.reseller_profile_id.is_not(None),
+    )
+    rows = await session.scalars(
+        select(ResellerProfile.user_id).where(ResellerProfile.id.in_(child_profiles)).limit(CHILD_LIMIT)
+    )
+    return [int(uid) for uid in rows.all()]
+
+
+async def reserved_for_children(session: AsyncSession, shop_id: int, *, now: datetime,
+                                except_shop_id: int | None = None) -> int:
+    """Credit this shop has handed to its level-2 shops; it is not the shop's to lend again."""
+    ids = [cid for cid in await child_shop_ids(session, shop_id) if cid != except_shop_id]
+    if not ids:
+        return 0
+    accounts = (await session.scalars(select(ShopCreditAccount).where(ShopCreditAccount.shop_id.in_(ids)))).all()
+    return sum(effective_limit(account, now=now) for account in accounts)
+
+
 async def shop_credit_limit(session: AsyncSession, shop_id: int, *, now: datetime | None = None) -> int:
-    """Credit new PAYG charges of this shop may use now."""
-    return effective_limit(await credit_account(session, shop_id), now=now or datetime.now(timezone.utc))
+    """Credit new PAYG charges of this shop may use now, after what it handed to its children."""
+    now = now or datetime.now(timezone.utc)
+    own = effective_limit(await credit_account(session, shop_id), now=now)
+    if own <= 0:
+        return 0
+    return max(0, own - await reserved_for_children(session, shop_id, now=now))
 
 
 async def shop_standing_limit(session: AsyncSession, shop_id: int, *, now: datetime | None = None) -> int:
