@@ -287,7 +287,8 @@ class NoticeTextTests(NoticeCase):
         for action in CLEANUP_NOTICE_TEXTS:
             text = notice_text(action, service_name="<script>x</script>", reason="2026-11-17")
             self.assertNotIn("<script>", text, action)
-            self.assertIn("2026-11-17", text, action)
+            if not action.endswith("deleted"):  # the deleted notice has no deadline left to show
+                self.assertIn("2026-11-17", text, action)
 
     async def test_a_cleanup_warning_carries_a_renew_button_and_other_notices_do_not(self) -> None:
         sent = []

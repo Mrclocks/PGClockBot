@@ -59,15 +59,15 @@ class ScanResult:
     reset: int = 0
 
 
-def _stage_column(kind: str):
+def stage_column(kind: str):
     return UserService.cleanup_warn_stage if kind == KIND_TIME else UserService.cleanup_volume_warn_stage
 
 
-def _stage_of(service: UserService, kind: str) -> int:
+def stage_of(service: UserService, kind: str) -> int:
     return int((service.cleanup_warn_stage if kind == KIND_TIME else service.cleanup_volume_warn_stage) or 0)
 
 
-def _is_over(service: UserService, kind: str, now: datetime) -> bool:
+def is_over(service: UserService, kind: str, now: datetime) -> bool:
     """True while the service is still expired / out of volume according to its (refreshed) cache."""
     if kind == KIND_TIME:
         expire = service.quota_expire_at
@@ -77,7 +77,7 @@ def _is_over(service: UserService, kind: str, now: datetime) -> bool:
 
 def _candidate_clause(kind: str, policy: CleanupPolicy, now: datetime):
     """SQL prefilter: services that may need a stage sent; Python then decides exactly."""
-    column = _stage_column(kind)
+    column = stage_column(kind)
     make = time_due_clause if kind == KIND_TIME else volume_due_clause
     started = (
         and_(UserService.quota_expire_at.is_not(None), UserService.quota_expire_at < now)
@@ -98,7 +98,7 @@ def _candidate_clause(kind: str, policy: CleanupPolicy, now: datetime):
     return or_(*options)
 
 
-async def _live_refresh(session: AsyncSession, services: list[UserService]) -> set[int]:
+async def live_refresh(session: AsyncSession, services: list[UserService]) -> set[int]:
     """Re-read each service from its own shop's panel and refresh its quota cache; returns the ids that were read.
 
     A service that could not be read is left alone: nothing about it is decided from stale data.
@@ -127,7 +127,7 @@ async def _live_refresh(session: AsyncSession, services: list[UserService]) -> s
 
 
 async def _claim_stage(session: AsyncSession, service_id: int, kind: str, stage: int, now: datetime) -> bool:
-    column = _stage_column(kind)
+    column = stage_column(kind)
     result = await session.execute(
         update(UserService).where(UserService.id == service_id, column < stage).values({column.key: stage, UserService.cleanup_warned_at.key: now}),
         execution_options={"synchronize_session": False},
@@ -159,16 +159,16 @@ async def scan_notices(
     telegram = {int(service.id): int(tg or 0) for service, tg in rows}
     if not services:
         return ScanResult()
-    fresh = await _live_refresh(session, services)
+    fresh = await live_refresh(session, services)
     queued = reset = 0
     for service in services:
-        stage = _stage_of(service, kind)
+        stage = stage_of(service, kind)
         if int(service.id) not in fresh:
             continue
-        if not _is_over(service, kind, now):
+        if not is_over(service, kind, now):
             if stage:
                 await session.execute(
-                    update(UserService).where(UserService.id == service.id).values({_stage_column(kind).key: 0}),
+                    update(UserService).where(UserService.id == service.id).values({stage_column(kind).key: 0}),
                     execution_options={"synchronize_session": False},
                 )
                 reset += 1
