@@ -190,6 +190,7 @@ async def reserve_charge(
                 idempotency_key=charge.idempotency_key,
                 note=f"{request.change.event} {request.pg_username}"[:255],
                 created_by=request.created_by,
+                use_credit=True,
             )
     except IntegrityError:
         winner = _reusable(await _latest_attempt(session, shop_id, request_key))
