@@ -88,9 +88,9 @@ SNAPSHOT_TIMEOUT_SECONDS = 3.0
 SNAPSHOT_CONCURRENCY = 4
 # A customer screen lists at most this many services with live status.
 SNAPSHOT_LIMIT = 30
-# Panel read failures that only mean «status unknown»: the stored row is shown instead.
 # PasarGuard status of a user whose data limit is used up.
 VOLUME_FINISHED_STATUS = "limited"
+# Panel read failures that only mean «status unknown»: the stored row is shown instead.
 PANEL_READ_ERRORS = (asyncio.TimeoutError, PasarGuardError, httpx.HTTPError, ValueError)
 MAX_TELEGRAM_ID = 9_007_199_254_740_991  # signed int64 safe upper bound
 # Shop feature key for viewing and changing a customer's services (bot and web).
@@ -872,6 +872,7 @@ def _cache_quota_status(service: UserService, info: dict[str, Any]) -> None:
                 service.volume_exhausted_at = datetime.now(timezone.utc)
         else:
             service.volume_exhausted_at = None
+            service.cleanup_volume_warn_stage = 0
 
 
 def sync_service_quota_cache(
@@ -898,6 +899,7 @@ def sync_service_quota_cache(
     from app.services.formatting import parse_expire
 
     touched = False
+    previous_expire = service.quota_expire_at
     if isinstance(info, dict):
         _cache_quota_status(service, info)
         has_expire = "expire" in info or "expire_date" in info
@@ -961,6 +963,22 @@ def sync_service_quota_cache(
             touched = True
     if touched:
         service.quota_synced_at = datetime.now(timezone.utc)
+        _reset_cleanup_stage_after_renewal(service, previous_expire)
+
+
+def _reset_cleanup_stage_after_renewal(service: UserService, previous_expire: datetime | None) -> None:
+    """A service that is no longer expired starts its cleanup warnings over at the next expiry.
+
+    Only a real renewal counts: the new expiry is later and in the future. A service that is still
+    expired after a small extension keeps its stage, so its warnings are not sent twice.
+    """
+    new_expire = service.quota_expire_at
+    if previous_expire is None or new_expire is None:
+        return
+    old = previous_expire if previous_expire.tzinfo else previous_expire.replace(tzinfo=timezone.utc)
+    new = new_expire if new_expire.tzinfo else new_expire.replace(tzinfo=timezone.utc)
+    if new > old and new > datetime.now(timezone.utc):
+        service.cleanup_warn_stage = 0
 
 
 async def _hold_assign_volume(
