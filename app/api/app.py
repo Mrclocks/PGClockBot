@@ -52,6 +52,7 @@ from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.miniapp_branding import ACCENT_PRESETS
 from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 from app.services.payer_notify import notify_payer
+from app.services.pg_panel_access import apply_pg_panel_access, is_pg_panel_blocked, pg_panel_allowed
 from app.services.resellers import (
     setup_is_complete,
     DEFAULT_FEATURE_PERMS,
@@ -132,6 +133,13 @@ from app.api.order_purge_pages import register_order_purge_pages
 from app.api.cleanup_settings_pages import register_cleanup_settings_pages
 from app.api.staff_audit_pages import register_staff_audit_pages
 from app.api.shop_wallet_pages import register_shop_wallet_pages
+from app.api.pg_panel_access_pages import register_pg_panel_access_pages
+from app.api.payg_charge_pages import register_payg_charge_pages
+from app.api.shop_credit_pages import register_shop_credit_pages
+from app.api.cashback_pages import register_cashback_pages
+from app.api.reseller_finance_pages import register_reseller_finance_pages
+from app.api.billing_report_pages import register_billing_report_pages
+from app.api.child_pricing_pages import register_child_pricing_pages
 from app.api.shop_points_pages import register_shop_points_pages
 from app.api.shop_customer_block_pages import register_shop_customer_block_pages
 from app.api.panel_brand_pages import register_panel_brand_pages
@@ -649,6 +657,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         pass
             elif profile.pg_role_id:
                 user["pg_role_id"] = int(profile.pg_role_id)
+            user = apply_pg_panel_access(user, profile)
             # Principal from the server-loaded ResellerProfile only.
             # Cookie org_principal_id / parent / depth / scope are not selectors.
             from app.services.org_principals import (
@@ -887,6 +896,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             )
 
             user = await require_staff(request, session)
+            if is_pg_panel_blocked(user):
+                raise NotAdmin(redirect="/home")
             ctx = authz_from_staff(user)
             if is_level1_principal_staff(user):
                 if not staff_may_pg_page(user, perm):
@@ -1603,6 +1614,13 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_cleanup_settings_pages(app, require_staff=require_staff, get_db=get_db)
     register_staff_audit_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_shop_wallet_pages(app, require_staff=require_staff, get_db=get_db)
+    register_pg_panel_access_pages(app, require_admin=require_admin, get_db=get_db)
+    register_payg_charge_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    register_shop_credit_pages(app, require_admin=require_admin, get_db=get_db)
+    register_cashback_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_reseller_finance_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_billing_report_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    register_child_pricing_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_shop_points_pages(app, require_staff=require_staff, get_db=get_db)
     register_shop_customer_block_pages(app, require_staff=require_staff, get_db=get_db)
     register_trial_users_pages(app, render=render, require_staff=require_staff, get_db=get_db)
@@ -2198,6 +2216,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                             pg_role_id, client=pg_client
                         )
                     else:
+                        pg_permissions, pg_role = [], None
+                    if not pg_panel_allowed(profile):
                         pg_permissions, pg_role = [], None
                     pg_user_actions = role_user_actions(pg_role)
                     pg_access = role_access_limits(pg_role)

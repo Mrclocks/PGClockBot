@@ -1132,6 +1132,11 @@ DEFAULT_SETTINGS = {
     "billing_low_balance": "10000",
     "billing_on_empty": "block_provision",
     "billing_tick_minutes": "15",
+    # Credit statements: days after month end, then days after due for each ladder step.
+    "credit_due_days": "7",
+    "credit_block_create_days": "3",
+    "credit_block_changes_days": "7",
+    "credit_block_days": "14",
     "volume_external_sync_minutes": "15",
     # UX20 ops
     "shop_maintenance_enabled": "0",
@@ -1467,6 +1472,30 @@ SETTING_GROUPS = {
             "بازه شارژ خودکار (دقیقه)",
             "number",
             "فاصله اجرای billing tick برای کسر مصرف تفاضلی (دلتا) از watermark نماینده",
+        ),
+        (
+            "credit_due_days",
+            "مهلت پرداخت صورت‌حساب (روز)",
+            "number",
+            "روز بعد از پایان ماه تا سررسید صورت‌حساب اعتبار؛ از سررسید، اعتبار تازه داده نمی‌شود",
+        ),
+        (
+            "credit_block_create_days",
+            "بستن ساخت کاربر (روز بعد از سررسید)",
+            "number",
+            "از این روز، نمایندهٔ بدهکار کاربر تازه نمی‌سازد",
+        ),
+        (
+            "credit_block_changes_days",
+            "بستن تمدید و تغییر (روز بعد از سررسید)",
+            "number",
+            "از این روز، تمدید، افزایش حجم و ریست هم بسته است",
+        ),
+        (
+            "credit_block_days",
+            "مسدودسازی کامل (روز بعد از سررسید)",
+            "number",
+            "از این روز حساب نماینده تعلیق می‌شود؛ با پرداخت خودکار باز می‌شود",
         ),
     ],
     "هشدار سرویس کاربر": [

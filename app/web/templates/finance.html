@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "macros.html" import ord_status, pay_status, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
 {% from "_stuck_order_actions.html" import stuck_close_actions %}
+{% from "_finance_tabs.html" import finance_tabs %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot, ds_switch, ico %}
 {% block title %}
 {%- if finance_tab == 'reports' -%}گزارشات
@@ -21,24 +22,7 @@
   {% endif %}
 </div>
 
-<nav class="section-tabs" role="tablist" aria-label="مالی">
-  {% if can_orders or can_payments %}
-  <a class="{% if finance_tab=='reports' %}active{% endif %}" href="/finance?tab=reports">گزارشات</a>
-  {% endif %}
-  {% if can_orders %}
-  <a class="{% if finance_tab=='orders' %}active{% endif %}" href="/finance?tab=orders">سفارشات</a>
-  {% endif %}
-  {% if can_payments %}
-  <a class="{% if finance_tab=='payments' %}active{% endif %}" href="/finance?tab=payments">پرداخت‌ها</a>
-  {% endif %}
-  {% if can_orders %}
-  <a class="{% if finance_tab=='delivery' %}active{% endif %}" href="/finance?tab=delivery">تحویل ناموفق</a>
-  <a class="finance-tab-cancel {% if finance_tab=='cancellations' %}active{% endif %}" href="/finance?tab=cancellations">
-    <span class="nav-item-label"><span>درخواست‌های لغو</span>{% if cancel_alert %}<i class="nav-dot" aria-label="درخواست لغو در انتظار"></i>{% endif %}</span>
-  </a>
-  <a class="{% if finance_tab=='automation' %}active{% endif %}" href="/finance?tab=automation">تمدید خودکار</a>
-  {% endif %}
-</nav>
+{{ finance_tabs(finance_tab, can_orders=can_orders, can_payments=can_payments, cancel_alert=cancel_alert, staff=staff) }}
 
 {% if finance_tab == 'reports' and (can_orders or can_payments) %}
 {% include "_finance_reports.html" %}

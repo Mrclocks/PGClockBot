@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, BotUserShop, Plan, Role, UserService, WalletTransaction
+from app.db.models import BotUser, BotUserShop, Plan, ResellerCharge, Role, UserService, WalletTransaction
 from app.services.authz import authz_from_staff, can_shop
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import (
@@ -60,6 +60,19 @@ from app.services.provision_gate import (
     settle_failed_hold,
 )
 from app.services.volume_allocation import HeldVolume, is_hard_panel_rejection, release_volume_hold
+from app.services.payg_charges import new_request_key
+from app.services.payg_gate import (
+    charge_shop_change,
+    charge_shop_changes,
+    finish_charge,
+    finish_charges,
+    read_template_volume,
+    service_edit_changes,
+    settle_failed_charge,
+    settle_failed_charges,
+    shop_charges_at_creation,
+)
+from app.services.payg_pricing import ChargeEvent, ServiceChange
 
 logger = logging.getLogger(__name__)
 
@@ -545,6 +558,7 @@ async def admin_provision_service(
     )
 
     hold = await _hold_assign_volume(session, shop_rid, pg, plan, data_limit)
+    assign_charge = await _charge_assign(session, shop_rid, pg, plan, data_limit, hold, username)
     pg_uid: int | None = None
     try:
         if plan.pg_template_id:
@@ -605,6 +619,7 @@ async def admin_provision_service(
         session.add(service)
         await ensure_member(session, int(user.id), shop_rid)
         await release_volume_hold(session, hold)
+        await finish_charge(session, assign_charge, commit=False)
         await session.commit()
         await session.refresh(service)
         return service
@@ -618,6 +633,7 @@ async def admin_provision_service(
                 )
         await session.rollback()
         await settle_failed_hold(session, hold, exc, panel_touched=True)
+        await settle_failed_charge(session, assign_charge, exc, panel_touched=True)
         from app.services.pasarguard import PasarGuardError
 
         if isinstance(exc, PasarGuardError):
@@ -952,6 +968,73 @@ async def _hold_assign_volume(
         raise ValueError(e.message) from e
 
 
+async def _charge_assign(
+    session: AsyncSession, shop_rid: int | None, pg: Any, plan: Plan, data_limit: int | None,
+    hold: HeldVolume | None, username: str,
+) -> ResellerCharge | None:
+    """Take the shop's PAYG charge for a manual assignment; frees the hold when refused."""
+    if not shop_rid or not await shop_charges_at_creation(session, int(shop_rid)):
+        return None
+    try:
+        limit, days = int(data_limit or 0), int(plan.duration_days or 0)
+        if plan.pg_template_id:
+            limit, days = await read_template_volume(pg, int(plan.pg_template_id))
+        return await charge_shop_change(
+            session, shop_id=int(shop_rid),
+            change=ServiceChange(ChargeEvent.CREATE, data_limit_bytes=limit, days=days),
+            request_key=f"assign:{new_request_key()}", pg_username=username,
+            panel_target={"plan_id": int(plan.id), "username": username}, created_by="assign",
+        )
+    except ProvisionError as e:
+        await release_volume_hold(session, hold)
+        await session.commit()
+        raise ValueError(e.message) from e
+
+
+async def _charge_quota_edit(
+    session: AsyncSession, pg: Any, service: UserService, hold: HeldVolume | None,
+    *, renew: bool, data_limit_bytes: int | None, expire_ts: int | None, reset: bool,
+) -> list[ResellerCharge]:
+    """Charge a staff edit of a shop user from its live panel values; frees the hold when refused."""
+    shop_rid = service.shop_id
+    if not shop_rid or not await shop_charges_at_creation(session, int(shop_rid)):
+        return []
+    from app.services.formatting import parse_expire
+
+    info = await pg.get_user_by_id(int(service.pg_user_id))
+    if not isinstance(info, dict):
+        raise ValueError("کاربر پاسارگارد یافت نشد")
+    current_expire = parse_expire(info.get("expire") or info.get("expire_date"))
+    changes = service_edit_changes(
+        renew=renew,
+        current_limit=int(info.get("data_limit") or 0),
+        new_limit=data_limit_bytes,
+        current_expire=int(current_expire.timestamp()) if current_expire else None,
+        new_expire=expire_ts,
+        reset=reset,
+        now_ts=int(time.time()),
+    )
+    try:
+        return await charge_shop_changes(
+            session, shop_id=int(shop_rid), changes=changes, request_key=f"svc-edit:{new_request_key()}",
+            pg_username=str(service.pg_username or ""), panel_target={"service_id": int(service.id)},
+            created_by="staff-edit",
+        )
+    except ProvisionError as e:
+        await release_volume_hold(session, hold)
+        await session.commit()
+        raise ValueError(e.message) from e
+
+
+async def _settle_failed_reset(
+    session: AsyncSession, charges: list[ResellerCharge], exc: BaseException
+) -> list[ResellerCharge]:
+    """A failed reset is not sold: settle its charge as failed and keep the others."""
+    resets = [c for c in charges if c.event == ChargeEvent.RESET]
+    await settle_failed_charges(session, resets, exc, panel_touched=True)
+    return [c for c in charges if c.event != ChargeEvent.RESET]
+
+
 async def _hold_quota_change(
     session: AsyncSession, service: UserService, data_limit_bytes: int | None
 ) -> HeldVolume | None:
@@ -989,8 +1072,12 @@ async def admin_set_service_quota(
     reset_traffic: bool = False,
     activate: bool = True,
     staff: dict | None = None,
+    renew: bool = False,
 ) -> ServiceSnapshot:
-    """Set absolute quota on the linked PG user and refresh local link + list cache."""
+    """Set absolute quota on the linked PG user and refresh local link + list cache.
+
+    ``renew`` prices a PAYG shop's edit as a new period instead of as its parts.
+    """
     if not service.pg_user_id:
         raise ValueError("سرویس به پاسارگارد وصل نیست")
     assert_staff_pg_user_action(staff, "update")
@@ -1004,11 +1091,16 @@ async def admin_set_service_quota(
 
         if not staff_user_actions(staff).get("reset_usage"):
             do_reset = False
+    charges = await _charge_quota_edit(
+        session, pg, service, hold, renew=renew, data_limit_bytes=data_limit_bytes, expire_ts=expire_ts,
+        reset=do_reset,
+    )
     if do_reset:
         try:
             await pg.reset_user_by_id(int(service.pg_user_id))
-        except Exception:
+        except Exception as exc:
             logger.debug("reset traffic failed uid=%s", service.pg_user_id, exc_info=True)
+            charges = await _settle_failed_reset(session, charges, exc)
     payload = build_user_modify_payload(
         data_limit=data_limit_bytes,
         expire_ts=expire_ts,
@@ -1018,7 +1110,11 @@ async def admin_set_service_quota(
         raise ValueError("تغییری برای اعمال نیست")
     info: dict | None = None
     if payload:
-        info = await _modify_with_hold(session, pg, service, payload, hold)
+        try:
+            info = await _modify_with_hold(session, pg, service, payload, hold)
+        except Exception as exc:
+            await settle_failed_charges(session, charges, exc, panel_touched=True)
+            raise
         if isinstance(info, dict):
             live = user_subscription_url(info)
             if live:
@@ -1047,6 +1143,7 @@ async def admin_set_service_quota(
     service.notified_expire = False
     service.notified_traffic = False
     await release_volume_hold(session, hold)
+    await finish_charges(session, charges, commit=False)
     await session.commit()
     snap = await service_snapshot(session, service)
     # Persist any cache refresh from the live snapshot read
@@ -1106,6 +1203,7 @@ async def admin_renew_service(
         reset_traffic=reset_traffic,
         activate=True,
         staff=staff,
+        renew=True,
     )
     if next_plan_id is not None and service.plan_id != next_plan_id:
         service.plan_id = next_plan_id

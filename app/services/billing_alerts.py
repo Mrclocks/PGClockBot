@@ -37,6 +37,7 @@ class TickIssue(StrEnum):
     PANEL_UNAVAILABLE = "panel_unavailable"
     NO_TRAFFIC_FIELD = "no_traffic_field"
     RATE_ZERO = "rate_zero"
+    WALLET_SHORT = "wallet_short"
 
 
 PANEL_TICK_ISSUES: tuple[TickIssue, ...] = (
@@ -157,12 +158,8 @@ async def _owner_recipients(
     return None, [int(i) for i in get_settings().admin_ids]
 
 
-async def report_tick_issue(
-    session: AsyncSession,
-    profile: ResellerProfile,
-    issue: TickIssue,
-) -> bool:
-    """Tell the owner admin about a billing problem once per episode; True when announced."""
+async def _claim_issue(session: AsyncSession, profile: ResellerProfile, issue: TickIssue) -> bool:
+    """Record ``issue`` on the shop once; True only for the call that recorded it."""
     result = await session.execute(
         update(ResellerProfile)
         .where(
@@ -179,6 +176,17 @@ async def report_tick_issue(
     if result.rowcount != 1:
         return False
     await session.refresh(profile)
+    return True
+
+
+async def report_tick_issue(
+    session: AsyncSession,
+    profile: ResellerProfile,
+    issue: TickIssue,
+) -> bool:
+    """Tell the owner admin about a billing problem once per episode; True when announced."""
+    if not await _claim_issue(session, profile, issue):
+        return False
     owner_shop_id, owner_chat_ids = await _owner_recipients(session, profile)
     await _send(
         session, owner_shop_id, owner_chat_ids, _tick_issue_text(profile, issue),
@@ -206,6 +214,36 @@ async def clear_tick_issue(
     )
     await session.commit()
     await session.refresh(profile)
+
+
+WALLET_SHORT_RESELLER_TEXT = (
+    "⚠️ <b>موجودی کیف پول برای هزینهٔ PAYG کافی نیست</b>\n"
+    "فروش و تحویل سرویس تازه تا شارژ کیف پول انجام نمی‌شود."
+)
+
+
+async def announce_wallet_short(session: AsyncSession, profile: ResellerProfile) -> bool:
+    """Tell the reseller and their owner once per episode that sales stopped for lack of funds."""
+    if not await _claim_issue(session, profile, TickIssue.WALLET_SHORT):
+        return False
+    reseller = await session.get(BotUser, int(profile.user_id))
+    reseller_tid = deliverable_telegram_id(getattr(reseller, "telegram_id", None))
+    if reseller_tid is not None:
+        await _send(
+            session, int(profile.user_id), [reseller_tid], WALLET_SHORT_RESELLER_TEXT,
+            markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="💳 صورتحساب و شارژ", callback_data=BILLING_SCREEN_CALLBACK),
+            ]]),
+        )
+    owner_shop_id, owner_chat_ids = await _owner_recipients(session, profile)
+    await _send(
+        session, owner_shop_id, owner_chat_ids,
+        "⚠️ <b>موجودی نماینده PAYG کافی نیست</b>\n"
+        f"نماینده: <code>{_reseller_label(profile)}</code>\n"
+        "فروش و تحویل سرویس تازهٔ این نماینده تا شارژ کیف پول متوقف است.",
+        markup=_reseller_card_markup(profile, owner_shop_id),
+    )
+    return True
 
 
 def _tick_issue_text(profile: ResellerProfile, issue: TickIssue) -> str:
@@ -299,3 +337,62 @@ async def _send(
     finally:
         if owned:
             await bot.session.close()
+
+
+async def notify_credit_use(session: AsyncSession, profile: ResellerProfile, *, level: int, used: int, limit: int) -> None:
+    """Tell the reseller and their owner how much of the credit line is used (sent once per level)."""
+    from app.services.formatting import format_toman
+
+    headline = "اعتبار شما تمام شد" if level >= 100 else f"{level}٪ از اعتبار شما استفاده شده"
+    detail = f"استفاده‌شده: {format_toman(used)} از {format_toman(limit)}"
+    reseller = await session.get(BotUser, int(profile.user_id))
+    reseller_tid = deliverable_telegram_id(getattr(reseller, "telegram_id", None))
+    if reseller_tid is not None:
+        await _send(
+            session, int(profile.user_id), [reseller_tid], f"⚠️ <b>{headline}</b>\n{detail}",
+            markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="💳 صورتحساب و شارژ", callback_data=BILLING_SCREEN_CALLBACK),
+            ]]),
+        )
+    owner_shop_id, owner_chat_ids = await _owner_recipients(session, profile)
+    await _send(
+        session, owner_shop_id, owner_chat_ids,
+        f"⚠️ <b>اعتبار نماینده: {level}٪</b>\nنماینده: <code>{_reseller_label(profile)}</code>\n{detail}",
+        markup=_reseller_card_markup(profile, owner_shop_id),
+    )
+
+
+STATEMENT_NOTICES: dict[int, str] = {
+    1: "🧾 <b>صورت‌حساب اعتبار صادر شد</b>",
+    2: "⏰ <b>سررسید صورت‌حساب گذشت</b>\nتا پرداخت، اعتبار تازه‌ای داده نمی‌شود.",
+    3: "⛔️ <b>ساخت کاربر تازه بسته شد</b>\nبه دلیل بدهی سررسیدگذشته.",
+    4: "⛔️ <b>تمدید و تغییر کاربران بسته شد</b>\nبه دلیل بدهی سررسیدگذشته.",
+    5: "🚫 <b>حساب مسدود شد</b>\nبه دلیل بدهی سررسیدگذشته؛ با پرداخت خودکار باز می‌شود.",
+}
+
+
+async def notify_statement(
+    session: AsyncSession, profile: ResellerProfile, *, notice: int, amount_due: int, due_text: str
+) -> None:
+    """Tell the reseller and their owner about a statement step (the caller claims it first)."""
+    from app.services.formatting import format_toman
+
+    headline = STATEMENT_NOTICES.get(int(notice))
+    if headline is None:
+        return
+    detail = f"مبلغ: {format_toman(int(amount_due))} · سررسید: <span dir=\"ltr\">{html.escape(due_text)}</span>"
+    reseller = await session.get(BotUser, int(profile.user_id))
+    reseller_tid = deliverable_telegram_id(getattr(reseller, "telegram_id", None))
+    if reseller_tid is not None:
+        await _send(
+            session, int(profile.user_id), [reseller_tid], f"{headline}\n{detail}",
+            markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="💳 صورتحساب و شارژ", callback_data=BILLING_SCREEN_CALLBACK),
+            ]]),
+        )
+    owner_shop_id, owner_chat_ids = await _owner_recipients(session, profile)
+    await _send(
+        session, owner_shop_id, owner_chat_ids,
+        f"{headline}\nنماینده: <code>{_reseller_label(profile)}</code>\n{detail}",
+        markup=_reseller_card_markup(profile, owner_shop_id),
+    )

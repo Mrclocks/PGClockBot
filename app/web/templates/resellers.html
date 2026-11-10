@@ -14,7 +14,10 @@
   {% if owner_view %}
   <button type="button" class="btn" data-modal-open="modal-reseller-create">افزودن نماینده</button>
   {% elif can_create_l2 %}
-  <button type="button" class="btn" data-modal-open="modal-reseller-create-child">افزودن نماینده</button>
+  <div class="actions">
+    <a class="btn btn-ghost" href="/resellers/children-pricing">قیمت و اعتبار زیرمجموعه</a>
+    <button type="button" class="btn" data-modal-open="modal-reseller-create-child">افزودن نماینده</button>
+  </div>
   {% endif %}
 </div>
 
