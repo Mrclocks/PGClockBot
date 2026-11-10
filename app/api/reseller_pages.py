@@ -24,6 +24,11 @@ from app.services.miniapp_shop import (
     STATE_SHOP_OFF,
     shop_miniapp_state,
 )
+from app.api.pg_panel_access_pages import (
+    access_target_from_form,
+    apply_access_after_save,
+    apply_access_before_save,
+)
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
 from app.services.db_safe import rollback_quiet
@@ -862,7 +867,12 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         profile.bot_permissions = perms  # must stay identical
         profile.can_approve_receipts = "payments" in parse_perms(perms)
         profile.is_active = bool(form.get("is_active"))
-        profile.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
+        pg_access_target = access_target_from_form(form, profile)
+        apply_access_before_save(
+            profile,
+            target=pg_access_target,
+            share_panel_url=bool(form.get("share_pg_panel_url")),
+        )
         # An unchecked switch is not posted; the marker says the switch was on the form.
         apply_oversell_switch(
             profile,
@@ -954,6 +964,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
 
             await sync_reseller_bot_runtime(profile)
         _resync_menu_if_miniapp_changed(profile, miniapp_before)
+        access_warning = await apply_access_after_save(session, profile, target=pg_access_target)
+        if access_warning:
+            return _redirect_reseller_edit(user_id, err=access_warning)
         return _redirect_reseller_edit(user_id, ok='ذخیره شد')
 
     @app.post("/resellers/{user_id}/billing-topup")
@@ -1463,6 +1476,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             create_pg_admin=bool(form.get("create_pg_admin")),
             create_web_access=True,
             share_pg_panel_url=bool(form.get("share_pg_panel_url")),
+            allow_pg_panel_access=bool(form.get("allow_pg_panel_access")),
             pg_role_id=int(pg_role_raw) if pg_role_raw.isdigit() else None,
             button_style=button_style,
             category_id=category_id,
@@ -1614,6 +1628,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             plan.carry_remaining_period = bool(form.get("carry_remaining_period"))
             plan.keep_extras_on_renew = bool(form.get("keep_extras_on_renew"))
             plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
+            plan.allow_pg_panel_access = bool(form.get("allow_pg_panel_access"))
             perms = _feature_perms_from_form(form)
             plan.web_permissions = perms
             plan.bot_permissions = perms
@@ -1775,6 +1790,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         plan.can_approve_receipts = "payments" in parse_perms(perms)
         plan.create_pg_admin = bool(form.get("create_pg_admin"))
         plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
+        plan.allow_pg_panel_access = bool(form.get("allow_pg_panel_access"))
         plan.renew_price = _parse_nonneg_int(form, "renew_price")
         plan.carry_remaining_period = bool(form.get("carry_remaining_period"))
         plan.keep_extras_on_renew = bool(form.get("keep_extras_on_renew"))

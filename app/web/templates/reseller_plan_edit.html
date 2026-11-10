@@ -166,7 +166,8 @@
         {% if not is_system_plan %}
         {{ ds_switch('create_pg_admin', 'ساخت ادمین پاسارگارد هنگام تأیید', 'با نقش پاسارگارد پلن؛ برای مالکیت کاربران لازم است', plan.create_pg_admin) }}
         {% endif %}
-        {{ ds_switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', 'اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند', plan.share_pg_panel_url) }}
+        {{ ds_switch('allow_pg_panel_access', 'دسترسی به پاسارگارد', 'خاموش: منو و صفحه‌های پاسارگارد پنهان می‌شود و رمز پنل جدا از رمز وب‌پنل و ارسال‌نشدنی است', plan.allow_pg_panel_access) }}
+        {{ ds_switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', 'فقط وقتی دسترسی به پاسارگارد روشن است ارسال می‌شود', plan.share_pg_panel_url) }}
       </div>
     </div>
   </section>

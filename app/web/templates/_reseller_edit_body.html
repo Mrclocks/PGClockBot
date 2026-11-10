@@ -126,7 +126,9 @@
 
     <div class="ui-switch-list">
       {{ switch('is_active', 'نماینده فعال', checked=profile.is_active) }}
-      {{ switch('share_pg_panel_url', 'ارسال لینک پنل پاسارگارد', checked=profile.share_pg_panel_url, help='اگر خاموش باشد، فقط وب‌پنل ربات برای مدیریت استفاده می‌شود') }}
+      <input type="hidden" name="pg_access_shown" value="1" />
+      {{ switch('allow_pg_panel_access', 'دسترسی به پاسارگارد', checked=profile.allow_pg_panel_access, help='خاموش: منو و صفحه‌های پاسارگارد پنهان می‌شود و رمز ادمین پاسارگارد با یک رمز تازهٔ ارسال‌نشدنی عوض می‌شود') }}
+      {{ switch('share_pg_panel_url', 'ارسال لینک پنل پاسارگارد', checked=profile.share_pg_panel_url, help='فقط وقتی دسترسی به پاسارگارد روشن است ارسال می‌شود') }}
       {% if owner_can_toggle_oversell and not is_payg %}
       <input type="hidden" name="volume_oversell_shown" value="1" />
       {{ switch('allow_volume_oversell', 'اجازه فروش بیش از سقف حجم', checked=profile.allow_volume_oversell, help='اگر خاموش باشد، مجموع حجم سرویس‌های فروشگاه از سقف اشتراک بیشتر نمی‌شود. نماینده‌ای که اشتراک یا سقف حجم ندارد محدود نمی‌شود.') }}
@@ -137,6 +139,16 @@
       <button class="btn" type="submit">ذخیره</button>
     </div>
   </form>
+  {% if profile.pg_password_rotation_enc %}
+  <div class="flash warn">تغییر رمز ادمین پاسارگارد هنوز تأیید نشده؛ تا تأیید، رمز قبلی ممکن است کار کند.</div>
+  <form method="post" action="/resellers/{{ user.id }}/pg-password-rotation" class="form-stack"
+        data-confirm="رمز تازهٔ ذخیره‌شده دوباره به پاسارگارد فرستاده شود؟ این رمز برای نماینده ارسال نمی‌شود."
+        data-confirm-title="تکرار تغییر رمز پاسارگارد">
+    <div class="actions">
+      <button class="btn btn-ghost" type="submit">تکرار تغییر رمز پاسارگارد</button>
+    </div>
+  </form>
+  {% endif %}
 </section>
 
 {% if pg_limits and pg_limits.ready %}
