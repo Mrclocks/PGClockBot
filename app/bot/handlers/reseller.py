@@ -903,9 +903,11 @@ async def present_reseller_tickets_list(
     else:
         lines = ["🎫 <b>تیکت‌های مشتریان</b>\n"]
         rows_kb: list[list[InlineKeyboardButton]] = []
+        from app.services.formatting import bot_user_ticket_who
+
         for t, u in rows:
-            who = u.full_name or u.username or str(u.telegram_id)
-            lines.append(f"#{t.id} — {t.subject[:40]} — {who}")
+            who = html.escape(bot_user_ticket_who(u, fallback_id=int(t.user_id)))
+            lines.append(f"#{t.id} — {html.escape((t.subject or '')[:40])} — {who}")
             rows_kb.append(
                 [
                     InlineKeyboardButton(

@@ -106,7 +106,7 @@
           {{ table_select_cell(t.id) }}
           <td class="mono">{{ t.id }}</td>
           <td class="li-sub">
-            {#- On phones line two: who asked and when. -#}
+            {#- On phones line two: who asked (with Telegram id) and when. -#}
             {% if row.user_id %}
             <a class="cell-user-link" href="/users?uid={{ row.user_id }}" dir="auto">{{ row.user_label }}</a>
             {% else %}
@@ -289,6 +289,9 @@
         {{ active_tg_user_label }}
         {% endif %}
       </span>
+      {% if active_tg_user and active_tg_user.id %}
+      <a class="btn btn-sm btn-ghost" href="/users?uid={{ active_tg_user.id }}">پروفایل / کیف پول</a>
+      {% endif %}
     </div>
 
     <div class="ticket-thread" id="tg-ticket-thread">

@@ -134,6 +134,7 @@ async def _present_admin_tickets_list(
 ) -> None:
     """Render open platform tickets as an inline panel (list + Back)."""
     from app.bot.nav_inline import present_inline_only, with_inline_back
+    from app.services.formatting import bot_user_ticket_who
     from app.services.tickets import list_open_tickets as _list_open
 
     tickets = await _list_open(session, platform_only=True)
@@ -142,19 +143,31 @@ async def _present_admin_tickets_list(
         markup = with_inline_back(None, ui, "nv:adm:ops")
         text = "تیکت بازی وجود ندارد."
     else:
-        rows = [
-            [
-                InlineKeyboardButton(
-                    text=f"#{t.id} {t.subject[:24]}",
-                    callback_data=f"adm:ticket:{t.id}",
-                )
-            ]
-            for t in tickets[:20]
-        ]
+        user_ids = {int(t.user_id) for t in tickets[:20]}
+        users = {
+            int(u.id): u
+            for u in (
+                await session.execute(select(BotUser).where(BotUser.id.in_(user_ids or [0])))
+            ).scalars().all()
+        }
+        lines = ["🎫 <b>تیکت‌های باز</b>\n"]
+        rows = []
+        for t in tickets[:20]:
+            who = html.escape(bot_user_ticket_who(users.get(int(t.user_id)), fallback_id=int(t.user_id)))
+            subj = html.escape((t.subject or "")[:40])
+            lines.append(f"#{t.id} — {subj} — {who}")
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"#{t.id} { (t.subject or '')[:20] }",
+                        callback_data=f"adm:ticket:{t.id}",
+                    )
+                ]
+            )
         markup = with_inline_back(
             InlineKeyboardMarkup(inline_keyboard=rows), ui, "nv:adm:ops"
         )
-        text = "🎫 تیکت‌های باز:"
+        text = "\n".join(lines)
     if edit:
         try:
             await message.edit_text(text, reply_markup=markup)
@@ -193,11 +206,28 @@ async def _answer_tickets_nav(
     )
 
 
-def _admin_ticket_actions_markup(ticket_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
+def _admin_ticket_actions_markup(
+    ticket_id: int,
+    ui: dict | None = None,
+    *,
+    user_id: int | None = None,
+) -> InlineKeyboardMarkup:
     from app.bot.keyboards import _ikb
     from app.bot.nav_inline import with_inline_back
 
-    rows = [
+    rows: list[list] = []
+    if user_id:
+        rows.append(
+            [
+                _ikb(
+                    "👤 کاربر",
+                    callback_data=f"adm:users:view:{int(user_id)}",
+                    ui=ui,
+                    style_fallback="primary",
+                )
+            ]
+        )
+    rows.append(
         [
             _ikb(
                 "💬 پاسخ",
@@ -212,7 +242,7 @@ def _admin_ticket_actions_markup(ticket_id: int, ui: dict | None = None) -> Inli
                 style_id="reject", style_fallback="danger",
             ),
         ]
-    ]
+    )
     return with_inline_back(
         InlineKeyboardMarkup(inline_keyboard=rows), ui, "adm:tickets"
     )
@@ -4698,8 +4728,16 @@ async def _load_platform_ticket(
     return ticket, None
 
 
-def _ticket_thread_text(ticket: Ticket) -> str:
-    lines = [f"🎫 #{ticket.id} — {html.escape(ticket.subject or '')}"]
+def _ticket_thread_text(ticket: Ticket, opener: BotUser | None = None) -> str:
+    from app.services.formatting import info_block
+    from app.services.notifications import _buyer_lines
+
+    lines = [
+        f"🎫 #{ticket.id} — {html.escape(ticket.subject or '')}",
+        "",
+        info_block(_buyer_lines(opener)),
+        "",
+    ]
     for m in (ticket.messages or [])[-12:]:
         who = "پشتیبانی" if m.is_staff else "کاربر"
         lines.append(f"<b>{who}:</b> {html.escape(m.body or '')}")
@@ -4727,10 +4765,13 @@ async def adm_ticket_view(
     await callback.answer()
     await state.set_state(None)
     ui = await get_all_settings(session)
+    opener = await session.get(BotUser, int(ticket.user_id)) if ticket.user_id else None
     if callback.message:
         await callback.message.edit_text(
-            _ticket_thread_text(ticket),
-            reply_markup=_admin_ticket_actions_markup(ticket.id, ui),
+            _ticket_thread_text(ticket, opener),
+            reply_markup=_admin_ticket_actions_markup(
+                ticket.id, ui, user_id=int(ticket.user_id) if ticket.user_id else None
+            ),
         )
 
 
