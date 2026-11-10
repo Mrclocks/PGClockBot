@@ -273,6 +273,19 @@ SECTIONS: dict[str, dict] = {
                 ("stars_description", "توضیح فاکتور", "text"),
                 *BTN_PAY_STARS,
             ]),
+            # Same keys as web finance modal tab «مدیریت PAYG» (SETTING_GROUPS).
+            ("payg", "مدیریت PAYG", [
+                ("billing_enabled", "فعال‌سازی PAYG", "toggle"),
+                ("billing_low_balance", "حداقل موجودی PAYG (تومان)", "number"),
+                ("billing_on_empty", "رفتار اتمام موجودی", "select"),
+                ("billing_tick_minutes", "بازه شارژ خودکار (دقیقه)", "number"),
+            ]),
+            ("payg_credit", "مهلت اعتبار PAYG", [
+                ("credit_due_days", "مهلت پرداخت صورت‌حساب (روز)", "number"),
+                ("credit_block_create_days", "بستن ساخت کاربر (روز بعد از سررسید)", "number"),
+                ("credit_block_changes_days", "بستن تمدید و تغییر (روز بعد از سررسید)", "number"),
+                ("credit_block_days", "مسدودسازی کامل (روز بعد از سررسید)", "number"),
+            ]),
         ],
     },
     "support": {
@@ -414,6 +427,11 @@ def _field_lookup() -> dict[str, Field]:
 
 
 FIELDS = _field_lookup()
+
+# Select fields cycle through these (value, Persian label); keep in sync with SETTING_GROUPS.
+SELECT_CYCLE_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
+    "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
+}
 
 NOTIFY_KEYS: frozenset[str] = frozenset(key for key, *_ in NOTIFY_PREFS)
 
@@ -560,10 +578,26 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
         )
 
 
+def _select_label(key: str, raw: str | None) -> str:
+    options = SELECT_CYCLE_OPTIONS.get(key) or ()
+    by_value = {value: text for value, text in options}
+    if raw in by_value:
+        return by_value[raw]
+    if options:
+        return options[0][1]
+    return str(raw or "—")
+
+
 def _field_button(ui: dict, key: str, label: str, kind: str) -> InlineKeyboardButton:
     if kind == "toggle":
         mark = "✅" if on(ui.get(key)) else "⬜️"
         return InlineKeyboardButton(text=f"{mark} {label}", callback_data=f"adm:st:tog:{key}")
+    if kind == "select":
+        current = _select_label(key, ui.get(key))
+        return InlineKeyboardButton(
+            text=f"{label}: {current}",
+            callback_data=f"adm:st:sel:{key}",
+        )
     return InlineKeyboardButton(text=label, callback_data=f"adm:st:edit:{key}")
 
 
@@ -1060,6 +1094,33 @@ async def settings_toggle(
     await _rerender_after_key(callback, session, key)
 
 
+@settings_actor_required
+@router.callback_query(F.data.startswith("adm:st:sel:"))
+async def settings_select_cycle(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
+    if not _is_admin(db_user):
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
+        return
+    key = callback.data.split(":", 3)[-1]
+    options = SELECT_CYCLE_OPTIONS.get(key)
+    meta = FIELDS.get(key)
+    if not options or meta is None or meta[2] != "select":
+        await callback.answer("کلید نامعتبر", show_alert=True)
+        return
+    values = [value for value, _label in options]
+    cur = await get_setting(session, key)
+    if cur not in values:
+        cur = values[0]
+    nxt = values[(values.index(cur) + 1) % len(values)]
+    await set_setting(session, key, nxt)
+    await callback.answer(feedback.SAVED)
+    await _rerender_after_key(callback, session, key)
+
+
 def _search_entries() -> list[SettingsSearchEntry]:
     entries: list[SettingsSearchEntry] = []
     for sec_id, sec in SECTIONS.items():
@@ -1173,6 +1234,9 @@ async def settings_edit_ask(
     meta = FIELDS.get(key)
     label = meta[1] if meta else key
     kind = meta[2] if meta else "text"
+    if kind == "select":
+        await callback.answer("این مورد را از روی دکمه عوض کنید", show_alert=True)
+        return
     cur = await get_setting(session, key)
     if key == "force_join_channel":
         from app.services.users import format_force_join_for_edit
