@@ -803,6 +803,32 @@ async def nv_res_ra(
             push=False,
         )
         return
+    if action == "res_cashback":
+        from app.bot.handlers.cashback_tools import open_shop_cashback_panel
+
+        await open_shop_cashback_panel(
+            callback.message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            push=False,
+        )
+        return
+    if action == "res_child_pricing":
+        from app.bot.handlers.child_pricing_bot import open_child_pricing_panel
+
+        await open_child_pricing_panel(
+            callback.message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            push=False,
+        )
+        return
     if action in {kb.REPLY_ACTION_RES_PREVIEW, "res_preview"}:
         if not is_reseller_bot:
             await callback.message.answer(

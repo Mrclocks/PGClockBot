@@ -1,7 +1,9 @@
 """Cashback light panel in the bot: list, feature toggle, rule enable/disable.
 
-Create and edit stay in the web panel. Platform Owner uses the marketing hub;
-a shop actor with the ``cashback`` permission uses the shop hub on their bot.
+Create and edit stay in the web panel. Platform Owner uses the marketing hub
+(with a nav level, like gift codes). A shop actor with the ``cashback``
+permission uses the shop hub the same way shop broadcast does: clear FSM and
+present the panel with the group Back button.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import menu_nav as nav
-from app.bot.auth import require_bot_owner_handler
+from app.bot.auth import can_shop_feature, require_bot_owner_handler
 from app.bot.marketing_panels import (
     CASHBACK_FEATURE_PATTERN,
     CASHBACK_PANEL_CALLBACK,
@@ -57,7 +59,6 @@ async def resolve_cashback_shop(
     """``(shop_id, allowed)`` — ``shop_id`` is ``None`` for the platform shop."""
     if is_reseller_bot:
         from app.services.reseller_access import load_reseller_actor
-        from app.services.resellers import has_bot_perm
 
         owner_id, profile = await load_reseller_actor(
             session,
@@ -65,7 +66,9 @@ async def resolve_cashback_shop(
             is_reseller_bot=True,
             reseller_owner_id=reseller_owner_id,
         )
-        if not owner_id or not profile or not has_bot_perm(profile, "cashback"):
+        if not owner_id or not profile:
+            return None, False
+        if not can_shop_feature("cashback", profile=profile, db_user=db_user):
             return None, False
         return int(owner_id), True
     if db_user.role == Role.ADMIN.value:
@@ -142,6 +145,8 @@ async def open_shop_cashback_panel(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> None:
+    """Shop hub leaf: broadcast-style (clear FSM; Back returns to the shop group)."""
+    _ = push
     shop_id, allowed = await resolve_cashback_shop(
         session,
         db_user,
@@ -151,12 +156,14 @@ async def open_shop_cashback_panel(
     if not allowed:
         await message.answer(NO_ACCESS)
         return
+    if state is not None:
+        await state.clear()
     await show_cashback_panel(
         message,
         session,
         state,
         shop_id=shop_id,
-        push=push,
+        push=False,
         back_callback=back_callback_for("res_cashback"),
         feature_prefix="res:cb",
         rule_prefix="res:cb",
@@ -270,27 +277,18 @@ async def open_shop_cashback_cb(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> None:
-    shop_id, allowed = await resolve_cashback_shop(
+    await callback.answer()
+    if callback.message is None:
+        return
+    await open_shop_cashback_panel(
+        callback.message,
         session,
         db_user,
+        state,
+        push=False,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
-    if not allowed:
-        await callback.answer(NO_ACCESS, show_alert=True)
-        return
-    await callback.answer()
-    if callback.message is not None:
-        await show_cashback_panel(
-            callback.message,
-            session,
-            state,
-            shop_id=shop_id,
-            push=False,
-            back_callback=back_callback_for("res_cashback"),
-            feature_prefix="res:cb",
-            rule_prefix="res:cb",
-        )
 
 
 @router.callback_query(F.data.regexp(SHOP_CASHBACK_FEATURE_PATTERN.pattern))

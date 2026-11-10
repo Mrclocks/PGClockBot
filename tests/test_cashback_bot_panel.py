@@ -186,5 +186,20 @@ class OwnerCashbackHandlerTests(CashbackDbCase):
             message.edit_text.assert_awaited()
 
 
+class ShopCashbackHubWiringTests(unittest.TestCase):
+    def test_shop_hub_uses_dedicated_cashback_callback(self):
+        from app.bot.nav_inline import _reseller_entry_buttons
+        from app.services.users import DEFAULT_SETTINGS
+
+        buttons = _reseller_entry_buttons(
+            [("res_loyalty", "باشگاه"), ("res_cashback", "کش‌بک")],
+            dict(DEFAULT_SETTINGS),
+            {},
+        )
+        data = [b.callback_data for b in buttons]
+        self.assertIn(cashback_tools.SHOP_CASHBACK_PANEL_CALLBACK, data)
+        self.assertNotIn("nv:res:ra:res_cashback", data)
+
+
 if __name__ == "__main__":
     unittest.main()

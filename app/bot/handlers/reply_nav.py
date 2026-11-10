@@ -2351,6 +2351,7 @@ async def _soft_reseller(
             session,
             db_user,
             state,
+            push=False,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
@@ -2363,6 +2364,7 @@ async def _soft_reseller(
             session,
             db_user,
             state,
+            push=False,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )

@@ -1,4 +1,8 @@
-"""Owner credit-line controls on a reseller card, and credit summary on PAYG billing."""
+"""Owner credit-line controls on a reseller card, and credit summary on PAYG billing.
+
+Limit entry uses the same ``ask_text`` / cancel / ``return_to`` path as wallet adjust
+on the reseller card. Open and freeze stay edit-in-place subpanels.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.auth import require_bot_owner_handler, require_platform_rep_mgmt
 from app.bot.keyboards import back_button
+from app.bot.nav_input import ask_text, finish_text_step, try_legacy_cancel
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Role
@@ -22,6 +27,7 @@ from app.services import bot_feedback_texts as feedback
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_toman
 from app.services.numbers import parse_int
+from app.services.redact import user_safe_error
 from app.services.shop_credit import (
     CreditLimitChange,
     CreditStatus,
@@ -42,6 +48,7 @@ STATUS_LABELS = {
     CreditStatus.OVERDUE: "معوق",
     CreditStatus.BLOCKED: "مسدود",
 }
+HELP_LINE = "تغییر سقف و مسدود موقت از همین‌جا؛ صورتحساب و بخشش از وب‌پنل."
 
 
 class ShopCreditStates(StatesGroup):
@@ -52,7 +59,7 @@ def _is_admin(user: BotUser) -> bool:
     return user.role == Role.ADMIN.value
 
 
-def credit_summary_lines(overview, *, currency: str) -> list[str]:
+def credit_summary_lines(overview, *, currency: str, with_help: bool = False) -> list[str]:
     """Shared read-only lines for owner card and reseller billing."""
     usage = overview.usage
     status = STATUS_LABELS.get(overview.status, overview.status)
@@ -67,6 +74,8 @@ def credit_summary_lines(overview, *, currency: str) -> list[str]:
     account = overview.account
     if account is not None and account.temp_limit is not None:
         lines.append(f"سقف موقت: {format_toman(int(account.temp_limit), currency)}")
+    if with_help:
+        lines.extend(["", HELP_LINE])
     return lines
 
 
@@ -98,11 +107,45 @@ async def _load_reseller(session: AsyncSession, user_id: int) -> BotUser | None:
     return user
 
 
+async def _wallet_balance(session: AsyncSession, user: BotUser) -> int:
+    """Same PAYG wallet source as reseller billing when the shop is PAYG."""
+    from app.services.billing import ensure_payg_shop_wallet, is_payg
+    from app.services.resellers import get_reseller_profile
+
+    profile = await get_reseller_profile(session, int(user.id))
+    if profile is not None and is_payg(profile):
+        _owner, bal = await ensure_payg_shop_wallet(session, profile)
+        await session.commit()
+        return int(bal)
+    return int(user.wallet_balance or 0)
+
+
+async def _render_credit_panel(
+    message: Message,
+    session: AsyncSession,
+    user: BotUser,
+    *,
+    preface: str = "",
+) -> None:
+    balance = await _wallet_balance(session, user)
+    overview = await credit_overview(session, int(user.id), balance=balance)
+    currency = get_settings().currency
+    lines = credit_summary_lines(overview, currency=currency, with_help=True)
+    if preface:
+        lines = [preface, ""] + lines
+    frozen = overview.status == CreditStatus.FROZEN
+    await safe_edit_text(
+        message,
+        "\n".join(lines),
+        reply_markup=_credit_keyboard(int(user.id), frozen=frozen),
+    )
+
+
 @router.callback_query(F.data.regexp(CREDIT_OPEN.pattern))
 @require_bot_owner_handler
 @require_platform_rep_mgmt
 async def open_credit_panel(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ) -> None:
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
@@ -115,30 +158,17 @@ async def open_credit_panel(
     if user is None:
         await callback.answer("نماینده یافت نشد", show_alert=True)
         return
+    await state.set_state(None)
     await callback.answer()
-    overview = await credit_overview(session, int(user.id), balance=int(user.wallet_balance or 0))
-    currency = get_settings().currency
-    lines = credit_summary_lines(overview, currency=currency)
-    lines.extend(
-        [
-            "",
-            "تغییر سقف و مسدود موقت از همین‌جا؛ صورتحساب و بخشش از وب‌پنل.",
-        ]
-    )
-    frozen = overview.status == CreditStatus.FROZEN
     if callback.message is not None:
-        await safe_edit_text(
-            callback.message,
-            "\n".join(lines),
-            reply_markup=_credit_keyboard(int(user.id), frozen=frozen),
-        )
+        await _render_credit_panel(callback.message, session, user)
 
 
 @router.callback_query(F.data.regexp(CREDIT_FREEZE.pattern))
 @require_bot_owner_handler
 @require_platform_rep_mgmt
 async def toggle_credit_freeze(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ) -> None:
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
@@ -160,18 +190,12 @@ async def toggle_credit_freeze(
         )
     except ValueError as exc:
         await rollback_quiet(session)
-        await callback.answer(str(exc) or "ناموفق", show_alert=True)
+        await callback.answer(user_safe_error(exc), show_alert=True)
         return
+    await state.set_state(None)
     await callback.answer("انجام شد")
-    overview = await credit_overview(session, int(user.id), balance=int(user.wallet_balance or 0))
-    currency = get_settings().currency
-    frozen = overview.status == CreditStatus.FROZEN
     if callback.message is not None:
-        await safe_edit_text(
-            callback.message,
-            "\n".join(credit_summary_lines(overview, currency=currency)),
-            reply_markup=_credit_keyboard(int(user.id), frozen=frozen),
-        )
+        await _render_credit_panel(callback.message, session, user)
 
 
 @router.callback_query(F.data.regexp(CREDIT_LIMIT_ASK.pattern))
@@ -191,17 +215,20 @@ async def ask_credit_limit(
     if user is None:
         await callback.answer("نماینده یافت نشد", show_alert=True)
         return
-    await state.set_state(ShopCreditStates.waiting_limit)
     await state.update_data(shop_credit_user_id=int(user.id))
     await callback.answer()
-    if callback.message is not None:
-        await safe_edit_text(
-            callback.message,
-            f"سقف اعتبار نماینده #{user.id} را به تومان بفرستید (۰ برای حذف سقف).",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[back_button(None, f"adm:resellers:credit:{user.id}")]]
-            ),
-        )
+    await ask_text(
+        callback,
+        state,
+        prompt=(
+            f"💳 سقف اعتبار برای نماینده #{user.id}\n\n"
+            "مبلغ را به تومان بفرستید (۰ برای حذف سقف)."
+        ),
+        cancel_code="adm_res",
+        return_to=f"adm:resellers:credit:{user.id}",
+        fsm_state=ShopCreditStates.waiting_limit,
+        edit=True,
+    )
 
 
 @router.message(ShopCreditStates.waiting_limit)
@@ -213,6 +240,8 @@ async def save_credit_limit(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await state.clear()
         await message.answer(feedback.CANCELLED)
         return
@@ -240,13 +269,18 @@ async def save_credit_limit(
         )
     except ValueError as exc:
         await rollback_quiet(session)
-        await message.answer(str(exc) or "ذخیره نشد")
+        await message.answer(f"⚠️ {user_safe_error(exc)}")
         return
-    await state.clear()
-    overview = await credit_overview(session, int(user.id), balance=int(user.wallet_balance or 0))
+    balance = await _wallet_balance(session, user)
+    overview = await credit_overview(session, int(user.id), balance=balance)
     currency = get_settings().currency
     frozen = overview.status == CreditStatus.FROZEN
-    await message.answer(
-        "\n".join(credit_summary_lines(overview, currency=currency)),
-        reply_markup=_credit_keyboard(int(user.id), frozen=frozen),
+    lines = ["✅ سقف اعتبار ذخیره شد.", ""] + credit_summary_lines(
+        overview, currency=currency, with_help=True
+    )
+    await finish_text_step(
+        message,
+        state,
+        text="\n".join(lines),
+        inline=_credit_keyboard(int(user.id), frozen=frozen),
     )
