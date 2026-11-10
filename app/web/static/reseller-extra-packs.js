@@ -48,13 +48,8 @@
     users: { rowAttr: "data-extra-pack-row", removeAttr: "data-extra-pack-remove", amountName: "extra_user_amount", styleName: "extra_user_style", amountMax: "100000", unit: "نفر", amountLabel: "تعداد کاربر بسته", styleLabel: "رنگ دکمه بسته کاربر", removeLabel: "حذف بسته کاربر" },
   };
 
-  function buildRow(kind, amount, styleValue, styleOptionsHtml) {
-    return PackRows.buildRow(ROW_SPECS[kind], amount, styleValue, styleOptionsHtml);
-  }
-
-  function styleOptionsFrom(root) {
-    const sample = root.querySelector("select.extra-pack-style");
-    return sample ? sample.innerHTML : '<option value="inherit">ارث از پیش‌فرض</option>';
+  function buildRow(kind, amount, styleValue, optionsHtml) {
+    return PackRows.buildRow(ROW_SPECS[kind], amount, styleValue, optionsHtml);
   }
 
   function seedDefaultsIfEmpty(root) {
@@ -64,9 +59,9 @@
       if (!box || box.querySelector("[data-extra-pack-row]")) return;
       const attr = kind === "gb" ? "data-default-gb" : "data-default-users";
       const amounts = parseCsvInts(root.getAttribute(attr), DEFAULTS[kind]);
-      const html = styleOptionsFrom(root);
+      const html = PackRows.styleOptionsHtml(root);
       amounts.forEach((n) =>
-        box.appendChild(buildRow(kind, n, "inherit", html || '<option value="inherit">ارث از پیش‌فرض</option>'))
+        box.appendChild(buildRow(kind, n, "inherit", html))
       );
     });
     PackRows.refresh(root);
@@ -82,7 +77,7 @@
         const kind = add.getAttribute("data-extra-pack-add");
         const box = root.querySelector(`[data-extra-packs-rows="${kind}"]`);
         if (!box) return;
-        const html = styleOptionsFrom(root);
+        const html = PackRows.styleOptionsHtml(root);
         box.appendChild(buildRow(kind, 1, "inherit", html));
         PackRows.refresh(root);
         return;
