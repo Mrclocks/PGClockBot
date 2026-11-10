@@ -1,7 +1,7 @@
 """Queue of customer notices about staff actions.
 
-Revision ID: 0097_customer_notice_queue
-Revises: 0096_service_panel_presence
+Revision ID: 0105_customer_notice_queue
+Revises: 0104_service_panel_presence
 
 Creates ``customer_notices``: one row per message, claimed by a throttled worker before it is sent.
 Idempotent; the downgrade drops the table (queued notices are transient).
@@ -14,8 +14,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0097_customer_notice_queue"
-down_revision: Union[str, None] = "0096_service_panel_presence"
+revision: str = "0105_customer_notice_queue"
+down_revision: Union[str, None] = "0104_service_panel_presence"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

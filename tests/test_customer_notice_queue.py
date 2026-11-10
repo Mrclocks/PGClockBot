@@ -126,7 +126,7 @@ class ProcessBatchTests(QueueCase):
 
 class QueueMigrationTests(unittest.TestCase):
     def test_upgrade_twice_and_downgrade(self) -> None:
-        spec = importlib.util.spec_from_file_location("m0097", ROOT / "alembic/versions/0097_customer_notice_queue.py")
+        spec = importlib.util.spec_from_file_location("m0097", ROOT / "alembic/versions/0105_customer_notice_queue.py")
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(migration)
