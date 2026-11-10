@@ -1950,7 +1950,7 @@ async def handle_back(
             message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
         )
         return
-    if level in {nav.NAV_ADMIN_GIFTS, nav.NAV_ADMIN_CAMPAIGNS}:
+    if level in {nav.NAV_ADMIN_GIFTS, nav.NAV_ADMIN_CAMPAIGNS, nav.NAV_ADMIN_CASHBACK}:
         from app.bot.handlers.marketing_tools import open_admin_marketing_panel
 
         await open_admin_marketing_panel(
@@ -2343,6 +2343,30 @@ async def _soft_reseller(
             reseller_owner_id=reseller_owner_id,
         )
         return
+    if action == "res_cashback":
+        from app.bot.handlers.cashback_tools import open_shop_cashback_panel
+
+        await open_shop_cashback_panel(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    if action == "res_child_pricing":
+        from app.bot.handlers.child_pricing_bot import open_child_pricing_panel
+
+        await open_child_pricing_panel(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
     if action == "res_broadcast":
         from app.bot.handlers.shop_broadcast import open_shop_broadcast_hub
 
@@ -2554,6 +2578,8 @@ async def reply_main_nav(
         "res_payments",
         "res_tickets",
         "res_loyalty",
+        "res_cashback",
+        "res_child_pricing",
         "res_broadcast",
         "res_renew",
         "res_buy_gb",

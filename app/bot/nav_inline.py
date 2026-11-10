@@ -766,7 +766,11 @@ def admin_product_hub_keyboard(
 @editable_screen("a.marketing")
 def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     """Club and broadcast leaves reuse ``nv:adm:*``; gift codes and campaigns are inline-only."""
-    from app.bot.marketing_panels import CAMPAIGN_PANEL_CALLBACK, GIFT_PANEL_CALLBACK
+    from app.bot.marketing_panels import (
+        CAMPAIGN_PANEL_CALLBACK,
+        CASHBACK_PANEL_CALLBACK,
+        GIFT_PANEL_CALLBACK,
+    )
 
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADMIN_BROADCAST,
@@ -804,6 +808,13 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
                 ui=ui,
                 label_key="btn_adm_campaigns",
                 style_id="adm_campaigns",
+            ),
+            _ikb(
+                _t(ui, "btn_adm_cashback"),
+                callback_data=CASHBACK_PANEL_CALLBACK,
+                ui=ui,
+                label_key="btn_adm_cashback",
+                style_id="adm_cashback",
             ),
             _ikb(TRIAL_USERS_LABEL, callback_data=TRIAL_USERS_CALLBACK, ui=ui),
         ]

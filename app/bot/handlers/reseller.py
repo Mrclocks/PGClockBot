@@ -787,11 +787,12 @@ async def res_billing(
     owner_user, bal = await ensure_payg_shop_wallet(session, profile)
     await session.commit()
     txs = await list_billing_transactions(session, int(owner_id), limit=5)
+    currency = get_settings().currency
     lines = [
         "💰 <b>کیف پول (PAYG)</b>",
         "",
-        f"موجودی: <b>{format_toman(int(bal), get_settings().currency)}</b>",
-        f"نرخ پلن: {format_toman(rate, get_settings().currency)} / گیگابایت",
+        f"موجودی: <b>{format_toman(int(bal), currency)}</b>",
+        f"نرخ پلن: {format_toman(rate, currency)} / گیگابایت",
         f"وضعیت سیستم: {'فعال' if enabled else 'غیرفعال'}",
         "",
         "مصرف ترافیک از همین کیف پول (همان موجودی منوی کیف پول) کسر می‌شود.",
@@ -799,13 +800,23 @@ async def res_billing(
     ]
     if profile.billing_suspended_at is not None:
         lines.insert(3, "⚠️ <b>حساب به‌خاطر موجودی صفر مسدود است</b>")
+    try:
+        from app.bot.handlers.shop_credit_bot import credit_summary_lines
+        from app.services.shop_credit import credit_overview
+
+        overview = await credit_overview(session, int(owner_id), balance=int(bal))
+        if overview.usage.limit > 0 or overview.account is not None:
+            lines.append("")
+            lines.extend(credit_summary_lines(overview, currency=currency))
+    except Exception:
+        logger.warning("reseller billing credit summary failed shop=%s", owner_id, exc_info=True)
     if txs:
         lines.append("")
         lines.append("آخرین تراکنش‌ها:")
         for tx in txs:
             sign = "+" if tx.amount >= 0 else ""
             lines.append(
-                f"• {tx.kind}: {sign}{format_toman(tx.amount, get_settings().currency)}"
+                f"• {tx.kind}: {sign}{format_toman(tx.amount, currency)}"
             )
     if callback.message:
         await safe_edit_text(

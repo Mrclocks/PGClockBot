@@ -2050,6 +2050,12 @@ def admin_reseller_actions(
         [InlineKeyboardButton(text="➖ کاهش کیف", callback_data=f"adm:resellers:wdebit:{user_id}")],
         [
             InlineKeyboardButton(
+                text="💳 پلن اعتباری",
+                callback_data=f"adm:resellers:credit:{user_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 text=f"🏷 تگ: {tag_label}"[:64],
                 callback_data=f"adm:resellers:tag:{user_id}",
             )

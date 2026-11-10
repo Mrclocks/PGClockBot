@@ -30,11 +30,15 @@ class ResellerGroup:
 
 RESELLER_GROUPS: tuple[ResellerGroup, ...] = (
     ResellerGroup("daily", "btn_res_grp_daily", ("res_dash", "res_orders", "res_payments", "res_tickets")),
-    ResellerGroup("customers", "btn_res_grp_customers", ("res_users", "res_add_rep")),
+    ResellerGroup(
+        "customers",
+        "btn_res_grp_customers",
+        ("res_users", "res_add_rep", "res_child_pricing"),
+    ),
     ResellerGroup(
         "shop",
         "btn_res_grp_shop",
-        ("res_plans", "res_loyalty", "res_broadcast", "res_settings"),
+        ("res_plans", "res_loyalty", "res_broadcast", "res_cashback", "res_settings"),
     ),
     ResellerGroup(
         "account",

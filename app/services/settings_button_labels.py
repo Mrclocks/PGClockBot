@@ -195,6 +195,7 @@ BTN_ADMIN_PLANS_SUB: list[Field] = [
 BTN_ADMIN_MARKETING_SUB: list[Field] = [
     ("btn_adm_gift_codes", "کدهای هدیه", "text"),
     ("btn_adm_campaigns", "کمپین‌ها", "text"),
+    ("btn_adm_cashback", "کش‌بک", "text"),
 ]
 
 BTN_SERVICE_MORE: list[Field] = [
@@ -234,6 +235,7 @@ BTN_RESELLER_HUB: list[Field] = [
     ("btn_res_dash", "خانه نماینده", "text"),
     ("btn_res_users", "مشتریان من", "text"),
     ("btn_res_add_rep", "افزودن نماینده", "text"),
+    ("btn_res_child_pricing", "قیمت زیرمجموعه", "text"),
     ("btn_res_reports", "گزارش‌ها", "text"),
     ("btn_res_stats", "آمار", "text"),
     ("btn_res_plans", "پلن‌های فروش", "text"),
@@ -244,6 +246,7 @@ BTN_RESELLER_HUB: list[Field] = [
 BTN_RESELLER_HUB_MORE: list[Field] = [
     ("btn_res_tickets", "تیکت‌های مشتریان", "text"),
     ("btn_res_loyalty", "باشگاه مشتریان", "text"),
+    ("btn_res_cashback", "کش‌بک", "text"),
     ("btn_res_broadcast", "پیام گروهی", "text"),
     ("btn_res_settings", "تنظیمات فروشگاه", "text"),
     ("btn_res_billing", "کیف پول PAYG", "text"),

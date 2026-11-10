@@ -295,6 +295,10 @@
       ],
       [
         {
+          "callback_data": "nv:adm:cb",
+          "text": "🎁 کش‌بک"
+        },
+        {
           "callback_data": "tru:l:all:0",
           "text": "🧪 کاربران تست"
         }
@@ -1673,15 +1677,21 @@
           "text": "➖ کاهش کیف"
         },
         {
-          "callback_data": "adm:resellers:tag:6",
-          "text": "🏷 تگ: 🟢 مطمئن"
+          "callback_data": "adm:resellers:credit:6",
+          "text": "💳 پلن اعتباری"
         }
       ],
       [
         {
+          "callback_data": "adm:resellers:tag:6",
+          "text": "🏷 تگ: 🟢 مطمئن"
+        },
+        {
           "callback_data": "adm:users:svcs:6",
           "text": "🛒 سرویس‌های فروشگاه"
-        },
+        }
+      ],
+      [
         {
           "callback_data": "adm:users:unres:6",
           "text": "🤝 حذف نمایندگی"
