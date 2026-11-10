@@ -988,6 +988,28 @@ class ResellerCharge(Base):
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class PaygPanelSnapshot(Base):
+    """Last panel state of a PAYG shop's user that reconciliation has billed up to.
+
+    A difference to the live panel that no charge since ``seen_at`` paid for is a change
+    made outside the bot. ``revision`` keys the reconciliation charges of one difference,
+    so a rerun after a crash cannot charge it twice.
+    """
+
+    __tablename__ = "payg_panel_snapshots"
+    __table_args__ = (UniqueConstraint("shop_id", "pg_user_id", name="uq_payg_snapshot_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    pg_user_id: Mapped[int] = mapped_column(Integer)
+    pg_username: Mapped[str] = mapped_column(String(128))
+    data_limit: Mapped[int] = mapped_column(BigInteger, default=0)
+    expire_ts: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    used_traffic: Mapped[int] = mapped_column(BigInteger, default=0)
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class ResellerBillingRate(Base):
     """Extensible price table. MVP UI uses global Setting; this enables per-reseller/plan/inbound/node later."""
 

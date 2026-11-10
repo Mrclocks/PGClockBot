@@ -440,3 +440,5 @@ tests/test_payg_charges.py
 tests/test_payg_pricing.py
 # PAYG charging at creation: deliveries, renewals, packs, staff edits, resets, owner review.
 tests/test_payg_charging_flows.py
+# PAYG reconciliation: panel changes outside the bot are charged once, never twice.
+tests/test_payg_reconcile.py
