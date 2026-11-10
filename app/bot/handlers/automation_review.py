@@ -16,6 +16,7 @@ from app.bot.nav_inline import with_inline_back
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser
+from app.services.user_errors import domain_error_text
 from app.services import bot_feedback_texts as feedback
 from app.services.automation_review import (
     STATE_CLEARABLE,
@@ -157,7 +158,7 @@ async def review_release(
         )
     except ValueError as exc:
         await session.rollback()
-        await callback.answer(str(exc)[:190], show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         await _show_card(callback, session, shop_id, service_id)
         return
     await callback.answer("آزاد شد", show_alert=True)
