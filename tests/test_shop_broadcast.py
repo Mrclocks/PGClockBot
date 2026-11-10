@@ -429,7 +429,7 @@ class MigrationTests(unittest.TestCase):
         from alembic.operations import Operations
 
         spec = importlib.util.spec_from_file_location(
-            "broadcast_shop", ROOT / "alembic/versions/0094_broadcast_shop_id.py"
+            "broadcast_shop", ROOT / "alembic/versions/0095_broadcast_shop_id.py"
         )
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
