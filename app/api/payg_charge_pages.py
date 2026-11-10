@@ -39,7 +39,10 @@ def register_payg_charge_pages(
             (await session.scalars(select(BotUser).where(BotUser.id.in_(shop_ids)))).all() if shop_ids else []
         )
         names = {int(u.id): (u.full_name or u.username or f"#{int(u.id)}") for u in users}
-        return render(request, "payg_charges_review.html", {"charges": charges, "shop_names": names})
+        return render(request, "payg_charges_review.html", {
+            "staff": staff, "charges": charges, "shop_names": names,
+            "flash_ok": request.query_params.get("ok"), "flash_err": request.query_params.get("err"),
+        })
 
     async def _decide(charge_id: int, staff: dict, session: AsyncSession, *, applied: bool) -> RedirectResponse:
         actor = str(staff.get("username") or "owner")

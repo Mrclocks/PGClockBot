@@ -63,7 +63,7 @@
       </div>
     </div>
     {% if is_system_plan %}<input type="hidden" name="billing_mode" value="fixed" />{% endif %}
-    <div id="edit-price-per-gb-field" hidden>
+    <div id="edit-price-per-gb-field" class="form-stack" hidden>
       <label class="form-field">نرخ هر گیگ
         <span class="ds-unit"><input name="price_per_gb" id="edit-price-per-gb-input" type="number" data-money min="0" value="{{ plan.price_per_gb or 0 }}" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
         <small class="muted">نرخ مصرف این پلن PAYG — برای گروه‌های با قیمت متفاوت، پلن جدا بسازید</small>

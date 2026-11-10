@@ -32,6 +32,7 @@ from app.services.shop_credit import (
     CreditStatus,
     claim_credit_alert,
     effective_limit,
+    set_credit_frozen,
     set_credit_limit,
     set_credit_status,
 )
@@ -135,6 +136,16 @@ class SpendingTests(CreditCase):
         with self.assertRaises(ValueError):
             await self.reserve(6, "order:4")
         self.assertEqual(await self.wallet(), 5_000)
+
+    async def test_the_freeze_switch_never_overrides_the_overdue_ladder(self) -> None:
+        async with self.Session() as session:
+            await set_credit_status(session, 5, CreditStatus.OVERDUE, actor="ladder")
+            for frozen in (True, False):  # a saved form keeps the ladder's status either way
+                account = await set_credit_frozen(session, 5, frozen, actor="owner")
+                self.assertEqual(account.status, CreditStatus.OVERDUE)
+            await set_credit_status(session, 5, CreditStatus.ACTIVE, actor="ladder")
+            self.assertEqual((await set_credit_frozen(session, 5, True, actor="owner")).status, CreditStatus.FROZEN)
+            self.assertEqual((await set_credit_frozen(session, 5, False, actor="owner")).status, CreditStatus.ACTIVE)
 
     async def test_racing_charges_never_pass_the_floor(self) -> None:
         results = await asyncio.gather(
