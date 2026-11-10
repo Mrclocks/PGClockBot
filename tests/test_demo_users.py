@@ -125,6 +125,22 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(report["ops"]["pending_receipts"], 2)
 
     async def test_daily_reports_and_dashboards_use_same_non_demo_revenue(self) -> None:
+        from app.services.daily_report import previous_tehran_day_bounds
+
+        start, end, _ = previous_tehran_day_bounds(self.now)
+        mid = start + (end - start) / 2
+        # Daily digest covers the previous Tehran day; move non-demo activity into that window.
+        for user_id in self.customers:
+            if user_id in self.demo_ids:
+                continue
+            order = await self.session.get(Order, user_id * 10)
+            service = await self.session.get(UserService, user_id)
+            assert order is not None and service is not None
+            order.created_at = mid
+            order.updated_at = mid
+            service.created_at = mid
+        await self.session.commit()
+
         for shop_id in (None, 10, 20):
             summary = await _scoped_totals(self.session, reseller_id=shop_id)
             self.assertEqual(summary["orders_total"], 2)
