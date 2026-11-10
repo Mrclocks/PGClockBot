@@ -337,3 +337,26 @@ async def _send(
     finally:
         if owned:
             await bot.session.close()
+
+
+async def notify_credit_use(session: AsyncSession, profile: ResellerProfile, *, level: int, used: int, limit: int) -> None:
+    """Tell the reseller and their owner how much of the credit line is used (sent once per level)."""
+    from app.services.formatting import format_toman
+
+    headline = "اعتبار شما تمام شد" if level >= 100 else f"{level}٪ از اعتبار شما استفاده شده"
+    detail = f"استفاده‌شده: {format_toman(used)} از {format_toman(limit)}"
+    reseller = await session.get(BotUser, int(profile.user_id))
+    reseller_tid = deliverable_telegram_id(getattr(reseller, "telegram_id", None))
+    if reseller_tid is not None:
+        await _send(
+            session, int(profile.user_id), [reseller_tid], f"⚠️ <b>{headline}</b>\n{detail}",
+            markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="💳 صورتحساب و شارژ", callback_data=BILLING_SCREEN_CALLBACK),
+            ]]),
+        )
+    owner_shop_id, owner_chat_ids = await _owner_recipients(session, profile)
+    await _send(
+        session, owner_shop_id, owner_chat_ids,
+        f"⚠️ <b>اعتبار نماینده: {level}٪</b>\nنماینده: <code>{_reseller_label(profile)}</code>\n{detail}",
+        markup=_reseller_card_markup(profile, owner_shop_id),
+    )

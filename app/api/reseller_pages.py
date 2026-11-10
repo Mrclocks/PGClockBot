@@ -25,6 +25,7 @@ from app.services.miniapp_shop import (
     shop_miniapp_state,
 )
 from app.api.payg_plan_form import apply_payg_settings, payg_rate_and_settings
+from app.services.shop_credit import credit_overview
 from app.api.pg_panel_access_pages import (
     access_target_from_form,
     apply_access_after_save,
@@ -731,6 +732,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             "color_tags": color_tags_for_ui(),
             "pg_api_key_ready": False,
             "owner_can_toggle_oversell": is_explicit_owner_staff(staff),
+            "credit": await credit_overview(session, int(user.id), balance=int(user.wallet_balance or 0))
+            if is_payg(profile)
+            else None,
         }
         if (getattr(profile, "pg_api_key_enc", None) or "").strip():
             ctx["pg_api_key_ready"] = True

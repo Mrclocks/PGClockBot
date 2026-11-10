@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ResellerBillingRate, ResellerBillingTransaction, ResellerPlan, ResellerProfile
 from app.services.payg_pricing import PaygPriceError, assert_billable_rates, rates_from_plan
+from app.services.shop_credit import shop_credit_limit
 from app.services.billing_alerts import (
     PANEL_TICK_ISSUES,
     TickIssue,
@@ -542,9 +543,13 @@ async def ensure_payg_shop_wallet(
 
 
 async def payg_available_balance(session: AsyncSession, profile: ResellerProfile) -> int:
-    """Shop-wallet balance used for PAYG (after ensuring link)."""
+    """What the shop can still spend on PAYG: wallet balance plus its open credit line.
+
+    Every «empty wallet» decision (suspend, restore, block provisioning, low balance)
+    reads this, so a shop working inside its credit is never treated as empty.
+    """
     _, bal = await ensure_payg_shop_wallet(session, profile)
-    return int(bal)
+    return int(bal) + await shop_credit_limit(session, int(profile.user_id))
 
 
 # ---------------------------------------------------------------------------
@@ -751,17 +756,19 @@ class WalletShortfall(ValueError):
     """The shop wallet cannot pay this debit; the message is safe for shop staff."""
 
 
-async def _move_payg_wallet(session: AsyncSession, profile: ResellerProfile, delta: int) -> int:
-    """Add ``delta`` to the shop wallet in one statement; a debit never goes below zero.
+async def _move_payg_wallet(
+    session: AsyncSession, profile: ResellerProfile, delta: int, *, floor: int = 0
+) -> int:
+    """Add ``delta`` to the shop wallet in one statement; a debit never goes below ``floor``.
 
-    Returns the balance after the change. Raises ``ValueError`` on a shortfall; the caller
-    owns the transaction.
+    ``floor`` is 0, or minus the shop's credit limit for PAYG charges. Returns the balance
+    after the change. Raises ``WalletShortfall``; the caller owns the transaction.
     """
     user, _bal = await ensure_payg_shop_wallet(session, profile)
     stmt = update(BotUser).where(BotUser.id == int(user.id))
     if delta < 0:
-        # Atomic shortfall check: a concurrent charge cannot push the wallet negative.
-        stmt = stmt.where(BotUser.wallet_balance >= -int(delta))
+        # Atomic shortfall check: a concurrent charge cannot push the wallet past the floor.
+        stmt = stmt.where(BotUser.wallet_balance + int(delta) >= int(floor))
     with session.no_autoflush:
         result = await session.execute(
             stmt.values(wallet_balance=BotUser.wallet_balance + int(delta)).execution_options(
@@ -784,10 +791,12 @@ async def record_payg_ledger_entry(
     idempotency_key: str,
     note: str | None = None,
     created_by: str | None = None,
+    use_credit: bool = False,
 ) -> ResellerBillingTransaction:
     """Move ``amount`` (signed) on the shop wallet and write its ledger row, without committing.
 
-    A key already used by this shop returns that row and moves nothing.
+    A key already used by this shop returns that row and moves nothing. ``use_credit``
+    lets a debit use the shop's open credit line (PAYG charges only).
     """
     if isinstance(amount, bool) or not isinstance(amount, int) or amount == 0:
         raise ValueError("مبلغ تراکنش نامعتبر است")
@@ -796,7 +805,8 @@ async def record_payg_ledger_entry(
     existing = await _idempotent_tx_for_reseller(session, idempotency_key, int(profile.user_id))
     if existing is not None:
         return existing
-    balance_after = await _move_payg_wallet(session, profile, int(amount))
+    floor = -await shop_credit_limit(session, int(profile.user_id)) if use_credit and amount < 0 else 0
+    balance_after = await _move_payg_wallet(session, profile, int(amount), floor=floor)
     tx = ResellerBillingTransaction(
         reseller_user_id=int(profile.user_id),
         kind=kind,

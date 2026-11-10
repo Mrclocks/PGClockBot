@@ -312,6 +312,48 @@
 </section>
 {% endif %}
 
+{% if is_payg and credit %}
+<section class="edit-section" id="reseller-credit">
+  <header class="edit-section-head reseller-section-head">
+    <h3>اعتبار</h3>
+    {% if credit.status == 'frozen' %}<span class="badge rejected" aria-label="وضعیت: منجمد">منجمد</span>
+    {% elif credit.status in ('overdue', 'blocked') %}<span class="badge rejected">{{ 'سررسید گذشته' if credit.status == 'overdue' else 'مسدود' }}</span>{% endif %}
+  </header>
+  <p class="muted">کیف پول این نماینده برای هزینه‌های PAYG تا این سقف می‌تواند منفی شود</p>
+  <p>استفاده‌شده <b dir="ltr">{{ credit.usage.used | money }}</b> از <b dir="ltr">{{ credit.usage.limit | money }}</b>
+    (<span dir="ltr">{{ credit.usage.percent }}٪</span>) · قابل استفاده <b dir="ltr">{{ credit.usage.available | money }}</b></p>
+  <form method="post" action="/resellers/{{ user.id }}/credit" class="form-stack">
+    <div class="form-row">
+      <label class="form-field">سقف اعتبار
+        <span class="ds-unit"><input name="credit_limit" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ credit.account.credit_limit if credit.account else 0 }}" /><span class="ds-unit-label">تومان</span></span>
+      </label>
+      <label class="form-field">سقف موقت (اختیاری)
+        <span class="ds-unit"><input name="temp_limit" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ credit.account.temp_limit if credit.account and credit.account.temp_limit is not none else '' }}" /><span class="ds-unit-label">تومان</span></span>
+      </label>
+      <label class="form-field">مدت سقف موقت
+        <span class="ds-unit"><input name="temp_limit_days" type="number" min="1" max="365" inputmode="numeric" dir="ltr" placeholder="روز" /><span class="ds-unit-label">روز</span></span>
+      </label>
+    </div>
+    <label class="form-field">یادداشت تغییر
+      <input name="note" maxlength="255" placeholder="مثلاً: افزایش برای فروش آخر ماه" />
+    </label>
+    <div class="actions"><button class="btn" type="submit">ذخیرهٔ اعتبار</button></div>
+  </form>
+  <form method="post" action="/resellers/{{ user.id }}/credit/status" class="form-stack"
+        data-confirm="{{ 'اعتبار این نماینده باز شود؟' if credit.status == 'frozen' else 'اعتبار منجمد شود؟ نماینده تا باز شدن آن فقط با موجودی خودش می‌فروشد.' }}"
+        data-confirm-title="وضعیت اعتبار">
+    {% if credit.status != 'frozen' %}<input type="hidden" name="frozen" value="1" />{% endif %}
+    <div class="actions"><button class="btn btn-ghost" type="submit">{{ 'باز کردن اعتبار' if credit.status == 'frozen' else 'منجمد کردن اعتبار' }}</button></div>
+  </form>
+  {% if credit.events %}
+  <h4 class="edit-section-sub">تغییرهای اخیر اعتبار</h4>
+  <ul class="muted">
+    {% for e in credit.events %}<li><span dir="ltr">{{ e.created_at.strftime('%Y-%m-%d') if e.created_at else '' }}</span> · {{ {'limit': 'سقف', 'temp_limit': 'سقف موقت', 'status': 'وضعیت'}.get(e.kind, e.kind) }}: <span dir="ltr">{{ e.old_value or '—' }} → {{ e.new_value or '—' }}</span>{% if e.actor %} · {{ e.actor }}{% endif %}{% if e.note %} · {{ e.note }}{% endif %}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if is_payg %}
 <section class="edit-section">
   <header class="edit-section-head reseller-section-head">

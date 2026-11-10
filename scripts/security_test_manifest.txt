@@ -442,3 +442,5 @@ tests/test_payg_pricing.py
 tests/test_payg_charging_flows.py
 # PAYG reconciliation: panel changes outside the bot are charged once, never twice.
 tests/test_payg_reconcile.py
+# Credit lines: only PAYG charges use credit, floors hold under races, changes audited.
+tests/test_shop_credit.py
