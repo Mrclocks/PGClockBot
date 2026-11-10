@@ -1451,8 +1451,12 @@ async def admin_delete_service(
     *,
     delete_pg: bool = True,
     staff: dict | None = None,
+    allow_disable_fallback: bool = True,
 ) -> dict[str, Any]:
     """Hard-delete one shop service and optionally its linked PasarGuard user.
+
+    ``allow_disable_fallback=False`` makes a panel user that can only be disabled, not deleted, a
+    failure that keeps the local row (the automatic cleanup uses it).
 
     Caller must verify ownership / shop scope before invoking. Nulls FK refs on
     orders / loyalty / wheel spins, then removes the ``UserService`` row.
@@ -1481,7 +1485,7 @@ async def admin_delete_service(
     if delete_pg and pg_uid:
         pg = await _pg_client_for_bot_service(session, service)
         outcome = await ensure_pg_user_removed_or_absent(
-            pg, pg_uid, staff=staff, allow_disable_fallback=True
+            pg, pg_uid, staff=staff, allow_disable_fallback=allow_disable_fallback
         )
         if outcome == "deleted":
             pg_deleted = True

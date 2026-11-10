@@ -468,3 +468,4 @@ tests/test_customer_notice_queue.py
 tests/test_reason_required_routes.py
 tests/test_service_cleanup.py
 tests/test_service_cleanup_notices.py
+tests/test_service_cleanup_delete.py

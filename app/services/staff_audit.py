@@ -29,10 +29,12 @@ SHOP_OWNER_ROLES = frozenset({"reseller", "principal"})
 ACTOR_PLATFORM_OWNER = "platform_owner"
 ACTOR_SHOP_OWNER = "shop_owner"
 ACTOR_STAFF = "staff"
+ACTOR_SYSTEM = "system"
 ACTOR_LABELS = {
     ACTOR_PLATFORM_OWNER: "مدیر پلتفرم",
     ACTOR_SHOP_OWNER: "صاحب فروشگاه",
     ACTOR_STAFF: "کارمند",
+    ACTOR_SYSTEM: "سیستم",
 }
 
 # Fixed in code: a record's action is always one of these.
@@ -55,6 +57,7 @@ ACTION_LABELS = {
     "service_extend": "تغییر مانده سرویس",
     "service_delete": "حذف سرویس",
     "customer_delete": "حذف مشتری",
+    "service_auto_delete": "حذف خودکار سرویس",
 }
 
 TARGET_LABELS = {
