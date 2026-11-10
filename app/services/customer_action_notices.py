@@ -1,30 +1,39 @@
 """Tell a customer what staff did to their service and why.
 
-The message is sent after the operation and its log record are committed, through the bot of the
-shop that owns the service. A delivery failure is logged and never undoes the operation; the
-staff log keeps the reason either way.
+The message is queued after the operation and its log record are committed, and a throttled worker
+sends it through the bot of the shop that owns the service. A queueing or delivery failure is logged
+and never undoes the operation; the staff log keeps the reason either way.
 """
 
 from __future__ import annotations
 
 import html
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import timedelta
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError
-from aiogram.utils.token import TokenValidationError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, UserService
+from app.db.models import BotUser, CustomerNotice, UserService
 from app.services.action_reasons import log_reasoned_action_as
-from app.services.reseller_bots import ShopBotUnavailable, open_notify_bot_for_user
+from app.services.customer_notice_queue import (
+    OUTCOME_FAILED,
+    OUTCOME_RETRY,
+    OUTCOME_SENT,
+    OUTCOME_SKIPPED,
+    NoticeOutcome,
+    add_notice,
+)
 from app.services.shop_scope import resolve_shop_scope_id
 from app.services.staff_audit import StaffActor
 
 logger = logging.getLogger(__name__)
 
+BULK_NOTICE_LIMIT = 500  # one bulk action notifies at most this many services
 NOTICE_RECIPIENT_LIMIT = 5  # one panel user is linked to a handful of local rows at most
 ACTION_NOTICE_TITLES = {
     "service_renew": "🔄 سرویس شما تمدید شد",
@@ -50,6 +59,7 @@ class NoticeTarget:
     telegram_id: int
     shop_id: int | None
     service_name: str
+    service_id: int | None = None
 
 
 def notice_text(action: str, *, service_name: str, reason: str) -> str:
@@ -79,47 +89,85 @@ async def pg_user_targets_for_shop(session: AsyncSession, shop_id: int | None, *
     return [NoticeTarget(int(uid), int(tg), (int(shop) if shop else None), str(name or "")) for uid, tg, shop, name in rows if tg]
 
 
+async def pg_users_targets_for_shop(
+    session: AsyncSession, shop_id: int | None, *, pg_user_ids: list[int]
+) -> dict[int, list[NoticeTarget]]:
+    """Notice targets of many panel users in one query, keyed by panel user id (bulk actions)."""
+    if not pg_user_ids:
+        return {}
+    query = (
+        select(UserService.pg_user_id, BotUser.id, BotUser.telegram_id, UserService.shop_id, UserService.pg_username)
+        .join(UserService, UserService.bot_user_id == BotUser.id)
+        .where(UserService.pg_user_id.in_([int(i) for i in pg_user_ids]))
+        .limit(BULK_NOTICE_LIMIT)
+    )
+    if shop_id is not None:
+        query = query.where(UserService.shop_id == int(shop_id))
+    grouped: dict[int, list[NoticeTarget]] = {}
+    for pg_id, uid, tg, shop, name in (await session.execute(query)).all():
+        if tg:
+            grouped.setdefault(int(pg_id), []).append(NoticeTarget(int(uid), int(tg), (int(shop) if shop else None), str(name or "")))
+    return grouped
+
+
 async def pg_user_targets(session: AsyncSession, staff: dict, *, pg_user_id: int) -> list[NoticeTarget]:
     """``pg_user_targets_for_shop`` for a web staff session, limited to the acting shop."""
     return await pg_user_targets_for_shop(session, resolve_shop_scope_id(staff), pg_user_id=pg_user_id)
 
 
 async def notify_customers(session: AsyncSession, targets: list[NoticeTarget], *, action: str, reason: str) -> int:
-    """Send the notice to each target; returns how many were delivered."""
-    delivered = 0
-    users = {
-        int(u.id): u
-        for u in (await session.scalars(select(BotUser).where(BotUser.id.in_({t.user_id for t in targets})))).all()
-    }
-    bots: dict[int | None, tuple[Bot, bool] | None] = {}  # one bot per shop for the whole call
+    """Queue the notice for each target (sent later by the throttled worker); returns how many were queued.
+
+    A queueing failure is logged and never undoes the operation that was already committed.
+    """
+    if not targets:
+        return 0
     try:
         for target in targets:
-            user = users.get(target.user_id)
-            if user is None or user.is_blocked:
-                continue
-            if target.shop_id not in bots:
-                try:
-                    bots[target.shop_id] = await open_notify_bot_for_user(session, user, shop_id=target.shop_id)
-                except (ShopBotUnavailable, TokenValidationError):
-                    logger.warning("customer notice skipped: bot unavailable shop=%s", target.shop_id, exc_info=True)
-                    bots[target.shop_id] = None
-            opened = bots[target.shop_id]
-            if opened is None:
-                continue
-            try:
-                await opened[0].send_message(
-                    target.telegram_id,
-                    notice_text(action, service_name=target.service_name, reason=reason),
-                    parse_mode="HTML",
-                )
-                delivered += 1
-            except (TelegramAPIError, OSError, TimeoutError):
-                logger.warning("customer notice failed action=%s user=%s", action, target.user_id, exc_info=True)
-    finally:
-        for opened in bots.values():
-            if opened is not None and opened[1]:
-                await opened[0].session.close()
-    return delivered
+            add_notice(
+                session,
+                shop_id=target.shop_id,
+                bot_user_id=target.user_id,
+                telegram_id=target.telegram_id,
+                action=action,
+                service_name=target.service_name,
+                reason=reason,
+                service_id=target.service_id,
+            )
+        await session.commit()
+    except Exception:  # noqa: BLE001 - the operation succeeded; only the customer message is lost
+        logger.warning("customer notice queueing failed action=%s", action, exc_info=True)
+        await session.rollback()
+        return 0
+    return len(targets)
+
+
+BotFor = Callable[[int | None], Awaitable[Bot | None]]
+
+
+async def deliver_notice(session: AsyncSession, bot_for: BotFor, notice: CustomerNotice) -> NoticeOutcome:
+    """Send one queued notice through its shop's bot and say what happened to it."""
+    user = await session.get(BotUser, int(notice.bot_user_id))
+    if user is None or user.is_blocked:
+        return NoticeOutcome(OUTCOME_SKIPPED)
+    bot = await bot_for(notice.shop_id)
+    if bot is None:
+        logger.warning("customer notice skipped: no bot for shop=%s", notice.shop_id)
+        return NoticeOutcome(OUTCOME_SKIPPED)
+    text = notice_text(notice.action, service_name=notice.service_name, reason=notice.reason)
+    try:
+        await bot.send_message(int(notice.telegram_id), text, parse_mode="HTML")
+    except TelegramRetryAfter as exc:
+        return NoticeOutcome(OUTCOME_RETRY, timedelta(seconds=int(exc.retry_after) + 1))
+    except TelegramForbiddenError:
+        return NoticeOutcome(OUTCOME_SKIPPED)
+    except TelegramBadRequest:
+        logger.warning("customer notice rejected id=%s", notice.id, exc_info=True)
+        return NoticeOutcome(OUTCOME_FAILED)
+    except (TelegramAPIError, OSError, TimeoutError):
+        logger.warning("customer notice failed id=%s", notice.id, exc_info=True)
+        return NoticeOutcome(OUTCOME_RETRY)
+    return NoticeOutcome(OUTCOME_SENT)
 
 
 async def log_and_notify(

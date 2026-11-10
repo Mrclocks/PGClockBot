@@ -464,3 +464,5 @@ tests/test_billing_pages_design.py
 tests/test_action_reasons.py
 tests/test_customer_action_notices.py
 tests/test_bot_action_reason.py
+tests/test_customer_notice_queue.py
+tests/test_reason_required_routes.py
