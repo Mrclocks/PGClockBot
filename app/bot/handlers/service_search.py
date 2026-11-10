@@ -20,6 +20,7 @@ from app.bot.nav_input import (
 )
 from app.bot.nav_inline import SERVICES_LIST_CALLBACK, SERVICES_PAGE_SIZE, SERVICES_SEARCH_CALLBACK
 from app.db.models import BotUser
+from app.services.user_errors import domain_error_text
 from app.services.service_scope import search_customer_services
 from app.services.users import current_shop_reseller_id
 
@@ -76,7 +77,7 @@ async def show_service_search(
             session, int(db_user.id), current_shop_reseller_id(), text, limit=SERVICES_PAGE_SIZE
         )
     except ValueError as exc:
-        await message.answer(str(exc))
+        await message.answer(domain_error_text(exc))
         return
     await state.set_state(None)
     shown = html.escape(text)
