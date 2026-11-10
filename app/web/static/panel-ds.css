@@ -191,15 +191,25 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds .ds-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); }
 .ds .ds-req { color: var(--destructive); font-weight: 700; }
 .ds .ds-error { margin: 0; color: var(--destructive); font-size: 12px; font-weight: 400; }
-.ds .ds-unit { position: relative; display: block; }
-.ds .ds-unit input { width: 100%; padding-inline-start: 56px; text-align: left; font-variant-numeric: tabular-nums; }
+.ds .ds-unit { position: relative; display: block; container-type: inline-size; }
+/* The unit sits inside the field on its left. A field wide enough gets the same padding on the right too, so the
+   number sits in the true centre; a narrow one (half a row on a phone) centres the number in the space beside the
+   unit, so a seven-digit amount still fits. */
+.ds .ds-unit input { width: 100%; padding-left: 56px; padding-right: var(--g3); font-variant-numeric: tabular-nums; }
+@container (min-width: 240px) { .ds .ds-unit input { padding-right: 56px; } }
+/* «نامحدود» shows where the number would: the field around an unlimited box measures the width. */
+.ds .form-field:has(> .ds-unit[data-unlimited-label]) { container-type: inline-size; }
+@container (min-width: 240px) { .ds .ds-unit.is-unlimited::after { right: 56px; } }
 .ds .ds-unit-label {
   position: absolute; inset-block: 0; left: var(--g4); display: flex; align-items: center; padding-top: 2px;
   font-size: 12px; font-weight: 400; line-height: 1; color: var(--muted-fg); pointer-events: none;
 }
+/* Every number box (amount, price, count, days, …) shows its number in the middle, in forms and in list rows alike.
+   The base input rules carry long :not() chains that would push it to one side, so this is marked important. */
+.ds :is(input[type="number"], input[data-money], input[data-money-kind], input[inputmode="numeric"], input[inputmode="decimal"]) { text-align: center !important; }
 .ds .ds-unit.is-unlimited input { color: transparent; caret-color: transparent; }
 .ds .ds-unit.is-unlimited::after {
-  content: attr(data-unlimited-label); position: absolute; inset-block: 0; right: var(--g4); display: flex; align-items: center;
+  content: attr(data-unlimited-label); position: absolute; inset-block: 0; left: 56px; right: var(--g3); display: flex; align-items: center; justify-content: center;
   font-size: 14px; color: var(--muted-fg); pointer-events: none;
 }
 .ds .ds-mini {
@@ -392,8 +402,6 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-list-row > * { margin: 0; }
 .ds .ds-list-row + .ds-list-row { border-top: 1px dashed var(--dash) !important; }
 .ds .ds-list-row input { height: var(--ctl-h); min-height: var(--ctl-h); font-size: 15px; font-weight: 600; }
-/* Numbers in a list row sit in the middle of their box; the base input rules (long :not() chains) would push them to one side. */
-.ds .ds-list-row input { text-align: center !important; }
 .ds .ds-list-value { font-size: 13px; color: var(--muted-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ds .ds-list-value bdi { color: var(--foreground); font-weight: 600; font-variant-numeric: tabular-nums; }
 .ds .ds-pack-amt input { padding-inline: var(--g2); }
@@ -436,9 +444,16 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-dot-select:is([data-value="inherit"], :not([data-value])) .ui-select-toggle::before { display: none; }
 @media (max-width: 480px) {
   .ds { --num-w: 72px; }
-  .ds .ds-list-head, .ds .ds-list-row { grid-template-columns: var(--num-w) minmax(0, 1fr) 96px 40px; gap: 6px; padding-inline: var(--g2); }
-  .ds .ds-list-row input { padding-inline: var(--g2); }
+  /* A phone row still fits a seven-digit typed price: a slimmer colour chip and less side padding (inputs keep
+     16px text on phones so iOS does not zoom on focus). */
+  .ds .ds-list-head, .ds .ds-list-row { grid-template-columns: var(--num-w) minmax(0, 1fr) 84px 40px; gap: 6px; padding-inline: var(--g2); }
+  .ds .ds-list-row input, .ds .ds-pack-amt input { padding-inline: 6px; }
   .ds .ds-dot-select .ui-select-toggle { padding: 0 6px !important; }
+}
+@media (max-width: 379px) {
+  .ds { --num-w: 64px; }
+  .ds .ds-list-head, .ds .ds-list-row { grid-template-columns: var(--num-w) minmax(0, 1fr) 76px 40px; }
+  .ds .ds-list-row input, .ds .ds-pack-amt input { padding-inline: var(--g1); }
 }
 
 /* ===================================================================== 11. Confirmations */
