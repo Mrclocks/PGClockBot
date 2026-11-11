@@ -47,6 +47,8 @@ class ColorTagFilterDropdownTests(unittest.TestCase):
         self.assertIn("color-tag-select", form)
         self.assertIn("قرمز", form)
         self.assertNotIn("color-tag-filters", html)
+        # Full-height search row control — not the compact select-sm tier.
+        self.assertNotIn("select-sm", form)
 
     def test_users_uses_dropdown_not_pills(self):
         html = _render_list_page("users.html", "/users", flt="all")
@@ -54,6 +56,7 @@ class ColorTagFilterDropdownTests(unittest.TestCase):
         self.assertIn("data-color-tag-nav", form)
         self.assertIn("قرمز", form)
         self.assertNotIn("color-tag-filters", html)
+        self.assertNotIn("select-sm", form)
 
     def test_tag_filter_hidden_without_tags(self):
         html = _render_list_page("users.html", "/users", flt="all", color_tags=[])
@@ -63,6 +66,24 @@ class ColorTagFilterDropdownTests(unittest.TestCase):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
         self.assertIn("data-color-tag-nav", js)
         self.assertIn("window.location.assign", js)
+
+    def test_tag_filter_matches_search_btn_height_and_capsule(self):
+        """Search-row tag control stays btn-h + capsule, even under .ds compact selects."""
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        ds = (ROOT / "app/web/static/panel-ds.css").read_text(encoding="utf-8")
+        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
+        wrap_block = css.split(".color-tag-select-wrap {", 1)[1].split("}", 1)[0]
+        self.assertIn("height: var(--btn-h)", wrap_block)
+        self.assertIn("border-radius: var(--control-radius)", wrap_block)
+        self.assertIn(".ds .color-tag-select-wrap .ui-select-toggle", ds)
+        self.assertIn(
+            "height: var(--btn-h) !important",
+            ds.split(".ds .color-tag-select-wrap .ui-select-toggle", 1)[1].split("}", 1)[0],
+        )
+        self.assertIn("forceFullHeight", js)
+        self.assertIn("color-tag-select", js.split("forceFullHeight", 1)[1][:200])
+        self.assertIn("search-bar.search-bar--with-tag", css)
+        self.assertIn("align-items: center", css.split("search-bar.search-bar--with-tag", 1)[1][:120])
 
 
 if __name__ == "__main__":

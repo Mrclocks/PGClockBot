@@ -593,6 +593,23 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .plan-naming-block { margin-top: var(--g2); padding-top: 0; border-top: 0; }
 /* The small select is the compact tier (36), like every other compact control. */
 .ds .ui-select-sm .ui-select-toggle { height: var(--cmp-h) !important; min-height: var(--cmp-h) !important; }
+/* Tag filter in the search row must match the adjacent search .btn (44 + capsule),
+   not the compact select tier — specificity beats the rule above. */
+.ds .color-tag-select-wrap,
+.ds .color-tag-select-wrap .ui-select,
+.ds .color-tag-select-wrap .ui-select-sm {
+  height: var(--btn-h) !important;
+  min-height: var(--btn-h) !important;
+  max-height: var(--btn-h);
+}
+.ds .color-tag-select-wrap .ui-select-toggle,
+.ds .color-tag-select-wrap .ui-select-sm .ui-select-toggle {
+  height: var(--btn-h) !important;
+  min-height: var(--btn-h) !important;
+  max-height: var(--btn-h);
+  padding-block: 0 !important;
+  border-radius: var(--control-radius) !important;
+}
 @media (max-width: 880px) {
   /* List header bar: one compact row (select-all, count, sort), with no empty actions cell adding a second row. */
   .ds .table-list-sm > thead > tr { grid-template-rows: var(--cmp-h); padding-block: var(--g2); }

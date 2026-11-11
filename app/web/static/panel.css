@@ -642,12 +642,14 @@ html[data-theme="light"] .channel-badge-dev {
   min-width: 0;
   max-width: 100%;
   flex: 0 0 auto;
-  height: var(--btn-h);
-  min-height: var(--btn-h);
+  /* Same hit size as the adjacent search .btn — beat .ds .ui-select-sm compact tier */
+  height: var(--btn-h) !important;
+  min-height: var(--btn-h) !important;
+  max-height: var(--btn-h);
   margin: 0;
   /* Must stay capsule even when .is-tagged paints bg on the wrap
      (inner toggle border becomes transparent — wrap shape is what you see). */
-  border-radius: var(--control-radius);
+  border-radius: var(--control-radius) !important;
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -656,21 +658,33 @@ html[data-theme="light"] .channel-badge-dev {
   width: auto;
   min-width: 7.5rem;
   max-width: min(12rem, 42vw);
-  margin-top: 0;
-  height: 100%;
-  min-height: 100%;
+  margin-top: 0 !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100%;
 }
 .color-tag-select-wrap .ui-select {
-  height: 100%;
+  height: 100% !important;
+  min-height: 100% !important;
 }
-.color-tag-select-wrap .ui-select-toggle {
+.color-tag-select-wrap .ui-select-toggle,
+.color-tag-select-wrap > select.color-tag-select {
   min-width: 7.5rem;
-  height: 100%;
-  min-height: 100%;
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100%;
   display: inline-flex;
   align-items: center;
-  padding-block: 0;
+  padding-block: 0 !important;
   box-sizing: border-box;
+  border-radius: var(--control-radius) !important;
+}
+.color-tag-select-wrap .ui-select-toggle:hover,
+.color-tag-select-wrap .ui-select-toggle:focus,
+.color-tag-select-wrap .ui-select-toggle:focus-visible,
+.color-tag-select-wrap .ui-select-toggle:active,
+.color-tag-select-wrap .ui-select.open .ui-select-toggle {
+  border-radius: var(--control-radius) !important;
 }
 /* Selected tag: paint the whole control with tag color (no separate dot). */
 .color-tag-select-wrap.is-tagged {
@@ -5759,6 +5773,15 @@ form.settings-form > .actions.sticky-actions,
     width: auto;
     flex: 0 0 auto;
     align-self: flex-end;
+  }
+  /* Tag filter row: share one centre line with the search button (not flex-end). */
+  .search-bar.search-bar--with-tag {
+    align-items: center;
+  }
+  .search-bar.search-bar--with-tag > .btn,
+  .search-bar.search-bar--with-tag > button,
+  .search-bar.search-bar--with-tag > .color-tag-select-wrap {
+    align-self: center;
   }
   .user-edit-inline-row {
     flex-direction: column;
