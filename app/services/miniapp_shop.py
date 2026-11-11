@@ -69,6 +69,12 @@ SHOP_ROUTES: frozenset[str] = frozenset({
     "/api/mini/club",
     "/api/mini/club/history",
     "/api/mini/club/rewards/{reward_id}/redeem",
+    # Owner-only (handlers re-check ``is_shop_miniapp_owner``; customers get 403).
+    "/api/mini/ops",
+    "/api/mini/review",
+    "/api/mini/review/{payment_id}/receipt",
+    "/api/mini/review/{payment_id}/approve",
+    "/api/mini/review/{payment_id}/reject",
 })
 # What a shop's Mini App shows so far; the page hides every other section.
 SHOP_SECTIONS = ("services", "guides", "activity", "shop", "topup", "support", "codes", "club")
@@ -78,6 +84,7 @@ DEFAULT_SHOP_NAME = "فروشگاه"
 SHOP_UNAVAILABLE = "مینی‌اپ این فروشگاه فعال نیست"
 ROUTE_UNAVAILABLE = "این بخش هنوز در مینی‌اپ این فروشگاه نیست"
 NOT_A_CUSTOMER = "شما مشتری این فروشگاه نیستید؛ ابتدا ربات فروشگاه را استارت کنید"
+SHOP_OWNER_ONLY = "این بخش فقط برای صاحب همین فروشگاه است"
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +158,16 @@ def is_shop_staff(scope: MiniScope, user: BotUser) -> bool:
     )
 
 
+def is_shop_miniapp_owner(scope: MiniScope, user: BotUser) -> bool:
+    """True only for the shop's own ``BotUser`` row — never ``bot_admin_ids`` assistants.
+
+    Privilege inside ``/miniapp/s/<key>/`` must key off this, not ``role`` or
+    ``is_shop_staff``: another reseller shopping as a customer still has
+    ``role=reseller``, and assistants are staff without being the owner.
+    """
+    return scope.is_shop and scope.shop_id is not None and int(user.id) == int(scope.shop_id)
+
+
 async def assert_shop_member(session: AsyncSession, scope: MiniScope, user: BotUser) -> None:
     """Only the shop's own customers and its owner or bot admins use its Mini App."""
     if not scope.is_shop or is_shop_staff(scope, user):
@@ -168,13 +185,17 @@ def assert_shop_route(scope: MiniScope, request: Request) -> None:
         raise HTTPException(404, ROUTE_UNAVAILABLE)
 
 
-def shop_nav() -> list[dict[str, str]]:
-    return [
+def shop_nav(*, include_ops: bool = False) -> list[dict[str, str]]:
+    """Customer tabs for a shop Mini App; ``include_ops`` adds the owner manage tab."""
+    nav = [
         {"id": "home", "label": "خانه", "icon": "home"},
         {"id": "services", "label": "سرویس‌ها", "icon": "svc"},
         {"id": "shop", "label": "خرید", "icon": "shop"},
-        {"id": "account", "label": "حساب", "icon": "account"},
     ]
+    if include_ops:
+        nav.append({"id": "ops", "label": "فروشگاه", "icon": "store"})
+    nav.append({"id": "account", "label": "حساب", "icon": "account"})
+    return nav
 
 
 async def shop_display_name(session: AsyncSession, scope: MiniScope) -> str:

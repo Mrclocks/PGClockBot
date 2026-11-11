@@ -576,7 +576,11 @@ _RESELLER_FEATURE_LEAVES: tuple[tuple[str, str, str], ...] = (
 
 
 def _reseller_submenu_entries(
-    profile=None, *, can_add_representative: bool = False, ui: dict | None = None
+    profile=None,
+    *,
+    can_add_representative: bool = False,
+    show_owner_creds: bool = False,
+    ui: dict | None = None,
 ) -> list[tuple[str, str]]:
     from app.services.authz import shop_feature_allowed
 
@@ -606,6 +610,9 @@ def _reseller_submenu_entries(
     for perm, action, label_key in _RESELLER_FEATURE_LEAVES:
         if shop_feature_allowed(key=perm, profile=profile):
             entries.append((action, _t(ui, label_key)))
+    # Login card: shop owner only (never bot_admin assistants).
+    if show_owner_creds:
+        entries.append((REPLY_ACTION_CREDS, _t(ui, "btn_reseller_creds") or "🔑 اطلاعات ورود"))
     # Preview lives on thin reply KB (reseller_hub_main_keyboard), not manage hub.
     return entries
 
