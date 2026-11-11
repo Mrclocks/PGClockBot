@@ -1585,7 +1585,6 @@ def create_api_app(lifespan=None) -> FastAPI:
     from app.api.miniapp_shop_manage import register_miniapp_shop_manage
     from app.api.miniapp_support import register_miniapp_support
     from app.api.miniapp_topup import register_miniapp_topup
-    from app.api.reseller_panel_open import register_reseller_panel_open
 
     register_miniapp_pages(app, render=render, get_db=get_db)
     register_miniapp_feeds(app, get_db=get_db)
@@ -1597,7 +1596,6 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_miniapp_reseller(app, get_db=get_db)
     register_miniapp_review(app, get_db=get_db)
     register_miniapp_shop_manage(app, get_db=get_db)
-    register_reseller_panel_open(app, get_db=get_db)
     from app.api.customer_features import register_customer_features
 
     register_customer_features(app, render=render, require_staff=require_staff, get_db=get_db)

@@ -1069,7 +1069,7 @@ def reseller_group_hub_keyboard(
 
 
 def reseller_access_confirm_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Ask before revealing usernames / minting a one-time panel link."""
+    """Ask before revealing usernames / the public panel login URL."""
     rows = [
         [
             InlineKeyboardButton(

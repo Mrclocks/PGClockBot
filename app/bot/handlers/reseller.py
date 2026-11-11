@@ -263,7 +263,7 @@ async def res_creds(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Confirm before revealing usernames / minting a one-time panel link."""
+    """Confirm before revealing usernames / panel login URL."""
     profile = await _owner_creds_profile(
         session,
         db_user,
@@ -295,7 +295,7 @@ async def res_creds_reveal(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Reveal usernames and mint a one-time panel login link after confirm."""
+    """Reveal usernames and the public panel login URL after confirm."""
     profile = await _owner_creds_profile(
         session,
         db_user,
