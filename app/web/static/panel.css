@@ -642,14 +642,12 @@ html[data-theme="light"] .channel-badge-dev {
   min-width: 0;
   max-width: 100%;
   flex: 0 0 auto;
-  /* Same hit size as the adjacent search .btn — beat .ds .ui-select-sm compact tier */
-  height: var(--btn-h) !important;
-  min-height: var(--btn-h) !important;
-  max-height: var(--btn-h);
+  height: var(--btn-h);
+  min-height: var(--btn-h);
   margin: 0;
   /* Must stay capsule even when .is-tagged paints bg on the wrap
      (inner toggle border becomes transparent — wrap shape is what you see). */
-  border-radius: var(--control-radius) !important;
+  border-radius: var(--control-radius);
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -658,33 +656,31 @@ html[data-theme="light"] .channel-badge-dev {
   width: auto;
   min-width: 7.5rem;
   max-width: min(12rem, 42vw);
-  margin-top: 0 !important;
-  height: 100% !important;
-  min-height: 100% !important;
-  max-height: 100%;
+  margin-top: 0;
+  height: 100%;
+  min-height: 100%;
 }
 .color-tag-select-wrap .ui-select {
-  height: 100% !important;
-  min-height: 100% !important;
+  height: 100%;
 }
 .color-tag-select-wrap .ui-select-toggle,
 .color-tag-select-wrap > select.color-tag-select {
   min-width: 7.5rem;
-  height: 100% !important;
-  min-height: 100% !important;
-  max-height: 100%;
+  height: 100%;
+  min-height: 100%;
   display: inline-flex;
   align-items: center;
-  padding-block: 0 !important;
+  padding-block: 0;
   box-sizing: border-box;
-  border-radius: var(--control-radius) !important;
+  border-radius: var(--control-radius);
 }
+/* Lock radius on interaction — some Android browsers square :active/:focus. */
 .color-tag-select-wrap .ui-select-toggle:hover,
 .color-tag-select-wrap .ui-select-toggle:focus,
 .color-tag-select-wrap .ui-select-toggle:focus-visible,
 .color-tag-select-wrap .ui-select-toggle:active,
 .color-tag-select-wrap .ui-select.open .ui-select-toggle {
-  border-radius: var(--control-radius) !important;
+  border-radius: var(--control-radius);
 }
 /* Selected tag: paint the whole control with tag color (no separate dot). */
 .color-tag-select-wrap.is-tagged {
