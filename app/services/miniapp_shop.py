@@ -75,6 +75,11 @@ SHOP_ROUTES: frozenset[str] = frozenset({
     "/api/mini/review/{payment_id}/receipt",
     "/api/mini/review/{payment_id}/approve",
     "/api/mini/review/{payment_id}/reject",
+    "/api/mini/shop/customers",
+    "/api/mini/shop/orders",
+    "/api/mini/shop/tickets",
+    "/api/mini/shop/tickets/{ticket_id}",
+    "/api/mini/shop/tickets/{ticket_id}/reply",
 })
 # What a shop's Mini App shows so far; the page hides every other section.
 SHOP_SECTIONS = ("services", "guides", "activity", "shop", "topup", "support", "codes", "club")

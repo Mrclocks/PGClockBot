@@ -37,7 +37,7 @@ from app.api.miniapp_buy_extras import (
 )
 from app.services.custom_service_name import name_order_at_checkout
 from app.services.db_safe import rollback_quiet
-from app.services.panel_nav import MINIAPP_OWNER_SHORTCUTS, MINIAPP_RESELLER_SHORTCUTS, miniapp_shortcuts
+from app.services.panel_nav import MINIAPP_OWNER_SHORTCUTS, miniapp_shortcuts
 from app.services.funnel_events import STEP_PAY_START, record_order_funnel
 from app.services.service_scope import customer_may_use_service
 from app.services.trial_notify import notify_trial_claimed_outside_bot
@@ -74,7 +74,9 @@ from app.services.miniapp_shop import (
     shop_display_name,
     shop_nav,
 )
+from app.services.miniapp_shop_ops import reseller_ops_payload
 from app.services.pasarguard import get_pg
+from app.services.resellers import get_reseller_panel_base_url
 from app.services.service_live_info import fetch_subscription_info, service_info_error, validate_service_info
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import get_wallet_balance
@@ -427,8 +429,6 @@ async def _shop_me_payload(session: AsyncSession, user: BotUser, scope: MiniScop
     persona = "reseller" if owner else "user"
     panel_base = ""
     if owner:
-        from app.services.resellers import get_reseller_panel_base_url
-
         panel_base = (await get_reseller_panel_base_url(session) or "").rstrip("/") or _mini_panel_base()
     return {
         "persona": persona,
@@ -514,43 +514,23 @@ async def _reseller_ops_payload(
 ) -> dict:
     """Shop stats for this reseller only — profile must belong to ``user``."""
     from app.api.home_pages import _reseller_shop_stats
-    from app.services.resellers import get_reseller_panel_base_url
+    from app.services.authz import shop_feature_allowed
 
     if profile is not None and int(profile.user_id) != int(user.id):
         # Fail closed — never serve another reseller's ops.
         profile = None
 
-    stats = {
-        "users": 0,
-        "orders": 0,
-        "pending": 0,
-        "services": 0,
-        "revenue": 0,
-        "plans": 0,
-        "tickets": 0,
-    }
-    if profile is not None:
+    stats = None
+    # Do not query shop-wide aggregates without the dashboard permission.
+    if profile is not None and shop_feature_allowed(key="dashboard", profile=profile):
         try:
             stats = await _reseller_shop_stats(session, int(profile.user_id))
         except Exception:
             await rollback_quiet(session)
+            log.warning("miniapp reseller stats failed user=%s", user.id, exc_info=True)
+            stats = None
     base = (await get_reseller_panel_base_url(session) or "").rstrip("/") or _mini_panel_base()
-    billing = None
-    if profile is not None and (profile.billing_mode or "") == "payg":
-        billing = {
-            "balance": int(profile.billing_balance or 0),
-            "suspended": bool(getattr(profile, "billing_suspended_at", None)),
-        }
-    return {
-        "stats": stats,
-        "shop": {
-            "bot_username": (profile.bot_username if profile else None) or "",
-            "active": bool(profile.is_active) if profile else False,
-            "billing": billing,
-        },
-        "panel_links": miniapp_shortcuts(MINIAPP_RESELLER_SHORTCUTS) if base else [],
-        "panel_base": base,
-    }
+    return reseller_ops_payload(profile, stats=stats, panel_base=base)
 
 
 async def _renewal_already_ordered(session: AsyncSession, user: BotUser, preview: object) -> bool:
