@@ -168,10 +168,16 @@ class ShopReadOnlyTests(ShopFixture):
         self.assertEqual(sender.await_args.kwargs["shop_id"], SHOP)
 
     async def test_topup_support_club_and_service_changes_stay_closed(self) -> None:
-        for path in ("/api/mini/service/101/automation", "/api/mini/service/101/cancellation", "/api/mini/ops"):
+        for path in ("/api/mini/service/101/automation", "/api/mini/service/101/cancellation"):
             with self.subTest(path=path):
                 response = await self.shop_get(path)
                 self.assertEqual((response.status_code, response.json()["detail"]), (404, ROUTE_UNAVAILABLE))
+
+    async def test_ops_is_open_but_customers_are_refused(self) -> None:
+        from app.services.miniapp_shop import SHOP_OWNER_ONLY
+
+        response = await self.shop_get("/api/mini/ops")
+        self.assertEqual((response.status_code, response.json()["detail"]), (403, SHOP_OWNER_ONLY))
 
     async def test_platform_view_is_unchanged(self) -> None:
         headers = {"X-Telegram-Init-Data": signed(MAIN_TOKEN, CUSTOMER)}

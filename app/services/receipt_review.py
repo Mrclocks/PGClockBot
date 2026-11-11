@@ -53,8 +53,25 @@ class Reviewer:
     shop_id: int | None
 
 
-async def mini_reviewer(session: AsyncSession, user: BotUser) -> Reviewer:
-    """The caller's review scope: the platform for an admin, their own shop for a shop owner."""
+async def mini_reviewer(
+    session: AsyncSession,
+    user: BotUser,
+    *,
+    shop_scope_id: int | None = None,
+) -> Reviewer:
+    """The caller's review scope.
+
+    Platform Mini App: admin → platform payments; reseller with ``payments`` → own shop.
+    Shop Mini App (``shop_scope_id`` set): only that shop's owner with ``payments`` —
+    never platform-admin scope and never another shop's queue.
+    """
+    if shop_scope_id is not None:
+        if int(user.id) != int(shop_scope_id):
+            raise ReviewDenied("بررسی رسیدها برای حساب شما فعال نیست")
+        profile = await get_reseller_profile(session, int(user.id))
+        if profile is not None and has_bot_perm(profile, "payments"):
+            return Reviewer(user=user, shop_id=int(shop_scope_id))
+        raise ReviewDenied("بررسی رسیدها برای حساب شما فعال نیست")
     persona = resolve_mini_persona(user)
     if persona == "admin" and (user.role or "") == Role.ADMIN.value:
         return Reviewer(user=user, shop_id=None)
@@ -65,9 +82,14 @@ async def mini_reviewer(session: AsyncSession, user: BotUser) -> Reviewer:
     raise ReviewDenied("بررسی رسیدها برای حساب شما فعال نیست")
 
 
-async def may_review_receipts(session: AsyncSession, user: BotUser) -> bool:
+async def may_review_receipts(
+    session: AsyncSession,
+    user: BotUser,
+    *,
+    shop_scope_id: int | None = None,
+) -> bool:
     try:
-        await mini_reviewer(session, user)
+        await mini_reviewer(session, user, shop_scope_id=shop_scope_id)
     except ReviewDenied:
         return False
     return True

@@ -35,7 +35,16 @@ RESELLER_GROUPS: tuple[ResellerGroup, ...] = (
     ResellerGroup(
         "account",
         "btn_res_grp_account",
-        ("res_billing", "res_addon_packs", "res_renew", "res_buy_gb", "res_buy_users", "res_reports", "res_stats"),
+        (
+            "reseller_creds",
+            "res_billing",
+            "res_addon_packs",
+            "res_renew",
+            "res_buy_gb",
+            "res_buy_users",
+            "res_reports",
+            "res_stats",
+        ),
     ),
 )
 _BY_ID = {group.id: group for group in RESELLER_GROUPS}

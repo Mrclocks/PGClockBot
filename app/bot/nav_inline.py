@@ -913,6 +913,7 @@ def reseller_manage_hub_keyboard(
     ui: dict | None = None,
     *,
     can_add_representative: bool = False,
+    show_owner_creds: bool = False,
     pending_payments: int = 0,
     pending_tickets: int = 0,
     pending_cancellations: int = 0,
@@ -923,7 +924,10 @@ def reseller_manage_hub_keyboard(
     from app.services.admin_counters import with_badge
 
     entries = _reseller_submenu_entries(
-        profile, can_add_representative=can_add_representative, ui=ui
+        profile,
+        can_add_representative=can_add_representative,
+        show_owner_creds=show_owner_creds,
+        ui=ui,
     )
     group_badge = {"daily": pending_payments + pending_tickets + pending_deliveries}
     buttons = [
@@ -964,6 +968,7 @@ def reseller_group_hub_keyboard(
     ui: dict | None = None,
     *,
     can_add_representative: bool = False,
+    show_owner_creds: bool = False,
     pending_payments: int = 0,
     pending_tickets: int = 0,
     pending_deliveries: int = 0,
@@ -973,7 +978,10 @@ def reseller_group_hub_keyboard(
 
     group = reseller_group(group_id)
     entries = _reseller_submenu_entries(
-        profile, can_add_representative=can_add_representative, ui=ui
+        profile,
+        can_add_representative=can_add_representative,
+        show_owner_creds=show_owner_creds,
+        ui=ui,
     )
     shown = group_entries(group, entries) if group else []
     badge_for = {"res_payments": pending_payments, "res_tickets": pending_tickets, "res_orders": pending_deliveries}

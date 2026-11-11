@@ -47,6 +47,7 @@ from app.services.miniapp_auth import (
     assert_mini_force_join,
     assert_miniapp_feature_enabled,
     load_mini_user,
+    load_reseller_profile,
     resolve_mini_persona,
 )
 from app.services.miniapp_branding import platform_brand, shop_brand
@@ -58,6 +59,7 @@ from app.services.miniapp_shop import (
     SHOP_SECTIONS,
     SHOP_UNAVAILABLE,
     MiniScope,
+    is_shop_miniapp_owner,
     mini_scope,
     resolve_shop_scope,
     shop_display_name,
@@ -389,19 +391,39 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
 
 
 async def _shop_me_payload(session: AsyncSession, user: BotUser, scope: MiniScope) -> dict:
-    """``/me`` in a shop's Mini App: everyone is that shop's customer, with its open sections only."""
+    """``/me`` in a shop's Mini App.
+
+    Customers (and assistants / foreign resellers shopping here) stay on the customer
+    shell. Only the shop owner (``user.id == scope.shop_id``) gets the reseller shell
+    with the ops tab — never by sticky ``role`` alone.
+    """
     customer = await _customer_summary(session, user, scope=scope)
     name = await shop_display_name(session, scope)
     brand = await shop_brand(session, shop_id=int(scope.shop_id), name=name)
+    owner = False
+    if is_shop_miniapp_owner(scope, user):
+        profile = await load_reseller_profile(session, user)
+        owner = profile is not None and bool(profile.is_active)
+    persona = "reseller" if owner else "user"
+    panel_base = ""
+    if owner:
+        from app.services.resellers import get_reseller_panel_base_url
+
+        panel_base = (await get_reseller_panel_base_url(session) or "").rstrip("/") or _mini_panel_base()
     return {
-        "persona": "user",
-        "nav": shop_nav(),
+        "persona": persona,
+        "nav": shop_nav(include_ops=owner),
         "sections": list(SHOP_SECTIONS),
         "shop": {"name": name},
         "brand": brand.payload(),
-        "user": {"id": user.id, "name": user.full_name or "", "role": "user", "wallet": customer["wallet"]},
+        "user": {
+            "id": user.id,
+            "name": user.full_name or "",
+            "role": persona,
+            "wallet": customer["wallet"],
+        },
         "currency": get_settings().currency or "تومان",
-        "panel_base": "",
+        "panel_base": panel_base,
         "commerce_allowed": True,
         "customer": customer,
     }
