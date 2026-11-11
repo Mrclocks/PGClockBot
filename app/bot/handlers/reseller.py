@@ -233,26 +233,34 @@ async def res_creds(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Credentials / deep-link card — available on the main bot for shop owners."""
+    """Credentials / deep-link card — shop owner on their shop bot or the platform bot."""
+    from app.services.reseller_access import is_shop_profile_owner
     from app.services.resellers import format_reseller_access_card, get_reseller_profile
 
     if is_reseller_bot:
-        # On shop bot, send them to the real panel
         owner_id, profile = await _actor(
             session,
             db_user,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
-        if owner_id and profile:
-            await callback.answer()
-            if callback.message:
-                await safe_edit_text(
-                    callback.message,
-                    format_message("🤝 پنل نماینده", "دسترسی‌ها با وب‌پنل یکسان است."),
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "nv:res:home")]]),
-                )
+        # Assistants keep the manage hub; only the shop owner sees login secrets.
+        if not owner_id or not profile or not is_shop_profile_owner(db_user, owner_id):
+            await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
             return
+        await callback.answer()
+        from app.bot.nav_inline import reseller_access_card_keyboard
+
+        text = await format_reseller_access_card(session, profile)
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                text,
+                reply_markup=reseller_access_card_keyboard(
+                    profile, await get_all_settings(session)
+                ),
+            )
+        return
     if db_user.role != Role.RESELLER.value:
         await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return

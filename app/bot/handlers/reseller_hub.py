@@ -18,7 +18,7 @@ from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
 from app.services.admin_counters import PendingCounts, pending_counts
 from app.services.formatting import format_message
-from app.services.reseller_access import load_reseller_actor
+from app.services.reseller_access import is_shop_profile_owner, load_reseller_actor
 from app.services.representative_unification import shop_bot_can_manage_representatives
 from app.services.screen_titles import screen_caption, screen_title_html
 from app.services.users import get_all_settings
@@ -34,6 +34,7 @@ class ResellerHub:
     profile: Any
     ui: dict[str, str]
     can_add_representative: bool
+    show_owner_creds: bool
     queue: PendingCounts
 
 
@@ -64,7 +65,13 @@ async def load_reseller_hub(
     except Exception:
         logger.warning("reseller hub pending_counts failed shop_id=%s", owner_id, exc_info=True)
         queue = PendingCounts()
-    return ResellerHub(profile=profile, ui=ui, can_add_representative=can_add, queue=queue)
+    return ResellerHub(
+        profile=profile,
+        ui=ui,
+        can_add_representative=can_add,
+        show_owner_creds=is_shop_profile_owner(db_user, owner_id),
+        queue=queue,
+    )
 
 
 async def open_reseller_group(
@@ -94,6 +101,7 @@ async def open_reseller_group(
             hub.profile,
             hub.ui,
             can_add_representative=hub.can_add_representative,
+            show_owner_creds=hub.show_owner_creds,
             pending_payments=hub.queue.payments,
             pending_tickets=hub.queue.tickets,
             pending_deliveries=hub.queue.deliveries,

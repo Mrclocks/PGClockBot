@@ -840,6 +840,7 @@ async def open_reseller_home(
             hub.profile,
             ui,
             can_add_representative=hub.can_add_representative,
+            show_owner_creds=hub.show_owner_creds,
             pending_payments=queue.payments,
             pending_tickets=queue.tickets,
             pending_cancellations=queue.cancellations,
@@ -2309,6 +2310,23 @@ async def _soft_reseller(
         if not owner_id or not profile:
             await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
             return
+
+    if action == kb.REPLY_ACTION_CREDS:
+        from app.services.reseller_access import is_shop_profile_owner
+
+        # Login card is the shop owner's only — never bot_admin assistants.
+        if is_reseller_bot and not is_shop_profile_owner(db_user, owner_id):
+            await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
+            return
+        await open_reseller_creds(
+            message,
+            session,
+            db_user,
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
 
     if action == kb.REPLY_ACTION_RES_ADD_REP:
         from app.bot.handlers.reseller_reps import start_add_representative
