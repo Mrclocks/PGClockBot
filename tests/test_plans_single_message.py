@@ -126,19 +126,21 @@ class ResellerAccessCardTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("app.bot.menu_nav.build_main_reply_keyboard",
                   new=AsyncMock(return_value=(MagicMock(), {}, "user"))),
-            patch("app.services.resellers.get_reseller_profile",
-                  new=AsyncMock(return_value=profile)),
-            patch("app.services.resellers.format_reseller_access_card",
-                  new=AsyncMock(return_value="card")),
+            patch.object(reply_nav, "get_reseller_profile", new=AsyncMock(return_value=profile)),
+            patch.object(
+                reply_nav, "format_reseller_access_prompt", new=AsyncMock(return_value="prompt"),
+            ),
             patch.object(reply_nav, "get_all_settings", new=AsyncMock(return_value={})),
-            patch("app.bot.nav_inline.present_nav_panel", new=present),
+            patch.object(reply_nav, "present_nav_panel", new=present),
         ):
             await reply_nav.open_reseller_creds(message, MagicMock(), user)
         present.assert_awaited_once()
         message.answer.assert_not_awaited()
         markup = present.await_args.kwargs["inline"]
-        urls = [b.url for row in markup.inline_keyboard for b in row if b.url]
-        self.assertEqual(urls, ["https://t.me/shop_bot"])
+        # Confirm step first — bot URL appears only after reveal on the card keyboard.
+        cbs = [b.callback_data for row in markup.inline_keyboard for b in row if b.callback_data]
+        self.assertEqual(cbs, ["res:creds:reveal", "nv:res:home"])
+        self.assertEqual(present.await_args.kwargs["text"], "prompt")
 
     async def test_non_reseller_gets_refusal_only(self) -> None:
         from app.bot.handlers import reply_nav

@@ -140,14 +140,20 @@ class AccessCardTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("app.bot.menu_nav.build_main_reply_keyboard",
                   new=AsyncMock(return_value=(MagicMock(), {}, "user"))),
-            patch("app.services.resellers.get_reseller_profile", new=AsyncMock(return_value=profile)),
-            patch("app.services.resellers.format_reseller_access_card", new=AsyncMock(return_value="card")),
+            patch.object(reply_nav, "get_reseller_profile", new=AsyncMock(return_value=profile)),
+            patch.object(
+                reply_nav, "format_reseller_access_prompt", new=AsyncMock(return_value="prompt"),
+            ),
             patch.object(reply_nav, "get_all_settings", new=AsyncMock(return_value={})),
-            patch("app.bot.nav_inline.present_nav_panel", new=present),
+            patch.object(reply_nav, "present_nav_panel", new=present),
         ):
             await reply_nav.open_reseller_creds(MagicMock(), MagicMock(), user)
         present.assert_awaited_once()
-        self.assertIn("nv:res:home", _callbacks(present.await_args.kwargs["inline"]))
+        self.assertEqual(present.await_args.kwargs["text"], "prompt")
+        self.assertEqual(
+            _callbacks(present.await_args.kwargs["inline"]),
+            ["res:creds:reveal", "nv:res:home"],
+        )
 
 
 if __name__ == "__main__":
