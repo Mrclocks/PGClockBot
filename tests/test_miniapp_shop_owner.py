@@ -78,6 +78,15 @@ class ShopOwnerMiniAppTests(unittest.IsolatedAsyncioTestCase):
                     receipt_file_id="SHOP_FILE",
                 ),
                 Payment(
+                    id=12,
+                    user_id=10,
+                    amount=40_000,
+                    status="pending",
+                    receipt_file_id="SHOP_TOPUP",
+                    is_wallet_topup=True,
+                    wallet_shop_id=SHOP,
+                ),
+                Payment(
                     id=13,
                     user_id=10,
                     order_id=21,
@@ -119,6 +128,10 @@ class ShopOwnerMiniAppTests(unittest.IsolatedAsyncioTestCase):
             patch("app.api.home_pages._reseller_shop_stats", AsyncMock(return_value={"users": 3, "pending": 1})),
             patch(
                 "app.services.resellers.get_reseller_panel_base_url",
+                AsyncMock(return_value="https://panel.example.com"),
+            ),
+            patch(
+                "app.api.miniapp_pages.get_reseller_panel_base_url",
                 AsyncMock(return_value="https://panel.example.com"),
             ),
         ]
@@ -184,7 +197,7 @@ class ShopOwnerMiniAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_owner_review_queue_is_this_shop_only(self) -> None:
         items = (await self.get("/api/mini/review", tg_id=OWNER_TG)).json()["items"]
-        self.assertEqual([row["id"] for row in items], [11])
+        self.assertEqual(sorted(row["id"] for row in items), [11, 12])
         self.assertNotIn("PLATFORM_FILE", (await self.get("/api/mini/review", tg_id=OWNER_TG)).text)
         self.assertNotIn("OTHER_FILE", (await self.get("/api/mini/review", tg_id=OWNER_TG)).text)
 
@@ -207,6 +220,87 @@ class ShopOwnerMiniAppTests(unittest.IsolatedAsyncioTestCase):
         me = (await self.get("/api/mini/me", tg_id=OWNER_TG, token=MAIN_TOKEN, key=None)).json()
         self.assertEqual(me["persona"], "reseller")
         self.assertIn("ops", [n["id"] for n in me["nav"]])
+
+    async def test_ops_without_dashboard_hides_stats(self) -> None:
+        # with_shop_settings always re-adds dashboard to non-empty ACLs, and an empty
+        # ACL turns the shop Mini App off — so gate the filter at the payload helper.
+        from app.services.miniapp_shop_ops import reseller_ops_payload
+
+        profile = SimpleNamespace(
+            user_id=SHOP,
+            is_active=True,
+            bot_username="shop5bot",
+            billing_mode="payg",
+            billing_balance=12_000,
+            billing_suspended_at=None,
+            web_permissions='["miniapp","payments"]',
+        )
+        with patch(
+            "app.services.miniapp_shop_ops.shop_feature_allowed",
+            side_effect=lambda *, key, profile=None: key in {"miniapp", "payments"},
+        ), patch(
+            "app.services.miniapp_shop_ops.resolve_shop_permissions_from_profile",
+            return_value=["miniapp", "payments"],
+        ), patch(
+            "app.services.miniapp_shop_ops.permitted_ops_panel_links",
+            return_value=[{"id": "finance", "label": "مالی", "path": "/finance"}],
+        ):
+            body = reseller_ops_payload(
+                profile,
+                stats={"users": 9, "pending": 2, "revenue": 100},
+                panel_base="https://panel.example.com",
+            )
+        self.assertEqual(body["stats"]["users"], 0)
+        self.assertEqual(body["stats"]["pending"], 0)
+        self.assertIsNone(body["shop"]["billing"])
+        self.assertEqual(body["permissions"], ["miniapp", "payments"])
+        self.assertEqual([row["id"] for row in body["panel_links"]], ["finance"])
+
+    async def test_ops_without_payments_omits_finance_and_review(self) -> None:
+        async with self.Session() as session:
+            profile = await session.get(ResellerProfile, 1)
+            profile.web_permissions = '["dashboard","orders","tickets","miniapp","shop_settings"]'
+            await session.commit()
+        body = (await self.get("/api/mini/ops", tg_id=OWNER_TG)).json()
+        self.assertIn("dashboard", body["permissions"])
+        self.assertNotIn("payments", body["permissions"])
+        self.assertFalse(body["can_review"])
+        self.assertEqual(body["stats"]["users"], 3)
+        link_ids = {row["id"] for row in body["panel_links"]}
+        self.assertNotIn("finance", link_ids)
+        self.assertIn("home", link_ids)
+        self.assertIn("tickets", link_ids)
+        self.assertIn("shop", link_ids)
+        review = await self.get("/api/mini/review", tg_id=OWNER_TG)
+        self.assertEqual(review.status_code, 403)
+
+    async def test_foreign_and_platform_receipts_are_404_unchanged(self) -> None:
+        for path, payment_id in (
+            ("/api/mini/review/13/approve", 13),
+            ("/api/mini/review/13/reject", 13),
+            ("/api/mini/review/13/receipt", 13),
+            ("/api/mini/review/10/approve", 10),
+            ("/api/mini/review/10/reject", 10),
+            ("/api/mini/review/10/receipt", 10),
+        ):
+            with self.subTest(path=path):
+                if path.endswith("/receipt"):
+                    response = await self.get(path, tg_id=OWNER_TG)
+                else:
+                    response = await self.post(path, tg_id=OWNER_TG)
+                self.assertEqual(response.status_code, 404)
+                async with self.Session() as session:
+                    payment = await session.get(Payment, payment_id)
+                    self.assertEqual(payment.status, "pending")
+
+    async def test_approve_twice_credits_once(self) -> None:
+        first = await self.post("/api/mini/review/12/approve", tg_id=OWNER_TG)
+        self.assertEqual(first.status_code, 200, first.text)
+        second = await self.post("/api/mini/review/12/approve", tg_id=OWNER_TG)
+        self.assertIn(second.status_code, (200, 400))
+        async with self.Session() as session:
+            payment = await session.get(Payment, 12)
+            self.assertNotEqual(payment.status, "pending")
 
 
 class OwnerCredsMenuTests(unittest.TestCase):

@@ -284,6 +284,7 @@ tests/test_miniapp_shop_scope.py
 tests/test_miniapp_shop_admin_persona.py
 tests/test_miniapp_shop_readonly.py
 tests/test_miniapp_shop_owner.py
+tests/test_miniapp_shop_manage.py
 tests/test_miniapp_shop_purchase.py
 tests/test_miniapp_shop_topup.py
 tests/test_legacy_discount_shop_scope.py
