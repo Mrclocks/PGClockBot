@@ -675,6 +675,16 @@
     });
   }
 
+  function newClientKey() {
+    const c = root.crypto;
+    if (c && c.getRandomValues) {
+      const bytes = new Uint8Array(16);
+      c.getRandomValues(bytes);
+      return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    }
+    return String(Date.now()) + String(Math.random()).slice(2, 14);
+  }
+
   async function submitShopTicketReply(form) {
     const id = intAttr(form, "data-id");
     const body = textField(form, "body");
@@ -682,9 +692,15 @@
       core.toast("متن پیام را بنویسید", "err");
       return;
     }
+    // One key for this tap; a lost answer retries with the same key so the server stores once.
+    const clientKey = form.getAttribute("data-client-key") || newClientKey();
+    form.setAttribute("data-client-key", clientKey);
     await guarded("shop-ticket-reply:" + id, form.querySelector("button[type=submit]"), async () => {
       try {
-        await core.api(`/api/mini/shop/tickets/${id}/reply`, { method: "POST", body: { body } });
+        await core.api(`/api/mini/shop/tickets/${id}/reply`, {
+          method: "POST", body: { body, client_key: clientKey },
+        });
+        form.removeAttribute("data-client-key");
         invalidate("shopTickets");
         await loadShopTicket(id);
       } catch (err) {

@@ -8,6 +8,7 @@ tickets use ``tickets``.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlalchemy import and_, or_, select
@@ -16,15 +17,23 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import BotUser, Order, ResellerProfile, Ticket, TicketStatus
 from app.services.authz import shop_feature_allowed
+from app.services.idempotency_claim import claim_once, claim_setting_key
+from app.services.notifications import notify_ticket_message
+from app.services.reseller_bots import open_notify_bot_for_reseller
 from app.services.tickets import reply_ticket
 from app.services.ticket_scope import ticket_shop_clause
 from app.services.users_ops import scoped_users_where
+
+logger = logging.getLogger(__name__)
 
 PAGE_SIZE = 20
 PAGE_SIZE_MAX = 20
 SEARCH_MAX = 64
 ID_MAX = 2**31 - 1
 BODY_MAX = 2000
+CLIENT_KEY_MIN = 16
+CLIENT_KEY_MAX = 64
+REPLY_CLAIM_NS = "shop_ticket_reply"
 
 # FEATURE_PERMS keys for each manage surface (no new keys).
 PERM_CUSTOMERS = "dashboard"
@@ -240,6 +249,8 @@ async def reply_shop_ticket(
     ticket_id: int,
     staff_telegram_id: int,
     body: str,
+    client_key: str,
+    staff_name: str | None = None,
 ) -> dict[str, Any]:
     assert_shop_manage_perm(profile, PERM_TICKETS)
     tid = _valid_id(ticket_id)
@@ -248,6 +259,9 @@ async def reply_shop_ticket(
         raise ValueError("متن پیام را بنویسید")
     if len(text) > BODY_MAX:
         raise ValueError("متن پیام خیلی بلند است")
+    key = (client_key or "").strip()
+    if not (CLIENT_KEY_MIN <= len(key) <= CLIENT_KEY_MAX):
+        raise ValueError("کلید تکرار نامعتبر است")
     ticket = await session.scalar(
         select(Ticket).where(Ticket.id == tid, ticket_shop_clause(int(shop_id))).limit(1)
     )
@@ -256,6 +270,10 @@ async def reply_shop_ticket(
     # Re-check shop stamp at mutation time.
     if int(ticket.reseller_id or 0) != int(shop_id):
         raise ManageNotFound("تیکت پیدا نشد")
+    claim_key = claim_setting_key(REPLY_CLAIM_NS, int(shop_id), tid, key)
+    if not await claim_once(session, claim_key):
+        # Same client_key already produced a reply — safe to report success again.
+        return {"ticket_id": int(ticket.id), "message": "پاسخ ثبت شد", "duplicate": True}
     await reply_ticket(
         session,
         ticket,
@@ -263,4 +281,52 @@ async def reply_shop_ticket(
         int(staff_telegram_id),
         is_staff=True,
     )
-    return {"ticket_id": int(ticket.id), "message": "پاسخ ثبت شد"}
+    await _notify_customer_of_staff_reply(
+        session,
+        shop_id=int(shop_id),
+        ticket=ticket,
+        body=text,
+        staff_name=staff_name,
+    )
+    return {"ticket_id": int(ticket.id), "message": "پاسخ ثبت شد", "duplicate": False}
+
+
+async def _notify_customer_of_staff_reply(
+    session: AsyncSession,
+    *,
+    shop_id: int,
+    ticket: Ticket,
+    body: str,
+    staff_name: str | None,
+) -> None:
+    """Best-effort Telegram notice; never undoes the saved reply."""
+    bot = None
+    should_close = False
+    try:
+        bot, should_close = await open_notify_bot_for_reseller(session, int(shop_id))
+        if bot is None:
+            return
+        await notify_ticket_message(
+            bot,
+            session,
+            ticket_id=int(ticket.id),
+            subject=ticket.subject,
+            body=body,
+            from_staff=True,
+            ticket_user_id=int(ticket.user_id),
+            actor_name=staff_name,
+            ticket_reseller_id=int(shop_id),
+        )
+    except Exception:
+        logger.warning(
+            "shop miniapp ticket reply notify failed ticket_id=%s shop_id=%s",
+            ticket.id,
+            shop_id,
+            exc_info=True,
+        )
+    finally:
+        if should_close and bot is not None:
+            try:
+                await bot.session.close()
+            except Exception:
+                logger.debug("shop ticket notify bot close failed", exc_info=True)

@@ -14,10 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.miniapp_pages import _no_store
 from app.services.db_safe import rollback_quiet
-from app.services.miniapp_auth import load_mini_user, load_reseller_profile
-from app.services.miniapp_shop import SHOP_OWNER_ONLY, is_shop_miniapp_owner, mini_scope
+from app.services.miniapp_auth import require_shop_miniapp_owner
 from app.services.miniapp_shop_manage import (
     BODY_MAX,
+    CLIENT_KEY_MAX,
+    CLIENT_KEY_MIN,
     ID_MAX,
     PAGE_SIZE,
     PAGE_SIZE_MAX,
@@ -38,6 +39,8 @@ logger = logging.getLogger(__name__)
 class TicketReplyBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     body: StrictStr = Field(min_length=1, max_length=BODY_MAX)
+    # Opaque client key so a lost POST + retry does not create a second message.
+    client_key: StrictStr = Field(min_length=CLIENT_KEY_MIN, max_length=CLIENT_KEY_MAX)
 
     @field_validator("body")
     @classmethod
@@ -45,6 +48,16 @@ class TicketReplyBody(BaseModel):
         text = value.strip()
         if not text:
             raise ValueError("متن پیام را بنویسید")
+        return text
+
+    @field_validator("client_key")
+    @classmethod
+    def strip_client_key(cls, value: str) -> str:
+        text = value.strip()
+        if not (CLIENT_KEY_MIN <= len(text) <= CLIENT_KEY_MAX):
+            raise ValueError("کلید تکرار نامعتبر است")
+        if not text.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("کلید تکرار نامعتبر است")
         return text
 
 
@@ -58,17 +71,6 @@ def _http_error(exc: Exception) -> HTTPException:
     return HTTPException(400, "انجام نشد")
 
 
-async def _shop_owner(session: AsyncSession, request: Request):
-    user = await load_mini_user(session, request)
-    scope = mini_scope(request)
-    if not scope.is_shop or not is_shop_miniapp_owner(scope, user):
-        raise HTTPException(403, SHOP_OWNER_ONLY)
-    profile = await load_reseller_profile(session, user)
-    if profile is None or not profile.is_active or int(profile.user_id) != int(scope.shop_id):
-        raise HTTPException(403, SHOP_OWNER_ONLY)
-    return user, profile, scope
-
-
 def register_miniapp_shop_manage(app: FastAPI, *, get_db) -> None:
     @app.get("/api/mini/shop/customers")
     async def mini_shop_customers(
@@ -78,8 +80,7 @@ def register_miniapp_shop_manage(app: FastAPI, *, get_db) -> None:
         q: str | None = Query(None, max_length=SEARCH_MAX),
         session: AsyncSession = Depends(get_db),
     ):
-        user, profile, scope = await _shop_owner(session, request)
-        _ = user
+        _user, profile, scope = await require_shop_miniapp_owner(session, request)
         try:
             payload = await list_shop_customers(
                 session,
@@ -100,8 +101,7 @@ def register_miniapp_shop_manage(app: FastAPI, *, get_db) -> None:
         limit: int = Query(PAGE_SIZE, ge=1, le=PAGE_SIZE_MAX),
         session: AsyncSession = Depends(get_db),
     ):
-        user, profile, scope = await _shop_owner(session, request)
-        _ = user
+        _user, profile, scope = await require_shop_miniapp_owner(session, request)
         try:
             payload = await list_shop_orders(
                 session,
@@ -121,8 +121,7 @@ def register_miniapp_shop_manage(app: FastAPI, *, get_db) -> None:
         limit: int = Query(PAGE_SIZE, ge=1, le=PAGE_SIZE_MAX),
         session: AsyncSession = Depends(get_db),
     ):
-        user, profile, scope = await _shop_owner(session, request)
-        _ = user
+        _user, profile, scope = await require_shop_miniapp_owner(session, request)
         try:
             payload = await list_shop_tickets(
                 session,
@@ -141,8 +140,7 @@ def register_miniapp_shop_manage(app: FastAPI, *, get_db) -> None:
         request: Request,
         session: AsyncSession = Depends(get_db),
     ):
-        user, profile, scope = await _shop_owner(session, request)
-        _ = user
+        _user, profile, scope = await require_shop_miniapp_owner(session, request)
         try:
             payload = await shop_ticket_thread(
                 session,
@@ -161,7 +159,7 @@ def register_miniapp_shop_manage(app: FastAPI, *, get_db) -> None:
         request: Request,
         session: AsyncSession = Depends(get_db),
     ):
-        user, profile, scope = await _shop_owner(session, request)
+        user, profile, scope = await require_shop_miniapp_owner(session, request)
         try:
             payload = await reply_shop_ticket(
                 session,
@@ -169,7 +167,9 @@ def register_miniapp_shop_manage(app: FastAPI, *, get_db) -> None:
                 profile=profile,
                 ticket_id=ticket_id,
                 staff_telegram_id=int(user.telegram_id or 0),
+                staff_name=user.full_name or user.username,
                 body=body.body,
+                client_key=body.client_key,
             )
         except (ManageDenied, ManageNotFound, ValueError) as exc:
             await rollback_quiet(session)

@@ -110,10 +110,14 @@ class ShopManageMiniAppTests(unittest.IsolatedAsyncioTestCase):
             currency="تومان",
             miniapp_url="https://panel.example.com/miniapp/",
         )
+        self.notify = AsyncMock()
+        self.open_bot = AsyncMock(return_value=(SimpleNamespace(session=SimpleNamespace(close=AsyncMock())), True))
         self.patches = [
             patch("app.services.miniapp_auth.get_settings", return_value=settings),
             patch("app.api.miniapp_pages.get_settings", return_value=settings),
             patch("app.services.miniapp_shop.get_settings", return_value=settings),
+            patch("app.services.miniapp_shop_manage.notify_ticket_message", self.notify),
+            patch("app.services.miniapp_shop_manage.open_notify_bot_for_reseller", self.open_bot),
         ]
         for p in self.patches:
             p.start()
@@ -220,22 +224,42 @@ class ShopManageMiniAppTests(unittest.IsolatedAsyncioTestCase):
                 response = await self.get(f"/api/mini/shop/tickets/{tid}", tg_id=OWNER_TG)
                 self.assertEqual(response.status_code, 404)
 
-    async def test_reply_is_shop_scoped_and_escapes_storage(self) -> None:
+    async def test_reply_is_shop_scoped_notifies_and_is_idempotent(self) -> None:
+        from sqlalchemy import func, select
+
+        from app.db.models import TicketMessage
+
+        key = "a" * 32
         ok = await self.post(
             "/api/mini/shop/tickets/30/reply",
             tg_id=OWNER_TG,
-            json={"body": "پاسخ <b>امن</b>"},
+            json={"body": "پاسخ <b>امن</b>", "client_key": key},
         )
         self.assertEqual(ok.status_code, 200, ok.text)
+        self.assertFalse(ok.json().get("duplicate"))
+        self.notify.assert_awaited_once()
+        again = await self.post(
+            "/api/mini/shop/tickets/30/reply",
+            tg_id=OWNER_TG,
+            json={"body": "پاسخ <b>امن</b>", "client_key": key},
+        )
+        self.assertEqual(again.status_code, 200, again.text)
+        self.assertTrue(again.json().get("duplicate"))
+        self.assertEqual(self.notify.await_count, 1)
+        async with self.Session() as session:
+            count = await session.scalar(
+                select(func.count()).select_from(TicketMessage).where(TicketMessage.ticket_id == 30)
+            )
+            # Seed message + one staff reply.
+            self.assertEqual(int(count), 2)
+            other = await session.get(Ticket, 31)
+            self.assertEqual(other.status, TicketStatus.OPEN.value)
         denied = await self.post(
             "/api/mini/shop/tickets/31/reply",
             tg_id=OWNER_TG,
-            json={"body": "nope"},
+            json={"body": "nope", "client_key": "b" * 32},
         )
         self.assertEqual(denied.status_code, 404)
-        async with self.Session() as session:
-            other = await session.get(Ticket, 31)
-            self.assertEqual(other.status, TicketStatus.OPEN.value)
 
     async def test_invalid_limit_and_ids_rejected(self) -> None:
         bad_limit = await self.get("/api/mini/shop/customers", tg_id=OWNER_TG, limit=0)
@@ -245,9 +269,15 @@ class ShopManageMiniAppTests(unittest.IsolatedAsyncioTestCase):
         empty_body = await self.post(
             "/api/mini/shop/tickets/30/reply",
             tg_id=OWNER_TG,
-            json={"body": "   "},
+            json={"body": "   ", "client_key": "c" * 32},
         )
         self.assertEqual(empty_body.status_code, 422)
+        missing_key = await self.post(
+            "/api/mini/shop/tickets/30/reply",
+            tg_id=OWNER_TG,
+            json={"body": "ok"},
+        )
+        self.assertEqual(missing_key.status_code, 422)
 
 
 class OpsPayloadUnitTests(unittest.TestCase):

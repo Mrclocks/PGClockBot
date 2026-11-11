@@ -2,6 +2,7 @@
 // Shop-owner manage screens: permission shortcuts and hostile-text escaping.
 const assert = require("node:assert/strict");
 const { loadMiniApp, settle } = require("./miniapp_env.cjs");
+// loadMiniApp is also used directly by the client_key retry case.
 
 const HOSTILE = "<img src=x onerror=alert(1)>";
 
@@ -118,6 +119,49 @@ test("without dashboard the customer shortcut is hidden", async () => {
   const html = env.element("root").innerHTML;
   assert.ok(!html.includes('data-view="shop-customers"'));
   assert.ok(html.includes('data-view="shop-orders"'));
+});
+
+test("shop ticket reply retries reuse one client_key", async () => {
+  let replyCalls = 0;
+  const env = loadMiniApp({
+    routes: async (method, url, body) => {
+      if (url === "/api/mini/me") return { status: 200, body: meReseller() };
+      if (url.startsWith("/api/mini/services")) return { status: 200, body: { items: [], next_before_id: null } };
+      if (url === "/api/mini/ops") return { status: 200, body: ops(["tickets"]) };
+      if (url === "/api/mini/shop/tickets/30") {
+        return {
+          status: 200,
+          body: { ticket: { id: 30, subject: "t", status: "open", user_id: 10 }, messages: [] },
+        };
+      }
+      if (method === "POST" && url === "/api/mini/shop/tickets/30/reply") {
+        replyCalls += 1;
+        if (replyCalls === 1) throw Object.assign(new Error("network"), { status: 0 });
+        return { status: 200, body: { ticket_id: 30, message: "ok", duplicate: true } };
+      }
+      return { status: 404, body: { detail: "not found" } };
+    },
+  });
+  env.mini.app.start();
+  await settle();
+  env.mini.app.go("shop-ticket", { shopTicketId: 30 });
+  await settle();
+  const form = {
+    attrs: { "data-form": "shop-ticket-reply", "data-id": "30" },
+    elements: { body: { value: "سلام" } },
+    getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name] : null; },
+    setAttribute(name, value) { this.attrs[name] = String(value); },
+    removeAttribute(name) { delete this.attrs[name]; },
+    querySelector() { return { disabled: false }; },
+  };
+  await env.mini.app.submitForm(form);
+  await settle();
+  await env.mini.app.submitForm(form);
+  await settle();
+  const replyBodies = env.calls.filter((c) => c.method === "POST" && String(c.url).includes("/reply")).map((c) => c.body);
+  assert.equal(replyBodies.length, 2);
+  assert.equal(replyBodies[0].client_key, replyBodies[1].client_key);
+  assert.ok(replyBodies[0].client_key.length >= 16);
 });
 
 (async () => {
