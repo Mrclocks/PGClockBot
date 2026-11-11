@@ -25,6 +25,8 @@
     serviceId: null,
     ticketId: null,
     tickets: new Map(),
+    shopTicketId: null,
+    shopTickets: new Map(),
     then: null,
     resources: {},
     services: null,
@@ -124,7 +126,12 @@
     ["support", { parent: "account", tab: "account", label: "حساب" }],
     ["club", { parent: "account", tab: "account", label: "حساب" }],
     ["ticket", { parent: "support", tab: "account", label: "پشتیبانی" }],
+    ["shop-customers", { parent: "ops", tab: "ops", label: "فروشگاه" }],
+    ["shop-orders", { parent: "ops", tab: "ops", label: "فروشگاه" }],
+    ["shop-tickets", { parent: "ops", tab: "ops", label: "فروشگاه" }],
+    ["shop-ticket", { parent: "shop-tickets", tab: "ops", label: "تیکت‌ها" }],
   ]);
+  const SHOP_MANAGE_VIEWS = new Set(["shop-customers", "shop-orders", "shop-tickets", "shop-ticket"]);
 
   // Sub-screens that belong to a section a shop's Mini App may not have opened yet.
   const VIEW_SECTIONS = new Map([["support", "support"], ["ticket", "support"], ["club", "club"]]);
@@ -149,6 +156,8 @@
     // The server decides who reviews; the screen shows its answer (including a refusal).
     if (view === "review") return persona() === "admin" || persona() === "reseller";
     if (view === "subscription") return persona() === "reseller" && commerce();
+    // Shop manage screens: reseller shell only; each API re-checks FEATURE_PERMS.
+    if (SHOP_MANAGE_VIEWS.has(view)) return persona() === "reseller";
     if (VIEW_SECTIONS.has(view) && !can(VIEW_SECTIONS.get(view))) return false;
     if (SUB_VIEWS.has(view)) return commerce();
     return ((state.me && state.me.nav) || []).some((n) => n.id === view);
@@ -184,6 +193,9 @@
     club: () => core.api("/api/mini/club"),
     review: () => core.api("/api/mini/review"),
     resub: () => core.api("/api/mini/reseller/subscription"),
+    shopCustomers: () => core.api("/api/mini/shop/customers?limit=20"),
+    shopOrders: () => core.api("/api/mini/shop/orders?limit=20"),
+    shopTickets: () => core.api("/api/mini/shop/tickets?limit=20"),
   };
 
   const inflight = new Map();
@@ -281,8 +293,9 @@
 
   function hashRoute() {
     const raw = routeHash();
-    const match = /^(service|ticket)\/(\d{1,10})$/.exec(raw);
+    const match = /^(service|ticket|shop-ticket)\/(\d{1,10})$/.exec(raw);
     if (match && match[1] === "service") return { view: "service", serviceId: Number(match[2]) };
+    if (match && match[1] === "shop-ticket") return { view: "shop-ticket", shopTicketId: Number(match[2]) };
     if (match) return { view: "ticket", ticketId: Number(match[2]) };
     return { view: LEGACY_VIEWS.get(raw) || raw || "home" };
   }
@@ -298,13 +311,18 @@
     if (state.serviceId) state.details.delete(state.serviceId);
     state.ticketId = next === "ticket" ? Number(options.ticketId) || null : null;
     if (state.ticketId) state.tickets.delete(state.ticketId);
+    state.shopTicketId = next === "shop-ticket" ? Number(options.shopTicketId) || null : null;
+    if (state.shopTicketId) state.shopTickets.delete(state.shopTicketId);
     // Purchases carry the generation of the load, so each visit reads the package again.
     if (next === "subscription") invalidate("resub");
     state.then = options.then || null;
     if (next === "service" && !state.serviceId) state.view = "services";
     if (next === "ticket" && !state.ticketId) state.view = "support";
+    if (next === "shop-ticket" && !state.shopTicketId) state.view = "shop-tickets";
     const hash = state.view === "service" ? "service/" + state.serviceId
-      : state.view === "ticket" ? "ticket/" + state.ticketId : state.view;
+      : state.view === "ticket" ? "ticket/" + state.ticketId
+      : state.view === "shop-ticket" ? "shop-ticket/" + state.shopTicketId
+      : state.view;
     // Until the SDK has loaded or failed, the address still holds the parameters it reads.
     if (!core.sdkPending() && String(root.location.hash || "").replace(/^#/, "") !== hash) {
       root.history.replaceState(null, "", "#" + hash);
@@ -443,9 +461,27 @@
     ["pending", "رسید معلق", false, "clock", "amber"], ["tickets", "تیکت باز", false, "headset", "pink"],
   ];
 
+  function opsPermissions(ops) {
+    return (ops && Array.isArray(ops.permissions)) ? ops.permissions : [];
+  }
+
+  function hasOpsPerm(ops, key) {
+    return opsPermissions(ops).indexOf(key) >= 0;
+  }
+
   function shopPeekHtml() {
     const r = resource("ops");
-    const body = settled(r, 1, "retry") || R.statsHtml(r.data.stats, SHOP_PEEK_STATS, { columns: 2 });
+    const settledBody = settled(r, 1, "retry");
+    if (settledBody) {
+      return `<section class="card" aria-label="فروشگاه من">
+      <div class="card-head"><h2 class="card-title">فروشگاه من</h2>
+        <button type="button" class="link-btn" data-action="goto" data-view="ops">بیشتر</button></div>
+      ${settledBody}
+    </section>`;
+    }
+    const body = hasOpsPerm(r.data, "dashboard")
+      ? R.statsHtml(r.data.stats, SHOP_PEEK_STATS, { columns: 2 })
+      : `<p class="muted">میانبرهای مدیریت در «بیشتر».</p>`;
     return `<section class="card" aria-label="فروشگاه من">
       <div class="card-head"><h2 class="card-title">فروشگاه من</h2>
         <button type="button" class="link-btn" data-action="goto" data-view="ops">بیشتر</button></div>
@@ -544,26 +580,118 @@
 
   function resellerHeroHtml(ops) {
     const shop = ops.shop || {};
-    const billing = shop.billing;
+    const billing = hasOpsPerm(ops, "dashboard") ? shop.billing : null;
     const credit = billing
       ? `<p class="hero-sub">اعتبار فروشگاه (پرداخت به‌ازای مصرف): <bdi>${core.esc(core.money(billing.balance))}</bdi>${billing.suspended ? '، <strong>مسدود</strong>' : ""}</p>`
       : "";
+    const revenue = hasOpsPerm(ops, "dashboard") ? core.money((ops.stats || {}).revenue) : "—";
     return R.heroHtml({
-      label: "درآمد فروشگاه",
+      label: "فروشگاه من",
       chip: shop.active ? "ربات فعال" : "ربات غیرفعال",
-      value: core.money((ops.stats || {}).revenue),
+      value: revenue,
       footer: credit,
       aria: "فروشگاه من",
     });
   }
 
+  function resellerManageShortcuts(ops) {
+    const leading = [];
+    if (hasOpsPerm(ops, "dashboard")) {
+      leading.push({ action: "goto", attrs: { view: "shop-customers" }, icon: "users", tone: "blue", label: "مشتریان" });
+    }
+    if (hasOpsPerm(ops, "orders")) {
+      leading.push({ action: "goto", attrs: { view: "shop-orders" }, icon: "receipt", tone: "green", label: "سفارش‌ها" });
+    }
+    if (hasOpsPerm(ops, "tickets")) {
+      leading.push({ action: "goto", attrs: { view: "shop-tickets" }, icon: "headset", tone: "pink", label: "تیکت‌ها" });
+    }
+    return leading.concat(opsShortcuts(ops));
+  }
+
   function resellerOpsHtml(ops) {
     const shop = ops.shop || {};
+    const statsCard = hasOpsPerm(ops, "dashboard")
+      ? `<section class="card" aria-label="آمار فروشگاه"><h2 class="card-title">آمار فروشگاه</h2>${R.statsHtml(ops.stats, RESELLER_STATS, { columns: 2 })}</section>`
+      : "";
     return viewHead("فروشگاه من", shop.bot_username ? "@" + shop.bot_username : "", { subtitleLtr: true })
       + resellerHeroHtml(ops)
       + attentionCard(ops)
-      + R.panelShortcutsHtml(ops.panel_links, { leading: opsShortcuts(ops), badges: opsPanelBadges(ops) })
-      + `<section class="card" aria-label="آمار فروشگاه"><h2 class="card-title">آمار فروشگاه</h2>${R.statsHtml(ops.stats, RESELLER_STATS, { columns: 2 })}</section>`;
+      + R.panelShortcutsHtml(ops.panel_links, { leading: resellerManageShortcuts(ops), badges: opsPanelBadges(ops) })
+      + statsCard;
+  }
+
+  function shopCustomersViewHtml() {
+    const r = resource("shopCustomers");
+    return viewHead("مشتریان فروشگاه") + (settled(r, 3, "retry") || R.shopCustomerListHtml(r.data));
+  }
+
+  function shopOrdersViewHtml() {
+    const r = resource("shopOrders");
+    return viewHead("سفارش‌های فروشگاه") + (settled(r, 3, "retry") || R.shopOrderListHtml(r.data));
+  }
+
+  function shopTicketsViewHtml() {
+    const r = resource("shopTickets");
+    return viewHead("تیکت‌های فروشگاه") + (settled(r, 3, "retry") || R.shopTicketListHtml(r.data));
+  }
+
+  function shopTicketViewHtml() {
+    const id = state.shopTicketId;
+    const row = state.shopTickets && state.shopTickets.get(id);
+    if (!state.shopTickets) state.shopTickets = new Map();
+    if (!row) {
+      loadShopTicket(id);
+      return R.loadingHtml(3);
+    }
+    if (row.status === "loading") return R.loadingHtml(3);
+    if (row.status === "error") return viewHead("تیکت") + R.errorHtml(row.error, "retry");
+    return viewHead("تیکت") + R.shopTicketThreadHtml(row.data);
+  }
+
+  async function loadShopTicket(id) {
+    if (!state.shopTickets) state.shopTickets = new Map();
+    state.shopTickets.set(id, { status: "loading" });
+    try {
+      const data = await core.api("/api/mini/shop/tickets/" + id);
+      state.shopTickets.set(id, { status: "ready", data });
+    } catch (err) {
+      state.shopTickets.set(id, { status: "error", error: err.message });
+    }
+    if (state.view === "shop-ticket" && state.shopTicketId === id) renderView();
+  }
+
+  async function loadMoreShopList(name, path, trigger) {
+    const r = state.resources[name];
+    if (!r || r.status !== "ready" || !r.data.next_before_id) return;
+    await guarded(name + "-more", trigger, async () => {
+      try {
+        const more = await core.api(path + "?before_id=" + r.data.next_before_id + "&limit=20");
+        r.data.items = (r.data.items || []).concat(more.items || []);
+        r.data.next_before_id = more.next_before_id;
+        renderView();
+      } catch (err) {
+        core.toast(err.message, "err");
+      }
+    });
+  }
+
+  async function submitShopTicketReply(form) {
+    const id = intAttr(form, "data-id");
+    const body = textField(form, "body");
+    if (!id || !body) {
+      core.toast("متن پیام را بنویسید", "err");
+      return;
+    }
+    await guarded("shop-ticket-reply:" + id, form.querySelector("button[type=submit]"), async () => {
+      try {
+        await core.api(`/api/mini/shop/tickets/${id}/reply`, { method: "POST", body: { body } });
+        invalidate("shopTickets");
+        await loadShopTicket(id);
+      } catch (err) {
+        core.toast(err.status === 0 ? "نتیجه مشخص نشد؛ گفتگو دوباره خوانده شد." : err.message, "err");
+        if (err.status === 0) await loadShopTicket(id);
+      }
+    });
   }
 
   function opsViewHtml() {
@@ -847,6 +975,10 @@
     review: reviewViewHtml,
     ticket: ticketViewHtml,
     subscription: subscriptionViewHtml,
+    "shop-customers": shopCustomersViewHtml,
+    "shop-orders": shopOrdersViewHtml,
+    "shop-tickets": shopTicketsViewHtml,
+    "shop-ticket": shopTicketViewHtml,
   };
 
   function renderView() {
@@ -1644,6 +1776,8 @@
       state.details.delete(state.serviceId);
     } else if (state.view === "ticket") {
       state.tickets.delete(state.ticketId);
+    } else if (state.view === "shop-ticket") {
+      state.shopTickets.delete(state.shopTicketId);
     } else {
       for (const name of Object.keys(state.resources)) {
         if (state.resources[name].status === "error") invalidate(name);
@@ -1714,6 +1848,10 @@
     "open-ticket": (el) => go("ticket", { ticketId: intAttr(el, "data-id") }),
     "refresh-ticket": (el) => loadTicket(intAttr(el, "data-id")),
     "open-contact": (el) => openContact(Number(el.getAttribute("data-index"))),
+    "open-shop-ticket": (el) => go("shop-ticket", { shopTicketId: intAttr(el, "data-id") }),
+    "shop-customers-more": (el) => loadMoreShopList("shopCustomers", "/api/mini/shop/customers", el),
+    "shop-orders-more": (el) => loadMoreShopList("shopOrders", "/api/mini/shop/orders", el),
+    "shop-tickets-more": (el) => loadMoreShopList("shopTickets", "/api/mini/shop/tickets", el),
     retry: () => retryCurrentView(),
   };
 
@@ -1747,7 +1885,8 @@
   }
 
   const FORMS = { automation: saveAutomation, cancellation: submitCancellation, topup: startTopup, receipt: uploadReceipt,
-    "ticket-new": submitNewTicket, "ticket-reply": submitTicketReply, discount: applyDiscount, gift: redeemGift };
+    "ticket-new": submitNewTicket, "ticket-reply": submitTicketReply, "shop-ticket-reply": submitShopTicketReply,
+    discount: applyDiscount, gift: redeemGift };
 
   function formHandler(form) {
     const kind = form.getAttribute && form.getAttribute("data-form");
@@ -1802,7 +1941,8 @@
       if (!state.me) return;
       const route = hashRoute();
       if (route.view !== state.view || (route.serviceId || null) !== state.serviceId
-        || (route.ticketId || null) !== state.ticketId) go(route.view, route);
+        || (route.ticketId || null) !== state.ticketId
+        || (route.shopTicketId || null) !== state.shopTicketId) go(route.view, route);
     });
   }
 

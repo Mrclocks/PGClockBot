@@ -916,6 +916,55 @@
     return item.plan_name ? `خرید «${item.plan_name}»` : "خرید سرویس";
   }
 
+  function shopCustomerListHtml(data) {
+    const items = (data && data.items) || [];
+    if (!items.length) return emptyHtml("مشتری برای این فروشگاه پیدا نشد.");
+    return `<section class="card list-card" aria-label="مشتریان فروشگاه"><ul class="plain-list">${items.map((u) => {
+      const name = esc(u.name || u.username || String(u.telegram_id || u.id));
+      const meta = u.username ? `@${esc(u.username)}` : `<span dir="ltr">${esc(String(u.telegram_id || ""))}</span>`;
+      return `<li class="list-row"><div class="list-main"><strong>${name}</strong><span class="muted sm">${meta}${u.blocked ? " · مسدود" : ""}</span></div></li>`;
+    }).join("")}</ul>${data.next_before_id ? `<button type="button" class="btn ghost block" data-action="shop-customers-more" aria-label="مشتریان بیشتر">بیشتر</button>` : ""}</section>`;
+  }
+
+  function shopOrderListHtml(data) {
+    const items = (data && data.items) || [];
+    if (!items.length) return emptyHtml("سفارشی برای این فروشگاه نیست.");
+    return `<section class="card list-card" aria-label="سفارش‌های فروشگاه"><ul class="plain-list">${items.map((o) => `
+      <li class="list-row"><div class="list-main"><strong>#${esc(num(o.id))}</strong>
+        <span class="muted sm">${esc(o.status)} · <bdi>${esc(money(o.amount))}</bdi></span></div></li>`).join("")}</ul>
+      ${data.next_before_id ? `<button type="button" class="btn ghost block" data-action="shop-orders-more" aria-label="سفارش‌های بیشتر">بیشتر</button>` : ""}</section>`;
+  }
+
+  function shopTicketListHtml(data) {
+    const items = (data && data.items) || [];
+    if (!items.length) return emptyHtml("تیکت بازی برای این فروشگاه نیست.");
+    return `<section class="card list-card" aria-label="تیکت‌های فروشگاه"><ul class="plain-list">${items.map((t) => `
+      <li class="list-row"><button type="button" class="list-btn" data-action="open-shop-ticket" data-id="${Number(t.id) || 0}" aria-label="تیکت ${esc(num(t.id))}">
+        <span class="list-main"><strong>${esc(t.subject || ("تیکت #" + t.id))}</strong>
+        <span class="muted sm">${esc(t.status)}</span></span>${icon("chevron", 18)}</button></li>`).join("")}</ul>
+      ${data.next_before_id ? `<button type="button" class="btn ghost block" data-action="shop-tickets-more" aria-label="تیکت‌های بیشتر">بیشتر</button>` : ""}</section>`;
+  }
+
+  function shopTicketThreadHtml(data) {
+    const ticket = (data && data.ticket) || {};
+    const messages = (data && data.messages) || [];
+    const thread = messages.length
+      ? `<ul class="plain-list" aria-label="گفتگوی تیکت">${messages.map((m) => `
+          <li class="list-row"><div class="list-main"><strong>${m.is_staff ? "پشتیبانی" : "مشتری"}</strong>
+            <span class="msg-body">${esc(m.body)}</span></div></li>`).join("")}</ul>`
+      : emptyHtml("هنوز پیامی نیست.");
+    return viewCardTitle(ticket.subject || ("تیکت #" + (ticket.id || "")), ticket.status || "")
+      + thread
+      + `<form class="card" data-form="shop-ticket-reply" data-id="${Number(ticket.id) || 0}" aria-label="پاسخ به تیکت">
+          <label class="field"><span class="visually-hidden">متن پاسخ</span>
+            <textarea name="body" rows="3" maxlength="2000" required placeholder="پاسخ خود را بنویسید" dir="auto"></textarea></label>
+          <button type="submit" class="btn block">ارسال پاسخ</button></form>`;
+  }
+
+  function viewCardTitle(title, sub) {
+    return `<section class="card"><h2 class="card-title">${esc(title)}</h2>${sub ? `<p class="muted sm">${esc(sub)}</p>` : ""}</section>`;
+  }
+
   function reviewQueueHtml(data) {
     const items = (data && data.items) || [];
     if (!items.length) return emptyHtml("رسیدی در انتظار بررسی نیست.");
@@ -1034,6 +1083,6 @@
     validServiceName, randomServiceName, giftFormHtml, renewPlansHtml,
     renewPreviewHtml, addonPacksHtml, addonPreviewHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
     backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, reviewQueueHtml, reviewSheetHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, navHtml, loadingHtml, emptyHtml,
-    errorHtml, resellerSubscriptionHtml,
+    errorHtml, resellerSubscriptionHtml, shopCustomerListHtml, shopOrderListHtml, shopTicketListHtml, shopTicketThreadHtml,
   });
 })(typeof window === "object" ? window : globalThis);
