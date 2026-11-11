@@ -1,12 +1,16 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_title, card_title, row_actions %}
+{% from "_my_account_tabs.html" import my_account_tabs %}
 {% block title %}اشتراک من{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>
     {{ page_title('payments', 'اشتراک من') }}
   </div>
 </div>
+
+{{ my_account_tabs('subscription') }}
 
 {% if unavailable %}
 <div class="card">
@@ -46,7 +50,7 @@
 
 <div class="card card-flush">
   <div class="card-flush-head">{{ card_title('payments', 'تمدید یا تغییر بسته') }}</div>
-  <p class="muted">با تمدید، مدت بسته از تاریخ انقضای فعلی اضافه می‌شود و ظرفیت بستهٔ انتخابی همین حالا اعمال می‌شود. مصرف کاربران صفر می‌شود و هزینه از کیف پول کسر می‌شود.</p>
+  <p class="muted">با تمدید، ظرفیت بستهٔ انتخابی اعمال می‌شود، مصرف خود ادمین (حجم بسته) صفر می‌شود و هزینه از کیف پول کسر می‌شود. مصرف مشتریان دست‌نخورده می‌ماند. انتقال زمان باقی‌مانده و حفظ حجم/کاربر اضافه را تنظیمات همان بسته مشخص می‌کند. بستهٔ بدون زمان تمدید نمی‌شود؛ برای افزایش از بسته‌های اضافه یا ارتقا استفاده کنید.</p>
   <div class="table-wrap">
     <table class="table-compact table-list-sm">
       <thead>
@@ -71,8 +75,9 @@
             <span class="muted li-hide">{{ c.blocked }}</span>
             {% else %}
             {% call row_actions() %}
+            {% set renew_base = ('تمدید «' ~ c.plan.name ~ '» با ' ~ (c.invoice.total | money) ~ ' تومان از کیف پول؟') if c.relation == 'current' else ('تغییر به «' ~ c.plan.name ~ '» و پرداخت ' ~ (c.invoice.total | money) ~ ' تومان از کیف پول؟ ظرفیت بستهٔ جدید همین حالا اعمال می‌شود.') %}
             <form method="post" action="/my-subscription/renew"
-                  data-confirm="{{ ('تمدید «' ~ c.plan.name ~ '» با ' ~ (c.invoice.total | money) ~ ' تومان از کیف پول؟') if c.relation == 'current' else ('تغییر به «' ~ c.plan.name ~ '» و پرداخت ' ~ (c.invoice.total | money) ~ ' تومان از کیف پول؟ ظرفیت بستهٔ جدید همین حالا اعمال می‌شود.') }}"
+                  data-confirm="{{ renew_base }}{% if c.invoice.cleared_extra_gb or c.invoice.cleared_extra_users %} توجه: حجم/کاربر اضافهٔ خریداری‌شده با این تمدید پاک می‌شود و در مبلغ تمدید حساب نمی‌شود.{% endif %}{% if c.plan.duration_days and not c.invoice.carry_remaining_period %} زمان باقی‌مانده منتقل نمی‌شود؛ دوره از همین الان شروع می‌شود.{% endif %}"
                   data-confirm-title="{{ 'تمدید بسته' if c.relation == 'current' else c.label ~ ' بسته' }}"
                   data-confirm-label="پرداخت و تمدید">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -90,41 +95,45 @@
   </div>
 </div>
 
-{% if extras %}
+{% if extras and (extras.gb_price or extras.user_price) %}
+<p class="muted">{% if ov.current and ov.current.keep_extras_on_renew %}ظرفیت اضافه تا پایان دوره می‌ماند و در تمدید بعدی هم حساب می‌شود.{% else %}ظرفیت اضافه تا پایان همین دوره می‌ماند؛ بستهٔ فعلی در تمدید آن را حفظ نمی‌کند.{% endif %} هر نوع را جدا بخرید.</p>
+{% if extras.gb_price and extras.gb_options %}
 <div class="card">
-  {{ card_title('payments', 'خرید ظرفیت اضافه') }}
-  <p class="muted">ظرفیت اضافه تا پایان دوره می‌ماند و در تمدید بعدی هم حساب می‌شود.</p>
-  <div class="form-row">
-    {% if extras.gb_price %}
-    <form method="post" action="/my-subscription/extra" class="form-stack"
-          data-confirm="حجم اضافه با گیگی {{ extras.gb_price | money }} تومان از کیف پول خریده شود؟" data-confirm-title="خرید حجم اضافه" data-confirm-label="خرید">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="kind" value="gb">
-      <label class="form-field">
-        <span class="form-field-label">حجم اضافه (گیگی <bdi dir="ltr">{{ extras.gb_price | money }}</bdi> تومان)</span>
-        <select name="amount">
-          {% for n in extras.gb_options %}<option value="{{ n }}">{{ n }} گیگ — {{ (n * extras.gb_price) | money }} تومان</option>{% endfor %}
-        </select>
-      </label>
-      <button type="submit" class="btn btn-sm">خرید حجم</button>
-    </form>
-    {% endif %}
-    {% if extras.user_price %}
-    <form method="post" action="/my-subscription/extra" class="form-stack"
-          data-confirm="کاربر اضافه با هر نفر {{ extras.user_price | money }} تومان از کیف پول خریده شود؟" data-confirm-title="خرید کاربر اضافه" data-confirm-label="خرید">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="kind" value="users">
-      <label class="form-field">
-        <span class="form-field-label">کاربر اضافه (هر نفر <bdi dir="ltr">{{ extras.user_price | money }}</bdi> تومان)</span>
-        <select name="amount">
-          {% for n in extras.user_options %}<option value="{{ n }}">{{ n }} کاربر — {{ (n * extras.user_price) | money }} تومان</option>{% endfor %}
-        </select>
-      </label>
-      <button type="submit" class="btn btn-sm">خرید کاربر</button>
-    </form>
-    {% endif %}
-  </div>
+  {{ card_title('payments', '📦 حجم اضافه') }}
+  <form method="post" action="/my-subscription/extra" class="form-stack"
+        data-confirm="حجم اضافه با گیگی {{ extras.gb_price | money }} تومان از کیف پول خریده شود؟" data-confirm-title="خرید حجم اضافه" data-confirm-label="خرید">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="kind" value="gb">
+    <input type="hidden" name="generation" value="{{ ov.generation }}">
+    <label class="form-field">
+      <span class="form-field-label">نرخ هر گیگ: <bdi dir="ltr">{{ extras.gb_price | money }}</bdi> تومان — یک پله انتخاب کنید</span>
+      <select name="amount">
+        {% for n in extras.gb_options %}<option value="{{ n }}">{{ n }} گیگ — {{ (n * extras.gb_price) | money }} تومان</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-sm">خرید حجم</button>
+  </form>
+</div>
+{% endif %}
+{% if extras.user_price and extras.user_options %}
+<div class="card">
+  {{ card_title('payments', '👥 کاربر اضافه') }}
+  <form method="post" action="/my-subscription/extra" class="form-stack"
+        data-confirm="کاربر اضافه با هر نفر {{ extras.user_price | money }} تومان از کیف پول خریده شود؟" data-confirm-title="خرید کاربر اضافه" data-confirm-label="خرید">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="kind" value="users">
+    <input type="hidden" name="generation" value="{{ ov.generation }}">
+    <label class="form-field">
+      <span class="form-field-label">نرخ هر کاربر: <bdi dir="ltr">{{ extras.user_price | money }}</bdi> تومان — یک پله انتخاب کنید</span>
+      <select name="amount">
+        {% for n in extras.user_options %}<option value="{{ n }}">{{ n }} کاربر — {{ (n * extras.user_price) | money }} تومان</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-sm">خرید کاربر</button>
+  </form>
 </div>
 {% endif %}
 {% endif %}
+{% endif %}
+</div>
 {% endblock %}

@@ -22,15 +22,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, PgAdminSubscription, ResellerPlan, ResellerProfile
 from app.services.billing import GB, is_payg
 from app.services.pg_admin_subscription import (
+    NO_TIME_RENEWAL,
     PLAN_KIND_SUBSCRIPTION,
     compute_renew_invoice,
     get_or_create_subscription,
     get_subscription,
     is_subscription_plan,
+    plan_has_time,
+    plan_keeps_extras_on_renew,
     plan_kind_of,
     renew_subscription,
 )
 from app.services.pg_quota import _as_int
+from app.services.reseller_shop_gates import assert_shop_allows_renew
 from app.services.resellers import normalize_feature_perms, parse_perms
 
 logger = logging.getLogger(__name__)
@@ -49,6 +53,17 @@ NEEDS_SUPPORT = "تغییر به این بسته با هماهنگی پشتیب�
 STALE_PAGE = "این صفحه قدیمی است یا تمدید دیگری همین حالا انجام شد؛ صفحه را دوباره باز کنید"
 USAGE_UNREADABLE = "مصرف فعلی از پنل خوانده نشد؛ کمی بعد دوباره تلاش کنید"
 PACKAGE_LIST_LIMIT = 30
+RENEW_EXPLAIN = (
+    "با تمدید، دسترسی باز می‌شود و مصرف خود ادمین (حجم بسته) صفر می‌شود. "
+    "مصرف مشتریان شما دست‌نخورده می‌ماند. انتقال زمان و حفظ ظرفیت اضافه را تنظیمات بسته مشخص می‌کند."
+)
+MOVE_UNTIMED_EXPLAIN = (
+    "ظرفیت بستهٔ جدید همین حالا اعمال می‌شود. این بسته زمان ندارد، پس زمان و مصرف تغییری نمی‌کند."
+)
+WALLET_PAY_HINT = "با پرداخت از کیف پول، مبلغ همین حالا کسر و تمدید اعمال می‌شود."
+EXTRAS_CLEARED_WARN = (
+    "توجه: حجم/کاربر اضافهٔ خریداری‌شده با این تمدید پاک می‌شود و در مبلغ تمدید حساب نمی‌شود."
+)
 
 
 @dataclass(slots=True)
@@ -87,13 +102,39 @@ class PackageOverview:
 
 
 def _limits(plan: ResellerPlan, sub: PgAdminSubscription | None) -> tuple[int, int]:
-    """(users, gb) the shop would have on ``plan`` with its bought extras; 0 = unlimited."""
+    """(users, gb) after renewing onto ``plan``; 0 = unlimited.
+
+    Bought extras count only when the target plan keeps them on renew.
+    """
     users = max(0, int(plan.included_users or 0))
     gb = max(0, int(plan.included_gb or 0))
-    if sub is not None:
+    if sub is not None and plan_keeps_extras_on_renew(plan):
         users = users + int(sub.extra_users_purchased or 0) if users else 0
         gb = gb + int(sub.extra_gb_purchased or 0) if gb else 0
     return users, gb
+
+
+def renew_confirm_warnings_from_invoice(plan: ResellerPlan, invoice: dict) -> list[str]:
+    """Warnings shown before the owner pays, from a server-side renew invoice."""
+    warnings: list[str] = []
+    if int(invoice.get("cleared_extra_gb") or 0) or int(invoice.get("cleared_extra_users") or 0):
+        warnings.append(EXTRAS_CLEARED_WARN)
+    if plan_has_time(plan) and not bool(invoice.get("carry_remaining_period", True)):
+        warnings.append("زمان باقی‌مانده منتقل نمی‌شود؛ دوره از همین الان شروع می‌شود.")
+    return warnings
+
+
+def renew_confirm_warnings(plan: ResellerPlan, sub: PgAdminSubscription | None) -> list[str]:
+    """Warnings shown before the owner pays for a renew into ``plan``."""
+    return renew_confirm_warnings_from_invoice(plan, compute_renew_invoice(plan, sub))
+
+
+def renew_confirm_text(plan: ResellerPlan, invoice: dict, *, base: str) -> str:
+    """``base`` plus any renew-policy warnings for web confirm dialogs."""
+    extra = renew_confirm_warnings_from_invoice(plan, invoice)
+    if not extra:
+        return base
+    return base + " " + " ".join(extra)
 
 
 def _rank(value: int) -> float:
@@ -201,9 +242,12 @@ async def package_overview(session: AsyncSession, profile: ResellerProfile) -> P
         plans.insert(0, current)
     for plan in plans:
         relation = package_relation(current, plan)
-        blocked = None if relation == RELATION_CURRENT else switch_blocker(current, plan)
-        if blocked is None and relation != RELATION_CURRENT and relation != RELATION_UPGRADE:
-            blocked = usage_blocker(plan, sub, usage) if usage is not None else None
+        blocked = NO_TIME_RENEWAL if relation == RELATION_CURRENT and not plan_has_time(plan) else (
+            None if relation == RELATION_CURRENT else switch_blocker(current, plan)
+        )
+        # Post-renew capacity (extras dropped when the target plan does not keep them).
+        if blocked is None and usage is not None:
+            blocked = usage_blocker(plan, sub, usage)
         choices.append(PackageChoice(plan=plan, relation=relation, invoice=compute_renew_invoice(plan, sub), blocked=blocked))
     choices.sort(key=lambda c: (c.relation != RELATION_CURRENT, c.blocked is not None))
     return PackageOverview(
@@ -219,18 +263,34 @@ async def _assert_target_allowed(
     if relation == RELATION_CURRENT:
         if not is_subscription_plan(target):
             raise ValueError("تمدید فقط برای پلن اشتراک است")
+    else:
+        blocked = switch_blocker(current, target)
+        if blocked:
+            raise ValueError(blocked)
+    clears_extras = not plan_keeps_extras_on_renew(target) and (
+        int(sub.extra_gb_purchased or 0) > 0 or int(sub.extra_users_purchased or 0) > 0
+    )
+    may_shrink = clears_extras or relation in (RELATION_DOWNGRADE, RELATION_OTHER)
+    if not may_shrink and relation == RELATION_UPGRADE:
         return
-    blocked = switch_blocker(current, target)
-    if blocked:
-        raise ValueError(blocked)
-    if relation == RELATION_UPGRADE:
-        return
+    # Same-plan renew that drops extras, or a smaller/other package, must fit live usage.
     usage = await read_admin_usage(uname)
     if usage is None:
-        raise ValueError(USAGE_UNREADABLE)
+        if may_shrink:
+            raise ValueError(USAGE_UNREADABLE)
+        return
     blocked = usage_blocker(target, sub, usage)
     if blocked:
         raise ValueError(blocked)
+
+
+def renewal_effect(result: dict) -> str:
+    """One sentence on what a finished renewal did to the volume, for every screen that reports it."""
+    if not result.get("timed"):
+        return "ظرفیت بستهٔ جدید اعمال شد؛ زمان و مصرف تغییری نکرد."
+    if result.get("usage_reset"):
+        return "مصرف ادمین صفر شد؛ مصرف کاربران شما دست‌نخورده ماند."
+    return "مصرف ادمین صفر نشد؛ برای بررسی با پشتیبانی تماس بگیرید."
 
 
 async def renew_package(
@@ -240,8 +300,17 @@ async def renew_package(
     profile: ResellerProfile,
     plan_id: int,
     generation: int,
+    charge_wallet: bool = True,
 ) -> dict:
-    """Renew into ``plan_id`` (the current package or an allowed one), once per shown page."""
+    """Renew into ``plan_id`` (the current package or an allowed one), once per shown page.
+
+    Renewing a timed package starts its next period (time extended, the admin's volume refilled,
+    customers' usage untouched). A package without time is not renewed: moving to it applies its
+    capacity only. ``charge_wallet=False`` is for a paid platform order that already collected
+    the money through another method.
+    """
+    # Expiry flips is_active off; renew must still work. Soft-deactivate while open is refused.
+    await assert_shop_allows_renew(session, profile)
     if is_payg(profile):
         raise ValueError("پلن PAYG تمدید زمانی ندارد — از شارژ کیف پول استفاده کنید")
     uname = _pg_username(profile)
@@ -257,10 +326,33 @@ async def renew_package(
     changed = current is None or int(target.id) != int(current.id)
     profile_id = int(profile.id)
     result = await renew_subscription(
-        session, sub=sub, plan=target, payer=owner, charge_wallet=True, reset_user_traffic=True,
+        session,
+        sub=sub,
+        plan=target,
+        payer=owner if charge_wallet else None,
+        charge_wallet=charge_wallet,
+        moving=changed,
     )
     if changed:
         fresh = await session.get(ResellerProfile, profile_id)
         fresh.plan_id = int(target.id)
         await session.commit()
-    return {**result, "plan_name": target.name, "changed": changed}
+    out = {**result, "plan_name": target.name, "changed": changed}
+    try:
+        from app.services.reseller_purchase_notify import notify_package_wallet_renew
+
+        await notify_package_wallet_renew(
+            session,
+            buyer=owner,
+            amount=int(out.get("amount") or 0),
+            plan_name=target.name,
+            changed=changed,
+        )
+    except Exception:
+        logger.warning(
+            "package renew owner notify failed user=%s plan=%s",
+            getattr(owner, "id", None),
+            getattr(target, "id", None),
+            exc_info=True,
+        )
+    return out

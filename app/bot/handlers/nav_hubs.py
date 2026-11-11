@@ -15,7 +15,6 @@ from app.bot.list_pages import page_number
 from app.db.models import BotUser
 from app.services.users import get_all_settings
 from app.services import bot_feedback_texts as feedback
-from app.services.screen_titles import screen_caption, screen_title_html
 import logging
 
 logger = logging.getLogger(__name__)
@@ -119,33 +118,14 @@ async def nv_wallet_home(
     db_user: BotUser,
     state: FSMContext,
 ):
-    from app.bot.nav_inline import safe_edit_inline, wallet_hub_keyboard
-    from app.config import get_settings
-    from app.services.formatting import format_message, format_toman, kv_line
-    from app.services.wallet import wallet_balance_for_context
+    from app.bot.handlers.wallet import load_wallet_home
+    from app.bot.nav_inline import safe_edit_inline
 
     await callback.answer()
     if not callback.message:
         return
-    ui = await get_all_settings(session)
-    bal = await wallet_balance_for_context(session, db_user)
-    text = format_message(
-        screen_title_html(ui, "c.wallet"),
-        "\n".join(
-            [
-                kv_line(
-                    "💵",
-                    "موجودی",
-                    f"<b>{format_toman(bal, get_settings().currency)}</b>",
-                ),
-                "",
-                screen_caption(ui, "c.wallet"),
-            ]
-        ),
-    )
-    ok = await safe_edit_inline(
-        callback.message, text, reply_markup=wallet_hub_keyboard(ui)
-    )
+    text, markup = await load_wallet_home(session, db_user)
+    ok = await safe_edit_inline(callback.message, text, reply_markup=markup)
     if not ok:
         from app.bot.handlers.reply_nav import open_wallet_home
         await open_wallet_home(callback.message, session, db_user, state, push=False)
@@ -809,6 +789,45 @@ async def nv_res_ra(
     action = (callback.data or "")[len("nv:res:ra:") :]
     await callback.answer()
     if not callback.message or not action:
+        return
+    if action == "res_broadcast":
+        from app.bot.handlers.shop_broadcast import open_shop_broadcast_hub
+
+        await open_shop_broadcast_hub(
+            callback.message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            push=False,
+        )
+        return
+    if action == "res_cashback":
+        from app.bot.handlers.cashback_tools import open_shop_cashback_panel
+
+        await open_shop_cashback_panel(
+            callback.message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            push=False,
+        )
+        return
+    if action == "res_child_pricing":
+        from app.bot.handlers.child_pricing_bot import open_child_pricing_panel
+
+        await open_child_pricing_panel(
+            callback.message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            push=False,
+        )
         return
     if action in {kb.REPLY_ACTION_RES_PREVIEW, "res_preview"}:
         if not is_reseller_bot:

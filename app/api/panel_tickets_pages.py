@@ -54,9 +54,15 @@ async def _bot_ticket_in_scope(session: AsyncSession, staff: dict, ticket: Ticke
 
 
 def _bot_user_label(user: BotUser | None, user_id: int) -> str:
-    from app.services.formatting import bot_user_panel_label
+    from app.services.formatting import bot_user_ticket_who
 
-    return bot_user_panel_label(user, fallback_id=user_id)
+    return bot_user_ticket_who(user, fallback_id=user_id)
+
+
+def _bot_user_telegram_id(user: BotUser | None) -> int | None:
+    from app.services.formatting import bot_user_telegram_id
+
+    return bot_user_telegram_id(user)
 
 
 async def _staff_sender_tg(session: AsyncSession, staff: dict) -> int:
@@ -202,6 +208,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                 "ticket": t,
                 "user_id": int(t.user_id),
                 "user_label": _bot_user_label(tg_users.get(int(t.user_id)), int(t.user_id)),
+                "telegram_id": _bot_user_telegram_id(tg_users.get(int(t.user_id))),
             }
             for t in tg_tickets
         ]
@@ -218,6 +225,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             "active_tg_user_label": _bot_user_label(
                 active_tg_user, int(active_tg_ticket.user_id) if active_tg_ticket else 0
             ),
+            "active_tg_telegram_id": _bot_user_telegram_id(active_tg_user),
             "open_new": bool(new),
             "status_labels": STATUS_LABELS,
             "priority_labels": PRIORITY_LABELS,

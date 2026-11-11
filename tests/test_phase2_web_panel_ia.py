@@ -12,6 +12,18 @@ JS = ROOT / "app/web/static/panel.js"
 PRINCIPALS = ROOT / "app/web/templates/principals.html"
 
 
+def rendered_owner_page() -> str:
+    """Base page of an Owner who can open every section."""
+    from types import SimpleNamespace
+
+    from app.api.app import templates
+
+    request = SimpleNamespace(query_params={}, url=SimpleNamespace(path="/home"), state=SimpleNamespace())
+    staff = {"role": "admin", "permissions": [], "pg_permissions": ["pg_users"]}
+    return templates.env.get_template("base.html").render(
+        request=request, app_version="t", staff=staff, identity={"kind": "owner"}, is_owner=True)
+
+
 class Phase2NavAccordionTests(unittest.TestCase):
     def test_no_work_mode_tabs(self):
         html = BASE.read_text(encoding="utf-8")
@@ -24,21 +36,20 @@ class Phase2NavAccordionTests(unittest.TestCase):
         self.assertNotIn('role="tabpanel"', html)
 
     def test_all_sections_stacked_with_mode_keys(self):
-        html = BASE.read_text(encoding="utf-8")
+        html = rendered_owner_page()
         self.assertIn('data-nav-mode="system"', html)
         self.assertIn('data-nav-mode="shop"', html)
         self.assertIn('data-nav-mode="pg"', html)
         self.assertNotIn('data-nav-mode="help"', html)
-        # Keep established section labels for IA continuity
-        self.assertIn("پنل ربات", html)
-        self.assertIn("پنل پاسارگارد", html)
-        self.assertIn("وب پنل", html)
+        # Short section labels from the panel glossary
+        for label in ("سیستم", "فروشگاه", "پاسارگارد"):
+            self.assertIn(f"<span>{label}</span>", html)
         # Help is a bottom chip (outside accordion), styled like active tags
         self.assertIn("side-help-btn", html)
         self.assertIn('href="/help/"', html)
 
     def test_sections_are_collapsible(self):
-        html = BASE.read_text(encoding="utf-8")
+        html = rendered_owner_page()
         self.assertIn("nav-label-toggle", html)
         self.assertIn('data-nav-collapse="system"', html)
         self.assertIn('data-nav-collapse="shop"', html)
@@ -48,7 +59,7 @@ class Phase2NavAccordionTests(unittest.TestCase):
 
     def test_additive_css_and_js_wired(self):
         html = BASE.read_text(encoding="utf-8")
-        self.assertIn("/static/panel-nav-modes.css?v={{ app_version }}", html)
+        self.assertIn("/static/panel-nav-modes.css?v={{ asset_v('panel-nav-modes.css')", html)
         self.assertTrue(CSS.is_file())
         css = CSS.read_text(encoding="utf-8")
         self.assertNotIn(".nav-modes", css)
@@ -65,13 +76,8 @@ class Phase2NavAccordionTests(unittest.TestCase):
         self.assertNotIn("data-active-mode", js)
 
     def test_sections_default_collapsed_until_js(self):
-        html = BASE.read_text(encoding="utf-8")
-        self.assertGreaterEqual(html.count("is-collapsed"), 3)
-        self.assertIn('data-nav-collapse="system" aria-expanded="false"', html)
-
-    def test_sections_default_collapsed_until_js(self):
-        html = BASE.read_text(encoding="utf-8")
-        self.assertGreaterEqual(html.count("is-collapsed"), 3)
+        html = rendered_owner_page()
+        self.assertGreaterEqual(html.count("nav-section is-collapsed"), 3)
         self.assertIn('data-nav-collapse="system" aria-expanded="false"', html)
 
     def test_persian_pg_role_chrome(self):
@@ -83,13 +89,10 @@ class Phase2NavAccordionTests(unittest.TestCase):
         self.assertIn("نقش پاسارگارد:", principals)
 
     def test_owner_gates_remain(self):
-        html = BASE.read_text(encoding="utf-8")
-        self.assertIn("{% if is_owner %}", html)
-        users_idx = html.find('href="/users"')
-        self.assertGreater(users_idx, 0)
-        window = html[max(0, users_idx - 120) : users_idx]
-        self.assertIn("is_owner", window)
+        from tests.sidebar_view import labels, sidebar
 
+        self.assertIn("کاربران ربات", labels(sidebar("admin", owner=True)["shop"]))
+        self.assertNotIn("کاربران ربات", labels(sidebar("admin")["shop"]))
 
 if __name__ == "__main__":
     unittest.main()

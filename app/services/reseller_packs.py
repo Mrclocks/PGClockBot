@@ -1,0 +1,123 @@
+"""Capacity packs a shop owner buys for their own panel admin: which packs fit, and the purchase.
+
+A pack without a category fits every subscription category; a categorised pack fits only its own
+(the catalog listing is ``list_addon_plans``). A purchase adds to the admin's live panel limit,
+not to a stored total, and is claimed against the subscription generation the buyer saw, so a
+repeated tap or an old screen buys once.
+"""
+
+from __future__ import annotations
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models import BotUser, ResellerPlan, ResellerProfile
+from app.services.billing import is_payg
+from app.services.pg_admin_subscription import (
+    PLAN_KIND_ADDON_VOLUME,
+    is_addon_plan,
+    is_subscription_plan,
+    plan_kind_of,
+)
+from app.services.reseller_capacity import CapacityOffer, buy_offer
+from app.services.reseller_shop_gates import (
+    SHOP_INACTIVE,
+    SUB_EXPIRED,
+    SUB_NEEDS_ACTIVE,
+    assert_shop_allows_capacity,
+    assert_subscription_open,
+)
+
+NO_PACK = "این بسته پیدا نشد یا برای پلن شما در دسترس نیست"
+PACK_NOT_FOR_PAYG = "خرید بسته برای پلن PAYG فعال نیست"
+PACK_NEEDS_SUBSCRIPTION = "اول یک پلن نمایندگی (اشتراک) بخرید"
+# Stable aliases for callers/tests that imported the pack-module names.
+PACK_NEEDS_ACTIVE = SUB_NEEDS_ACTIVE
+PACK_EXPIRED = SUB_EXPIRED
+PACK_BAD_AMOUNT = "مقدار بسته نامعتبر است"
+PACK_BAD_PRICE = "قیمت بسته نامعتبر است"
+NO_PANEL_ADMIN = "ادمین پاسارگارد برای این نماینده تنظیم نشده است"
+
+__all__ = (
+    "NO_PACK",
+    "NO_PANEL_ADMIN",
+    "PACK_BAD_AMOUNT",
+    "PACK_BAD_PRICE",
+    "PACK_EXPIRED",
+    "PACK_NEEDS_ACTIVE",
+    "PACK_NEEDS_SUBSCRIPTION",
+    "PACK_NOT_FOR_PAYG",
+    "SHOP_INACTIVE",
+    "assert_shop_allows_capacity",
+    "assert_subscription_open",
+    "buy_addon_pack",
+    "pack_fits_plan",
+    "pack_offer",
+)
+
+
+def pack_fits_plan(pack: ResellerPlan | None, plan: ResellerPlan | None) -> bool:
+    """A general pack fits every plan; a categorised one only a plan of the same category."""
+    if pack is None or plan is None or not pack.is_active or not is_addon_plan(pack):
+        return False
+    if pack.category_id is None:
+        return True
+    return plan.category_id is not None and int(pack.category_id) == int(plan.category_id)
+
+
+def _pack_amounts(pack: ResellerPlan) -> tuple[int, int]:
+    """(gb, users) the pack adds; exactly one of them is positive."""
+    if plan_kind_of(pack) == PLAN_KIND_ADDON_VOLUME:
+        gb, users = int(pack.addon_gb or 0), 0
+    else:
+        gb, users = 0, int(pack.addon_users or 0)
+    if gb <= 0 and users <= 0:
+        raise ValueError(PACK_BAD_AMOUNT)
+    return gb, users
+
+
+async def pack_offer(
+    session: AsyncSession,
+    *,
+    user: BotUser,
+    profile: ResellerProfile,
+    plan: ResellerPlan | None,
+    pack_id: int,
+) -> CapacityOffer:
+    """Validate that ``user`` may buy catalog pack ``pack_id`` now; raises ``ValueError`` (safe to show).
+
+    ``profile`` must be the profile of ``user`` (the caller resolves both from the session).
+    """
+    if profile.user_id != user.id:
+        raise ValueError(NO_PACK)
+    if is_payg(profile):
+        raise ValueError(PACK_NOT_FOR_PAYG)
+    if plan is None or not is_subscription_plan(plan):
+        raise ValueError(PACK_NEEDS_SUBSCRIPTION)
+    uname = (profile.pg_admin_username or "").strip()
+    if not uname:
+        raise ValueError(NO_PANEL_ADMIN)
+    await assert_shop_allows_capacity(session, profile)
+    pack = await session.get(ResellerPlan, int(pack_id))
+    if not pack_fits_plan(pack, plan):
+        raise ValueError(NO_PACK)
+    price = int(pack.price or 0)
+    if price <= 0:
+        raise ValueError(PACK_BAD_PRICE)
+    gb, users = _pack_amounts(pack)
+    return CapacityOffer(uname=uname, gb=gb, users=users, price=price, reason=f"reseller_addon:{int(pack.id)}:{uname}")
+
+
+async def buy_addon_pack(
+    session: AsyncSession,
+    *,
+    user: BotUser,
+    profile: ResellerProfile,
+    plan: ResellerPlan | None,
+    pack_id: int,
+    generation: int,
+) -> dict[str, int | str]:
+    """Pay a catalog pack from the owner's wallet and raise the admin's live panel limit by it."""
+    offer = await pack_offer(session, user=user, profile=profile, plan=plan, pack_id=pack_id)
+    new_limit = await buy_offer(session, user=user, offer=offer, generation=int(generation))
+    pack = await session.get(ResellerPlan, int(pack_id))
+    return {"pack": pack.name, "gb": offer.gb, "users": offer.users, "amount": offer.price, "new_limit": new_limit}

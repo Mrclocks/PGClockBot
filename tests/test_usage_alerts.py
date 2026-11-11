@@ -168,8 +168,11 @@ class AutomationNoticeTests(AlertCase):
     async def test_the_insufficient_wallet_notice_offers_a_topup(self):
         self.assertEqual(buttons(await self.notice_markup("low_wallet")), [TOPUP_CALLBACK, "svc:auto:10"])
 
+    async def test_a_review_notice_adds_the_support_button(self):
+        self.assertEqual(buttons(await self.notice_markup("review")), ["svc:auto:10", "nv:s:home"])
+
     async def test_other_notices_keep_their_single_button(self):
-        self.assertEqual(buttons(await self.notice_markup("review")), ["svc:auto:10"])
+        self.assertEqual(buttons(await self.notice_markup("insufficient")), ["svc:auto:10"])
 
 
 class AlertJobTests(AlertCase):
@@ -273,3 +276,178 @@ class AlertJobTests(AlertCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AlertThresholdCorrectnessTests(AlertJobTests):
+    """Time share uses the plan's period, and a sent alert is armed again once it no longer applies."""
+
+    async def set_created(self, days_ago: int) -> None:
+        await self.session.execute(
+            UserService.__table__.update().where(UserService.id == 10).values(created_at=self.now - timedelta(days=days_ago))
+        )
+        await self.session.commit()
+
+    def time_info(self, days_left: float):
+        return lambda token: {
+            "status": "active", "expire": (self.now + timedelta(days=days_left)).isoformat(),
+            "used_traffic": 10, "data_limit": 100,
+        }
+
+    async def run_time(self, days_left: float):
+        async with self.Session() as session:
+            await set_setting(session, "user_alert_low_enabled", "1")
+        clear_settings_cache()
+        pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=self.time_info(days_left)))
+        bot = AsyncMock()
+        with patch.object(jobs, "SessionLocal", self.Session), patch.object(jobs, "get_pg", return_value=pg):
+            await jobs.check_expiring_services(bot)
+        return [c for c in bot.send_message.await_args_list if c.args[0] == 1001 and "زمان سرویس" in c.args[1]]
+
+    async def test_a_renewed_service_is_not_alerted_early_because_of_its_old_creation_date(self):
+        await self.set_created(100)  # 25 of the 30 plan days left, but 20% of the time since creation
+        self.assertEqual(await self.run_time(25), [])
+
+    async def test_a_renewed_service_is_still_alerted_when_the_plan_period_is_nearly_over(self):
+        await self.set_created(100)  # 2 of 30 days left, but 2% of 102 days only counts since creation
+        self.assertEqual(len(await self.run_time(4)), 1)
+
+    async def test_a_service_without_a_plan_duration_falls_back_to_its_creation_date(self):
+        await self.set_created(29)
+        await self.session.execute(Plan.__table__.update().where(Plan.id == 1).values(duration_days=0))
+        await self.session.commit()
+        self.assertEqual(len(await self.run_time(1)), 1)
+
+
+class QuotaSyncKeepsFlagsTests(AlertCase):
+    """A quota change alone never clears an alert flag: only the thresholds can say it no longer applies."""
+
+    def test_a_small_extension_and_a_slightly_bigger_limit_keep_both_flags(self):
+        from app.services.bot_user_admin import sync_service_quota_cache
+
+        svc = UserService(id=99, bot_user_id=1, pg_user_id=1, pg_username="u", notified_expire=True, notified_traffic=True,
+                          quota_expire_at=self.now + timedelta(hours=10), quota_data_limit_bytes=100)
+        sync_service_quota_cache(svc, info={"status": "active", "expire": int((self.now + timedelta(hours=12)).timestamp()), "data_limit": 101})
+        self.assertTrue(svc.notified_expire and svc.notified_traffic)
+
+
+class RearmSweepTests(AlertCase):
+    async def flag(self, service_id: int, **extra):
+        await self.session.execute(
+            UserService.__table__.update().where(UserService.id == service_id).values(notified_expire=True, notified_traffic=True, **extra)
+        )
+        await self.session.commit()
+
+    async def sweep(self, infos: dict[str, object], *, enabled=True, limit=100):
+        from app.services.alert_rearm import rearm_flagged_alerts
+
+        async def lookup(token):
+            answer = infos[token]
+            if isinstance(answer, BaseException):
+                raise answer
+            return answer
+
+        async def thresholds(_shop):
+            return (enabled, 20, 20)
+
+        pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=lookup))
+        result = await rearm_flagged_alerts(self.session, pg, thresholds, now=self.now, limit=limit)
+        await self.session.commit()
+        return result
+
+    def info(self, *, days_left: float, used: int):
+        return {"status": "active", "expire": int((self.now + timedelta(days=days_left)).timestamp()), "used_traffic": used, "data_limit": 100}
+
+    async def flags(self, service_id: int):
+        row = await self.service(service_id)
+        await self.session.refresh(row)
+        return row.notified_expire, row.notified_traffic
+
+    async def test_a_usage_reset_arms_the_traffic_alert_again(self):
+        await self.flag(10)
+        await self.sweep({"tokplat": self.info(days_left=1, used=5)})
+        self.assertEqual(await self.flags(10), (True, False))
+
+    async def test_a_panel_side_renewal_arms_the_time_alert_again(self):
+        await self.flag(10)
+        await self.sweep({"tokplat": self.info(days_left=28, used=95)})
+        self.assertEqual(await self.flags(10), (False, True))
+
+    async def test_a_service_still_below_the_threshold_keeps_its_flags(self):
+        await self.flag(10)
+        await self.sweep({"tokplat": self.info(days_left=1, used=95)})
+        self.assertEqual(await self.flags(10), (True, True))
+
+    async def test_a_service_just_above_the_threshold_stays_inside_the_margin(self):
+        await self.flag(10)  # 7 of 30 days is 23%: above the 20% threshold but inside the 5-point margin
+        await self.sweep({"tokplat": self.info(days_left=7, used=77)})
+        self.assertEqual(await self.flags(10), (True, True))
+
+    async def test_an_unreadable_service_and_a_shop_with_alerts_off_are_left_alone(self):
+        await self.flag(10)
+        await self.sweep({"tokplat": TimeoutError()})
+        self.assertEqual(await self.flags(10), (True, True))
+        await self.sweep({"tokplat": self.info(days_left=28, used=5)}, enabled=False)
+        self.assertEqual(await self.flags(10), (True, True))
+
+    async def test_a_two_hour_extension_of_a_nearly_finished_service_does_not_arm_it_again(self):
+        await self.flag(10)
+        await self.sweep({"tokplat": self.info(days_left=0.1, used=99)})
+        self.assertEqual(await self.flags(10), (True, True))
+
+    async def test_services_the_panel_keeps_failing_on_cannot_hold_up_the_others(self):
+        for sid, token in ((10, "tokplat"), (11, "tokshop2"), (12, "tokshop3")):
+            await self.flag(sid)
+        answers = {"tokplat": TimeoutError(), "tokshop2": TimeoutError(), "tokshop3": self.info(days_left=28, used=5)}
+        from app.services.alert_rearm import rearm_flagged_alerts
+
+        async def lookup(token):
+            answer = answers[token]
+            if isinstance(answer, BaseException):
+                raise answer
+            return answer
+
+        async def thresholds(_shop):
+            return (True, 20, 20)
+
+        pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=lookup))
+        first = await rearm_flagged_alerts(self.session, pg, thresholds, now=self.now, limit=2)
+        second = await rearm_flagged_alerts(self.session, pg, thresholds, now=self.now, after_id=first.next_after_id, limit=2)
+        self.assertEqual(await self.flags(12), (False, False))  # reached on the second step despite the failing rows before it
+        self.assertEqual(second.next_after_id, 0)
+
+    async def test_recently_changed_services_are_read_before_the_rotation_reaches_them(self):
+        await self.flag(10, quota_synced_at=self.now - timedelta(days=5))
+        await self.flag(11, quota_synced_at=self.now - timedelta(days=5))
+        await self.flag(12, quota_synced_at=self.now - timedelta(minutes=5))
+        seen = []
+
+        from app.services.alert_rearm import rearm_flagged_alerts
+
+        async def lookup(token):
+            seen.append(token)
+            return self.info(days_left=28, used=5)
+
+        async def thresholds(_shop):
+            return (True, 20, 20)
+
+        await rearm_flagged_alerts(self.session, SimpleNamespace(subscription_info=AsyncMock(side_effect=lookup)), thresholds,
+                                   now=self.now, after_id=100, limit=2)
+        self.assertEqual(seen, ["tokshop3"])  # nothing left after the cursor, the recent one still goes first
+
+    async def test_a_shop_with_alerts_off_never_takes_a_place_in_the_sweep(self):
+        for sid in (10, 11, 12):
+            await self.flag(sid)
+        seen = []
+
+        from app.services.alert_rearm import rearm_flagged_alerts
+
+        async def lookup(token):
+            seen.append(token)
+            return self.info(days_left=28, used=5)
+
+        async def thresholds(shop):
+            return (shop == 3, 20, 20)
+
+        await rearm_flagged_alerts(self.session, SimpleNamespace(subscription_info=AsyncMock(side_effect=lookup)), thresholds,
+                                   now=self.now, limit=2)
+        self.assertEqual(seen, ["tokshop3"])

@@ -61,6 +61,7 @@ SCREEN_TITLE_DEFAULTS: dict[str, str] = {
     "r.customers": "👥 مشتریان",
     "r.shop": "🏪 فروشگاه من",
     "r.account": "💼 حساب من",
+    "r.broadcast": "📢 پیام گروهی",
 }
 
 _PICK_SECTION = "یک بخش را از دکمه‌های زیر انتخاب کنید."
@@ -104,8 +105,9 @@ SCREEN_CAPTION_DEFAULTS: dict[str, str] = {
     "r.plans": "پلن تازه بسازید، یا برچسب دسته و بسته‌های حجم/زمان را مدیریت کنید.",
     "r.daily": "خلاصهٔ فروشگاه، سفارش‌ها، رسیدها و تیکت‌های مشتریان.",
     "r.customers": "فهرست مشتریان و نمایندگان زیرمجموعه.",
-    "r.shop": "پلن‌های فروش، باشگاه مشتریان و تنظیمات فروشگاه.",
+    "r.shop": "پلن‌های فروش، باشگاه مشتریان، پیام گروهی و تنظیمات فروشگاه.",
     "r.account": "کیف پول، تمدید، بسته‌های حجم/کاربر، گزارش و آمار.",
+    "r.broadcast": "مخاطبان پیام را انتخاب کنید:",
 }
 # The support menu already shows an editable setting under its title.
 CAPTION_SETTING_OVERRIDES: dict[str, str] = {"c.support": "support_text"}

@@ -28,7 +28,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.catalog_pricing import displayed_quote, quote_product, sale_price
 from app.config import get_settings
 from app.db.models import BotUser, Order, ResellerProfile, UserService
+from app.api.miniapp_buy_extras import (
+    check_buy_extras,
+    checkout_options,
+    deliver_free,
+    is_staff_free_request,
+    service_name_field,
+)
+from app.services.custom_service_name import name_order_at_checkout
 from app.services.db_safe import rollback_quiet
+from app.services.panel_nav import MINIAPP_OWNER_SHORTCUTS, MINIAPP_RESELLER_SHORTCUTS, miniapp_shortcuts
 from app.services.funnel_events import STEP_PAY_START, record_order_funnel
 from app.services.service_scope import customer_may_use_service
 from app.services.trial_notify import notify_trial_claimed_outside_bot
@@ -371,8 +380,13 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
 
     Plans, activity and live service usage load on their own screens. In a shop's Mini App
     everything is that shop's: its services, its purse and its settings, and paying stays
-    off until shop purchases are opened.
+    off until shop purchases are opened. Loyalty points appear only while this shop's club
+    is on, and only for that shop's purse.
     """
+    # Reuse the already-loaded shop ui for the club switch (one settings read, not a
+    # second loyalty_enabled query). points_balance runs only while the club is on.
+    from app.services.loyalty import points_balance
+
     ui = await get_all_settings(session, reseller_id=scope.shop_id)
     try:
         home = (await customer_home_summary(session, int(user.id), shop_id=scope.shop_id)).payload()
@@ -380,14 +394,20 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
         await rollback_quiet(session)
         log.warning("miniapp home summary failed user=%s", user.id, exc_info=True)
         home = _empty_home()
-    return {
+    out = {
         "wallet": await get_wallet_balance(session, user, shop_id=scope.shop_id),
         "wallet_pay_enabled": on(ui.get("pay_wallet_enabled")),
         "qr_enabled": on(ui.get("qr_enabled", "1")),
         "commerce_allowed": True,
         "home": home,
         "badges": (await home_badges(session, user, shop_id=scope.shop_id)).payload(),
+        "checkout": await checkout_options(session, user, scope),
     }
+    shop_id = scope.shop_id
+    if on(ui.get("loyalty_enabled")):
+        out["loyalty_enabled"] = True
+        out["points"] = await points_balance(session, user, shop_id)
+    return out
 
 
 async def _shop_me_payload(session: AsyncSession, user: BotUser, scope: MiniScope) -> dict:
@@ -484,15 +504,7 @@ async def _admin_ops_payload(session: AsyncSession) -> dict:
             "tickets": int(summary.get("tickets") or 0),
             "resellers": int(summary.get("resellers") or 0),
         },
-        "panel_links": [
-            {"id": "resellers", "label": "نمایندگان", "path": "/resellers"},
-            {"id": "finance", "label": "مالی", "path": "/finance"},
-            {"id": "users", "label": "کاربران", "path": "/users"},
-            {"id": "tickets", "label": "تیکت‌ها", "path": "/tickets"},
-            {"id": "dashboard", "label": "نمای کلی وب", "path": "/dashboard"},
-        ]
-        if base
-        else [],
+        "panel_links": miniapp_shortcuts(MINIAPP_OWNER_SHORTCUTS) if base else [],
         "panel_base": base,
     }
 
@@ -536,14 +548,7 @@ async def _reseller_ops_payload(
             "active": bool(profile.is_active) if profile else False,
             "billing": billing,
         },
-        "panel_links": [
-            {"id": "home", "label": "داشبورد وب", "path": "/home"},
-            {"id": "finance", "label": "مالی", "path": "/finance"},
-            {"id": "tickets", "label": "پشتیبانی", "path": "/tickets"},
-            {"id": "shop", "label": "تنظیمات فروشگاه", "path": "/shop-settings"},
-        ]
-        if base
-        else [],
+        "panel_links": miniapp_shortcuts(MINIAPP_RESELLER_SHORTCUTS) if base else [],
         "panel_base": base,
     }
 
@@ -559,6 +564,17 @@ async def _renewal_already_ordered(session: AsyncSession, user: BotUser, preview
         return False
     order_id = await session.scalar(
         select(Order.id).where(Order.renewal_request_key == key, Order.user_id == int(user.id)).limit(1)
+    )
+    return order_id is not None
+
+
+async def _addon_already_ordered(session: AsyncSession, user: BotUser, preview: object) -> bool:
+    """True when this preview's request key already created the caller's addon order."""
+    key = preview.get("request_key") if isinstance(preview, dict) else None
+    if not isinstance(key, str) or not key:
+        return False
+    order_id = await session.scalar(
+        select(Order.id).where(Order.addon_request_key == key, Order.user_id == int(user.id)).limit(1)
     )
     return order_id is not None
 
@@ -729,16 +745,42 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             }
         )
 
+    @app.get("/api/mini/service/{service_id}/addon-preview")
+    async def mini_preview_addon(
+        service_id: int,
+        pack_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.db.models import ServiceAddonPack
+        from app.services.service_addons import preview_addon
+
+        user = await load_mini_user(session, request)
+        _require_commerce(user)
+        svc = await _addon_service(session, user, service_id, shop_id=mini_scope(request).shop_id)
+        pack = await session.get(ServiceAddonPack, pack_id)
+        try:
+            return _no_store(
+                await preview_addon(session, user_id=user.id, service=svc, pack=pack)
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                400, _safe_client_message(exc, fallback="دریافت پیش‌نمایش ناموفق")
+            ) from None
+        except Exception:
+            log.exception("mini addon preview failed user=%s svc=%s", user.id, service_id)
+            raise HTTPException(503, "دریافت اطلاعات سرویس ناموفق بود؛ دوباره تلاش کنید") from None
+
     @app.post("/api/mini/addon")
     async def mini_addon(request: Request, session: AsyncSession = Depends(get_db)):
         from app.db.models import ServiceAddonPack
         from app.services.orders import pay_with_wallet
         from app.services.service_addons import (
+            addon_terms,
             create_addon_order,
             kind_label,
-            pack_matches_service_category,
             pack_matches_shop,
-            service_plan_category_id,
+
         )
 
         user = await load_mini_user(session, request)
@@ -746,6 +788,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         user_id = int(user.id)
         try:
             body = await request.json()
+            if not isinstance(body, dict):
+                raise ValueError("bad json")
             service_id = int(body.get("service_id"))
             pack_id = int(body.get("pack_id"))
             kind = body.get("kind")
@@ -763,16 +807,29 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             raise HTTPException(400, "بسته یافت نشد")
         if kind is not None and pack.kind != kind:
             raise HTTPException(400, "نوع بسته با بخش انتخاب‌شده مطابقت ندارد")
-        svc_cat = await service_plan_category_id(session, svc)
-        if not pack_matches_service_category(pack, svc_cat):
-            raise HTTPException(400, "این بسته برای دستهٔ پلن این سرویس نیست")
         await session.refresh(user)
+        preview = body.get("preview")
+        retrying = await _addon_already_ordered(session, user, preview)
         quote = await quote_product(session, pack, shop_id=shop_id)
-        if quote.price > await _scope_wallet(session, user, request):
+        if not retrying and quote.price > await _scope_wallet(session, user, request):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
+            if (
+                not isinstance(preview, dict)
+                or preview.get("terms") != addon_terms(pack)
+                or preview.get("price") != sale_price(pack)
+                or not preview.get("request_key")
+            ):
+                raise ValueError(
+                    "پیش‌نمایش افزایش معتبر نیست یا بسته تغییر کرده؛ دوباره بسته را انتخاب کنید"
+                )
             order = await create_addon_order(
-                session, user_id=user.id, service=svc, pack=pack, expected_price=body.get("price")
+                session,
+                user_id=user.id,
+                service=svc,
+                pack=pack,
+                expected_price=preview["price"],
+                request_key=preview["request_key"],
             )
             order = await pay_with_wallet(session, order, user)
             await session.refresh(user)
@@ -825,8 +882,13 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             plan_id = int(body.get("plan_id"))
         except (TypeError, ValueError):
             raise HTTPException(400, "plan_id required")
+        staff_free = is_staff_free_request(body)
+        service_name = service_name_field(body)
+        await check_buy_extras(
+            session, user, mini_scope(request), staff_free=staff_free, service_name=service_name
+        )
         ui = await _scope_ui(session, request)
-        if not on(ui.get("pay_wallet_enabled")):
+        if not staff_free and not on(ui.get("pay_wallet_enabled")):
             raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
         # This Mini App's catalog only: load_mini_user set the shop context, and
         # get_catalog_plan refuses every plan another shop (or the platform) sells.
@@ -834,14 +896,20 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         if not plan or not plan.is_active:
             raise HTTPException(400, "پلن یافت نشد")
         await session.refresh(user)
-        if sale_price(plan) > await _scope_wallet(session, user, request):
+        if not staff_free and sale_price(plan) > await _scope_wallet(session, user, request):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
             order = await create_order(session, user_id=user.id, plan_id=plan_id, expected_price=body.get("price"))
             await record_order_funnel(session, order, STEP_PAY_START, key=f"pay_start:order:{order.id}")
+            await name_order_at_checkout(session, order, buyer_id=int(user.id), raw=service_name)
             await session.refresh(user)
-            order = await pay_with_wallet(session, order, user)
+            if staff_free:
+                order = await deliver_free(session, order, user)
+            else:
+                order = await pay_with_wallet(session, order, user)
             await session.refresh(user)
+        except HTTPException:
+            raise
         except ValueError as exc:
             await rollback_quiet(session)
             raise HTTPException(

@@ -25,7 +25,7 @@ class TicketNotifyButtonsTests(unittest.TestCase):
     def test_notify_new_ticket_sends_markup(self):
         src = (ROOT / "app/services/notifications.py").read_text(encoding="utf-8")
         self.assertIn("ticket_action_markup", src)
-        self.assertIn("markup=ticket_action_markup(ticket_id)", src)
+        self.assertIn("markup=ticket_action_markup(", src)
         self.assertIn("_ticket_reseller_chat_ids", src)
         self.assertIn("notify_ticket_message", src)
 

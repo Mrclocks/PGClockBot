@@ -3,13 +3,15 @@ from __future__ import annotations
 import json
 import logging
 import secrets
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.redact import user_safe_error
 from app.db.models import (
     BotUser,
     Order,
@@ -24,6 +26,13 @@ from app.db.models import (
 )
 from app.services.db_safe import rollback_quiet
 from app.services.chat_records import keeps_sent
+from app.services.pg_panel_access import (
+    close_access_warning,
+    may_share_pg_credentials,
+    pg_panel_allowed,
+    pg_password_follows_web,
+    set_pg_panel_access,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,16 +43,19 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("orders", "سفارش‌ها"),
     ("payments", "پرداخت‌ها و تأیید رسید"),
     ("payment_void", "ابطال پرداخت تأییدشده"),
-    ("tickets", "تیکت‌ها"),
+    ("tickets", "پشتیبانی"),
     ("stats", "آمار"),
     ("demo_users", "مدیریت کاربران دمو"),
     ("customer_notes", "یادداشت و تگ ریسک مشتری"),
+    ("customer_services", "اطلاعات و ویرایش سرویس مشتری"),
     ("shop_settings", "تنظیمات ربات فروشگاه"),
     ("campaigns", "کمپین‌های هدفمند فروشگاه"),
+    ("broadcast", "پیام گروهی به مشتریان فروشگاه"),
     ("trial_users", "مشاهدهٔ کاربران تست و خریداران"),
     ("trial_users_manage", "پیام به کاربران تست"),
     ("catalog_discounts", "تخفیف و کاهش قیمت فروشگاه"),
     ("gift_codes", "کد هدیه و کد تخفیف فروشگاه"),
+    ("cashback", "کش‌بک خرید فروشگاه"),
     ("wallet_adjust", "تنظیم دستی کیف پول مشتری"),
     ("loyalty_adjust", "تغییر دستی امتیاز مشتری"),
     ("customers_block", "مسدودسازی مشتری در فروشگاه"),
@@ -52,10 +64,51 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("connection_status_manage", "مدیریت تست اتصال"),
     ("service_import", "تأیید افزودن سرویس قبلی"),
     ("orders_purge", "حذف کامل سفارش‌ها و پرداخت‌ها"),
+    ("service_cleanup", "پاکسازی خودکار سرویس‌های منقضی"),
     ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
+    ("free_checkout", "دریافت رایگان سفارش خود توسط مالک فروشگاه"),
+    ("custom_service_name", "نام دلخواه سرویس هنگام خرید (اجباری)"),
 ]
 
-DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import,miniapp,customer_notes,gift_codes"
+DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import,miniapp,customer_notes,customer_services,gift_codes"
+
+
+@dataclass(frozen=True, slots=True)
+class FeaturePerm:
+    key: str
+    label: str
+    default: bool
+
+
+@dataclass(frozen=True, slots=True)
+class FeaturePermGroup:
+    title: str
+    risky: bool
+    perms: tuple[FeaturePerm, ...]
+
+
+# Display groups for the permission switches; every FEATURE_PERMS key is in exactly one group.
+# Risky money and data actions sit in their own group and are off by default.
+FEATURE_PERM_LAYOUT: tuple[tuple[str, bool, tuple[str, ...]], ...] = (
+    ("فروش و سفارش", False, ("dashboard", "plans", "orders", "payments", "stats", "custom_service_name")),
+    ("مشتریان", False, ("tickets", "customer_notes", "customer_services", "demo_users", "trial_users",
+                        "trial_users_manage", "customers_block")),
+    ("بازاریابی و وفاداری", False, ("campaigns", "broadcast", "catalog_discounts", "gift_codes", "cashback",
+                                   "loyalty")),
+    ("فروشگاه و فنی", False, ("shop_settings", "miniapp", "service_import", "connection_status",
+                             "connection_status_manage")),
+    ("عملیات حساس مالی", True, ("payment_void", "wallet_adjust", "loyalty_adjust", "orders_purge", "service_cleanup", "free_checkout")),
+)
+
+
+def feature_perm_groups() -> list[FeaturePermGroup]:
+    """Permission switches in display groups, with the default state used when creating a plan."""
+    labels = dict(FEATURE_PERMS)
+    defaults = set(DEFAULT_FEATURE_PERMS.split(","))
+    return [
+        FeaturePermGroup(title, risky, tuple(FeaturePerm(k, labels[k], k in defaults) for k in keys))
+        for title, risky, keys in FEATURE_PERM_LAYOUT
+    ]
 
 # Tabs a reseller may edit for their own shop bot
 RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
@@ -65,16 +118,16 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
     ("screens", "تیتر و توضیح منوها"),
-    ("colors", "رنگبندی دکمه‌ها"),
-    ("menu", "منوی بات"),
+    ("colors", "رنگ دکمه‌ها"),
+    ("menu", "منوی ربات"),
     ("miniapp", "مینی‌اپ"),
     ("links", "لینک‌های سریع"),
     ("qr", "QR اشتراک"),
-    ("limits", "محدودیت"),
+    ("limits", "قوانین و محدودیت‌ها"),
     ("service_import", "افزودن سرویس قبلی"),
     ("guides", "آموزش اتصال"),
-    ("naming", "نام‌گذاری سرویس"),
-    ("notifications", "نوتیفیکیشن"),
+    ("naming", "قالب نام‌گذاری"),
+    ("notifications", "هشدارها"),
     ("daily_report", "گزارش روزانه"),
     ("bot", "ربات اختصاصی"),
 ]
@@ -249,6 +302,18 @@ async def reseller_can_review_payment(
     return True
 
 
+# A closed-access shop's panel password is never shown, so it can be long.
+PRIVATE_PG_PASSWORD_LENGTH = 20
+
+
+def plan_allows_pg_panel_access(plan: ResellerPlan | None) -> bool:
+    """A plan's «دسترسی به پاسارگارد» default; no plan keeps access open."""
+    if plan is None:
+        return True
+    value = getattr(plan, "allow_pg_panel_access", True)
+    return True if value is None else bool(value)
+
+
 def _rand_password(length: int = 14) -> str:
     """PasarGuard-compatible password (Phase D1 shared generator)."""
     from app.services.credential_policy import generate_compliant_password
@@ -276,7 +341,7 @@ async def apply_reseller_panel_password(
     if not ok:
         raise ValueError(err)
     profile.web_password_hash = hash_password(pwd)
-    if not sync_pg or not (profile.pg_admin_username or "").strip():
+    if not sync_pg or not pg_password_follows_web(profile) or not (profile.pg_admin_username or "").strip():
         return
     enc = encrypt_secret(pwd)
     if not enc:
@@ -299,7 +364,7 @@ async def apply_reseller_panel_password(
             client = await get_pg_for_principal(session, principal_id=int(linked.id))
             await client.modify_admin(profile.pg_admin_username, {"password": pwd})
         except Exception as e:
-            raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
+            raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {user_safe_error(e)}") from e
         linked.pg_password_enc = enc
         profile.pg_admin_password_enc = None
         try:
@@ -316,7 +381,7 @@ async def apply_reseller_panel_password(
             client = await get_pg_for_reseller(session, int(profile.user_id))
             await client.modify_admin(profile.pg_admin_username, {"password": pwd})
         except Exception as e:
-            raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
+            raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {user_safe_error(e)}") from e
         profile.pg_admin_password_enc = enc
         try:
             invalidate_pg_reseller_cache(int(profile.user_id))
@@ -328,7 +393,7 @@ async def apply_reseller_panel_password(
     try:
         await get_pg().modify_admin(profile.pg_admin_username, {"password": pwd})
     except Exception as e:
-        raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
+        raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {user_safe_error(e)}") from e
     # Drop cached PG clients so next shop op uses the new password
     try:
         reset_pg()
@@ -547,6 +612,18 @@ def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> s
                 f"(گیگ {format_toman(eg, currency) if eg else '—'} · "
                 f"کاربر {format_toman(eu, currency) if eu else '—'})"
             )
+        carry_period = bool(getattr(plan, "carry_remaining_period", True))
+        keep_extras = bool(getattr(plan, "keep_extras_on_renew", True))
+        lines.append(
+            "زمان مانده در تمدید: <b>"
+            + ("منتقل می‌شود" if carry_period else "منتقل نمی‌شود")
+            + "</b>"
+        )
+        lines.append(
+            "حجم/کاربر اضافه در تمدید: <b>"
+            + ("حفظ می‌شود" if keep_extras else "پاک می‌شود")
+            + "</b>"
+        )
     groups = (getattr(plan, "pg_group_ids", None) or "").strip()
     lines.append(
         f"گروه‌های پاسارگارد: <code>{html.escape(groups) if groups else '—'}</code>"
@@ -782,8 +859,14 @@ _OPEN_APPLICATION_STATUSES = frozenset(
     {
         ResellerApplicationStatus.PENDING_PAYMENT.value,
         ResellerApplicationStatus.AWAITING_APPROVAL.value,
+        # In-flight approve still blocks a second application from the same user.
+        ResellerApplicationStatus.PROVISIONING.value,
     }
 )
+
+# Stuck ``provisioning`` may be reclaimed only after this lease (AGENTS.md lease+expiry).
+PROVISION_LEASE = timedelta(minutes=5)
+ALREADY_RESELLER = "این کاربر از قبل نماینده فعال دارد"
 
 # Order statuses that mean the linked reseller-app checkout is dead.
 _DEAD_ORDER_STATUSES = frozenset(
@@ -870,9 +953,9 @@ async def create_application(
     from app.services.billing import BillingError, assert_payg_purchase_wallet
 
     if reseller_plan_mode_of(plan) == "payg":
-        from app.services.billing import require_positive_payg_rate
+        from app.services.billing import require_billable_payg_plan
 
-        require_positive_payg_rate(int(getattr(plan, "price_per_gb", 0) or 0))
+        require_billable_payg_plan(plan)
         try:
             await assert_payg_purchase_wallet(session, int(user.wallet_balance or 0))
         except BillingError as e:
@@ -1064,8 +1147,13 @@ async def provision_reseller(
     share_pg_panel_url: bool | None = None,
     pg_role_id: int | None = None,
     panel_base_url: str = "",
+    reuse_existing: bool = False,
 ) -> dict:
-    """Activate reseller: PG admin + web panel creds + optional bot-token setup link."""
+    """Activate reseller: PG admin + web panel creds + optional bot-token setup link.
+
+    Manual grant paths keep ``reuse_existing=False`` so an already-active shop raises
+    instead of silently returning without secrets. Approve retries pass ``True``.
+    """
     from app.services.pasarguard import get_pg
     from app.services.pg_admin_subscription import (
         assert_new_admin_fits_owner_budget,
@@ -1085,9 +1173,9 @@ async def provision_reseller(
     if plan_billing not in {"fixed", "payg"}:
         plan_billing = "fixed"
     if plan_billing == "payg":
-        from app.services.billing import require_positive_payg_rate
+        from app.services.billing import require_billable_payg_plan
 
-        require_positive_payg_rate(int(getattr(plan, "price_per_gb", 0) or 0))
+        require_billable_payg_plan(plan)
     perms = normalize_feature_perms(
         web_permissions
         or bot_permissions
@@ -1113,9 +1201,52 @@ async def provision_reseller(
         share_pg = bool(getattr(plan, "share_pg_panel_url", False))
     else:
         share_pg = False
+    allow_pg_access = plan_allows_pg_panel_access(plan)
+    share_pg = may_share_pg_credentials(allow_access=allow_pg_access, share_panel_url=share_pg)
 
     # One username + password for Pasarguard admin AND bot web panel (when both created).
     from app.services.secret_box import encrypt_secret
+
+    existing = await get_reseller_profile(session, int(user.id))
+    already_provisioned = bool(
+        existing
+        and existing.is_active
+        and (
+            (do_pg and (existing.pg_admin_username or "").strip())
+            or (not do_pg and setup_is_complete(existing))
+        )
+    )
+    if already_provisioned:
+        if not reuse_existing:
+            raise ValueError(ALREADY_RESELLER)
+        # Approve retry / double submit: never create another PG admin for the same shop owner.
+        pg_username = (existing.pg_admin_username or "").strip() or None
+        if plan is not None and pg_username and is_subscription_plan(plan):
+            from app.services.pg_admin_subscription import get_subscription
+
+            # Only finish a missing period; do not refresh/reset an already-running one.
+            if await get_subscription(session, pg_username) is None:
+                await _start_new_subscription(session, plan, existing, pg_username)
+        base = (panel_base_url or "").rstrip("/") or await get_reseller_panel_base_url(session)
+        share_pg = share_pg and pg_panel_allowed(existing)
+        pg_panel = await get_reseller_pg_panel_base_url(session) if share_pg else ""
+        return {
+            "profile": existing,
+            "pg_username": pg_username,
+            "pg_password": None,
+            "pg_panel_url": pg_panel,
+            "share_pg_panel_url": share_pg,
+            "web_username": existing.web_username,
+            "web_password": None,
+            "panel_username": existing.web_username or pg_username,
+            "panel_password": None,
+            "unified_credentials": bool(do_pg and do_web and existing.web_username and pg_username),
+            "panel_url": base,
+            "permissions": existing.web_permissions or perms,
+            "plan_name": (plan.name if plan else None) or None,
+            "billing_mode": plan_billing,
+            "already_provisioned": True,
+        }
 
     shared_username = None
     shared_password = None
@@ -1128,7 +1259,8 @@ async def provision_reseller(
     pg_password_enc = None
     if do_pg:
         pg_username = shared_username
-        pg_password = shared_password
+        # Closed access: the panel password is never the web password and never sent.
+        pg_password = shared_password if allow_pg_access else _rand_password(PRIVATE_PG_PASSWORD_LENGTH)
         pg_password_enc = encrypt_secret(pg_password)
         if not pg_password_enc:
             raise ValueError("رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید")
@@ -1160,9 +1292,9 @@ async def provision_reseller(
                 try:
                     await get_pg().create_admin(payload)
                 except Exception as e2:
-                    raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {e2}") from e2
+                    raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e2)}") from e2
             else:
-                raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {e}") from e
+                raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e)}") from e
 
     web_username = None
     web_password = None
@@ -1188,6 +1320,7 @@ async def provision_reseller(
         issue_setup_token=True,
     )
     profile.share_pg_panel_url = share_pg
+    profile.allow_pg_panel_access = allow_pg_access
     await session.commit()
     await session.refresh(profile)
 
@@ -1198,14 +1331,15 @@ async def provision_reseller(
     if not base:
         base = await get_reseller_panel_base_url(session)
     pg_panel = await get_reseller_pg_panel_base_url(session) if share_pg else ""
-    unified = bool(do_pg and do_web and shared_username and shared_password)
+    unified = bool(allow_pg_access and do_pg and do_web and shared_username and shared_password)
 
     return {
         "profile": profile,
         "pg_username": pg_username,
-        "pg_password": pg_password if (share_pg or unified) else None,
+        "pg_password": pg_password if allow_pg_access and (share_pg or unified) else None,
         "pg_panel_url": pg_panel,
         "share_pg_panel_url": share_pg,
+        "pg_panel_access": allow_pg_access,
         "web_username": web_username,
         "web_password": web_password,
         "panel_username": shared_username if unified else (web_username or pg_username),
@@ -1242,8 +1376,11 @@ def format_credentials_message(creds: dict) -> str:
 
     panel = (creds.get("panel_url") or "").strip().rstrip("/")
     pg_panel = (creds.get("pg_panel_url") or "").strip().rstrip("/")
-    share_pg = bool(creds.get("share_pg_panel_url")) or bool(pg_panel and creds.get("pg_username"))
-    unified = bool(creds.get("unified_credentials"))
+    pg_access = bool(creds.get("pg_panel_access", True))
+    share_pg = pg_access and (
+        bool(creds.get("share_pg_panel_url")) or bool(pg_panel and creds.get("pg_username"))
+    )
+    unified = pg_access and bool(creds.get("unified_credentials"))
     panel_user = creds.get("panel_username") or creds.get("web_username") or creds.get("pg_username")
     panel_pass = creds.get("panel_password") or creds.get("web_password") or creds.get("pg_password")
 
@@ -1267,7 +1404,7 @@ def format_credentials_message(creds: dict) -> str:
             "💡 رمز را عوض کنید و در جای امن نگه دارید.",
         ]
     else:
-        if share_pg or creds.get("pg_username"):
+        if share_pg or (pg_access and creds.get("pg_username")):
             lines += ["🛡 <b>پنل پاسارگارد</b>", ""]
             if pg_panel:
                 lines += [f"آدرس:\n{copyable(pg_panel)}", ""]
@@ -1379,18 +1516,18 @@ async def format_reseller_my_service_card(session: AsyncSession, profile) -> str
         block.append(kv_line("⚠️", "ظرفیت زنده", err))
 
     if sub is not None:
+        from app.services.volume_allocation import subscription_ceiling_gb
+
         base = int(getattr(sub, "base_gb", 0) or 0)
         extra = int(getattr(sub, "extra_gb_purchased", 0) or 0)
-        if base or extra:
-            total = base + extra
-            block.append(
-                kv_line(
-                    "🗂",
-                    "سقف اشتراک",
-                    f"{total} گیگ" if total else "—",
-                )
-            )
+        plan_included = int(getattr(plan, "included_gb", 0) or 0) if plan is not None else 0
+        total = subscription_ceiling_gb(base_gb=base, extra_gb=extra, plan_included_gb=plan_included)
+        if total:
+            block.append(kv_line("🗂", "سقف اشتراک", f"{total} گیگ"))
             if extra:
+                shown_base = base if base > 0 else plan_included
+                if shown_base > 0:
+                    block.append(kv_line("📌", "سقف پایه", f"{shown_base} گیگ"))
                 block.append(kv_line("➕", "حجم اضافه خریداری‌شده", f"{extra} گیگ"))
         exp = getattr(sub, "expires_at", None)
         if exp is not None:
@@ -1790,10 +1927,10 @@ async def provision_existing_pg_admin(
     if not plan or not plan.is_active:
         return None, None, "پلن نمایندگی معتبر نیست — ابتدا یک پلن فعال بسازید"
     if reseller_plan_mode_of(plan) == "payg":
-        from app.services.billing import PaygRateError, require_positive_payg_rate
+        from app.services.billing import PaygRateError, require_billable_payg_plan
 
         try:
-            require_positive_payg_rate(int(getattr(plan, "price_per_gb", 0) or 0))
+            require_billable_payg_plan(plan)
         except PaygRateError as exc:
             return None, None, str(exc)
     if is_current_capacity_plan(plan):
@@ -1941,12 +2078,19 @@ async def provision_existing_pg_admin(
         # Store operator note on profile via unused field if present; else ignore
         pass
     profile.is_active = True
+    allow_pg_access = plan_allows_pg_panel_access(plan)
     if share_pg_panel_url is not None:
-        profile.share_pg_panel_url = bool(share_pg_panel_url)
+        share_pg = bool(share_pg_panel_url)
     elif getattr(plan, "share_pg_panel_url", None) is not None:
-        profile.share_pg_panel_url = bool(plan.share_pg_panel_url)
-    # Keep Pasarguard password in sync when operator sets a new shared password
-    if pwd:
+        share_pg = bool(plan.share_pg_panel_url)
+    else:
+        share_pg = bool(getattr(profile, "share_pg_panel_url", False))
+    profile.share_pg_panel_url = may_share_pg_credentials(
+        allow_access=allow_pg_access, share_panel_url=share_pg
+    )
+    # Keep Pasarguard password in sync when operator sets a new shared password;
+    # with access closed the panel password is replaced below instead.
+    if pwd and allow_pg_access and pg_panel_allowed(profile):
         from app.services.pasarguard import get_pg, reset_pg
         from app.services.secret_box import encrypt_secret
 
@@ -1958,7 +2102,7 @@ async def provision_existing_pg_admin(
             await get_pg().modify_admin(pg_u, {"password": pwd})
             reset_pg()
         except Exception as e:
-            return None, None, f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}"
+            return None, None, f"به‌روزرسانی رمز پاسارگارد ناموفق: {user_safe_error(e)}"
     await session.commit()
     await session.refresh(profile)
 
@@ -1974,11 +2118,17 @@ async def provision_existing_pg_admin(
             await session.commit()
         except ValueError as exc:
             await rollback_quiet(session)
-            return profile, None, f"نمایندگی فعال شد ولی اشتراک پلن ثبت نشد: {exc}"
+            return profile, None, f"نمایندگی فعال شد ولی اشتراک پلن ثبت نشد: {user_safe_error(exc)}"
         except Exception:  # noqa: BLE001 - the panel/DB detail stays in the log, the admin sees a safe text
             logger.exception("subscription start failed after provision_existing pg=%s", pg_u)
             await rollback_quiet(session)
             return profile, None, "نمایندگی فعال شد ولی اشتراک پلن ثبت نشد؛ اتصال پنل را بررسی و دوباره تلاش کنید"
+
+    if not allow_pg_access:
+        change = await set_pg_panel_access(session, profile, False)
+        warning = await close_access_warning(session, profile, change)
+        if warning:
+            return profile, None, warning
 
     setup_hint = None
     if not (profile.bot_token or "").strip():
@@ -2062,6 +2212,93 @@ def bot_needs_setup(profile: ResellerProfile | None) -> bool:
     return not bool((profile.bot_token or "").strip())
 
 
+APP_IN_PROGRESS = "این درخواست در حال آماده‌سازی است — چند لحظه دیگر دوباره تلاش کنید"
+APP_ALREADY_DONE = "این درخواست قبلاً تأیید شده است"
+APP_NOT_APPROVABLE = "این درخواست قابل تأیید نیست"
+
+
+async def _claim_application_for_approve(
+    session: AsyncSession,
+    app_id: int,
+    *,
+    reviewer_tg: int | None,
+) -> ResellerApplication:
+    """Atomically move an open application into ``provisioning`` before any panel call.
+
+    A second concurrent approve sees a fresh ``provisioning`` lease and gets
+    ``APP_IN_PROGRESS``. A stuck ``provisioning`` row with no shop profile may be
+    reclaimed only after ``PROVISION_LEASE`` (lease + expiry).
+    """
+    now = datetime.now(timezone.utc)
+    claimed = await session.execute(
+        update(ResellerApplication)
+        .where(
+            ResellerApplication.id == int(app_id),
+            ResellerApplication.status.in_(
+                (
+                    ResellerApplicationStatus.AWAITING_APPROVAL.value,
+                    ResellerApplicationStatus.PENDING_PAYMENT.value,
+                )
+            ),
+        )
+        .values(
+            status=ResellerApplicationStatus.PROVISIONING.value,
+            reviewed_by=reviewer_tg,
+            updated_at=now,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount == 1:
+        await session.commit()
+        app = await session.get(ResellerApplication, int(app_id))
+        if app is None:
+            raise ValueError(APP_NOT_APPROVABLE)
+        return app
+
+    app = await session.get(ResellerApplication, int(app_id))
+    if app is None:
+        raise ValueError(APP_NOT_APPROVABLE)
+    if app.status == ResellerApplicationStatus.APPROVED.value:
+        raise ValueError(APP_ALREADY_DONE)
+    if app.status == ResellerApplicationStatus.PROVISIONING.value:
+        profile = await get_reseller_profile(session, int(app.user_id))
+        if profile is not None and (profile.pg_admin_username or "").strip():
+            raise ValueError(APP_ALREADY_DONE)
+        lease_before = now - PROVISION_LEASE
+        reclaimed = await session.execute(
+            update(ResellerApplication)
+            .where(
+                ResellerApplication.id == int(app_id),
+                ResellerApplication.status == ResellerApplicationStatus.PROVISIONING.value,
+                or_(
+                    ResellerApplication.updated_at.is_(None),
+                    ResellerApplication.updated_at <= lease_before,
+                ),
+            )
+            .values(reviewed_by=reviewer_tg, updated_at=now)
+            .execution_options(synchronize_session=False)
+        )
+        if reclaimed.rowcount != 1:
+            raise ValueError(APP_IN_PROGRESS)
+        await session.commit()
+        await session.refresh(app)
+        return app
+    raise ValueError(APP_NOT_APPROVABLE)
+
+
+async def _creds_from_existing_profile(
+    session: AsyncSession,
+    *,
+    user: BotUser,
+    plan: ResellerPlan,
+    panel_base_url: str,
+) -> dict:
+    """Build an approve response when the shop was already provisioned (no plaintext secrets)."""
+    return await provision_reseller(
+        session, user=user, plan=plan, panel_base_url=panel_base_url, reuse_existing=True,
+    )
+
+
 async def approve_application(
     session: AsyncSession,
     app: ResellerApplication,
@@ -2070,28 +2307,55 @@ async def approve_application(
     panel_base_url: str = "",
     admin_note: str | None = None,
 ) -> dict:
-    if app.status not in {
-        ResellerApplicationStatus.AWAITING_APPROVAL.value,
-        ResellerApplicationStatus.PENDING_PAYMENT.value,
-    }:
-        raise ValueError("این درخواست قابل تأیید نیست")
+    """Approve a reseller application once: claim → provision → mark approved."""
     user = await session.get(BotUser, app.user_id)
     plan = await session.get(ResellerPlan, app.plan_id)
     if not user or not plan:
         raise ValueError("کاربر یا پلن یافت نشد")
-    if app.status == ResellerApplicationStatus.PENDING_PAYMENT.value and plan.price > 0:
+    if (
+        app.status == ResellerApplicationStatus.PENDING_PAYMENT.value
+        and int(plan.price or 0) > 0
+    ):
         raise ValueError("هنوز پرداخت این درخواست تکمیل نشده")
 
-    creds = await provision_reseller(
-        session,
-        user=user,
-        plan=plan,
-        panel_base_url=panel_base_url,
-    )
-    app.status = ResellerApplicationStatus.APPROVED.value
-    app.reviewed_by = reviewer_tg
+    app_id = int(app.id)
+    try:
+        await _claim_application_for_approve(session, app_id, reviewer_tg=reviewer_tg)
+    except ValueError as exc:
+        if str(exc) != APP_ALREADY_DONE:
+            raise
+        fresh = await session.get(ResellerApplication, app_id)
+        if fresh is not None and fresh.status != ResellerApplicationStatus.APPROVED.value:
+            fresh.status = ResellerApplicationStatus.APPROVED.value
+            fresh.reviewed_by = reviewer_tg
+            if admin_note:
+                fresh.admin_note = admin_note
+            await session.commit()
+        return await _creds_from_existing_profile(
+            session, user=user, plan=plan, panel_base_url=panel_base_url,
+        )
+
+    try:
+        creds = await provision_reseller(
+            session,
+            user=user,
+            plan=plan,
+            panel_base_url=panel_base_url,
+            reuse_existing=True,
+        )
+    except Exception:
+        # Leave ``provisioning`` for retry when the panel outcome is unknown; reclaim
+        # only after PROVISION_LEASE when no shop profile was written.
+        logger.exception("approve_application provision failed app_id=%s", app_id)
+        raise
+
+    fresh = await session.get(ResellerApplication, app_id)
+    if fresh is None:
+        raise ValueError(APP_NOT_APPROVABLE)
+    fresh.status = ResellerApplicationStatus.APPROVED.value
+    fresh.reviewed_by = reviewer_tg
     if admin_note:
-        app.admin_note = admin_note
+        fresh.admin_note = admin_note
     await session.commit()
     return creds
 

@@ -2,6 +2,7 @@
 {% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}کمپین هدفمند{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head"><h1>{{ self.title() }}</h1></div>
 {{ marketing_tabs(marketing_sections|default(()), 'campaigns') }}
 {% if request.query_params.get('error') %}<div class="flash warn">{{ request.query_params.get('error') }}</div>{% endif %}
@@ -20,4 +21,5 @@
 {% if row.status in ['draft', 'paused', 'running'] %}<form method="post" action="/campaigns/{{ row.id }}/{% if row.status == 'running' %}pause{% else %}start{% endif %}" {% if row.status != 'running' %}data-confirm="ارسال این متن به مخاطبان پیش‌نمایش‌شده آغاز شود؟"{% endif %}>
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">{% if row.status == 'running' %}توقف ارسال{% elif row.status == 'paused' %}ادامهٔ ارسال{% else %}شروع ارسال{% endif %}</button></form>{% endif %}
 </div>{% endfor %}
+</div>
 {% endblock %}

@@ -128,18 +128,14 @@ class WiringTests(unittest.TestCase):
         self.assertNotIn(">تمپلیت‌ها</span>", home)
 
     def test_base_nav_web_panel_for_all(self):
-        src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("تنظیمات وب پنل", src)
-        self.assertIn('href="/security"', src)
-        parts = src.split("nav-section-home")
-        self.assertGreaterEqual(len(parts), 3)
-        non_admin_web = parts[2].split("nav-section-bot")[0]
-        self.assertIn('href="/security"', non_admin_web)
-        self.assertIn('href="/home"', non_admin_web)
-        self.assertIn(">داشبورد</span>", non_admin_web)
-        bot = src[src.find("پنل ربات") : src.find("پنل پاسارگارد")]
-        self.assertIn('href="/dashboard"', bot)
-        self.assertIn(">نمای کلی</span>", bot)
+        from tests.sidebar_view import owner_sidebar, sidebar
+
+        self.assertIn(("تنظیمات سیستم", "/settings?tab=general"), owner_sidebar()["system"])
+        for role in ("reseller", "pg_staff", "principal"):
+            account = sidebar(role, perms=("dashboard",))["system"]
+            self.assertIn(("داشبورد", "/home"), account, role)
+            self.assertIn(("حساب و امنیت", "/security"), account, role)
+        self.assertIn(("نمای کلی فروشگاه", "/dashboard"), owner_sidebar()["shop"])
 
     def test_dashboard_perm_always_injected(self):
         perms = parse_perms("plans,orders")

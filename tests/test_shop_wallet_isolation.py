@@ -147,7 +147,7 @@ class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
 
             with patch(
                 "app.services.orders._resume_paid_wallet_order",
-                new=AsyncMock(side_effect=lambda s, o, u: o),
+                new=AsyncMock(side_effect=lambda s, o, u, **_kw: o),
             ):
                 await pay_with_wallet(session, order, buyer)
 

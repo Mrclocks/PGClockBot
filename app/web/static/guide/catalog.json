@@ -12,25 +12,25 @@
     "panel": "/home"
   },
   "home": {
-    "title": "داشبورد وب پنل",
-    "summary": "نمای کلی وضعیت سرور، اعلان‌های مهم و میانبرهای روزمره از صفحهٔ داشبورد.",
+    "title": "داشبورد",
+    "summary": "نمای کلی وضعیت سرور، هشدارهای مهم و میانبرهای روزمره از صفحهٔ داشبورد.",
     "slug": "home",
     "panel": "/home"
   },
   "inbox": {
-    "title": "اعلان‌ها و مرکز اقدام",
+    "title": "مرکز اقدام",
     "summary": "رسیدهای منتظر، تیکت‌ها و هشدارهای انقضا/حجم را از یک جا ببینید و جمع کنید.",
     "slug": "inbox",
     "panel": "/inbox"
   },
   "settings-panel": {
-    "title": "تنظیمات وب پنل",
-    "summary": "بکاپ، امنیت ورود، PWA، SSL و آپدیت نسخه — تنظیمات خودِ پنل، نه ربات فروشگاه.",
+    "title": "تنظیمات سیستم",
+    "summary": "اتصال ربات و پاسارگارد، بکاپ، امنیت ورود، PWA، دامنه‌ها و آپدیت — تنظیمات خودِ پنل، نه ربات فروشگاه.",
     "slug": "settings-panel",
     "panel": "/settings?tab=backup"
   },
   "bot-dashboard": {
-    "title": "نمای کلی ربات",
+    "title": "نمای کلی فروشگاه",
     "summary": "آمار فروشگاه، سفارش‌ها و سلامت ربات تلگرام را یک‌جا ببینید.",
     "slug": "bot-dashboard",
     "panel": "/dashboard"
@@ -42,7 +42,7 @@
     "panel": "/users"
   },
   "finance": {
-    "title": "مدیریت مالی",
+    "title": "مالی",
     "summary": "سفارش‌ها، رسید کارت‌به‌کارت، درگاه و تأیید/رد پرداخت‌ها.",
     "slug": "finance",
     "panel": "/finance"
@@ -78,8 +78,8 @@
     "panel": "/message-variables"
   },
   "settings-bot": {
-    "title": "تنظیمات ربات و فروشگاه",
-    "summary": "متن‌ها، دکمه‌ها، پرداخت، منو، ظاهر و اعلان‌های ربات تلگرام.",
+    "title": "تنظیمات ربات",
+    "summary": "ظاهر، متن‌ها و دکمه‌ها، فروش و تحویل سرویس، و هشدارهای ربات تلگرام؛ برای نماینده «تنظیمات فروشگاه».",
     "slug": "settings-bot",
     "panel": "/settings"
   },
@@ -93,7 +93,7 @@
     "title": "درخواست‌های نمایندگی",
     "summary": "بررسی و تأیید درخواست‌هایی که کاربر از داخل ربات فرستاده است.",
     "slug": "reseller-applications",
-    "panel": "/reseller-applications"
+    "panel": "/resellers/applications"
   },
   "funnel": {
     "title": "رفتار کاربر",
@@ -126,7 +126,7 @@
     "panel": "/settings"
   },
   "connection-status": {
-    "title": "وضعیت اتصال",
+    "title": "تست اتصال سرویس",
     "summary": "تست خودکار کانفیگ‌ها از سمت سرور و نمایش وضعیت آن‌ها به ادمین و مشتریان.",
     "slug": "connection-status",
     "panel": "/connection-status"

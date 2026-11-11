@@ -53,6 +53,7 @@ SHOP_ROUTES: frozenset[str] = frozenset({
     "/api/mini/service/{service_id}/renewal-preview",
     "/api/mini/renew",
     "/api/mini/service/{service_id}/addons",
+    "/api/mini/service/{service_id}/addon-preview",
     "/api/mini/addon",
     "/api/mini/topup",
     "/api/mini/topup/{payment_id}/receipt",

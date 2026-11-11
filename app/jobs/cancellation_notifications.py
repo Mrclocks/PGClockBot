@@ -12,7 +12,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from app.config import get_settings
 from app.db.session import SessionLocal
 from app.services.cancellation_notifications import CancellationNotice, NOTIFY_KEY, NoticeOutcome, process_cancellation_notifications
-from app.services.notifications import _shop_recipient_chat_ids, notify_enabled
+from app.services.notifications import _merge_markups, _shop_recipient_chat_ids, customer_markup, notify_enabled
 from app.services.reseller_bots import open_notify_bot_for_reseller
 
 logger = logging.getLogger(__name__)
@@ -40,13 +40,22 @@ async def _send_notice(bot: Bot, notice: CancellationNotice) -> NoticeOutcome:
             await send_bot.session.close()
 
 
-async def _send_to_targets(bot: Bot, notice: CancellationNotice, targets: list[int]) -> NoticeOutcome:
+def _notice_markup(notice: CancellationNotice) -> InlineKeyboardMarkup | None:
+    """Review button first, then the customer and service, then the web tab when HTTPS is public."""
+    review = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="📝 بررسی درخواست", callback_data=f"cnrv:v:{notice.request_id}"),
+    ]])
+    parts = [review, customer_markup(user_id=notice.user_id, service_id=notice.service_id, shop_id=notice.shop_id)]
     base_url = get_settings().public_base_url.rstrip("/")
-    markup = None
     if base_url.startswith("https://"):
-        markup = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="بررسی درخواست‌های لغو", url=base_url + "/finance?tab=cancellations"),
-        ]])
+        parts.append(InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="🌐 باز کردن در پنل وب", url=base_url + "/finance?tab=cancellations"),
+        ]]))
+    return _merge_markups(*parts)
+
+
+async def _send_to_targets(bot: Bot, notice: CancellationNotice, targets: list[int]) -> NoticeOutcome:
+    markup = _notice_markup(notice)
     outcome: NoticeOutcome = "sent"
     for chat_id in targets:
         if not await _send_target(bot, notice, chat_id, markup):

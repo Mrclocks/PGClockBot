@@ -49,6 +49,7 @@ class PaymentMethod(str, Enum):
     STARS = "stars"
     PSP = "psp"  # Iranian/online PSP with request→verify (additive)
     BBC = "bbc"  # BezanBeCard card-to-card match (per-shop API key)
+    STAFF_FREE = "staff_free"  # platform owner / shop operator took their own order free
 
 
 class PaymentStatus(str, Enum):
@@ -174,6 +175,21 @@ class Plan(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
+    # When true (default), renewal/upgrade/downgrade adds leftover volume and time.
+    # When false, the new period is exactly this plan's volume and duration.
+    carry_remaining_quota: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    # Plan-scoped customer extra stairs (volume GB / duration months), like reseller fixed.
+    allow_buy_extra: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    extra_gb_price: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0")
+    )  # toman per extra GB
+    extra_month_price: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0")
+    )  # toman per extra month (stored packs use days = months * 30)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -181,10 +197,9 @@ class Plan(Base):
 class ServiceAddonPack(Base):
     """Customer add-on packs: extra volume (GB) or duration (days) on an existing service.
 
-    ``is_general`` packs apply to every plan category of the shop. Otherwise
-    ``category_id`` ties the pack to the plan category of the service's sales
-    plan, so VIP and economy packs can be priced differently. A pack that is
-    neither general nor tied to a category matches nothing.
+    Scope (narrowest wins at purchase time):
+    - ``plan_id`` set → only services of that sales plan see the pack.
+    - else ``category_id`` / ``is_general`` → category or shop-wide (legacy).
     """
 
     __tablename__ = "service_addon_packs"
@@ -205,21 +220,46 @@ class ServiceAddonPack(Base):
         nullable=True,
         index=True,
     )
+    # When set, the pack is exclusive to this sales plan (overrides category/general listing).
+    plan_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("plans.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    # NULL = inherit plan button style; "" = Telegram default; primary|success|danger
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     is_general: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+# Orders whose chosen service name is still held: unpaid, paid, or being delivered.
+OPEN_NAMED_ORDER_SQL = (
+    "requested_username IS NOT NULL AND status IN "
+    "('pending', 'rejected', 'awaiting_receipt', 'paid', 'delivering')"
+)
+
+
 class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         Index("uq_orders_renewal_request_key", "renewal_request_key", unique=True),
+        Index("uq_orders_addon_request_key", "addon_request_key", unique=True),
         Index("ix_orders_created_at", "created_at"),
         Index(
             "uq_orders_service_quota_mutation", "service_id", unique=True,
             sqlite_where=text("service_mutation_pending = true"),
             postgresql_where=text("service_mutation_pending = true"),
+        ),
+        # One open order per shop may hold a chosen service name (platform orders: shop 0).
+        Index(
+            "uq_orders_open_requested_username",
+            text("coalesce(reseller_id, 0)"),
+            "requested_username",
+            unique=True,
+            sqlite_where=text(OPEN_NAMED_ORDER_SQL),
+            postgresql_where=text(OPEN_NAMED_ORDER_SQL),
         ),
     )
 
@@ -239,10 +279,14 @@ class Order(Base):
     status: Mapped[str] = mapped_column(String(32), default=OrderStatus.PENDING.value, index=True)
     payment_method: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     discount_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Name the buyer chose for the new service; fills the naming pattern's {random} part.
+    requested_username: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Purchased terms and an absolute target, persisted before panel mutation.
     renewal_snapshot: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     renewal_request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Mini App addon preview idempotency — same role as renewal_request_key for packs.
+    addon_request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # Serialize quota changes and retain exclusion while a renewal needs review.
     service_mutation_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     service_id: Mapped[Optional[int]] = mapped_column(
@@ -408,6 +452,18 @@ class UserService(Base):
             postgresql_where=text("remark = 'imported'"),
         ),
         # New services waiting for the first-use check; the check stamps the row, so it leaves the index.
+        Index("ix_user_services_panel_checked_at", "panel_checked_at"),
+        Index("ix_user_services_quota_expire_at", "quota_expire_at"),
+        Index(
+            "ix_user_services_volume_exhausted", "volume_exhausted_at",
+            sqlite_where=text("volume_exhausted_at IS NOT NULL"),
+            postgresql_where=text("volume_exhausted_at IS NOT NULL"),
+        ),
+        Index(
+            "ix_user_services_panel_missing", "shop_id",
+            sqlite_where=text("panel_missing_at IS NOT NULL"),
+            postgresql_where=text("panel_missing_at IS NOT NULL"),
+        ),
         Index(
             "ix_user_services_first_use_pending", "created_at",
             sqlite_where=text("first_use_checked_at IS NULL"),
@@ -458,12 +514,57 @@ class UserService(Base):
     shop_needs_review: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("false"), index=True
     )
+    # Expired / volume-finished service cleanup (see service_cleanup.py).
+    cleanup_exempt: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # A staff-set date before which the service is not deleted, whatever the policy says.
+    cleanup_hold_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Highest warning stage already sent for the current expiry (0 = none); reset by a renewal.
+    cleanup_warn_stage: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # When the last warning stage was queued; the deletion waits a while after it.
+    cleanup_warned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Same for the volume-finished rule, which has its own warnings.
+    cleanup_volume_warn_stage: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # Lease taken before the delete call; a lease that never finished means the outcome is unknown.
+    cleanup_claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the panel first reported the volume as finished (status «limited»); cleared when it is not.
+    volume_exhausted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set when the panel confirmed (HTTP 404 on the user lookup) that this service's panel user is gone.
+    panel_missing_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Last time the presence scan looked this service up; the scan takes the oldest first.
+    panel_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     owner: Mapped["BotUser"] = relationship(
         back_populates="services", foreign_keys=[bot_user_id]
     )
     plan: Mapped[Optional["Plan"]] = relationship()
+
+
+class CustomerNotice(Base):
+    """A message telling a customer what staff did to their service, sent by a throttled worker.
+
+    ``pending`` -> ``sending`` (claimed before the network call) -> ``sent`` / ``skipped`` /
+    ``failed``. A row left ``sending`` by a crash becomes ``review``: Telegram may have accepted
+    it, so it is never sent again.
+    """
+
+    __tablename__ = "customer_notices"
+    __table_args__ = (Index("ix_customer_notices_status_due", "status", "next_attempt_at", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bot_user_id: Mapped[int] = mapped_column(Integer)
+    telegram_id: Mapped[int] = mapped_column(BigInteger)
+    # The service the notice is about, when it has one (lets the message carry a renew button).
+    service_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    action: Mapped[str] = mapped_column(String(32))
+    service_name: Mapped[str] = mapped_column(String(128), default="", server_default="")
+    reason: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    next_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class BotUserShop(Base):
@@ -571,6 +672,22 @@ class PanelAlertState(Base):
     fingerprint: Mapped[str] = mapped_column(String(64), default="", server_default="")
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PgLinkHealthState(Base):
+    """Single platform row: last known PasarGuard link-health summary across restarts."""
+
+    __tablename__ = "pg_link_health_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    pause_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    kind_totals_24h: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
 
 
 class VolumeHold(Base):
@@ -752,8 +869,20 @@ class DiscountCode(Base):
 
 class BroadcastLog(Base):
     __tablename__ = "broadcast_logs"
+    __table_args__ = (
+        Index("ix_broadcast_logs_shop_id", "shop_id"),
+        Index(
+            "uq_broadcast_logs_request_key",
+            "request_key",
+            unique=True,
+            sqlite_where=text("request_key IS NOT NULL"),
+            postgresql_where=text("request_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # None = platform/owner broadcast; a shop id never shares history or audience with another shop.
+    shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
     audience: Mapped[str] = mapped_column(String(32), default="all")
     text: Mapped[str] = mapped_column(Text)
     total: Mapped[int] = mapped_column(Integer, default=0)
@@ -770,6 +899,8 @@ class BroadcastLog(Base):
     lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Client nonce scoped by the service (``shop-<id>-<nonce>``); unique when set.
+    request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
 class ResellerProfile(Base):
@@ -785,6 +916,17 @@ class ResellerProfile(Base):
     pg_api_key_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     share_pg_panel_url: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Off: no PasarGuard pages, actions or direct panel password for this shop (see pg_panel_access).
+    allow_pg_panel_access: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    # New PasarGuard password saved before the panel call that sets it, so a retry
+    # after an unknown outcome sends the same secret (Fernet ciphertext).
+    pg_password_rotation_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # A level-2 shop's PAYG price list, set by its level-1 parent (child_pricing).
+    child_plan_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # When panel reconciliation took this shop's baseline; a shop with no users still has one.
+    payg_baseline_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     web_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True)
     web_password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # Unified feature permissions (web + bot must stay identical)
@@ -865,6 +1007,228 @@ class ResellerBillingTransaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ResellerCharge(Base):
+    """One PAYG charge for a change to a shop's panel user (create, renew, volume, reset).
+
+    The row and the wallet debit are committed together before the panel call; the panel
+    outcome then settles, refunds or sends it to review. ``panel_target`` keeps the exact
+    change so a retry after an unknown outcome repeats it unchanged. Amounts are totals for
+    ``quantity`` users; the per-unit fields are for one user.
+    """
+
+    __tablename__ = "reseller_charges"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_reseller_charges_idempotency"),
+        Index("ix_reseller_charges_shop_request", "shop_id", "request_key"),
+        Index("ix_reseller_charges_shop_created", "shop_id", "created_at"),
+        Index("ix_reseller_charges_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
+    plan_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    event: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    # One confirmed change of the shop; a refunded attempt is followed by attempt + 1.
+    request_key: Mapped[str] = mapped_column(String(160))
+    attempt: Mapped[int] = mapped_column(Integer, default=1)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    pg_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    bytes_charged: Mapped[int] = mapped_column(BigInteger, default=0)
+    days_charged: Mapped[int] = mapped_column(Integer, default=0)
+    user_units: Mapped[int] = mapped_column(Integer, default=0)
+    price_per_gb: Mapped[int] = mapped_column(Integer, default=0)
+    user_price: Mapped[int] = mapped_column(Integer, default=0)
+    is_unlimited: Mapped[bool] = mapped_column(Boolean, default=False)
+    amount: Mapped[int] = mapped_column(Integer)
+    idempotency_key: Mapped[str] = mapped_column(String(191))
+    panel_target: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # A level-2 shop's charge points at its parent's charge for the same change; both move together.
+    linked_charge_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ChildPricePlan(Base):
+    """A level-1 shop's PAYG price list for its level-2 shops (never in the owner's catalog).
+
+    Same PAYG fields as ``ResellerPlan`` so ``payg_pricing.rates_from_plan`` reads it;
+    always charged at creation.
+    """
+
+    __tablename__ = "child_price_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_shop_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    payg_basis: Mapped[str] = mapped_column(String(16), default="traffic")
+    payg_charge_upfront: Mapped[bool] = mapped_column(Boolean, default=True)
+    price_per_gb: Mapped[int] = mapped_column(Integer, default=0)
+    payg_user_price: Mapped[int] = mapped_column(Integer, default=0)
+    payg_user_price_per_30d: Mapped[bool] = mapped_column(Boolean, default=False)
+    payg_unlimited_price: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ShopCreditAccount(Base):
+    """A PAYG shop's credit line: its wallet may go down to ``-limit`` for PAYG charges."""
+
+    __tablename__ = "shop_credit_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), unique=True)
+    credit_limit: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    temp_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    temp_limit_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # active | frozen | overdue | blocked; only active lends (see shop_credit.effective_limit).
+    status: Mapped[str] = mapped_column(String(16), default="active", server_default=text("'active'"))
+    # Highest «credit used» alert already sent (0, 70, 90, 100), claimed atomically.
+    alert_level: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # Overdue ladder step now in force (credit_statements.LadderStep), 0 when nothing is overdue.
+    restriction: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class CashbackRule(Base):
+    """One cashback rule of a shop (``shop_id`` NULL is the platform shop)."""
+
+    __tablename__ = "cashback_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # percent (basis points, 1000 = 10%) | fixed (toman)
+    mode: Mapped[str] = mapped_column(String(16), default="percent")
+    percent_bps: Mapped[int] = mapped_column(Integer, default=0)
+    fixed_amount: Mapped[int] = mapped_column(Integer, default=0)
+    max_per_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    min_order_amount: Mapped[int] = mapped_column(Integer, default=0)
+    # CSV of new | renew | addon
+    events: Mapped[str] = mapped_column(String(64), default="new,renew,addon")
+    plan_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    payment_methods: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    first_purchase_only: Mapped[bool] = mapped_column(Boolean, default=False)
+    starts_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Per customer and calendar month.
+    customer_max_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    customer_max_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    allow_with_discount: Mapped[bool] = mapped_column(Boolean, default=True)
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CashbackGrant(Base):
+    """Cashback of one delivered order: pending, then credited to the buyer's shop wallet.
+
+    One per order (unique ``order_id``). The rule's numbers are stored, so a later rule
+    edit never changes a grant.
+    """
+
+    __tablename__ = "cashback_grants"
+    __table_args__ = (
+        UniqueConstraint("order_id", name="uq_cashback_grant_order"),
+        Index("ix_cashback_grants_status_available", "status", "available_at"),
+        Index("ix_cashback_grants_shop_user_created", "shop_id", "user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
+    order_id: Mapped[int] = mapped_column(Integer)
+    rule_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    base_amount: Mapped[int] = mapped_column(Integer)
+    amount: Mapped[int] = mapped_column(Integer)
+    # pending | available | cancelled | reversed
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    reversed_amount: Mapped[int] = mapped_column(Integer, default=0)
+    unrecoverable_amount: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CashbackBudget(Base):
+    """Cashback a shop granted in one calendar month, checked atomically against its budget."""
+
+    __tablename__ = "cashback_budgets"
+    __table_args__ = (UniqueConstraint("shop_key", "month", name="uq_cashback_budget_month"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # The shop's user id, or 0 for the platform shop.
+    shop_key: Mapped[int] = mapped_column(Integer)
+    month: Mapped[str] = mapped_column(String(7))
+    used: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CreditStatement(Base):
+    """One closed calendar month of a shop's credit line, with the debt due and its due date.
+
+    Paid when the shop's balance plus the PAYG spending since ``period_end`` is no longer
+    negative: payments clear the oldest debt first. Never edited after issue except status.
+    """
+
+    __tablename__ = "credit_statements"
+    __table_args__ = (UniqueConstraint("shop_id", "period_start", name="uq_credit_statement_period"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    amount_due: Mapped[int] = mapped_column(Integer, default=0)
+    charges_total: Mapped[int] = mapped_column(Integer, default=0)
+    payments_total: Mapped[int] = mapped_column(Integer, default=0)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # issued | paid | written_off
+    status: Mapped[str] = mapped_column(String(16), default="issued", index=True)
+    # Highest notice already sent for this statement (issued, each ladder step), claimed atomically.
+    notified_step: Mapped[int] = mapped_column(Integer, default=0)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CreditEvent(Base):
+    """Audit row for every change to a shop's credit line (who, what, from, to, why)."""
+
+    __tablename__ = "credit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    old_value: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    new_value: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    actor: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PaygPanelSnapshot(Base):
+    """Last panel state of a PAYG shop's user that reconciliation has billed up to.
+
+    A difference to the live panel that no charge since ``seen_at`` paid for is a change
+    made outside the bot. ``revision`` keys the reconciliation charges of one difference,
+    so a rerun after a crash cannot charge it twice.
+    """
+
+    __tablename__ = "payg_panel_snapshots"
+    __table_args__ = (UniqueConstraint("shop_id", "pg_user_id", name="uq_payg_snapshot_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    pg_user_id: Mapped[int] = mapped_column(Integer)
+    pg_username: Mapped[str] = mapped_column(String(128))
+    data_limit: Mapped[int] = mapped_column(BigInteger, default=0)
+    expire_ts: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    used_traffic: Mapped[int] = mapped_column(BigInteger, default=0)
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class ResellerBillingRate(Base):
     """Extensible price table. MVP UI uses global Setting; this enables per-reseller/plan/inbound/node later."""
 
@@ -917,11 +1281,31 @@ class ResellerPlan(Base):
     create_pg_admin: Mapped[bool] = mapped_column(Boolean, default=True)
     create_web_access: Mapped[bool] = mapped_column(Boolean, default=True)
     share_pg_panel_url: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Default «دسترسی به پاسارگارد» for resellers granted this package.
+    allow_pg_panel_access: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
     pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Default billing for new resellers on this package: fixed | payg
     billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")
     # PAYG: toman per GB for resellers on this package (overrides global Setting via plan rate)
     price_per_gb: Mapped[int] = mapped_column(Integer, default=0)
+    # PAYG basis: traffic | user | user_traffic (see payg_pricing).
+    payg_basis: Mapped[str] = mapped_column(
+        String(16), default="traffic", server_default=text("'traffic'")
+    )
+    # Traffic is charged for the volume set on a user when it is set, not as it is used.
+    # Stored default off (usage billing); the plan form offers it switched on for new plans.
+    payg_charge_upfront: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    payg_user_price: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # True: the user price is per started 30 days of the user's period.
+    payg_user_price_per_30d: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    # Price of an unlimited user; NULL forbids unlimited users on this package.
+    payg_unlimited_price: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Optional PasarGuard group ids this PAYG price is intended for (comma-separated)
     pg_group_ids: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # subscription | current_capacity | addon_volume | addon_users
@@ -940,6 +1324,14 @@ class ResellerPlan(Base):
     extra_gb_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra GB
     extra_user_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra user slot
     renew_price: Mapped[int] = mapped_column(Integer, default=0)  # 0 = use plan.price
+    # When true (default), renew extends from a future expiry instead of from now.
+    carry_remaining_period: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    # When true (default), purchased extra GB/user slots survive into the next period.
+    keep_extras_on_renew: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
     # NULL = inherit plan-kind btn_style_*; "" = explicit Telegram default (white)
     button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     # Optional category label (audience=resellers); NULL = uncategorized
@@ -953,6 +1345,43 @@ class ResellerPlan(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    extra_packs: Mapped[list["ResellerPlanExtraPack"]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan"
+    )
+
+
+class ResellerPlanExtraPack(Base):
+    """Per-plan quick-buy stairs for reseller extra GB / user slots.
+
+    Amounts are priced with the parent plan's unit rates (``extra_gb_price`` /
+    ``extra_user_price``). Packs never leak across plans: every list and purchase
+    path filters by ``plan_id``.
+    """
+
+    __tablename__ = "reseller_plan_extra_packs"
+    __table_args__ = (
+        UniqueConstraint(
+            "plan_id", "kind", "amount", name="uq_reseller_plan_extra_pack_amount"
+        ),
+        Index("ix_reseller_plan_extra_packs_plan_kind", "plan_id", "kind"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(
+        ForeignKey("reseller_plans.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # gb | users
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    # NULL = inherit plan button style; "" = Telegram default; primary|success|danger
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    plan: Mapped["ResellerPlan"] = relationship(back_populates="extra_packs")
 
 
 class PgAdminSubscription(Base):
@@ -993,6 +1422,8 @@ class PgAdminSubscription(Base):
 class ResellerApplicationStatus(str, Enum):
     PENDING_PAYMENT = "pending_payment"
     AWAITING_APPROVAL = "awaiting_approval"
+    # Claimed for provision; prevents a second approve from creating another PG admin.
+    PROVISIONING = "provisioning"
     APPROVED = "approved"
     REJECTED = "rejected"
     CANCELLED = "cancelled"
@@ -1031,6 +1462,15 @@ class Setting(Base):
 
 class WalletTransaction(Base):
     __tablename__ = "wallet_transactions"
+    __table_args__ = (
+        Index(
+            "uq_wallet_tx_idempotency",
+            "idempotency_key",
+            unique=True,
+            sqlite_where=text("idempotency_key IS NOT NULL"),
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
@@ -1041,6 +1481,8 @@ class WalletTransaction(Base):
     reseller_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True, index=True
     )
+    # Optional: repeated admin/form submits with the same key insert once.
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -1732,6 +2174,13 @@ class ServiceCancellation(Base):
 
 class TargetedCampaign(Base):
     __tablename__ = "targeted_campaigns"
+    __table_args__ = (
+        Index(
+            "uq_targeted_campaigns_request_key", "request_key", unique=True,
+            sqlite_where=text("request_key IS NOT NULL"),
+            postgresql_where=text("request_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     reseller_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True, index=True)
@@ -1740,6 +2189,8 @@ class TargetedCampaign(Base):
     text: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
     created_by: Mapped[str] = mapped_column(String(128))
+    # Set by callers that can be repeated (a confirmation tap); one campaign per key.
+    request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

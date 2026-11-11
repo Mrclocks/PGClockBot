@@ -773,13 +773,16 @@
       set('overflow-y', 'auto');
       set('-webkit-overflow-scrolling', 'touch');
 
-      let width = Math.max(rect.width, 120);
+      /* Compact toggles (e.g. a colour dot) ask for a wider menu than themselves. */
+      const minHost = wrap.closest('[data-menu-min-width]');
+      const minW = minHost ? Number(minHost.getAttribute('data-menu-min-width')) || 0 : 0;
+      let width = Math.max(rect.width, 120, minW);
       let leftVis = rect.left;
       const maxW = Math.max(120, vvW - pad * 2);
       if (width > maxW) width = maxW;
       if (leftVis < pad) leftVis = pad;
       if (leftVis + width > vvW - pad) leftVis = Math.max(pad, vvW - pad - width);
-      if (rect.width <= maxW && rect.left >= pad - 0.5 && rect.right <= vvW - pad + 0.5) {
+      if (rect.width >= minW && rect.width <= maxW && rect.left >= pad - 0.5 && rect.right <= vvW - pad + 0.5) {
         leftVis = rect.left;
         width = rect.width;
       }
@@ -1274,6 +1277,22 @@
       active.setAttribute('data-save-home', slot.id);
       active.setAttribute('data-save-form', form.id);
       panel.appendChild(active);
+      reserveModalFooterRoom(panel, active);
+    }
+
+    /* The scroll area keeps room for the pinned footer's real height (it grows when a
+       warning line shows), so the last field never sits under the buttons. */
+    function reserveModalFooterRoom(panel, footer){
+      const apply = () => {
+        const h = footer.isConnected ? footer.getBoundingClientRect().height : 0;
+        panel.style.setProperty('--modal-save-footer-h', Math.ceil(h) + 'px');
+      };
+      apply();
+      if (typeof ResizeObserver === 'function') {
+        if (panel._footerObserver) panel._footerObserver.disconnect();
+        panel._footerObserver = new ResizeObserver(apply);
+        panel._footerObserver.observe(footer);
+      }
     }
 
     function ensureModalScrollShell(modal){
@@ -1534,6 +1553,8 @@
       el.classList.add('is-front');
     }
     window.bringModalToFront = bringModalToFront;
+    /* Forms that swap their visible panel (plan modal) re-pin the matching save bar. */
+    window.pinModalStickySave = pinModalStickySave;
     window.topOpenModal = topOpenModal;
     function prefersReducedMotion(){
       try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
@@ -1906,7 +1927,9 @@
         toast.setAttribute('role', 'status');
         toast.textContent = msg;
         document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 2800);
+        /* Same lifetime as page-level .flash.ok (panel_ok_flash.js). */
+        const dismissMs = (window.PGClockPanelOkFlash && window.PGClockPanelOkFlash.DISMISS_MS) || 2800;
+        setTimeout(() => toast.remove(), dismissMs);
       }
       document.addEventListener('submit', (e) => {
         const form = e.target;
@@ -2041,7 +2064,7 @@
                 '</span>' +
               '</label>' +
               '<div class="force-channel-actions">' +
-                '<button type="button" class="btn btn-danger btn-sm force-channel-remove" aria-label="حذف کانال">حذف</button>' +
+                '<button type="button" class="ds-del force-channel-remove" aria-label="حذف کانال"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
               '</div>' +
             '</div>' +
           '</div>'
@@ -2838,11 +2861,9 @@
         if (e.target.hasAttribute('data-money')) applyNormalize(e.target);
       }, true);
       document.addEventListener('formdata', (e) => {
-        e.target.querySelectorAll('input[data-money]').forEach((el) => {
-          if (!el.disabled && el.name && e.formData.has(el.name)) {
-            e.formData.set(el.name, normalizeNumberText(el.value));
-          }
-        });
+        if (window.PanelMoney && window.PanelMoney.normalizeMoneyFormData) {
+          window.PanelMoney.normalizeMoneyFormData(e.formData, Array.from(e.target.elements || []), normalizeNumberText);
+        }
       });
       document.addEventListener('reset', (e) => {
         setTimeout(() => unlockNumberInputs(e.target), 0);
@@ -3082,7 +3103,7 @@
               '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-sandbox"' + (item.sandbox ? ' checked' : '') + ' /> سندباکس زرین‌پال</label>' +
               '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-enabled"' + (item.enabled === false ? '' : ' checked') + ' /> فعال</label>' +
             '</div>' +
-            '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
           '</div>'
         );
       }
@@ -3110,7 +3131,7 @@
                 '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + attrEsc(item.holder) + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
-              '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+              '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
             '</div>'
           );
         }
@@ -3122,7 +3143,7 @@
                 '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + attrEsc(item.link) + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
-              '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+              '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
             '</div>'
           );
         }
@@ -3134,7 +3155,7 @@
               '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + attrEsc(item.address) + '" autocomplete="off" /></label>' +
               styleHtml +
             '</div>' +
-            '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
           '</div>'
         );
       }
@@ -3295,7 +3316,7 @@
               '</label>' +
               styleSelectHtml(storedStyleValue(item)) +
             '</div>' +
-            '<button type="button" class="btn btn-danger btn-sm supports-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="ds-del supports-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
           '</div>'
         );
       }
@@ -3479,7 +3500,7 @@
               linksHtml(item && item.links) +
               '<div class="full guides-media" data-guides-media-slot></div>' +
             '</div>' +
-            '<button type="button" class="btn btn-danger btn-sm guides-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="ds-del guides-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
           '</div>'
         );
       }

@@ -110,14 +110,17 @@
 </div>
 
 {% if can_create %}
-<div class="ui-modal" id="modal-node-create" hidden>
+<div class="ui-modal ds" id="modal-node-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('nodes', 'ساخت نود', caption='نود جدید پاسارگارد', tone='pg') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('nodes', 'ساخت نود', tone='pg') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/pg/nodes" class="form-stack js-busy-form" data-busy-label="در حال ساخت…">
+    <form method="post" action="/pg/nodes" class="form-stack ds-body js-busy-form" data-busy-label="در حال ساخت…">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <p class="muted">فیلدهای گواهی و کلید API را از پنل پاسارگارد / نود کپی کنید.</p>
       <label class="form-field">نام
         <input name="name" required autocomplete="off" placeholder="DE node" />
@@ -143,10 +146,11 @@
       <label class="form-field">Server CA
         <textarea name="server_ca" rows="4" dir="ltr" placeholder="-----BEGIN CERTIFICATE-----"></textarea>
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit">ساخت نود</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+
+      </div></div>
     </form>
   </div>
 </div>

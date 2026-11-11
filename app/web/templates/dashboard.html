@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "macros.html" import pay_status, page_title, card_title %}
 {% from "_home_widgets.html" import delta, status_tiles %}
-{% block title %}نمای کلی ربات{% endblock %}
+{% block title %}نمای کلی فروشگاه{% endblock %}
 {% block content %}
 <div class="page-head ov-page-head">
-  {{ page_title('overview', 'نمای کلی ربات', 'brand', help='bot-dashboard') }}
+  {{ page_title('overview', 'نمای کلی فروشگاه', 'brand', help='bot-dashboard') }}
   {% if viewer.can_settings %}
   <a class="btn btn-sm btn-ghost ov-head-btn" href="{{ '/settings?tab=bot' if viewer.shop_id is none else '/shop-settings' }}">
     <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>
@@ -22,7 +22,7 @@
   </div>
 </div>
 {% elif not viewer.has_shop %}
-<div class="flash warn"><div class="flash-copy"><strong>فروشگاهی برای این حساب پیدا نشد</strong><span class="muted">نمای کلی ربات فقط برای مدیر اصلی و فروشگاه‌ها نمایش داده می‌شود.</span></div></div>
+<div class="flash warn"><div class="flash-copy"><strong>فروشگاهی برای این حساب پیدا نشد</strong><span class="muted">نمای کلی فروشگاه فقط برای مدیر اصلی و فروشگاه‌ها نمایش داده می‌شود.</span></div></div>
 {% else %}
 <div class="home-dash">
 
@@ -164,6 +164,6 @@
 <script src="/static/sales-chart.js?v={{ sales_chart_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 {% endif %}
 {% if host_gauges %}
-<script src="/static/overview-live.js?v={{ app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/overview-live.js?v={{ asset_v('overview-live.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 {% endif %}
 {% endblock %}

@@ -37,19 +37,22 @@ class DomainSettingsRedirectTests(unittest.TestCase):
         self.assertIn("loyalty", SHOP_SETTINGS_DOMAIN_REDIRECTS)
 
     def test_nav_has_finance_not_separate_orders_payments(self):
-        src = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-        self.assertIn('href="/finance"', src)
-        self.assertIn("مدیریت مالی", src)
+        from tests.sidebar_view import owner_sidebar
+
+        shop = owner_sidebar()["shop"]
+        self.assertIn(("مالی", "/finance"), shop)
         # Separate sidebar entries for orders/payments removed
-        self.assertNotRegex(src, r'href="/orders"\s+class="nav-item')
-        self.assertNotRegex(src, r'href="/payments"\s+class="nav-item')
+        self.assertFalse({"/orders", "/payments"} & {href for _, href in shop})
 
 
 class DomainModalTemplateTests(unittest.TestCase):
     def test_finance_page_modal(self):
         html = (TEMPLATES / "finance.html").read_text(encoding="utf-8")
+        tabs = (TEMPLATES / "_finance_tabs.html").read_text(encoding="utf-8")
         self.assertIn('data-modal-open="modal-finance-settings"', html)
-        self.assertIn("section-tabs", html)
+        # Page tabs live in the shared partial used by finance and PAYG report.
+        self.assertIn("finance_tabs(", html)
+        self.assertIn("section-tabs", tabs)
         self.assertIn("_modal_finance_settings.html", html)
         self.assertTrue((TEMPLATES / "_modal_finance_settings.html").is_file())
 
@@ -86,12 +89,11 @@ class DomainModalTemplateTests(unittest.TestCase):
             self.assertNotIn("search-bar-label", html)
 
     def test_bot_settings_nav_is_last(self):
-        src = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-        bot = src.split("nav-section-bot", 1)[1].split("nav-section-pg", 1)[0]
-        loyalty_i = bot.find("بازاریابی و وفاداری")
-        settings_i = bot.find(">تنظیمات</span>")
-        self.assertGreater(loyalty_i, 0)
-        self.assertGreater(settings_i, loyalty_i)
+        from tests.sidebar_view import labels, owner_sidebar
+
+        shop = labels(owner_sidebar()["shop"])
+        self.assertEqual(shop[-1], "تنظیمات ربات")
+        self.assertLess(shop.index("بازاریابی"), shop.index("تنظیمات ربات"))
 
     def test_settings_html_no_supports_or_payment_branches(self):
         html = (TEMPLATES / "settings.html").read_text(encoding="utf-8")
@@ -190,14 +192,15 @@ class PaymentSettingsModalUxTests(unittest.TestCase):
             tab_groups=tab_groups,
             groups=groups,
             values=values,
-            show_pending_orders=False,
             style_options=[],
         )
         self.assertIn('data-pay-settings-for="pay_card_enabled" hidden', html)
         self.assertIn('data-pay-settings-for="pay_bbc_enabled" hidden', html)
-        # Methods card itself is always visible (holds the toggles)
-        self.assertIn(">روش‌های پرداخت<", html)
-        self.assertNotIn('data-pay-settings-for="pay_wallet_enabled"', html)
+        # Each method section stays visible and keeps its own switch outside the hidden part
+        card = html.split(">کارت به کارت<", 1)[1].split('data-pay-settings-for="pay_card_enabled"', 1)[0]
+        self.assertIn('name="s_pay_card_enabled"', card)
+        # Receipts have no on/off switch of their own
+        self.assertNotIn('data-pay-settings-for="auto_approve_payments"', html)
 
         values["pay_card_enabled"] = "1"
         html_on = tpl.render(
@@ -205,7 +208,6 @@ class PaymentSettingsModalUxTests(unittest.TestCase):
             tab_groups=tab_groups,
             groups=groups,
             values=values,
-            show_pending_orders=False,
             style_options=[],
         )
         self.assertIn('data-pay-settings-for="pay_card_enabled"', html_on)
@@ -223,7 +225,7 @@ class PaymentSettingsModalUxTests(unittest.TestCase):
         self.assertIn(".setting-help {", css)
         from app.services.users import SETTING_GROUPS
 
-        bbc = next(f for f in SETTING_GROUPS["روش‌های پرداخت"] if f[0] == "pay_bbc_enabled")
+        bbc = next(f for f in SETTING_GROUPS["بزن به کارت"] if f[0] == "pay_bbc_enabled")
         self.assertGreater(len(bbc[3]), 70)
 
 
@@ -237,7 +239,9 @@ class DomainSettingGroupsTests(unittest.TestCase):
         self.assertNotIn("support_text", msg_keys)
         self.assertNotIn("referral_text", msg_keys)
         self.assertEqual(keys_for_tab("supports"), {"support_text"})
-        self.assertEqual(keys_for_tab("loyalty"), {"referral_text"})
+        # The referral wallet bonus sits with the referral text, not among payment methods
+        self.assertEqual(keys_for_tab("loyalty"), {"referral_text", "referral_bonus"})
+        self.assertNotIn("referral_bonus", keys_for_tab("payment"))
         # Required-referral moved from payment modal → limits tab
         self.assertEqual(
             keys_for_tab("payment") & {"referral_required", "referral_required_text"},
@@ -248,13 +252,13 @@ class DomainSettingGroupsTests(unittest.TestCase):
             {"referral_required", "referral_required_text"},
         )
         self.assertEqual(TAB_SETTING_GROUPS["limits"][0], "معرف اجباری")
-        self.assertIn("روش‌های پرداخت", TAB_SETTING_GROUPS["payment"])
+        self.assertEqual(TAB_SETTING_GROUPS["payment"][:2], ["کیف پول", "کارت به کارت"])
         self.assertIn("معرف اجباری", SETTING_GROUPS)
         self.assertEqual(
             {f[0] for f in SETTING_GROUPS["معرف اجباری"]},
             {"referral_required", "referral_required_text"},
         )
-        self.assertEqual({f[0] for f in SETTING_GROUPS["متن دعوت دوستان"]}, {"referral_text"})
+        self.assertEqual({f[0] for f in SETTING_GROUPS["متن دعوت دوستان"]}, {"referral_bonus", "referral_text"})
 
     def test_preview_js_drops_moved_message_fields(self):
         src = (TEMPLATES / "_tg_preview_chat_js.html").read_text(encoding="utf-8")
@@ -302,10 +306,14 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         general = (TEMPLATES / "_settings_general.html").read_text(encoding="utf-8")
         self.assertIn("وب و عمومی", general)
         self.assertIn('name="WEB_PORT"', general)
-        base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-        self.assertIn('href="/settings?tab=general"', base)
-        self.assertNotIn('href="/settings?tab=pasarguard"', base)
-        self.assertIn('href="/settings?tab=bot"', base)
+        from tests.sidebar_view import hrefs, owner_sidebar
+
+        nav = owner_sidebar()
+        every_href = [h for section in nav.values() for h in hrefs(section)]
+        self.assertIn("/settings?tab=general", hrefs(nav["system"]))
+        self.assertNotIn("/settings?tab=pasarguard", every_href)
+        # The bot connection is reached from the system settings tabs, not the sidebar.
+        self.assertNotIn("/settings?tab=bot", every_href)
 
     def test_bot_secret_placeholders_are_clean_rtl(self):
         bot = (TEMPLATES / "_settings_bot.html").read_text(encoding="utf-8")
@@ -345,8 +353,8 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         self.assertIn("display: flex", block)
         self.assertIn("direction: ltr", block)
         self.assertNotIn("position: relative", block)
-        self.assertIn("--magic-link-h: 52px", block)
-        self.assertIn("--magic-copy-h: 34px", block)
+        self.assertIn("--magic-link-h: var(--btn-h)", block)
+        self.assertIn("--magic-copy-h: var(--ctl-sm-h)", block)
         self.assertIn("--magic-copy-w: 4.75rem", block)
         inp = css.split(".magic-link-field .magic-link-input {", 1)[1].split("}", 1)[0]
         self.assertIn("text-overflow: ellipsis", inp)
@@ -361,16 +369,22 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         logo = css.split(".brand-logo {", 1)[1].split("}", 1)[0]
         self.assertIn("var(--brand-logo-size)", logo)
         self.assertIn("--brand-logo-size: 40px", css)
-        self.assertIn("--topbar-h: 58px", css)
+        # Content band keeps the old 58px top air; only bottom grows to --page-title-gap
+        self.assertIn("--topbar-content-h: 58px;", css)
+        self.assertIn("--topbar-pad-bottom: var(--page-title-gap);", css)
+        self.assertIn(
+            "--topbar-h: calc(var(--topbar-content-h) + var(--topbar-pad-bottom));",
+            css,
+        )
+        self.assertNotIn("--topbar-pad-top:", css)
+        self.assertNotIn("--topbar-h: 58px", css)
 
-    def test_pg_connection_settings_is_last_sidebar_item(self):
-        base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-        section = base.split('id="nav-panel-pg"', 1)[1].split("</div>", 1)[0]
-        self.assertIn("تنظیمات اتصال", section)
-        self.assertIn('href="/settings?tab=bot"', section)
-        # Owner connection link must come after every other PG nav item.
-        self.assertGreater(section.rindex("تنظیمات اتصال"), section.rindex("اینباند"))
-        self.assertGreater(section.rindex('href="/settings?tab=bot"'), section.index('href="/pg"'))
+    def test_bot_connection_is_a_system_settings_tab(self):
+        from app.services.users import PANEL_SETTINGS_TABS, SETTINGS_TABS
+        from tests.sidebar_view import owner_sidebar
 
-if __name__ == "__main__":
-    unittest.main()
+        self.assertIn("bot", [k for k, _ in PANEL_SETTINGS_TABS])
+        self.assertNotIn("bot", [k for k, _ in SETTINGS_TABS])
+        self.assertNotIn("/settings?tab=bot", [h for _, h in owner_sidebar()["pg"]])
+        tabs = (TEMPLATES / "_panel_settings_tabs.html").read_text(encoding="utf-8")
+        self.assertIn('href="/settings?tab=bot"', tabs)
