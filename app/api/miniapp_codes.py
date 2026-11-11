@@ -26,6 +26,7 @@ from app.services.discount_checkout import (
 )
 from app.services.miniapp_auth import load_mini_user
 from app.services.miniapp_shop import mini_scope
+from app.services.purchase_notices import notify_purchase_outside_bot
 from app.services.redact import user_safe_error
 from app.services.users import on
 
@@ -109,10 +110,12 @@ def register_miniapp_codes(app: FastAPI, *, get_db) -> None:
             await rollback_quiet(session)
             logger.exception("mini checkout pay failed user=%s order=%s", user_id, order_id)
             raise HTTPException(500, "پرداخت ناموفق بود") from None
-        return _no_store({
+        response = _no_store({
             "ok": True, "order_id": int(order.id), "wallet": await _scope_wallet(session, user, request),
             "message": "خرید با موفقیت انجام شد",
         })
+        await notify_purchase_outside_bot(session, order=order, user=user)
+        return response
 
     @app.post("/api/mini/checkout/{order_id}/cancel")
     async def mini_checkout_cancel(order_id: int, request: Request, session: AsyncSession = Depends(get_db)):

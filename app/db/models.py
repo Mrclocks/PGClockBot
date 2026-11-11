@@ -289,6 +289,9 @@ class Order(Base):
     addon_request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # Serialize quota changes and retain exclusion while a renewal needs review.
     service_mutation_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # When staff were told about a sale made outside the bot; claimed once, so a retry or
+    # a second tap on the same order does not repeat the notice.
+    staff_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     service_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("user_services.id"), nullable=True, index=True
     )

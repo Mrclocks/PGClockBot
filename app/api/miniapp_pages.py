@@ -40,6 +40,7 @@ from app.services.db_safe import rollback_quiet
 from app.services.panel_nav import MINIAPP_OWNER_SHORTCUTS, MINIAPP_RESELLER_SHORTCUTS, miniapp_shortcuts
 from app.services.funnel_events import STEP_PAY_START, record_order_funnel
 from app.services.service_scope import customer_may_use_service
+from app.services.purchase_notices import notify_purchase_outside_bot
 from app.services.trial_notify import notify_trial_claimed_outside_bot
 from app.services.formatting import (
     expire_remaining_days,
@@ -851,21 +852,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
                 "message": f"افزایش {kind_label(pack.kind)} با موفقیت انجام شد",
             }
         )
-        # Notification failures must not turn a completed purchase into an error.
-        try:
-            from app.services.notifications import notify_new_subscription
-            from app.services.reseller_bots import open_notify_bot_for_user
-
-            bot, should_close = await open_notify_bot_for_user(session, user, shop_id=shop_id)
-            try:
-                await notify_new_subscription(
-                    bot, session, order=order, user_tg_id=user.telegram_id
-                )
-            finally:
-                if should_close:
-                    await bot.session.close()
-        except Exception:
-            log.exception("mini addon notification failed order=%s", order_id)
+        await notify_purchase_outside_bot(session, order=order, user=user)
         return response
 
     @app.post("/api/mini/buy")
@@ -919,9 +906,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             await rollback_quiet(session)
             log.exception("mini buy failed user=%s plan=%s", user.id, plan_id)
             raise HTTPException(500, "خرید ناموفق")
-        if plan.is_trial:
-            await notify_trial_claimed_outside_bot(session, order=order, user=user)
-        return _no_store(
+        response = _no_store(
             {
                 "ok": True,
                 "order_id": order.id,
@@ -929,6 +914,11 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
                 "message": "خرید با موفقیت انجام شد",
             }
         )
+        if plan.is_trial:
+            await notify_trial_claimed_outside_bot(session, order=order, user=user)
+        else:
+            await notify_purchase_outside_bot(session, order=order, user=user)
+        return response
 
     @app.get("/api/mini/service/{service_id}/automation")
     async def mini_automation(service_id: int, request: Request, session: AsyncSession = Depends(get_db)):
@@ -1040,7 +1030,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             await rollback_quiet(session)
             log.exception("mini renew failed user=%s svc=%s", user.id, service_id)
             raise HTTPException(500, "تمدید ناموفق")
-        return _no_store(
+        response = _no_store(
             {
                 "ok": True,
                 "order_id": order.id,
@@ -1048,3 +1038,5 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
                 "message": "تمدید با موفقیت انجام شد",
             }
         )
+        await notify_purchase_outside_bot(session, order=order, user=user)
+        return response

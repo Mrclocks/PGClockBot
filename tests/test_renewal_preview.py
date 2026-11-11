@@ -437,6 +437,17 @@ class MiniAppRenewalTests(RenewalFixture):
         self.assertEqual(retry.json()["wallet"], 800)
         self.assertEqual(len(self.pg.writes), 1)
 
+    async def test_api_renewal_tells_staff_once_even_when_retried(self):
+        quote = await self.quote()
+        body = {"service_id": 1, "plan_id": 1, "preview": quote}
+        send = AsyncMock()
+        with patch("app.services.purchase_notices._send_notice", send):
+            first = await self.client.post("/api/mini/renew", json=body)
+            retry = await self.client.post("/api/mini/renew", json=body)
+        self.assertEqual((first.status_code, retry.status_code), (200, 200), first.text)
+        send.assert_awaited_once()
+        self.assertEqual(send.await_args.kwargs["order"].id, first.json()["order_id"])
+
     async def test_api_retry_after_lost_response_succeeds_when_wallet_is_now_empty(self):
         self.user.wallet_balance = 200
         await self.session.commit()

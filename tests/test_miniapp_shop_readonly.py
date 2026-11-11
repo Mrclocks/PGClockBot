@@ -87,7 +87,13 @@ class ShopFixture(unittest.IsolatedAsyncioTestCase):
         clear_settings_cache()
         settings = SimpleNamespace(miniapp_enabled=True, bot_token=MAIN_TOKEN, currency="تومان",
                                    miniapp_url="https://panel.example.com/miniapp/")
+        # Staff notices about a shop's sales go to this mock instead of Telegram.
+        self.shop_notify_bot = AsyncMock()
         self.patches = [
+            patch(
+                "app.services.reseller_bots.open_notify_bot_for_reseller",
+                AsyncMock(return_value=(self.shop_notify_bot, False)),
+            ),
             patch("app.services.miniapp_auth.get_settings", return_value=settings),
             patch("app.api.miniapp_pages.get_settings", return_value=settings),
             patch("app.services.miniapp_shop.get_settings", return_value=settings),
