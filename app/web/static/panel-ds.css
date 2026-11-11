@@ -354,7 +354,7 @@ html[data-theme="dark"] .ds .ds-steps a.need { color: #fbbf24; }
 .ds .badge, .ds .ds-badge, .ds .ds-meta {
   min-height: var(--lbl-h); height: var(--lbl-h); padding: 0 var(--g3); border-radius: 999px; font-size: 12px; font-weight: 600; gap: var(--g1);
 }
-.ds .ds-meta { font-weight: 500; color: var(--muted-fg); background: var(--muted); }
+.ds .ds-meta { flex: 0 0 auto; font-weight: 500; color: var(--muted-fg); background: var(--muted); }
 .ds .ds-badge { background: var(--muted); color: var(--muted-fg); }
 .ds .ds-badge[data-tone="warn"] { background: color-mix(in srgb, var(--warn) 16%, transparent); color: #b45309; }
 html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
@@ -384,9 +384,10 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-acc { border-top: 1px solid var(--line); }
 .ds .ds-acc summary { list-style: none; display: flex; align-items: center; gap: var(--g2); min-height: 56px; padding: 0 var(--g4); cursor: pointer; font-size: 14px; font-weight: 500; }
 .ds .ds-acc summary::-webkit-details-marker { display: none; }
-.ds .ds-acc summary > svg:not(.ds-chev) { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.ds .ds-acc-title { flex: 1; }
-.ds .ds-chev { width: 18px; height: 18px; fill: none; stroke: var(--muted-fg); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--motion-fast); }
+.ds .ds-acc summary > svg:not(.ds-chev) { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+/* Title may shrink; counter + chevron must stay fully visible (ds-card-flush clips overflow). */
+.ds .ds-acc-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds .ds-chev { width: 18px; height: 18px; fill: none; stroke: var(--muted-fg); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--motion-fast); flex: 0 0 auto; }
 .ds .ds-acc[open] .ds-chev { transform: rotate(-90deg); }
 .ds .ds-acc.is-risk summary { color: var(--destructive); }
 .ds .ds-acc.is-risk .ds-meta { background: color-mix(in srgb, var(--destructive) 10%, transparent); color: var(--destructive); }
