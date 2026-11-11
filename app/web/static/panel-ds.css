@@ -169,6 +169,9 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds .ds-card-flush { padding: 0; gap: 0; overflow: hidden; }
 .ds .ds-divider { height: 1px; background: var(--line); margin: 0 calc(-1 * var(--box-pad)); }
 .ds .ds-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--box-gap) var(--g3); align-items: start; }
+/* Two-column field grids: a field left without a partner takes the whole row instead of half a row beside an empty
+   half (panel-ds.js marks it, counting only the fields on screen). */
+.ds-row-alone { grid-column: 1 / -1; }
 .ds .ds-desc, .ds .settings-card > p.muted, .ds .edit-section-head p.muted { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--muted-fg); }
 .ds .settings-card > h2, .ds .edit-section-head h3, .ds .edit-section > h3 { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.4; }
 .ds .settings-card > h2 + p.muted { margin-top: calc(var(--g2) - var(--box-gap)); }

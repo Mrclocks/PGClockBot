@@ -7435,10 +7435,6 @@ td.byte-size {
   .ui-modal-panel .settings-grid {
     width: 100%;
   }
-  /* Trailing lone cell in a 2-col settings grid should span full width */
-  .ui-modal-panel .settings-grid > .setting-item:last-child:nth-child(odd):not(.full) {
-    grid-column: 1 / -1;
-  }
 }
 
 /* Block fields + color pickers stretch the modal chrome (no 320px orphan chips) */

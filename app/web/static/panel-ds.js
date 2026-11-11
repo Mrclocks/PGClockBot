@@ -142,6 +142,44 @@
     if (field) el.hidden = !showWhenMatches(rule, fieldValue(field));
   }
 
+  /* ---------- Two-column field grids: a field without a partner takes the whole row ----------
+     Fields pair up in order; a row that already spans both columns (a switch, a long field) starts a new run.
+     The last field of a run with an odd count would sit beside an empty half, so it spans the row instead. */
+  const PAIR_GRIDS = ".ds-grid-2, .settings-grid, .ui-modal .form-row";
+  const ALONE = "ds-row-alone";
+
+  /** cells: [{shown, fullRow}] in DOM order -> indexes of the cells that should span the row. */
+  function unpairedCells(cells) {
+    const alone = [];
+    let run = [];
+    const close = () => {
+      if (run.length % 2 === 1) alone.push(run[run.length - 1]);
+      run = [];
+    };
+    cells.forEach((cell, index) => {
+      if (!cell.shown) return;
+      if (cell.fullRow) close();
+      else run.push(index);
+    });
+    close();
+    return alone;
+  }
+
+  function syncPairs(grid) {
+    const kids = Array.from(grid.children);
+    kids.forEach((el) => el.classList.remove(ALONE));
+    const cells = kids.map((el) => {
+      const style = getComputedStyle(el);
+      const shown = style.display !== "none" && style.position !== "absolute" && style.position !== "fixed";
+      return { shown, fullRow: shown && style.gridColumnEnd === "-1" };
+    });
+    unpairedCells(cells).forEach((index) => kids[index].classList.add(ALONE));
+  }
+
+  function syncAllPairs(scope) {
+    scope.querySelectorAll(PAIR_GRIDS).forEach(syncPairs);
+  }
+
   /* ---------- Reveal: [data-ds-reveal="#id"] shows an optional field and hides itself ---------- */
   function reveal(btn) {
     const target = qs(document, btn.getAttribute("data-ds-reveal"));
@@ -246,6 +284,7 @@
     base.querySelectorAll("[data-ds-dot] select").forEach(syncDot);
     base.querySelectorAll("form[data-ds-form]").forEach(syncForm);
     base.querySelectorAll("[data-ds-show-when]").forEach(syncShowWhen);
+    syncAllPairs(base);
   }
 
   function bind() {
@@ -272,6 +311,8 @@
       document.querySelectorAll("[data-ds-choice]").forEach((g) => { if (choiceTarget(g) === t) syncChoice(g); });
       document.querySelectorAll("[data-ds-show-when]").forEach(syncShowWhen);
       refreshForm(t);
+      // Show-when rules and page scripts hide fields on change, which can leave a field without a partner.
+      if (event.type === "change") syncAllPairs(document);
       if (event.type === "change" && t.matches && t.matches("[data-ds-submit-on-change]") && t.form) {
         t.form.requestSubmit ? t.form.requestSubmit() : t.form.submit();
       }
@@ -287,7 +328,7 @@
     if (form) syncForm(form);
   }
 
-  const api = { syncAll, syncChoice, syncForm, missingFields, faDigits, resetPerms, syncPerms, showWhenMatches };
+  const api = { syncAll, syncChoice, syncForm, missingFields, faDigits, resetPerms, syncPerms, showWhenMatches, unpairedCells };
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   } else {
