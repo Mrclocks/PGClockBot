@@ -18,8 +18,11 @@ class DsPermCounterTests(unittest.TestCase):
         title = css.split(".ds .ds-acc-title {", 1)[1].split("}", 1)[0]
         self.assertIn("min-width: 0", title)
         self.assertIn("text-overflow: ellipsis", title)
-        meta = css.split(".ds .ds-meta {", 1)[1].split("}", 1)[0]
-        self.assertIn("flex: 0 0 auto", meta)
+        # Dedicated .ds-meta rule (not the shared badge/ds-meta selector)
+        self.assertRegex(
+            css,
+            r"(?m)^\.ds \.ds-meta \{[^}]*flex:\s*0 0 auto",
+        )
 
     def test_fragment_dom_ready_re_syncs_panel_ds(self) -> None:
         js = JS.read_text(encoding="utf-8")
