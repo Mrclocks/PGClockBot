@@ -90,11 +90,11 @@
   /* Equal space above & below page title+icon (bot and PasarGuard identical) */
   --page-title-gap: var(--space-3);
   /* Header chrome — keep in sync with .brand / .topbar padding + logo size.
-     Bottom air equals --page-title-gap so the topbar separator has the same
-     space above (logo/menu → line) as .main keeps below it (line → title). */
-  --topbar-pad-top: var(--space-1);
+     Content band stays the pre-frost 58px (same top air around logo/menu).
+     Only bottom grows to --page-title-gap so separator↔logo matches separator↔title. */
+  --topbar-content-h: 58px;
   --topbar-pad-bottom: var(--page-title-gap);
-  --topbar-h: calc(var(--btn-h) + var(--topbar-pad-top) + var(--topbar-pad-bottom));
+  --topbar-h: calc(var(--topbar-content-h) + var(--topbar-pad-bottom));
   /* Air below BOTH footers — owned by the footer boxes (padding-bottom),
      never by .side / .main (that dual path split separator Y when one foot grew). */
   --foot-gap: var(--space-2);
@@ -5109,8 +5109,8 @@ form.settings-form > .actions.sticky-actions,
   justify-content: space-between;
   gap: var(--space-1);
   height: calc(var(--topbar-h) + var(--safe-top));
-  /* Top: safe + pad; bottom: --page-title-gap so separator↔logo matches separator↔title */
-  padding: calc(var(--safe-top) + var(--topbar-pad-top)) var(--space-2) var(--topbar-pad-bottom);
+  /* Top unchanged (safe-area only); bottom: --page-title-gap under the 58px content band */
+  padding: var(--safe-top) var(--space-2) var(--topbar-pad-bottom);
   border-bottom: 1px solid var(--modal-frost-line);
   /* Same matte glass as .ui-modal-head / sticky save */
   background: var(--modal-frost-bg);

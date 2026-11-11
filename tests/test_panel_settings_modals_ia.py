@@ -369,12 +369,14 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         logo = css.split(".brand-logo {", 1)[1].split("}", 1)[0]
         self.assertIn("var(--brand-logo-size)", logo)
         self.assertIn("--brand-logo-size: 40px", css)
-        # Bottom air = --page-title-gap so separator↔logo matches separator↔title
+        # Content band keeps the old 58px top air; only bottom grows to --page-title-gap
+        self.assertIn("--topbar-content-h: 58px;", css)
         self.assertIn("--topbar-pad-bottom: var(--page-title-gap);", css)
         self.assertIn(
-            "--topbar-h: calc(var(--btn-h) + var(--topbar-pad-top) + var(--topbar-pad-bottom));",
+            "--topbar-h: calc(var(--topbar-content-h) + var(--topbar-pad-bottom));",
             css,
         )
+        self.assertNotIn("--topbar-pad-top:", css)
         self.assertNotIn("--topbar-h: 58px", css)
 
     def test_bot_connection_is_a_system_settings_tab(self):
