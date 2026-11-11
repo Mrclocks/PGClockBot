@@ -350,7 +350,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("var(--topbar-pad-bottom)", top_body)
         self.assertIn("padding: var(--safe-top) var(--space-2) var(--topbar-pad-bottom);", top_body)
         self.assertNotIn("topbar-pad-top", top_body)
-        self.assertIn("--topbar-pad-bottom: var(--page-title-gap);", css)
+        self.assertIn("--topbar-pad-bottom: var(--space-1_5);", css)
         self.assertIn("--topbar-content-h: 58px;", css)
         menu = re.search(r"(?ms)^\.menu-toggle\s*\{([^}]+)\}", css)
         self.assertIsNotNone(menu)
