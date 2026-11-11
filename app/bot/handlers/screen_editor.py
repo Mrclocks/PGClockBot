@@ -85,6 +85,7 @@ BTN_ENTRY = "✏️ حالت ویرایش منوها"
 BTN_BACK = "⬅️ بازگشت"
 BTN_BACK_TO_MENU = "↩️ بازگشت به منو"
 BTN_EDIT_MAIN_MENU = "✏️ ویرایش منوی اصلی"
+BTN_EDIT_CUSTOMER_MAIN_MENU = "✏️ ویرایش منوی اصلی مشتری"
 BTN_EDIT_TEXT = "✏️ تغییر متن"
 BTN_RESET = "↺ رنگ پیش‌فرض"
 BTN_CONTINUE = "✏️ ادامهٔ ویرایش"
@@ -185,9 +186,20 @@ def switches_view(actor: EditorActor, *, feature_on: bool, minutes_left: int) ->
         ])
         rows.append([_button(f"✏️ حالت ویرایش من: {mine}", _cb(actor, "m0" if minutes_left else "m1"))])
         if minutes_left:
-            rows.append([_button(BTN_EDIT_MAIN_MENU, _cb(actor, "o", "c.main"))])
+            rows.extend(_main_menu_rows(actor))
     rows.append([_button(BTN_BACK, _SETTINGS_BACK[audience_code(actor)])])
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _main_menu_rows(actor: EditorActor) -> list[list[InlineKeyboardButton]]:
+    """The main menu as the editor sees it on this bot; the owner also edits the customer's version,
+    which carries buttons staff never get (e.g. «درخواست نمایندگی»)."""
+    if actor.for_reseller:
+        return [[_button(BTN_EDIT_MAIN_MENU, _cb(actor, "o", "c.main"))]]
+    return [
+        [_button(BTN_EDIT_MAIN_MENU, _cb(actor, "o", "a.main"))],
+        [_button(BTN_EDIT_CUSTOMER_MAIN_MENU, _cb(actor, "o", "c.main"))],
+    ]
 
 
 def panel_view(
