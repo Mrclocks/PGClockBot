@@ -88,26 +88,26 @@ class VisibilityMirrorsTheRouteTests(unittest.TestCase):
 
 
 class GroupingTests(unittest.TestCase):
-    def test_it_joins_the_service_and_sales_group_last_and_opens_its_own_page(self):
+    def test_it_joins_the_texts_group_last_and_opens_its_own_page(self):
         for tabs, staff in ((SETTINGS_TABS, OWNER), (RESELLER_SETTINGS_TABS, SHOP_WITH_RIGHT)):
             groups = group_settings_tabs(tabs_with_message_variables(tabs, staff), "welcome")
-            service = next(group for group in groups if group.key == "service")
-            self.assertEqual(service.tabs[-1].key, MESSAGE_VARIABLES_TAB_KEY)
-            self.assertEqual(service.tabs[-1].href, "/message-variables")
-            self.assertEqual([t.href for t in service.tabs[:-1]], [None] * (len(service.tabs) - 1))
+            texts = next(group for group in groups if group.key == "texts")
+            self.assertEqual(texts.tabs[-1].key, MESSAGE_VARIABLES_TAB_KEY)
+            self.assertEqual(texts.tabs[-1].href, "/message-variables")
+            self.assertEqual([t.href for t in texts.tabs[:-1]], [None] * (len(texts.tabs) - 1))
 
     def test_every_tab_still_appears_exactly_once_and_no_group_is_added(self):
         for tabs, staff in ((SETTINGS_TABS, OWNER), (RESELLER_SETTINGS_TABS, SHOP_WITH_RIGHT)):
             before = group_settings_tabs(tabs, "welcome")
             after = group_settings_tabs(tabs_with_message_variables(tabs, staff), "welcome")
-            keys = [tab.key for group in after for tab in group.tabs]
+            keys = [s.key for group in after for tab in group.tabs for s in (tab.sections or (tab,))]
             self.assertEqual(len(keys), len(set(keys)))
             self.assertEqual(sorted(keys), sorted([*(k for k, _ in tabs), MESSAGE_VARIABLES_TAB_KEY]))
             self.assertEqual([g.key for g in before], [g.key for g in after])
 
-    def test_on_the_variables_page_the_service_group_and_its_tab_are_active(self):
+    def test_on_the_variables_page_the_texts_group_and_its_tab_are_active(self):
         groups = group_settings_tabs(tabs_with_message_variables(SETTINGS_TABS, OWNER), MESSAGE_VARIABLES_TAB_KEY)
-        self.assertEqual([g.key for g in groups if g.is_active], ["service"])
+        self.assertEqual([g.key for g in groups if g.is_active], ["texts"])
 
 
 class SettingsPagesTests(unittest.TestCase):
@@ -118,8 +118,8 @@ class SettingsPagesTests(unittest.TestCase):
             tabs=SETTINGS_TABS, tab=tab, is_panel_settings=False, tab_nav=nav,
         )
 
-    def test_the_header_button_is_gone_and_the_tab_is_in_the_service_group(self):
-        html = self._owner_page("limits")
+    def test_the_header_button_is_gone_and_the_tab_is_in_the_texts_group(self):
+        html = self._owner_page("messages")
         head = html.split("settings-layout", 1)[0]
         self.assertNotIn("page-head-actions", head)
         self.assertEqual(head.count('href="/message-variables"'), 1)
@@ -131,10 +131,10 @@ class SettingsPagesTests(unittest.TestCase):
 
     def test_shop_page_has_the_tab_for_a_shop_with_the_right_and_not_without(self):
         for staff, expected in ((SHOP_WITH_RIGHT, 1), (SHOP_WITHOUT_RIGHT, 0)):
-            nav = group_settings_tabs(tabs_with_message_variables(RESELLER_SETTINGS_TABS, staff), "limits")
+            nav = group_settings_tabs(tabs_with_message_variables(RESELLER_SETTINGS_TABS, staff), "messages")
             html = _settings_page(
                 "shop_settings.html", "/shop-settings", staff,
-                tabs=RESELLER_SETTINGS_TABS, tab="limits", shop_mode=True, settings_base="/shop-settings", tab_nav=nav,
+                tabs=RESELLER_SETTINGS_TABS, tab="messages", shop_mode=True, settings_base="/shop-settings", tab_nav=nav,
             )
             head = html.split("settings-layout", 1)[0]
             self.assertEqual(head.count('href="/message-variables"'), expected, staff)
@@ -183,16 +183,16 @@ class VariablesPageTests(unittest.IsolatedAsyncioTestCase):
         response = await self._get(OWNER)
         self.assertEqual(response.status_code, 200)
         strip = _tab_strip(response.text)
-        self.assertIn('href="/settings?tab=welcome"', strip)
+        self.assertIn('href="/settings?tab=identity"', strip)
         self.assertIn('href="/message-variables" class="active">متغیرهای پیام</a>', strip)
-        self.assertIn('href="/settings?tab=naming" class=""', strip)
+        self.assertIn('href="/settings?tab=delivery" class=""', strip)
         self.assertNotIn("/shop-settings", strip)
 
     async def test_shop_owner_gets_the_shop_tab_strip(self):
         response = await self._get(SHOP_WITH_RIGHT)
         self.assertEqual(response.status_code, 200)
         strip = _tab_strip(response.text)
-        self.assertIn('href="/shop-settings?tab=welcome"', strip)
+        self.assertIn('href="/shop-settings?tab=identity"', strip)
         self.assertIn('href="/message-variables" class="active">متغیرهای پیام</a>', strip)
         self.assertNotIn('href="/settings?tab=', strip)
 

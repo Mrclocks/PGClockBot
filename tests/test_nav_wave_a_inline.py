@@ -88,6 +88,7 @@ class HubKeyboardTests(unittest.TestCase):
         self.assertIn("nv:w:topup", data)
         self.assertIn("nv:w:tx", data)
         self.assertIn("menu:home", data)
+        self.assertNotIn("nv:loy:home", data)
 
     def test_support_hub_has_no_reseller_apply(self):
         from app.bot.nav_inline import support_hub_keyboard
@@ -125,8 +126,9 @@ class OpenWalletInlineTests(unittest.IsolatedAsyncioTestCase):
         ui = {"nav_mode": "inline"}
 
         with (
+            # Settings are loaded inside load_wallet_home, not reply_nav.
             patch(
-                "app.bot.handlers.reply_nav.get_all_settings",
+                "app.services.users.get_all_settings",
                 AsyncMock(return_value=ui),
             ),
             patch(

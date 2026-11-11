@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_title %}
-{% block title %}وضعیت اتصال{% endblock %}
-{% block head %}<link rel="stylesheet" href="/static/connection-status.css?v={{ app_version }}">{% endblock %}
+{% block title %}تست اتصال سرویس{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/connection-status.css?v={{ asset_v('connection-status.css') if asset_v is defined else app_version }}">{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
-  <div>{{ page_title('activity', 'وضعیت اتصال', help='connection-status') }}</div>
+  <div>{{ page_title('activity', 'تست اتصال سرویس', help='connection-status') }}</div>
   <div class="actions"><a class="btn btn-ghost" href="/connection-status">تازه‌سازی</a></div>
 </div>
 
@@ -38,6 +39,11 @@
       <span class="badge {{ 'ok' if page.settings.enabled else 'neutral' }}">{{ 'روشن' if page.settings.enabled else 'خاموش' }}</span>
     </div>
     <p class="muted">بعد از ثبت کاربر تست و انتخاب کانفیگ‌ها، تست‌ها را روشن کنید. بررسی تقریباً هر دقیقه انجام می‌شود و «تازه‌سازی» فقط آخرین نتیجه را نشان می‌دهد.</p>
+    {% if page.stop_reason %}
+    <div class="flash warn" role="status">
+      <div class="flash-copy">{{ reason_labels.get(page.stop_reason, 'پایش متوقف شد.') }}</div>
+    </div>
+    {% endif %}
     {% if not binary_configured %}
     <div class="flash warn" role="status">
       <div class="flash-copy">
@@ -158,4 +164,5 @@
 </section>
 {% else %}<div class="card"><p class="muted">هنوز کانفیگی برای تست انتخاب نشده است. از بخش «انتخاب کانفیگ‌های اشتراک» شروع کنید.</p></div>{% endfor %}
 {% if page.next_id %}<div class="actions"><a class="btn btn-ghost" href="/connection-status?after={{ page.next_id }}">نتیجه‌های بعدی</a></div>{% endif %}
+</div>
 {% endblock %}

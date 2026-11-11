@@ -28,6 +28,7 @@ from app.services.org_principals import (
     is_owner_principal,
 )
 from app.services.org_scope import visible_principal_ids
+from app.services.pg_panel_access import apply_pg_panel_access
 from app.services.web_auth import hash_password, verify_password_hash
 
 log = logging.getLogger(__name__)
@@ -750,7 +751,7 @@ async def _attach_linked_shop_package(
     perms = resolve_shop_permissions_from_profile(profile)
     if perms:
         out["permissions"] = list(perms)
-    return out
+    return apply_pg_panel_access(out, profile)
 
 
 def owner_env_pg_username() -> str:

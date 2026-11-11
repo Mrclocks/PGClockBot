@@ -2,6 +2,7 @@
 {% from "macros.html" import page_title %}
 {% block title %}گزارش کارکنان{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>
     {{ page_title('users', 'گزارش کارکنان', 'neutral') }}
@@ -46,4 +47,5 @@
   <a class="btn btn-ghost" href="/staff-actions?before={{ next_before }}">موارد قدیمی‌تر</a>
 </div>
 {% endif %}
+</div>
 {% endblock %}

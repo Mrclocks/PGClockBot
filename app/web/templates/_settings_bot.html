@@ -1,5 +1,6 @@
 {% from "macros.html" import flash_warn_icon, modal_title %}
 {% from "_list_input.html" import list_input %}
+{% from "_ds.html" import ds_modal_head, ds_sec, ds_foot, ds_switch, ico %}
 {% set update_mode = bot_update_mode or env_values.get('BOT_UPDATE_MODE') or 'polling' %}
 {% set wh_url = env_values.get('WEBHOOK_URL','') %}
 {% set wh_path = env_values.get('WEBHOOK_PATH','/telegram/webhook') %}
@@ -227,29 +228,32 @@
   </div>
 </form>
 
-<div class="ui-modal" id="modal-bot-restart-confirm" hidden>
+<div class="ui-modal ds ds-dialog" id="modal-bot-restart-confirm" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bot-restart-confirm-title">
-    <div class="ui-modal-head">
-      {{ modal_title('bot-settings', 'تأیید ری‌استارت', caption='اعمال تغییرات با یک‌بار ری‌استارت سرویس', tone='neutral', heading='h3', heading_id='bot-restart-confirm-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    {{ ds_modal_head('bot-settings', 'تأیید ری‌استارت', 'bot-restart-confirm-title', tone='neutral') }}
+    <div class="ds-body">
+      <div class="ds-confirm">
+        <span class="ds-confirm-ico" aria-hidden="true">{{ ico('warn') }}</span>
+        <p>برای اعمال این تغییرات سرویس یک‌بار ری‌استارت می‌شود. چند ثانیه قطعی طبیعی است؛ پیام‌های در صف تلگرام ممکن است از دست بروند. پس از تأیید در همین صفحه می‌مانید.</p>
+      </div>
     </div>
-    <p class="muted">
-      برای اعمال این تغییرات سرویس یک‌بار ری‌استارت می‌شود. چند ثانیه قطعی طبیعی است؛
-      پیام‌های در صف تلگرام ممکن است از دست بروند. پس از تأیید در همین صفحه می‌مانید.
-    </p>
-    <div class="actions">
-      <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      <button type="button" class="btn" id="bot-restart-confirm-btn">تأیید و ری‌استارت</button>
+    <div class="ds-foot">
+      <div class="ds-foot-btns">
+        <button type="button" class="btn" id="bot-restart-confirm-btn">تأیید و ری‌استارت</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
     </div>
   </div>
 </div>
 
-<div class="ui-modal" id="modal-bot-restart-progress" hidden data-modal-no-escape="1">
+<div class="ui-modal ds ds-dialog" id="modal-bot-restart-progress" hidden data-modal-no-escape="1">
   <div class="ui-modal-backdrop"></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bot-restart-progress-title">
-    <div class="ui-modal-head">
-      {{ modal_title('bot-settings', 'در حال اعمال تغییرات', caption='تا پایان عملیات در این صفحه بمانید', tone='neutral', heading='h3', heading_id='bot-restart-progress-title') }}
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('bot-settings', 'در حال اعمال تغییرات', tone='neutral', heading='h3', heading_id='bot-restart-progress-title') }}
+      </div>
     </div>
     <div class="flash warn update-stay-warn flash-has-ico" role="status">
       {{ flash_warn_icon() }}

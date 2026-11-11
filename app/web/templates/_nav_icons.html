@@ -1,0 +1,27 @@
+{# Sidebar icons, keyed by the ``icon`` of each item in app/services/panel_nav.py. #}
+{% macro nav_icon(name) -%}
+<svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true">
+{%- if name == 'home' -%}<path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/>
+{%- elif name == 'inbox' -%}<path d="M12 4a5 5 0 0 1 5 5v2.2l1.8 3.3H5.2L7 11.2V9a5 5 0 0 1 5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/>
+{%- elif name == 'sliders' -%}<path d="M4 7h9M17 5v4M19 7h1"/><path d="M4 12h3M11 10v4M13 12h7"/><path d="M4 17h11M19 15v4M21 17h-1"/>
+{%- elif name == 'ticket' -%}<path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/>
+{%- elif name == 'shield-check' -%}<path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/>
+{%- elif name == 'card' -%}<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18M7 15h3"/>
+{%- elif name == 'users' -%}<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/>
+{%- elif name == 'users-pair' -%}<circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/>
+{%- elif name == 'cart' -%}<path d="M7 7h13l-1.2 9.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.7L6 4H3"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/>
+{%- elif name == 'plans' -%}<path d="M4 7h16M4 12h16M4 17h10"/><path d="M18 15v4M16 17h4"/>
+{%- elif name == 'megaphone' -%}<path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M18.8 6.2a8.5 8.5 0 0 1 0 11.6"/>
+{%- elif name == 'receipt' -%}<path d="M7 4h10a2 2 0 0 1 2 2v14l-3-2-2 2-2-2-2 2-2-2-3 2V6a2 2 0 0 1 2-2z"/><path d="M9 9h6M9 13h4"/>
+{%- elif name == 'pulse' -%}<path d="M3 12h4l3-8 4 16 3-8h4"/>
+{%- elif name == 'bot' -%}<rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V5H9"/><path d="M2 14h2M20 14h2"/><circle cx="9.5" cy="13.5" r="1.1"/><circle cx="14.5" cy="13.5" r="1.1"/><path d="M9.5 17h5"/>
+{%- elif name == 'user' -%}<circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/>
+{%- elif name == 'shield' -%}<path d="M12 3 5 6v5c0 4.2 2.8 7.2 7 8.5 4.2-1.3 7-4.3 7-8.5V6l-7-3z"/>
+{%- elif name == 'nodes' -%}<rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/>
+{%- elif name == 'group' -%}<path d="M4 7h16v10H4z"/><path d="M8 7V5h8v2"/>
+{%- elif name == 'globe' -%}<circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/>
+{%- elif name == 'template' -%}<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/>
+{%- elif name == 'inbound' -%}<path d="M4 12h16M12 4v16"/><circle cx="12" cy="12" r="3"/>
+{%- elif name == 'trash' -%}<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>
+{%- endif -%}</svg>
+{%- endmacro %}

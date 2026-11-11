@@ -157,6 +157,7 @@ class PaygAlertsDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sent[0][1:3], ([7008], "reseller"))
         self.assertEqual(sent[1][1], [PLATFORM_ADMIN_ID])
         self.assertIn("plat", sent[1][2])
+        self.assertEqual(self.markups, ["nv:res:ra:res_billing", f"adm:resellers:view:{profile.user_id}"])
 
     async def test_sub_reseller_warning_goes_to_its_parent_not_to_siblings(self) -> None:
         async with self.Session() as session:
@@ -189,13 +190,17 @@ class PaygAlertsDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sent[1][1], [7010])
         self.assertNotIn(7011, sent[1][1])
         self.assertNotIn(PLATFORM_ADMIN_ID, sent[1][1])
+        self.assertEqual(self.markups[1], None)
 
     async def _capture_notifications(
         self, session: AsyncSession, profile: ResellerProfile
     ) -> list[tuple[int | None, list[int], str]]:
         sent: list[tuple[int | None, list[int], str]] = []
 
-        async def fake_send(_session, shop_user_id, chat_ids, text) -> None:
+        self.markups = []
+
+        async def fake_send(_session, shop_user_id, chat_ids, text, *, markup=None) -> None:
+            self.markups.append(None if markup is None else markup.inline_keyboard[0][0].callback_data)
             kind = "reseller" if shop_user_id == profile.user_id else "owner"
             sent.append((shop_user_id, list(chat_ids), text if kind == "owner" else "reseller"))
 

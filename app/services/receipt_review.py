@@ -26,12 +26,13 @@ from app.services.receipt_files import fetch_telegram_file, payment_bot_token
 from app.services.reseller_bots import ShopBotUnavailable, open_notify_bot_for_user
 from app.services.resellers import get_reseller_profile, has_bot_perm, reseller_can_review_payment
 from app.services.shop_scope import payment_shop_id, pending_receipt_clause
-from app.services.users import get_all_settings, reset_shop_reseller_id, set_shop_reseller_id
+from app.services.support_button import support_markup
+from app.services.users import DEFAULT_SETTINGS, get_all_settings, reset_shop_reseller_id, set_shop_reseller_id
 
 logger = logging.getLogger(__name__)
 
 QUEUE_LIMIT = 20
-DEFAULT_REJECT_TEXT = "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
+DEFAULT_REJECT_TEXT = DEFAULT_SETTINGS["payment_reject_text"]
 STARS_RECEIPT_PREFIX = "stars:"
 
 
@@ -195,4 +196,6 @@ async def reject_receipt(session: AsyncSession, reviewer: Reviewer, payment_id: 
         if should_close:
             await bot.session.close()
     body = (await get_all_settings(session, reseller_id=shop_id)).get("payment_reject_text") or DEFAULT_REJECT_TEXT
-    await notify_payer(session, payer_id, title="❌ پرداخت رد شد", body=body, shop_id=shop_id)
+    await notify_payer(
+        session, payer_id, title="❌ پرداخت رد شد", body=body, shop_id=shop_id, reply_markup=support_markup()
+    )

@@ -37,6 +37,9 @@ class MiniAppFrontendTests(unittest.TestCase):
     def test_club_behavior(self) -> None:
         self.run_node("miniapp_club.test.cjs")
 
+    def test_wallet_points_behavior(self) -> None:
+        self.run_node("miniapp_wallet_points.test.cjs")
+
     def test_receipt_review_behavior(self) -> None:
         self.run_node("miniapp_review.test.cjs")
 

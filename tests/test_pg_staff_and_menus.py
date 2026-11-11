@@ -43,51 +43,26 @@ class MapPgRoleTests(unittest.TestCase):
 
 class SidebarMenuOrderTests(unittest.TestCase):
     def test_bot_sidebar_order_and_labels(self):
-        src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        # Bot section: نمای کلی first, then shop tools
-        bot_start = src.find("پنل ربات")
-        self.assertGreater(bot_start, 0)
-        chunk = src[bot_start : src.find("پنل پاسارگارد")]
-        # Orders + payments were later unified into a single "مدیریت مالی"
-        # (Financial Management) sidebar item pointing at /finance.
-        markers = [
-            ">نمای کلی</span>",
-            ">کاربران</span>",
-            ">نمایندگان</span>",
-            ">مدیریت مالی</span>",
-            ">پلن‌ها</span>",
-            ">پشتیبانی</span>",
-            ">بازاریابی و وفاداری</span>",
-            ">تنظیمات</span>",
-        ]
-        positions = [chunk.find(m) for m in markers]
-        self.assertTrue(all(p >= 0 for p in positions), positions)
-        self.assertEqual(positions, sorted(positions))
-        self.assertIn('href="/dashboard"', chunk)
-        self.assertNotIn(">تیکت‌ها</span>", src)
-        # Web panel dashboard for everyone
-        self.assertIn(">داشبورد</span>", src)
-        self.assertIn(">تنظیمات وب پنل</span>", src)
+        from tests.sidebar_view import labels, owner_sidebar
+
+        nav = owner_sidebar()
+        # Orders + payments are a single «مالی» entry pointing at /finance.
+        self.assertEqual(
+            labels(nav["shop"]),
+            ["نمای کلی فروشگاه", "کاربران ربات", "نمایندگان", "مالی", "پلن‌ها", "پشتیبانی", "بازاریابی",
+             "پاکسازی سرویس‌ها", "گزارش کارکنان", "تنظیمات ربات"],
+        )
+        self.assertEqual(nav["shop"][0][1], "/dashboard")
+        self.assertNotIn("تیکت‌ها", labels(nav["shop"]))
+        self.assertEqual(labels(nav["system"]), ["داشبورد", "مرکز اقدام", "تنظیمات سیستم"])
 
     def test_pg_sidebar_order_and_labels(self):
-        src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        # Find PasarGuard section start
-        pg_start = src.find("پنل پاسارگارد")
-        self.assertGreater(pg_start, 0)
-        chunk = src[pg_start:]
-        markers = [
-            ">نمای کلی</span>",
-            ">کاربران</span>",
-            ">ادمین</span>",
-            ">نود</span>",
-            ">گروه</span>",
-            ">هاست</span>",
-            ">تمپلیت</span>",
-            ">اینباند</span>",
-        ]
-        positions = [chunk.find(m) for m in markers]
-        self.assertTrue(all(p >= 0 for p in positions), positions)
-        self.assertEqual(positions, sorted(positions))
+        from tests.sidebar_view import labels, owner_sidebar
+
+        self.assertEqual(
+            labels(owner_sidebar()["pg"])[:8],
+            ["نمای کلی پاسارگارد", "کاربران", "ادمین‌ها", "نودها", "گروه‌ها", "هاست‌ها", "تمپلیت‌ها", "اینباندها"],
+        )
 
     def test_pg_tabs_macro_order(self):
         src = Path("app/web/templates/macros.html").read_text(encoding="utf-8")

@@ -60,11 +60,15 @@ class BotUserAdminServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("selectinload(UserService.plan)", fn)
         self.assertNotIn("session.get(UserService", fn)
         self.assertIn("snapshot_telegram_lines", src)
-        # Card reads plan.name — must stay compatible with eager-loaded plan
+        # Card reads plan without sync lazy-load (MissingGreenlet after commit).
         lines_fn = src.split("def snapshot_telegram_lines", 1)[1].split(
             "\ndef ", 1
         )[0]
-        self.assertIn("svc.plan", lines_fn)
+        self.assertIn("_snapshot_plan", lines_fn)
+        self.assertIn("_snapshot_plan", src)
+        helper = src.split("def _snapshot_plan", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn('"plan"', helper)
+        self.assertIn("_sa_instance_state", helper)
 
 
 class UserEditUiTests(unittest.TestCase):
@@ -149,7 +153,8 @@ class UserEditUiTests(unittest.TestCase):
         self.assertIn("admin_user_service_actions", kb)
 
         admin = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        self.assertIn("adm_users_wallet_credit", admin)
+        wallet = Path("app/bot/handlers/admin_wallet_adjust.py").read_text(encoding="utf-8")
+        self.assertIn("adm_users_wallet_credit", wallet)
         self.assertIn("adm_users_services", admin)
         self.assertIn("admin_renew_service", admin)
         self.assertIn("admin_extend_service", admin)

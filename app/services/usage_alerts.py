@@ -8,6 +8,7 @@ of that shop cannot pay it.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -25,6 +26,10 @@ from app.services.wallet import wallet_balances_for_scope
 
 ALERT_TIME = "time"
 ALERT_TRAFFIC = "traffic"
+# An alert that already went out is armed again only when the remaining share climbs this far above
+# its threshold, so a service hovering around the threshold is not alerted over and over.
+REARM_MARGIN_PCT = 5.0
+SECONDS_PER_DAY = 86400
 # (bot that sent it, replace key, the alert message)
 SentAlert = tuple[Bot, str, Message]
 
@@ -139,3 +144,47 @@ def traffic_alert_markup(ui: dict, service_id: int, extras: AlertExtras) -> Inli
     if on(ui.get("one_tap_renew_enabled", "1")):
         rows.append([_renew_button(ui, service_id)])
     return _markup(rows + _topup_row(extras, service_id))
+
+
+def period_seconds(*, plan_days: int | None, created_at: datetime | None, expire: datetime) -> float | None:
+    """Length of the current period in seconds: the plan's duration, else the time since creation.
+
+    The creation date alone is wrong once a service was renewed: it would count every earlier
+    period too, so the share of time left would stay high and the alert would come late.
+    """
+    if plan_days and plan_days > 0:
+        return float(plan_days) * SECONDS_PER_DAY
+    if created_at is not None and expire > created_at:
+        return (expire - created_at).total_seconds()
+    return None
+
+
+def time_remaining_pct(expire: datetime, *, now: datetime, period: float | None) -> float | None:
+    """Share of the period still left (0 to 100), or ``None`` when it cannot be told or already ended."""
+    if not period or period <= 0:
+        return None
+    remaining = (expire - now).total_seconds()
+    if remaining < 0:
+        return None
+    return min(100.0, remaining / period * 100.0)
+
+
+def traffic_remaining_pct(used: float, limit: float) -> float | None:
+    """Share of the volume still left (0 to 100), or ``None`` for an unlimited service."""
+    if limit <= 0:
+        return None
+    return max(0.0, (1.0 - used / limit) * 100.0)
+
+
+def should_rearm(remaining_pct: float | None, threshold_pct: float) -> bool:
+    """True when an alert that was already sent must be allowed to fire again."""
+    return remaining_pct is not None and remaining_pct > threshold_pct + REARM_MARGIN_PCT
+
+
+async def plan_durations(session: AsyncSession, services: list[UserService]) -> dict[int, int]:
+    """Plan id -> duration in days for the given services, in one query."""
+    plan_ids = {int(s.plan_id) for s in services if s.plan_id}
+    if not plan_ids:
+        return {}
+    rows = (await session.execute(select(Plan.id, Plan.duration_days).where(Plan.id.in_(plan_ids)))).all()
+    return {int(pid): int(days) for pid, days in rows if days}

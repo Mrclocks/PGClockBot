@@ -48,6 +48,7 @@ _RESELLER_HUB_BACK = "nv:res:home"
 FREE_TEXT_INPUT_STATES: frozenset[str] = frozenset(
     {
         "AdminStates:user_message",
+        "AdminStates:user_wallet_reason",
         "AdminStates:ticket_reply",
         "AdminStates:broadcast_text",
         "AdminStates:revoke_reseller_reason",
@@ -488,32 +489,13 @@ async def open_wallet_home(
     *,
     push: bool = True,
 ) -> None:
-    from app.bot.nav_inline import present_inline_only, wallet_hub_keyboard
-    from app.config import get_settings
-    from app.services.formatting import format_toman, kv_line
-    from app.services.wallet import wallet_balance_for_context
+    from app.bot.handlers.wallet import load_wallet_home
+    from app.bot.nav_inline import present_inline_only
 
-    ui = await get_all_settings(session)
-    bal = await wallet_balance_for_context(session, db_user)
-    text = format_message(
-        screen_title_html(ui, "c.wallet"),
-        "\n".join(
-            [
-                kv_line(
-                    "💵",
-                    "موجودی",
-                    f"<b>{format_toman(bal, get_settings().currency)}</b>",
-                ),
-                "",
-                screen_caption(ui, "c.wallet"),
-            ]
-        ),
-    )
+    text, markup = await load_wallet_home(session, db_user)
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_WALLET, push=push)
-    await present_inline_only(
-        message, text=text, inline=wallet_hub_keyboard(ui)
-    )
+    await present_inline_only(message, text=text, inline=markup)
     return
 
 async def open_wallet_topup(
@@ -1968,7 +1950,7 @@ async def handle_back(
             message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
         )
         return
-    if level in {nav.NAV_ADMIN_GIFTS, nav.NAV_ADMIN_CAMPAIGNS}:
+    if level in {nav.NAV_ADMIN_GIFTS, nav.NAV_ADMIN_CAMPAIGNS, nav.NAV_ADMIN_CASHBACK}:
         from app.bot.handlers.marketing_tools import open_admin_marketing_panel
 
         await open_admin_marketing_panel(
@@ -2361,6 +2343,44 @@ async def _soft_reseller(
             reseller_owner_id=reseller_owner_id,
         )
         return
+    if action == "res_cashback":
+        from app.bot.handlers.cashback_tools import open_shop_cashback_panel
+
+        await open_shop_cashback_panel(
+            message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    if action == "res_child_pricing":
+        from app.bot.handlers.child_pricing_bot import open_child_pricing_panel
+
+        await open_child_pricing_panel(
+            message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    if action == "res_broadcast":
+        from app.bot.handlers.shop_broadcast import open_shop_broadcast_hub
+
+        await open_shop_broadcast_hub(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
     if action == "res_plans":
         await open_reseller_plans_hub(
             message,
@@ -2560,6 +2580,9 @@ async def reply_main_nav(
         "res_payments",
         "res_tickets",
         "res_loyalty",
+        "res_cashback",
+        "res_child_pricing",
+        "res_broadcast",
         "res_renew",
         "res_buy_gb",
         "res_buy_users",

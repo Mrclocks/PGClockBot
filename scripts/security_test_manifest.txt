@@ -81,6 +81,7 @@ tests/test_live_pg_menus.py
 tests/test_miniapp_security_audit.py
 tests/test_miniapp_init_data_window.py
 tests/test_miniapp_service_addons.py
+tests/test_addon_preview.py
 tests/test_miniapp_feeds.py
 tests/test_miniapp_frontend.py
 tests/test_miniapp_topup.py
@@ -95,6 +96,9 @@ tests/test_miniapp_badges.py
 tests/test_bot_profile_photo.py
 tests/test_bot_appearance_menu_button.py
 tests/test_renewal_preview.py
+tests/test_plan_carry_remaining_quota.py
+tests/test_reseller_plan_carry_on_renew.py
+tests/test_admin_renew_respects_carry.py
 tests/test_on_hold_addon_quotas.py
 tests/test_on_hold_service_display.py
 tests/test_owner_bypass_guards.py
@@ -193,6 +197,7 @@ tests/test_reseller_hub_in_place.py
 tests/test_panel_connection_resilience.py
 tests/test_panel_asset_cache.py
 tests/test_catalog_discounts.py
+tests/test_catalog_discounts_route_wired.py
 tests/test_inbox_dismissal_lifecycle.py
 tests/test_stale_menu_notice.py
 tests/test_restart_button.py
@@ -218,6 +223,7 @@ tests/test_shop_isolation_tickets.py
 tests/test_shop_isolation_order_payment.py
 tests/test_shop_isolation_service_ops.py
 tests/test_shop_isolation_customer_services.py
+tests/test_reseller_service_panel_acl.py
 tests/test_service_shop_scope_migration.py
 tests/test_shop_attribution_keeps_platform_customers.py
 tests/test_shop_membership.py
@@ -228,6 +234,8 @@ tests/test_shop_isolation_dashboards.py
 tests/test_service_shop_review_page.py
 tests/test_shop_points.py
 tests/test_shop_points_migration.py
+# Customer wallet hub/miniapp: shop loyalty flag + that shop's points purse only.
+tests/test_wallet_show_points.py
 tests/test_shop_isolation_remaining.py
 tests/test_shop_isolation_review_fixes.py
 tests/test_wheel_state_per_shop.py
@@ -260,10 +268,16 @@ tests/test_volume_allocation_cascade.py
 tests/test_paid_order_undelivered.py
 tests/test_manual_approve_undelivered.py
 tests/test_reseller_package.py
+tests/test_reseller_expire_claim.py
 tests/test_reseller_provision_limits.py
+tests/test_reseller_approve_idempotent.py
+tests/test_reseller_soft_deactivate_bot.py
+tests/test_reseller_phase5_failclosed.py
 tests/test_reseller_subscription_pages.py
 tests/test_reseller_package_bot.py
 tests/test_reseller_extra_purchase.py
+tests/test_reseller_purchase_notify.py
+tests/test_reseller_phase1_safety_gates.py
 tests/test_bbc_refusal_reason.py
 tests/test_finance_daily_charts.py
 tests/test_miniapp_shop_scope.py
@@ -298,6 +312,7 @@ tests/test_payment_voids.py
 tests/test_payment_void_bot.py
 # Durable broadcast queue: platform audience only, no double send, cancel, admin-only.
 tests/test_broadcast_queue.py
+tests/test_shop_broadcast.py
 # First-use nudge: once per service, per-shop switch, shop bot only.
 tests/test_first_use_nudge.py
 # The app must compile and import (guards a broken merge).
@@ -337,6 +352,9 @@ tests/test_panel_brand.py
 tests/test_user_search_folding.py
 # Shop bot: void button only for a shop holding payment_void; customer card lists only the shop's services.
 tests/test_shop_customer_card.py
+tests/test_reseller_customer_services.py
+tests/test_customer_services_permission.py
+tests/test_customer_services_web_permission.py
 # Shop Mini App: permission default for new shops and the reason a shop cannot switch it on.
 tests/test_shop_miniapp_defaults.py
 # Cleanup tab deletion: own shop only, chosen tags only, never money in flight, from the root.
@@ -345,17 +363,110 @@ tests/test_order_purge.py
 tests/test_bulk_grant_miniapp.py
 # Customer staff note and risk tag: customer_notes key, own shop only.
 tests/test_customer_notes_permission.py
+# Staff free checkout: owner / shop operator with free_checkout only, own new orders, one zero claim.
+tests/test_staff_free_checkout.py
+# Chosen service name: own unpaid order only, unique per shop, delivery never blocked by it.
+tests/test_custom_service_name.py
+# Mini App: free checkout only for the shop's own staff, required name before any order.
+tests/test_miniapp_checkout_options.py
 # Gift codes: own gift_codes key, own shop only; migration 0077 keeps current access.
 tests/test_gift_codes_permission.py
+# PasarGuard link reconnect: owner-only, CSRF, rate limit; never leak exception text.
+tests/test_pg_link_reconnect.py
+# PasarGuard read circuit: heal under concurrency, probe lease, budget exhaustion.
+tests/test_pg_read_circuit_heal.py
+tests/test_pg_read_breaker_threshold.py
+# PasarGuard HTTP client rebuild after repeated transport failures.
+tests/test_pg_http_rebuild.py
 # Shop staff action log: written with the change, read only by the shop it belongs to.
 tests/test_staff_audit.py
 # Manual shop wallet changes by shop staff: own shop purse only, capped, once per request.
 tests/test_shop_wallet_adjust.py
 # Manual loyalty-point changes by shop staff: own shop only, capped, once per request.
 tests/test_shop_points_adjust.py
+# Platform/shop manual adjusts require a reason and notify the customer once (not on replay).
+tests/test_manual_adjust_notices.py
+# Platform wallet adjust: request-key idempotency, isolation, hostile notice text.
+tests/test_admin_wallet_adjust.py
+tests/test_wallet_tx_idempotency_migration.py
 # Per-shop customer block: that shop's bot, Mini App and campaigns only; never account-wide.
 tests/test_shop_customer_block.py
 # Campaigns to a shop's whole audience: own reachable customers only, one per shop per day.
 tests/test_campaign_broad_audiences.py
 # Shop bot customer card tools: same keys and checks as the web, own shop only, once per flow.
 tests/test_shop_bot_customer_tools.py
+# Delivered staff notices: shop bots get res:user only; platform service buttons stay platform-only.
+tests/test_staff_notify_view_user.py
+# Settlement review notices never offer payrev approve; shop delivery alerts omit platform panel URLs.
+tests/test_staff_notify_action_buttons.py
+# Platform admin points adjust: shop customers denied; shop cards show only that shop's purse.
+tests/test_admin_points_adjust.py
+
+# Reseller capacity packs: wallet, tenancy, generation claim and Mini App role gating.
+tests/test_reseller_packs.py
+tests/test_reseller_plan_extra_packs.py
+tests/test_reseller_plan_extra_packs_bot.py
+tests/test_reseller_capacity_buy_bot.py
+tests/test_reseller_renewal.py
+tests/test_pasarguard_admin_reset.py
+tests/test_reseller_capacity_orders.py
+tests/test_reseller_package_orders.py
+# Mini App service packs: ownership of the service and who sees which pack.
+tests/test_mini_addon_packs.py
+# PasarGuard link watchdog job: heal, one rebuild, lock and disable.
+tests/test_pg_link_watchdog.py
+tests/test_pg_link_alerts.py
+tests/test_pg_link_health_persist.py
+tests/test_pg_stop_missing_user_poll.py
+tests/test_pg_cache_capability_probe.py
+tests/test_service_addon_plan_scope.py
+tests/test_svc_addon_kind_picker.py
+tests/test_stale_admin_demotion.py
+tests/test_shop_topup_web_review.py
+tests/test_stuck_orders_bot.py
+tests/test_staff_views_bot.py
+tests/test_service_shop_review_bot.py
+tests/test_broadcast_history_bot.py
+tests/test_admin_pg_inbounds_bot.py
+tests/test_admin_pg_hosts_bot.py
+# Web panel sidebar: every entry follows the visibility rule of its route.
+tests/test_panel_nav.py
+tests/test_panel_search.py
+tests/test_addon_pack_batches.py
+# «دسترسی به پاسارگارد»: closed shops get no PasarGuard pages, actions or panel password.
+tests/test_pg_panel_access.py
+# PAYG charge ledger: one debit per confirmed change, refunds once, scoped to the shop.
+tests/test_payg_charges.py
+tests/test_payg_pricing.py
+# PAYG charging at creation: deliveries, renewals, packs, staff edits, resets, owner review.
+tests/test_payg_charging_flows.py
+# PAYG reconciliation: panel changes outside the bot are charged once, never twice.
+tests/test_payg_reconcile.py
+# Credit lines: only PAYG charges use credit, floors hold under races, changes audited.
+tests/test_shop_credit.py
+# Credit statements: oldest-first payment, overdue ladder enforced, write-off once.
+tests/test_credit_statements.py
+# Cashback: one grant per order, shop-isolated purse, budget atomic, credited and reversed once.
+tests/test_cashback.py
+# Cashback management: permission, shop isolation of rules and settings.
+tests/test_cashback_pages.py
+# Reseller finance pages: owner only, own purse and own rows only.
+tests/test_reseller_finance_pages.py
+# Cashback preview and notices, ladder day settings.
+tests/test_billing_finishing.py
+# Owner PAYG report: owner only, CSV formula-safe.
+tests/test_billing_reports.py
+# Level-1/level-2: two-step charges, reserved credit, parent-only scope.
+tests/test_child_pricing.py
+tests/test_reseller_plan_payg.py
+tests/test_billing_pages_design.py
+# Action reasons: staff must give a reason for service and panel-user operations.
+tests/test_action_reasons.py
+tests/test_customer_action_notices.py
+tests/test_bot_action_reason.py
+tests/test_customer_notice_queue.py
+tests/test_reason_required_routes.py
+tests/test_service_cleanup.py
+tests/test_service_cleanup_notices.py
+tests/test_service_cleanup_delete.py
+tests/test_service_cleanup_manage.py

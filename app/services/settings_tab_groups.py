@@ -22,13 +22,31 @@ MESSAGE_VARIABLES_PERMISSION = "shop_settings"
 # Tabs that open their own page instead of ``<settings base>?tab=<key>``.
 _TAB_PAGES = {MESSAGE_VARIABLES_TAB_KEY: "/message-variables"}
 
-# (group key, label, tab keys in display order)
+# (group key, label, tab keys in display order). Related tabs sit together:
+# what the bot looks like, what it says, what a sale delivers, what it reports.
 _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("look", "ظاهر و متن‌ها", ("welcome", "appearance", "brand", "messages", "buttons", "screens", "colors", "menu", "miniapp")),
-    ("service", "سرویس و فروش", ("naming", "qr", "guides", "limits", "service_import", MESSAGE_VARIABLES_TAB_KEY)),
-    ("alerts", "اعلان‌ها", ("notifications", "daily_report")),
-    ("connect", "اتصال و لینک‌ها", ("links", "bot")),
+    ("look", "ظاهر ربات", ("welcome", "appearance", "brand", "menu", "miniapp", "links")),
+    ("texts", "متن‌ها", ("messages", "buttons", "colors", "screens", MESSAGE_VARIABLES_TAB_KEY)),
+    ("service", "فروش و سرویس", ("naming", "qr", "guides", "limits", "service_import")),
+    ("alerts", "هشدار و گزارش", ("notifications", "daily_report")),
+    # A reseller's own shop bot (the Owner's bot connection is a system setting).
+    ("connect", "ربات اختصاصی", ("bot",)),
 )
+
+
+# Small tabs about one subject share one entry; each keeps its own ``?tab=`` key, form and save
+# button and shows as a section inside the merged tab. (merged key, label, member keys)
+_MERGED_TABS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("identity", "هویت ربات", ("welcome", "appearance")),
+    ("buttons", "دکمه‌ها", ("buttons", "colors")),
+    ("delivery", "تحویل سرویس", ("naming", "qr", "guides")),
+)
+# Section names inside a merged tab, where the old tab name no longer fits.
+_SECTION_LABELS = {
+    "welcome": "خوش‌آمد",
+    "appearance": "پروفایل تلگرام",
+    "buttons": "متن دکمه‌ها",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +54,11 @@ class SettingsTab:
     key: str
     label: str
     href: str | None = None
+    sections: tuple[SettingsTab, ...] = ()
+
+    def shows(self, active: str) -> bool:
+        """True when ``active`` is this tab or one of its sections."""
+        return active == self.key or any(section.key == active for section in self.sections)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,11 +88,12 @@ def group_settings_tabs(
     tabs: Sequence[tuple[str, str]], active: str
 ) -> tuple[SettingsTabGroup, ...]:
     """Split ``tabs`` into groups, keeping only tabs the caller already holds."""
-    available = {key: SettingsTab(key, label, _TAB_PAGES.get(key)) for key, label in tabs}
+    available, alias = _merge_tabs({key: SettingsTab(key, label, _TAB_PAGES.get(key)) for key, label in tabs})
     claimed: set[str] = set()
     groups: list[SettingsTabGroup] = []
     for group_key, label, keys in _GROUP_LAYOUT:
-        members = tuple(available[key] for key in keys if key in available)
+        merged_keys = dict.fromkeys(alias.get(key, key) for key in keys)
+        members = tuple(available[key] for key in merged_keys if key in available)
         claimed.update(tab.key for tab in members)
         if members:
             groups.append(_build_group(group_key, label, members, active))
@@ -79,6 +103,38 @@ def group_settings_tabs(
     return tuple(groups)
 
 
+def resolve_merged_tab(key: str) -> str:
+    """The tab key to render for ``key``: a merged tab opens its first section."""
+    for merged_key, _label, members in _MERGED_TABS:
+        if key == merged_key:
+            return members[0]
+    return key
+
+
+def _merge_tabs(available: dict[str, SettingsTab]) -> tuple[dict[str, SettingsTab], dict[str, str]]:
+    """Fold merged members into one tab placed where its first member was.
+
+    A merge needs at least two members the caller holds; otherwise the tab stays as it was.
+    Returns the new tabs by key and a member-key -> merged-key map.
+    """
+    alias: dict[str, str] = {}
+    folded: dict[str, SettingsTab] = {}
+    for merged_key, label, members in _MERGED_TABS:
+        held = [available[key] for key in members if key in available]
+        if len(held) < 2:
+            continue
+        sections = tuple(SettingsTab(tab.key, _SECTION_LABELS.get(tab.key, tab.label), tab.href) for tab in held)
+        folded[held[0].key] = SettingsTab(merged_key, label, None, sections)
+        alias.update({tab.key: merged_key for tab in held})
+    result: dict[str, SettingsTab] = {}
+    for key, tab in available.items():
+        if key in folded:
+            result[folded[key].key] = folded[key]
+        elif key not in alias:
+            result[key] = tab
+    return result, alias
+
+
 def _build_group(
     key: str, label: str, members: tuple[SettingsTab, ...], active: str
 ) -> SettingsTabGroup:
@@ -86,5 +142,5 @@ def _build_group(
         key=key,
         label=label,
         tabs=members,
-        is_active=any(tab.key == active for tab in members),
+        is_active=any(tab.shows(active) for tab in members),
     )

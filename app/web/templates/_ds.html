@@ -1,0 +1,105 @@
+{# Design-language building blocks (styles: panel-ds.css, behavior: panel-ds.js). #}
+{% from "macros.html" import modal_title %}
+
+{% macro ico(name) -%}
+<svg viewBox="0 0 24 24" aria-hidden="true">
+{%- if name == 'plus' -%}<path d="M12 5v14M5 12h14"/>
+{%- elif name == 'check' -%}<path d="M5 12.5l4.5 4.5L19 7.5"/>
+{%- elif name == 'info' -%}<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>
+{%- elif name == 'trash' -%}<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>
+{%- elif name == 'shield' -%}<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M12 8v4M12 15h.01"/>
+{%- elif name == 'fixed' -%}<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/>
+{%- elif name == 'payg' -%}<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>
+{%- elif name == 'pack' -%}<path d="M12 5v14M5 12h14"/>
+{%- elif name == 'custom' -%}<path d="M4 7h9M17 5v4M19 7h1M4 12h3M11 10v4M13 12h7M4 17h11M19 15v4M21 17h-1"/>
+{%- elif name == 'trial' -%}<circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 1.5M9 3h6"/>
+{%- elif name == 'wholesale' -%}<path d="M4 8l8-4 8 4-8 4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/>
+{%- elif name == 'time' -%}<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>
+{%- elif name == 'users' -%}<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/>
+{%- elif name == 'chev' -%}<path d="M15 6l-6 6 6 6"/>
+{%- elif name == 'warn' -%}<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/>
+{%- endif -%}
+</svg>
+{%- endmacro %}
+
+{# Section: small grey title outside, dashboard-style card inside. #}
+{% macro ds_sec(title, sid='', side='', flush=false, extra_class='') -%}
+<section class="ds-sec{% if extra_class %} {{ extra_class }}{% endif %}"{% if sid %} id="{{ sid }}"{% endif %}>
+  <div class="ds-sec-head"><h3 class="ds-sec-title">{{ title }}</h3>{% if side %}{{ side }}{% endif %}</div>
+  <div class="ds-card{% if flush %} ds-card-flush{% endif %}">{{ caller() }}</div>
+</section>
+{%- endmacro %}
+
+{# show_when: "#field:value,value" shows the row only for those values (panel-ds.js). #}
+{% macro ds_switch(name, label, help='', checked=false, id=None, value='1', default=None, show_when='', hidden=false) -%}
+<label class="ui-switch-row ds-switch"{% if show_when %} data-ds-show-when="{{ show_when }}"{% endif %}{% if hidden %} hidden{% endif %}>
+  <span class="ui-switch-copy"><strong>{{ label }}</strong>{% if help %}<small>{{ help }}</small>{% endif %}</span>
+  <span class="ui-switch">
+    <input type="checkbox" name="{{ name }}" value="{{ value }}"{% if id %} id="{{ id }}"{% endif %}{% if checked %} checked{% endif %}{% if default is not none %} data-default="{{ '1' if default else '0' }}"{% endif %} />
+    <span class="ui-switch-track" aria-hidden="true"></span>
+  </span>
+</label>
+{%- endmacro %}
+
+{# Switch for a section that turns on and off (rule 6): passed as ds_sec(side=...). The
+   section title names it, so it has no visible label; the body (with its save button)
+   carries data-ds-show-when="#id:1" and stays hidden while the switch is off. Flipping
+   it saves its form at once, since the save button is hidden while it is off. #}
+{% macro ds_head_switch(name, label, id, checked=false, value='1') -%}
+<label class="ds-head-switch"><span class="ui-switch">
+  <input type="checkbox" name="{{ name }}" value="{{ value }}" id="{{ id }}" aria-label="{{ label }}" data-ds-submit-on-change{% if checked %} checked{% endif %} />
+  <span class="ui-switch-track" aria-hidden="true"></span>
+</span></label>
+{%- endmacro %}
+
+{# Number field where 0 means «no limit»: the «نامحدود» toggle sets 0 and locks the field. #}
+{% macro ds_unlimited(label, name, id, unit, value=0) -%}
+<div class="form-field">
+  <span class="ds-label-row"><span class="ds-label-text">{{ label }}</span>
+    <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#{{ id }}" aria-label="{{ label }} نامحدود">نامحدود</button></span>
+  <span class="ds-unit" data-unlimited-label="نامحدود"><input name="{{ name }}" id="{{ id }}" type="number" min="0" value="{{ value }}" inputmode="numeric" dir="ltr" aria-label="{{ label }}" /><span class="ds-unit-label">{{ unit }}</span></span>
+</div>
+{%- endmacro %}
+
+{# Grouped permission switches with live counters. groups: feature_perm_groups(). #}
+{% macro ds_perm_groups(groups, open_first=false, checked_keys=None) -%}
+{% for g in groups %}
+<details class="ds-acc{% if g.risky %} is-risk{% endif %}" data-ds-group{% if open_first and loop.first %} open{% endif %}>
+  <summary>{% if g.risky %}{{ ico('shield') }}{% endif %}<span class="ds-acc-title">{{ g.title }}</span>
+    <span class="ds-meta" data-ds-group-count></span><svg class="ds-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></summary>
+  {% if g.risky %}<p class="ds-acc-note">هر کدام فقط برای نمایندهٔ مورد اعتماد روشن شود.</p>{% endif %}
+  <div class="ds-acc-rows">
+    {% for p in g.perms %}
+    {% set on = (p.key in checked_keys) if checked_keys is not none else p.default %}
+    {{ ds_switch('perm_' ~ p.key, p.label, checked=on, default=p.default) }}
+    {% endfor %}
+  </div>
+</details>
+{% endfor %}
+{%- endmacro %}
+
+{# Footer line shown instead of the summary while a required field is empty. #}
+{% macro ds_foot_warn() -%}
+<a class="ds-foot-warn" href="#" role="status" hidden>{{ ico('info') }}<span><span data-ds-missing-count>۱</span> مورد مانده: <b data-ds-missing></b></span><span class="ds-foot-warn-go">رفتن به آن</span></a>
+{%- endmacro %}
+
+{# Modal header: icon and title (no caption), close button at the far edge. #}
+{% macro ds_modal_head(icon, title, heading_id, tone='brand') -%}
+<div class="ui-modal-head ds-head">
+  <div class="ds-head-row">
+    {{ modal_title(icon, title, tone=tone, heading_id=heading_id) }}
+    <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+</div>
+{%- endmacro %}
+
+{# Modal footer. A form modal has one full-width action (close is the × in the header);
+   a confirmation dialog passes cancel=true to pair its action with «انصراف». #}
+{% macro ds_foot(label, primary_class='btn', primary_id=none, pinned=true, cancel=false) -%}
+<div class="{% if pinned %}ui-modal-sticky-save {% endif %}ds-foot">
+  <div class="ds-foot-btns">
+    <button type="submit" class="{{ primary_class }}"{% if primary_id %} id="{{ primary_id }}"{% endif %}>{{ label }}</button>
+    {% if cancel %}<button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>{% endif %}
+  </div>
+</div>
+{%- endmacro %}

@@ -1,4 +1,4 @@
-"""Cleanup tab: save which status tags are deleted (by hand and hourly), and run it by hand."""
+"""Cleanup tab: run the saved deletion rules by hand (the rules are saved with the tab)."""
 
 from __future__ import annotations
 
@@ -11,21 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.safe_next import safe_internal_next
 from app.services.order_purge import (
-    RULES_PATH,
     RUN_PATH,
-    TAGS,
-    PurgeRules,
     count_purgeable,
-    parse_days,
     purge_scope,
     record_purge_run,
     rules_from_settings,
     run_purge,
-    save_rules,
 )
 from app.services.users import get_all_settings
 
-PURGE_TAB = "/finance?tab=orders&settings=purge"
+PURGE_TAB = "/finance?tab=orders&settings=cleanup"
 
 
 def _back(request: Request, **flash: str) -> RedirectResponse:
@@ -35,28 +30,7 @@ def _back(request: Request, **flash: str) -> RedirectResponse:
     return RedirectResponse(f"{target}{joiner}{key}={quote(value)}", status_code=303)
 
 
-def _switched_on(form) -> frozenset[str]:
-    return frozenset(token for token in TAGS if str(form.get(f"t_{token}") or "") == "1")
-
-
 def register_order_purge_pages(app: FastAPI, *, require_staff: Callable, get_db: Callable) -> None:
-    @app.post(RULES_PATH)
-    async def purge_rules_save(
-        request: Request, staff: dict = Depends(require_staff), session: AsyncSession = Depends(get_db)
-    ) -> RedirectResponse:
-        try:
-            shop_id = purge_scope(staff)
-        except PermissionError:
-            return RedirectResponse("/home", status_code=303)
-        form = await request.form()
-        try:
-            days = parse_days(form.get("days"))
-        except ValueError as exc:
-            return _back(request, err=str(exc))
-        rules = PurgeRules(tags=_switched_on(form), auto=str(form.get("auto") or "") == "1", days=days)
-        await save_rules(session, shop_id=shop_id, rules=rules)
-        return _back(request, ok="قواعد حذف ذخیره شد")
-
     @app.post(RUN_PATH)
     async def purge_run_now(
         request: Request, staff: dict = Depends(require_staff), session: AsyncSession = Depends(get_db)

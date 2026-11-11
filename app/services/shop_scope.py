@@ -173,6 +173,14 @@ def platform_may_review_payment(payment: Any, order: Any | None) -> bool:
     return payment_shop_id(payment, order) is None
 
 
+def shop_may_review_payment(payment: Any, order: Any | None, shop_id: int) -> bool:
+    """Shop staff review only their own shop's payments: its orders and its wallet top-ups.
+
+    Same rule as the bot's ``reseller_can_review_payment`` so the web panel and the bot agree.
+    """
+    return payment_shop_id(payment, order) == int(shop_id)
+
+
 def assert_bot_user_in_scope(staff: dict, user: Any) -> None:
     """H3 — BotUser object scope (users / wallet / loyalty targets).
 

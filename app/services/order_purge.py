@@ -42,6 +42,7 @@ from app.services.authz import authz_from_staff, can_shop
 from app.services.db_safe import rollback_quiet
 from app.services.orders import release_unpaid_order_holds
 from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.stale_order_cleanup import disable_all_legacy_soft_cancel
 from app.services.user_purge import purge_row_references
 from app.services.users import get_all_settings, set_settings_bulk
 from app.services.ux20 import payment_shop_clause
@@ -58,7 +59,6 @@ KEY_LAST_KIND = "cleanup_purge_last_kind"
 DEFAULT_DAYS = 30
 MIN_DAYS = 1
 MAX_DAYS = 3650
-RULES_PATH = "/finance/cleanup/purge-rules"
 RUN_PATH = "/finance/cleanup/purge-run"
 # Rows deleted per run and shop; a larger backlog is finished by the next run.
 BATCH = 200
@@ -79,6 +79,7 @@ class PurgeTag:
     table: str
     status: str
     label: str
+    hint: str = ""
 
     @property
     def token(self) -> str:
@@ -86,18 +87,18 @@ class PurgeTag:
 
 
 ORDER_TAGS: tuple[PurgeTag, ...] = (
-    PurgeTag(ORDER, OrderStatus.PENDING.value, "در انتظار"),
-    PurgeTag(ORDER, OrderStatus.AWAITING_RECEIPT.value, "منتظر رسید"),
-    PurgeTag(ORDER, OrderStatus.AWAITING_APPROVAL.value, "منتظر تأیید"),
-    PurgeTag(ORDER, OrderStatus.DELIVERED.value, "تحویل‌شده"),
-    PurgeTag(ORDER, OrderStatus.REJECTED.value, "ردشده"),
-    PurgeTag(ORDER, OrderStatus.CANCELLED.value, "لغوشده"),
+    PurgeTag(ORDER, OrderStatus.PENDING.value, "در انتظار", "هنوز پرداخت شروع نشده"),
+    PurgeTag(ORDER, OrderStatus.AWAITING_RECEIPT.value, "منتظر رسید", "رسید هنوز ارسال نشده"),
+    PurgeTag(ORDER, OrderStatus.AWAITING_APPROVAL.value, "منتظر تأیید", "رسید آمده؛ تأیید نشده"),
+    PurgeTag(ORDER, OrderStatus.DELIVERED.value, "تحویل‌شده", "سرویس ساخته شده؛ فقط ردیف سفارش"),
+    PurgeTag(ORDER, OrderStatus.REJECTED.value, "ردشده", "پرداخت رد شده"),
+    PurgeTag(ORDER, OrderStatus.CANCELLED.value, "لغوشده", "سفارش لغو شده"),
 )
 PAYMENT_TAGS: tuple[PurgeTag, ...] = (
-    PurgeTag(PAYMENT, PaymentStatus.PENDING.value, "در انتظار"),
-    PurgeTag(PAYMENT, PaymentStatus.APPROVED.value, "تأییدشده"),
-    PurgeTag(PAYMENT, PaymentStatus.REJECTED.value, "ردشده"),
-    PurgeTag(PAYMENT, PaymentStatus.VOIDED.value, "باطل‌شده"),
+    PurgeTag(PAYMENT, PaymentStatus.PENDING.value, "در انتظار", "پرداخت باز روی سفارش بسته‌شده"),
+    PurgeTag(PAYMENT, PaymentStatus.APPROVED.value, "تأییدشده", "پرداخت تأییدشدهٔ سفارش بسته‌شده"),
+    PurgeTag(PAYMENT, PaymentStatus.REJECTED.value, "ردشده", "پرداخت ردشده"),
+    PurgeTag(PAYMENT, PaymentStatus.VOIDED.value, "باطل‌شده", "پرداخت باطل‌شده"),
 )
 TAGS: dict[str, PurgeTag] = {tag.token: tag for tag in (*ORDER_TAGS, *PAYMENT_TAGS)}
 
@@ -150,7 +151,10 @@ def rules_from_settings(settings: Mapping[str, str]) -> PurgeRules:
 
 
 def purge_scope(staff: dict) -> int | None:
-    """Shop whose rows ``staff`` may delete (``None`` = platform); raises ``PermissionError``."""
+    """Shop whose rows ``staff`` may delete (``None`` = platform); raises ``PermissionError``.
+
+    Permanent deletion stays on ``orders_purge`` only (deny by default).
+    """
     if is_platform_admin(staff):
         return None
     if not can_shop(authz_from_staff(staff), PURGE_PERMISSION):
@@ -377,7 +381,10 @@ def _last_run_view(settings: Mapping[str, str]) -> dict[str, object] | None:
 async def purge_panel_context(
     session: AsyncSession, staff: dict, settings: Mapping[str, str], *, return_to: str
 ) -> dict[str, object] | None:
-    """Template values for the cleanup tab, or None when ``staff`` may not delete rows."""
+    """Template values for the tag-based cleanup tab, or None when ``staff`` may not delete rows.
+
+    Read-only: does not write settings. Legacy soft-cancel is disabled by the hourly job.
+    """
     try:
         shop_id = purge_scope(staff)
     except PermissionError:
@@ -391,26 +398,45 @@ async def purge_panel_context(
         "ready": await count_purgeable(session, shop_id=shop_id, tags=rules.tags, days=rules.days),
         "auto_on": rules.auto,
         "last_run": _last_run_view(settings),
-        "rules_action": f"{RULES_PATH}?next={quote(return_to)}",
         "run_action": f"{RUN_PATH}?next={quote(return_to)}",
     }
 
 
-SHOP_SCAN_LIMIT = 2000
+SHOP_SCAN_PAGE = 2000
 
 
 async def _shops_with_auto_rules(session: AsyncSession) -> list[int]:
-    rows = await session.scalars(
-        select(ResellerSetting.reseller_user_id)
-        .where(ResellerSetting.key == KEY_AUTO, ResellerSetting.value == "1")
-        .order_by(ResellerSetting.reseller_user_id)
-        .limit(SHOP_SCAN_LIMIT)
-    )
-    return [int(shop_id) for shop_id in rows.all()]
+    """Every shop with automatic purge on, keyset-paged so the scan is not capped at one page."""
+    shops: list[int] = []
+    after_id = 0
+    while True:
+        rows = await session.scalars(
+            select(ResellerSetting.reseller_user_id)
+            .where(
+                ResellerSetting.key == KEY_AUTO,
+                ResellerSetting.value == "1",
+                ResellerSetting.reseller_user_id > after_id,
+            )
+            .order_by(ResellerSetting.reseller_user_id)
+            .limit(SHOP_SCAN_PAGE)
+        )
+        page = [int(shop_id) for shop_id in rows.all()]
+        if not page:
+            break
+        shops.extend(page)
+        after_id = page[-1]
+        if len(page) < SHOP_SCAN_PAGE:
+            break
+    return shops
 
 
 async def auto_purge_all_shops(session: AsyncSession) -> int:
-    """One automatic pass over the platform and every shop that switched it on; one failure does not stop the rest."""
+    """One automatic pass over the platform and every shop that switched purge on.
+
+    First turns off legacy soft-cancel everywhere (no tag/auto writes — operators must
+    opt into permanent deletion themselves). One shop failure does not stop the rest.
+    """
+    await disable_all_legacy_soft_cancel(session)
     total = 0
     for shop_id in [None, *await _shops_with_auto_rules(session)]:
         try:

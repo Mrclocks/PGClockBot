@@ -210,10 +210,10 @@
           <span dir="auto">{{ a.name }}</span>
           {% if a.description %}<br class="li-hide"><small class="muted li-hide">{{ a.description }}</small>{% endif %}
         </td>
-        <td class="col-hide-sm muted">{% if a.is_general %}عمومی{% elif a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
+        <td class="col-hide-sm muted">{% if a.is_general or not a.category_id %}عمومی{% elif plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
         <td class="li-sub">
           <span>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</span>
-          <span class="li-only">· {% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %} · {% if a.is_general %}عمومی{% elif a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}بدون برچسب{% endif %}</span>
+          <span class="li-only">· {% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %} · {% if a.is_general or not a.category_id %}عمومی{% elif plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</span>
         </td>
         <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
         <td class="mono li-value" dir="ltr">{{ a.price | money }}</td>
@@ -230,7 +230,8 @@
                     data-price="{{ a.price }}"
                     data-sort="{{ a.sort_order }}"
                     data-category="{{ a.category_id or '' }}"
-                    data-description="{{ a.description or '' }}">ویرایش</button>
+                    data-description="{{ a.description or '' }}"
+                    data-style="{{ a.button_style or 'inherit' }}">ویرایش</button>
             <form method="post" action="/plans/addons/{{ a.id }}/toggle">
               <button class="btn btn-ghost btn-sm" type="submit">{% if a.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
@@ -429,514 +430,105 @@
 </div>
 {% endif %}
 
-<script src="/static/plans-tabs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
+<script src="/static/pack-rows.js?v={{ asset_v('pack-rows.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/addon-pack-form.js?v={{ asset_v('addon-pack-form.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/reseller-extra-packs.js?v={{ asset_v('reseller-extra-packs.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/user-plan-addon-packs.js?v={{ asset_v('user-plan-addon-packs.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/plans-tabs.js?v={{ asset_v('plans-tabs.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 
 {# —— Unified plan modal —— #}
-<div class="ui-modal" id="modal-plan-unified" hidden>
+<div class="ui-modal ds" id="modal-plan-unified" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
-  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('plans', 'افزودن پلن', caption='پلن فروشگاه یا نمایندگی را اینجا بسازید', heading_id='plan-unified-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-
-    <div class="form-stack" style="margin-bottom: 0" data-ui-select-watch>
-      <div class="form-row">
-        <label class="form-field">مخاطب پلن
-          <select id="plan-audience">
-            <option value="users">کاربران</option>
-            {% if is_platform_admin %}
-            <option value="resellers">نمایندگان</option>
-            {% endif %}
-          </select>
-        </label>
-        <label class="form-field">نوع پلن
-          {# Options are filled by JS from USER_KINDS / RESELLER_KINDS — must stay dynamic #}
-          <select id="plan-kind" data-plan-kind-dynamic="1">
-            <option value="fixed">ثابت</option>
-          </select>
-        </label>
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="plan-unified-title">
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('plans', 'پلن جدید', heading_id='plan-unified-title') }}
+        {# Hidden selects stay the source of truth for the plan script; the controls below only set them. #}
+        <select id="plan-audience" data-ui-select="1" hidden aria-hidden="true" tabindex="-1">
+          <option value="users">کاربران</option>
+          {% if is_platform_admin %}<option value="resellers">نمایندگان</option>{% endif %}
+        </select>
+        {% if is_platform_admin %}
+        <div class="sales-seg ds-aud" role="radiogroup" aria-label="مخاطب پلن" data-ds-choice data-ds-target="#plan-audience">
+          <button type="button" role="radio" data-value="users">کاربر</button>
+          <button type="button" role="radio" data-value="resellers">نماینده</button>
+        </div>
+        {% endif %}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
+      {% if is_platform_admin %}
+      <nav class="ds-steps" data-ds-form="reseller-plan-form" id="reseller-plan-steps" aria-label="بخش‌های فرم" hidden>
+        <a href="#rp-sec-basic">مشخصات</a>
+        <a href="#rp-sec-cap">ظرفیت</a>
+        <a href="#reseller-buy-extra-block">بسته‌ها</a>
+        <a href="#rp-sec-pg">پاسارگارد</a>
+        <a href="#reseller-perms-section">دسترسی</a>
+      </nav>
+      {% endif %}
     </div>
 
-    {# —— User fixed —— #}
-    <div id="panel-user-fixed" class="plan-panel">
-      <form method="post" action="/plans" class="form-stack">
-        <label class="form-field">برچسب دسته (اختیاری)
-          <select name="category_id" data-plan-category-select data-category-audience="users">
-            <option value="">— بدون برچسب —</option>
-            {% for c in plan_categories or [] %}
-              {% if c.is_active and (c.audience or 'users') == 'users' %}
-              <option value="{{ c.id }}">{{ c.name }}</option>
-              {% endif %}
-            {% endfor %}
-          </select>
-          <small class="muted">برچسب نمایش در بات — بسته‌های حجم/زمان همین دسته فقط روی سرویس‌های همین برچسب دیده می‌شوند</small>
-        </label>
-        <div class="form-row">
-          <label class="form-field">نام پلن
-            <input name="name" required placeholder="مثلاً ویژه ۴۰ گیگ" />
-          </label>
-          <label class="form-field">قیمت (تومان)
-            <input name="price" type="number" data-money min="0" required placeholder="150,000" />
-          </label>
-          <label class="form-field">مدت (روز)
-            <input name="duration_days" type="number" min="0" value="30" placeholder="خالی = نامحدود" />
-            <small class="muted">برای مدت نامحدود فیلد را <b>خالی</b> بگذارید (یا ۰){% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_expire_max %} — سقف زنده: {{ (pg_limit_snapshot.per_user_expire_max // 86400) or 1 }} روز{% endif %}</small>
-          </label>
-          <label class="form-field">حجم (گیگ)
-            <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="خالی = نامحدود" />
-            <small class="muted">برای حجم نامحدود فیلد را <b>خالی</b> بگذارید — عدد صفر نامحدود نیست{% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_data_max %} — سقف زنده: {{ pg_limit_snapshot.per_user_data_max | bytes }}{% endif %}</small>
-          </label>
+    {% from "_ds.html" import ico %}
+    <section class="ds-sec ds-sec-first" aria-labelledby="plan-kind-title">
+      <div class="ds-sec-head"><h3 class="ds-sec-title" id="plan-kind-title">نوع پلن</h3></div>
+      <select id="plan-kind" data-plan-kind-dynamic="1" data-ui-select="1" hidden aria-hidden="true" tabindex="-1">
+        <option value="fixed">ثابت</option>
+      </select>
+      <div class="ds-types ds-types-2" role="radiogroup" aria-labelledby="plan-kind-title" data-ds-choice data-ds-target="#plan-kind" id="plan-kinds-users">
+        {% for value, title, hint, icon in [
+          ('fixed', 'ثابت', 'حجم، مدت و قیمت مشخص', 'fixed'),
+          ('custom', 'دلخواه', 'کاربر حجم و مدت را می‌سازد', 'custom'),
+          ('trial', 'تست', 'یک‌بار رایگان برای هر کاربر', 'trial'),
+          ('wholesale', 'فروش عمده', 'تخفیف پله‌ای برای خرید چندتایی', 'wholesale'),
+          ('addon_volume', 'بستهٔ حجم', 'حجم اضافه روی سرویس فعلی', 'pack'),
+          ('addon_duration', 'بستهٔ زمان', 'روز اضافه روی سرویس فعلی', 'time')] %}
+        <button type="button" class="ds-type" role="radio" data-value="{{ value }}">
+          <span class="ds-type-ico" aria-hidden="true">{{ ico(icon) }}</span>
+          <span class="ds-type-copy"><strong>{{ title }}</strong><small>{{ hint }}</small></span>
+          <span class="ds-radio" aria-hidden="true"></span>
+        </button>
+        {% endfor %}
+      </div>
+      {% if is_platform_admin %}
+      <div class="ds-types" role="radiogroup" aria-labelledby="plan-kind-title" data-ds-choice data-ds-target="#plan-kind" id="plan-kinds-resellers" hidden>
+        {% for value, also, title, hint, icon in [
+          ('fixed', '', 'اشتراک ثابت', 'قیمت، مدت و ظرفیت مشخص', 'fixed'),
+          ('payg', '', 'PAYG', 'پرداخت به ازای هر گیگ مصرفی', 'payg'),
+          ('addon_volume', 'addon_users', 'بستهٔ عمومی', 'حجم یا کاربر اضافه برای همهٔ نمایندگان', 'pack')] %}
+        <button type="button" class="ds-type" role="radio" data-value="{{ value }}"{% if also %} data-ds-also="{{ also }}"{% endif %}>
+          <span class="ds-type-ico" aria-hidden="true">{{ ico(icon) }}</span>
+          <span class="ds-type-copy"><strong>{{ title }}</strong><small>{{ hint }}</small></span>
+          <span class="ds-radio" aria-hidden="true"></span>
+        </button>
+        {% endfor %}
+        <div class="sales-seg ds-seg" role="radiogroup" aria-label="نوع بستهٔ عمومی" data-ds-choice data-ds-target="#plan-kind" id="plan-pack-kind" hidden>
+          <button type="button" role="radio" data-value="addon_volume">بستهٔ حجم</button>
+          <button type="button" role="radio" data-value="addon_users">بستهٔ کاربر</button>
         </div>
-        <label class="form-field">توضیح کوتاه
-          <input name="description" placeholder="نمایش در بات" />
-        </label>
-        <label class="form-field">حالت ساخت در پاسارگارد
-          <select name="mode" id="plan-mode">
-            <option value="custom">سفارشی (گروه + حجم + مدت)</option>
-            <option value="template">از تمپلیت آماده پاسارگارد</option>
-          </select>
-        </label>
-        <div id="mode-custom" class="form-stack">
-          <div class="form-field">
-            <span class="form-field-label">گروه‌های پاسارگارد (حداقل یکی)</span>
-            <div class="ui-switch-grid">
-              {% for g in groups %}
-              {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
-              {% else %}
-              <span class="muted">گروهی نیست — از منوی پاسارگارد → گروه‌ها بسازید.</span>
-              {% endfor %}
-            </div>
-          </div>
-          <div class="ui-switch-list">
-            {% if can_create_template is not defined or can_create_template %}
-            {{ switch('also_create_template', 'همزمان تمپلیت مشابه در پاسارگارد هم ساخته شود') }}
-            {% endif %}
-          </div>
-        </div>
-        <div id="mode-template" class="form-stack" style="display:none">
-          <label class="form-field">تمپلیت پاسارگارد
-            <select name="pg_template_id">
-              <option value="">— انتخاب کنید —</option>
-              {% for t in templates %}
-              <option value="{{ t.get('id') }}">#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
-              {% endfor %}
-            </select>
-          </label>
-        </div>
-        {% set naming_prefix = '' %}
-        {% set naming_suffix = '' %}
-        {% set naming_pattern = '' %}
-        {% set naming_prefix_name = 'pg_username_prefix' %}
-        {% set naming_suffix_name = 'pg_username_suffix' %}
-        {% set naming_pattern_name = 'pg_username_pattern' %}
-        {% set naming_preview_id = 'create-naming-sample' %}
-        {% set global_prefix = values.get('pg_username_prefix','clk') %}
-        {% set global_suffix = values.get('pg_username_suffix','') %}
-        {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
-        {% include "_plan_naming_fields.html" %}
-        {% set plan_button_style = 'inherit' %}
-        {% include "_plan_button_style_field.html" %}
-        <div class="actions">
-          <button class="btn" type="submit">ذخیره پلن</button>
-          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-        </div>
-      </form>
-    </div>
+      </div>
+      {% endif %}
+    </section>
 
-    {# —— User trial —— #}
-    <div id="panel-user-trial" class="plan-panel" hidden>
-      <p class="muted update-card-caption">حجم، مدت و اتصال پاسارگارد برای تست — از فروشگاه فقط یک‌بار به کاربر نشان داده می‌شود.</p>
-      <form method="post" action="/plans/trial" class="form-stack">
-        <div class="ui-switch-list">
-          {{ switch('trial_enabled', 'نمایش پلن تست در فروشگاه', checked=trial_on) }}
-        </div>
-        <div class="form-row">
-          <label class="form-field">نام
-            <input name="name" value="{{ trial.name if trial else 'تست رایگان' }}" required />
-          </label>
-          <label class="form-field">مدت (روز)
-            <input name="duration_days" type="number" min="1" value="{{ trial.duration_days if trial else 1 }}" required />
-            {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_expire_max %}<small class="muted">سقف زنده: {{ (pg_limit_snapshot.per_user_expire_max // 86400) or 1 }} روز</small>{% endif %}
-          </label>
-          <label class="form-field">حجم (گیگ)
-            <input name="data_limit_gb" type="number" step="0.1" min="0" value="{% if trial and trial.data_limit_gb is not none %}{{ trial.data_limit_gb }}{% endif %}" placeholder="خالی = نامحدود" />
-            <small class="muted">برای حجم نامحدود فیلد را <b>خالی</b> بگذارید — عدد صفر نامحدود نیست{% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_data_max %} — سقف زنده: {{ pg_limit_snapshot.per_user_data_max | bytes }}{% endif %}</small>
-          </label>
-        </div>
-        <label class="form-field">حالت ساخت در پاسارگارد
-          <select name="mode" id="trial-mode">
-            <option value="custom" {% if not trial or not trial.pg_template_id %}selected{% endif %}>سفارشی (گروه + حجم + مدت)</option>
-            <option value="template" {% if trial and trial.pg_template_id %}selected{% endif %}>از تمپلیت آماده</option>
-          </select>
-        </label>
-        <div id="trial-mode-custom" class="form-stack">
-          <div class="form-field">
-            <span class="form-field-label">گروه‌های پاسارگارد</span>
-            <div class="ui-switch-grid">
-              {% for g in groups %}
-              {% set gid = g.get('id')|string %}
-              {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in trial_group_ids), value=g.get('id')) }}
-              {% else %}
-              <span class="muted">گروهی نیست.</span>
-              {% endfor %}
-            </div>
-          </div>
-        </div>
-        <div id="trial-mode-template" class="form-stack" style="display:none">
-          <label class="form-field">تمپلیت پاسارگارد
-            <select name="pg_template_id">
-              <option value="">— انتخاب کنید —</option>
-              {% for t in templates %}
-              <option value="{{ t.get('id') }}" {% if trial and trial.pg_template_id == t.get('id') %}selected{% endif %}>#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
-              {% endfor %}
-            </select>
-          </label>
-        </div>
-        {% set naming_prefix = trial.pg_username_prefix if trial else '' %}
-        {% set naming_suffix = trial.pg_username_suffix if trial else '' %}
-        {% set naming_pattern = trial.pg_username_pattern if trial else '' %}
-        {% set naming_prefix_name = 'pg_username_prefix' %}
-        {% set naming_suffix_name = 'pg_username_suffix' %}
-        {% set naming_pattern_name = 'pg_username_pattern' %}
-        {% set naming_preview_id = 'trial-naming-sample' %}
-        {% set global_prefix = values.get('pg_username_prefix','clk') %}
-        {% set global_suffix = values.get('pg_username_suffix','') %}
-        {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
-        {% include "_plan_naming_fields.html" %}
-        {% if trial and trial.button_style is not none %}
-        {% set plan_button_style = trial.button_style if trial.button_style else '' %}
-        {% else %}
-        {% set plan_button_style = 'inherit' %}
-        {% endif %}
-        {% include "_plan_button_style_field.html" %}
-        <div class="actions">
-          <button class="btn" type="submit">ذخیره پلن تست</button>
-          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-        </div>
-      </form>
-    </div>
-
-    {# —— User custom —— #}
-    <div id="panel-user-custom" class="plan-panel" hidden>
-      <p class="muted update-card-caption">کاربر در بات حجم و روز دلخواه می‌چیند؛ قیمت از روی هر گیگ/روز حساب می‌شود.</p>
-      {% if custom_limit_issue %}<div class="flash warn">{{ custom_limit_issue }}</div>{% endif %}
-      <form method="post" action="/plans/custom" class="form-stack">
-        <div class="ui-switch-list">
-          {{ switch('custom_plan_enabled', 'فعال‌سازی پلن دلخواه در فروشگاه', checked=custom_on) }}
-        </div>
-        <div class="form-row">
-          <label class="form-field">قیمت هر گیگ (تومان)
-            <input name="custom_plan_price_per_gb" type="number" data-money min="0" value="{{ values.get('custom_plan_price_per_gb','1000') }}" />
-          </label>
-          <label class="form-field">قیمت هر روز (تومان)
-            <input name="custom_plan_price_per_day" type="number" data-money min="0" value="{{ values.get('custom_plan_price_per_day','500') }}" />
-          </label>
-          <label class="form-field">حداقل / حداکثر گیگ
-            <div class="form-row" style="margin: 0">
-              <input name="custom_plan_min_gb" type="number" min="1" value="{{ values.get('custom_plan_min_gb','1') }}" />
-              <input name="custom_plan_max_gb" type="number" min="1" value="{{ values.get('custom_plan_max_gb','500') }}" />
-            </div>
-            {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_data_max %}<small class="muted">سقف زنده حداکثر: {{ pg_limit_snapshot.per_user_data_max | bytes }}</small>{% endif %}
-          </label>
-          <label class="form-field">حداقل / حداکثر روز
-            <div class="form-row" style="margin: 0">
-              <input name="custom_plan_min_days" type="number" min="1" value="{{ values.get('custom_plan_min_days','1') }}" />
-              <input name="custom_plan_max_days" type="number" min="1" value="{{ values.get('custom_plan_max_days','365') }}" />
-            </div>
-            {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_expire_max %}<small class="muted">سقف زنده حداکثر: {{ (pg_limit_snapshot.per_user_expire_max // 86400) or 1 }} روز</small>{% endif %}
-          </label>
-        </div>
-        <label class="form-field">اتصال پاسارگارد
-          <select name="mode" id="custom-mode">
-            <option value="custom" {% if not values.get('custom_plan_template_id') %}selected{% endif %}>گروه اینباند</option>
-            <option value="template" {% if values.get('custom_plan_template_id') %}selected{% endif %}>تمپلیت</option>
-          </select>
-        </label>
-        <div id="custom-mode-groups" class="form-stack">
-          <div class="form-field">
-            <span class="form-field-label">گروه‌ها</span>
-            <div class="ui-switch-grid">
-              {% for g in groups %}
-              {% set gid = g.get('id')|string %}
-              {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in custom_group_ids), value=g.get('id')) }}
-              {% else %}
-              <span class="muted">گروهی نیست.</span>
-              {% endfor %}
-            </div>
-          </div>
-        </div>
-        <div id="custom-mode-template" class="form-stack" style="display:none">
-          <label class="form-field">تمپلیت
-            <select name="custom_plan_template_id">
-              <option value="">— انتخاب کنید —</option>
-              {% for t in templates %}
-              <option value="{{ t.get('id') }}" {% if values.get('custom_plan_template_id')|string == t.get('id')|string %}selected{% endif %}>#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
-              {% endfor %}
-            </select>
-          </label>
-        </div>
-        {% set naming_prefix = values.get('custom_plan_username_prefix','') %}
-        {% set naming_suffix = values.get('custom_plan_username_suffix','') %}
-        {% set naming_pattern = values.get('custom_plan_username_pattern','') %}
-        {% set naming_prefix_name = 'custom_plan_username_prefix' %}
-        {% set naming_suffix_name = 'custom_plan_username_suffix' %}
-        {% set naming_pattern_name = 'custom_plan_username_pattern' %}
-        {% set naming_preview_id = 'custom-naming-sample' %}
-        {% set global_prefix = values.get('pg_username_prefix','clk') %}
-        {% set global_suffix = values.get('pg_username_suffix','') %}
-        {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
-        {% include "_plan_naming_fields.html" %}
-        {% set button_style_name = 'custom_plan_button_style' %}
-        {% set raw_custom_style = values.get('custom_plan_button_style') %}
-        {% if raw_custom_style is none or raw_custom_style == '' or raw_custom_style == 'inherit' %}
-        {% set plan_button_style = 'inherit' %}
-        {% else %}
-        {% set plan_button_style = raw_custom_style %}
-        {% endif %}
-        {% if plan_button_style not in ['inherit', 'primary', 'success', 'danger', ''] %}
-        {% set plan_button_style = 'inherit' %}
-        {% endif %}
-        {% include "_plan_button_style_field.html" %}
-        <div class="actions">
-          <button class="btn" type="submit">ذخیره پلن دلخواه</button>
-          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-        </div>
-      </form>
-    </div>
-
-    {# —— User wholesale —— #}
-    <div id="panel-user-wholesale" class="plan-panel" hidden>
-      <p class="muted update-card-caption">کاربر در ربات نوع سرویس و تعداد را انتخاب می‌کند؛ تخفیف پلکانی بر اساس تعداد اعمال می‌شود.</p>
-      <form method="post" action="/plans/wholesale" class="form-stack" id="wholesale-form">
-        <div class="ui-switch-list">
-          {{ switch('wholesale_enabled', 'فعال‌سازی فروش عمده در فروشگاه', checked=wholesale_on) }}
-        </div>
-        <div class="form-row">
-          <label class="form-field">حداقل تعداد خرید
-            <input name="wholesale_min_qty" type="number" min="1" value="{{ values.get('wholesale_min_qty','5') }}" required />
-          </label>
-          <label class="form-field">حداکثر تعداد خرید
-            <input name="wholesale_max_qty" type="number" min="1" value="{{ values.get('wholesale_max_qty','20') }}" required />
-          </label>
-          <label class="form-field">متن دکمه در ربات
-            <input name="btn_wholesale" value="{{ values.get('btn_wholesale','📦 فروش عمده') }}" />
-          </label>
-        </div>
-        <div class="form-field">
-          <strong>پله‌های تخفیف</strong>
-          <small class="muted">مثلاً از ۵ عدد ۱۰٪ و از ۲۰ عدد ۲۰٪ — تعداد و درصد را تنظیم کنید.</small>
-          <div id="wholesale-tiers" class="form-stack stack-mt"></div>
-          <button type="button" class="btn btn-ghost btn-sm" id="wholesale-add-tier">+ پله تخفیف</button>
-          <input type="hidden" name="wholesale_tiers" id="wholesale_tiers_json" value="{{ values.get('wholesale_tiers','[]') }}" />
-        </div>
-        <div class="actions">
-          <button class="btn" type="submit">ذخیره فروش عمده</button>
-          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-        </div>
-      </form>
-    </div>
-
-    {# —— User service addon packs (volume / duration) —— #}
-    <div id="panel-user-addon" class="plan-panel" hidden>
-      <p class="muted update-card-caption" id="user-addon-hint">از کارت همان سرویس در ربات خریداری می‌شود. بستهٔ «عمومی» برای همهٔ دسته‌ها دیده می‌شود؛ برای قیمت جدا، برچسب دسته را با پلن سرویس یکی بگذارید.</p>
-      <form method="post" action="/plans/addons" class="form-stack" id="unified-service-addon-form">
-        <input type="hidden" name="kind" id="unified-addon-kind" value="volume" />
-        <label class="form-field">دسته‌ی بسته
-          <select name="category_id" id="unified-addon-category" data-plan-category-select data-category-audience="users">
-            <option value="">عمومی (همه‌ی دسته‌ها)</option>
-            {% for c in plan_categories or [] %}
-              {% if c.is_active and (c.audience or 'users') == 'users' %}
-              <option value="{{ c.id }}">{{ c.name }}</option>
-              {% endif %}
-            {% endfor %}
-          </select>
-          <small class="muted">پیش‌فرض «عمومی» است و برای همهٔ سرویس‌ها دیده می‌شود. با انتخاب برچسب، فقط برای سرویس‌های همان برچسب نمایش داده می‌شود.</small>
-        </label>
-        <div class="form-row">
-          <label class="form-field">نام بسته
-            <input name="name" id="unified-addon-name" required maxlength="128" placeholder="مثلاً ۱۰ گیگ اضافه" />
-          </label>
-          <label class="form-field">مقدار
-            <input name="amount" id="unified-addon-amount" type="number" min="0.1" step="0.1" required placeholder="۱۰" />
-            <small class="muted" id="unified-addon-amount-hint">برای حجم می‌تواند اعشار باشد؛ برای زمان عدد صحیح روز</small>
-          </label>
-          <label class="form-field">قیمت (تومان)
-            <input name="price" id="unified-addon-price" type="number" data-money min="0" required placeholder="50,000" />
-          </label>
-          <label class="form-field">ترتیب
-            <input name="sort_order" type="number" value="0" />
-          </label>
-        </div>
-        <label class="form-field">توضیح (اختیاری)
-          <input name="description" maxlength="255" placeholder="نمایش در بات" />
-        </label>
-        <div class="actions">
-          <button class="btn" type="submit">ذخیره بسته</button>
-          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-        </div>
-      </form>
-    </div>
+    {% include "_user_plan_forms.html" %}
 
     {# —— Reseller —— #}
     {% if is_platform_admin %}
     <div id="panel-reseller" class="plan-panel" hidden>
-      {% if pg_limit_cards %}
-      {% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}
-      {{ pg_snapshot_limit_board(pg_limit_cards, heading='سقف ظرفیت نماینده', caption='ظرفیت نمایندگی‌ها از سقف زنده ادمین اصلی بیشتر نمی‌شود') }}
-      {% endif %}
-      <form method="post" action="/resellers/plans" class="form-stack" id="reseller-plan-form">
-        <input type="hidden" name="billing_mode" id="reseller-billing-mode" value="fixed" />
-        <input type="hidden" name="plan_kind" id="reseller-plan-kind" value="subscription" />
-        <p class="muted update-card-caption" id="reseller-mode-hint">نوع پلن را از بالا انتخاب کنید — فیلدهای مخصوص همان نوع نمایش داده می‌شود.</p>
-        <label class="form-field" id="reseller-category-field">برچسب دسته (اختیاری)
-          <select name="category_id" data-plan-category-select data-category-audience="resellers">
-            <option value="">— بدون برچسب —</option>
-            {% for c in plan_categories or [] %}
-              {% if c.is_active and (c.audience or 'users') == 'resellers' %}
-              <option value="{{ c.id }}">{{ c.name }}</option>
-              {% endif %}
-            {% endfor %}
-          </select>
-          <small class="muted" id="reseller-category-hint">برچسب نمایش برای پلن‌های نمایندگی — از «برچسب دسته» با مخاطب نمایندگان بسازید</small>
-        </label>
-        <div class="form-row">
-          <label class="form-field">نام
-            <input name="name" required placeholder="نمایندگی نقره‌ای" id="reseller-plan-name" />
-          </label>
-          <label class="form-field">
-            <span id="reseller-price-label">قیمت ورود (تومان)</span>
-            <input name="price" type="number" data-money value="0" id="reseller-plan-price" />
-            <small class="muted" id="reseller-price-hint">هزینه خرید پکیج نمایندگی — ۰ = رایگان؛ فقط تأیید ادمین</small>
-          </label>
-          <label class="form-field" id="reseller-price-per-gb-field" hidden>
-            نرخ هر گیگ (تومان)
-            <input name="price_per_gb" id="reseller-price-per-gb-input" type="number" data-money min="0" value="0" />
-            <small class="muted">فقط برای PAYG — هر پلن می‌تواند نرخ جدا داشته باشد</small>
-          </label>
-          <label class="form-field">ترتیب
-            <input name="sort_order" type="number" value="0" />
-          </label>
-        </div>
-        <label class="form-field">توضیح
-          <textarea name="description" rows="2"></textarea>
-        </label>
-
-        <div class="form-row" id="reseller-duration-field">
-          <label class="form-field">مدت اشتراک (روز)
-            <input name="duration_days" type="number" min="0" value="0" />
-            <small class="muted">۰ = زمان نامحدود (بدون انقضای اشتراک)</small>
-          </label>
-        </div>
-        <div class="form-row" id="reseller-included-fields">
-          <label class="form-field">حجم پایه (گیگ)
-            <input name="included_gb" type="number" min="0" value="0" />
-            <small class="muted">۰ = سقف حجم از این پلن اعمال نمی‌شود (نامحدود/حفظ وضعیت فعلی)</small>
-          </label>
-          <label class="form-field">کاربر پایه
-            <input name="included_users" type="number" min="0" value="0" />
-            <small class="muted">۰ = سقف کاربر از این پلن اعمال نمی‌شود</small>
-          </label>
-        </div>
-        <div class="form-row" id="reseller-addon-fields" hidden>
-          <label class="form-field" id="reseller-addon-gb-field">حجم بسته (گیگ)
-            <input name="addon_gb" type="number" min="0" value="0" />
-          </label>
-          <label class="form-field" id="reseller-addon-users-field">کاربر بسته
-            <input name="addon_users" type="number" min="0" value="0" />
-          </label>
-        </div>
-        <div class="form-row" id="reseller-renew-fields">
-          <label class="form-field">قیمت تمدید (تومان)
-            <input name="renew_price" type="number" data-money min="0" value="0" />
-            <small class="muted">۰ = همان قیمت ورود پلن</small>
-          </label>
-          <label class="form-field">محاسبه تمدید
-            <select name="renew_pricing_mode" id="reseller-renew-pricing-mode">
-              <option value="fixed" selected>ثابت (فقط قیمت تمدید)</option>
-              <option value="from_capacity">بر اساس ظرفیت (پایه + اضافه‌ها)</option>
-            </select>
-            <small class="muted" id="reseller-renew-mode-hint">اگر خرید حجم/کاربر اضافه روشن باشد، همیشه بر اساس ظرفیت محاسبه می‌شود.</small>
-          </label>
-        </div>
-
-        <div id="reseller-subscription-extras">
-        <div id="reseller-groups" class="form-field">
-          <span class="form-field-label">گروه‌های پاسارگارد (الزامی)</span>
-          <p class="muted update-card-caption">حداقل یک گروه باید انتخاب شود — برای ثابت و PAYG.</p>
-          <div class="ui-switch-grid">
-            {% for g in groups %}
-            {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
-            {% else %}
-            <span class="muted">گروهی از پاسارگارد لود نشد — اتصال PG را بررسی کنید.</span>
-            {% endfor %}
-          </div>
-        </div>
-
-        <div class="ui-switch-section" id="reseller-perms-section">
-          <span class="ui-switch-section-title">دسترسی پیش‌فرض (وب = بات)</span>
-          <p class="ui-switch-section-hint">این دسترسی‌ها هنگام تأیید درخواست نمایندگی اعمال می‌شوند.</p>
-          <div class="ui-switch-list">
-            {% for key, label in feature_perms %}
-            {{ switch('perm_' ~ key, label, checked=true) }}
-            {% endfor %}
-          </div>
-        </div>
-
-        <div class="ui-switch-list" id="reseller-provision-switches">
-          {{ switch('create_pg_admin', 'ساخت ادمین پاسارگارد هنگام تأیید', checked=true, help='با نقش پاسارگارد پلن؛ برای مالکیت کاربران لازم است') }}
-          {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند') }}
-        </div>
-
-        <div id="reseller-buy-extra-block">
-        <div class="ui-switch-list">
-          {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=false, help='فقط اشتراک ثابت — در ربات پله‌های ۱/۵/۱۰… نمایش داده می‌شود؛ برای PAYG لازم نیست', id='reseller-allow-buy-extra') }}
-        </div>
-
-        <div class="form-row" id="reseller-extra-prices" hidden>
-          <label class="form-field">قیمت هر گیگ اضافه (تومان)
-            <input name="extra_gb_price" id="reseller-extra-gb-price" type="number" data-money min="0" value="0" />
-          </label>
-          <label class="form-field">قیمت هر کاربر اضافه (تومان)
-            <input name="extra_user_price" id="reseller-extra-user-price" type="number" data-money min="0" value="0" />
-          </label>
-        </div>
-        </div>{# /reseller-buy-extra-block #}
-
-        <label class="form-field" id="reseller-role-field">نقش پاسارگارد (الزامی)
-          <select name="pg_role_id" id="reseller-pg-role">
-            <option value="" disabled selected>— انتخاب کنید —</option>
-            {% for r in pg_roles %}
-            <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        </div>{# /reseller-subscription-extras #}
-
-        <div class="ui-switch-list">
-          {{ switch('is_active', 'پلن فعال', checked=true) }}
-        </div>
-        {% set plan_button_style = 'inherit' %}
-        {% include "_plan_button_style_field.html" %}
-        <div class="actions">
-          <button class="btn" type="submit">ذخیره پلن</button>
-          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-        </div>
-      </form>
+      {% include "_reseller_plan_form.html" %}
     </div>
     {% endif %}
   </div>
 </div>
 
 {# —— Plan category labels modal —— #}
-<div class="ui-modal{% if open_categories %} open{% endif %}" id="modal-plan-categories" {% if not open_categories %}hidden{% endif %}
+<div class="ui-modal ds{% if open_categories %} open{% endif %}" id="modal-plan-categories" {% if not open_categories %}hidden{% endif %}
      data-modal-strip-keys="categories,ok,err,_">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="plan-categories-title">
-    <div class="ui-modal-head">
-      {{ modal_title('plans', 'برچسب دسته', caption='در ربات فروشگاه، به‌جای «ثابت» دکمه‌های دسته نشان داده می‌شوند — رنگ دکمه را اینجا تنظیم کنید', tone='brand', heading_id='plan-categories-title') }}
-      <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('plans', 'برچسب دسته', tone='brand', heading_id='plan-categories-title') }}
+        <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
     {% if open_categories and (flash_ok or flash_err) %}
     <div class="settings-modal-flash" id="plan-categories-flash">
@@ -944,7 +536,8 @@
       {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
     </div>
     {% endif %}
-    <form method="post" action="/plans/categories" class="form-stack plan-cat-form" id="plan-category-form" data-create-action="/plans/categories">
+    <form method="post" action="/plans/categories" class="form-stack ds-body plan-cat-form" id="plan-category-form" data-create-action="/plans/categories">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <div class="settings-grid">
         <label class="form-field">نام برچسب
           <input name="name" id="plan-category-name" required maxlength="128" placeholder="مثلاً ویژه / اقتصادی" />
@@ -972,11 +565,12 @@
           {% include "_plan_button_style_field.html" %}
         </div>
       </div>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" id="plan-category-submit">افزودن برچسب</button>
         <button type="button" class="btn btn-ghost" id="plan-category-cancel-edit" hidden>انصراف از ویرایش</button>
-        <button type="button" class="btn btn-ghost" data-modal-close-strip>بستن</button>
-      </div>
+
+      </div></div>
     </form>
     <div class="plan-cat-list">
       <h3 class="gift-codes-recent-title">برچسب‌های فعلی</h3>
@@ -1068,23 +662,52 @@
 </div>
 
 {# —— Service addon packs modal —— #}
-<div class="ui-modal{% if open_addons %} open{% endif %}" id="modal-service-addons" {% if not open_addons %}hidden{% endif %}>
+<div class="ui-modal ds{% if open_addons %} open{% endif %}" id="modal-service-addons" {% if not open_addons %}hidden{% endif %}>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="service-addons-title">
-    <div class="ui-modal-head">
-      {{ modal_title('plans', 'بسته حجم / زمان', caption='کاربر می‌تواند حجم یا زمان بخرد و به سرویس فعلی‌اش اضافه کند', tone='brand', heading_id='service-addons-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('plans', 'بسته حجم / زمان', tone='brand', heading_id='service-addons-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/plans/addons" class="form-stack" id="service-addon-form" data-create-action="/plans/addons">
+{# One row of the general pack form; also rendered into a <template> so added rows start un-enhanced. #}
+{% macro addon_pack_row(style_options) -%}
+{% from "_ds.html" import ico %}
+<div class="ds-list-row extra-pack-row" data-addon-row>
+  <span class="ds-unit ds-pack-amt"><input name="amount" class="extra-pack-amount" type="number" min="0.1" step="0.1" inputmode="decimal" dir="ltr" required placeholder="۱۰" aria-label="مقدار بسته" /><span class="ds-unit-label" data-addon-unit>گیگ</span></span>
+  <span class="ds-list-value"><input name="price" type="number" data-money min="0" required placeholder="50,000" dir="ltr" aria-label="قیمت بسته (تومان)" /></span>
+  <span class="ds-dot-select" data-ds-dot data-menu-min-width="168" data-value="inherit" data-tone="default">
+    <select name="button_style" class="btn-color-select extra-pack-style" data-tone="default" aria-label="رنگ دکمه بسته در ربات">
+      {% for opt_val, opt_label, opt_tone in style_options %}
+      <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if opt_val == 'inherit' %}selected{% endif %}>{{ 'پیش‌فرض' if opt_val == 'inherit' else opt_label }}</option>
+      {% endfor %}
+    </select>
+  </span>
+  <button type="button" class="ds-del extra-pack-remove" data-addon-row-remove aria-label="حذف ردیف بسته">{{ ico('trash') }}</button>
+</div>
+{%- endmacro %}
+    <form method="post" action="/plans/addons" class="form-stack ds-body" id="service-addon-form" data-create-action="/plans/addons">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <div class="settings-grid">
         <label class="form-field">نام بسته
-          <input name="name" id="service-addon-name" required maxlength="128" placeholder="مثلاً ۱۰ گیگ اضافه" />
+          <input name="name" id="service-addon-name" maxlength="128" placeholder="خالی: از مقدار ساخته می‌شود" />
+          <small class="muted" id="service-addon-name-hint">برای چند بسته خالی بگذارید؛ نام هر بسته مثل «۱۰ گیگ» از مقدارش ساخته می‌شود.</small>
         </label>
         <label class="form-field">نوع
           <select name="kind" id="service-addon-kind" required>
             <option value="volume">حجم (گیگ)</option>
             <option value="duration">زمان (روز)</option>
           </select>
+        </label>
+        <label class="form-field">پلن اختصاصی (اختیاری)
+          <select name="plan_id" id="service-addon-plan">
+            <option value="">— بدون پلن (عمومی / دسته) —</option>
+            {% for p in plans or [] %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+          </select>
+          <small class="muted">اگر پلن انتخاب شود، بسته فقط روی سرویس‌های همان پلن دیده می‌شود و دسته نادیده گرفته می‌شود. با تعریف بستهٔ مخصوص این پلن برای یک نوع (حجم یا زمان)، بسته‌های عمومی همان نوع برای این پلن مخفی می‌شوند؛ نوع دیگر اگر بستهٔ مخصوص نداشته باشد همچنان عمومی/دسته‌ای می‌ماند.</small>
         </label>
         <label class="form-field">دسته‌ی بسته
           <select name="category_id" id="service-addon-category" data-plan-category-select data-category-audience="users">
@@ -1097,13 +720,27 @@
           </select>
           <small class="muted">پیش‌فرض «عمومی» است و برای همهٔ سرویس‌ها دیده می‌شود. با انتخاب برچسب، فقط سرویس‌های همان دسته این بسته را می‌بینند.</small>
         </label>
-        <label class="form-field">مقدار
-          <input name="amount" id="service-addon-amount" type="number" min="0.1" step="0.1" required placeholder="۱۰" />
-          <small class="muted" id="service-addon-amount-hint">برای حجم می‌تواند اعشار باشد؛ برای زمان عدد صحیح روز</small>
-        </label>
-        <label class="form-field">قیمت (تومان)
-          <input name="price" id="service-addon-price" type="number" data-money min="0" required placeholder="50,000" />
-        </label>
+        {% set plan_button_style = 'inherit' %}
+        {% set button_style_name = 'button_style' %}
+        {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
+        {% set plan_style_options = pack_style_options %}
+        {% set plan_color_hint = 'رنگ دکمه این بسته در ربات؛ «ارث» یعنی رنگ پلن سرویس.' %}
+        {% set addon_style_options = pack_style_options %}
+      </div>
+      </div></section>
+      <section class="ds-sec"><div class="ds-card">
+        <div class="ds-list" data-addon-rows>
+          <div class="ds-list-head" aria-hidden="true"><span>مقدار<span class="ds-unit-head" data-addon-unit-head> (گیگ)</span></span><span>قیمت<span class="ds-head-long"> (تومان)</span></span><span>رنگ</span><span></span></div>
+          <div class="extra-packs-rows" data-addon-row-list>
+            {{ addon_pack_row(addon_style_options) }}
+          </div>
+          <template data-addon-row-template>{{ addon_pack_row(addon_style_options) }}</template>
+          <button type="button" class="ds-add" data-addon-row-add>{{ ico('plus') }}افزودن ردیف</button>
+        </div>
+        <small class="muted" id="service-addon-amount-hint">حجم به گیگ — اعشار مجاز است</small>
+      </div></section>
+      <section class="ds-sec"><div class="ds-card">
+      <div class="settings-grid">
         <label class="form-field">ترتیب
           <input name="sort_order" id="service-addon-sort" type="number" value="0" />
         </label>
@@ -1111,11 +748,12 @@
           <input name="description" id="service-addon-desc" maxlength="255" placeholder="نمایش در بات" />
         </label>
       </div>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" id="service-addon-submit">افزودن بسته</button>
         <button type="button" class="btn btn-ghost" id="service-addon-cancel-edit" hidden>انصراف از ویرایش</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>بستن</button>
-      </div>
+
+      </div></div>
     </form>
     <h3 class="gift-codes-recent-title">بسته‌های فعلی</h3>
     <div class="table-wrap">
@@ -1138,7 +776,7 @@
               {{ a.name }}
               {% if a.description %}<br><small class="muted">{{ a.description }}</small>{% endif %}
             </td>
-            <td class="col-hide-sm muted">{% if a.is_general %}عمومی{% elif a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
+            <td class="col-hide-sm muted">{% if a.is_general or not a.category_id %}عمومی{% elif plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
             <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
             <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
             <td class="mono" dir="ltr">{{ a.price | money }}</td>
@@ -1154,7 +792,8 @@
                         data-price="{{ a.price }}"
                         data-sort="{{ a.sort_order }}"
                         data-category="{{ a.category_id or '' }}"
-                        data-description="{{ a.description or '' }}">ویرایش</button>
+                        data-description="{{ a.description or '' }}"
+                    data-style="{{ a.button_style or 'inherit' }}">ویرایش</button>
                 <form method="post" action="/plans/addons/{{ a.id }}/toggle">
                   <button class="btn btn-ghost btn-sm" type="submit">{% if a.is_active %}خاموش{% else %}روشن{% endif %}</button>
                 </form>
@@ -1250,11 +889,18 @@
 
   function syncResellerExtras(){
     const prices = document.getElementById('reseller-extra-prices');
+    const packs = document.getElementById('reseller-extra-packs');
     const sw = document.querySelector('#reseller-plan-form input[name="allow_buy_extra"]');
     const renewMode = document.getElementById('reseller-renew-pricing-mode');
     if (!prices) return;
     const on = sw ? !!sw.checked : false;
     prices.hidden = !on;
+    if (window.ResellerExtraPacks && packs) {
+      if (on) window.ResellerExtraPacks.seedDefaultsIfEmpty(packs);
+      window.ResellerExtraPacks.setEditorVisible(packs, on);
+    } else if (packs) {
+      packs.hidden = !on;
+    }
     if (renewMode) {
       const fixedOpt = renewMode.querySelector('option[value="fixed"]');
       if (on) {
@@ -1263,6 +909,21 @@
       } else if (fixedOpt) {
         fixedOpt.disabled = false;
       }
+      renewMode.dispatchEvent(new Event('change', {bubbles: true}));
+    }
+  }
+
+  function syncUserExtras(){
+    const prices = document.getElementById('user-extra-prices');
+    const packs = document.getElementById('user-plan-addon-packs-create');
+    const sw = document.querySelector('#user-buy-extra-block input[name="allow_buy_extra"]');
+    const on = sw ? !!sw.checked : false;
+    if (prices) prices.hidden = !on;
+    if (window.UserPlanAddonPacks && packs) {
+      if (on) window.UserPlanAddonPacks.seedDefaultsIfEmpty(packs);
+      window.UserPlanAddonPacks.setEditorVisible(packs, on);
+    } else if (packs) {
+      packs.hidden = !on;
     }
   }
 
@@ -1298,6 +959,7 @@
     setVisible(rateField, !isAddon && isPayg);
     setVisible(extras, !isAddon);
     setVisible(document.getElementById('reseller-buy-extra-block'), !isAddon && !isPayg);
+    setVisible(document.getElementById('reseller-renew-carry-block'), !isAddon && !isPayg);
     setVisible(included, !isAddon);
     setVisible(renew, !isAddon);
     setVisible(duration, !isAddon);
@@ -1358,7 +1020,9 @@
   }
 
   document.addEventListener('change', (e) => {
-    if (e.target && e.target.name === 'allow_buy_extra') syncResellerExtras();
+    if (!e.target || e.target.name !== 'allow_buy_extra') return;
+    if (e.target.closest('#user-buy-extra-block')) syncUserExtras();
+    else syncResellerExtras();
   });
 
   function hideAllPanels(){
@@ -1414,9 +1078,70 @@
     } else {
       const key = 'users:' + kind;
       if (panels[key]) panels[key].hidden = false;
+      if (kind === 'fixed') syncUserExtras();
       if (kind === 'addon_volume' || kind === 'addon_duration') syncUserAddonForm();
     }
+    dsSync();
   }
+
+  const RESELLER_KIND_LABELS = {fixed: 'اشتراک ثابت', payg: 'PAYG', addon_volume: 'بستهٔ حجم', addon_users: 'بستهٔ کاربر'};
+
+  function toNumber(raw){
+    return Number(String(raw == null ? '' : raw).replace(/[^\d.]/g, '')) || 0;
+  }
+  function faCount(raw){
+    const fa = window.PanelDs ? window.PanelDs.faDigits : String;
+    return fa(toNumber(raw));
+  }
+  function money(raw){
+    return toNumber(raw).toLocaleString('en-US');
+  }
+
+  /* Footer line: what the reseller plan will be, in one sentence. */
+  function updateResellerSummary(){
+    const out = document.getElementById('reseller-plan-summary');
+    const form = document.getElementById('reseller-plan-form');
+    if (!out || !form) return;
+    const kind = kindSel ? kindSel.value : 'fixed';
+    const val = (name) => { const el = form.querySelector(`[name="${name}"]`); return el ? el.value : ''; };
+    const parts = [];
+    if (kind === 'addon_volume') parts.push(`${faCount(val('addon_gb'))} گیگ`);
+    else if (kind === 'addon_users') parts.push(`${faCount(val('addon_users'))} کاربر`);
+    else {
+      const days = Number(val('duration_days')) || 0;
+      parts.push(days ? `${faCount(days)} روز` : 'مدت نامحدود');
+      const gb = Number(val('included_gb')) || 0;
+      parts.push(gb ? `${faCount(gb)} گیگ` : 'حجم نامحدود');
+      const users = Number(val('included_users')) || 0;
+      parts.push(users ? `${faCount(users)} کاربر` : 'کاربر نامحدود');
+    }
+    parts.push(`${money(val('price'))} تومان`);
+    const label = document.createElement('b');
+    label.textContent = RESELLER_KIND_LABELS[kind] || '';
+    out.replaceChildren(label, document.createTextNode(' · ' + parts.join(' · ')));
+  }
+
+  /* Show the controls that belong to the chosen audience and kind, then refresh the design-language state. */
+  function dsSync(){
+    const audience = currentAudience();
+    const kind = kindSel ? kindSel.value : '';
+    const isReseller = audience === 'resellers';
+    const usersKinds = document.getElementById('plan-kinds-users');
+    const resellerKinds = document.getElementById('plan-kinds-resellers');
+    const packKind = document.getElementById('plan-pack-kind');
+    const steps = document.getElementById('reseller-plan-steps');
+    if (usersKinds) usersKinds.hidden = isReseller;
+    if (resellerKinds) resellerKinds.hidden = !isReseller;
+    if (packKind) packKind.hidden = !(isReseller && kind.indexOf('addon_') === 0);
+    if (steps) steps.hidden = !(isReseller && (kind === 'fixed' || kind === 'payg'));
+    updateResellerSummary();
+    const modal = document.getElementById('modal-plan-unified');
+    if (window.pinModalStickySave) window.pinModalStickySave(modal);
+    if (window.PanelDs) window.PanelDs.syncAll(modal);
+  }
+
+  const resellerFormEl = document.getElementById('reseller-plan-form');
+  if (resellerFormEl) resellerFormEl.addEventListener('input', updateResellerSummary);
 
   function applyPlanOpen(audience, kind){
     if (!audienceSel || !kindSel) return;
@@ -1443,6 +1168,7 @@
         if (panels[key]) panels[key].hidden = false;
         if (kind === 'addon_volume' || kind === 'addon_duration') syncUserAddonForm();
       }
+      dsSync();
     });
   }
   if (kindSel) kindSel.addEventListener('change', syncAudienceAndKind);
@@ -1621,70 +1347,56 @@
     if (cancelEl) cancelEl.addEventListener('click', resetCreate);
   })();
 
-  // —— Service addon form: create / edit + amount step by kind ——
+  // —— Service addon form: several rows when adding, one when editing ——
   (function(){
     const form = document.getElementById('service-addon-form');
-    if (!form) return;
+    if (!form || !window.AddonPackForm) return;
+    const rowsUi = window.AddonPackForm.bind(form);
+    if (!rowsUi) return;
     const createAction = form.getAttribute('data-create-action') || '/plans/addons';
-    const nameEl = document.getElementById('service-addon-name');
-    const kindEl = document.getElementById('service-addon-kind');
-    const amountEl = document.getElementById('service-addon-amount');
-    const priceEl = document.getElementById('service-addon-price');
-    const sortEl = document.getElementById('service-addon-sort');
-    const descEl = document.getElementById('service-addon-desc');
-    const catEl = document.getElementById('service-addon-category');
-    const submitEl = document.getElementById('service-addon-submit');
-    const cancelEl = document.getElementById('service-addon-cancel-edit');
-    const hintEl = document.getElementById('service-addon-amount-hint');
-    function syncAmountStep(){
-      if (!amountEl || !kindEl) return;
-      const isDays = kindEl.value === 'duration';
-      amountEl.step = isDays ? '1' : '0.1';
-      amountEl.min = isDays ? '1' : '0.1';
-      if (hintEl) {
-        hintEl.textContent = isDays
-          ? 'تعداد روز — فقط عدد صحیح'
-          : 'حجم به گیگ — اعشار مجاز است';
-      }
-    }
+    const field = (id) => document.getElementById(id);
+    const nameEl = field('service-addon-name');
+    const nameHint = field('service-addon-name-hint');
+    const kindEl = field('service-addon-kind');
+    const sortEl = field('service-addon-sort');
+    const descEl = field('service-addon-desc');
+    const catEl = field('service-addon-category');
+    const submitEl = field('service-addon-submit');
+    const cancelEl = field('service-addon-cancel-edit');
     function setSelectValue(el, value){
       if (!el) return;
       el.value = value || '';
       el.dispatchEvent(new Event('change', { bubbles: true }));
     }
+    function setEditing(on){
+      if (nameEl) nameEl.required = on;
+      if (nameHint) nameHint.hidden = on;
+      if (submitEl) submitEl.textContent = on ? 'ذخیره تغییرات' : 'افزودن بسته';
+      if (cancelEl) cancelEl.hidden = !on;
+    }
     function resetCreate(){
       form.action = createAction;
       if (nameEl) nameEl.value = '';
       if (kindEl) kindEl.value = 'volume';
-      if (amountEl) amountEl.value = '';
-      if (priceEl) priceEl.value = '';
       if (sortEl) sortEl.value = '0';
       if (descEl) descEl.value = '';
       setSelectValue(catEl, '');
-      if (submitEl) submitEl.textContent = 'افزودن بسته';
-      if (cancelEl) cancelEl.hidden = true;
-      syncAmountStep();
+      rowsUi.reset();
+      setEditing(false);
     }
-    if (kindEl) kindEl.addEventListener('change', syncAmountStep);
-    syncAmountStep();
     document.querySelectorAll('[data-addon-edit]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-id');
-        form.action = '/plans/addons/' + id + '/edit';
-        if (nameEl) nameEl.value = btn.getAttribute('data-name') || '';
-        if (kindEl) kindEl.value = btn.getAttribute('data-kind') || 'volume';
-        if (amountEl) amountEl.value = btn.getAttribute('data-amount') || '';
-        if (priceEl) {
-          priceEl.value = btn.getAttribute('data-price') || '';
-          priceEl.dispatchEvent(new Event('input', {bubbles: true}));
-        }
-        if (sortEl) sortEl.value = btn.getAttribute('data-sort') || '0';
-        if (descEl) descEl.value = btn.getAttribute('data-description') || '';
-        setSelectValue(catEl, btn.getAttribute('data-category') || '');
-        if (submitEl) submitEl.textContent = 'ذخیره تغییرات';
-        if (cancelEl) cancelEl.hidden = false;
-        syncAmountStep();
-        nameEl && nameEl.focus();
+        const data = (k) => btn.getAttribute('data-' + k) || '';
+        form.action = '/plans/addons/' + data('id') + '/edit';
+        if (nameEl) nameEl.value = data('name');
+        if (kindEl) kindEl.value = data('kind') || 'volume';
+        if (sortEl) sortEl.value = data('sort') || '0';
+        if (descEl) descEl.value = data('description');
+        setSelectValue(catEl, data('category'));
+        rowsUi.editPack({ amount: data('amount'), price: data('price'), style: data('style') });
+        rowsUi.syncKind();
+        setEditing(true);
+        if (nameEl) nameEl.focus();
       });
     });
     if (cancelEl) cancelEl.addEventListener('click', resetCreate);

@@ -173,6 +173,12 @@ def _reseller_screens() -> list[ScreenSpec]:
             "r.settings", "تنظیمات فروشگاه", lambda ctx: hubs.reseller_settings_hub_keyboard(ctx.ui), "res:st:hub"
         ),
         reseller("r.plans", "پلن‌های فروش", lambda ctx: hubs.reseller_plans_hub_keyboard(ctx.ui), "res:plans"),
+        reseller(
+            "r.broadcast",
+            "پیام گروهی",
+            lambda ctx: hubs.shop_broadcast_hub_keyboard(ctx.ui),
+            "shp:bc:hub",
+        ),
         *(
             reseller(
                 group.screen_id,

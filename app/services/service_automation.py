@@ -27,6 +27,7 @@ from app.db.models import (
 )
 from app.services.catalog_pricing import annotate_prices, displayed_quote, sale_price
 from app.services.service_scope import service_shop_id
+from app.services.support_button import support_row
 from app.services.formatting import format_toman, parse_expire
 from app.services.users import (
     current_shop_reseller_id,
@@ -309,6 +310,7 @@ async def notify_once(
                             callback_data=f"svc:auto:{service.id}",
                         ),
                     ],
+                    *([support_row()] if code == "review" else []),
                 ]
             ),
         )
@@ -513,8 +515,17 @@ async def _process_locked(session, row, service, user, bot) -> None:
         # for review, avoiding a refund followed by another capacity purchase.
         try:
             if action == "renew":
+                from app.services.service_renewals import plan_carries_remaining_quota
+
+                # Modern renewals freeze carry in renewal_snapshot and ignore
+                # reset_traffic. Legacy auto orders without a snapshot still
+                # honor the plan flag here.
                 order = await apply_renewal(
-                    session, order, service, choice, reset_traffic=True
+                    session,
+                    order,
+                    service,
+                    choice,
+                    reset_traffic=not plan_carries_remaining_quota(choice),
                 )
             else:
                 order = await apply_service_addon(session, order)
