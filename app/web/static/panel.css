@@ -61,9 +61,13 @@
   --drawer-w: min(300px, 78vw);
   /* Drawer dim — painted by .side-backdrop::before, never by the fixed box */
   --side-dim: rgba(0, 0, 0, 0.55);
-  /* Header chrome — keep in sync with .brand / .topbar padding + logo size */
-  --topbar-h: 58px;
   --brand-logo-size: 40px;
+  /* Shared matte glass — modal sticky chrome + shell topbar/footers/mobile drawer.
+     Keep the mix/blur numbers identical everywhere (see .ui-modal-head). */
+  --modal-frost-bg: color-mix(in srgb, var(--bg-card) 52%, transparent);
+  --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  --modal-frost-blur: blur(14px) saturate(1.08);
+  --modal-frost-line: color-mix(in srgb, var(--border) 55%, transparent);
   /* Control size tiers (see «Control size tiers» at the end of this file). */
   --btn-h: 44px;
   --ctl-sm-h: 36px;
@@ -85,6 +89,12 @@
   --section-gap: var(--space-3);
   /* Equal space above & below page title+icon (bot and PasarGuard identical) */
   --page-title-gap: var(--space-3);
+  /* Header chrome — keep in sync with .brand / .topbar padding + logo size.
+     Content band stays the pre-frost 58px (same top air around logo/menu).
+     Only bottom grows to --page-title-gap so separator↔logo matches separator↔title. */
+  --topbar-content-h: 58px;
+  --topbar-pad-bottom: var(--page-title-gap);
+  --topbar-h: calc(var(--topbar-content-h) + var(--topbar-pad-bottom));
   /* Air below BOTH footers — owned by the footer boxes (padding-bottom),
      never by .side / .main (that dual path split separator Y when one foot grew). */
   --foot-gap: var(--space-2);
@@ -885,7 +895,10 @@ a.cell-user-link:hover {
   padding-top: var(--page-title-gap);
   /* Same inset owner as .site-footer — desktop/mobile/PWA one path */
   padding-bottom: var(--bottom-inset);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--modal-frost-line);
+  background: var(--modal-frost-bg);
+  backdrop-filter: var(--modal-frost-blur);
+  -webkit-backdrop-filter: var(--modal-frost-blur);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3727,7 +3740,10 @@ code.env-fname {
   padding-top: var(--page-title-gap);
   /* Same inset owner as .side-foot — desktop/mobile/PWA one path */
   padding-bottom: var(--bottom-inset);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--modal-frost-line);
+  background: var(--modal-frost-bg);
+  backdrop-filter: var(--modal-frost-blur);
+  -webkit-backdrop-filter: var(--modal-frost-blur);
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -5093,15 +5109,20 @@ form.settings-form > .actions.sticky-actions,
   justify-content: space-between;
   gap: var(--space-1);
   height: calc(var(--topbar-h) + var(--safe-top));
-  padding: var(--safe-top) var(--space-2) 0;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-card);
+  /* Top unchanged (safe-area only); bottom: --page-title-gap under the 58px content band */
+  padding: var(--safe-top) var(--space-2) var(--topbar-pad-bottom);
+  border-bottom: 1px solid var(--modal-frost-line);
+  /* Same matte glass as .ui-modal-head / sticky save */
+  background: var(--modal-frost-bg);
+  backdrop-filter: var(--modal-frost-blur);
+  -webkit-backdrop-filter: var(--modal-frost-blur);
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 55;
   width: 100%;
+  box-sizing: border-box;
 }
 .topbar-brand {
   display: flex;
@@ -5144,9 +5165,10 @@ form.settings-form > .actions.sticky-actions,
   height: var(--btn-h);
   /* Same soft square as v4.3.10 — not pill / not card radius */
   border-radius: var(--r-sm);
-  border: 1px solid color-mix(in srgb, var(--bot-line) 40%, var(--border));
+  /* Follows panel brand colour (تنظیمات → ظاهر و برند), same tokens as .btn / tabs */
+  border: 1px solid color-mix(in srgb, var(--brand-base) 40%, var(--border));
   background: transparent;
-  color: var(--bot-line);
+  color: var(--brand-fg);
   cursor: pointer;
   display: inline-grid;
   place-items: center;
@@ -5375,13 +5397,22 @@ form.settings-form > .actions.sticky-actions,
     overflow-y: auto;
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
-    border-left: 1px solid var(--border);
-    border-top: 1px solid var(--border);
-    background-color: var(--bg-card);
-    background: var(--bg-card);
+    border-left: 1px solid var(--modal-frost-line);
+    border-top: 1px solid var(--modal-frost-line);
+    /* Same matte glass as modal sticky chrome — page shows through the drawer */
+    background-color: var(--modal-frost-bg);
+    background: var(--modal-frost-bg);
+    backdrop-filter: var(--modal-frost-blur);
+    -webkit-backdrop-filter: var(--modal-frost-blur);
     transform: translate3d(calc(100% + 24px), 0, 0);
     transition: transform 0.22s var(--ease-standard);
     will-change: transform;
+  }
+  /* Foot already sits on frosted .side-panel — avoid stacking a second blur */
+  .side .side-foot {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
   .side.open .side-panel {
     transform: translate3d(0, 0, 0);
@@ -6496,18 +6527,15 @@ form.settings-form > .actions.sticky-actions,
   background: var(--bg-card);
   isolation: isolate;
 }
-/* Shared frosted chrome (sticky head + save footer). Same tokens for both. */
+/* Modal-only frost padding (shared --modal-frost-* live on :root). */
 .ui-modal-panel {
-  --modal-frost-bg: color-mix(in srgb, var(--bg-card) 52%, transparent);
-  --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 90%, transparent);
-  --modal-frost-blur: blur(14px) saturate(1.08);
-  --modal-frost-line: color-mix(in srgb, var(--border) 55%, transparent);
   --modal-frost-pad: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   /* Vertical air around the save button (equal top/bottom) */
   --modal-save-pad-y: var(--space-2_5);
   --modal-save-footer-h: calc(var(--modal-save-pad-y) * 2 + var(--btn-h));
 }
-html[data-theme="light"] .ui-modal-panel {
+/* Light theme: slightly denser matte so frost stays readable on white cards. */
+html[data-theme="light"] {
   --modal-frost-bg: color-mix(in srgb, var(--bg-card) 58%, transparent);
   --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 94%, transparent);
 }
@@ -6563,8 +6591,20 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-stic
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head,
-  .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save {
+  .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save,
+  .topbar,
+  .site-footer,
+  .side-foot {
     background: var(--modal-frost-bg-fallback);
+  }
+  @media (max-width: 900px) {
+    .side-panel {
+      background: var(--modal-frost-bg-fallback);
+      background-color: var(--modal-frost-bg-fallback);
+    }
+    .side .side-foot {
+      background: transparent;
+    }
   }
 }
 .ui-modal-scroll {
@@ -8112,7 +8152,8 @@ html[data-theme="light"] * { scrollbar-color: #d4d4d8 transparent; }
 html[data-theme="light"] *::-webkit-scrollbar-thumb { background: #d4d4d8; }
 
 html[data-theme="light"] .topbar {
-  background: #ffffff;
+  /* Keep shared frost tokens (denser light mix is on html[data-theme=light]) */
+  background: var(--modal-frost-bg);
 }
 /* Do NOT set background on .side here. Desktop already paints via
    `.side { background: var(--bg-card) }` (--bg-card is #fff in light).

@@ -316,17 +316,52 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("margin-top: auto", body)
         # Align with .side-foot baseline
         self.assertIn("padding-top: var(--page-title-gap)", body)
+        # Same matte glass as modal sticky chrome
+        self.assertIn("background: var(--modal-frost-bg);", body)
+        self.assertIn("backdrop-filter: var(--modal-frost-blur);", body)
+        self.assertIn("border-top: 1px solid var(--modal-frost-line);", body)
         # star button uses the compact tier, shorter than the primary --btn-h
         self.assertIn("min-height: var(--ctl-sm-h)", css)
         # sidebar footer must stay at the pre-compact sizing
         side = re.search(r"(?ms)^\.side-foot\s*\{([^}]+)\}", css)
         self.assertIsNotNone(side)
-        self.assertIn("padding-top: var(--page-title-gap)", side.group(1))
+        side_body = side.group(1)
+        self.assertIn("padding-top: var(--page-title-gap)", side_body)
+        self.assertIn("background: var(--modal-frost-bg);", side_body)
+        self.assertIn("backdrop-filter: var(--modal-frost-blur);", side_body)
         logout = re.search(r"(?ms)^\.logout-link\s*\{([^}]+)\}", css)
         self.assertIsNotNone(logout)
         self.assertIn("font-size: 13px", logout.group(1))
         self.assertIn("height: var(--ctl-sm-h)", logout.group(1))
         self.assertIn("padding: 0 var(--space-1)", logout.group(1))
+
+    def test_shell_chrome_matches_modal_frost_and_brand_menu(self):
+        """Mobile topbar / drawer use the same frost tokens; menu follows brand colour."""
+        css = CSS.read_text(encoding="utf-8")
+        # Prefer the fixed chrome block (not the short `.topbar { direction: ltr; }`)
+        top = re.search(
+            r"(?ms)^\.topbar\s*\{([^}]*background:\s*var\(--modal-frost-bg\);[^}]*)\}",
+            css,
+        )
+        self.assertIsNotNone(top)
+        top_body = top.group(1)
+        self.assertIn("backdrop-filter: var(--modal-frost-blur);", top_body)
+        self.assertIn("border-bottom: 1px solid var(--modal-frost-line);", top_body)
+        self.assertIn("var(--topbar-pad-bottom)", top_body)
+        self.assertIn("padding: var(--safe-top) var(--space-2) var(--topbar-pad-bottom);", top_body)
+        self.assertNotIn("topbar-pad-top", top_body)
+        self.assertIn("--topbar-pad-bottom: var(--page-title-gap);", css)
+        self.assertIn("--topbar-content-h: 58px;", css)
+        menu = re.search(r"(?ms)^\.menu-toggle\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(menu)
+        menu_body = menu.group(1)
+        self.assertIn("color: var(--brand-fg);", menu_body)
+        self.assertIn("var(--brand-base)", menu_body)
+        self.assertNotIn("var(--bot-line)", menu_body)
+        self.assertRegex(
+            css,
+            r"(?ms)\.side-panel\s*\{[^}]*backdrop-filter:\s*var\(--modal-frost-blur\);",
+        )
 
     def test_block_button_is_warn_update_is_ok(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
