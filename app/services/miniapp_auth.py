@@ -18,10 +18,13 @@ from app.config import get_settings
 from app.db.models import BotUser, ResellerProfile, Role
 from app.services.miniapp_shop import (
     PLATFORM_SCOPE,
+    SHOP_OWNER_ONLY,
     MiniScope,
     assert_shop_member,
     assert_shop_route,
+    is_shop_miniapp_owner,
     is_shop_staff,
+    mini_scope,
     request_scope,
 )
 from app.services.shop_customer_block import BLOCKED_MESSAGE as SHOP_BLOCKED_MESSAGE, is_blocked_in_shop
@@ -255,3 +258,26 @@ async def load_reseller_profile(
         select(ResellerProfile).where(ResellerProfile.user_id == user.id)
     )
     return result.scalar_one_or_none()
+
+
+def ensure_shop_miniapp_owner(
+    user: BotUser,
+    profile: ResellerProfile | None,
+    scope: MiniScope,
+) -> tuple[BotUser, ResellerProfile, MiniScope]:
+    """Raise 403 unless ``user`` owns this shop Mini App scope with an active profile."""
+    if not scope.is_shop or not is_shop_miniapp_owner(scope, user):
+        raise HTTPException(403, SHOP_OWNER_ONLY)
+    if profile is None or not profile.is_active or int(profile.user_id) != int(scope.shop_id):
+        raise HTTPException(403, SHOP_OWNER_ONLY)
+    return user, profile, scope
+
+
+async def require_shop_miniapp_owner(
+    session: AsyncSession, request: Request
+) -> tuple[BotUser, ResellerProfile, MiniScope]:
+    """Load initData then enforce shop-owner — same gate as ops/review/manage."""
+    user = await load_mini_user(session, request)
+    scope = mini_scope(request)
+    profile = await load_reseller_profile(session, user)
+    return ensure_shop_miniapp_owner(user, profile, scope)

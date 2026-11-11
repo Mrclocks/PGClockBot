@@ -27,8 +27,13 @@ from app.api.miniapp_pages import (
 from app.db.models import Plan
 from app.services.catalog_pricing import annotate_prices, displayed_quote
 from app.services.db_safe import rollback_quiet
-from app.services.miniapp_auth import load_mini_user, load_reseller_profile, resolve_mini_persona
-from app.services.miniapp_shop import SHOP_OWNER_ONLY, is_shop_miniapp_owner, mini_scope
+from app.services.miniapp_auth import (
+    ensure_shop_miniapp_owner,
+    load_mini_user,
+    load_reseller_profile,
+    resolve_mini_persona,
+)
+from app.services.miniapp_shop import mini_scope
 from app.services.receipt_review import may_review_receipts
 from app.services.service_scope import SERVICE_SEARCH_MAX_LENGTH, page_customer_services
 from app.services.users import get_all_settings, on
@@ -134,16 +139,14 @@ def register_miniapp_feeds(app: FastAPI, *, get_db) -> None:
 
     @app.get("/api/mini/ops")
     async def mini_ops(request: Request, session: AsyncSession = Depends(get_db)):
+        # load_mini_user must run first — it stamps request.state.mini_scope.
         user = await load_mini_user(session, request)
         scope = mini_scope(request)
         # Shop Mini App: only that shop's owner, never platform-admin ops, never another
         # reseller's stats while the wallet/catalog context is this shop.
         if scope.is_shop:
-            if not is_shop_miniapp_owner(scope, user):
-                raise HTTPException(403, SHOP_OWNER_ONLY)
             profile = await load_reseller_profile(session, user)
-            if profile is None or not profile.is_active or int(profile.user_id) != int(scope.shop_id):
-                raise HTTPException(403, SHOP_OWNER_ONLY)
+            user, profile, scope = ensure_shop_miniapp_owner(user, profile, scope)
             payload = await _reseller_ops_payload(session, profile, user=user)
             can_review = await may_review_receipts(session, user, shop_scope_id=int(scope.shop_id))
             return _no_store({**payload, "can_review": can_review})
