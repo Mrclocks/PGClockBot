@@ -169,6 +169,9 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds .ds-card-flush { padding: 0; gap: 0; overflow: hidden; }
 .ds .ds-divider { height: 1px; background: var(--line); margin: 0 calc(-1 * var(--box-pad)); }
 .ds .ds-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--box-gap) var(--g3); align-items: start; }
+/* Two-column field grids: a field left without a partner takes the whole row instead of half a row beside an empty
+   half (panel-ds.js marks it, counting only the fields on screen). */
+.ds-row-alone { grid-column: 1 / -1; }
 .ds .ds-desc, .ds .settings-card > p.muted, .ds .edit-section-head p.muted { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--muted-fg); }
 .ds .settings-card > h2, .ds .edit-section-head h3, .ds .edit-section > h3 { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.4; }
 .ds .settings-card > h2 + p.muted { margin-top: calc(var(--g2) - var(--box-gap)); }
@@ -198,25 +201,24 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds .ds-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); }
 .ds .ds-req { color: var(--destructive); font-weight: 700; }
 .ds .ds-error { margin: 0; color: var(--destructive); font-size: 12px; font-weight: 400; }
-.ds .ds-unit { position: relative; display: block; container-type: inline-size; }
-/* The unit sits inside the field on its left. A field wide enough gets the same padding on the right too, so the
-   number sits in the true centre; a narrow one (half a row on a phone) centres the number in the space beside the
-   unit, so a seven-digit amount still fits. */
+.ds .ds-unit { position: relative; display: block; }
+/* The unit sits inside the field on its left; the number starts from the right edge, like the text around it, so it
+   never drifts towards the unit. */
 .ds .ds-unit input { width: 100%; padding-left: 56px; padding-right: var(--g3); font-variant-numeric: tabular-nums; }
-@container (min-width: 240px) { .ds .ds-unit input { padding-right: 56px; } }
-/* «نامحدود» shows where the number would: the field around an unlimited box measures the width. */
-.ds .form-field:has(> .ds-unit[data-unlimited-label]) { container-type: inline-size; }
-@container (min-width: 240px) { .ds .ds-unit.is-unlimited::after { right: 56px; } }
 .ds .ds-unit-label {
   position: absolute; inset-block: 0; left: var(--g4); display: flex; align-items: center; padding-top: 2px;
   font-size: 12px; font-weight: 400; line-height: 1; color: var(--muted-fg); pointer-events: none;
 }
-/* Every number box (amount, price, count, days, …) shows its number in the middle, in forms and in list rows alike.
-   The base input rules carry long :not() chains that would push it to one side, so this is marked important. */
+/* A number box without a unit (count, sort order, numeric id) shows its number in the middle, in forms and in list
+   rows alike. The base input rules carry long :not() chains that would push it to one side, so this is important. */
 .ds :is(input[type="number"], input[data-money], input[data-money-kind], input[inputmode="numeric"], input[inputmode="decimal"]) { text-align: center !important; }
+/* A box with its unit inside (تومان، گیگ، روز، …) keeps the number on the right. A list-row amount hides its unit
+   (it is in the column title), so it stays a centred box. */
+.ds .ds-unit:not(.ds-pack-amt) > input { text-align: right !important; }
 .ds .ds-unit.is-unlimited input { color: transparent; caret-color: transparent; }
+/* «نامحدود» shows where the number would: on the right. */
 .ds .ds-unit.is-unlimited::after {
-  content: attr(data-unlimited-label); position: absolute; inset-block: 0; left: 56px; right: var(--g3); display: flex; align-items: center; justify-content: center;
+  content: attr(data-unlimited-label); position: absolute; inset-block: 0; left: 56px; right: var(--g3); display: flex; align-items: center; justify-content: flex-end;
   font-size: 14px; color: var(--muted-fg); pointer-events: none;
 }
 .ds .ds-mini {

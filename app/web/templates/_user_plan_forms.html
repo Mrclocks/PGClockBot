@@ -39,7 +39,7 @@
 {# —— User fixed —— #}
 <div id="panel-user-fixed" class="plan-panel">
   <form method="post" action="/plans" class="form-stack ds-body" id="user-plan-form" data-ds-form>
-    {% call ds_sec('مشخصات') %}
+    {% call ds_sec('مشخصات', sid='up-sec-basic') %}
       <label class="form-field"><span class="ds-label-text">نام پلن <span class="ds-req" aria-hidden="true">*</span></span>
         <input name="name" required placeholder="مثلاً ویژه ۴۰ گیگ" data-ds-label="نام پلن" />
       </label>
@@ -52,7 +52,7 @@
       </label>
     {% endcall %}
 
-    {% call ds_sec('مدت و حجم') %}
+    {% call ds_sec('مدت و حجم', sid='up-sec-quota') %}
       <div class="ds-grid-2">
         <div class="form-field">
           <span class="ds-label-row"><span class="ds-label-text">مدت</span>
@@ -70,7 +70,7 @@
       <div class="ds-rows">{{ ds_switch('carry_remaining_quota', 'انتقال مانده حجم و زمان در تمدید', 'مانده سرویس به تمدید، ارتقا یا تنزل اضافه می‌شود؛ خاموش: فقط حجم و مدت همین پلن', true) }}</div>
     {% endcall %}
 
-    {% call ds_sec('اتصال پاسارگارد') %}
+    {% call ds_sec('اتصال پاسارگارد', sid='up-sec-pg') %}
       {{ pg_mode('plan-mode', 'mode', false) }}
       <div id="mode-custom" class="form-stack">
         <div class="form-field"><span class="ds-label-text">گروه‌ها</span>{{ group_tags() }}<small class="muted">حداقل یک گروه</small></div>
@@ -115,7 +115,7 @@
       </div>
     </section>
 
-    {% call ds_sec('نمایش در ربات') %}
+    {% call ds_sec('نمایش در ربات', sid='up-sec-bot') %}
       <label class="form-field">برچسب دسته
         <select name="category_id" data-plan-category-select data-category-audience="users">
           <option value="">بدون برچسب</option>
@@ -138,7 +138,7 @@
 {# —— User trial —— #}
 <div id="panel-user-trial" class="plan-panel" hidden>
   <form method="post" action="/plans/trial" class="form-stack ds-body" id="trial-plan-form" data-ds-form>
-    {% call ds_sec('پلن تست') %}
+    {% call ds_sec('پلن تست', sid='utp-sec-basic') %}
       <p class="ds-desc">حجم، مدت و اتصال پاسارگارد برای تست — از فروشگاه فقط یک‌بار به هر کاربر نشان داده می‌شود.</p>
       <div class="ds-rows">{{ ds_switch('trial_enabled', 'نمایش پلن تست در فروشگاه', checked=trial_on) }}</div>
       <label class="form-field"><span class="ds-label-text">نام <span class="ds-req" aria-hidden="true">*</span></span>
@@ -156,7 +156,7 @@
         </div>
       </div>
     {% endcall %}
-    {% call ds_sec('اتصال پاسارگارد') %}
+    {% call ds_sec('اتصال پاسارگارد', sid='utp-sec-pg') %}
       {{ pg_mode('trial-mode', 'mode', trial and trial.pg_template_id) }}
       <div id="trial-mode-custom" class="form-stack">
         <div class="form-field"><span class="ds-label-text">گروه‌ها</span>{{ group_tags(trial_group_ids) }}</div>
@@ -178,7 +178,7 @@
       {% set global_prefix = values.get('pg_username_prefix','clk') %}{% set global_suffix = values.get('pg_username_suffix','') %}{% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
       {% include "_plan_naming_fields.html" %}
     {% endcall %}
-    {% call ds_sec('نمایش در ربات') %}
+    {% call ds_sec('نمایش در ربات', sid='utp-sec-bot') %}
       {% if trial and trial.button_style is not none %}{% set plan_button_style = trial.button_style if trial.button_style else '' %}{% else %}{% set plan_button_style = 'inherit' %}{% endif %}
       {% set plan_color_compact = true %}
       <div class="form-field">رنگ دکمه{% include "_plan_button_style_field.html" %}</div>
@@ -190,7 +190,7 @@
 {# —— User custom —— #}
 <div id="panel-user-custom" class="plan-panel" hidden>
   <form method="post" action="/plans/custom" class="form-stack ds-body" id="custom-plan-form" data-ds-form>
-    {% call ds_sec('پلن دلخواه') %}
+    {% call ds_sec('پلن دلخواه', sid='ucp-sec-price') %}
       <p class="ds-desc">کاربر در ربات حجم و روز دلخواه می‌چیند؛ قیمت از روی هر گیگ و هر روز حساب می‌شود.</p>
       {% if custom_limit_issue %}<div class="flash warn">{{ custom_limit_issue }}</div>{% endif %}
       <div class="ds-rows">{{ ds_switch('custom_plan_enabled', 'فعال در فروشگاه', checked=custom_on) }}</div>
@@ -203,7 +203,7 @@
         </label>
       </div>
     {% endcall %}
-    {% call ds_sec('محدودهٔ انتخاب کاربر') %}
+    {% call ds_sec('محدودهٔ انتخاب کاربر', sid='ucp-sec-range') %}
       <div class="ds-grid-2">
         <label class="form-field">حداقل حجم
           <span class="ds-unit"><input name="custom_plan_min_gb" type="number" min="1" value="{{ values.get('custom_plan_min_gb','1') }}" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">گیگ</span></span>
@@ -221,7 +221,7 @@
         </label>
       </div>
     {% endcall %}
-    {% call ds_sec('اتصال پاسارگارد') %}
+    {% call ds_sec('اتصال پاسارگارد', sid='ucp-sec-pg') %}
       {{ pg_mode('custom-mode', 'mode', values.get('custom_plan_template_id'), 'گروه اینباند', 'تمپلیت') }}
       <div id="custom-mode-groups" class="form-stack">
         <div class="form-field"><span class="ds-label-text">گروه‌ها</span>{{ group_tags(custom_group_ids) }}</div>
@@ -243,7 +243,7 @@
       {% set global_prefix = values.get('pg_username_prefix','clk') %}{% set global_suffix = values.get('pg_username_suffix','') %}{% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
       {% include "_plan_naming_fields.html" %}
     {% endcall %}
-    {% call ds_sec('نمایش در ربات') %}
+    {% call ds_sec('نمایش در ربات', sid='ucp-sec-bot') %}
       {% set button_style_name = 'custom_plan_button_style' %}
       {% set raw_custom_style = values.get('custom_plan_button_style') %}
       {% if raw_custom_style is none or raw_custom_style == '' or raw_custom_style == 'inherit' %}{% set plan_button_style = 'inherit' %}{% else %}{% set plan_button_style = raw_custom_style %}{% endif %}
@@ -258,7 +258,7 @@
 {# —— User wholesale —— #}
 <div id="panel-user-wholesale" class="plan-panel" hidden>
   <form method="post" action="/plans/wholesale" class="form-stack ds-body" id="wholesale-form" data-ds-form>
-    {% call ds_sec('فروش عمده') %}
+    {% call ds_sec('فروش عمده', sid='uws-sec-basic') %}
       <p class="ds-desc">کاربر در ربات نوع سرویس و تعداد را انتخاب می‌کند؛ تخفیف پله‌ای بر اساس تعداد اعمال می‌شود.</p>
       <div class="ds-rows">{{ ds_switch('wholesale_enabled', 'فعال در فروشگاه', checked=wholesale_on) }}</div>
       <div class="ds-grid-2">
@@ -270,13 +270,13 @@
         </label>
       </div>
     {% endcall %}
-    {% call ds_sec('پله‌های تخفیف') %}
+    {% call ds_sec('پله‌های تخفیف', sid='uws-sec-tiers') %}
       <p class="ds-desc">مثلاً از ۵ عدد ۱۰٪ و از ۲۰ عدد ۲۰٪.</p>
       <div id="wholesale-tiers" class="form-stack"></div>
       <button type="button" class="ds-link-btn" id="wholesale-add-tier">{{ ico('plus') }}افزودن پلهٔ تخفیف</button>
       <input type="hidden" name="wholesale_tiers" id="wholesale_tiers_json" value="{{ values.get('wholesale_tiers','[]') }}" />
     {% endcall %}
-    {% call ds_sec('نمایش در ربات') %}
+    {% call ds_sec('نمایش در ربات', sid='uws-sec-bot') %}
       <label class="form-field">متن دکمه در ربات
         <input name="btn_wholesale" value="{{ values.get('btn_wholesale','📦 فروش عمده') }}" />
       </label>

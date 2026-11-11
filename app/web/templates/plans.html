@@ -456,8 +456,18 @@
         {% endif %}
         <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
+      {# Section shortcuts for the open form; dsSync shows the nav whose data-plan-steps lists the audience:kind. #}
+      {% for form_id, kinds, links in [
+        ('user-plan-form', 'users:fixed', [('up-sec-basic', 'مشخصات'), ('up-sec-quota', 'مدت و حجم'), ('up-sec-pg', 'پاسارگارد'), ('user-buy-extra-block', 'بسته‌ها'), ('up-sec-bot', 'نمایش')]),
+        ('custom-plan-form', 'users:custom', [('ucp-sec-price', 'قیمت'), ('ucp-sec-range', 'محدوده'), ('ucp-sec-pg', 'پاسارگارد'), ('ucp-sec-bot', 'نمایش')]),
+        ('trial-plan-form', 'users:trial', [('utp-sec-basic', 'مشخصات'), ('utp-sec-pg', 'پاسارگارد'), ('utp-sec-bot', 'نمایش')]),
+        ('wholesale-form', 'users:wholesale', [('uws-sec-basic', 'تعداد'), ('uws-sec-tiers', 'پله‌های تخفیف'), ('uws-sec-bot', 'نمایش')])] %}
+      <nav class="ds-steps" data-ds-form="{{ form_id }}" data-plan-steps="{{ kinds }}" aria-label="بخش‌های فرم" hidden>
+        {% for anchor, label in links %}<a href="#{{ anchor }}">{{ label }}</a>{% endfor %}
+      </nav>
+      {% endfor %}
       {% if is_platform_admin %}
-      <nav class="ds-steps" data-ds-form="reseller-plan-form" id="reseller-plan-steps" aria-label="بخش‌های فرم" hidden>
+      <nav class="ds-steps" data-ds-form="reseller-plan-form" data-plan-steps="resellers:fixed resellers:payg" aria-label="بخش‌های فرم" hidden>
         <a href="#rp-sec-basic">مشخصات</a>
         <a href="#rp-sec-cap">ظرفیت</a>
         <a href="#reseller-buy-extra-block">بسته‌ها</a>
@@ -1129,11 +1139,13 @@
     const usersKinds = document.getElementById('plan-kinds-users');
     const resellerKinds = document.getElementById('plan-kinds-resellers');
     const packKind = document.getElementById('plan-pack-kind');
-    const steps = document.getElementById('reseller-plan-steps');
     if (usersKinds) usersKinds.hidden = isReseller;
     if (resellerKinds) resellerKinds.hidden = !isReseller;
     if (packKind) packKind.hidden = !(isReseller && kind.indexOf('addon_') === 0);
-    if (steps) steps.hidden = !(isReseller && (kind === 'fixed' || kind === 'payg'));
+    const stepsKey = audience + ':' + kind;
+    document.querySelectorAll('#modal-plan-unified [data-plan-steps]').forEach((nav) => {
+      nav.hidden = nav.getAttribute('data-plan-steps').split(' ').indexOf(stepsKey) < 0;
+    });
     updateResellerSummary();
     const modal = document.getElementById('modal-plan-unified');
     if (window.pinModalStickySave) window.pinModalStickySave(modal);
