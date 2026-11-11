@@ -367,6 +367,10 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
             "background: color-mix(in srgb, var(--brand) 8%, transparent);",
             menu_body,
         )
+        self.assertRegex(
+            css,
+            r"(?ms)\.menu-toggle:active\s*\{[^}]*transform:\s*scale\(0\.96\);",
+        )
         self.assertNotIn("var(--bot-line)", menu_body)
         self.assertNotIn("var(--r-sm)", menu_body)
         self.assertRegex(

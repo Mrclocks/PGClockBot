@@ -1148,7 +1148,8 @@ tr.principal-row-l2 td:first-child {
   }
   .btn:active:not(:disabled), a.btn:active,
   .nav-item:active, .icon-btn:active,
-  .section-tabs a:active, .section-tabs .tab-btn:active {
+  .section-tabs a:active, .section-tabs .tab-btn:active,
+  .menu-toggle:active {
     transform: none;
   }
 }
@@ -5181,11 +5182,16 @@ form.settings-form > .actions.sticky-actions,
     background var(--motion-fast) var(--ease-standard),
     border-color var(--motion-fast) var(--ease-standard),
     color var(--motion-fast) var(--ease-standard),
-    opacity var(--motion-fast) var(--ease-standard);
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
 }
 .menu-toggle:hover {
   background: color-mix(in srgb, var(--brand) 15%, transparent);
   opacity: 1;
+}
+.menu-toggle:active {
+  /* Same press feedback as .btn */
+  transform: scale(0.96);
 }
 .burger {
   width: 16px;
