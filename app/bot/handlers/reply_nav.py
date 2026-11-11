@@ -26,10 +26,18 @@ from app.bot.reply_keyboards import _reply_admin_marketing_entries
 from app.db.models import BotUser, Order, ResellerProfile, Role
 from app.services.formatting import format_message
 from app.services.home_overview import admin_customer_counts
+from app.services.reseller_access import is_shop_profile_owner
+from app.services.resellers import (
+    format_reseller_access_prompt,
+    get_reseller_panel_base_url,
+    get_reseller_profile,
+    has_bot_perm,
+)
 from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
 from app.services import bot_feedback_texts as feedback
+from app.bot.nav_inline import present_nav_panel, reseller_access_confirm_keyboard
 from app.services.screen_titles import (
     screen_caption,
     screen_heading,
@@ -860,7 +868,6 @@ async def open_reseller_creds(
     reseller_owner_id: int | None = None,
 ) -> None:
     from app.bot.menu_nav import build_main_reply_keyboard
-    from app.services.resellers import format_reseller_access_card, get_reseller_profile
 
     main_kb, _, _ = await build_main_reply_keyboard(
         session,
@@ -868,20 +875,24 @@ async def open_reseller_creds(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
-    if db_user.role != Role.RESELLER.value:
-        await message.answer("فقط نمایندگان.", reply_markup=main_kb)
-        return
-    profile = await get_reseller_profile(session, db_user.id)
+    if is_reseller_bot:
+        if not is_shop_profile_owner(db_user, reseller_owner_id):
+            await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND, reply_markup=main_kb)
+            return
+        profile = await get_reseller_profile(session, int(reseller_owner_id or 0))
+    else:
+        if db_user.role != Role.RESELLER.value:
+            await message.answer("فقط نمایندگان.", reply_markup=main_kb)
+            return
+        profile = await get_reseller_profile(session, db_user.id)
     if not profile or not profile.is_active:
         await message.answer("پروفایل نماینده یافت نشد.", reply_markup=main_kb)
         return
-    from app.bot.nav_inline import present_nav_panel, reseller_access_card_keyboard
-
     ui = await get_all_settings(session)
     await present_nav_panel(
         message,
-        text=await format_reseller_access_card(session, profile),
-        inline=reseller_access_card_keyboard(profile, ui),
+        text=await format_reseller_access_prompt(),
+        inline=reseller_access_confirm_keyboard(ui),
         state=state,
     )
 
@@ -2312,8 +2323,6 @@ async def _soft_reseller(
             return
 
     if action == kb.REPLY_ACTION_CREDS:
-        from app.services.reseller_access import is_shop_profile_owner
-
         # Login card is the shop owner's only — never bot_admin assistants.
         if is_reseller_bot and not is_shop_profile_owner(db_user, owner_id):
             await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
@@ -2456,8 +2465,6 @@ async def _soft_reseller(
     if action.startswith("res_st_"):
         sec = action.replace("res_st_", "", 1)
         if sec == "panel":
-            from app.services.resellers import get_reseller_panel_base_url, has_bot_perm
-
             if not has_bot_perm(profile, "shop_settings"):
                 await message.answer(feedback.NO_SHOP_SETTINGS_ACCESS)
                 return
@@ -3341,7 +3348,6 @@ async def reply_main_nav(
         )
     elif action == kb.REPLY_ACTION_RES_ST_PANEL:
         from app.services.reseller_access import load_reseller_actor
-        from app.services.resellers import get_reseller_panel_base_url, has_bot_perm
 
         if not is_reseller_bot:
             await open_reseller_creds(

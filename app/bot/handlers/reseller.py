@@ -34,17 +34,21 @@ from app.services.formatting import (
     format_toman,
     order_status_fa,
 )
-from app.services.reseller_access import load_reseller_actor
+from app.services.reseller_access import is_shop_profile_owner, load_reseller_actor
 from app.services.shop_membership import is_shop_customer
 from app.services.resellers import (
     create_application,
+    format_reseller_access_card,
+    format_reseller_access_prompt,
     format_reseller_plan_apply_detail,
+    get_reseller_profile,
     has_bot_perm,
     list_active_reseller_plans,
     normalize_reseller_billing_mode,
     reseller_billing_mode_label,
     reseller_plan_mode_of,
 )
+from app.bot.nav_inline import reseller_access_card_keyboard, reseller_access_confirm_keyboard
 from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
 from app.bot.handlers import stuck_orders
@@ -225,6 +229,32 @@ async def _resapply_plan_list_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+async def _owner_creds_profile(
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+):
+    """Shop-owner profile for the credentials card, or None when the caller may not see it."""
+    if is_reseller_bot:
+        owner_id, profile = await _actor(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        if not owner_id or not profile or not is_shop_profile_owner(db_user, owner_id):
+            return None
+        return profile
+    if db_user.role != Role.RESELLER.value:
+        return None
+    profile = await get_reseller_profile(session, db_user.id)
+    if not profile or not profile.is_active:
+        return None
+    return profile
+
+
 @router.callback_query(F.data == "res:creds")
 async def res_creds(
     callback: CallbackQuery,
@@ -233,44 +263,49 @@ async def res_creds(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Credentials / deep-link card — shop owner on their shop bot or the platform bot."""
-    from app.services.reseller_access import is_shop_profile_owner
-    from app.services.resellers import format_reseller_access_card, get_reseller_profile
-
-    if is_reseller_bot:
-        owner_id, profile = await _actor(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
+    """Confirm before revealing usernames / minting a one-time panel link."""
+    profile = await _owner_creds_profile(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if profile is None:
+        await callback.answer(
+            feedback.RESELLERS_ONLY
+            if is_reseller_bot or db_user.role != Role.RESELLER.value
+            else "حساب نمایندگی شما پیدا نشد؛ با پشتیبانی تماس بگیرید",
+            show_alert=True,
         )
-        # Assistants keep the manage hub; only the shop owner sees login secrets.
-        if not owner_id or not profile or not is_shop_profile_owner(db_user, owner_id):
-            await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
-            return
-        await callback.answer()
-        from app.bot.nav_inline import reseller_access_card_keyboard
-
-        text = await format_reseller_access_card(session, profile)
-        if callback.message:
-            await safe_edit_text(
-                callback.message,
-                text,
-                reply_markup=reseller_access_card_keyboard(
-                    profile, await get_all_settings(session)
-                ),
-            )
-        return
-    if db_user.role != Role.RESELLER.value:
-        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
-        return
-    profile = await get_reseller_profile(session, db_user.id)
-    if not profile or not profile.is_active:
-        await callback.answer("حساب نمایندگی شما پیدا نشد؛ با پشتیبانی تماس بگیرید", show_alert=True)
         return
     await callback.answer()
-    from app.bot.nav_inline import reseller_access_card_keyboard
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            await format_reseller_access_prompt(),
+            reply_markup=reseller_access_confirm_keyboard(await get_all_settings(session)),
+        )
 
+
+@router.callback_query(F.data == "res:creds:reveal")
+async def res_creds_reveal(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    """Reveal usernames and mint a one-time panel login link after confirm."""
+    profile = await _owner_creds_profile(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if profile is None:
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
+        return
+    await callback.answer()
     text = await format_reseller_access_card(session, profile)
     if callback.message:
         await safe_edit_text(

@@ -1068,6 +1068,20 @@ def reseller_group_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback=RESELLER_HOME_CALLBACK)
 
 
+def reseller_access_confirm_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Ask before revealing usernames / minting a one-time panel link."""
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="بله، نمایش داده شود",
+                callback_data="res:creds:reveal",
+            )
+        ],
+        _hub_back_row(ui, callback_data="nv:res:home"),
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def reseller_access_card_keyboard(
     profile, ui: dict | None = None
 ) -> InlineKeyboardMarkup:

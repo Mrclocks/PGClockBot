@@ -1538,9 +1538,21 @@ async def format_reseller_my_service_card(session: AsyncSession, profile) -> str
     return format_message("🤝 سرویس نمایندگی", info_block(block))
 
 
+async def format_reseller_access_prompt() -> str:
+    """Ask before revealing usernames or a one-time panel link (no secrets in chat yet)."""
+    from app.services.formatting import format_message
+
+    return format_message(
+        "🔐 اطلاعات نمایندگی",
+        "نام کاربری و لینک ورود یک‌بارمصرف نمایش داده شود؟\n"
+        "لینک تا ۵ دقیقه معتبر است و فقط یک‌بار باز می‌شود. رمز عبور در این کارت نیست.",
+    )
+
+
 async def format_reseller_access_card(session: AsyncSession, profile) -> str:
-    """Non-secret access info for a reseller on the main bot (no plaintext passwords)."""
+    """Access info after explicit confirm (no plaintext passwords; login URL is one-time)."""
     from app.services.formatting import copyable, format_message, info_block, kv_line
+    from app.services.reseller_panel_open import mint_panel_open_token, panel_open_path
 
     panel = (await get_reseller_panel_base_url(session)).rstrip("/")
     lines = [
@@ -1551,9 +1563,12 @@ async def format_reseller_access_card(session: AsyncSession, profile) -> str:
     pg_u = (profile.pg_admin_username or "").strip()
     web_u = (profile.web_username or "").strip()
     unified = bool(pg_u and web_u and pg_u.lower() == web_u.lower())
-    login_url = f"{panel}/login" if panel else ""
+    login_url = ""
+    if panel:
+        token = await mint_panel_open_token(session, shop_user_id=int(profile.user_id))
+        login_url = f"{panel}{panel_open_path(token)}"
     block = [
-        kv_line("🌐", "وب‌پنل", copyable(login_url) if login_url else "—"),
+        kv_line("🌐", "وب‌پنل (یک‌بارمصرف)", copyable(login_url) if login_url else "—"),
     ]
     if unified:
         block.append(
