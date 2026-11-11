@@ -369,9 +369,9 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         logo = css.split(".brand-logo {", 1)[1].split("}", 1)[0]
         self.assertIn("var(--brand-logo-size)", logo)
         self.assertIn("--brand-logo-size: 40px", css)
-        # Content band keeps the old 58px top air; only bottom grows to --page-title-gap
+        # Content band keeps the old 58px top air; bottom is half of --page-title-gap
         self.assertIn("--topbar-content-h: 58px;", css)
-        self.assertIn("--topbar-pad-bottom: var(--page-title-gap);", css)
+        self.assertIn("--topbar-pad-bottom: var(--space-1_5);", css)
         self.assertIn(
             "--topbar-h: calc(var(--topbar-content-h) + var(--topbar-pad-bottom));",
             css,
