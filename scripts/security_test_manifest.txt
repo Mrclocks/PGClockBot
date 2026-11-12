@@ -487,3 +487,4 @@ tests/test_customer_notice_buttons.py
 tests/test_catalog_row_editor.py
 # Home offer to add an old service: only for a customer of this shop with no service there.
 tests/test_import_home_prompt.py
+tests/test_service_import_offer_migration.py
