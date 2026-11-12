@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import Select, func, or_, select, update
+from sqlalchemy import ColumnElement, Select, func, or_, select, update
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,7 @@ from app.db.models import (
 )
 from app.services.demo_users import non_demo_customer
 from app.services.formatting import bot_user_panel_label
+from app.services.referral_scope import is_referral_of_shop, referral_shop_clause
 from app.services.service_scope import customer_may_use_service, service_shop_id
 from app.services.volume_allocation import VolumeAllocationError, assert_volume_delta_allowed
 
@@ -171,6 +172,14 @@ DEFAULT_REWARDS: list[dict[str, Any]] = [
 
 SETTING_LOYALTY_ENABLED = "loyalty_enabled"
 SETTING_POINTS_TO_WALLET_RATE = "points_to_wallet_rate"  # toman per 1 point when converting via wallet_credit rewards
+# Idempotency prefixes of the points a referrer earns from their invites (see on_user_referred
+# and on_order_delivered); "_" is escaped so the pattern matches the literal prefix.
+REFERRAL_POINTS_KEY_PATTERN = "ref\\_%"
+
+
+def _settings_scope(reseller_id: int | None) -> int:
+    """Settings key for one club: 0 pins the platform, where None would mean the bot in use."""
+    return int(reseller_id or 0)
 
 
 @dataclass(frozen=True)
@@ -186,12 +195,13 @@ async def ensure_loyalty_defaults(session: AsyncSession, *, reseller_id: int | N
     """Seed default rules/tiers/rewards once (idempotent)."""
     from app.services.users import get_setting, set_setting
 
-    enabled = await get_setting(session, SETTING_LOYALTY_ENABLED, "1", reseller_id=reseller_id)
+    scope = _settings_scope(reseller_id)
+    enabled = await get_setting(session, SETTING_LOYALTY_ENABLED, "1", reseller_id=scope)
     if enabled == "":
-        await set_setting(session, SETTING_LOYALTY_ENABLED, "1", reseller_id=reseller_id)
-    rate = await get_setting(session, SETTING_POINTS_TO_WALLET_RATE, "", reseller_id=reseller_id)
+        await set_setting(session, SETTING_LOYALTY_ENABLED, "1", reseller_id=scope)
+    rate = await get_setting(session, SETTING_POINTS_TO_WALLET_RATE, "", reseller_id=scope)
     if rate == "":
-        await set_setting(session, SETTING_POINTS_TO_WALLET_RATE, "100", reseller_id=reseller_id)
+        await set_setting(session, SETTING_POINTS_TO_WALLET_RATE, "100", reseller_id=scope)
 
     q: Select = select(func.count()).select_from(PointsRule)
     if reseller_id is None:
@@ -258,7 +268,7 @@ async def ensure_loyalty_defaults(session: AsyncSession, *, reseller_id: int | N
 async def loyalty_enabled(session: AsyncSession, *, reseller_id: int | None = None) -> bool:
     from app.services.users import get_setting, on
 
-    raw = await get_setting(session, SETTING_LOYALTY_ENABLED, "1", reseller_id=reseller_id)
+    raw = await get_setting(session, SETTING_LOYALTY_ENABLED, "1", reseller_id=_settings_scope(reseller_id))
     return on(raw)
 
 
@@ -672,20 +682,8 @@ async def _rules_for_event(
         q = q.where(PointsRule.reseller_id.is_(None))
     else:
         q = q.where(PointsRule.reseller_id == int(reseller_id))
-    rows = list((await session.execute(q)).scalars().all())
-    if not rows and reseller_id is not None:
-        # Fall back to platform rules
-        q2 = (
-            select(PointsRule)
-            .where(
-                PointsRule.event_key == event_key,
-                PointsRule.enabled.is_(True),
-                PointsRule.reseller_id.is_(None),
-            )
-            .order_by(PointsRule.sort_order.asc(), PointsRule.id.asc())
-        )
-        rows = list((await session.execute(q2)).scalars().all())
-    return rows
+    # A shop's club runs on its own rules only: one it switched off is not replaced by the platform's.
+    return list((await session.execute(q)).scalars().all())
 
 
 async def _rule_passes(
@@ -811,7 +809,7 @@ async def on_user_referred(
         await session.commit()
         return
     try:
-        await ensure_loyalty_defaults(session, reseller_id=referred.reseller_id)
+        await ensure_loyalty_defaults(session, reseller_id=referred.referral_shop_id)
     except Exception:
         logger.debug("on_user_referred: ignored failure", exc_info=True)
     await record_referral_event(
@@ -830,13 +828,13 @@ async def on_user_referred(
             user=referrer,
             event_key="referral_signup",
             idempotency_prefix=f"ref_signup:{referred.id}",
-            reseller_id=referred.reseller_id,
+            reseller_id=referred.referral_shop_id,
             description_override="ثبت‌نام با دعوت",
         )
 
 
 async def _is_first_delivered_purchase(session: AsyncSession, order: Order) -> bool:
-    """True when this is the buyer's first non-trial delivered purchase (not renew/app fee)."""
+    """True when this is the buyer's first non-trial delivered purchase in the order's shop (not renew/app fee)."""
     note = (order.note or "").strip()
     if note.startswith(("renew:", "reseller_app:", "res_cap:", "res_pkg:")):
         return False
@@ -848,6 +846,7 @@ async def _is_first_delivered_purchase(session: AsyncSession, order: Order) -> b
                 Order.user_id == order.user_id,
                 Order.status == "delivered",
                 Order.id != order.id,
+                Order.reseller_id == order.reseller_id if order.reseller_id else Order.reseller_id.is_(None),
                 or_(Plan.id.is_(None), Plan.is_trial.is_(False)),
             )
             .limit(1)
@@ -916,7 +915,8 @@ async def on_order_delivered(session: AsyncSession, order: Order) -> None:
             description_override="اولین خرید",
         )
 
-    if user.referred_by_id:
+    # Only purchases in the shop the referral was made in reward the referrer.
+    if is_referral_of_shop(user, reseller_id):
         referrer = await session.get(BotUser, int(user.referred_by_id))
         if not referrer or int(referrer.id) == int(user.id):
             return
@@ -966,8 +966,17 @@ async def on_order_delivered(session: AsyncSession, order: Order) -> None:
             )
 
 
+def _purse_clause(shop_id: int | None) -> ColumnElement[bool]:
+    """Points entries of one club (None = the platform)."""
+    return PointsTransaction.reseller_id == int(shop_id) if shop_id else PointsTransaction.reseller_id.is_(None)
+
+
 async def reverse_order_points(session: AsyncSession, order: Order, *, reason: str) -> int:
-    """Reverse all earn txs tied to this order reference. Returns count reversed."""
+    """Reverse the rule points one order earned (buyer and referrer) in its own shop. Returns count reversed.
+
+    The reference alone is not enough: other entries (a lucky-wheel spin) also store a numeric id
+    there, so the match is narrowed to rule earnings in the order's shop.
+    """
     rows = list(
         (
             await session.execute(
@@ -975,6 +984,8 @@ async def reverse_order_points(session: AsyncSession, order: Order, *, reason: s
                     PointsTransaction.reference == str(order.id),
                     PointsTransaction.amount > 0,
                     PointsTransaction.tx_type == "earn",
+                    PointsTransaction.source.like("rule:%"),
+                    _purse_clause(order.reseller_id),
                 )
             )
         ).scalars().all()
@@ -993,10 +1004,9 @@ async def list_points_history(
     session: AsyncSession, user_id: int, *, shop_id: int | None, limit: int = 10, offset: int = 0
 ) -> list[PointsTransaction]:
     """The customer's points entries in one shop (None = platform)."""
-    scope = PointsTransaction.reseller_id == int(shop_id) if shop_id else PointsTransaction.reseller_id.is_(None)
     result = await session.execute(
         select(PointsTransaction)
-        .where(PointsTransaction.user_id == user_id, scope)
+        .where(PointsTransaction.user_id == user_id, _purse_clause(shop_id))
         .order_by(PointsTransaction.id.desc())
         .offset(offset)
         .limit(limit)
@@ -1004,61 +1014,51 @@ async def list_points_history(
     return list(result.scalars().all())
 
 
-async def referral_stats(session: AsyncSession, user_id: int) -> dict[str, int]:
+async def referral_stats(session: AsyncSession, user_id: int, *, shop_id: int | None) -> dict[str, int]:
+    """The customer's invites and invite points in one club (None = the platform).
+
+    Only people referred in this club's bot and points earned in its purse count, so a
+    customer of a shop and of the platform sees each side's invites on that side only.
+    """
     total = int(
-        (
-            await session.execute(
-                select(func.count()).select_from(BotUser).where(BotUser.referred_by_id == user_id)
+        await session.scalar(
+            select(func.count()).select_from(BotUser).where(
+                BotUser.referred_by_id == int(user_id), referral_shop_clause(shop_id),
             )
-        ).scalar_one()
+        )
         or 0
     )
     qualified = int(
-        (
-            await session.execute(
-                select(func.count())
-                .select_from(ReferralEvent)
-                .where(
-                    ReferralEvent.referrer_id == user_id,
-                    ReferralEvent.qualification_state == "qualified",
-                )
+        await session.scalar(
+            select(func.count(func.distinct(ReferralEvent.referred_id)))
+            .select_from(ReferralEvent)
+            .join(BotUser, BotUser.id == ReferralEvent.referred_id)
+            .where(
+                ReferralEvent.referrer_id == int(user_id),
+                ReferralEvent.qualification_state == "qualified",
+                BotUser.referred_by_id == int(user_id),
+                referral_shop_clause(shop_id),
             )
-        ).scalar_one()
+        )
         or 0
     )
     earned = int(
-        (
-            await session.execute(
-                select(func.coalesce(func.sum(PointsTransaction.amount), 0)).where(
-                    PointsTransaction.user_id == user_id,
-                    PointsTransaction.amount > 0,
-                    PointsTransaction.source.like("rule:%"),
-                    PointsTransaction.description.like("%دعوت%"),
-                )
+        await session.scalar(
+            select(func.coalesce(func.sum(PointsTransaction.amount), 0)).where(
+                PointsTransaction.user_id == int(user_id),
+                PointsTransaction.amount > 0,
+                PointsTransaction.idempotency_key.like(REFERRAL_POINTS_KEY_PATTERN, escape="\\"),
+                _purse_clause(shop_id),
             )
-        ).scalar_one()
+        )
         or 0
     )
-    # Broader: sum referral event-related earn txs
-    if earned == 0:
-        earned = int(
-            (
-                await session.execute(
-                    select(func.coalesce(func.sum(PointsTransaction.amount), 0)).where(
-                        PointsTransaction.user_id == user_id,
-                        PointsTransaction.amount > 0,
-                        PointsTransaction.idempotency_key.like("ref_%"),
-                    )
-                )
-            ).scalar_one()
-            or 0
-        )
     return {"total": total, "qualified": qualified, "earned_points": earned}
 
 
 async def month_earned_points(session: AsyncSession, user_id: int, *, shop_id: int | None) -> int:
     """Points the customer earned this month in one purse (None = platform)."""
-    purse = PointsTransaction.reseller_id == int(shop_id) if shop_id else PointsTransaction.reseller_id.is_(None)
+    purse = _purse_clause(shop_id)
     now = datetime.now(timezone.utc)
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     return int(
@@ -1149,12 +1149,18 @@ async def redeem_reward(
     from app.services.users import current_shop_reseller_id  # users imports loyalty lazily; avoid a cycle
 
     key = idempotency_key or f"redeem:{user.id}:{reward_id}:{int(datetime.now(timezone.utc).timestamp())}"
+    user_rid = current_shop_reseller_id()
     existing = (
         await session.execute(
             select(RewardRedemption).where(RewardRedemption.idempotency_key == key)
         )
     ).scalar_one_or_none()
     if existing:
+        # A replay is shown to the caller: never one of another customer or another shop's club.
+        replayed_reward = await session.get(LoyaltyReward, int(existing.reward_id))
+        replayed_shop = replayed_reward.reseller_id if replayed_reward is not None else None
+        if int(existing.user_id) != int(user.id) or (replayed_shop or None) != (user_rid or None):
+            raise ValueError("این جایزه فعال نیست")
         return existing
 
     # Lock reward row when supported (SQLite ignores / may no-op)
@@ -1169,7 +1175,6 @@ async def redeem_reward(
     if not reward or not reward.enabled or reward.archived:
         raise ValueError("این جایزه فعال نیست")
     # Scope isolation: a reward is redeemable only in the bot of the shop that owns it.
-    user_rid = current_shop_reseller_id()
     # Points, reward and benefit all belong to one shop: a platform reward is not redeemable in
     # a shop bot (its credit would come from the platform's wallet while the points are the shop's).
     if (reward.reseller_id or None) != (user_rid or None):
@@ -1631,9 +1636,10 @@ async def _assert_reward_volume_fits(session: AsyncSession, shop_id: int, add_by
 async def overview_metrics(
     session: AsyncSession, *, reseller_id: int | None = None
 ) -> dict[str, Any]:
-    user_filter = [BotUser.is_demo.is_(False), non_demo_customer(BotUser.referred_by_id)]
-    if reseller_id is not None:
-        user_filter.append(BotUser.reseller_id == int(reseller_id))
+    # Referrals belong to the shop whose bot they were made in, not to the person's attribution.
+    user_filter = [
+        BotUser.is_demo.is_(False), non_demo_customer(BotUser.referred_by_id), referral_shop_clause(reseller_id),
+    ]
 
     total_refs = int(
         (
@@ -1645,19 +1651,16 @@ async def overview_metrics(
         ).scalar_one()
         or 0
     )
-    qual_q = select(func.count()).select_from(ReferralEvent).where(
-        ReferralEvent.qualification_state == "qualified"
-    )
-    if reseller_id is not None:
-        qual_q = (
-            select(func.count())
-            .select_from(ReferralEvent)
-            .join(BotUser, BotUser.id == ReferralEvent.referrer_id)
-            .where(
-                ReferralEvent.qualification_state == "qualified",
-                BotUser.reseller_id == int(reseller_id),
-            )
+    qual_q = (
+        select(func.count())
+        .select_from(ReferralEvent)
+        .join(BotUser, BotUser.id == ReferralEvent.referred_id)
+        .where(
+            ReferralEvent.qualification_state == "qualified",
+            BotUser.referred_by_id == ReferralEvent.referrer_id,
+            referral_shop_clause(reseller_id),
         )
+    )
     qual_q = qual_q.where(
         non_demo_customer(ReferralEvent.referrer_id), non_demo_customer(ReferralEvent.referred_id),
     )
@@ -1717,9 +1720,14 @@ async def overview_metrics(
         .limit(5)
     )
     top_rows = (await session.execute(top_q)).all()
+    referrer_ids = [int(rid) for rid, _ in top_rows]
+    referrers = {
+        int(u.id): u
+        for u in (await session.scalars(select(BotUser).where(BotUser.id.in_(referrer_ids)))).all()
+    } if referrer_ids else {}
     top: list[dict[str, Any]] = []
     for rid, cnt in top_rows:
-        u = await session.get(BotUser, int(rid))
+        u = referrers.get(int(rid))
         top.append(
             {
                 "user_id": int(rid),

@@ -95,6 +95,9 @@ class BotUser(Base):
     referred_by_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True
     )
+    # Shop whose bot the referral was made in (NULL = platform); only that shop rewards it.
+    # A plain id: the shop may be deleted while the referral stays on record.
+    referral_shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     reseller_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True, index=True
     )

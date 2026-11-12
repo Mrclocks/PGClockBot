@@ -224,7 +224,7 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
                 RewardRedemption(user_id=user_id, reward_id=reward_of[shop_id], reward_type="wallet_credit", reward_value=100, points_spent=10, status="completed", idempotency_key=f"reward{user_id}"),
             ])
         for user_id in (11, 12):
-            await self.session.execute(sa.update(BotUser).where(BotUser.id == user_id).values(referred_by_id=10))
+            await self.session.execute(sa.update(BotUser).where(BotUser.id == user_id).values(referred_by_id=10, referral_shop_id=10))
             self.session.add(ReferralEvent(referrer_id=10, referred_id=user_id, qualification_state="qualified", event_key="purchase", idempotency_key=f"ref{user_id}"))
         await self.session.commit()
         summary = await overview_metrics(self.session, reseller_id=10)

@@ -66,6 +66,7 @@ from app.services.provision_gate import (
     settle_failed_hold,
     template_limit_if_gated,
 )
+from app.services.referral_scope import is_referral_of_shop
 from app.services.volume_allocation import (
     HeldVolume,
     VolumeAllocationError,
@@ -156,7 +157,9 @@ async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None
     buyer = order.__dict__.get("user")
     if buyer is None:
         buyer = await session.get(BotUser, order.user_id)
-    if not buyer or not buyer.referred_by_id:
+    shop_id = int(order.reseller_id) if order.reseller_id else None
+    # Only a purchase in the shop the referral was made in pays that shop's bonus.
+    if not buyer or not is_referral_of_shop(buyer, shop_id):
         return
     if order.plan_id:
         from app.db.models import Plan
@@ -166,9 +169,9 @@ async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None
             return
     from app.services.users import get_setting
 
-    shop_id = int(order.reseller_id) if order.reseller_id else None
+    # 0 pins the platform's setting; None would read the settings of the bot in use.
     raw = await get_setting(
-        session, "referral_bonus", "0", reseller_id=shop_id
+        session, "referral_bonus", "0", reseller_id=shop_id or 0
     )
     try:
         bonus = int(str(raw or "0").replace(",", "").strip() or "0")
