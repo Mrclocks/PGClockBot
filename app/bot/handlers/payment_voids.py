@@ -27,6 +27,7 @@ from app.services.payment_voids import (
     load_void_candidate,
     offers_void,
     void_and_notify,
+    void_effect,
 )
 from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import has_bot_perm
@@ -194,7 +195,7 @@ async def void_confirm(
     text = (
         f"⚠️ <b>ابطال پرداخت #{payment_id}</b>\n"
         f"دلیل: {html.escape(BOT_REASONS[key])}\n\n"
-        "سرویس این سفارش در پنل غیرفعال و سفارش لغو می‌شود. این کار برگشت‌پذیر نیست.\n"
+        f"{void_effect(order)} این کار برگشت‌پذیر نیست.\n"
         f"مبلغ {_money(payment.amount)} به کیف پول مشتری برگردد؟"
     )
     rows = [

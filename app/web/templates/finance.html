@@ -514,7 +514,7 @@
     <form method="post" id="payment-void-form" class="form-stack ds-body" action="">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       {% call ds_sec('ابطال', extra_class='ds-sec-first') %}
-        <div class="ds-note" data-tone="danger" role="note">{{ ico('info') }}<span>سرویس مربوط به این پرداخت غیرفعال می‌شود. این کار برگشت‌پذیر نیست.</span></div>
+        <div class="ds-note" data-tone="danger" role="note">{{ ico('info') }}<span>برای خرید، سرویس غیرفعال می‌شود؛ برای تمدید یا افزونه، حجم، زمان و پلن سرویس به پیش از آن برمی‌گردد. این کار برگشت‌پذیر نیست.</span></div>
         <p class="ds-desc" id="payment-void-summary"></p>
         <label class="form-field"><span>دلیل ابطال <span class="ds-req" aria-hidden="true">*</span></span>
           <textarea name="reason" maxlength="500" required rows="3" placeholder="مثلاً رسید تکراری بود"></textarea>

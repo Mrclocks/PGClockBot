@@ -67,6 +67,7 @@ from app.services.provision_gate import (
     template_limit_if_gated,
 )
 from app.services.referral_scope import is_referral_of_shop
+from app.services.service_restore import encode_change
 from app.services.volume_allocation import (
     HeldVolume,
     VolumeAllocationError,
@@ -2708,6 +2709,8 @@ class _RenewalRun:
     snapshot: dict | None
     had_saved_target: bool
     write_attempted: bool
+    # The live panel user the target was computed from; its quota is saved for a later void.
+    panel_before: dict | None = None
 
 
 async def _assert_renewal_matches_service(session: AsyncSession, order: Order, service: UserService) -> None:
@@ -2774,13 +2777,14 @@ async def _renewal_panel_client(session: AsyncSession, order: Order, service: Us
     return pg
 
 
-async def _renewal_targets(pg, service: UserService, plan: Plan, snapshot: dict | None):
+async def _renewal_targets(pg, service: UserService, plan: Plan, run: _RenewalRun):
     """Return ``(payload, data_limit, expire, gate_expire)``.
 
     ``payload`` is the absolute panel target for snapshot renewals (``None`` for
     legacy orders); ``gate_expire`` is the expiry used for the reseller
     provisioning gate, which counts an on-hold duration from now.
     """
+    snapshot = run.snapshot
     if snapshot is None:
         data_limit = int(plan.data_limit_gb * (1024**3)) if plan.data_limit_gb is not None else None
         expire = int(time.time()) + plan.duration_days * 86400 if plan.duration_days else None
@@ -2791,7 +2795,9 @@ async def _renewal_targets(pg, service: UserService, plan: Plan, snapshot: dict 
     if payload is None:
         from app.services.service_renewals import calculate_renewal
 
-        payload = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), snapshot)["payload"]
+        live = await pg.get_user_by_id(service.pg_user_id)
+        payload = calculate_renewal(live, snapshot)["payload"]
+        run.panel_before = live if isinstance(live, dict) else None
     gate_expire = payload["expire"]
     if payload.get("on_hold_expire_duration"):
         gate_expire = int(time.time()) + payload["on_hold_expire_duration"]
@@ -2848,6 +2854,17 @@ async def _started_on_hold_renewal(pg, service: UserService, snapshot: dict, pay
     return live
 
 
+def _restore_record(service: UserService, before: dict | None, payload: dict) -> str | None:
+    """What this write replaces, for a later void; a panel user it cannot read leaves no record."""
+    if before is None:
+        return None
+    try:
+        return encode_change(service_id=int(service.id), plan_id=service.plan_id, before=before, payload=payload)
+    except ValueError:
+        logger.warning("renewal restore record skipped service=%s", service.id, exc_info=True)
+        return None
+
+
 async def _write_renewal_target(
     session: AsyncSession, order: Order, pg, service: UserService, run: _RenewalRun, payload: dict,
 ) -> dict:
@@ -2856,6 +2873,7 @@ async def _write_renewal_target(
     snapshot["target"] = payload
     if not run.had_saved_target:
         snapshot["prepared_at"] = int(time.time())
+        order.service_restore = _restore_record(service, run.panel_before, payload)
     order.renewal_snapshot = json.dumps(snapshot)
     await session.commit()
     # From here a retry must reuse the saved target instead of recomputing it.
@@ -2998,7 +3016,7 @@ async def apply_renewal(
     panel_touched = had_saved_target
     try:
         pg = await _renewal_panel_client(session, order, service)
-        payload, data_limit, expire, gate_expire = await _renewal_targets(pg, service, plan, snapshot)
+        payload, data_limit, expire, gate_expire = await _renewal_targets(pg, service, plan, run)
         await _assert_renewal_provision_gate(session, order, plan, run, data_limit=data_limit, gate_expire=gate_expire)
         volume_hold = await _hold_renewal_volume(session, order, service, plan, pg, run, data_limit=data_limit)
         payg_charge = await _charge_renewal(session, order, service, plan, pg, run)

@@ -1,8 +1,12 @@
 """Void a payment that was approved by mistake: stop what it bought and optionally return the money.
 
+A new service is disabled. A renewal or add-on is taken back instead: the service's quota and plan
+from just before it, saved on the order, are written back, as long as the panel still shows what
+the renewal or add-on wrote.
+
 The payment is claimed as voided first and committed; only then is the panel touched. A panel
-failure moves the void to ``review`` with the saved target, and a retry disables exactly the same
-services. The wallet refund is paid in the same transaction that seals the void, so it runs once.
+failure moves the void to ``review`` with the saved target, and a retry repeats exactly the same
+change. The wallet refund is paid in the same transaction that seals the void, so it runs once.
 """
 
 from __future__ import annotations
@@ -25,16 +29,20 @@ from app.db.models import (
     PaymentMethod,
     PaymentStatus,
     PaymentVoid,
+    Plan,
     ServiceAutomation,
     UserService,
 )
+from app.services.bot_user_admin import sync_service_quota_cache
 from app.services.formatting import format_toman
 from app.services.cashback import reverse_after_refund
 from app.services.loyalty import reverse_order_points
-from app.services.orders import _order_note, _wallet_topup_already_credited, is_mutation_order_note
+from app.services.orders import _order_note, _wallet_topup_already_credited, is_addon_order_note, is_mutation_order_note
 from app.services.pasarguard import get_pg, get_pg_for_reseller, is_pg_not_found
 from app.services.payer_notify import notify_payer
 from app.services.support_button import support_markup
+from app.services.service_cancellations import lock_service_mutation
+from app.services.service_restore import SavedChange, assert_still_changed, put_back, saved_change
 from app.services.shop_scope import payment_shop_id
 from app.services.wallet import credit_wallet, debit_wallet
 
@@ -73,6 +81,8 @@ class VoidPlan:
     order: Order | None
     service_ids: list[int]
     refund_amount: int
+    # Set for a renewal or add-on: the quota to write back instead of disabling the service.
+    change: SavedChange | None = None
 
 
 def _clean_reason(reason: str) -> str:
@@ -118,13 +128,77 @@ async def _resolve_plan(session: AsyncSession, payment: Payment, order: Order | 
             raise ValueError("اعتبار این شارژ هرگز واریز نشده بود؛ ابطال ممکن نیست")
         return VoidPlan(payment, None, [], 0)
     if is_mutation_order_note(_order_note(order)):
-        raise ValueError("ابطال پرداخت تمدید، افزونه یا نمایندگی از این بخش ممکن نیست؛ سرویس را دستی ویرایش کنید")
+        return _extension_plan(payment, order, refund_to_wallet)
     if order.status not in VOIDABLE_ORDER_STATUSES:
         raise ValueError("سفارش این پرداخت در وضعیتی نیست که بتوان ابطال کرد")
     service_ids = await _order_service_ids(session, order)
     if order.status == OrderStatus.DELIVERED.value and not service_ids:
         raise ValueError("سرویس تحویل‌شدهٔ این سفارش پیدا نشد؛ ابتدا سفارش را بررسی کنید")
     return VoidPlan(payment, order, service_ids, int(payment.amount) if refund_to_wallet else 0)
+
+
+def is_extension_order(order: Order | None) -> bool:
+    """A renewal or add-on: it changed a service the customer already had."""
+    note = _order_note(order)
+    return note.startswith("renew:") or is_addon_order_note(note)
+
+
+def _extension_change(order: Order) -> SavedChange | None:
+    change = saved_change(order.service_restore)
+    return change if change is not None and change.service_id == order.service_id else None
+
+
+def _extension_plan(payment: Payment, order: Order, refund_to_wallet: bool) -> VoidPlan:
+    if not is_extension_order(order):
+        raise ValueError("ابطال پرداخت نمایندگی از این بخش ممکن نیست")
+    if order.status != OrderStatus.DELIVERED.value:
+        raise ValueError("سفارش این پرداخت در وضعیتی نیست که بتوان ابطال کرد")
+    change = _extension_change(order)
+    if change is None:
+        raise ValueError("وضعیت سرویس پیش از این تمدید یا افزونه ثبت نشده است؛ سرویس را دستی ویرایش کنید")
+    return VoidPlan(payment, order, [change.service_id], int(payment.amount) if refund_to_wallet else 0, change)
+
+
+async def _extended_service(session: AsyncSession, order: Order, change: SavedChange) -> UserService:
+    service = await session.get(UserService, change.service_id)
+    if service is None or service.bot_user_id != order.user_id or not service.pg_user_id:
+        raise ValueError("مالکیت یا شناسهٔ پنل سرویس تغییر کرده است")
+    return service
+
+
+async def _panel_for(session: AsyncSession, shop_id: int | None):
+    return await get_pg_for_reseller(session, shop_id) if shop_id else get_pg()
+
+
+async def _check_extension(session: AsyncSession, plan: VoidPlan, shop_id: int | None) -> None:
+    """Refuse before anything is claimed when the service changed again since the renewal or add-on."""
+    service = await _extended_service(session, plan.order, plan.change)
+    pg_user_id = int(service.pg_user_id)
+    pg = await _panel_for(session, shop_id)
+    # Nothing is written yet; end the read transaction before the panel call.
+    await session.commit()
+    await assert_still_changed(pg, pg_user_id, plan.change)
+
+
+async def _lock_extended_service(session: AsyncSession, order: Order) -> None:
+    """Hold the service's one-change-at-a-time lock until the void is sealed or reviewed."""
+    try:
+        await lock_service_mutation(session, order.service_id)
+        locked = await session.execute(
+            update(Order)
+            .where(Order.id == order.id, Order.status == OrderStatus.DELIVERED.value)
+            .values(service_mutation_pending=True)
+            .execution_options(synchronize_session=False)
+        )
+    except IntegrityError:
+        await session.rollback()
+        raise ValueError("تغییر دیگری برای این سرویس در حال انجام یا بررسی است") from None
+    except ValueError:
+        await session.rollback()
+        raise
+    if locked.rowcount != 1:
+        await session.rollback()
+        raise ValueError("وضعیت سفارش هم‌زمان تغییر کرد")
 
 
 async def _find_void(session: AsyncSession, payment_id: int) -> PaymentVoid | None:
@@ -208,7 +282,7 @@ async def _disable_panel_services(session: AsyncSession, void: PaymentVoid, orde
     service_ids = json.loads(void.service_ids)
     if not service_ids:
         return
-    pg = await get_pg_for_reseller(session, void.shop_id) if void.shop_id else get_pg()
+    pg = await _panel_for(session, void.shop_id)
     services = list(await session.scalars(select(UserService).where(UserService.id.in_(service_ids))))
     for service in services:
         if service.bot_user_id != order.user_id or not service.pg_user_id:
@@ -225,6 +299,16 @@ async def _disable_panel_services(session: AsyncSession, void: PaymentVoid, orde
         except Exception as exc:
             if not is_pg_not_found(exc):
                 raise
+
+
+async def _put_back_panel_quota(session: AsyncSession, void: PaymentVoid, order: Order, change: SavedChange) -> None:
+    service = await _extended_service(session, order, change)
+    pg = await _panel_for(session, void.shop_id)
+    try:
+        await put_back(pg, int(service.pg_user_id), change)
+    except Exception as exc:
+        if not is_pg_not_found(exc):
+            raise
 
 
 async def _seal(session: AsyncSession, void_id: int, token: str) -> None:
@@ -248,9 +332,7 @@ async def _release_to_review(session: AsyncSession, void_id: int, token: str) ->
     await session.commit()
 
 
-async def _finish_order_void(session: AsyncSession, void: PaymentVoid, token: str, order: Order) -> None:
-    """Seal the void, stop the services locally, cancel the order and pay the refund in one commit."""
-    await _seal(session, void.id, token)
+async def _stop_local_services(session: AsyncSession, void: PaymentVoid) -> None:
     service_ids = json.loads(void.service_ids)
     if service_ids:
         await session.execute(
@@ -265,10 +347,29 @@ async def _finish_order_void(session: AsyncSession, void: PaymentVoid, token: st
             .values(renew_enabled=False, duration_enabled=False, volume_enabled=False)
             .execution_options(synchronize_session=False)
         )
+
+
+async def _restore_local_service(session: AsyncSession, order: Order, change: SavedChange) -> None:
+    """Mirror the written-back quota on the service row, and its plan when that plan still exists."""
+    service = await _extended_service(session, order, change)
+    if change.plan_id and await session.get(Plan, change.plan_id) is not None:
+        service.plan_id = change.plan_id
+    sync_service_quota_cache(service, change.before.payload())
+
+
+async def _finish_order_void(
+    session: AsyncSession, void: PaymentVoid, token: str, order: Order, change: SavedChange | None
+) -> None:
+    """Seal the void, settle the service locally, cancel the order and pay the refund in one commit."""
+    await _seal(session, void.id, token)
+    if change is None:
+        await _stop_local_services(session, void)
+    else:
+        await _restore_local_service(session, order, change)
     cancelled = await session.execute(
         update(Order)
         .where(Order.id == order.id, Order.status.in_(VOIDABLE_ORDER_STATUSES))
-        .values(status=OrderStatus.CANCELLED.value)
+        .values(status=OrderStatus.CANCELLED.value, service_mutation_pending=False)
         .execution_options(synchronize_session=False)
     )
     if cancelled.rowcount != 1:
@@ -284,9 +385,13 @@ async def _finish_order_void(session: AsyncSession, void: PaymentVoid, token: st
 
 async def _run_order_void(session: AsyncSession, void: PaymentVoid, token: str, order: Order) -> None:
     void_id = int(void.id)  # a rollback expires the row, so read the id while it is loaded
+    change = _extension_change(order) if is_extension_order(order) else None
     try:
-        await _disable_panel_services(session, void, order)
-        await _finish_order_void(session, void, token, order)
+        if change is None:
+            await _disable_panel_services(session, void, order)
+        else:
+            await _put_back_panel_quota(session, void, order, change)
+        await _finish_order_void(session, void, token, order, change)
     except Exception as exc:
         # The panel call may have succeeded, so keep the saved target and let the operator retry.
         await session.rollback()
@@ -327,10 +432,14 @@ async def void_approved_payment(
     plan = await _resolve_plan(session, payment, order, refund_to_wallet)
     if payment.is_wallet_topup:
         return await _void_topup(session, plan, actor=actor[:128], reason=reason)
+    if plan.change is not None:
+        await _check_extension(session, plan, shop_id)
     token = secrets.token_hex(16)
     void = await _claim_void(
         session, plan, shop_id=shop_id, actor=actor[:128], reason=reason, status=STATUS_PROCESSING, token=token
     )
+    if plan.change is not None:
+        await _lock_extended_service(session, order)
     await session.commit()
     await _run_order_void(session, void, token, order)
     await _reverse_points(session, order, payment.id)
@@ -371,7 +480,9 @@ def offers_void(payment: Payment, order: Order | None) -> bool:
         return False
     if payment.is_wallet_topup or order is None:
         return False
-    return not is_mutation_order_note(_order_note(order)) and order.status in VOIDABLE_ORDER_STATUSES
+    if is_mutation_order_note(_order_note(order)):
+        return is_extension_order(order) and order.status == OrderStatus.DELIVERED.value and _extension_change(order) is not None
+    return order.status in VOIDABLE_ORDER_STATUSES
 
 
 async def list_void_candidates(
@@ -403,10 +514,20 @@ async def list_void_candidates(
     ]
 
 
-def void_customer_notice(payment: Payment, refund_amount: int) -> str:
+def void_effect(order: Order | None) -> str:
+    """What a void of this order does to the service, for the confirmation step."""
+    if is_extension_order(order):
+        return "حجم، زمان و پلن سرویس به پیش از این تمدید یا افزونه برمی‌گردد و سفارش لغو می‌شود."
+    return "سرویس این سفارش در پنل غیرفعال و سفارش لغو می‌شود."
+
+
+def void_customer_notice(payment: Payment, refund_amount: int, order: Order | None = None) -> str:
     if payment.is_wallet_topup:
         return f"شارژ کیف پول #{payment.id} ابطال شد و مبلغ آن از کیف پول شما کم شد. اگر اشتباهی رخ داده با پشتیبانی تماس بگیرید."
-    text = f"پرداخت #{payment.id} ابطال و سرویس مربوط به آن غیرفعال شد."
+    if is_extension_order(order):
+        text = f"پرداخت #{payment.id} ابطال شد و تمدید یا افزونهٔ آن از سرویس برداشته شد."
+    else:
+        text = f"پرداخت #{payment.id} ابطال و سرویس مربوط به آن غیرفعال شد."
     if refund_amount:
         text += f" مبلغ {format_toman(refund_amount)} به کیف پول شما برگشت."
     return text + " اگر اشتباهی رخ داده با پشتیبانی تماس بگیرید."
@@ -428,9 +549,10 @@ async def void_and_notify(
     )
     if previous is None or previous.status != STATUS_DONE:
         payment = await session.get(Payment, int(payment_id))
+        order = await session.get(Order, payment.order_id) if payment.order_id else None
         await notify_payer(
             session, payment.user_id, title="⚠️ پرداخت ابطال شد",
-            body=void_customer_notice(payment, int(void.refund_amount)), shop_id=void.shop_id,
+            body=void_customer_notice(payment, int(void.refund_amount), order), shop_id=void.shop_id,
             reply_markup=support_markup(),
         )
     return void
