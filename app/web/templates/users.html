@@ -91,7 +91,7 @@
     <label class="color-tag-select-wrap{% if active_tag %} is-tagged{% endif %}"
            {% if active_tag %}style="--tag-color: {{ active_tag.hex }}"{% endif %}
            aria-label="فیلتر تگ ریسک">
-      <select class="select-sm color-tag-select" data-color-tag-nav aria-label="فیلتر تگ ریسک">
+      <select class="color-tag-select" data-color-tag-nav aria-label="فیلتر تگ ریسک">
         <option value="{{ filter_href(filter_key=flt, q=q, color=none) }}"{% if not color_filter %} selected{% endif %}>همه تگ‌ها</option>
         {% for t in color_tags %}
         <option value="{{ filter_href(filter_key=flt, q=q, color=t.key) }}"

@@ -663,7 +663,8 @@ html[data-theme="light"] .channel-badge-dev {
 .color-tag-select-wrap .ui-select {
   height: 100%;
 }
-.color-tag-select-wrap .ui-select-toggle {
+.color-tag-select-wrap .ui-select-toggle,
+.color-tag-select-wrap > select.color-tag-select {
   min-width: 7.5rem;
   height: 100%;
   min-height: 100%;
@@ -671,6 +672,15 @@ html[data-theme="light"] .channel-badge-dev {
   align-items: center;
   padding-block: 0;
   box-sizing: border-box;
+  border-radius: var(--control-radius);
+}
+/* Lock radius on interaction — some Android browsers square :active/:focus. */
+.color-tag-select-wrap .ui-select-toggle:hover,
+.color-tag-select-wrap .ui-select-toggle:focus,
+.color-tag-select-wrap .ui-select-toggle:focus-visible,
+.color-tag-select-wrap .ui-select-toggle:active,
+.color-tag-select-wrap .ui-select.open .ui-select-toggle {
+  border-radius: var(--control-radius);
 }
 /* Selected tag: paint the whole control with tag color (no separate dot). */
 .color-tag-select-wrap.is-tagged {
@@ -5776,6 +5786,15 @@ form.settings-form > .actions.sticky-actions,
     width: auto;
     flex: 0 0 auto;
     align-self: flex-end;
+  }
+  /* Tag filter row: share one centre line with the search button (not flex-end). */
+  .search-bar.search-bar--with-tag {
+    align-items: center;
+  }
+  .search-bar.search-bar--with-tag > .btn,
+  .search-bar.search-bar--with-tag > button,
+  .search-bar.search-bar--with-tag > .color-tag-select-wrap {
+    align-self: center;
   }
   .user-edit-inline-row {
     flex-direction: column;

@@ -857,7 +857,13 @@
       sel.dataset.uiSelect = '1';
 
       const wrap = document.createElement('div');
-      wrap.className = 'ui-select' + (sel.classList.contains('select-sm') || (sel.closest('.actions') && !sel.classList.contains('select-block')) ? ' ui-select-sm' : '');
+      /* color-tag filter sits next to a full-height search .btn — never compact. */
+      const forceFullHeight = sel.classList.contains('color-tag-select');
+      const useSm = !forceFullHeight && (
+        sel.classList.contains('select-sm')
+        || (sel.closest('.actions') && !sel.classList.contains('select-block'))
+      );
+      wrap.className = 'ui-select' + (useSm ? ' ui-select-sm' : '');
       if (sel.classList.contains('users-svc-select')) wrap.classList.add('users-svc-ui');
       if (sel.disabled) wrap.classList.add('is-disabled');
 
