@@ -202,6 +202,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_staff_audit", "label": "گزارش کارکنان (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_service_shop_review", "label": "تعیین فروشگاه سرویس", "group": "منوی ادمین", "default": ""},
     {"id": "adm_backup", "label": "بکاپ / ریستور (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_service_cleanup", "label": "پاکسازی سرویس‌ها (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_preview", "label": "پیش‌نمایش منوی کاربر (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_users_list", "label": "لیست کاربران", "group": "منوی ادمین", "default": ""},
     {"id": "adm_users_search", "label": "جستجوی کاربر", "group": "منوی ادمین", "default": ""},
@@ -287,6 +288,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "res_trial_users", "label": "کاربران تست (نماینده)", "group": "منوی نماینده", "default": ""},
     {"id": "res_staff_audit", "label": "گزارش کارکنان (نماینده)", "group": "منوی نماینده", "default": ""},
     {"id": "res_settings", "label": "تنظیمات فروشگاه", "group": "منوی نماینده", "default": ""},
+    {"id": "res_service_cleanup", "label": "پاکسازی سرویس‌ها (نماینده)", "group": "منوی نماینده", "default": ""},
     {"id": "res_preview", "label": "پیش‌نمایش منوی کاربر", "group": "منوی نماینده", "default": ""},
     # Reseller settings sub (reply hub — ids must match res_st_* / res_st_panel)
     {"id": "res_st_shop", "label": "تنظیمات نماینده: نام و متن‌ها", "group": "تنظیمات نماینده", "default": ""},

@@ -138,6 +138,10 @@ BTN_ADMIN_HUB_ITEMS: list[Field] = [
     ("btn_adm_exit_preview", "خروج از پیش‌نمایش", "text"),
 ]
 
+BTN_ADMIN_SERVICE_CARE: list[Field] = [
+    ("btn_adm_service_cleanup", "پاکسازی سرویس‌ها", "text"),
+]
+
 
 # Submenu labels that used to be fixed in code (≤8 fields per Telegram screen).
 BTN_ADMIN_PG: list[Field] = [
@@ -270,6 +274,7 @@ BTN_RESELLER_HUB_EXTRA: list[Field] = [
     ("btn_res_cashback", "کش‌بک", "text"),
     ("btn_res_trial_users", "کاربران تست", "text"),
     ("btn_res_staff_audit", "گزارش کارکنان", "text"),
+    ("btn_res_service_cleanup", "پاکسازی سرویس‌ها", "text"),
 ]
 
 BTN_RESELLER_PLANS_SUB: list[Field] = [
@@ -307,6 +312,7 @@ PLATFORM_ONLY_BTN_KEYS = PLATFORM_ONLY_BTN_KEYS | frozenset(
     for group in (
         BTN_ADMIN_PG,
         BTN_ADMIN_PG_MORE,
+        BTN_ADMIN_SERVICE_CARE,
         BTN_ADMIN_PEOPLE_SUB,
         BTN_ADMIN_SETTINGS_SUB,
         BTN_ADMIN_SETTINGS_MORE,
@@ -372,6 +378,7 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
         ("btn_adm_ops", "دکمه‌های ادمین — عملیات", BTN_ADMIN_OPS),
         ("btn_adm_sys", "دکمه‌های ادمین — سیستم", BTN_ADMIN_SYS),
         ("btn_adm_pg_sub", "دکمه‌های ادمین — پاسارگارد", BTN_ADMIN_PG),
+        ("btn_adm_service_care", "دکمه‌های ادمین — نگهداری سرویس‌ها", BTN_ADMIN_SERVICE_CARE),
         ("btn_adm_pg_more", "دکمه‌های ادمین — هاست، اینباند و ادمین پاسارگارد", BTN_ADMIN_PG_MORE),
         ("btn_adm_people_sub", "دکمه‌های ادمین — کاربران و نمایندگان", BTN_ADMIN_PEOPLE_SUB),
         ("btn_adm_settings_sub", "دکمه‌های ادمین — بخش‌های تنظیمات", BTN_ADMIN_SETTINGS_SUB),

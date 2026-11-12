@@ -827,6 +827,10 @@
         {
           "callback_data": "ssr:l:0",
           "text": "🏷 تعیین فروشگاه سرویس"
+        },
+        {
+          "callback_data": "scl:h",
+          "text": "🗑 پاکسازی سرویس‌ها"
         }
       ],
       [
