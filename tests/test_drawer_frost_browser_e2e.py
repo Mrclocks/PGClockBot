@@ -48,6 +48,11 @@ class _Server:
         app = FastAPI()
         app.mount("/static", StaticFiles(directory=str(ROOT / "app" / "web" / "static")), name="static")
 
+        @app.get("/closed")
+        async def closed_page() -> HTMLResponse:
+            html = PAGE.replace("{theme}", "light").replace('class="nav-open"', "")
+            return HTMLResponse(html.replace("side open", "side").replace("side-backdrop show", "side-backdrop"))
+
         @app.get("/{theme}")
         async def page(theme: str) -> HTMLResponse:
             return HTMLResponse(PAGE.replace("{theme}", "light" if theme == "light" else "dark"))
@@ -103,6 +108,49 @@ class DrawerFrostE2E(unittest.TestCase):
                 browser.close()
         finally:
             server.stop()
+
+    def test_the_dim_edge_slides_in_with_the_drawer_edge(self) -> None:
+        from playwright.sync_api import sync_playwright
+
+        server = _Server()
+        server.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch(playwright)
+                page = browser.new_page(viewport={"width": 390, "height": 800})
+                page.goto(f"http://127.0.0.1:{server.port}/closed", wait_until="networkidle")
+                for fraction in (0.25, 0.5, 0.75):
+                    with self.subTest(fraction=fraction):
+                        edges = page.evaluate(FREEZE_OPEN_JS, fraction)
+                        # Both edges have moved, and the dim ends exactly where the menu begins.
+                        self.assertLess(edges["drawer"], 390)
+                        self.assertAlmostEqual(edges["dim"], edges["drawer"], delta=1.0)
+                browser.close()
+        finally:
+            server.stop()
+
+
+# Opens the drawer, freezes every running transition at the same point, and returns the two edges in px.
+FREEZE_OPEN_JS = """(fraction) => {
+  const side = document.getElementById('sidebar');
+  const back = document.getElementById('side-backdrop');
+  side.classList.remove('open');
+  back.classList.remove('show');
+  document.getAnimations().forEach((a) => a.cancel());
+  void side.offsetWidth;
+  side.classList.add('open');
+  back.classList.add('show');
+  document.body.classList.add('nav-open');
+  for (const a of document.getAnimations()) {
+    a.pause();
+    a.currentTime = a.effect.getComputedTiming().duration * fraction;
+  }
+  const panel = side.querySelector('.side-panel').getBoundingClientRect();
+  const dim = getComputedStyle(back, '::before');
+  const shift = new DOMMatrix(dim.transform).m41;
+  const dimRight = back.getBoundingClientRect().right - parseFloat(dim.right) + shift;
+  return { drawer: panel.left, dim: dimRight };
+}"""
 
 
 if __name__ == "__main__":

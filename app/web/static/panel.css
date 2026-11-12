@@ -61,6 +61,8 @@
   --drawer-w: min(300px, 78vw);
   /* Drawer dim — painted by .side-backdrop::before, never by the fixed box */
   --side-dim: rgba(0, 0, 0, 0.55);
+  /* One duration for the drawer slide, the dim's edge and its fade, so they move as one sheet. */
+  --drawer-motion: 240ms;
   --brand-logo-size: 40px;
   /* Shared matte glass — modal sticky chrome + shell topbar/footers/mobile drawer.
      Keep the mix/blur numbers identical everywhere (see .ui-modal-head). */
@@ -1152,6 +1154,7 @@ tr.principal-row-l2 td:first-child {
   .nav-item, .icon-btn,
   .section-tabs a, .section-tabs .tab-btn,
   .side-backdrop,
+  .side-backdrop::before,
   .side-panel,
   .ui-switch-track::after {
     transition: none !important;
@@ -5234,8 +5237,8 @@ form.settings-form > .actions.sticky-actions,
   z-index: 45;
   pointer-events: none;
   opacity: 0;
-  transition: opacity var(--motion-med) var(--ease-standard),
-    visibility 0s linear var(--motion-med);
+  transition: opacity var(--drawer-motion) var(--ease-standard),
+    visibility 0s linear var(--drawer-motion);
   overscroll-behavior: contain;
 }
 /* Dim on a pseudo-element so the fixed box itself stays transparent to Safari
@@ -5251,7 +5254,7 @@ form.settings-form > .actions.sticky-actions,
   visibility: visible;
   opacity: 1;
   pointer-events: auto;
-  transition: opacity var(--motion-med) var(--ease-standard),
+  transition: opacity var(--drawer-motion) var(--ease-standard),
     visibility 0s linear 0s;
 }
 
@@ -5375,10 +5378,20 @@ form.settings-form > .actions.sticky-actions,
   }
   /* The dim stops at the topbar and the drawer edge. Both are frosted glass that blur what lies behind them;
      over the dim that glass turns into a grey film (most visible in the light theme), so they blur the
-     undimmed page instead and keep the same matte look as when the drawer is closed. */
+     undimmed page instead and keep the same matte look as when the drawer is closed.
+     The dim's edge rides on the drawer's edge: it starts off-screen with the closed drawer (same offset,
+     duration and easing as .side-panel) and slides in with it, so no empty strip shows ahead of the menu.
+     It is drawer-wide longer on the left so its left edge never uncovers the page while it moves. */
+  .side-backdrop { overflow: hidden; }
   .side-backdrop::before {
     top: calc(var(--topbar-h) + var(--safe-top));
+    left: calc(-1 * (var(--drawer-w) + 24px));
     right: var(--drawer-w);
+    transform: translate3d(calc(var(--drawer-w) + 24px), 0, 0);
+    transition: transform var(--drawer-motion) var(--ease-standard);
+  }
+  .side-backdrop.show::before {
+    transform: translate3d(0, 0, 0);
   }
   body.nav-open .side {
     z-index: 5200;
@@ -5439,7 +5452,7 @@ form.settings-form > .actions.sticky-actions,
     backdrop-filter: var(--modal-frost-blur);
     -webkit-backdrop-filter: var(--modal-frost-blur);
     transform: translate3d(calc(100% + 24px), 0, 0);
-    transition: transform 0.22s var(--ease-standard);
+    transition: transform var(--drawer-motion) var(--ease-standard);
     will-change: transform;
   }
   /* Foot already sits on frosted .side-panel — avoid stacking a second blur */
@@ -5473,7 +5486,8 @@ form.settings-form > .actions.sticky-actions,
   /* chips/pg-role already hidden globally on .side-foot */
 
   /* Instant close on navigation — disable slide so PWA paints closed before unload */
-  html.ios .side.side-nav-closing .side-panel {
+  html.ios .side.side-nav-closing .side-panel,
+  html.ios .side.side-nav-closing ~ .side-backdrop::before {
     transition: none !important;
   }
 
