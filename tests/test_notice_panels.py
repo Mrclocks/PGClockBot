@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.bot.notice_panels import NoticePanels, notice_panels
+from app.bot.panel_history import panel_history
 from app.db.models import BotUser
 from app.services.notice_links import (
     CALLBACK_DATA_LIMIT,
@@ -63,19 +63,10 @@ class NoticeLinkTests(unittest.TestCase):
         self.assertIs(notice_markup(markup), markup)
 
 
-class NoticePanelStoreTests(unittest.TestCase):
-    def test_the_oldest_panel_is_forgotten_first(self) -> None:
-        panels = NoticePanels(limit=2)
-        for message_id in (1, 2, 3):
-            panels.open((1, 1, message_id), f"res:user:{message_id}")
-        self.assertIsNone(panels.get((1, 1, 1)))
-        self.assertEqual(panels.get((1, 1, 3)).first_screen, "res:user:3")
-
-
 class _NoticeFlow(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        notice_panels.clear()
-        self.addCleanup(notice_panels.clear)
+        panel_history.clear()
+        self.addCleanup(panel_history.clear)
         patcher = patch("app.bot.middlewares._rate_limited", MagicMock(return_value=False))
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -151,13 +142,14 @@ class PlatformNoticeTests(_NoticeFlow):
         self.assertEqual(self.panels(notice_id), [], self.sim.screen())
         self.assertEqual(self.notice(notice_id).text, NOTICE_TEXT)
 
-    async def test_the_same_screen_opened_from_the_menu_keeps_its_usual_back(self) -> None:
+    async def test_moving_up_from_the_first_screen_still_leads_out_to_the_notice(self) -> None:
         await self.send_notice(customer_markup(user_id=60, service_id=None, shop_id=None))
         await self.sim.tap("👤 کاربر")
         panel = self.panels(0)[-1]
         await self.sim._tap(panel, "adm:users:list:0")
         users_list = self.sim.telegram.messages[panel.message_id]
-        self.assertNotIn(NOTICE_CLOSE_CALLBACK, [data for row in users_list.inline for _, data in row])
+        backs = [data for row in users_list.inline for text, data in row if BACK in text]
+        self.assertEqual(backs, [NOTICE_CLOSE_CALLBACK])
 
     async def test_a_card_that_no_longer_exists_leaves_no_empty_panel(self) -> None:
         notice_id = await self.send_notice(customer_markup(user_id=999, service_id=None, shop_id=None))

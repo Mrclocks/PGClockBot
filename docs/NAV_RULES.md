@@ -28,6 +28,19 @@ A callback handler may send a **new** chat message only for:
 
 Everything else stays on the edited panel.
 
+## «بازگشت» — back to where the person came from
+
+Build every back button with `back_button(...)` / `with_inline_back(...)` (label key `btn_back`) and
+the screen's fixed parent. `app.bot.panel_history` keeps, per panel message, the read-only screens it
+showed, and the update that opens a screen builds its back buttons with the screen before it (the
+second page of a list, the stuck order or cancellation card the customer card was opened from).
+Fixed parents still apply when the history does not know the way (after a restart, after a typed
+reply shown in the panel).
+
+«بازگشت» sends the recorded callback again, so only read-only screens are recorded: a screen is
+added to `VIEW_SCREENS` / `VIEW_FAMILIES` only when its handler changes nothing (refreshing a cache
+or clearing an unfinished prompt is fine). Never add an approve, delete, toggle or payment callback.
+
 ## Buttons under a notice — open a panel, keep the notice
 
 A notice (a staff alert, a review item, a report) is a record and is never edited into another
@@ -37,7 +50,7 @@ notices are sent). The bot opens that screen in a new message under the notice; 
 screen, and on any screen of the panel at the same level (the card shown again after an action),
 «بازگشت» closes the panel and the notice is on screen again. Buttons that
 act (approve, reject, reply, close) keep acting on the notice. A new read-only screen that a
-notice links to is added to `NOTICE_SCREEN_PREFIXES`.
+notice links to is added to `NOTICE_SCREEN_PREFIXES` and to the panel history's view screens.
 
 ## Reply keyboard — main menu + contact only
 
