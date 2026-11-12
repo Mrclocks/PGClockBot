@@ -29,6 +29,7 @@ from app.bot.broadcast_entries import BROADCAST_HISTORY
 from app.bot.keyboards import _ikb, _label_or, _t
 from app.bot.pg_entries import PG_ADMINS, PG_HOSTS, PG_INBOUNDS
 from app.bot.list_pages import Page, page_of, pager_row
+from app.bot.payg_review_entries import PAYG_REVIEW
 from app.services.resellers import has_bot_perm
 from app.bot.reseller_hub_groups import (
     RESELLER_GROUPS,
@@ -504,10 +505,12 @@ def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _hub_entry_button(ui: dict | None, entry: HubEntry) -> InlineKeyboardButton:
+def _hub_entry_button(ui: dict | None, entry: HubEntry, *, badge: int = 0) -> InlineKeyboardButton:
     """A hub leaf whose label and color come from settings, like the other hub buttons."""
+    from app.services.admin_counters import with_badge
+
     return _ikb(
-        _label_or(ui, entry.label_key, entry.fallback),
+        with_badge(_label_or(ui, entry.label_key, entry.fallback), badge),
         callback_data=entry.callback,
         ui=ui,
         label_key=entry.label_key,
@@ -669,8 +672,12 @@ def admin_ops_hub_keyboard(
     pending_payments: int = 0,
     pending_tickets: int = 0,
     pending_deliveries: int = 0,
+    pending_payg_review: int = 0,
 ) -> InlineKeyboardMarkup:
-    """Daily ops — leaf buttons reuse existing ``adm:*`` callbacks."""
+    """Daily ops — leaf buttons reuse existing ``adm:*`` callbacks.
+
+    PAYG charges waiting for a decision add their own button, only while there is one.
+    """
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADMIN_DASH,
         REPLY_ACTION_ADMIN_ORDERS,
@@ -704,6 +711,8 @@ def admin_ops_hub_keyboard(
         for key, text in _reply_admin_ops_entries(ui)
         if key in cb_map
     ]
+    if pending_payg_review > 0:
+        buttons.append(_hub_entry_button(ui, PAYG_REVIEW, badge=pending_payg_review))
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 

@@ -186,6 +186,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_orders", "label": "سفارش‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_payments", "label": "رسیدها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_tickets", "label": "تیکت‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_payg_review", "label": "بازبینی هزینه‌های PAYG", "group": "منوی ادمین", "default": "danger"},
     {"id": "adm_plans", "label": "پلن‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_users", "label": "کاربران (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_resellers", "label": "نمایندگان (ادمین)", "group": "منوی ادمین", "default": "success"},

@@ -924,6 +924,7 @@ DEFAULT_SETTINGS = {
     "btn_adm_hub_product": "📦 محصول و پاسارگارد",
     "btn_adm_hub_marketing": "🎯 بازاریابی",
     "btn_adm_hub_system": "🛠 سیستم",
+    "btn_adm_payg_review": "🧾 بازبینی PAYG",
     "btn_adm_edit_mode": "✏️ حالت ویرایش منوها",
     # Submenu and hub button labels (editable from the bot editor and settings).
     "btn_pg_stats": "🏠 نمای کلی",

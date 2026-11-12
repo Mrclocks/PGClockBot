@@ -20,6 +20,7 @@ PLATFORM_ONLY_BTN_KEYS: frozenset[str] = frozenset(
         "btn_adm_orders",
         "btn_adm_payments",
         "btn_adm_tickets",
+        "btn_adm_payg_review",
         "btn_adm_plans",
         "btn_adm_pg",
         "btn_adm_users",
@@ -99,6 +100,7 @@ BTN_ADMIN_OPS: list[Field] = [
     ("btn_adm_tickets", "تیکت‌ها", "text"),
     ("btn_adm_plans", "پلن‌ها", "text"),
     ("btn_adm_pg", "پاسارگارد", "text"),
+    ("btn_adm_payg_review", "بازبینی هزینه‌های PAYG", "text"),
 ]
 
 BTN_ADMIN_SYS: list[Field] = [

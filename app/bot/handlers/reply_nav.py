@@ -24,8 +24,11 @@ from app.bot.menu_nav import restore_main_reply
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.reply_keyboards import _reply_admin_marketing_entries
 from app.db.models import BotUser, Order, ResellerProfile, Role
+from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_message
 from app.services.home_overview import admin_customer_counts
+from app.services.numbers import to_fa_digits
+from app.services.payg_charges import count_review_charges
 from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
@@ -42,6 +45,7 @@ logger = logging.getLogger(__name__)
 router = Router(name="reply_nav")
 
 _RESELLER_HUB_BACK = "nv:res:home"
+PAYG_REVIEW_LINE = "🧾 هزینهٔ PAYG در انتظار بازبینی: {count}"
 
 # Prompts whose answer is a free-form message: only labels of the visible main keyboard
 # (plus home / back) may interrupt them; hidden submenu labels are delivered as text.
@@ -1490,11 +1494,13 @@ async def open_admin_ops_hub(
     except Exception:
         logger.warning("admin ops pending_counts failed", exc_info=True)
         queue = PendingCounts()
+    payg_review = await _payg_review_count(session)
     body = with_caption(screen_heading(ui, "a.ops"), screen_caption(ui, "a.ops"))
     queue_line = format_queue_summary(queue)
     if queue_line:
-        # Cancel count is summary-only (no bot cancel inbox yet).
         body = f"{body}\n\n{queue_line}"
+    if payg_review:
+        body = f"{body}\n{PAYG_REVIEW_LINE.format(count=to_fa_digits(payg_review))}"
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_OPS, push=push)
     await present_nav_panel(
@@ -1505,10 +1511,22 @@ async def open_admin_ops_hub(
             pending_payments=queue.payments,
             pending_tickets=queue.tickets,
             pending_deliveries=queue.deliveries,
+            pending_payg_review=payg_review,
         ),
         state=state,
     )
     return
+
+
+async def _payg_review_count(session: AsyncSession) -> int:
+    """PAYG charges waiting for the owner; the hub still opens if the count fails."""
+    try:
+        return await count_review_charges(session)
+    except SQLAlchemyError:
+        await rollback_quiet(session)
+        logger.warning("admin ops payg review count failed", exc_info=True)
+        return 0
+
 
 async def open_admin_people_hub(
     message: Message,
