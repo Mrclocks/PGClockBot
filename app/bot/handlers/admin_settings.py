@@ -1351,11 +1351,11 @@ async def settings_edit_save(
     elif key == "force_join_channel":
         from app.services.users import normalize_force_join_channel_value
 
-        text = normalize_force_join_channel_value(text)
+        await set_setting(session, key, normalize_force_join_channel_value(text))
     elif key == "receipt_dup_policy":
         from app.services.receipt_fingerprints import normalize_dup_policy
 
-        text = normalize_dup_policy(text)
+        await set_setting(session, key, normalize_dup_policy(text))
     else:
         from app.services.rich_text import pack_setting_from_message
 
