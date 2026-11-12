@@ -480,3 +480,5 @@ tests/test_service_cleanup_manage.py
 tests/test_service_cleanup_bot.py
 tests/test_miniapp_purchase_notices.py
 tests/test_gift_code_plan_limit.py
+# Home offer to add an old service: only for a customer of this shop with no service there.
+tests/test_import_home_prompt.py

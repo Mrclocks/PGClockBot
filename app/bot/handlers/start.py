@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import note_throwaway, replace_home
 from app.bot.chat_screen import fresh_keyboard
+from app.bot.import_prompt import send_import_prompt, should_offer_import
 from app.bot.nav_input import delete_user_message
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, UserService
@@ -67,6 +68,7 @@ async def render_home(
     from app.services.rich_text import outbound_setting_text, rich_plain_text
 
     home_send_kw: dict = {}
+    offer_import = False
     if effective_role == "admin":
         from app.bot.menu_nav import build_main_reply_keyboard
 
@@ -124,6 +126,7 @@ async def render_home(
             reseller_owner_id=reseller_owner_id,
             ui=ui,
         )
+        offer_import = should_offer_import(ui, has_services=await _has_services(session, int(db_user.id)))
 
     # Home is a fresh start: a new welcome with the menu at the bottom; the older welcome and
     # every temporary message go, records (deliveries, receipts, configs) stay. A notice (a
@@ -133,6 +136,8 @@ async def render_home(
     with fresh_keyboard():
         home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
     await replace_home(home, sweep=True)
+    if offer_import:
+        await send_import_prompt(message, ui)
     _ = seed_reply_kb
 
 
