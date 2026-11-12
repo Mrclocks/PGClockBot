@@ -516,7 +516,7 @@
   "screen_title_r_settings": "⚙️ تنظیمات سریع فروشگاه",
   "screen_title_r_shop": "🏪 فروشگاه من",
   "service_import_admins": "",
-  "service_import_enabled": "0",
+  "service_import_enabled": "1",
   "service_import_max_per_user": "5",
   "service_import_mode": "instant",
   "service_import_paths": "",
