@@ -5373,6 +5373,13 @@ form.settings-form > .actions.sticky-actions,
   body.nav-open .side-backdrop {
     z-index: 5100;
   }
+  /* The dim stops at the topbar and the drawer edge. Both are frosted glass that blur what lies behind them;
+     over the dim that glass turns into a grey film (most visible in the light theme), so they blur the
+     undimmed page instead and keep the same matte look as when the drawer is closed. */
+  .side-backdrop::before {
+    top: calc(var(--topbar-h) + var(--safe-top));
+    right: var(--drawer-w);
+  }
   body.nav-open .side {
     z-index: 5200;
   }
