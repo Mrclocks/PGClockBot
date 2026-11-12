@@ -66,6 +66,8 @@ from app.services.orders import (
 from app.services.users import get_all_settings, on
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 from app.services import bot_feedback_texts as feedback
+from app.services.notice_links import notice_markup
+from app.services.staff_notice_buttons import reseller_card_markup
 
 DISCOUNT_APPLIED = "✅ تخفیف اعمال شد"
 
@@ -1931,6 +1933,7 @@ async def pay_wallet_cb(
                             f"✅ نمایندگی فعال شد — سفارش #{order.id}\n"
                             f"کاربر: {db_user.full_name or db_user.telegram_id}\n"
                             f"(تأیید خودکار پس از پرداخت)",
+                            reply_markup=reseller_card_markup(db_user.id),
                         )
                 else:
                     with keep_sent():  # a notice or review item, never a temporary panel
@@ -1939,7 +1942,7 @@ async def pay_wallet_cb(
                             f"🤝 درخواست نمایندگی پرداخت‌شده — سفارش #{order.id}\n"
                             f"کاربر: {db_user.full_name or db_user.telegram_id}",
                             reply_markup=(
-                                kb.reseller_app_review(app_id, user_id=db_user.id)
+                                notice_markup(kb.reseller_app_review(app_id, user_id=db_user.id))
                                 if app_id
                                 else None
                             ),
