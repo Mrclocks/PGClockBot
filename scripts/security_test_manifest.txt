@@ -471,3 +471,4 @@ tests/test_service_cleanup.py
 tests/test_service_cleanup_notices.py
 tests/test_service_cleanup_delete.py
 tests/test_service_cleanup_manage.py
+tests/test_miniapp_purchase_notices.py
