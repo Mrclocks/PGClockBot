@@ -355,9 +355,24 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         menu = re.search(r"(?ms)^\.menu-toggle\s*\{([^}]+)\}", css)
         self.assertIsNotNone(menu)
         menu_body = menu.group(1)
+        self.assertIn("border-radius: var(--control-radius);", menu_body)
+        self.assertIn("height: var(--btn-h);", menu_body)
+        self.assertIn("min-height: var(--btn-h);", menu_body)
         self.assertIn("color: var(--brand-fg);", menu_body)
-        self.assertIn("var(--brand-base)", menu_body)
+        self.assertIn(
+            "border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);",
+            menu_body,
+        )
+        self.assertIn(
+            "background: color-mix(in srgb, var(--brand) 8%, transparent);",
+            menu_body,
+        )
+        self.assertRegex(
+            css,
+            r"(?ms)\.menu-toggle:active\s*\{[^}]*transform:\s*scale\(0\.96\);",
+        )
         self.assertNotIn("var(--bot-line)", menu_body)
+        self.assertNotIn("var(--r-sm)", menu_body)
         self.assertRegex(
             css,
             r"(?ms)\.side-panel\s*\{[^}]*backdrop-filter:\s*var\(--modal-frost-blur\);",

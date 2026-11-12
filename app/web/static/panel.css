@@ -1148,7 +1148,8 @@ tr.principal-row-l2 td:first-child {
   }
   .btn:active:not(:disabled), a.btn:active,
   .nav-item:active, .icon-btn:active,
-  .section-tabs a:active, .section-tabs .tab-btn:active {
+  .section-tabs a:active, .section-tabs .tab-btn:active,
+  .menu-toggle:active {
     transform: none;
   }
 }
@@ -5161,13 +5162,15 @@ form.settings-form > .actions.sticky-actions,
   font-variant-numeric: tabular-nums;
 }
 .menu-toggle {
+  /* Square circle at the same height as .btn; fully round like other controls */
   width: var(--btn-h);
   height: var(--btn-h);
-  /* Same soft square as v4.3.10 — not pill / not card radius */
-  border-radius: var(--r-sm);
-  /* Follows panel brand colour (تنظیمات → ظاهر و برند), same tokens as .btn / tabs */
-  border: 1px solid color-mix(in srgb, var(--brand-base) 40%, var(--border));
-  background: transparent;
+  min-height: var(--btn-h);
+  box-sizing: border-box;
+  border-radius: var(--control-radius);
+  /* Same brand chrome as .btn: strong edge, light translucent fill */
+  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
   color: var(--brand-fg);
   cursor: pointer;
   display: inline-grid;
@@ -5175,6 +5178,20 @@ form.settings-form > .actions.sticky-actions,
   padding: 0;
   flex: 0 0 auto;
   margin-inline-start: auto;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+.menu-toggle:hover {
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
+  opacity: 1;
+}
+.menu-toggle:active {
+  /* Same press feedback as .btn */
+  transform: scale(0.96);
 }
 .burger {
   width: 16px;
