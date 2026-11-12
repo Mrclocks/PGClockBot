@@ -1,8 +1,8 @@
 """The shop's rule for approving a card receipt after a wait instead of at once.
 
 It belongs to the «تأیید خودکار رسید» switch: with the switch on and a wait set, a card receipt for
-a new service or a renewal is approved after that wait, so staff can still reject it meanwhile;
-every other receipt is still approved at once.
+a new service, a renewal or an add-on is approved after that wait, so staff can still reject it
+meanwhile; every other receipt is still approved at once.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ MINUTES_KEY = "auto_approve_after_minutes"
 MAX_AMOUNT_KEY = "auto_approve_after_max_amount"
 RETURNING_ONLY_KEY = "auto_approve_after_returning_only"
 MAX_MINUTES = 24 * 60
-# Orders the wait never applies to: add-ons, agency fees and a shop's capacity or package purchases.
-NO_WAIT_NOTE_PREFIXES = ("svc_addon:", "reseller_app:", "res_cap:", "res_pkg:")
+# Orders the wait never applies to: agency fees and a shop's capacity or package purchases.
+NO_WAIT_NOTE_PREFIXES = ("reseller_app:", "res_cap:", "res_pkg:")
 TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
@@ -53,7 +53,7 @@ def rule_from_settings(settings: Mapping[str, str]) -> ApprovalRule | None:
 
 
 def is_delayed_purchase(payment: Payment, order: Order | None) -> bool:
-    """A card payment for a new service or a renewal: the kind the wait applies to."""
+    """A card payment for a new service, a renewal or an add-on: the kind the wait applies to."""
     if payment.is_wallet_topup or payment.method != PaymentMethod.CARD.value or order is None:
         return False
     note = order.note or ""

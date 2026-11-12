@@ -1,7 +1,7 @@
 """Approve a card receipt that nobody reviewed for the shop's chosen number of minutes.
 
 Each shop (``None`` = the platform) decides in its own settings; off by default. Only a new
-service or a renewal paid by card qualifies: not a wallet top-up, add-on or agency fee. A
+service, a renewal or an add-on paid by card qualifies: not a wallet top-up or agency fee. A
 receipt that is a duplicate of another payment's, or whose fingerprint is unknown, stays for a
 person. Approval itself goes through ``approve_payment``, whose atomic claim makes a second
 attempt harmless.
@@ -35,7 +35,7 @@ def _shop_clause(shop_id: int | None) -> ColumnElement[bool]:
 
 
 def _waiting_clause() -> ColumnElement[bool]:
-    """A card receipt of a new service or a renewal, attached and still undecided."""
+    """A card receipt of a new service, a renewal or an add-on, attached and still undecided."""
     return and_(
         Payment.status == PaymentStatus.PENDING.value,
         Payment.method == PaymentMethod.CARD.value,
