@@ -29,6 +29,7 @@ from app.db.models import (
     ResellerApplication,
     ResellerApplicationStatus,
 )
+from app.services.customer_notice_buttons import customer_notice_markup
 from app.services.orders import is_mutation_order_note
 from app.services.payer_notify import notify_payer
 from app.services.shop_scope import assert_order_retry_in_scope
@@ -299,4 +300,5 @@ async def tell_customer_refunded(session: AsyncSession, result: Resolution) -> N
         session, result.user_id, title=REFUND_NOTICE_TITLE,
         body=f"سفارش #{result.order_id} به‌دلیل انجام‌نشدن تحویل لغو شد و {result.refunded:,} به کیف پول شما برگشت.",
         shop_id=result.shop_id,
+        reply_markup=customer_notice_markup(wallet=True, support=True),
     )

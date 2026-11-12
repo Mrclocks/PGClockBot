@@ -27,6 +27,7 @@ from app.db.models import (
 )
 from app.services.catalog_pricing import annotate_prices, displayed_quote, sale_price
 from app.services.service_scope import service_shop_id
+from app.services.notice_links import notice_open_data
 from app.services.support_button import support_row
 from app.services.formatting import format_toman, parse_expire
 from app.services.users import (
@@ -307,7 +308,7 @@ async def notify_once(
                     [
                         InlineKeyboardButton(
                             text="⚙️ تنظیمات خودکار سرویس",
-                            callback_data=f"svc:auto:{service.id}",
+                            callback_data=notice_open_data(f"svc:auto:{service.id}"),
                         ),
                     ],
                     *([support_row()] if code == "review" else []),

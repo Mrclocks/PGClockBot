@@ -16,7 +16,7 @@ from app.services.staff_notice_buttons import (
     pasarguard_markup,
     platform_report_markup,
     reseller_card_markup,
-    shop_report_markup,
+    shop_panel_markup,
     subordinate_report_markup,
 )
 from tests.chat_sim import ChatSim
@@ -30,7 +30,7 @@ class ButtonTests(unittest.TestCase):
     def test_every_button_opens_its_screen_under_the_notice(self) -> None:
         expected = {
             "adm:dash": platform_report_markup(),
-            "nv:res:home": shop_report_markup(),
+            "nv:res:home": shop_panel_markup(),
             "nv:adm:resellers": subordinate_report_markup(shop=False),
             "nv:adm:pg": pasarguard_markup(),
             "adm:resellers:view:12": reseller_card_markup(12),

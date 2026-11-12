@@ -3588,6 +3588,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             title="⏹ سفارش لغو شد",
             body=f"سفارش #{order_id} لغو شد.",
             shop_id=order.reseller_id,
+            reply_markup=support_markup(),
         )
         return _redirect_msg("/finance?tab=orders", ok="سفارش لغو شد")
 
