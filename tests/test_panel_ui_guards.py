@@ -358,15 +358,18 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("border-radius: var(--control-radius);", menu_body)
         self.assertIn("height: var(--btn-h);", menu_body)
         self.assertIn("min-height: var(--btn-h);", menu_body)
-        self.assertIn("color: var(--brand-fg);", menu_body)
+        # Closed: neutral like .btn-ghost. Open: brand colour (see test_drawer_frost_browser_e2e for rendered colours).
+        self.assertIn("color: var(--foreground);", menu_body)
         self.assertIn(
-            "border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);",
+            "border: 1.5px solid color-mix(in srgb, var(--foreground) 24%, transparent);",
             menu_body,
         )
-        self.assertIn(
-            "background: color-mix(in srgb, var(--brand) 8%, transparent);",
-            menu_body,
-        )
+        open_menu = re.search(r'(?ms)^\.menu-toggle\[aria-expanded="true"\]\s*\{([^}]+)\}', css)
+        self.assertIsNotNone(open_menu)
+        open_body = open_menu.group(1)
+        self.assertIn("color: var(--brand-fg);", open_body)
+        self.assertIn("border-color: color-mix(in srgb, var(--brand) 72%, transparent);", open_body)
+        self.assertIn("background: color-mix(in srgb, var(--brand) 8%, transparent);", open_body)
         self.assertRegex(
             css,
             r"(?ms)\.menu-toggle:active\s*\{[^}]*transform:\s*scale\(0\.96\);",

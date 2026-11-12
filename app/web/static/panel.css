@@ -5181,10 +5181,11 @@ form.settings-form > .actions.sticky-actions,
   min-height: var(--btn-h);
   box-sizing: border-box;
   border-radius: var(--control-radius);
-  /* Same brand chrome as .btn: strong edge, light translucent fill */
-  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
-  background: color-mix(in srgb, var(--brand) 8%, transparent);
-  color: var(--brand-fg);
+  /* Closed: neutral like the secondary .btn-ghost, so the header does not shout. Open: the panel brand colour
+     (تنظیمات → ظاهر و برند), marking it as the active control while the drawer is on screen. */
+  border: 1.5px solid color-mix(in srgb, var(--foreground) 24%, transparent);
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
+  color: var(--foreground);
   cursor: pointer;
   display: inline-grid;
   place-items: center;
@@ -5199,8 +5200,16 @@ form.settings-form > .actions.sticky-actions,
     transform var(--motion-fast) var(--ease-standard);
 }
 .menu-toggle:hover {
-  background: color-mix(in srgb, var(--brand) 15%, transparent);
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
   opacity: 1;
+}
+.menu-toggle[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--brand) 72%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
+  color: var(--brand-fg);
+}
+.menu-toggle[aria-expanded="true"]:hover {
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
 }
 .menu-toggle:active {
   /* Same press feedback as .btn */
