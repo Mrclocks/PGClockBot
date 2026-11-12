@@ -1,5 +1,5 @@
 {% from "macros.html" import switch, switch_chip %}
-{% macro gift_code_fields(c=none, details={}) %}
+{% macro gift_code_fields(c=none, details={}, plans=[]) %}
 {% set kind = c.kind if c else 'wallet' %}
 <div class="settings-grid">
   <label class="form-field">نوع کد
@@ -66,6 +66,18 @@
     </div>
     <span class="muted">بدون انتخاب = همه نوع خرید. می‌توانید چند مورد را انتخاب کنید.</span>
   </fieldset>
+  {% if plans %}
+  {% set chosen = (c.plan_ids or '').split(',') if c else [] %}
+  <fieldset class="form-field">
+    <legend>فقط برای این پلن‌ها</legend>
+    <div class="checks">
+      {% for plan_id, name, active in plans %}
+      {{ switch_chip('plan_ids', name if active else name ~ ' (غیرفعال)', checked=plan_id|string in chosen, value=plan_id) }}
+      {% endfor %}
+    </div>
+    <span class="muted">بدون انتخاب = همه پلن‌ها. کد محدود به پلن فقط روی خرید جدید و تمدید همان پلن‌ها اعمال می‌شود، نه افزایش حجم یا زمان.</span>
+  </fieldset>
+  {% endif %}
   <p class="muted">کاربر کد تخفیف را هنگام پرداخت وارد می‌کند. سقف تخفیف روی مجموع مبلغ سفارش اعمال می‌شود.</p>
 </div>
 {% endmacro %}

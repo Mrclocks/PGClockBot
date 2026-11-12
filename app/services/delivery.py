@@ -16,6 +16,7 @@ from app.bot import keyboards as kb
 from app.config import get_settings
 from app.services.pasarguard import absolutize_subscription_url, get_pg
 from app.services.qrcode_gen import make_subscription_qr
+from app.services.support_button import support_markup
 from app.services.message_variables import DOMAIN_ORDER, DOMAIN_WALLET, render_message_template
 from app.services.users import get_all_settings, on
 from app.services.wireguard_delivery import has_wireguard
@@ -40,6 +41,10 @@ def _plan_type_label(order) -> str:
     note = (getattr(order, "note", None) or "").strip()
     if note.startswith("svc_addon:"):
         return "بسته حجم/زمان"
+    if note.startswith("res_cap:"):
+        return "ظرفیت نمایندگی"
+    if note.startswith("res_pkg:"):
+        return "تمدید بسته نمایندگی"
     if note.startswith("renew:"):
         return "تمدید"
     if note.startswith("reseller_app:") or note.startswith("reseller_renew:"):
@@ -366,6 +371,7 @@ async def build_delivery_content(
             "ui": ui,
             "is_subscription": False,
             "skip_qr": True,
+            "needs_support": True,
         }
 
     title = rich_plain_text(ui.get("payment_ok_title")) or "✅ پرداخت تأیید شد"
@@ -425,26 +431,21 @@ async def _send_delivery_guides(
     order,
     ui: dict[str, str],
     shop_rid: int | None,
+    audience: str = "user",
 ) -> None:
-    """Inline «آموزش اتصال» — call only after QR / WireGuard / text delivery."""
+    """Inline guides after delivery; audience follows purchase context, not role."""
     try:
         from app.bot.handlers.guides import delivery_guides_keyboard
-        from app.db.models import BotUser
         from app.services.connection_guides import get_connection_guides, guides_for_audience
 
-        buyer_id = getattr(order, "user_id", None) if order is not None else None
-        audience = "user"
-        if buyer_id:
-            buyer = await session.get(BotUser, int(buyer_id))
-            if buyer and (getattr(buyer, "role", None) or "").lower() == "reseller":
-                audience = "reseller"
+        aud = "reseller" if audience == "reseller" else "user"
         if guides_for_audience(
-            await get_connection_guides(session, reseller_id=shop_rid), audience
+            await get_connection_guides(session, reseller_id=shop_rid), aud
         ):
             await bot.send_message(
                 chat_id,
                 "برای راه‌اندازی، آموزش اتصال را ببینید:",
-                reply_markup=delivery_guides_keyboard(ui, audience=audience),
+                reply_markup=delivery_guides_keyboard(ui, audience=aud),
                 parse_mode="HTML",
             )
     except Exception:
@@ -470,6 +471,40 @@ async def _try_send_html(
             return True
         except Exception:
             return False
+
+
+async def _deliver_capacity_order(bot: Bot, chat_id: int, order, reply_kb: Any) -> str:
+    from app.services.reseller_capacity_orders import describe, parse_note
+
+    parsed = parse_note(order.note)
+    text = format_message(
+        "✅ ظرفیت اضافه شد",
+        "\n".join(
+            [f"سفارش #{order.id}", f"افزایش: {describe(parsed)}" if parsed else "", "تاریخ انقضا تغییر نکرد."]
+        ).strip(),
+    )
+    if not await _try_send_html(bot, chat_id, text, reply_markup=reply_kb):
+        logger.debug("capacity delivery notify failed chat_id=%s", chat_id)
+    return text
+
+
+async def _deliver_package_order(bot: Bot, chat_id: int, session: AsyncSession, order, reply_kb: Any) -> str:
+    from app.db.models import ResellerPlan
+    from app.services.reseller_package_orders import parse_note
+
+    parsed = parse_note(order.note)
+    plan_name = "—"
+    if parsed is not None:
+        plan = await session.get(ResellerPlan, int(parsed[0]))
+        if plan is not None:
+            plan_name = str(plan.name or plan.id)
+    text = format_message(
+        "✅ تمدید بسته انجام شد",
+        "\n".join([f"سفارش #{order.id}", f"بسته: {plan_name}"]).strip(),
+    )
+    if not await _try_send_html(bot, chat_id, text, reply_markup=reply_kb):
+        logger.debug("package renew delivery notify failed chat_id=%s", chat_id)
+    return text
 
 
 async def _deliver_addon_order(
@@ -543,6 +578,16 @@ async def _deliver_reseller_app_order(
         text = format_credentials_message(creds)
         if not await _try_send_html(bot, chat_id, text, reply_markup=reply_kb):
             logger.debug("reseller creds delivery failed", exc_info=True)
+        panel_ui = await get_all_settings(session, reseller_id=None)
+        await _send_delivery_guides(
+            bot,
+            chat_id,
+            session,
+            order=order,
+            ui=panel_ui,
+            shop_rid=None,
+            audience="reseller",
+        )
         user = await session.get(BotUser, order.user_id)
         notify = (
             f"✅ نمایندگی فعال شد #{app_id}\n"
@@ -575,7 +620,7 @@ async def _deliver_reseller_app_order(
                 await bot.send_message(
                     aid,
                     notify,
-                    reply_markup=kb.reseller_app_review(app_id),
+                    reply_markup=kb.reseller_app_review(app_id, user_id=order.user_id),
                     parse_mode="HTML",
                 )
             except Exception:
@@ -655,8 +700,11 @@ async def _deliver_subscription_order(
             if isinstance(sub_info, dict) and not wg_username:
                 wg_username = sub_info.get("username")
 
+        # A paid order with no service yet: the buyer's next step is to ask support, so the message
+        # carries that button (the main keyboard stays as it is).
+        notice_markup = support_markup() if payload.get("needs_support") else reply_kb
         notify_ok = await _try_send_html(
-            bot, chat_id, text, reply_markup=reply_kb, send_kw=send_kw
+            bot, chat_id, text, reply_markup=notice_markup, send_kw=send_kw
         )
         if not notify_ok:
             logger.error(
@@ -722,6 +770,10 @@ async def send_delivery_to_user(
     note = str(order.note) if order and order.note else ""
     if note.startswith("svc_addon:"):
         return await _deliver_addon_order(bot, chat_id, session, order, reply_kb)
+    if note.startswith("res_cap:"):
+        return await _deliver_capacity_order(bot, chat_id, order, reply_kb)
+    if note.startswith("res_pkg:"):
+        return await _deliver_package_order(bot, chat_id, session, order, reply_kb)
     if note.startswith("reseller_app:"):
         return await _deliver_reseller_app_order(bot, chat_id, session, order, reply_kb)
     return await _deliver_subscription_order(

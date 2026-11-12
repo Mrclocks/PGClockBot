@@ -125,6 +125,22 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(report["ops"]["pending_receipts"], 2)
 
     async def test_daily_reports_and_dashboards_use_same_non_demo_revenue(self) -> None:
+        from app.services.daily_report import previous_tehran_day_bounds
+
+        start, end, _ = previous_tehran_day_bounds(self.now)
+        mid = start + (end - start) / 2
+        # Daily digest covers the previous Tehran day; move non-demo activity into that window.
+        for user_id in self.customers:
+            if user_id in self.demo_ids:
+                continue
+            order = await self.session.get(Order, user_id * 10)
+            service = await self.session.get(UserService, user_id)
+            assert order is not None and service is not None
+            order.created_at = mid
+            order.updated_at = mid
+            service.created_at = mid
+        await self.session.commit()
+
         for shop_id in (None, 10, 20):
             summary = await _scoped_totals(self.session, reseller_id=shop_id)
             self.assertEqual(summary["orders_total"], 2)
@@ -208,7 +224,7 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
                 RewardRedemption(user_id=user_id, reward_id=reward_of[shop_id], reward_type="wallet_credit", reward_value=100, points_spent=10, status="completed", idempotency_key=f"reward{user_id}"),
             ])
         for user_id in (11, 12):
-            await self.session.execute(sa.update(BotUser).where(BotUser.id == user_id).values(referred_by_id=10))
+            await self.session.execute(sa.update(BotUser).where(BotUser.id == user_id).values(referred_by_id=10, referral_shop_id=10))
             self.session.add(ReferralEvent(referrer_id=10, referred_id=user_id, qualification_state="qualified", event_key="purchase", idempotency_key=f"ref{user_id}"))
         await self.session.commit()
         summary = await overview_metrics(self.session, reseller_id=10)

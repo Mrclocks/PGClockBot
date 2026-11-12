@@ -18,6 +18,7 @@ from app.bot.nav_input import delete_user_message
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
+from app.services.referral_scope import is_referral_of_shop
 from app.services.service_scope import customer_may_use_service, list_customer_services, shop_services_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
@@ -193,7 +194,8 @@ async def cmd_start(
     args = (command.args or "").strip()
     if args.startswith("ref_"):
         await message.answer(
-            "کد دعوت ثبت شد ✅" if db_user.referred_by_id else "به ربات خوش آمدید."
+            # A referral made in another bot is not this shop's to confirm.
+            "کد دعوت ثبت شد ✅" if is_referral_of_shop(db_user, reseller_owner_id) else "به ربات خوش آمدید."
         )
     ui = await get_all_settings(session)
     channels = []

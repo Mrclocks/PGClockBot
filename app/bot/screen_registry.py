@@ -23,6 +23,7 @@ from app.bot import reply_keyboards as rk
 from app.bot.button_sources import recording_button_sources
 from app.bot.edit_mode import without_editor
 from app.bot.reseller_hub_groups import RESELLER_GROUPS
+from app.db.models import Role
 from app.py_compat import StrEnum
 from app.services.button_styles import CATALOG_IDS, setting_key
 from app.services.screen_titles import SCREEN_TITLE_DEFAULTS
@@ -114,6 +115,13 @@ def _admin_screens() -> list[ScreenSpec]:
         return ScreenSpec(screen_id, title, Audience.ADMIN, build, reopen_callback=reopen)
 
     return [
+        # The owner's own main menu: the customer buttons plus «پنل ادمین», built as the admin sees it.
+        admin(
+            "a.main",
+            "منوی اصلی ادمین",
+            lambda ctx: rk.main_reply_keyboard(Role.ADMIN.value, has_services=True, ui=ctx.ui),
+            "menu:home",
+        ),
         admin("a.home", "پنل ادمین", lambda ctx: hubs.admin_groups_hub_keyboard(ctx.ui), "nv:adm:home"),
         admin("a.ops", "عملیات روزانه", lambda ctx: hubs.admin_ops_hub_keyboard(ctx.ui), "nv:adm:ops"),
         admin(
@@ -165,6 +173,12 @@ def _reseller_screens() -> list[ScreenSpec]:
             "r.settings", "تنظیمات فروشگاه", lambda ctx: hubs.reseller_settings_hub_keyboard(ctx.ui), "res:st:hub"
         ),
         reseller("r.plans", "پلن‌های فروش", lambda ctx: hubs.reseller_plans_hub_keyboard(ctx.ui), "res:plans"),
+        reseller(
+            "r.broadcast",
+            "پیام گروهی",
+            lambda ctx: hubs.shop_broadcast_hub_keyboard(ctx.ui),
+            "shp:bc:hub",
+        ),
         *(
             reseller(
                 group.screen_id,

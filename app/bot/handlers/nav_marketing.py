@@ -19,7 +19,9 @@ from app.services.users import get_all_settings
 router = Router(name="nav_marketing")
 
 # Panels that open below the hub and push it on the back stack.
-MARKETING_CHILD_LEVELS = frozenset({nav.NAV_ADMIN_GIFTS, nav.NAV_ADMIN_CAMPAIGNS})
+MARKETING_CHILD_LEVELS = frozenset(
+    {nav.NAV_ADMIN_GIFTS, nav.NAV_ADMIN_CAMPAIGNS, nav.NAV_ADMIN_CASHBACK}
+)
 async def open_admin_marketing_hub(
     message: Message,
     session: AsyncSession,

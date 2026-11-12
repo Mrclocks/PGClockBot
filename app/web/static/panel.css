@@ -61,10 +61,19 @@
   --drawer-w: min(300px, 78vw);
   /* Drawer dim — painted by .side-backdrop::before, never by the fixed box */
   --side-dim: rgba(0, 0, 0, 0.55);
-  /* Header chrome — keep in sync with .brand / .topbar padding + logo size */
-  --topbar-h: 58px;
+  /* One duration for the drawer slide, the dim's edge and its fade, so they move as one sheet. */
+  --drawer-motion: 240ms;
   --brand-logo-size: 40px;
-  --btn-h: 36px;
+  /* Shared matte glass — modal sticky chrome + shell topbar/footers/mobile drawer.
+     Keep the mix/blur numbers identical everywhere (see .ui-modal-head). */
+  --modal-frost-bg: color-mix(in srgb, var(--bg-card) 52%, transparent);
+  --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  --modal-frost-blur: blur(14px) saturate(1.08);
+  --modal-frost-line: color-mix(in srgb, var(--border) 55%, transparent);
+  /* Control size tiers (see «Control size tiers» at the end of this file). */
+  --btn-h: 44px;
+  --ctl-sm-h: 36px;
+  --tag-h: 28px;
   /* Spacing scale — 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 */
   --space-0: 4px;
   --space-1: 8px;
@@ -82,6 +91,12 @@
   --section-gap: var(--space-3);
   /* Equal space above & below page title+icon (bot and PasarGuard identical) */
   --page-title-gap: var(--space-3);
+  /* Header chrome — keep in sync with .brand / .topbar padding + logo size.
+     Content band stays the pre-frost 58px (same top air around logo/menu).
+     Bottom pad is half of --page-title-gap (--space-1_5) so the bar stays short. */
+  --topbar-content-h: 58px;
+  --topbar-pad-bottom: var(--space-1_5);
+  --topbar-h: calc(var(--topbar-content-h) + var(--topbar-pad-bottom));
   /* Air below BOTH footers — owned by the footer boxes (padding-bottom),
      never by .side / .main (that dual path split separator Y when one foot grew). */
   --foot-gap: var(--space-2);
@@ -650,7 +665,8 @@ html[data-theme="light"] .channel-badge-dev {
 .color-tag-select-wrap .ui-select {
   height: 100%;
 }
-.color-tag-select-wrap .ui-select-toggle {
+.color-tag-select-wrap .ui-select-toggle,
+.color-tag-select-wrap > select.color-tag-select {
   min-width: 7.5rem;
   height: 100%;
   min-height: 100%;
@@ -658,6 +674,15 @@ html[data-theme="light"] .channel-badge-dev {
   align-items: center;
   padding-block: 0;
   box-sizing: border-box;
+  border-radius: var(--control-radius);
+}
+/* Lock radius on interaction — some Android browsers square :active/:focus. */
+.color-tag-select-wrap .ui-select-toggle:hover,
+.color-tag-select-wrap .ui-select-toggle:focus,
+.color-tag-select-wrap .ui-select-toggle:focus-visible,
+.color-tag-select-wrap .ui-select-toggle:active,
+.color-tag-select-wrap .ui-select.open .ui-select-toggle {
+  border-radius: var(--control-radius);
 }
 /* Selected tag: paint the whole control with tag color (no separate dot). */
 .color-tag-select-wrap.is-tagged {
@@ -882,7 +907,10 @@ a.cell-user-link:hover {
   padding-top: var(--page-title-gap);
   /* Same inset owner as .site-footer — desktop/mobile/PWA one path */
   padding-bottom: var(--bottom-inset);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--modal-frost-line);
+  background: var(--modal-frost-bg);
+  backdrop-filter: var(--modal-frost-blur);
+  -webkit-backdrop-filter: var(--modal-frost-blur);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -959,9 +987,9 @@ tr.principal-row-l2 td:first-child {
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  /* Match .btn-star height so side-foot & site-footer share one baseline */
-  height: 28px;
-  min-height: 28px;
+  /* Same compact tier as .btn-star so side-foot & site-footer share one baseline */
+  height: var(--ctl-sm-h);
+  min-height: var(--ctl-sm-h);
   padding: 0 var(--space-1);
   box-sizing: border-box;
   border-radius: var(--control-radius);
@@ -1126,13 +1154,15 @@ tr.principal-row-l2 td:first-child {
   .nav-item, .icon-btn,
   .section-tabs a, .section-tabs .tab-btn,
   .side-backdrop,
+  .side-backdrop::before,
   .side-panel,
   .ui-switch-track::after {
     transition: none !important;
   }
   .btn:active:not(:disabled), a.btn:active,
   .nav-item:active, .icon-btn:active,
-  .section-tabs a:active, .section-tabs .tab-btn:active {
+  .section-tabs a:active, .section-tabs .tab-btn:active,
+  .menu-toggle:active {
     transform: none;
   }
 }
@@ -1434,7 +1464,9 @@ label > small.muted,
 }
 /* Force help under the input/select/textarea even if HTML still has it under the title */
 label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > .ui-select, > textarea, > .pw-field) > small.muted,
-.form-field > small.muted {
+label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > .ui-select, > textarea, > .pw-field) > details.setting-help,
+.form-field > small.muted,
+.form-field > details.setting-help {
   order: 10;
   margin-top: var(--space-1);
   margin-bottom: 0;
@@ -1861,7 +1893,12 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .form-row > div {
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
   min-width: 0;
+}
+/* Parent column gap owns rhythm — same as .form-stack > .ui-switch-list */
+.form-row > div > .ui-switch-list {
+  margin: 0;
 }
 /* form-field already spaces title→control via gap; don't double-offset custom selects */
 .form-field > .ui-select,
@@ -2284,9 +2321,10 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
   max-width: 100%;
   min-width: 0;
   text-decoration: none !important;
-  color: var(--info-fg) !important;
-  border: 1px solid rgba(59, 130, 246, 0.42);
-  background: rgba(59, 130, 246, 0.12);
+  /* Main actions (save, confirm, add, select) follow the panel brand colour: strong edge, light fill. */
+  color: var(--brand-fg) !important;
+  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
   box-sizing: border-box;
   transition:
     background var(--motion-fast) var(--ease-standard),
@@ -2297,7 +2335,7 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
     box-shadow var(--motion-fast) var(--ease-standard);
 }
 .btn:hover, a.btn:hover {
-  background: rgba(59, 130, 246, 0.2);
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
   opacity: 1;
   transform: translateY(-1px);
 }
@@ -2312,43 +2350,43 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
 .btn-ghost,
 a.btn.btn-ghost {
   color: var(--foreground) !important;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px solid color-mix(in srgb, var(--foreground) 24%, transparent);
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
   font-weight: 500;
 }
 .btn-ghost:hover,
 a.btn.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
   color: var(--foreground) !important;
   opacity: 1;
   transform: translateY(-1px);
 }
 .btn-danger {
   color: var(--destructive-fg) !important;
-  border: 1px solid rgba(239, 68, 68, 0.42);
-  background: rgba(239, 68, 68, 0.12);
+  border: 1.5px solid color-mix(in srgb, var(--destructive) 72%, transparent);
+  background: color-mix(in srgb, var(--destructive) 7%, transparent);
   font-weight: 550;
 }
 .btn-danger:hover {
-  background: rgba(239, 68, 68, 0.2);
+  background: color-mix(in srgb, var(--destructive) 14%, transparent);
   opacity: 1;
   transform: translateY(-1px);
 }
 .btn-ok {
-  color: var(--ok-fg) !important;
-  border: 1px solid rgba(34, 197, 94, 0.42);
-  background: rgba(34, 197, 94, 0.12);
+  color: var(--brand-fg) !important;
+  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
   font-weight: 550;
 }
 .btn-ok:hover {
-  background: rgba(34, 197, 94, 0.2);
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
   opacity: 1;
   transform: translateY(-1px);
 }
 .btn-warn {
   color: var(--warn-fg) !important;
-  border: 1px solid rgba(234, 179, 8, 0.42);
-  background: rgba(234, 179, 8, 0.12);
+  border: 1.5px solid color-mix(in srgb, var(--warn) 72%, transparent);
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
   font-weight: 550;
 }
 .btn-warn:hover {
@@ -2624,7 +2662,9 @@ a.btn.btn-ghost:hover {
     height: 32px;
     border: 1px solid var(--border);
     border-radius: var(--control-radius);
+    background: transparent;
     color: var(--foreground);
+    cursor: pointer;
   }
   .table-list-sm .li-open .ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   /* Time-left colours already flag the row; the dot would only crowd the name. */
@@ -3714,7 +3754,10 @@ code.env-fname {
   padding-top: var(--page-title-gap);
   /* Same inset owner as .side-foot — desktop/mobile/PWA one path */
   padding-bottom: var(--bottom-inset);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--modal-frost-line);
+  background: var(--modal-frost-bg);
+  backdrop-filter: var(--modal-frost-blur);
+  -webkit-backdrop-filter: var(--modal-frost-blur);
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -3750,8 +3793,8 @@ a.btn.btn-star {
   background: color-mix(in srgb, var(--brand-base) 12%, transparent);
   border-radius: var(--control-radius);
   padding: 0 var(--space-1);
-  height: 28px;
-  min-height: 28px;
+  height: var(--ctl-sm-h);
+  min-height: var(--ctl-sm-h);
   font-size: 12px;
   font-weight: 600;
   text-decoration: none !important;
@@ -3778,6 +3821,10 @@ a.btn.btn-star:hover {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--section-gap);
+}
+/* A payment method's details stay hidden while its switch is off. */
+.settings-grid[hidden] {
+  display: none;
 }
 .settings-grid > .form-field,
 .settings-grid > .setting-item {
@@ -5083,15 +5130,20 @@ form.settings-form > .actions.sticky-actions,
   justify-content: space-between;
   gap: var(--space-1);
   height: calc(var(--topbar-h) + var(--safe-top));
-  padding: var(--safe-top) var(--space-2) 0;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-card);
+  /* Top unchanged (safe-area only); bottom: half page-title-gap under the 58px content band */
+  padding: var(--safe-top) var(--space-2) var(--topbar-pad-bottom);
+  border-bottom: 1px solid var(--modal-frost-line);
+  /* Same matte glass as .ui-modal-head / sticky save */
+  background: var(--modal-frost-bg);
+  backdrop-filter: var(--modal-frost-blur);
+  -webkit-backdrop-filter: var(--modal-frost-blur);
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 55;
   width: 100%;
+  box-sizing: border-box;
 }
 .topbar-brand {
   display: flex;
@@ -5130,19 +5182,45 @@ form.settings-form > .actions.sticky-actions,
   font-variant-numeric: tabular-nums;
 }
 .menu-toggle {
+  /* Square circle at the same height as .btn; fully round like other controls */
   width: var(--btn-h);
   height: var(--btn-h);
-  /* Same soft square as v4.3.10 — not pill / not card radius */
-  border-radius: var(--r-sm);
-  border: 1px solid color-mix(in srgb, var(--bot-line) 40%, var(--border));
-  background: transparent;
-  color: var(--bot-line);
+  min-height: var(--btn-h);
+  box-sizing: border-box;
+  border-radius: var(--control-radius);
+  /* Closed: neutral like the secondary .btn-ghost, so the header does not shout. Open: the panel brand colour
+     (تنظیمات → ظاهر و برند), marking it as the active control while the drawer is on screen. */
+  border: 1.5px solid color-mix(in srgb, var(--foreground) 24%, transparent);
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
+  color: var(--foreground);
   cursor: pointer;
   display: inline-grid;
   place-items: center;
   padding: 0;
   flex: 0 0 auto;
   margin-inline-start: auto;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+.menu-toggle:hover {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  opacity: 1;
+}
+.menu-toggle[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--brand) 72%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
+  color: var(--brand-fg);
+}
+.menu-toggle[aria-expanded="true"]:hover {
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
+}
+.menu-toggle:active {
+  /* Same press feedback as .btn */
+  transform: scale(0.96);
 }
 .burger {
   width: 16px;
@@ -5175,8 +5253,8 @@ form.settings-form > .actions.sticky-actions,
   z-index: 45;
   pointer-events: none;
   opacity: 0;
-  transition: opacity var(--motion-med) var(--ease-standard),
-    visibility 0s linear var(--motion-med);
+  transition: opacity var(--drawer-motion) var(--ease-standard),
+    visibility 0s linear var(--drawer-motion);
   overscroll-behavior: contain;
 }
 /* Dim on a pseudo-element so the fixed box itself stays transparent to Safari
@@ -5192,7 +5270,7 @@ form.settings-form > .actions.sticky-actions,
   visibility: visible;
   opacity: 1;
   pointer-events: auto;
-  transition: opacity var(--motion-med) var(--ease-standard),
+  transition: opacity var(--drawer-motion) var(--ease-standard),
     visibility 0s linear 0s;
 }
 
@@ -5314,6 +5392,23 @@ form.settings-form > .actions.sticky-actions,
   body.nav-open .side-backdrop {
     z-index: 5100;
   }
+  /* The dim stops at the topbar and the drawer edge. Both are frosted glass that blur what lies behind them;
+     over the dim that glass turns into a grey film (most visible in the light theme), so they blur the
+     undimmed page instead and keep the same matte look as when the drawer is closed.
+     The dim's edge rides on the drawer's edge: it starts off-screen with the closed drawer (same offset,
+     duration and easing as .side-panel) and slides in with it, so no empty strip shows ahead of the menu.
+     It is drawer-wide longer on the left so its left edge never uncovers the page while it moves. */
+  .side-backdrop { overflow: hidden; }
+  .side-backdrop::before {
+    top: calc(var(--topbar-h) + var(--safe-top));
+    left: calc(-1 * (var(--drawer-w) + 24px));
+    right: var(--drawer-w);
+    transform: translate3d(calc(var(--drawer-w) + 24px), 0, 0);
+    transition: transform var(--drawer-motion) var(--ease-standard);
+  }
+  .side-backdrop.show::before {
+    transform: translate3d(0, 0, 0);
+  }
   body.nav-open .side {
     z-index: 5200;
   }
@@ -5365,13 +5460,22 @@ form.settings-form > .actions.sticky-actions,
     overflow-y: auto;
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
-    border-left: 1px solid var(--border);
-    border-top: 1px solid var(--border);
-    background-color: var(--bg-card);
-    background: var(--bg-card);
+    border-left: 1px solid var(--modal-frost-line);
+    border-top: 1px solid var(--modal-frost-line);
+    /* Same matte glass as modal sticky chrome — page shows through the drawer */
+    background-color: var(--modal-frost-bg);
+    background: var(--modal-frost-bg);
+    backdrop-filter: var(--modal-frost-blur);
+    -webkit-backdrop-filter: var(--modal-frost-blur);
     transform: translate3d(calc(100% + 24px), 0, 0);
-    transition: transform 0.22s var(--ease-standard);
+    transition: transform var(--drawer-motion) var(--ease-standard);
     will-change: transform;
+  }
+  /* Foot already sits on frosted .side-panel — avoid stacking a second blur */
+  .side .side-foot {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
   .side.open .side-panel {
     transform: translate3d(0, 0, 0);
@@ -5398,7 +5502,8 @@ form.settings-form > .actions.sticky-actions,
   /* chips/pg-role already hidden globally on .side-foot */
 
   /* Instant close on navigation — disable slide so PWA paints closed before unload */
-  html.ios .side.side-nav-closing .side-panel {
+  html.ios .side.side-nav-closing .side-panel,
+  html.ios .side.side-nav-closing ~ .side-backdrop::before {
     transition: none !important;
   }
 
@@ -5718,6 +5823,15 @@ form.settings-form > .actions.sticky-actions,
     width: auto;
     flex: 0 0 auto;
     align-self: flex-end;
+  }
+  /* Tag filter row: share one centre line with the search button (not flex-end). */
+  .search-bar.search-bar--with-tag {
+    align-items: center;
+  }
+  .search-bar.search-bar--with-tag > .btn,
+  .search-bar.search-bar--with-tag > button,
+  .search-bar.search-bar--with-tag > .color-tag-select-wrap {
+    align-self: center;
   }
   .user-edit-inline-row {
     flex-direction: column;
@@ -6486,18 +6600,15 @@ form.settings-form > .actions.sticky-actions,
   background: var(--bg-card);
   isolation: isolate;
 }
-/* Shared frosted chrome (sticky head + save footer). Same tokens for both. */
+/* Modal-only frost padding (shared --modal-frost-* live on :root). */
 .ui-modal-panel {
-  --modal-frost-bg: color-mix(in srgb, var(--bg-card) 52%, transparent);
-  --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 90%, transparent);
-  --modal-frost-blur: blur(14px) saturate(1.08);
-  --modal-frost-line: color-mix(in srgb, var(--border) 55%, transparent);
   --modal-frost-pad: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   /* Vertical air around the save button (equal top/bottom) */
   --modal-save-pad-y: var(--space-2_5);
   --modal-save-footer-h: calc(var(--modal-save-pad-y) * 2 + var(--btn-h));
 }
-html[data-theme="light"] .ui-modal-panel {
+/* Light theme: slightly denser matte so frost stays readable on white cards. */
+html[data-theme="light"] {
   --modal-frost-bg: color-mix(in srgb, var(--bg-card) 58%, transparent);
   --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 94%, transparent);
 }
@@ -6553,8 +6664,20 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-stic
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head,
-  .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save {
+  .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save,
+  .topbar,
+  .site-footer,
+  .side-foot {
     background: var(--modal-frost-bg-fallback);
+  }
+  @media (max-width: 900px) {
+    .side-panel {
+      background: var(--modal-frost-bg-fallback);
+      background-color: var(--modal-frost-bg-fallback);
+    }
+    .side .side-foot {
+      background: transparent;
+    }
   }
 }
 .ui-modal-scroll {
@@ -7070,12 +7193,73 @@ td.byte-size {
   font-size: 12px;
   line-height: 1.45;
 }
-.payg-lifetime-note,
-.reseller-pg-admin-line {
-  margin: var(--space-2) 0 0;
+/* Reseller edit: usage/limits and wallet sections share the panel's stat-tile language. */
+.reseller-section-head {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+.reseller-usage-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+.reseller-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  padding: var(--space-0) var(--space-1_5);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--muted-fg);
   font-size: 12px;
-  line-height: 1.45;
-  text-align: right;
+  line-height: 1.6;
+}
+.reseller-chip code,
+.reseller-chip bdi {
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reseller-usage .pg-quota-banner { margin: 0 0 var(--space-2); }
+.reseller-usage-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding: var(--space-1_5) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+.reseller-usage-total span { color: var(--muted-fg); font-size: 12px; }
+.reseller-usage-total strong { font-size: 14px; font-weight: 650; }
+.reseller-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+.reseller-stat-grid > .stat { min-height: 76px; margin: 0; }
+.reseller-stat-grid > .stat strong { font-size: clamp(14px, 2.4vw, 18px); }
+.reseller-stat-grid > .stat strong span { color: inherit; font: inherit; }
+#reseller-wallet .reseller-stat-grid { grid-template-columns: minmax(0, 1fr); }
+.edit-section > .flash.err:has(.flash-copy) { margin: 0 0 var(--space-2); }
+@media (max-width: 560px) {
+  .reseller-stat-grid { grid-template-columns: minmax(0, 1fr); }
+  .reseller-stat-grid > .stat {
+    min-height: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .reseller-stat-grid > .stat strong { width: auto; text-align: left; }
 }
 .wallet-tx-list {
   list-style: none;
@@ -7363,10 +7547,6 @@ td.byte-size {
   }
   .ui-modal-panel .settings-grid {
     width: 100%;
-  }
-  /* Trailing lone cell in a 2-col settings grid should span full width */
-  .ui-modal-panel .settings-grid > .setting-item:last-child:nth-child(odd):not(.full) {
-    grid-column: 1 / -1;
   }
 }
 
@@ -8041,7 +8221,8 @@ html[data-theme="light"] * { scrollbar-color: #d4d4d8 transparent; }
 html[data-theme="light"] *::-webkit-scrollbar-thumb { background: #d4d4d8; }
 
 html[data-theme="light"] .topbar {
-  background: #ffffff;
+  /* Keep shared frost tokens (denser light mix is on html[data-theme=light]) */
+  background: var(--modal-frost-bg);
 }
 /* Do NOT set background on .side here. Desktop already paints via
    `.side { background: var(--bg-card) }` (--bg-card is #fff in light).
@@ -8208,49 +8389,7 @@ html[data-theme="light"] .nav-item-pg:hover {
   color: var(--foreground);
 }
 
-/* Primary/action buttons: same blue-tint language as dark */
-html[data-theme="light"] .btn,
-html[data-theme="light"] a.btn,
-html[data-theme="light"] .btn-sm,
-html[data-theme="light"] a.btn-sm {
-  color: #1d4ed8 !important;
-  border-color: rgba(37, 99, 235, 0.38);
-  background: rgba(37, 99, 235, 0.10);
-}
-html[data-theme="light"] .btn:hover,
-html[data-theme="light"] a.btn:hover {
-  background: rgba(37, 99, 235, 0.16);
-}
-/* Ghost: subtle dark-on-light (not white) */
-html[data-theme="light"] .btn-ghost,
-html[data-theme="light"] a.btn.btn-ghost {
-  color: var(--foreground) !important;
-  border-color: var(--border);
-  background: rgba(24, 24, 27, 0.03);
-}
-html[data-theme="light"] .btn-ghost:hover,
-html[data-theme="light"] a.btn.btn-ghost:hover {
-  background: rgba(24, 24, 27, 0.06);
-  color: var(--foreground) !important;
-}
-html[data-theme="light"] .btn-danger {
-  color: #b91c1c !important;
-  border-color: rgba(220, 38, 38, 0.35);
-  background: rgba(220, 38, 38, 0.08);
-}
-html[data-theme="light"] .btn-danger:hover { background: rgba(220, 38, 38, 0.14); }
-html[data-theme="light"] .btn-ok {
-  color: #15803d !important;
-  border-color: rgba(22, 163, 74, 0.35);
-  background: rgba(22, 163, 74, 0.08);
-}
-html[data-theme="light"] .btn-ok:hover { background: rgba(22, 163, 74, 0.14); }
-html[data-theme="light"] .btn-warn {
-  color: #a16207 !important;
-  border-color: rgba(202, 138, 4, 0.4);
-  background: rgba(234, 179, 8, 0.12);
-}
-html[data-theme="light"] .btn-warn:hover { background: rgba(234, 179, 8, 0.2); }
+html[data-theme="light"] .btn-warn { color: #a16207 !important; }
 
 html[data-theme="light"] .icon-btn,
 html[data-theme="light"] .icon-btn.icon-move,
@@ -9431,8 +9570,8 @@ html[data-theme="light"] .home-period {
   text-align: right;
 }
 .magic-link-field {
-  --magic-link-h: 52px;
-  --magic-copy-h: 34px;
+  --magic-link-h: var(--btn-h);
+  --magic-copy-h: var(--ctl-sm-h);
   --magic-copy-w: 4.75rem; /* «کپی» / «کپی شد» — same slot, no jump */
   direction: ltr;
   display: flex;
@@ -12102,8 +12241,9 @@ html[data-theme="light"] .panel-status-card {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
-  margin-top: var(--space-3);
-  padding-top: var(--space-2_5);
+  /* 16 plus the message's line spacing above the line matches the space below it. */
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
   border-top: 1px solid var(--border);
 }
 .panel-status-actions .btn {
@@ -12475,6 +12615,9 @@ html[data-theme="light"] .sc-tip { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+@media (max-width: 640px) {
+  .settings-reset-btn { width: 100%; justify-content: center; min-height: var(--btn-h); }
+}
 
 /* Guide photo/video upload: the profile-photo upload box, at a lower height. */
 .upload-box.upload-box--compact {
@@ -12651,7 +12794,7 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   box-shadow: 0 5px 14px color-mix(in srgb, var(--preview) 22%, transparent);
 }
 
-/* Cleanup tab: status-tag delete switches in two columns */
+/* Cleanup tab: clear status tags, age, auto or run-now */
 .order-purge-title {
   margin: var(--space-2) 0 var(--space-1);
   font-size: 0.9em;
@@ -12663,20 +12806,42 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   gap: var(--space-1);
 }
 .order-purge-options {
-  margin-top: var(--space-2);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+  margin-top: var(--space-1);
   align-items: end;
 }
 .order-purge-tag .ui-switch-copy {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-0);
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
 }
 .order-purge-tag .ui-switch-copy .badge {
   flex: 0 0 auto;
+  width: fit-content;
 }
-@media (max-width: 420px) {
-  .order-purge-tags {
+.order-purge-tag .ui-switch-copy small {
+  color: var(--muted-fg);
+  line-height: 1.35;
+}
+@media (max-width: 640px) {
+  .order-purge-tags,
+  .order-purge-options {
     grid-template-columns: 1fr;
+  }
+}
+.cleanup-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+@media (max-width: 640px) {
+  .cleanup-run-actions form,
+  .cleanup-run-actions .btn {
+    flex: 1 1 100%;
+    width: 100%;
   }
 }
 
@@ -12689,8 +12854,209 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   flex-wrap: wrap;
 }
 .link-health-head > h2 { margin: 0; }
-.link-health-head > .badge {
+.link-health-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+}
+.link-health-actions > .badge {
   flex: 0 0 auto;
   width: auto;
   white-space: nowrap;
 }
+.link-health-reconnect {
+  display: inline-flex;
+  margin: 0;
+}
+
+/* Nested reseller subscription extras — same vertical rhythm as .form-stack
+   so the packs “افزودن” row is not flush against نقش پاسارگارد below. */
+#reseller-subscription-extras,
+#edit-subscription-extras {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+#reseller-subscription-extras > .ui-switch-section,
+#edit-subscription-extras > .ui-switch-section {
+  margin: 0;
+}
+#reseller-subscription-extras > .ui-switch-list,
+#edit-subscription-extras > .ui-switch-list {
+  margin: 0;
+}
+
+/* Reseller / user plan pack editors — one-line stairs, pay-dest add row. */
+.extra-packs-editor {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  /* Match margin-top so the last “افزودن” clears the next form title
+     (role / button color) for both user and reseller plan forms. */
+  margin-bottom: var(--space-2);
+  grid-column: 1 / -1;
+  width: 100%;
+}
+.extra-packs-editor[hidden] {
+  display: none !important;
+}
+.extra-packs-kind {
+  display: grid;
+  gap: var(--space-1);
+}
+.extra-packs-rows {
+  display: grid;
+  gap: var(--space-1);
+}
+.extra-pack-row {
+  /* Desktop: [amount|style equal] + delete. Fields share one nested 1fr|1fr grid. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+  box-sizing: border-box;
+  width: 100%;
+}
+.extra-pack-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  width: 100%;
+}
+/* Amount + enhanced color select share one baseline.
+   panel.js wraps <select> in .ui-select (default margin-top: space-1);
+   zero that here so the toggle lines up with the number input. */
+.extra-pack-fields > .extra-pack-amount,
+.extra-pack-fields > .extra-pack-style,
+.extra-pack-fields > .ui-select {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin: 0;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  box-sizing: border-box;
+  align-self: center;
+}
+.extra-pack-fields > .ui-select .ui-select-toggle {
+  width: 100%;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+}
+.extra-pack-fields > .extra-pack-style,
+.extra-pack-fields > .ui-select .ui-select-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.extra-pack-row > .extra-pack-remove {
+  width: auto;
+  margin: 0;
+  justify-self: stretch;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.extra-packs-kind > .pay-dest-add-row {
+  margin-top: 2px;
+}
+.extra-packs-kind > .pay-dest-add-row[hidden] {
+  display: none !important;
+}
+@media (max-width: 640px) {
+  /* Mobile: amount | style equal on one row; delete full-width under them. */
+  .extra-pack-row {
+    grid-template-columns: 1fr;
+  }
+  .extra-pack-row > .extra-pack-remove {
+    width: 100%;
+    justify-self: stretch;
+  }
+}
+
+/* Sidebar search box and its result list. */
+.side-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-1) var(--space-1) 0;
+  padding: 0 var(--space-1);
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.side-search:focus-within { border-color: var(--accent); }
+.side-search > .nav-ico { flex: none; color: var(--muted-fg); }
+.side-search input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  appearance: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.side-search-results {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(100% + var(--space-0));
+  z-index: 40;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  padding: var(--space-0);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.25);
+}
+.side-search-results[hidden] { display: none; }
+.side-search-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1);
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+}
+.side-search-hit:hover,
+.side-search-hit:focus-visible,
+.side-search-hit.is-active { background: var(--accent-soft); outline: none; }
+.side-search-where { font-size: 0.8em; color: var(--muted-fg); }
+.side-search-empty { margin: 0; padding: var(--space-1); text-align: center; color: var(--muted-fg); }
+/* ---------- Control size tiers ----------
+   Three heights for the whole panel, so boxes side by side share one size and one centre line:
+   --btn-h    fields, selects, buttons, icon buttons and tabs
+   --ctl-sm-h compact buttons, filters, segment switches and multi-select tags
+   --tag-h    status tags and counters */
+.btn-sm, a.btn-sm, .btn-star { height: var(--ctl-sm-h); min-height: var(--ctl-sm-h); font-size: 12.5px; }
+.section-tabs a, .section-tabs .tab-btn { min-height: var(--btn-h); box-sizing: border-box; }
+.sales-seg button, .sales-seg a {
+  min-height: calc(var(--ctl-sm-h) - 4px); display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+}
+.sales-seg { min-height: var(--ctl-sm-h); box-sizing: border-box; align-items: center; }
+.badge { min-height: var(--tag-h); display: inline-flex; align-items: center; justify-content: center; line-height: 1; box-sizing: border-box; }
+.magic-link-input { height: var(--btn-h); min-height: var(--btn-h); }
+/* The panel font draws Latin digits higher than Persian letters; number fields move their text
+   down a little so the digits read centred like the Persian text of other fields. */
+input[dir="ltr"], input[inputmode="numeric"], input[inputmode="decimal"], input[type="number"], input[data-money] {
+  padding-top: 3px; padding-bottom: 0;
+}
+/* A colour card's menu sits at the bottom, so menus in one row line up even when a label wraps. */
+.btn-color-card > .ui-select, .btn-color-card > select { margin-top: auto; }
+/* «سیستم» tag on alerts about the panel itself. */
+.notify-system-badge { margin-inline-start: var(--space-0); font-size: 0.75em; vertical-align: middle; }

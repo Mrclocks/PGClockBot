@@ -20,6 +20,7 @@ PLATFORM_ONLY_BTN_KEYS: frozenset[str] = frozenset(
         "btn_adm_orders",
         "btn_adm_payments",
         "btn_adm_tickets",
+        "btn_adm_payg_review",
         "btn_adm_plans",
         "btn_adm_pg",
         "btn_adm_users",
@@ -99,6 +100,7 @@ BTN_ADMIN_OPS: list[Field] = [
     ("btn_adm_tickets", "تیکت‌ها", "text"),
     ("btn_adm_plans", "پلن‌ها", "text"),
     ("btn_adm_pg", "پاسارگارد", "text"),
+    ("btn_adm_payg_review", "بازبینی هزینه‌های PAYG", "text"),
 ]
 
 BTN_ADMIN_SYS: list[Field] = [
@@ -108,6 +110,8 @@ BTN_ADMIN_SYS: list[Field] = [
     ("btn_adm_preview", "پیش‌نمایش کاربر", "text"),
     ("btn_adm_st_panel", "تنظیمات: وب‌پنل", "text"),
     ("btn_adm_st_find", "تنظیمات: جستجو", "text"),
+    ("btn_adm_staff_audit", "گزارش کارکنان", "text"),
+    ("btn_adm_service_shop_review", "تعیین فروشگاه سرویس", "text"),
 ]
 
 # btn_miniapp is not offered: the Mini App opens from Telegram's menu button, and that label only
@@ -134,6 +138,10 @@ BTN_ADMIN_HUB_ITEMS: list[Field] = [
     ("btn_adm_exit_preview", "خروج از پیش‌نمایش", "text"),
 ]
 
+BTN_ADMIN_SERVICE_CARE: list[Field] = [
+    ("btn_adm_service_cleanup", "پاکسازی سرویس‌ها", "text"),
+]
+
 
 # Submenu labels that used to be fixed in code (≤8 fields per Telegram screen).
 BTN_ADMIN_PG: list[Field] = [
@@ -144,6 +152,12 @@ BTN_ADMIN_PG: list[Field] = [
     ("btn_pg_nodes", "نودها", "text"),
     ("btn_pg_group", "ساخت گروه", "text"),
     ("btn_pg_template", "ساخت تمپلیت", "text"),
+]
+
+BTN_ADMIN_PG_MORE: list[Field] = [
+    ("btn_pg_hosts", "هاست‌ها", "text"),
+    ("btn_pg_inbounds", "اینباندها", "text"),
+    ("btn_pg_admins", "ادمین‌های پنل", "text"),
 ]
 
 BTN_ADMIN_PEOPLE_SUB: list[Field] = [
@@ -195,6 +209,11 @@ BTN_ADMIN_PLANS_SUB: list[Field] = [
 BTN_ADMIN_MARKETING_SUB: list[Field] = [
     ("btn_adm_gift_codes", "کدهای هدیه", "text"),
     ("btn_adm_campaigns", "کمپین‌ها", "text"),
+    ("btn_adm_cashback", "کش‌بک", "text"),
+    ("btn_adm_trial_users", "کاربران تست", "text"),
+    ("btn_adm_broadcast_history", "تاریخچهٔ ارسال‌ها", "text"),
+    ("btn_adm_discounts", "تخفیف‌ها", "text"),
+    ("btn_adm_funnel", "رفتار کاربر", "text"),
 ]
 
 BTN_SERVICE_MORE: list[Field] = [
@@ -244,10 +263,27 @@ BTN_RESELLER_HUB: list[Field] = [
 BTN_RESELLER_HUB_MORE: list[Field] = [
     ("btn_res_tickets", "تیکت‌های مشتریان", "text"),
     ("btn_res_loyalty", "باشگاه مشتریان", "text"),
+    ("btn_res_broadcast", "پیام گروهی", "text"),
     ("btn_res_settings", "تنظیمات فروشگاه", "text"),
     ("btn_res_billing", "کیف پول PAYG", "text"),
     ("btn_res_addon_packs", "بسته‌های حجم/کاربر", "text"),
     ("btn_res_renew", "تمدید سرویس", "text"),
+]
+
+# Kept separate so hub / hub_more stay within the Telegram 8-field screen budget.
+BTN_RESELLER_HUB_EXTRA: list[Field] = [
+    ("btn_res_child_pricing", "قیمت زیرمجموعه", "text"),
+    ("btn_res_cashback", "کش‌بک", "text"),
+    ("btn_res_trial_users", "کاربران تست", "text"),
+    ("btn_res_staff_audit", "گزارش کارکنان", "text"),
+    ("btn_res_service_cleanup", "پاکسازی سرویس‌ها", "text"),
+]
+
+BTN_RESELLER_MARKETING: list[Field] = [
+    ("btn_res_gift_codes", "کد هدیه", "text"),
+    ("btn_res_campaigns", "کمپین‌ها", "text"),
+    ("btn_res_discounts", "تخفیف‌ها", "text"),
+    ("btn_res_funnel", "رفتار کاربر", "text"),
 ]
 
 BTN_RESELLER_PLANS_SUB: list[Field] = [
@@ -284,6 +320,8 @@ PLATFORM_ONLY_BTN_KEYS = PLATFORM_ONLY_BTN_KEYS | frozenset(
     key
     for group in (
         BTN_ADMIN_PG,
+        BTN_ADMIN_PG_MORE,
+        BTN_ADMIN_SERVICE_CARE,
         BTN_ADMIN_PEOPLE_SUB,
         BTN_ADMIN_SETTINGS_SUB,
         BTN_ADMIN_SETTINGS_MORE,
@@ -294,7 +332,15 @@ PLATFORM_ONLY_BTN_KEYS = PLATFORM_ONLY_BTN_KEYS | frozenset(
         BTN_ADMIN_MARKETING_SUB,
     )
     for key, _label, _kind in group
-) | frozenset({"btn_adm_st_panel", "btn_adm_st_find", "btn_connection_status_admin"})
+) | frozenset(
+    {
+        "btn_adm_st_panel",
+        "btn_adm_st_find",
+        "btn_connection_status_admin",
+        "btn_adm_staff_audit",
+        "btn_adm_service_shop_review",
+    }
+)
 
 
 def appearance_button_subs() -> list[tuple]:
@@ -341,6 +387,8 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
         ("btn_adm_ops", "دکمه‌های ادمین — عملیات", BTN_ADMIN_OPS),
         ("btn_adm_sys", "دکمه‌های ادمین — سیستم", BTN_ADMIN_SYS),
         ("btn_adm_pg_sub", "دکمه‌های ادمین — پاسارگارد", BTN_ADMIN_PG),
+        ("btn_adm_service_care", "دکمه‌های ادمین — نگهداری سرویس‌ها", BTN_ADMIN_SERVICE_CARE),
+        ("btn_adm_pg_more", "دکمه‌های ادمین — هاست، اینباند و ادمین پاسارگارد", BTN_ADMIN_PG_MORE),
         ("btn_adm_people_sub", "دکمه‌های ادمین — کاربران و نمایندگان", BTN_ADMIN_PEOPLE_SUB),
         ("btn_adm_settings_sub", "دکمه‌های ادمین — بخش‌های تنظیمات", BTN_ADMIN_SETTINGS_SUB),
         ("btn_adm_settings_more", "دکمه‌های ادمین — قوانین و پشتیبانی در تنظیمات", BTN_ADMIN_SETTINGS_MORE),
@@ -348,11 +396,13 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
         ("btn_adm_plans_sub", "دکمه‌های ادمین — پلن‌ها", BTN_ADMIN_PLANS_SUB),
         ("btn_adm_plan_kinds", "دکمه‌های ادمین — نوع پلن نمایندگی", BTN_ADMIN_PLAN_KINDS),
         ("btn_adm_loy_sub", "دکمه‌های ادمین — باشگاه", BTN_ADMIN_LOYALTY_SUB),
-        ("btn_adm_mkt_sub", "دکمه‌های ادمین — کدهای هدیه و کمپین", BTN_ADMIN_MARKETING_SUB),
+        ("btn_adm_mkt_sub", "دکمه‌های ادمین — بازاریابی", BTN_ADMIN_MARKETING_SUB),
         ("btn_service_more", "دکمه‌های مدیریت سرویس", BTN_SERVICE_MORE),
         ("btn_res_groups", "دکمه‌های پنل نماینده — گروه‌ها", BTN_RESELLER_GROUPS),
         ("btn_res_hub", "دکمه‌های پنل نماینده", BTN_RESELLER_HUB),
         ("btn_res_hub_more", "دکمه‌های پنل نماینده — مشتریان و حساب", BTN_RESELLER_HUB_MORE),
+        ("btn_res_hub_extra", "دکمه‌های پنل نماینده — قیمت، کش‌بک و گزارش‌ها", BTN_RESELLER_HUB_EXTRA),
+        ("btn_res_marketing", "دکمه‌های پنل نماینده — بازاریابی", BTN_RESELLER_MARKETING),
         ("btn_res_plans_sub", "دکمه‌های پلن‌های فروش", BTN_RESELLER_PLANS_SUB),
         ("btn_res_st_sub", "دکمه‌های تنظیمات فروشگاه", BTN_RESELLER_SETTINGS_SUB),
         ("btn_res_st_more", "دکمه‌های تنظیمات فروشگاه — قوانین و ربات", BTN_RESELLER_SETTINGS_MORE),

@@ -21,7 +21,8 @@ TEMPLATES = Path(__file__).resolve().parents[1] / "app/web/templates"
 
 
 def _flat_keys(groups) -> list[str]:
-    return [tab.key for group in groups for tab in group.tabs]
+    """Every tab key a page can open: plain tabs and the sections of merged tabs."""
+    return [s.key for group in groups for tab in group.tabs for s in (tab.sections or (tab,))]
 
 
 class GroupSettingsTabsTests(unittest.TestCase):
@@ -91,8 +92,9 @@ class SettingsTabsTemplateTests(unittest.TestCase):
         groups = group_settings_tabs(SETTINGS_TABS, "colors")
         html = _render("_settings_tabs.html", "settings_tabs", "colors", SETTINGS_TABS, groups)
         self.assertEqual(html.count("settings-tabs-groups"), 1)
-        self.assertEqual(html.count('class="active"'), 2)
-        self.assertIn('href="/settings?tab=welcome" class="active"', html)
+        self.assertEqual(html.count('class="active"'), 3)
+        self.assertIn('href="/settings?tab=messages" class="active"', html)
+        self.assertIn('href="/settings?tab=buttons" class="active"', html)
         self.assertIn('href="/settings?tab=colors" class="active"', html)
         self.assertNotIn('href="/settings?tab=naming" class="active"', html)
 
@@ -124,3 +126,22 @@ class SettingsTabsTemplateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RegroupedLayoutTests(unittest.TestCase):
+    def test_owner_tabs_are_grouped_by_what_they_change(self):
+        groups = group_settings_tabs(SETTINGS_TABS, "welcome")
+        layout = {g.label: [t.key for t in g.tabs] for g in groups}
+        self.assertEqual(list(layout), ["ظاهر ربات", "متن‌ها", "فروش و سرویس", "هشدار و گزارش"])
+        self.assertEqual(layout["متن‌ها"], ["messages", "buttons", "screens"])
+        self.assertIn("links", layout["ظاهر ربات"])
+        self.assertNotIn("bot", [k for keys in layout.values() for k in keys])
+
+    def test_a_reseller_keeps_their_own_bot_in_its_own_group(self):
+        groups = group_settings_tabs(RESELLER_SETTINGS_TABS, "bot")
+        own = [g for g in groups if [t.key for t in g.tabs] == ["bot"]]
+        self.assertEqual([(g.label, g.is_active) for g in own], [("ربات اختصاصی", True)])
+
+    def test_no_label_is_shared_with_the_sidebar_action_centre(self):
+        labels = {g.label for g in group_settings_tabs(SETTINGS_TABS, "welcome")}
+        self.assertNotIn("اعلان‌ها", labels)

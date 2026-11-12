@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import html
 import logging
-import secrets
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
@@ -25,9 +24,17 @@ from app.services.color_tags import risk_mark
 from app.services.home_overview import bot_dashboard_summary
 from app.services.formatting import (
     bot_user_panel_label,
+    format_number,
     format_system_stats,
     format_toman,
     order_status_fa,
+)
+from app.services.staff_cards import (
+    format_adjust_prompt,
+    SERVICE_BUTTON_LIMIT,
+    format_services_list,
+    format_services_list_header,
+    format_staff_customer_card,
 )
 from app.services.orders import (
     approve_payment,
@@ -47,9 +54,21 @@ from app.services.updates import local_version
 from app.services.user_search import clean_handle, find_bot_user
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.billing import is_payg
+from app.services.bot_user_admin import (
+    ServiceSnapshot,
+    admin_extend_service,
+    get_owned_service,
+    service_snapshot,
+    snapshot_telegram_lines,
+)
+from app.services.support_button import support_markup
 from app.services.volume_allocation import set_shop_oversell
+from app.bot.handlers.action_reason import ask_reason, take_reason
+from app.services.action_reasons import bot_actor
+from app.services.customer_action_notices import NoticeTarget, log_and_notify
 from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
+from app.bot.handlers import stuck_orders
 from app.bot.handlers.payment_voids import void_button
 from app.bot.handlers.subscription_lookup import (
     RESELLER_SEARCH_PROMPT,
@@ -60,6 +79,15 @@ from app.bot.handlers.subscription_lookup import (
     staff_user_search,
 )
 from app.bot.nav_inline import with_inline_back
+from app.bot.service_adjust import (
+    NOTHING_STAGED,
+    UNKNOWN_ADJUST_OUTCOME,
+    StagedAdjustment,
+    read_staged,
+    restore_staged,
+    service_adjust_lock,
+    take_staged,
+)
 from app.bot.nav_input import finish_text_step, form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services import bot_feedback_texts as feedback
@@ -106,6 +134,7 @@ async def _present_admin_tickets_list(
 ) -> None:
     """Render open platform tickets as an inline panel (list + Back)."""
     from app.bot.nav_inline import present_inline_only, with_inline_back
+    from app.services.formatting import bot_user_ticket_who
     from app.services.tickets import list_open_tickets as _list_open
 
     tickets = await _list_open(session, platform_only=True)
@@ -114,19 +143,31 @@ async def _present_admin_tickets_list(
         markup = with_inline_back(None, ui, "nv:adm:ops")
         text = "تیکت بازی وجود ندارد."
     else:
-        rows = [
-            [
-                InlineKeyboardButton(
-                    text=f"#{t.id} {t.subject[:24]}",
-                    callback_data=f"adm:ticket:{t.id}",
-                )
-            ]
-            for t in tickets[:20]
-        ]
+        user_ids = {int(t.user_id) for t in tickets[:20]}
+        users = {
+            int(u.id): u
+            for u in (
+                await session.execute(select(BotUser).where(BotUser.id.in_(user_ids or [0])))
+            ).scalars().all()
+        }
+        lines = ["🎫 <b>تیکت‌های باز</b>\n"]
+        rows = []
+        for t in tickets[:20]:
+            who = html.escape(bot_user_ticket_who(users.get(int(t.user_id)), fallback_id=int(t.user_id)))
+            subj = html.escape((t.subject or "")[:40])
+            lines.append(f"#{t.id} — {subj} — {who}")
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"#{t.id} { (t.subject or '')[:20] }",
+                        callback_data=f"adm:ticket:{t.id}",
+                    )
+                ]
+            )
         markup = with_inline_back(
             InlineKeyboardMarkup(inline_keyboard=rows), ui, "nv:adm:ops"
         )
-        text = "🎫 تیکت‌های باز:"
+        text = "\n".join(lines)
     if edit:
         try:
             await message.edit_text(text, reply_markup=markup)
@@ -165,11 +206,28 @@ async def _answer_tickets_nav(
     )
 
 
-def _admin_ticket_actions_markup(ticket_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
+def _admin_ticket_actions_markup(
+    ticket_id: int,
+    ui: dict | None = None,
+    *,
+    user_id: int | None = None,
+) -> InlineKeyboardMarkup:
     from app.bot.keyboards import _ikb
     from app.bot.nav_inline import with_inline_back
 
-    rows = [
+    rows: list[list] = []
+    if user_id:
+        rows.append(
+            [
+                _ikb(
+                    "👤 کاربر",
+                    callback_data=f"adm:users:view:{int(user_id)}",
+                    ui=ui,
+                    style_fallback="primary",
+                )
+            ]
+        )
+    rows.append(
         [
             _ikb(
                 "💬 پاسخ",
@@ -184,7 +242,7 @@ def _admin_ticket_actions_markup(ticket_id: int, ui: dict | None = None) -> Inli
                 style_id="reject", style_fallback="danger",
             ),
         ]
-    ]
+    )
     return with_inline_back(
         InlineKeyboardMarkup(inline_keyboard=rows), ui, "adm:tickets"
     )
@@ -262,12 +320,14 @@ async def _plan_detail_text(p: Plan, *, category_name: str | None = None) -> str
     else:
         link = "⚠️ هنوز به تمپلیت/گروه وصل نشده — خرید تحویل نمی‌شود"
     cat = html.escape(category_name) if category_name else "—"
+    carry = bool(getattr(p, "carry_remaining_quota", True))
     return (
         f"💎 <b>پلن #{p.id}</b> — {html.escape(p.name)}\n\n"
         f"قیمت: {format_toman(p.price, get_settings().currency)}\n"
         f"مدت: {format_plan_duration_days(p.duration_days)}\n"
         f"حجم: {gb}\n"
         f"برچسب دسته: {cat}\n"
+        f"مانده در تمدید: {'منتقل می‌شود' if carry else 'منتقل نمی‌شود'}\n"
         f"وضعیت: {'فعال' if p.is_active else 'خاموش'}\n"
         f"اتصال پاسارگارد: {link}"
     )
@@ -315,6 +375,14 @@ def _plan_detail_keyboard(p: Plan, ui: dict | None = None) -> InlineKeyboardMark
             kb._ikb(
                 "🎨 رنگ دکمه",
                 callback_data=f"adm:plan:colorpick:{pid}",
+                style=st,
+            )
+        ],
+        [
+            kb._ikb(
+                ("✅ " if getattr(p, "carry_remaining_quota", True) else "⬜️ ")
+                + "انتقال مانده در تمدید",
+                callback_data=f"adm:plan:flag:carry:{p.id}",
                 style=st,
             )
         ],
@@ -443,6 +511,7 @@ class AdminStates(StatesGroup):
     user_search = State()
     reseller_search = State()
     user_wallet_credit = State()
+    user_wallet_reason = State()
     user_message = State()
     revoke_reseller_reason = State()
     block_user_reason = State()
@@ -629,6 +698,8 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         rows.append([InlineKeyboardButton(text=label[:64], callback_data=f"adm:order:{o.id}")])
     if await count_review_queue(session, shop_id=None):
         rows.append([review_button()])
+    if stuck_count := await stuck_orders.queue_count(session, None):
+        rows.append(stuck_orders.entry_row(stuck_count))
     if callback.message:
         markup = InlineKeyboardMarkup(inline_keyboard=rows)
         markup = with_inline_back(markup, ui, "nv:adm:ops")
@@ -1934,6 +2005,26 @@ async def plan_toggle(callback: CallbackQuery, session: AsyncSession, db_user: B
             logger.debug("plan_toggle: ignored failure", exc_info=True)
     await _render_plans_list(callback, session)
 
+
+@router.callback_query(F.data.regexp(r"^adm:plan:flag:carry:\d+$"))
+@require_bot_owner_handler
+async def plan_carry_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
+        return
+    plan = await session.get(Plan, int(callback.data.rsplit(":", 1)[-1]))
+    if not plan or plan.is_trial:
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        return
+    plan.carry_remaining_quota = not bool(getattr(plan, "carry_remaining_quota", True))
+    await session.commit()
+    await callback.answer(feedback.UPDATED)
+    if callback.message:
+        await callback.message.edit_text(
+            await _plan_detail_text_for(session, plan),
+            reply_markup=await _plan_detail_markup(session, plan),
+        )
+
 @router.callback_query(F.data.startswith("adm:plan:delask:"))
 @require_bot_owner_handler
 async def adm_plan_del_ask(callback: CallbackQuery, db_user: BotUser):
@@ -2272,7 +2363,7 @@ async def adm_users_list(callback: CallbackQuery, session: AsyncSession, db_user
         f"👥 <b>لیست کاربران</b>\n"
         f"صفحه {page + 1} از {max(1, (total + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE)}"
         f" · {total} نفر\n"
-        f"<i>🔔 اعلان · ⏰ انقضا · 📉 حجم — جزئیات در وب‌پنل /users</i>"
+        f"<i>🔔 اعلان · ⏰ انقضا · 📉 حجم کم</i>"
     )
     if callback.message:
         from app.bot.nav_inline import with_inline_back
@@ -2415,7 +2506,6 @@ async def _user_card(
     by = await load_services_by_user_ids(session, [int(user.id)], shop_id=None)
     ops = build_user_ops_row(user, by.get(int(user.id), []))
     flags = risk_mark(user, shop_id=None) + bot_user_alert_flags(ops)
-    blocked = "بله 🚫" if user.is_blocked else "خیر"
     alert_line = ""
     if ops.has_alert:
         bits = []
@@ -2423,21 +2513,24 @@ async def _user_card(
             bits.append(f"انقضا {ops.expire_text}")
         if ops.low_volume:
             bits.append(f"حجم {ops.volume_text}")
-        alert_line = "\n🔔 اعلان: " + " · ".join(bits) if bits else "\n🔔 اعلان فعال"
+        alert_line = "🔔 اعلان: " + " · ".join(bits) if bits else "🔔 اعلان فعال"
     from app.services.color_tags import bot_tag_button_label, effective_color_tag
+    from app.services.loyalty import points_balance
 
     tag_line = bot_tag_button_label(effective_color_tag(user))
-    text = (
-        f"{flags} <b>{html.escape(user.full_name or user.username or '—')}</b>\n\n"
-        f"آیدی تلگرام: <code>{user.telegram_id}</code>\n"
-        f"یوزرنیم: @{html.escape(user.username or '—')}\n"
-        f"نقش: {html.escape(user.role)}\n"
-        f"تگ ریسک: {html.escape(tag_line)}\n"
-        f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
-        f"سرویس‌ها: {ops.service_count}\n"
-        f"مسدود: {blocked}"
-        f"{alert_line}\n\n"
-        f"<i>وب‌پنل: /users?uid={user.id}</i>"
+    pts = await points_balance(session, user, None)
+    text = format_staff_customer_card(
+        flags=flags,
+        display_name=user.full_name or user.username or "—",
+        telegram_id=int(user.telegram_id),
+        username=user.username,
+        wallet_text=format_toman(user.wallet_balance, get_settings().currency),
+        points_text=format_number(pts),
+        service_count=int(ops.service_count),
+        is_blocked=bool(user.is_blocked),
+        role=user.role,
+        risk_tag=tag_line,
+        alert_line=alert_line.strip(),
     )
     if confirm_delete:
         text += (
@@ -2562,6 +2655,7 @@ async def adm_users_message_send(
             message.text or "",
             shop_id=None,
             actor=bot_user_panel_label(db_user),
+            sender_tg=int(db_user.telegram_id or 0),
         )
         await session.commit()
         status = feedback.MESSAGE_SENT
@@ -2690,233 +2784,6 @@ async def adm_users_quick_renew(
     if callback.message and user:
         await _render_user_card(callback.message, session, user, edit=True)
 
-async def _adm_users_wallet_adjust_ask(
-    callback: CallbackQuery,
-    state: FSMContext,
-    session: AsyncSession,
-    db_user: BotUser,
-    *,
-    mode: str,
-    from_reseller_card: bool = False,
-) -> None:
-    if not _is_admin(db_user):
-        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
-        return
-    user_id = int(callback.data.split(":")[-1])
-    user = await session.get(BotUser, user_id)
-    deny = _deny_if_outside_platform_shop(user)
-    if deny:
-        await callback.answer(deny, show_alert=True)
-        return
-    from app.services.bot_user_admin import parse_admin_wallet_mode
-
-    try:
-        direction = parse_admin_wallet_mode(mode)
-    except ValueError as e:
-        await callback.answer(user_safe_error(e), show_alert=True)
-        return
-    await state.update_data(
-        admin_credit_user_id=user_id,
-        admin_wallet_mode=direction,
-        admin_wallet_from_reseller=from_reseller_card,
-        # One key per prompt: pressing «تأیید» twice changes the wallet once.
-        admin_wallet_nonce=secrets.token_hex(8),
-    )
-    await callback.answer()
-    from app.bot.nav_input import ask_text
-
-    action = "افزایش" if direction == "credit" else "کاهش"
-    prompt = (
-        f"💰 {action} کیف پول برای <b>{html.escape(user.full_name or str(user.telegram_id))}</b>\n"
-        f"موجودی فعلی: {format_toman(user.wallet_balance, get_settings().currency)}\n\n"
-        "مبلغ را به تومان بفرستید (عدد مثبت، حداقل ۱۰۰۰).\n"
-        "موجودی منفی مجاز نیست."
-    )
-    await ask_text(
-        callback,
-        state,
-        prompt=prompt,
-        cancel_code="adm_usr",
-        return_to=f"adm:resellers:view:{user_id}" if from_reseller_card else f"adm:users:view:{user_id}",
-        fsm_state=AdminStates.user_wallet_credit,
-        edit=True,
-    )
-
-
-@router.callback_query(F.data.startswith("adm:users:wcredit:"))
-@require_bot_owner_handler
-async def adm_users_wallet_credit_ask(
-    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
-):
-    await _adm_users_wallet_adjust_ask(
-        callback, state, session, db_user, mode="credit"
-    )
-
-
-@router.callback_query(F.data.startswith("adm:users:wdebit:"))
-@require_bot_owner_handler
-async def adm_users_wallet_debit_ask(
-    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
-):
-    await _adm_users_wallet_adjust_ask(
-        callback, state, session, db_user, mode="debit"
-    )
-
-
-@router.callback_query(F.data.regexp(r"^adm:resellers:w(credit|debit):\d+$"))
-@require_bot_owner_handler
-@require_platform_rep_mgmt
-async def adm_resellers_wallet_ask(
-    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
-):
-    mode = "credit" if ":wcredit:" in (callback.data or "") else "debit"
-    await _adm_users_wallet_adjust_ask(callback, state, session, db_user, mode=mode, from_reseller_card=True)
-
-
-@router.message(AdminStates.user_wallet_credit)
-@require_bot_owner_handler
-async def adm_users_wallet_credit_save(
-    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
-):
-    if not _is_admin(db_user):
-        await state.clear()
-        return
-    if kb.is_cancel_text(message.text):
-        from app.bot.nav_input import try_legacy_cancel
-
-        if await try_legacy_cancel(message, state, session, db_user):
-            return
-        await _answer_users_nav(
-            message,
-            session,
-            db_user,
-            feedback.CANCELLED,
-            state,
-            clear_state=True,
-        )
-        return
-    data = await state.get_data()
-    user_id = int(data.get("admin_credit_user_id") or 0)
-    mode = str(data.get("admin_wallet_mode") or "credit")
-    user, deny = await _platform_shop_user(session, user_id) if user_id else (None, feedback.NOT_FOUND)
-    if deny:
-        await _outcome_back_to_users(message, state, session, deny)
-        return
-    from app.services.bot_user_admin import (
-        admin_adjust_user_wallet,
-        parse_admin_wallet_amount,
-        parse_admin_wallet_mode,
-    )
-
-    try:
-        amount = parse_admin_wallet_amount(message.text or "")
-        direction = parse_admin_wallet_mode(mode)
-    except ValueError:
-        await message.answer(
-            "مبلغ را به تومان و با عدد صحیح بفرستید؛ دست‌کم ۱۰۰۰.",
-        )
-        return
-    if await load_reseller_profile(session, int(user.id)) is not None:
-        await state.update_data(admin_wallet_amount=int(amount))
-        await message.answer(
-            _reseller_wallet_confirm_text(user, int(amount), direction, payg=await _is_payg_reseller(session, user)),
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[
-                    InlineKeyboardButton(text="✅ اعمال", callback_data="adm:rwallet:ok"),
-                    InlineKeyboardButton(text="انصراف", callback_data="adm:rwallet:no"),
-                ]]
-            ),
-        )
-        return
-    try:
-        await admin_adjust_user_wallet(
-            session,
-            user,
-            int(amount),
-            mode=direction,
-            actor=f"tg:{db_user.telegram_id}",
-            note="تنظیم از ربات ادمین",
-        )
-    except ValueError as e:
-        await _outcome_on_card(message, state, session, user, f"⚠️ {user_safe_error(e)}")
-        return
-    await session.refresh(user)
-    verb = "شارژ شد" if direction == "credit" else "کسر شد"
-    await _outcome_on_card(
-        message, state, session, user,
-        f"✅ کیف پول {verb}: {format_toman(amount, get_settings().currency)}",
-    )
-
-async def _is_payg_reseller(session: AsyncSession, user: BotUser) -> bool:
-    from app.services.billing import is_payg
-
-    return is_payg(await load_reseller_profile(session, int(user.id)))
-
-
-def _reseller_wallet_confirm_text(user: BotUser, amount: int, direction: str, *, payg: bool) -> str:
-    currency = get_settings().currency
-    action = "افزایش" if direction == "credit" else "کاهش"
-    after = int(user.wallet_balance or 0) + (amount if direction == "credit" else -amount)
-    lines = [
-        f"💰 <b>{action} کیف پول نماینده</b> {html.escape(user.full_name or str(user.telegram_id))}",
-        f"مبلغ: {format_toman(amount, currency)}",
-        f"موجودی فعلی: {format_toman(user.wallet_balance, currency)}",
-    ]
-    if after < 0:
-        lines.append("⚠️ موجودی کافی نیست؛ این کاهش انجام نمی‌شود.")
-    else:
-        lines.append(f"موجودی بعد از تأیید: {format_toman(after, currency)}")
-        if payg and direction == "debit" and after == 0:
-            lines.append("⚠️ موجودی صفر می‌شود و ادمین پاسارگارد نماینده و همهٔ کاربرانش همان لحظه قطع می‌شوند.")
-    lines.append("\nاعمال شود؟")
-    return "\n".join(lines)
-
-
-@router.callback_query(F.data.in_({"adm:rwallet:ok", "adm:rwallet:no"}))
-@require_bot_owner_handler
-async def adm_reseller_wallet_confirm(
-    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
-):
-    if not _is_admin(db_user):
-        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
-        return
-    data = await state.get_data()
-    user_id = int(data.get("admin_credit_user_id") or 0)
-    amount = int(data.get("admin_wallet_amount") or 0)
-    from_reseller = bool(data.get("admin_wallet_from_reseller"))
-    if not user_id or not amount:
-        await callback.answer("این درخواست منقضی شده است.", show_alert=True)
-        return
-    await state.clear()
-    user, deny = await _platform_shop_user(session, user_id)
-    if deny or user is None:
-        await callback.answer(deny or feedback.NOT_FOUND, show_alert=True)
-        return
-    if callback.data == "adm:rwallet:no":
-        await callback.answer(feedback.CANCELLED)
-    else:
-        from app.services.reseller_wallet import adjust_reseller_wallet, schedule_followups
-
-        direction = str(data.get("admin_wallet_mode") or "credit")
-        try:
-            change = await adjust_reseller_wallet(
-                session, user, amount, mode=direction, actor=f"tg:{db_user.telegram_id}",
-                note="تنظیم از ربات ادمین", idempotency_key=f"bot:{direction}:{user_id}:{data.get('admin_wallet_nonce')}",
-            )
-        except ValueError as e:
-            await callback.answer(user_safe_error(e, limit=180), show_alert=True)
-            return
-        schedule_followups(change)
-        verb = "شارژ شد" if direction == "credit" else "کسر شد"
-        await callback.answer(f"کیف پول {verb}؛ مانده {change.balance:,} تومان"[:180], show_alert=True)
-    if callback.message:
-        await session.refresh(user)
-        if from_reseller:
-            await _render_reseller_card(callback.message, session, user, edit=True)
-        else:
-            await _render_user_card(callback.message, session, user, edit=True)
-
-
 @router.callback_query(F.data.startswith("adm:users:svcs:"))
 @require_bot_owner_handler
 async def adm_users_services(
@@ -2949,14 +2816,15 @@ async def adm_users_services(
                 ),
             )
         return
-    lines = [f"📦 <b>سرویس‌های کاربر #{user_id}</b>", ""]
-    for snap in snaps[:15]:
-        lines.append(snapshot_telegram_lines(snap))
-        lines.append("")
+    text = format_services_list(
+        format_services_list_header(user_id, subject="کاربر"),
+        [snapshot_telegram_lines(snap, with_link=False) for snap in snaps[:SERVICE_BUTTON_LIMIT]],
+        without_button=max(0, len(snaps) - SERVICE_BUTTON_LIMIT),
+    )
     if callback.message:
         await safe_edit_text(
             callback.message,
-            "\n".join(lines).strip(),
+            text,
             reply_markup=kb.admin_user_services_keyboard(
                 user_id, [s.service.id for s in snaps]
             ),
@@ -3037,7 +2905,7 @@ async def adm_users_service_link(
 @router.callback_query(F.data.startswith("adm:users:svcrenew:"))
 @require_bot_owner_handler
 async def adm_users_service_renew(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext | None = None
 ):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
@@ -3056,6 +2924,10 @@ async def adm_users_service_renew(
         snapshot_telegram_lines,
     )
 
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت تمدید")
+        return
     try:
         svc = await get_owned_service(
             session, bot_user_id=user_id, service_id=service_id, shop_id=None
@@ -3072,6 +2944,15 @@ async def adm_users_service_renew(
     except Exception as e:
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
+    await log_and_notify(
+        session,
+        bot_actor(db_user, shop_id=None),
+        action="service_renew",
+        target_type="service",
+        target_id=service_id,
+        reason=reason,
+        targets=[NoticeTarget(user_id, int(_user.telegram_id or 0), None, svc.pg_username or "")],
+    )
     await callback.answer(feedback.RENEWED)
     if callback.message:
         await safe_edit_text(
@@ -3131,7 +3012,7 @@ async def adm_users_service_delete_ask(
 @router.callback_query(F.data.startswith("adm:users:svcdel:"))
 @require_bot_owner_handler
 async def adm_users_service_delete(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext | None = None
 ):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
@@ -3151,11 +3032,16 @@ async def adm_users_service_delete(
     from app.services.service_import import admin_delete_pg_flag, is_external_service
 
     explicit_pg = len(parts) > 5 and parts[5] == "pg"
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت حذف سرویس")
+        return
     try:
         svc = await get_owned_service(
             session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
         detach_only = is_external_service(svc) and not explicit_pg
+        notice_target = NoticeTarget(user_id, int(_user.telegram_id or 0), None, svc.pg_username or "")
         await admin_delete_service(
             session, svc, delete_pg=admin_delete_pg_flag(svc, explicit=explicit_pg)
         )
@@ -3166,6 +3052,16 @@ async def adm_users_service_delete(
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     done = f"سرویس #{service_id} از لیست مشتری جدا شد؛ حساب پاسارگارد حفظ شد." if detach_only else f"سرویس #{service_id} حذف شد."
+    await log_and_notify(
+        session,
+        bot_actor(db_user, shop_id=None),
+        action="service_delete",
+        target_type="service",
+        target_id=service_id,
+        reason=reason,
+        targets=[notice_target],
+        notice_action="service_detach" if detach_only else "service_delete",
+    )
     await callback.answer(done, show_alert=True)
     if callback.message:
         await safe_edit_text(
@@ -3179,6 +3075,102 @@ async def adm_users_service_delete(
                 ]
             ),
         )
+
+
+async def _service_name(session: AsyncSession, service_id: int) -> str:
+    service = await session.get(UserService, int(service_id))
+    return (service.pg_username or "") if service is not None else ""
+
+
+async def _adm_apply_staged_adjust(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    user_id: int,
+    service_id: int,
+    adj_key: str,
+    staged: StagedAdjustment,
+) -> ServiceSnapshot | None:
+    """Apply a staged change; a refused change is staged again, an unknown outcome is not."""
+    try:
+        svc = await get_owned_service(session, bot_user_id=user_id, service_id=service_id, shop_id=None)
+        await admin_extend_service(session, svc, extra_days=staged.days, extra_gb=staged.gb)
+        return await service_snapshot(session, svc)
+    except ValueError as exc:
+        await rollback_quiet(session)
+        await restore_staged(state, adj_key, staged)
+        await callback.answer(user_safe_error(exc, limit=160), show_alert=True)
+    except Exception:
+        await rollback_quiet(session)
+        logger.warning("service extend outcome unknown sid=%s", service_id, exc_info=True)
+        await callback.answer(UNKNOWN_ADJUST_OUTCOME, show_alert=True)
+    return None
+
+
+async def _adm_confirm_service_adjust(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    user_id: int,
+    service_id: int,
+    adj_key: str,
+) -> bool:
+    """Apply the staged change; True only when the panel accepted it."""
+    async with service_adjust_lock(service_id):
+        staged = await take_staged(state, adj_key)
+        if staged.is_empty:
+            await callback.answer(NOTHING_STAGED, show_alert=True)
+            return False
+        snap = await _adm_apply_staged_adjust(
+            callback, state, session, user_id=user_id, service_id=service_id, adj_key=adj_key, staged=staged
+        )
+    if snap is None:
+        return False
+    await callback.answer("مانده به‌روز شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            "✅ مانده سرویس به‌روز شد\n\n" + snapshot_telegram_lines(snap),
+            reply_markup=kb.admin_user_service_actions(user_id, service_id),
+        )
+    return True
+
+
+async def _adm_confirm_with_reason(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    customer: BotUser,
+    service_id: int,
+    adj_key: str,
+) -> None:
+    """Ask for the reason, apply the staged change, then log it and tell the customer."""
+    if read_staged(await state.get_data(), adj_key).is_empty:
+        await callback.answer(NOTHING_STAGED, show_alert=True)
+        return
+    reason = await take_reason(state, callback)
+    if reason is None:
+        await ask_reason(callback, state, label="علت تغییر مانده سرویس")
+        return
+    user_id = int(customer.id)
+    if not await _adm_confirm_service_adjust(
+        callback, state, session, user_id=user_id, service_id=service_id, adj_key=adj_key
+    ):
+        return
+    await log_and_notify(
+        session,
+        bot_actor(db_user, shop_id=None),
+        action="service_extend",
+        target_type="service",
+        target_id=service_id,
+        reason=reason,
+        targets=[NoticeTarget(user_id, int(customer.telegram_id or 0), None, await _service_name(session, service_id))],
+    )
+
 
 @router.callback_query(F.data.startswith("adm:users:svcadj:"))
 @require_bot_owner_handler
@@ -3274,50 +3266,19 @@ async def adm_users_service_adjust(
             )
         return
     elif action == "confirm":
-        from app.services.bot_user_admin import (
-            admin_extend_service,
-            get_owned_service,
-            service_snapshot,
-            snapshot_telegram_lines,
+        await _adm_confirm_with_reason(
+            callback, state, session, db_user, customer=_user, service_id=service_id, adj_key=adj_key
         )
-
-        try:
-            svc = await get_owned_service(
-                session, bot_user_id=user_id, service_id=service_id, shop_id=None
-            )
-            await admin_extend_service(
-                session, svc, extra_days=days, extra_gb=gb
-            )
-            snap = await service_snapshot(session, svc)
-        except ValueError as e:
-            await callback.answer(user_safe_error(e, limit=160), show_alert=True)
-            return
-        except Exception as e:
-            await callback.answer(user_safe_error(e, limit=160), show_alert=True)
-            return
-        await state.update_data(**{adj_key: {"days": 0, "gb": 0.0}})
-        await callback.answer("مانده به‌روز شد")
-        if callback.message:
-            await safe_edit_text(
-                callback.message,
-                "✅ مانده سرویس به‌روز شد\n\n" + snapshot_telegram_lines(snap),
-                reply_markup=kb.admin_user_service_actions(user_id, service_id),
-            )
         return
     else:
         # Open adjust screen
         await state.update_data(**{adj_key: {"days": days, "gb": gb}})
         await callback.answer()
 
-    text = (
-        f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\n"
-        f"روز: <b>{days}</b> · گیگ: <b>{gb}</b>\n"
-        "مثبت = افزایش، منفی = کاهش. برای ورود دستی روی عدد بزنید."
-    )
     if callback.message:
         await safe_edit_text(
             callback.message,
-            text,
+            format_adjust_prompt(service_id, days=days, gb=gb),
             reply_markup=kb.admin_user_service_adjust_keyboard(
                 user_id, service_id, days=days, gb=gb
             ),
@@ -3373,7 +3334,7 @@ async def adm_svc_adjust_days_entered(
     await finish_text_step(
         message,
         state,
-        text=f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\nروز: <b>{days}</b> · گیگ: <b>{gb}</b>",
+        text=format_adjust_prompt(service_id, days=days, gb=gb),
         inline=kb.admin_user_service_adjust_keyboard(user_id, service_id, days=days, gb=gb),
     )
 
@@ -3427,7 +3388,7 @@ async def adm_svc_adjust_gb_entered(
     await finish_text_step(
         message,
         state,
-        text=f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\nروز: <b>{days}</b> · گیگ: <b>{gb}</b>",
+        text=format_adjust_prompt(service_id, days=days, gb=gb),
         inline=kb.admin_user_service_adjust_keyboard(user_id, service_id, days=days, gb=gb),
     )
 
@@ -4655,6 +4616,7 @@ async def adm_resapp_no(callback: CallbackQuery, session: AsyncSession, db_user:
                 await callback.bot.send_message(
                     user.telegram_id,
                     "❌ درخواست نمایندگی شما رد شد.\nدر صورت نیاز با پشتیبانی در ارتباط باشید.",
+                    reply_markup=support_markup(),
                 )
         except Exception:
             logger.debug("adm_resapp_no: ignored failure", exc_info=True)
@@ -4766,8 +4728,16 @@ async def _load_platform_ticket(
     return ticket, None
 
 
-def _ticket_thread_text(ticket: Ticket) -> str:
-    lines = [f"🎫 #{ticket.id} — {html.escape(ticket.subject or '')}"]
+def _ticket_thread_text(ticket: Ticket, opener: BotUser | None = None) -> str:
+    from app.services.formatting import info_block
+    from app.services.notifications import _buyer_lines
+
+    lines = [
+        f"🎫 #{ticket.id} — {html.escape(ticket.subject or '')}",
+        "",
+        info_block(_buyer_lines(opener)),
+        "",
+    ]
     for m in (ticket.messages or [])[-12:]:
         who = "پشتیبانی" if m.is_staff else "کاربر"
         lines.append(f"<b>{who}:</b> {html.escape(m.body or '')}")
@@ -4795,10 +4765,13 @@ async def adm_ticket_view(
     await callback.answer()
     await state.set_state(None)
     ui = await get_all_settings(session)
+    opener = await session.get(BotUser, int(ticket.user_id)) if ticket.user_id else None
     if callback.message:
         await callback.message.edit_text(
-            _ticket_thread_text(ticket),
-            reply_markup=_admin_ticket_actions_markup(ticket.id, ui),
+            _ticket_thread_text(ticket, opener),
+            reply_markup=_admin_ticket_actions_markup(
+                ticket.id, ui, user_id=int(ticket.user_id) if ticket.user_id else None
+            ),
         )
 
 
@@ -5028,8 +5001,11 @@ async def adm_broadcast_send(message: Message, state: FSMContext, session: Async
     await _show_outcome(
         message,
         state,
-        f"✅ در صف ارسال قرار گرفت\nمخاطبان: {log.total}\nارسال به‌تدریج انجام می‌شود؛ پیشرفت در پنل وب (پیام گروهی) دیده می‌شود.",
-        back,
+        f"✅ در صف ارسال قرار گرفت\nمخاطبان: {log.total}\nارسال به‌تدریج انجام می‌شود؛ پیشرفت را از «تاریخچهٔ ارسال‌ها» ببینید.",
+        InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📜 وضعیت این ارسال", callback_data=f"bch:v:{log.id}")],
+            *back.inline_keyboard,
+        ]),
     )
 
 @router.callback_query(F.data == "adm:pg:stats")

@@ -26,7 +26,7 @@ RESELLER = {"role": "reseller", "permissions": ["dashboard", "shop_settings"]}
 class ResellerSidebarTests(unittest.TestCase):
     def test_subscription_is_second_and_representatives_follow_customers_in_the_bot_section(self) -> None:
         nav = sidebar(staff=RESELLER, identity={"kind": "reseller", "can_add_representative": True})
-        self.assertEqual(nav["bot"][:4], ["نمای کلی", "اشتراک من", "مشتریان", "نمایندگان من"])
+        self.assertEqual(nav["bot"][:4], ["نمای کلی فروشگاه", "اشتراک من", "مشتریان", "نمایندگان من"])
         self.assertNotIn("اشتراک من", nav["web"])
         self.assertNotIn("نمایندگان من", nav["web"])
 
@@ -40,6 +40,12 @@ class ResellerSidebarTests(unittest.TestCase):
                       is_owner=True)
         self.assertNotIn("اشتراک من", nav["bot"] + nav["web"])
         self.assertIn("نمایندگان", nav["bot"])
+
+    def test_settings_is_the_last_bot_item(self) -> None:
+        owner = sidebar(staff={"role": "admin", "permissions": []}, identity={"kind": "owner"}, is_owner=True)
+        self.assertEqual(owner["bot"][-1], "تنظیمات ربات")
+        shop = sidebar(staff=RESELLER, identity={"kind": "reseller"})
+        self.assertEqual(shop["bot"][-1], "تنظیمات فروشگاه")
 
 
 if __name__ == "__main__":

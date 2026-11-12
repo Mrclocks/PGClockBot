@@ -159,7 +159,7 @@ async def build_referral_text(
         await ensure_loyalty_defaults(session, reseller_id=current_shop_reseller_id())
     except Exception:
         logger.debug("build_referral_text: ignored failure", exc_info=True)
-    stats = await referral_stats(session, db_user.id)
+    stats = await referral_stats(session, db_user.id, shop_id=current_shop_reseller_id())
     _, packed_ents = unpack_rich_text(ui.get("referral_text"))
     if packed_ents:
         extra = "\n".join(
@@ -204,7 +204,7 @@ async def build_loyalty_text(session: AsyncSession, db_user: BotUser) -> str:
     except Exception:
         logger.debug("build_loyalty_text: ignored failure", exc_info=True)
     tier = await get_tier_for_points(session, await _points(session, db_user))
-    stats = await referral_stats(session, db_user.id)
+    stats = await referral_stats(session, db_user.id, shop_id=current_shop_reseller_id())
     month = await month_earned_points(session, db_user.id, shop_id=current_shop_reseller_id())
     ui = await get_all_settings(session)
     lines = [
@@ -1037,7 +1037,7 @@ async def referral_home(callback: CallbackQuery, session: AsyncSession, db_user:
 @router.callback_query(F.data == "ref:stats")
 async def referral_stats_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
-    stats = await referral_stats(session, db_user.id)
+    stats = await referral_stats(session, db_user.id, shop_id=current_shop_reseller_id())
     body = "\n".join(
         [
             kv_line("👤", "کل دعوت‌شده‌ها", str(stats["total"])),

@@ -148,8 +148,9 @@ class UsersOpsUiTests(unittest.TestCase):
         self.assertIn(".badge.badge-risk", css)
         self.assertNotIn(".risk-dot {", css)
 
-        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("مشتریان", base)
+        from tests.sidebar_view import sidebar
+
+        self.assertIn(("مشتریان", "/users"), sidebar("reseller", perms=("dashboard",))["shop"])
 
     def test_action_center_deep_link(self):
         ux = (ROOT / "app/services/ux20.py").read_text(encoding="utf-8")

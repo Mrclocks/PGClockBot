@@ -27,8 +27,10 @@ def register_reseller_capacity_repair_pages(app: FastAPI, *, require_staff: Call
             return redirect_bulk(LIST_URL, err=DENIED)
         report = await repair_current_capacity_snapshots(session)
         text = f"{report.fixed} نماینده اصلاح شد"
+        if report.plan_linked:
+            text += f"؛ پلن {report.plan_linked} اشتراک از پروفایل نوشته شد"
         if report.unreadable:
             text += f"؛ {report.unreadable} مورد از پاسارگارد خوانده نشد"
-        if report.fixed + report.unreadable >= REPAIR_BATCH:
+        if report.fixed + report.unreadable + report.plan_linked >= REPAIR_BATCH:
             text += "؛ برای بقیه دوباره بزنید"
         return redirect_bulk(LIST_URL, ok=text)

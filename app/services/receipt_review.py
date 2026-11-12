@@ -26,12 +26,13 @@ from app.services.receipt_files import fetch_telegram_file, payment_bot_token
 from app.services.reseller_bots import ShopBotUnavailable, open_notify_bot_for_user
 from app.services.resellers import get_reseller_profile, has_bot_perm, reseller_can_review_payment
 from app.services.shop_scope import payment_shop_id, pending_receipt_clause
-from app.services.users import get_all_settings, reset_shop_reseller_id, set_shop_reseller_id
+from app.services.support_button import support_markup
+from app.services.users import DEFAULT_SETTINGS, get_all_settings, reset_shop_reseller_id, set_shop_reseller_id
 
 logger = logging.getLogger(__name__)
 
 QUEUE_LIMIT = 20
-DEFAULT_REJECT_TEXT = "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
+DEFAULT_REJECT_TEXT = DEFAULT_SETTINGS["payment_reject_text"]
 STARS_RECEIPT_PREFIX = "stars:"
 
 
@@ -53,8 +54,25 @@ class Reviewer:
     shop_id: int | None
 
 
-async def mini_reviewer(session: AsyncSession, user: BotUser) -> Reviewer:
-    """The caller's review scope: the platform for an admin, their own shop for a shop owner."""
+async def mini_reviewer(
+    session: AsyncSession,
+    user: BotUser,
+    *,
+    shop_scope_id: int | None = None,
+) -> Reviewer:
+    """The caller's review scope.
+
+    Platform Mini App: admin → platform payments; reseller with ``payments`` → own shop.
+    Shop Mini App (``shop_scope_id`` set): only that shop's owner with ``payments`` —
+    never platform-admin scope and never another shop's queue.
+    """
+    if shop_scope_id is not None:
+        if int(user.id) != int(shop_scope_id):
+            raise ReviewDenied("بررسی رسیدها برای حساب شما فعال نیست")
+        profile = await get_reseller_profile(session, int(user.id))
+        if profile is not None and has_bot_perm(profile, "payments"):
+            return Reviewer(user=user, shop_id=int(shop_scope_id))
+        raise ReviewDenied("بررسی رسیدها برای حساب شما فعال نیست")
     persona = resolve_mini_persona(user)
     if persona == "admin" and (user.role or "") == Role.ADMIN.value:
         return Reviewer(user=user, shop_id=None)
@@ -65,9 +83,14 @@ async def mini_reviewer(session: AsyncSession, user: BotUser) -> Reviewer:
     raise ReviewDenied("بررسی رسیدها برای حساب شما فعال نیست")
 
 
-async def may_review_receipts(session: AsyncSession, user: BotUser) -> bool:
+async def may_review_receipts(
+    session: AsyncSession,
+    user: BotUser,
+    *,
+    shop_scope_id: int | None = None,
+) -> bool:
     try:
-        await mini_reviewer(session, user)
+        await mini_reviewer(session, user, shop_scope_id=shop_scope_id)
     except ReviewDenied:
         return False
     return True
@@ -195,4 +218,6 @@ async def reject_receipt(session: AsyncSession, reviewer: Reviewer, payment_id: 
         if should_close:
             await bot.session.close()
     body = (await get_all_settings(session, reseller_id=shop_id)).get("payment_reject_text") or DEFAULT_REJECT_TEXT
-    await notify_payer(session, payer_id, title="❌ پرداخت رد شد", body=body, shop_id=shop_id)
+    await notify_payer(
+        session, payer_id, title="❌ پرداخت رد شد", body=body, shop_id=shop_id, reply_markup=support_markup()
+    )

@@ -4,6 +4,7 @@
 {% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}کد هدیه{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>
     {{ page_title('gift', 'کد هدیه', help='gift-codes') }}
@@ -16,7 +17,7 @@
   <h2>ساخت کد جدید</h2>
   <form method="post" action="/plans/gift-codes" class="form-stack gift-code-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    {{ gift_code_fields() }}
+    {{ gift_code_fields(plans=gift_code_plans or []) }}
     <div class="actions">
       <button class="btn" type="submit">ساخت کد</button>
     </div>
@@ -54,7 +55,7 @@
           <td class="li-sub">
             {#- On phones line two: kind · uses · per user · purchases · expiry · note. -#}
             <span class="li-only">{{ 'تخفیف' if c.kind == 'discount' else 'شارژ کیف پول' }} · مصرف <bdi dir="ltr">{{ c.used_count }}{% if c.max_uses is not none %}/{{ c.max_uses }}{% endif %}</bdi> ·</span>
-            <span>هر کاربر: {{ c.max_uses_per_user if c.max_uses_per_user is not none else 'نامحدود' }}</span>{% if c.kind == 'discount' %}<span class="muted"> · {{ 'فقط خرید اول' if c.first_purchase_only else d.get('purchase_label', 'همه خریدها') }}</span>{% endif %}
+            <span>هر کاربر: {{ c.max_uses_per_user if c.max_uses_per_user is not none else 'نامحدود' }}</span>{% if c.kind == 'discount' %}<span class="muted"> · {{ 'فقط خرید اول' if c.first_purchase_only else d.get('purchase_label', 'همه خریدها') }}{% if c.plan_ids %} · {{ d.get('plans_label', '') }}{% endif %}</span>{% endif %}
             <span class="li-only">· <bdi dir="ltr">{{ d.get('expiry_label', 'بدون انقضا') }}</bdi>{% if c.note %} · <span dir="auto">{{ c.note }}</span>{% endif %}</span>
           </td>
           <td dir="ltr">{{ d.get('expiry_label', 'بدون انقضا') }}</td>
@@ -82,7 +83,7 @@
   <form method="post" action="/plans/gift-codes/{{ c.id }}/edit" class="form-stack gift-code-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <h2>ویرایش کد <span class="mono" dir="ltr">{{ c.code }}</span></h2>
-    {{ gift_code_fields(c, (gift_code_details or {}).get(c.id, {})) }}
+    {{ gift_code_fields(c, (gift_code_details or {}).get(c.id, {}), plans=gift_code_plans or []) }}
     <div class="actions">
       <button class="btn" type="submit">ذخیره تنظیمات</button>
       <button class="btn btn-ghost" type="button" data-gift-edit="gift-edit-{{ c.id }}">بستن</button>
@@ -90,8 +91,9 @@
   </form>
 </div>
 {% endfor %}
+</div>
 {% endblock %}
 
 {% block page_scripts %}
-<script src="/static/gift-codes.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/gift-codes.js?v={{ asset_v('gift-codes.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 {% endblock %}

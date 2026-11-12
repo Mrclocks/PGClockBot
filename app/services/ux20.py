@@ -609,6 +609,7 @@ async def clone_plan(session: AsyncSession, plan_id: int, *, owner_reseller_id: 
         owner_reseller_id=src.owner_reseller_id,
         is_active=False,
         is_trial=bool(src.is_trial),
+        carry_remaining_quota=bool(getattr(src, "carry_remaining_quota", True)),
         sort_order=int(src.sort_order or 0),
     )
     session.add(copy)
@@ -698,6 +699,7 @@ async def create_charge_code(
     max_uses_per_user: int | None = None,
     first_purchase_only: bool = False,
     purchase_types: str | list[str] | None = None,
+    plan_ids: str | list[str] | None = None,
     audit: StaffActor | None = None,
 ) -> ChargeCode:
     from app.services.gift_codes import create_gift_code
@@ -707,7 +709,7 @@ async def create_charge_code(
         note=note, code=code, kind=kind, percent=percent,
         max_discount_toman=max_discount_toman, expires_at=expires_at,
         max_uses_per_user=max_uses_per_user, first_purchase_only=first_purchase_only,
-        purchase_types=purchase_types, audit=audit,
+        purchase_types=purchase_types, plan_ids=plan_ids, audit=audit,
     )
 
 
@@ -1084,14 +1086,14 @@ def shop_bundle_allowed_setting_keys() -> set[str]:
         RESELLER_SETTINGS_TABS,
         SHOP_SETTINGS_DOMAIN_POST_TABS,
     )
-    from app.services.users import keys_for_tab
+    from app.services.users import PLATFORM_ONLY_SETTING_KEYS, keys_for_tab
 
     keys: set[str] = {"menu_order"}
     for tab, _label in RESELLER_SETTINGS_TABS:
         keys |= keys_for_tab(tab)
     for tab in SHOP_SETTINGS_DOMAIN_POST_TABS:
         keys |= keys_for_tab(tab)
-    return keys
+    return keys - PLATFORM_ONLY_SETTING_KEYS
 
 
 def _parse_import_group_ids(raw: Any) -> list[int]:

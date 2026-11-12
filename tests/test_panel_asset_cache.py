@@ -25,6 +25,37 @@ class PanelAssetCacheTests(unittest.TestCase):
 
     def test_money_and_list_editors_use_the_current_script_content(self) -> None:
         static_dir = Path(__file__).resolve().parents[1] / "app/web/static"
-        for name in ("money-inputs.js", "list-inputs.js"):
+        for name in ("money-inputs.js", "list-inputs.js", "panel_ok_flash.js"):
             with self.subTest(script=name):
                 self.assertEqual(get_panel_asset_cache_key(name), build_asset_cache_key(static_dir / name))
+
+
+class StaticAssetUrlTests(unittest.TestCase):
+    """Every stylesheet and script URL carries its content key, so an edit reaches cached browsers."""
+
+    def test_stylesheets_and_scripts_use_their_content_key(self) -> None:
+        from app.services.panel_assets import asset_version
+
+        static_dir = Path(__file__).resolve().parents[1] / "app/web/static"
+        for name in ("panel.css", "panel-ds.css", "panel-ds.js", "panel-search.js", "miniapp/app.js"):
+            with self.subTest(asset=name):
+                self.assertEqual(asset_version(name), build_asset_cache_key(static_dir / name))
+
+    def test_unknown_names_fall_back_without_reading_files(self) -> None:
+        from app.services.panel_assets import asset_version
+
+        self.assertEqual(asset_version("../.env", fallback="0.0.0"), "0.0.0")
+
+    def test_base_page_links_the_current_stylesheets(self) -> None:
+        import os
+        import re
+        from types import SimpleNamespace
+
+        os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+        from app.api.app import templates
+        from app.services.panel_assets import asset_version
+
+        html = templates.env.get_template("login.html").render(request=SimpleNamespace(query_params={}, url=SimpleNamespace(path="/login"), cookies={}))
+        for name in ("panel.css", "panel-ds.css"):
+            self.assertIn(f"/static/{name}?v={asset_version(name)}", html)
+        self.assertFalse(re.search(r"/static/[\w./-]+\.(css|js)\?v=0\.", html))

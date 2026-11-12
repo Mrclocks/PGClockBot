@@ -1,0 +1,183 @@
+{# Reseller plan create form inside the unified plan modal (design language: panel-ds.css).
+   Field names and element ids are the ones /resellers/plans and the plans.html script expect. #}
+{% from "macros.html" import switch %}
+{% from "_ds.html" import ds_sec, ds_switch, ds_unlimited, ds_perm_groups, ds_foot_warn, ico %}
+{% from "_payg_pricing_fields.html" import payg_pricing_fields %}
+<form method="post" action="/resellers/plans" class="form-stack ds-body" id="reseller-plan-form" data-ds-form novalidate>
+  <input type="hidden" name="billing_mode" id="reseller-billing-mode" value="fixed" />
+  <input type="hidden" name="plan_kind" id="reseller-plan-kind" value="subscription" />
+
+  {% call ds_sec('مشخصات', sid='rp-sec-basic') %}
+    <p class="ds-hint" id="reseller-mode-hint">اشتراک ثابت — گروه و نقش پاسارگارد الزامی است.</p>
+    <label class="form-field"><span class="ds-label-text">نام پلن <span class="ds-req" aria-hidden="true">*</span></span>
+      <input name="name" required placeholder="نمایندگی نقره‌ای" id="reseller-plan-name" data-ds-label="نام پلن" />
+    </label>
+    <label class="form-field"><span id="reseller-price-label">قیمت ورود (تومان)</span>
+      <span class="ds-unit"><input name="price" type="number" data-money value="0" min="0" inputmode="numeric" dir="ltr" id="reseller-plan-price" /><span class="ds-unit-label">تومان</span></span>
+      <small class="muted" id="reseller-price-hint">هزینه خرید پکیج نمایندگی — ۰ = رایگان؛ فقط تأیید ادمین</small>
+    </label>
+    <div id="reseller-price-per-gb-field" class="form-stack" hidden>
+      <label class="form-field">نرخ هر گیگ
+        <span class="ds-unit"><input name="price_per_gb" id="reseller-price-per-gb-input" type="number" data-money min="0" value="0" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
+        <small class="muted">فقط برای PAYG — هر پلن می‌تواند نرخ جدا داشته باشد</small>
+      </label>
+      {{ payg_pricing_fields('rp') }}
+    </div>
+    <button type="button" class="ds-link-btn" data-ds-reveal="#reseller-desc-field">{{ ico('plus') }}افزودن توضیح برای نماینده</button>
+    <label class="form-field" id="reseller-desc-field" hidden>توضیح
+      <textarea name="description" rows="2"></textarea>
+    </label>
+  {% endcall %}
+
+  {% call ds_sec('مدت و ظرفیت', sid='rp-sec-cap') %}
+    {% if pg_limit_cards %}
+    <div class="ds-note" role="note">{{ ico('info') }}<span>ظرفیت آزاد شما:
+      {% for c in pg_limit_cards %}{{ c.label }} <b dir="ltr">{{ c.value }}</b>{% if not loop.last %} · {% endif %}{% endfor %}</span></div>
+    {% endif %}
+    <div class="form-field" id="reseller-duration-field">
+      <span class="ds-label-text">مدت اشتراک</span>
+      <div class="ds-chips" role="radiogroup" aria-label="مدت اشتراک" data-ds-choice data-ds-target="#reseller-duration-days" data-ds-other-field="#reseller-duration-custom">
+        <button type="button" role="radio" data-value="30">۳۰ روز</button>
+        <button type="button" role="radio" data-value="90">۹۰ روز</button>
+        <button type="button" role="radio" data-value="180">۱۸۰ روز</button>
+        <button type="button" role="radio" data-value="0">نامحدود</button>
+        <button type="button" role="radio" data-ds-other>دلخواه</button>
+      </div>
+      <span class="ds-unit" id="reseller-duration-custom" hidden><input name="duration_days" id="reseller-duration-days" type="number" min="0" value="0" inputmode="numeric" dir="ltr" aria-label="مدت اشتراک (روز)" /><span class="ds-unit-label">روز</span></span>
+    </div>
+    <div class="ds-grid-2" id="reseller-included-fields">
+      {{ ds_unlimited('حجم پایه', 'included_gb', 'reseller-included-gb', 'گیگ') }}
+      {{ ds_unlimited('کاربر پایه', 'included_users', 'reseller-included-users', 'نفر') }}
+    </div>
+    <div class="ds-grid-2" id="reseller-addon-fields" hidden>
+      <label class="form-field" id="reseller-addon-gb-field">حجم بسته
+        <span class="ds-unit"><input name="addon_gb" type="number" min="0" value="0" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">گیگ</span></span>
+      </label>
+      <label class="form-field" id="reseller-addon-users-field">کاربر بسته
+        <span class="ds-unit"><input name="addon_users" type="number" min="0" value="0" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">نفر</span></span>
+      </label>
+    </div>
+  {% endcall %}
+
+  <section class="ds-sec" id="reseller-renew-fields">
+    <div class="ds-sec-head"><h3 class="ds-sec-title">تمدید</h3></div>
+    <div class="ds-card">
+      <div class="form-field">
+        <span class="ds-label-text">محاسبهٔ قیمت تمدید</span>
+        <select name="renew_pricing_mode" id="reseller-renew-pricing-mode" data-ui-select="1" hidden>
+          <option value="fixed" selected>مبلغ ثابت</option>
+          <option value="from_capacity">بر اساس ظرفیت</option>
+        </select>
+        <div class="sales-seg ds-seg" role="radiogroup" aria-label="محاسبهٔ قیمت تمدید" data-ds-choice data-ds-target="#reseller-renew-pricing-mode">
+          <button type="button" role="radio" data-value="fixed">مبلغ ثابت</button>
+          <button type="button" role="radio" data-value="from_capacity">بر اساس ظرفیت</button>
+        </div>
+        <small class="muted" id="reseller-renew-mode-hint">اگر خرید حجم و کاربر اضافه روشن باشد، تمدید همیشه بر اساس ظرفیت (پایه + اضافه‌ها) حساب می‌شود.</small>
+      </div>
+      <label class="form-field">قیمت تمدید
+        <span class="ds-unit"><input name="renew_price" type="number" data-money min="0" value="0" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
+        <small class="muted">۰ = همان قیمت ورود پلن</small>
+      </label>
+      <div class="ds-rows" id="reseller-renew-carry-block">
+        {{ ds_switch('carry_remaining_period', 'انتقال زمان باقی‌مانده', 'مدت جدید به تاریخ انقضای فعلی اضافه می‌شود؛ خاموش: دوره از همین الان شروع می‌شود', true) }}
+        {{ ds_switch('keep_extras_on_renew', 'حفظ حجم و کاربر اضافه', 'ظرفیت خریداری‌شده به دورهٔ بعد منتقل می‌شود؛ خاموش: با تمدید پاک می‌شود', true) }}
+      </div>
+    </div>
+  </section>
+
+  <div id="reseller-subscription-extras">
+    <section class="ds-sec" id="reseller-buy-extra-block">
+      <div class="ds-sec-head"><h3 class="ds-sec-title">فروش حجم و کاربر اضافه</h3></div>
+      <div class="ds-card">
+        {{ ds_switch('allow_buy_extra', 'نماینده بتواند ظرفیت اضافه بخرد', 'بسته‌ها فقط برای همین پلن در ربات و «اشتراک من» دیده می‌شوند', false, id='reseller-allow-buy-extra') }}
+        <div class="ds-grid-2" id="reseller-extra-prices" hidden>
+          <label class="form-field">قیمت هر گیگ
+            <span class="ds-unit"><input name="extra_gb_price" id="reseller-extra-gb-price" type="number" data-money min="0" value="0" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
+          </label>
+          <label class="form-field">قیمت هر کاربر
+            <span class="ds-unit"><input name="extra_user_price" id="reseller-extra-user-price" type="number" data-money min="0" value="0" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
+          </label>
+        </div>
+        {% set packs_editor_id = 'reseller-extra-packs' %}
+        {% set packs_hidden = true %}
+        {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
+        {% include "_reseller_extra_packs_editor.html" %}
+      </div>
+    </section>
+
+    {% call ds_sec('اتصال پاسارگارد', sid='rp-sec-pg') %}
+      <label class="form-field" id="reseller-role-field"><span class="ds-label-text">نقش ادمین <span class="ds-req" aria-hidden="true">*</span></span>
+        <select name="pg_role_id" id="reseller-pg-role" required data-ds-label="نقش ادمین">
+          <option value="" disabled selected>انتخاب نقش…</option>
+          {% for r in pg_roles %}
+          <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
+          {% endfor %}
+        </select>
+        <small class="muted">ادمین نماینده در پاسارگارد با همین نقش ساخته می‌شود.</small>
+      </label>
+      <div class="form-field" id="reseller-groups">
+        <span class="ds-label-text">گروه‌ها <span class="ds-req" aria-hidden="true">*</span></span>
+        <div class="ds-tags" data-ds-require-one data-ds-label="گروه‌های پاسارگارد">
+          {% for g in groups %}
+          <label class="ds-tag"><input type="checkbox" name="group_{{ g.get('id') }}" value="{{ g.get('id') }}" />{{ ico('check') }}{{ g.get('name') or g.get('id') }}</label>
+          {% else %}
+          <span class="muted">گروهی از پاسارگارد لود نشد — اتصال پاسارگارد را بررسی کنید.</span>
+          {% endfor %}
+        </div>
+        <small class="muted">حداقل یک گروه؛ کاربران نماینده در همین گروه‌ها ساخته می‌شوند.</small>
+      </div>
+      <div class="ds-divider"></div>
+      <div class="ds-rows" id="reseller-provision-switches">
+        {{ ds_switch('create_pg_admin', 'ساخت ادمین هنگام تأیید', 'مالکیت کاربران نماینده به این ادمین سپرده می‌شود', true) }}
+        {{ ds_switch('allow_pg_panel_access', 'دسترسی به پاسارگارد', 'خاموش: منو و صفحه‌های پاسارگارد پنهان می‌شود و رمز پنل جدا از رمز وب‌پنل و ارسال‌نشدنی است', true) }}
+        {{ ds_switch('share_pg_panel_url', 'ارسال آدرس و رمز پنل', 'فقط وقتی دسترسی به پاسارگارد روشن است ارسال می‌شود', false) }}
+      </div>
+    {% endcall %}
+
+    <section class="ds-sec" id="reseller-perms-section">
+      <div class="ds-sec-head"><h3 class="ds-sec-title">دسترسی‌های نماینده</h3>
+        <button type="button" class="ds-link-btn" data-ds-perms-reset="#reseller-perms-box">بازگشت به پیشنهادی</button></div>
+      <div class="ds-card ds-card-flush" id="reseller-perms-box" data-ds-perms>
+        <div class="ds-acc-top"><span><b data-ds-total></b> از <span data-ds-of></span> دسترسی روشن</span><small>در پنل وب و ربات یکسان؛ هنگام تأیید درخواست اعمال می‌شود</small></div>
+        {{ ds_perm_groups(feature_perm_groups(), open_first=true) }}
+      </div>
+    </section>
+  </div>
+
+  {% call ds_sec('نمایش در ربات', sid='rp-sec-show') %}
+    <div class="ds-rows">{{ ds_switch('is_active', 'پلن فعال باشد', 'خاموش: در ربات نمایش داده نمی‌شود', true) }}</div>
+    <div class="ds-divider"></div>
+    <label class="form-field" id="reseller-category-field">برچسب دسته
+      <select name="category_id" data-plan-category-select data-category-audience="resellers">
+        <option value="">بدون برچسب</option>
+        {% for c in plan_categories or [] %}
+          {% if c.is_active and (c.audience or 'users') == 'resellers' %}
+          <option value="{{ c.id }}">{{ c.name }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+      <small class="muted" id="reseller-category-hint">برچسب نمایش برای پلن‌های نمایندگی — از «برچسب دسته» با مخاطب نمایندگان بسازید</small>
+    </label>
+    <div class="ds-grid-2">
+      {% set plan_button_style = 'inherit' %}
+      {% set plan_color_compact = true %}
+      <div class="form-field">رنگ دکمه
+        {% include "_plan_button_style_field.html" %}
+        <small class="muted">«ارث از دسته»: رنگ دکمهٔ دسته</small>
+      </div>
+      <label class="form-field">ترتیب نمایش
+        <input name="sort_order" type="number" value="0" inputmode="numeric" dir="ltr" />
+        <small class="muted">عدد کمتر، بالاتر</small>
+      </label>
+    </div>
+  {% endcall %}
+
+  <div class="ui-modal-sticky-save ds-foot" data-ds-form="reseller-plan-form">
+    {{ ds_foot_warn() }}
+    <p class="ds-summary" id="reseller-plan-summary" aria-live="polite"></p>
+    <div class="ds-foot-btns">
+      <button class="btn" type="submit">ذخیره پلن</button>
+
+    </div>
+  </div>
+</form>

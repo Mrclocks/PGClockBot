@@ -43,7 +43,26 @@
     else input.value = normalize(input.value);
   }
 
-  const helpers = {groupMoneyDigits, formatMoneyInput, syncMoneyMode};
+  /** Submit money fields as plain digits. Fields that share a name (rows of one list) keep
+      every value in order; FormData.set would collapse them into the last one. */
+  function normalizeMoneyFormData(formData, controls, normalize) {
+    const names = new Set(controls
+      .filter((control) => control.name && !control.disabled && control.hasAttribute("data-money"))
+      .map((control) => control.name));
+    names.forEach((name) => {
+      if (!formData.has(name)) return;
+      const values = formData.getAll(name);
+      const sources = controls.filter((control) => control.name === name && !control.disabled);
+      formData.delete(name);
+      values.forEach((value, index) => {
+        const source = sources[index];
+        const isMoney = !!source && source.hasAttribute("data-money") && typeof value === "string";
+        formData.append(name, isMoney ? normalize(value) : value);
+      });
+    });
+  }
+
+  const helpers = {groupMoneyDigits, formatMoneyInput, syncMoneyMode, normalizeMoneyFormData};
   if (typeof module === "object" && module.exports) module.exports = helpers;
   else root.PanelMoney = helpers;
 })(typeof window === "object" ? window : globalThis);

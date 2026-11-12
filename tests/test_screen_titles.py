@@ -63,6 +63,7 @@ OLD_PLAIN_TITLES = {
     "c.support": "🎧 پشتیبانی",
     "c.loyalty": "⭐ باشگاه مشتریان",
     "r.home": "🤝 پنل نماینده",
+    "r.broadcast": "📢 پیام گروهی",
 }
 # Shop panel groups added after the titles became editable; they never had an old heading.
 GROUP_TITLES = {
@@ -119,6 +120,7 @@ class MenuRendersTitleTests(unittest.IsolatedAsyncioTestCase):
             patch.object(reply_nav, "_deny_unless_owner", AsyncMock(return_value=True)),
             patch.object(reply_nav, "get_all_settings", AsyncMock(return_value=ui)),
             patch("app.services.admin_counters.pending_counts", AsyncMock(side_effect=RuntimeError)),
+            patch.object(reply_nav, "count_review_charges", AsyncMock(return_value=0)),
             patch("app.bot.nav_inline.present_nav_panel", AsyncMock()) as present,
         ):
             await reply_nav.open_admin_ops_hub(MagicMock(), MagicMock(), MagicMock(id=1), None)
@@ -129,8 +131,10 @@ class MenuRendersTitleTests(unittest.IsolatedAsyncioTestCase):
 
         ui = dict(DEFAULT_SETTINGS)
         ui[title_setting_key("c.wallet")] = "💰 حساب من"
+        ui["loyalty_enabled"] = "0"
         with (
-            patch.object(reply_nav, "get_all_settings", AsyncMock(return_value=ui)),
+            # open_wallet_home loads settings inside load_wallet_home (users.get_all_settings).
+            patch("app.services.users.get_all_settings", AsyncMock(return_value=ui)),
             patch("app.services.wallet.wallet_balance_for_context", AsyncMock(return_value=0)),
             patch("app.bot.nav_inline.present_inline_only", AsyncMock()) as present,
         ):

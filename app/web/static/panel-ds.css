@@ -1,0 +1,637 @@
+/* Panel design rules — one stylesheet, written from docs/DESIGN_SYSTEM.md.
+   Scope: "ds" on <main> (every page), on each .ui-modal root and on the auth panels.
+   Loaded after panel.css; component sizes and gaps come only from the tokens below. */
+
+/* ===================================================================== 1. Tokens */
+.ds {
+  --g1: 4px; --g2: 8px; --g3: 12px; --g4: 16px; --g6: 24px; --g8: 32px;
+  --box-pad: var(--g4);          /* inside every box, all four sides */
+  --box-gap: var(--g4);          /* between items inside a box */
+  --sec-gap: var(--g6);          /* between boxes / sections */
+  --ctl-h: var(--btn-h);         /* 44: fields, selects, buttons, tabs, icon buttons */
+  --cmp-h: var(--ctl-sm-h);      /* 36: compact controls */
+  --num-w: 96px;                 /* number box in a list row (amount); 72 on phones */
+  --money-w: 160px;              /* price box in a list row */
+  --lbl-h: var(--tag-h);         /* 28: status tags, counters */
+  --track-pad: 3px;              /* track border 1 + pad 3 + item 36 + 3 + 1 = 44 */
+  --box-radius: var(--radius);
+  --inner-radius: 16px;
+  --line: var(--border);
+  --dash: color-mix(in srgb, var(--border) 85%, transparent);
+  --sel-line: color-mix(in srgb, var(--brand) 72%, transparent);
+  --sel-bg: color-mix(in srgb, var(--brand) 10%, transparent);
+  --sel-fg: var(--brand-fg);
+  --box-bg: color-mix(in srgb, var(--foreground) 3%, transparent);
+  --inner-bg: color-mix(in srgb, var(--foreground) 2.5%, transparent);
+  /* Legacy names kept for templates and scripts that read them. */
+  --ds-1: var(--g1); --ds-2: var(--g2); --ds-3: var(--g3); --ds-4: var(--g4); --ds-6: var(--g6);
+  --ds-control-h: var(--ctl-h); --ds-tab-h: var(--ctl-h); --ds-chip-h: var(--ctl-h); --ds-tag-h: var(--lbl-h);
+  --ds-sel-line: var(--sel-line); --ds-sel-bg: var(--sel-bg); --ds-sel-fg: var(--sel-fg);
+  --ds-divider: var(--dash);
+}
+.ds [hidden], .ds[hidden] { display: none !important; }
+
+/* Text in every control sits on both centre lines. */
+.ds .btn, .ds a.btn, .ds .icon-btn, .ds .ds-del, .ds .ds-add, .ds .ds-mini, .ds .ds-tag, .ds .badge, .ds .ds-badge,
+.ds .ds-meta, .ds .ds-tab-count, .ds .ds-steps a, .ds .section-tabs a, .ds .section-tabs .tab-btn, .ds .ds-seg button,
+.ds .sales-seg button, .ds .sales-seg a, .ds .ds-aud button, .ds .ds-chips button, .ds .ui-switch-chip {
+  display: inline-flex; align-items: center; justify-content: center; text-align: center;
+  line-height: 1; white-space: nowrap; box-sizing: border-box;
+}
+
+/* ===================================================================== 2. Buttons */
+.ds .btn, .ds a.btn { height: var(--ctl-h); min-height: var(--ctl-h); padding: 0 var(--g4); gap: var(--g2); font-size: 13.5px; }
+.ds .btn-sm, .ds a.btn-sm, .ds .btn-star { height: var(--cmp-h); min-height: var(--cmp-h); padding: 0 var(--g3); font-size: 12.5px; }
+.ds .icon-btn { width: var(--ctl-h); height: var(--ctl-h); min-height: var(--ctl-h); padding: 0; flex: 0 0 auto; }
+.ds .icon-btn .ico { width: 18px; height: 18px; }
+/* Warnings act like main actions: the brand colour, so a colour change in the panel settings reaches them. */
+.btn-warn, a.btn.btn-warn {
+  color: var(--brand-fg) !important;
+  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent) !important;
+  background: color-mix(in srgb, var(--brand) 8%, transparent) !important;
+}
+.btn-warn:hover, a.btn.btn-warn:hover { background: color-mix(in srgb, var(--brand) 15%, transparent) !important; }
+html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
+
+/* ===================================================================== 3. Modal shell */
+.ui-modal.ds .ui-modal-panel {
+  --modal-frost-pad: var(--g4);
+  --modal-scrollbar-room: 0px;
+  --modal-save-pad-y: var(--g3);
+}
+.ui-modal.ds .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {
+  gap: 0;
+  padding: 0 var(--g4) calc(var(--modal-save-footer-h, 0px) + var(--g4));
+  scrollbar-gutter: auto;
+}
+/* The last content ends 16 above the footer line, like the 16 below it; without a footer, 16 above the edge. */
+.ui-modal.ds .ui-modal-panel[data-scroll-shell="1"]:not(:has(> .ui-modal-sticky-save)) > .ui-modal-scroll { padding-bottom: var(--g4); }
+/* A dialog's footer sits in its form: no extra space under it, and 16 between the message and the footer line. */
+.ui-modal.ds.ds-dialog .ui-modal-panel[data-scroll-shell="1"]:not(:has(> .ui-modal-sticky-save)) > .ui-modal-scroll { padding-bottom: 0; }
+.ui-modal.ds.ds-dialog .ui-modal-scroll > form { gap: var(--g4); }
+.ui-modal.ds.ds-dialog form .ds-body { padding-top: 0; }
+.ui-modal.ds.ds-dialog .ds-body { gap: var(--g4); }
+.ui-modal.ds.ds-dialog .ui-modal-scroll .ds-foot { margin: 0 calc(-1 * var(--g4)); }
+@media (max-width: 640px) {
+  .ui-modal.ds { padding: calc(var(--g6) + var(--safe-top)) 0 0 0; align-items: flex-end; }
+  .ui-modal.ds .ui-modal-panel { width: 100%; max-height: 100%; height: 100%; border-radius: var(--box-radius) var(--box-radius) 0 0; border-bottom: 0; }
+  .ui-modal.ds.ds-dialog .ui-modal-panel { height: auto; }
+}
+
+/* Header: 16 on every side, one 44px row (icon · title · switch · close), optional second row. */
+.ui-modal.ds .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head,
+.ui-modal.ds .ui-modal-head {
+  display: flex; flex-direction: column; gap: var(--g3);
+  margin: 0 calc(-1 * var(--g4)) 0; padding: var(--g4) !important;
+  border-bottom: 1px solid var(--modal-frost-line, var(--line));
+}
+.ui-modal.ds .ds-head-row, .ui-modal.ds .ui-modal-head:not(.ds-head) {
+  display: flex; flex-direction: row; align-items: center; gap: var(--g3); width: 100%; min-height: var(--ctl-h);
+}
+.ui-modal.ds .modal-title { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--g3); margin: 0; }
+.ui-modal.ds .modal-title .page-title-ico { width: var(--ctl-h); height: var(--ctl-h); border-radius: 14px; }
+.ui-modal.ds .modal-title-copy { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
+.ui-modal.ds .modal-title h2 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ui-modal.ds .modal-title-caption { margin: 0; font-size: 12px; line-height: 1.4; }
+.ui-modal.ds .ui-modal-head .icon-btn { margin: 0; }
+
+/* Body: sections 24 apart, the first 16 below the header. */
+.ui-modal.ds .ds-body, .ui-modal.ds .ui-modal-scroll > form, .ui-modal.ds .ds-stack {
+  display: flex; flex-direction: column; gap: var(--sec-gap); padding: var(--g4) 0 0; margin: 0;
+}
+.ui-modal.ds .ui-modal-scroll > .ds-sec:first-of-type,
+.ui-modal.ds .ui-modal-scroll > .modal-section-tabs { margin-top: var(--g4); }
+.ui-modal.ds .ds-body > .ds-sec, .ui-modal.ds .ds-sec { padding: 0; margin: 0; scroll-margin-top: 160px; }
+
+/* Footer: pinned, same padding for one or two buttons, safe area included. */
+.ui-modal.ds .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save,
+.ui-modal.ds .ds-foot {
+  display: flex !important; flex-direction: column; gap: var(--g2) !important;
+  padding: var(--g4) var(--g4) calc(var(--g4) + var(--safe-bottom)) !important;
+  border-top: 1px solid var(--modal-frost-line, var(--line));
+}
+.ui-modal.ds .ds-foot-btns, .ui-modal.ds .ui-modal-sticky-save > .actions {
+  display: flex; gap: var(--g2); width: 100%; margin: 0;
+}
+.ui-modal.ds .ds-foot-btns > .btn, .ui-modal.ds .ui-modal-sticky-save .btn { flex: 1 1 0; width: auto; margin: 0; }
+/* A dialog pairs the action (two shares) with «انصراف» (one share). */
+.ui-modal.ds .ds-foot-btns > .btn:first-child:not(:only-child) { flex-grow: 2; }
+.ui-modal.ds .ds-foot-warn {
+  display: flex; align-items: center; gap: var(--g2); min-height: var(--cmp-h); padding: 0 var(--g3);
+  border-radius: 999px; text-decoration: none; font-size: 12.5px; color: var(--foreground); box-sizing: border-box;
+  background: color-mix(in srgb, var(--warn) 12%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+}
+.ui-modal.ds .ds-foot-warn svg { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: var(--warn); stroke-width: 2; stroke-linecap: round; }
+.ui-modal.ds .ds-foot-warn b { font-weight: 600; }
+.ui-modal.ds .ds-foot-warn-go { margin-inline-start: auto; color: var(--sel-fg); font-weight: 600; white-space: nowrap; }
+.ui-modal.ds .ds-summary { margin: 0; font-size: 12px; color: var(--muted-fg); text-align: center; }
+
+/* Motion: every modal slides up to open and slides down to close; the backdrop fades with it.
+   On phones the sheet travels from the bottom edge; on wider screens the centred panel travels a short way.
+   Closing stays under the 240ms panel.js waits before removing the modal. */
+@keyframes ds-slide-up { from { transform: translateY(var(--ds-slide)); opacity: var(--ds-slide-opacity); } to { transform: none; opacity: 1; } }
+@keyframes ds-slide-down { from { transform: none; opacity: 1; } to { transform: translateY(var(--ds-slide)); opacity: var(--ds-slide-opacity); } }
+@keyframes ds-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ds-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.ui-modal.ds { --ds-slide: 48px; --ds-slide-opacity: 0; }
+.ui-modal.ds.open:not(.is-closing) .ui-modal-backdrop { animation: ds-fade-in 240ms ease-out both; }
+.ui-modal.ds.open:not(.is-closing) .ui-modal-panel { animation: ds-slide-up 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.ui-modal.ds.open.is-closing .ui-modal-backdrop { animation: ds-fade-out 220ms ease-in forwards; }
+.ui-modal.ds.open.is-closing .ui-modal-panel { animation: ds-slide-down 220ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+@media (max-width: 640px) {
+  /* A phone sheet slides in whole, without fading. */
+  .ui-modal.ds { --ds-slide: 100%; --ds-slide-opacity: 1; }
+  .ui-modal.ds.open:not(.is-closing) .ui-modal-panel { animation-duration: 340ms; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-modal.ds.open .ui-modal-panel, .ui-modal.ds.open .ui-modal-backdrop { animation: none !important; }
+}
+
+/* ===================================================================== 4. Sections and boxes */
+.ds .ds-sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); margin: 0 0 var(--g2); }
+/* A title alone needs no room for an action, so the space above its letters is not padded out. */
+.ds .ds-sec-head:has(> :only-child) { min-height: 0; }
+/* The on/off switch of a section sits at the far end of its title row (rule 6). */
+.ds .ds-head-switch { display: inline-flex; align-items: center; flex: 0 0 auto; cursor: pointer; }
+/* A page form built of sections keeps the section gap to the box after it. */
+.ds .ds-page-form { margin: 0 0 var(--sec-gap); }
+/* While it is off only the title row shows: a card whose one body is hidden is not drawn. */
+.ds .ds-card:has(> [data-ds-show-when][hidden]:only-child) { display: none; }
+.ds .ds-sec:has(> .ds-card > [data-ds-show-when][hidden]:only-child) > .ds-sec-head { margin-bottom: 0; }
+.ds .ds-sec-title { margin: 0; padding-inline: var(--g1); font-size: 13px; font-weight: 600; color: var(--muted-fg); }
+.ds .ds-card, .ds .settings-card, .ds .edit-section, .ui-modal.ds .ui-modal-scroll > form > .card {
+  display: flex; flex-direction: column; gap: var(--box-gap); margin: 0;
+  padding: var(--box-pad); border-radius: var(--box-radius); border: 1px solid var(--line); background: var(--box-bg);
+  box-sizing: border-box;
+}
+/* First and last child carry no vertical margin, so a box's top and bottom space are equal. */
+.ds .ds-card > *, .ds .settings-card > *, .ds .edit-section > *, .ds .form-stack > *, .ds .settings-grid > * { margin-block: 0; }
+.ds .ds-card-flush { padding: 0; gap: 0; overflow: hidden; }
+.ds .ds-divider { height: 1px; background: var(--line); margin: 0 calc(-1 * var(--box-pad)); }
+.ds .ds-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--box-gap) var(--g3); align-items: start; }
+/* Two-column field grids: a field left without a partner takes the whole row instead of half a row beside an empty
+   half (panel-ds.js marks it, counting only the fields on screen). */
+.ds-row-alone { grid-column: 1 / -1; }
+.ds .ds-desc, .ds .settings-card > p.muted, .ds .edit-section-head p.muted { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--muted-fg); }
+.ds .settings-card > h2, .ds .edit-section-head h3, .ds .edit-section > h3 { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.4; }
+.ds .settings-card > h2 + p.muted { margin-top: calc(var(--g2) - var(--box-gap)); }
+.ds .edit-section-head { display: flex; flex-direction: column; gap: var(--g1); margin: 0; }
+.ds .form-stack { display: flex; flex-direction: column; gap: var(--box-gap); }
+.ds .settings-grid { gap: var(--box-gap); }
+.ds .ds-body, .ds .settings-form, .ds .settings-main, .ds .edit-body { display: flex; flex-direction: column; gap: var(--sec-gap); }
+.ds .ds-body > *, .ds .settings-form > *, .ds .settings-main > * { margin-block: 0; }
+/* Boxes inside a box (list rows, contacts): one level, same 16 inside. */
+.ds .pay-dest-row, .ds .ds-card .ds-card {
+  display: flex; flex-direction: column; gap: var(--box-gap); position: relative;
+  padding: var(--box-pad); border-radius: var(--inner-radius); border: 1px solid var(--line); background: var(--inner-bg); margin: 0;
+}
+.ds .pay-dest-rows { display: flex; flex-direction: column; gap: var(--g3); }
+.ds .pay-dest-row > .ds-del.pay-dest-remove-btn { position: absolute; top: calc(var(--box-pad) - 10px); left: calc(var(--box-pad) - 10px); width: 40px; height: 40px; }
+
+/* ===================================================================== 5. Fields */
+.ds .form-field, .ds .setting-item > label:not(.ui-switch-row):not(.toggle-row) {
+  display: flex; flex-direction: column; gap: var(--g2); margin: 0; font-size: 13px; font-weight: 500;
+}
+.ds .form-field > small, .ds .setting-item small.muted, .ds .ds-hint { margin: 0; font-size: 12px; font-weight: 400; line-height: 1.6; color: var(--muted-fg); }
+.ds input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]), .ds select {
+  height: var(--ctl-h); min-height: var(--ctl-h); margin: 0; line-height: normal; box-sizing: border-box;
+}
+.ds .ui-select-toggle { height: var(--ctl-h); min-height: var(--ctl-h); box-sizing: border-box; }
+.ds textarea { margin: 0; }
+.ds .ds-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); }
+.ds .ds-req { color: var(--destructive); font-weight: 700; }
+.ds .ds-error { margin: 0; color: var(--destructive); font-size: 12px; font-weight: 400; }
+.ds .ds-unit { position: relative; display: block; }
+/* The unit sits inside the field on its left; the number starts from the right edge, like the text around it, so it
+   never drifts towards the unit. */
+.ds .ds-unit input { width: 100%; padding-left: 56px; padding-right: var(--g3); font-variant-numeric: tabular-nums; }
+.ds .ds-unit-label {
+  position: absolute; inset-block: 0; left: var(--g4); display: flex; align-items: center; padding-top: 2px;
+  font-size: 12px; font-weight: 400; line-height: 1; color: var(--muted-fg); pointer-events: none;
+}
+/* A number box without a unit (count, sort order, numeric id) shows its number in the middle, in forms and in list
+   rows alike. The base input rules carry long :not() chains that would push it to one side, so this is important. */
+.ds :is(input[type="number"], input[data-money], input[data-money-kind], input[inputmode="numeric"], input[inputmode="decimal"]) { text-align: center !important; }
+/* A box with its unit inside (تومان، گیگ، روز، …) keeps the number on the right. A list-row amount hides its unit
+   (it is in the column title), so it stays a centred box. */
+.ds .ds-unit:not(.ds-pack-amt) > input { text-align: right !important; }
+.ds .ds-unit.is-unlimited input { color: transparent; caret-color: transparent; }
+/* «نامحدود» shows where the number would: on the right. */
+.ds .ds-unit.is-unlimited::after {
+  content: attr(data-unlimited-label); position: absolute; inset-block: 0; left: 56px; right: var(--g3); display: flex; align-items: center; justify-content: flex-end;
+  font-size: 14px; color: var(--muted-fg); pointer-events: none;
+}
+.ds .ds-mini {
+  min-height: var(--lbl-h); padding: 0 var(--g3); border-radius: 999px; border: 1px solid var(--line);
+  background: transparent; color: var(--muted-fg); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
+}
+.ds .ds-mini[aria-pressed="true"] { background: var(--sel-bg); border-color: var(--sel-line); color: var(--sel-fg); }
+.ds .ds-link-btn {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: var(--lbl-h);
+  border: 0; background: none; padding: 0; font: inherit; font-size: 13px; font-weight: 500; color: var(--sel-fg); cursor: pointer;
+}
+.ds .ds-link-btn svg, .ds .ds-add svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.ds .ds-note {
+  display: flex; align-items: center; gap: var(--g2); padding: var(--g3); border-radius: 12px;
+  background: color-mix(in srgb, var(--pg-line) 9%, transparent); font-size: 12.5px; line-height: 1.6;
+}
+.ds .ds-note svg { flex: 0 0 auto; width: 18px; height: 18px; fill: none; stroke: var(--pg-line); stroke-width: 2; stroke-linecap: round; }
+.ds .ds-note[data-tone="danger"] { background: color-mix(in srgb, var(--destructive) 9%, transparent); }
+.ds .ds-note[data-tone="danger"] svg { stroke: var(--destructive); }
+/* A colour field is a plain field, never a box inside the card. */
+.ds .btn-color-card, .ds .plan-color-card {
+  padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important;
+  display: flex; flex-direction: column; gap: var(--g2); margin: 0;
+}
+.ds .plan-color-field { display: flex; flex-direction: column; gap: var(--g2); margin: 0; }
+.ds .plan-color-field .plan-color-hint { margin: 0; }
+.ds .btn-color-label { font-size: 13px; font-weight: 500; }
+
+/* ===================================================================== 6. Tracks: one rule for every tab strip and switch */
+.ds .section-tabs:not(.settings-subtabs), .ds .ds-seg, .ds .ds-aud, .ds .sales-seg, .ds .modal-section-tabs {
+  display: flex; align-items: center; gap: var(--g1); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+  min-height: var(--ctl-h); height: var(--ctl-h); padding: var(--track-pad); margin: 0;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--muted); box-sizing: border-box;
+}
+.ds .section-tabs::-webkit-scrollbar, .ds .ds-seg::-webkit-scrollbar, .ds .sales-seg::-webkit-scrollbar { display: none; }
+.ds .section-tabs:not(.settings-subtabs) a, .ds .section-tabs:not(.settings-subtabs) .tab-btn,
+.ds .ds-seg button, .ds .ds-aud button, .ds .sales-seg button, .ds .sales-seg a, .ds .modal-section-tabs .tab-btn {
+  flex: 1 0 auto; height: var(--cmp-h); min-height: var(--cmp-h); padding: 0 var(--g4); margin: 0; gap: 6px;
+  border: 0; border-radius: 999px; background: transparent; color: var(--muted-fg);
+  font: inherit; font-size: 13px; font-weight: 500; text-decoration: none; cursor: pointer; box-shadow: none;
+}
+.ds .section-tabs:not(.settings-subtabs) a.active, .ds .section-tabs:not(.settings-subtabs) .tab-btn.active,
+.ds .ds-seg button.on, .ds .ds-aud button.on, .ds .sales-seg button.on, .ds .sales-seg a.on, .ds .modal-section-tabs .tab-btn.active {
+  background: var(--bg-card); color: var(--sel-fg); box-shadow: inset 0 0 0 1.5px var(--sel-line); font-weight: 600;
+}
+.ds .ds-seg { width: 100%; }
+.ds .ds-seg button { flex: 1 1 0; }
+.ds .ds-seg button:disabled { opacity: .45; cursor: not-allowed; }
+.ds .ds-aud { flex: 0 0 auto; width: auto; }
+/* The audience switch in a modal header: each choice is wide enough to read as a button, not a tag. */
+.ds .ds-aud button { flex: 0 0 auto; min-width: 76px; padding: 0 var(--g4); justify-content: center; }
+.ds .sales-seg { width: auto; display: inline-flex; }
+.ds .sales-seg button, .ds .sales-seg a { flex: 0 0 auto; padding: 0 var(--g3); font-size: 12.5px; }
+.ds .ds-tab-count {
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; font-size: 11px;
+  background: var(--bg-card); color: var(--muted-fg); border: 1px solid var(--line);
+}
+/* Rows of tabs: 16 below every row; a topic row and its page chips sit 8 apart. */
+/* A page's tab track sits 16 below what is above it and 16 above what follows — never touching a box. */
+.ds .section-tabs:not(.settings-subtabs):not(.modal-section-tabs) { margin: 0 0 var(--g4) !important; }
+.ds :is(.main-body, .ds-settings) > :has(+ .section-tabs:not(.modal-section-tabs)) { margin-bottom: var(--g4) !important; }
+.ds .section-tabs.settings-subtabs {
+  display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: var(--g2);
+  min-height: 0; height: auto; padding: 0; border: 0; background: none; border-radius: 0;
+}
+.ds .section-tabs.settings-subtabs a {
+  flex: 0 0 auto; height: var(--cmp-h); min-height: var(--cmp-h); padding: 0 var(--g4); margin: 0;
+  border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted-fg); font-size: 13px; text-decoration: none;
+}
+.ds .section-tabs.settings-subtabs a.active { background: var(--sel-bg); color: var(--sel-fg); border: 1px solid var(--sel-line); box-shadow: inset 0 0 0 0.5px var(--sel-line); font-weight: 600; }
+
+/* ===================================================================== 7. Choices, chips and tags */
+.ds .ds-steps { display: flex; gap: 6px; width: 100%; overflow-x: auto; scrollbar-width: none; }
+.ds .ds-steps::-webkit-scrollbar { display: none; }
+.ds .ds-steps a {
+  flex: 1 0 auto; min-height: var(--cmp-h); padding: 0 var(--g2); border-radius: 999px; border: 1px solid var(--line);
+  text-decoration: none; font-size: 12.5px; color: var(--muted-fg);
+}
+.ds .ds-steps a.done { color: #15803d; border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); background: color-mix(in srgb, var(--ok) 8%, transparent); }
+.ds .ds-steps a.need { color: #a16207; border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, transparent); font-weight: 600; }
+html[data-theme="dark"] .ds .ds-steps a.done { color: #4ade80; }
+html[data-theme="dark"] .ds .ds-steps a.need { color: #fbbf24; }
+
+.ds .ds-chips { display: grid; grid-template-columns: repeat(var(--ds-chip-cols, 5), minmax(0, 1fr)); gap: var(--g2); }
+.ds .ds-chips button {
+  min-width: 0; min-height: var(--ctl-h); padding: 0 var(--g2); border-radius: 999px; border: 1px solid var(--line);
+  background: transparent; color: var(--foreground); font: inherit; font-size: 13px; cursor: pointer;
+}
+.ds .ds-chips button[aria-checked="true"] { background: var(--sel-bg); color: var(--sel-fg); border-color: var(--sel-line); font-weight: 600; }
+
+.ds .ds-types { display: flex; flex-direction: column; gap: var(--g2); }
+.ds .ds-types-2 { display: grid; grid-template-columns: 1fr 1fr; }
+.ds .ds-type {
+  position: relative; display: flex; align-items: center; gap: var(--g3); margin: 0; min-height: 76px;
+  padding: var(--g4); border-radius: var(--inner-radius); border: 1px solid var(--line); box-sizing: border-box;
+  background: transparent; font: inherit; color: inherit; text-align: start; cursor: pointer;
+  transition: border-color var(--motion-fast), background var(--motion-fast);
+}
+.ds .ds-types-2 .ds-type { gap: var(--g2); }
+.ds .ds-type-ico { flex: 0 0 var(--ctl-h); height: var(--ctl-h); border-radius: 14px; display: grid; place-items: center; background: var(--muted); color: var(--muted-fg); }
+.ds .ds-type-ico svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ds .ds-type-copy { flex: 1; display: flex; flex-direction: column; gap: var(--g1); min-width: 0; }
+.ds .ds-type-copy strong { font-size: 14px; font-weight: 600; }
+.ds .ds-type-copy small { font-size: 12px; color: var(--muted-fg); line-height: 1.5; }
+.ds .ds-radio { flex: 0 0 20px; height: 20px; border-radius: 999px; border: 2px solid var(--line); box-sizing: border-box; }
+.ds .ds-type[aria-checked="true"] { border-color: var(--sel-line); background: var(--sel-bg); }
+.ds .ds-type[aria-checked="true"] .ds-type-ico { background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--sel-fg); }
+.ds .ds-type[aria-checked="true"] .ds-radio { border: 6px solid var(--brand); }
+.ds .ds-types-2 .ds-radio { display: none; }
+
+/* Multi-select tags (groups, inbounds) and tag toggles. */
+.ds .ds-tags, .ds .ui-switch-grid { display: flex; flex-wrap: wrap; gap: var(--g2); }
+.ds .ds-tag, .ds .ui-switch-chip {
+  position: relative; gap: 6px; min-height: var(--cmp-h); padding: 0 var(--g3); margin: 0;
+  border-radius: 999px; border: 1px solid var(--line); background: transparent; font-size: 13px; font-weight: 500; cursor: pointer; direction: ltr;
+}
+.ds .ds-tag input { position: absolute; opacity: 0; pointer-events: none; }
+.ds .ds-tag svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; display: none; }
+.ds .ui-switch-chip .ui-switch { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.ds .ui-switch-chip .ui-switch-copy strong { font-size: 13px; font-weight: 500; }
+.ds .ui-switch-chip::before {
+  content: ""; display: none; width: 14px; height: 14px; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.ds .ds-tag:has(input:checked), .ds .ui-switch-chip:has(input:checked) { border-color: var(--sel-line); background: var(--sel-bg); color: var(--sel-fg); font-weight: 600; }
+.ds .ds-tag:has(input:checked) svg, .ds .ui-switch-chip:has(input:checked)::before { display: block; }
+.ds .ui-switch-chip:has(input:checked) .ui-switch-copy strong { font-weight: 600; color: var(--sel-fg); }
+.ds .ds-tag:has(input:focus-visible), .ds .ui-switch-chip:has(input:focus-visible) { outline: 2px solid var(--sel-line); outline-offset: 2px; }
+.ds .ds-count { font-size: 12px; font-weight: 500; color: var(--muted-fg); }
+
+/* Status tags and counters. */
+.ds .badge, .ds .ds-badge, .ds .ds-meta {
+  min-height: var(--lbl-h); height: var(--lbl-h); padding: 0 var(--g3); border-radius: 999px; font-size: 12px; font-weight: 600; gap: var(--g1);
+}
+.ds .ds-meta { flex: 0 0 auto; font-weight: 500; color: var(--muted-fg); background: var(--muted); }
+.ds .ds-badge { background: var(--muted); color: var(--muted-fg); }
+.ds .ds-badge[data-tone="warn"] { background: color-mix(in srgb, var(--warn) 16%, transparent); color: #b45309; }
+html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
+
+/* ===================================================================== 8. Switch rows */
+.ds .ui-switch-row.ds-switch, .ds .setting-item > .ui-switch-row, .ds .setting-item > .toggle-row, .ds .ui-switch-list > .ui-switch-row {
+  margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important;
+  background: transparent !important; box-shadow: none !important;
+  min-height: var(--ctl-h); align-items: center !important; gap: var(--g3);
+}
+.ds .ui-switch-copy { display: flex; flex-direction: column; gap: var(--g1); min-width: 0; }
+.ds .ui-switch-copy strong { font-size: 14px; font-weight: 500; }
+.ds .ui-switch-copy small { font-size: 12px; line-height: 1.6; }
+/* Consecutive switches: one divided list, 12 above and below every divider; none at the ends. */
+.ds .ds-rows, .ds .ui-switch-list { display: flex; flex-direction: column; gap: 0; margin: 0; }
+.ds .ds-rows > .ui-switch-row, .ds .ui-switch-list > .ui-switch-row { padding: var(--g3) 0 !important; }
+.ds .ds-rows > .ui-switch-row:first-child, .ds .ui-switch-list > .ui-switch-row:first-child { padding-top: 0 !important; }
+.ds .ds-rows > .ui-switch-row:last-child, .ds .ui-switch-list > .ui-switch-row:last-child { padding-bottom: 0 !important; }
+.ds .ds-rows > .ui-switch-row + .ui-switch-row, .ds .ui-switch-list > .ui-switch-row + .ui-switch-row { border-top: 1px dashed var(--dash) !important; }
+/* A row after a hidden one (show-when) starts the list: no line and no top padding. */
+.ds .ds-rows > .ui-switch-row[hidden]:first-child + .ui-switch-row { border-top: 0 !important; padding-top: 0 !important; }
+
+/* ===================================================================== 9. Accordion with counters */
+.ds .ds-acc-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--g1) var(--g3); padding: var(--g3) var(--g4); font-size: 13.5px; }
+.ds .ds-acc-top b { font-size: 15px; }
+.ds .ds-acc-top small { font-size: 12px; color: var(--muted-fg); }
+.ds .ds-acc { border-top: 1px solid var(--line); }
+.ds .ds-acc summary { list-style: none; display: flex; align-items: center; gap: var(--g2); min-height: 56px; padding: 0 var(--g4); cursor: pointer; font-size: 14px; font-weight: 500; }
+.ds .ds-acc summary::-webkit-details-marker { display: none; }
+.ds .ds-acc summary > svg:not(.ds-chev) { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+/* Title may shrink; counter + chevron must stay fully visible (ds-card-flush clips overflow). */
+.ds .ds-acc-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds .ds-chev { width: 18px; height: 18px; fill: none; stroke: var(--muted-fg); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--motion-fast); flex: 0 0 auto; }
+.ds .ds-acc[open] .ds-chev { transform: rotate(-90deg); }
+.ds .ds-acc.is-risk summary { color: var(--destructive); }
+.ds .ds-acc.is-risk .ds-meta { background: color-mix(in srgb, var(--destructive) 10%, transparent); color: var(--destructive); }
+.ds .ds-acc-note { margin: 0 var(--g4) var(--g3); font-size: 12px; color: var(--muted-fg); }
+/* Summary and rows are all 56 high with their content centred, and a dashed line separates every row —
+   the summary from the first row too — so the space on both sides of each line is the same. */
+.ds .ds-acc-rows { display: flex; flex-direction: column; padding: 0 var(--g4); }
+.ds .ds-acc > .ds-acc-rows > .ui-switch-row.ds-switch { padding: var(--g2) 0 !important; min-height: 56px; border-top: 1px dashed var(--dash) !important; }
+.ds .ds-acc-rows .ui-switch-copy strong { font-size: 13.5px; font-weight: 400; }
+
+/* ===================================================================== 10. Editable row lists (packs) */
+.ds .ds-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--inner-radius); overflow: visible; }
+.ds .ds-list-head, .ds .ds-list-row {
+  display: grid; grid-template-columns: var(--num-w) minmax(0, 1fr) 96px var(--ctl-h);
+  align-items: center; gap: var(--g2); padding: 0 var(--g3);
+}
+.ds .ds-list-head { min-height: var(--cmp-h); font-size: 12px; color: var(--muted-fg); border-bottom: 1px solid var(--line); }
+.ds .ds-list-head span { white-space: nowrap; }
+/* The number column is a compact box with its value centred; its unit lives in the column title. */
+.ds .ds-list-head > span:first-child, .ds .ds-list-head > span:nth-child(3) { text-align: center; overflow: hidden; text-overflow: ellipsis; }
+/* A price typed in a list row is a compact box too, wide enough for a seven-digit amount. */
+.ds .ds-list-value > input { display: block; width: 100%; max-width: var(--money-w); }
+.ds .ds-list-row { position: relative; padding-block: var(--g3); margin: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.ds .ds-list-row > * { margin: 0; }
+.ds .ds-list-row + .ds-list-row { border-top: 1px dashed var(--dash) !important; }
+.ds .ds-list-row input { height: var(--ctl-h); min-height: var(--ctl-h); font-size: 15px; font-weight: 600; }
+.ds .ds-list-value { font-size: 13px; color: var(--muted-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ds .ds-list-value bdi { color: var(--foreground); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ds .ds-pack-amt input { padding-inline: var(--g2); }
+.ds .ds-pack-amt .ds-unit-label { display: none; }
+.ds .ds-del {
+  width: var(--ctl-h); height: var(--ctl-h); padding: 0; border-radius: 999px; border: 1px solid transparent; background: none;
+  color: var(--muted-fg); cursor: pointer; justify-self: center;
+}
+.ds .ds-del svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ds .ds-del:hover { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, transparent); }
+.ds .ds-del.force-channel-remove { flex: 0 0 var(--ctl-h); }
+.ds .ds-add {
+  gap: 6px; min-height: var(--ctl-h); width: 100%; border: 0; border-top: 1px dashed var(--dash); background: none;
+  font: inherit; font-size: 13px; font-weight: 500; color: var(--sel-fg); cursor: pointer;
+}
+.ds .pay-dest-add-row {
+  min-height: var(--ctl-h); border-radius: 999px; border: 1px dashed var(--line) !important; background: none;
+  color: var(--sel-fg); font-weight: 500;
+}
+.ds.extra-packs-editor, .ds .extra-packs-editor { display: flex; flex-direction: column; gap: var(--g3); }
+.ds.extra-packs-editor[hidden], .ds .extra-packs-editor[hidden] { display: none; }
+/* Colour of a pack: a compact chip with the colour dot and its name. */
+.ds .ds-dot-select { justify-self: stretch; min-width: 0; }
+.ds .ds-dot-select .ui-select { width: 100%; min-width: 0; margin: 0; }
+.ds .ds-dot-select .ui-select-toggle {
+  height: var(--cmp-h) !important; min-height: var(--cmp-h) !important; padding: 0 var(--g2) !important; gap: 6px;
+  border-radius: 999px; justify-content: center; font-size: 12px;
+}
+.ds .ds-dot-select .ui-select-caret { display: none; }
+.ds .ds-dot-select .ui-select-toggle::before {
+  content: ""; flex: 0 0 12px; width: 12px; height: 12px; border-radius: 999px; box-sizing: border-box;
+  border: 1.5px solid var(--muted-fg); background: transparent;
+}
+.ds .ds-dot-select[data-value=""] .ui-select-toggle::before { border-color: var(--line); background: #fff; }
+.ds .ds-dot-select[data-value="primary"] .ui-select-toggle::before { border: 0; background: #3b82f6; }
+.ds .ds-dot-select[data-value="success"] .ui-select-toggle::before { border: 0; background: #22c55e; }
+.ds .ds-dot-select[data-value="danger"] .ui-select-toggle::before { border: 0; background: #ef4444; }
+.ds .ds-dot-select .ui-select-label { overflow: hidden; text-overflow: ellipsis; font-size: 13px !important; font-weight: 500; }
+/* «پیش‌فرض» has no colour of its own, so it shows no dot. */
+.ds .ds-dot-select:is([data-value="inherit"], :not([data-value])) .ui-select-toggle::before { display: none; }
+@media (max-width: 480px) {
+  .ds { --num-w: 72px; }
+  /* A phone row still fits a seven-digit typed price: a slimmer colour chip and less side padding (inputs keep
+     16px text on phones so iOS does not zoom on focus). */
+  .ds .ds-list-head, .ds .ds-list-row { grid-template-columns: var(--num-w) minmax(0, 1fr) 84px 40px; gap: 6px; padding-inline: var(--g2); }
+  .ds .ds-list-row input, .ds .ds-pack-amt input { padding-inline: 6px; }
+  .ds .ds-dot-select .ui-select-toggle { padding: 0 6px !important; }
+}
+@media (max-width: 379px) {
+  .ds { --num-w: 64px; }
+  .ds .ds-list-head, .ds .ds-list-row { grid-template-columns: var(--num-w) minmax(0, 1fr) 76px 40px; }
+  .ds .ds-list-row input, .ds .ds-pack-amt input { padding-inline: var(--g1); }
+}
+
+/* ===================================================================== 11. Confirmations */
+.ds .ds-confirm { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--g3); padding: 0 var(--g2); }
+.ds .ds-confirm p { margin: 0; font-size: 14px; line-height: 1.8; }
+.ds .ds-confirm-ico { width: 56px; height: 56px; border-radius: 999px; display: grid; place-items: center; background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.ds .ds-confirm-ico svg { width: 26px; height: 26px; fill: none; stroke: var(--warn); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ===================================================================== 12. Pages */
+.ds .page-head { margin-bottom: var(--g4); }
+.ds .settings-form > .actions, .ds .sticky-actions, .ds .settings-card > .actions, .ds .edit-section .actions {
+  display: flex; justify-content: flex-start; gap: var(--g2); margin: 0;
+}
+.ds .sticky-actions .btn, .ds .settings-card > .actions .btn, .ds .edit-section .actions .btn { min-width: 160px; }
+
+/* ===================================================================== 13. Narrow screens */
+@media (max-width: 374px) {
+  .ds { --box-pad: var(--g3); }
+  .ui-modal.ds .ds-head-row { gap: var(--g2); }
+  .ui-modal.ds .modal-title h2 { font-size: 16px; }
+  .ds .ds-grid-2, .ds .ds-types-2 { grid-template-columns: 1fr; }
+  .ds .ds-chips { --ds-chip-cols: 3; }
+  .ds .ds-steps a { padding: 0 6px; font-size: 12px; }
+}
+
+/* ===================================================================== 14. Sidebar: search and theme rows
+   Search sits right under the menu header; both rows are 44 high, same box as every field. */
+.side .side-search {
+  position: relative; display: flex; align-items: center; gap: var(--space-1);
+  min-height: var(--btn-h); height: var(--btn-h); margin: 0 0 var(--space-1); padding: 0 var(--space-2);
+  border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--control-bg, rgba(255, 255, 255, 0.04));
+  box-sizing: border-box;
+}
+.side .side-search:focus-within { border-color: color-mix(in srgb, var(--brand) 72%, transparent); }
+.side .side-search > .nav-ico { flex: 0 0 18px; width: 18px; height: 18px; color: var(--muted-fg); margin: 0; }
+.side .side-search input[type="search"] {
+  flex: 1 1 auto; min-width: 0; width: auto; height: 100%; min-height: 0; margin: 0; padding: 0;
+  border: 0 !important; border-radius: 0; background: transparent !important; box-shadow: none !important;
+  color: var(--foreground); font: inherit; font-size: 14px !important; outline: none; -webkit-appearance: none; appearance: none;
+}
+.side .side-search input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
+.side .side-search-results {
+  position: absolute; inset-inline: 0; top: calc(100% + var(--space-1)); z-index: 60;
+  display: flex; flex-direction: column; max-height: min(60vh, 440px); overflow-y: auto; padding: var(--space-0);
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+.side .side-search-results[hidden] { display: none; }
+.side .side-search-hit {
+  display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: var(--btn-h);
+  padding: var(--space-1) var(--space-1_5); border-radius: 12px; color: var(--foreground); text-decoration: none;
+}
+.side .side-search-hit + .side-search-hit { box-shadow: 0 -1px 0 color-mix(in srgb, var(--border) 70%, transparent); }
+.side .side-search-hit:hover, .side .side-search-hit:focus-visible, .side .side-search-hit.is-active {
+  background: color-mix(in srgb, var(--brand) 10%, transparent); outline: none;
+}
+.side .side-search-label { font-size: 13.5px; font-weight: 600; line-height: 1.4; }
+.side .side-search-where { font-size: 12px; line-height: 1.4; color: var(--muted-fg); }
+.side .side-search-empty { margin: 0; padding: var(--space-2); text-align: center; font-size: 13px; color: var(--muted-fg); }
+.side .side-theme-btn { min-height: var(--btn-h); padding: 0 var(--space-2); font-size: 13px; }
+
+/* ===================================================================== 15. Optical spacing
+   Titles and field labels use a tight line box (1.25), so the space above their letters matches the space
+   below the last control of a box. */
+.ds .settings-card > h2, .ds .edit-section-head h3, .ds .ds-sec-title, .ds .form-field, .ds .setting-item > label,
+.ds .ui-switch-copy strong, .ds .ds-type-copy strong, .ui-modal.ds .modal-title h2 { line-height: 1.25; }
+/* Tab rows inside modals: 16 above and below, like every other row of tabs. */
+.ui-modal.ds .modal-section-tabs { margin: var(--g4) 0 !important; }
+.ui-modal.ds .settings-modal-body { display: flex; flex-direction: column; gap: var(--sec-gap); margin: 0; padding: 0; }
+/* A colour menu on the default tone looks like every other field; other tones keep their colour preview. */
+.ds .btn-color-card .ui-select[data-tone="default"] .ui-select-toggle,
+.ds .plan-color-field .ui-select[data-tone="default"] .ui-select-toggle {
+  background: var(--control-bg); border-color: var(--input); color: var(--foreground);
+}
+/* Lists under a create form («برچسب‌های فعلی», «بسته‌های فعلی»): a section like any other —
+   24 below the form, a muted section title 8 above its table, no divider. */
+.ui-modal.ds .gift-codes-recent-title,
+.ui-modal.ds .form-stack + .gift-codes-recent-title {
+  margin: var(--sec-gap) 0 var(--g2) !important; padding: 0 var(--g1) !important; border: 0 !important;
+  font-size: 13px !important; font-weight: 600 !important; line-height: 1.25 !important; color: var(--muted-fg) !important;
+}
+.ui-modal.ds .plan-cat-list { gap: 0 !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
+.ui-modal.ds .ui-modal-scroll > .table-wrap, .ui-modal.ds .plan-cat-list > .table-wrap { margin: 0; border-radius: var(--inner-radius); }
+/* A segmented choice that fills its row (pack kinds) keeps equal options across the whole track. */
+.ds .sales-seg.ds-seg { display: flex; width: 100%; }
+.ds .sales-seg.ds-seg button { flex: 1 1 0; }
+@media (max-width: 480px) { .ds .ds-list-head .ds-head-long { display: none; } }
+
+/* ===================================================================== 16. Inside boxes
+   A switch row never draws its own box inside a card or a list row. List-row fields follow the field rule. */
+.ds :is(.ds-card, .settings-card, .edit-section, .pay-dest-row, .ui-modal-scroll) :is(.ui-switch-row:not(.ui-switch-chip), .toggle-row, .support-enabled, .ui-switch-section) {
+  margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important;
+  background: transparent !important; box-shadow: none !important;
+}
+/* …but a list of switches keeps its rows: 12 above and below each, and a dashed line between them. */
+.ds :is(.ds-rows, .ui-switch-list) > .ui-switch-row:not(.ui-switch-chip) { padding: var(--g3) 0 !important; }
+.ds :is(.ds-rows, .ui-switch-list) > .ui-switch-row:not(.ui-switch-chip):first-child { padding-top: 0 !important; }
+.ds :is(.ds-rows, .ui-switch-list) > .ui-switch-row:not(.ui-switch-chip):last-child { padding-bottom: 0 !important; }
+.ds :is(.ds-rows, .ui-switch-list) > .ui-switch-row:not(.ui-switch-chip) + .ui-switch-row { border-top: 1px dashed var(--dash) !important; }
+.ds .support-enabled { display: flex; align-items: center; justify-content: space-between; gap: var(--g3); min-height: var(--ctl-h); font-size: 14px; font-weight: 500; }
+.ds .ui-switch-section { display: flex; flex-direction: column; gap: var(--g2); }
+.ds .pay-dest-fields { display: flex; flex-direction: column; gap: var(--box-gap); margin: 0; }
+.ds .pay-dest-fields > label:not(.support-enabled), .ds .pay-dest-fields > .form-field {
+  display: flex; flex-direction: column; gap: var(--g2); margin: 0; font-size: 13px; font-weight: 500; line-height: 1.25;
+}
+.ds .pay-dest-head { display: flex; flex-direction: column; gap: var(--g1); margin: 0 0 var(--g3); }
+html[data-theme="light"] .ds .btn-color-card .ui-select[data-tone="default"] .ui-select-toggle,
+html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .ui-select-toggle {
+  background: var(--control-bg); border-color: var(--input); color: var(--foreground);
+}
+/* In a container that spaces its children with gap, no child adds its own vertical margin. */
+.ds :is(.ds-body, .settings-form, .settings-main, .settings-modal-body, .form-stack, .ds-card, .settings-card, .edit-section, .pay-dest-fields, .pay-dest-rows) > * { margin-block: 0 !important; }
+/* A section whose on/off switch is its header: title and switch share one row. */
+.ds .settings-card > .settings-card-switch { display: flex; align-items: center; justify-content: space-between; gap: var(--g3); padding: 0 !important; border: 0 !important; background: none !important; }
+.ds .settings-card > .settings-card-switch h2 { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.25; }
+/* Flush cards (a title over an edge-to-edge table): every title has 16 above and 16 below; a description
+   sits 8 under its title and 16 above the table; a second title has 8 of top padding: with the last row's
+   16 of padding that makes 24 between sections. */
+.ds .card-flush > :is(h2, h3, .card-subhead):not(.sr-only) { margin: 0 !important; padding: var(--g4) var(--g4) var(--g4) !important; line-height: 1.25; }
+.ds .card-flush > :is(h2, h3, .card-subhead) + p.muted { margin: 0 !important; padding: 0 var(--g4) var(--g4) !important; }
+.ds .card-flush > :is(h2, h3, .card-subhead):has(+ p.muted) { padding-bottom: var(--g2) !important; }
+.ds .card-flush > .table-wrap + :is(h2, h3, .card-subhead) { padding-top: var(--g2) !important; }
+/* Rows of chip tabs under a track keep the same 16 as the track itself. */
+.ds .section-tabs.settings-subtabs { margin: 0 0 var(--g4) !important; }
+/* Plan naming is part of its card: separated by space like every other group in a card, not by a line. */
+.ds .plan-naming-block { margin-top: var(--g2); padding-top: 0; border-top: 0; }
+/* The small select is the compact tier (36), like every other compact control. */
+.ds .ui-select-sm .ui-select-toggle { height: var(--cmp-h) !important; min-height: var(--cmp-h) !important; }
+/* Tag filter in the search row must match the adjacent search .btn (44 + capsule).
+   Only place that fights `.ds .ui-select-sm … !important` — keep overrides here. */
+.ds .color-tag-select-wrap,
+.ds .color-tag-select-wrap .ui-select,
+.ds .color-tag-select-wrap .ui-select-sm,
+.ds .color-tag-select-wrap .ui-select-toggle,
+.ds .color-tag-select-wrap .ui-select-sm .ui-select-toggle,
+.ds .color-tag-select-wrap > select.color-tag-select {
+  height: var(--btn-h) !important;
+  min-height: var(--btn-h) !important;
+  max-height: var(--btn-h);
+  margin-top: 0 !important;
+  padding-block: 0 !important;
+  border-radius: var(--control-radius) !important;
+}
+@media (max-width: 880px) {
+  /* List header bar: one compact row (select-all, count, sort), with no empty actions cell adding a second row. */
+  .ds .table-list-sm > thead > tr { grid-template-rows: var(--cmp-h); padding-block: var(--g2); }
+  .ds .table-list-sm > thead > tr > th.col-actions { display: none; }
+  .ds .table-list-sm .li-sort, .ds .table-list-sm .li-head .ui-select-toggle { height: var(--cmp-h) !important; min-height: var(--cmp-h) !important; }
+}
+.ds .ds-confirm p:empty { display: none; }
+/* A page section after a box starts 24 below it (the box's own margin); its title sits 8 above its description
+   and the description 16 above what follows. */
+.ds .main-body > section.ticket-tg-section { margin-top: 0; }
+.ds .main-body .section-title { margin: 0 0 var(--g2); line-height: 1.25; }
+.ds .main-body .section-title + .page-sub { margin: 0 0 var(--g4); }
+/* Very narrow phones: the header title comes first, so the audience switch returns to its content width. */
+@media (max-width: 379px) { .ds .ds-aud button { min-width: 0; padding: 0 var(--g3); } }
+/* The address in use: its badge (default / custom) leads the line, so it sits in the same place for every field. */
+.ds .url-in-use > span { display: flex; align-items: center; gap: var(--g2); min-width: 0; }
+.ds .url-in-use > span > .badge { flex: 0 0 auto; }
+.ds .url-in-use code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Buttons in a card's action row share the row and wrap to a second row before their text overflows. */
+.ds :is(.card, .settings-card) .actions:not(.ui-modal-sticky-save) { display: flex; flex-wrap: wrap; gap: var(--g2); }
+.ds :is(.card, .settings-card) .actions:not(.ui-modal-sticky-save) > .btn { flex: 1 1 160px; min-width: 0; white-space: nowrap; }
+/* Service stats (volume, time left): label above, value below, both from the reading edge, so the pills match. */
+.ds .svc-stat-pill { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: var(--g1); padding: var(--g3); }
+.ds .svc-stat-pill > .muted { font-size: 12px; line-height: 1.25; }
+.ds .svc-stat-pill > strong { align-self: stretch; font-size: 14px; line-height: 1.3; text-align: right; white-space: normal; overflow-wrap: anywhere; unicode-bidi: isolate; }
+.ds .svc-stat-part { white-space: nowrap; }

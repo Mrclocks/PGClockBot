@@ -3,6 +3,7 @@
 {% from "_settings_tab_nav.html" import grouped_settings_tabs %}
 {% block title %}متغیرهای پیام{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>
     {{ page_title('bot-settings', 'تنظیمات ربات' if settings_base|default('/settings') == '/settings' else 'تنظیمات فروشگاه', help='message-variables') }}
@@ -62,5 +63,6 @@
     </div>
   </section>
   {% endfor %}
+</div>
 </div>
 {% endblock %}

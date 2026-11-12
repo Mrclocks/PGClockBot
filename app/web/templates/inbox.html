@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_title, action_center_icon, inbox_dismiss_btn %}
-{% block title %}اعلان‌ها و مرکز اقدام{% endblock %}
+{% block title %}مرکز اقدام{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 {% set ac = action_center or {} %}
 {% set pr = payg_risk or {} %}
 
 <div class="page-head">
   <div>
-    {{ page_title('inbox', 'اعلان‌ها و مرکز اقدام', 'neutral', help='inbox') }}
+    {{ page_title('inbox', 'مرکز اقدام', 'neutral', help='inbox') }}
   </div>
 </div>
 
@@ -101,6 +102,17 @@
   </div>
 </div>
 {% endif %}
+{% if pr.review %}
+<div class="flash warn home-update-banner inbox-alert-row">
+  <div class="home-update-copy">
+    <strong><span dir="ltr">{{ pr.review }}</span> هزینهٔ PAYG در انتظار بازبینی</strong>
+    <span class="muted">پنل پاسخ روشن نداد؛ اعمال شدن یا نشدن تغییر را مشخص کنید</span>
+  </div>
+  <div class="inbox-alert-actions">
+    <a class="btn btn-sm btn-ghost" href="/payg/charges/review">بازبینی</a>
+  </div>
+</div>
+{% endif %}
 {% if pr.low %}
 <div class="flash warn home-update-banner inbox-alert-row">
   <div class="home-update-copy">
@@ -138,4 +150,5 @@
 {% endif %}
 
 {% endif %}
+</div>
 {% endblock %}

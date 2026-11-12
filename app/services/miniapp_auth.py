@@ -26,7 +26,7 @@ from app.services.miniapp_shop import (
 )
 from app.services.shop_customer_block import BLOCKED_MESSAGE as SHOP_BLOCKED_MESSAGE, is_blocked_in_shop
 from app.services.platform_identity import is_bot_platform_admin
-from app.services.users import set_shop_reseller_id
+from app.services.users import demote_stale_admin, set_shop_reseller_id
 
 
 logger = logging.getLogger(__name__)
@@ -144,6 +144,8 @@ async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
         raise mini_reject(404, NOT_STARTED)
     if bool(getattr(user, "is_blocked", False)):
         raise HTTPException(403, "دسترسی شما مسدود شده است")
+    if await demote_stale_admin(session, user):
+        await session.commit()
     await assert_shop_member(session, scope, user)
     if scope.is_shop and not is_shop_staff(scope, user) and await is_blocked_in_shop(session, int(user.id), scope.shop_id):
         raise HTTPException(403, SHOP_BLOCKED_MESSAGE)

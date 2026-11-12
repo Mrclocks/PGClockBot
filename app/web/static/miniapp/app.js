@@ -14,10 +14,13 @@
   const LEGACY_VIEWS = new Map([["wallet", "account"]]);
   const UNKNOWN_OUTCOME = "نتیجهٔ درخواست مشخص نشد. پیش از تلاش دوباره، سرویس‌ها و تراکنش‌ها را بررسی کنید.";
   const RENEW_UNKNOWN_OUTCOME = "نتیجهٔ تمدید مشخص نشد. دوباره «تأیید» را بزنید؛ این تمدید فقط یک بار انجام می‌شود.";
+  const ADDON_UNKNOWN_OUTCOME = "نتیجهٔ افزایش مشخص نشد. دوباره «تأیید» را بزنید؛ این خرید فقط یک بار انجام می‌شود.";
 
   const els = {};
   const state = {
     me: null,
+    // Typed service name, kept across checkout re-renders until a purchase finishes.
+    serviceName: "",
     view: "home",
     serviceId: null,
     ticketId: null,
@@ -29,6 +32,7 @@
     selectedPlanId: null,
     activityLimit: ACTIVITY_PAGE,
     renewPreview: null,
+    addonPreview: null,
     topupCurrent: null,
     checkout: null,
     addonPacks: [],
@@ -68,8 +72,39 @@
     const c = customer();
     return {
       walletPay: !!c.wallet_pay_enabled, qr: !!c.qr_enabled, topup: can("topup"), gift: can("codes"),
-      manage: can("manage"), shop: can("shop"),
+      manage: can("manage"), shop: can("shop"), club: can("club"),
     };
+  }
+
+  /** Name field and staff free button of the checkout card (server decides; see /api/mini/me). */
+  function checkoutOptions() {
+    const c = customer().checkout || {};
+    return { nameRequired: !!c.service_name_required, staffFree: !!c.staff_free, name: state.serviceName };
+  }
+
+  /** The name to send, or null after telling the buyer what is wrong (only when a name is required). */
+  function serviceNameForPurchase() {
+    if (!checkoutOptions().nameRequired) return undefined;
+    const name = R.validServiceName(state.serviceName);
+    if (name) return name;
+    core.toast(state.serviceName ? "نام سرویس معتبر نیست: حروف انگلیسی کوچک، عدد و _ ؛ ۳ تا ۲۰ نویسه" : "نام سرویس را وارد کنید", "err");
+    const input = doc.querySelector("[data-input=service-name]");
+    if (input) input.focus();
+    return null;
+  }
+
+  /** [0, 1) from the browser's secure generator (falls back where it is missing). */
+  function secureRandom() {
+    const c = root.crypto;
+    if (c && c.getRandomValues) return c.getRandomValues(new Uint32Array(1))[0] / 4294967296;
+    return Math.random();
+  }
+
+  function fillRandomServiceName() {
+    state.serviceName = R.randomServiceName(secureRandom);
+    const input = doc.querySelector("[data-input=service-name]");
+    if (input) input.value = state.serviceName;
+    core.haptic("select");
   }
 
   /** «Buy a service» empty-state button, only where buying is open. */
@@ -85,6 +120,7 @@
   // Screens below a tab: where Back goes, its label, and which tab stays highlighted.
   const SUB_VIEWS = new Map([
     ["service", { parent: "services", tab: "services", label: "سرویس‌ها" }],
+    ["subscription", { parent: "services", tab: "services", label: "سرویس‌ها" }],
     ["support", { parent: "account", tab: "account", label: "حساب" }],
     ["club", { parent: "account", tab: "account", label: "حساب" }],
     ["ticket", { parent: "support", tab: "account", label: "پشتیبانی" }],
@@ -112,6 +148,7 @@
   function viewAllowed(view) {
     // The server decides who reviews; the screen shows its answer (including a refusal).
     if (view === "review") return persona() === "admin" || persona() === "reseller";
+    if (view === "subscription") return persona() === "reseller" && commerce();
     if (VIEW_SECTIONS.has(view) && !can(VIEW_SECTIONS.get(view))) return false;
     if (SUB_VIEWS.has(view)) return commerce();
     return ((state.me && state.me.nav) || []).some((n) => n.id === view);
@@ -146,6 +183,7 @@
     guides: () => core.api("/api/mini/guides"),
     club: () => core.api("/api/mini/club"),
     review: () => core.api("/api/mini/review"),
+    resub: () => core.api("/api/mini/reseller/subscription"),
   };
 
   const inflight = new Map();
@@ -260,6 +298,8 @@
     if (state.serviceId) state.details.delete(state.serviceId);
     state.ticketId = next === "ticket" ? Number(options.ticketId) || null : null;
     if (state.ticketId) state.tickets.delete(state.ticketId);
+    // Purchases carry the generation of the load, so each visit reads the package again.
+    if (next === "subscription") invalidate("resub");
     state.then = options.then || null;
     if (next === "service" && !state.serviceId) state.view = "services";
     if (next === "ticket" && !state.ticketId) state.view = "support";
@@ -329,7 +369,8 @@
 
   function openSheet(kind, title, bodyHtml, ctx) {
     state.sheetSeq += 1;
-    state.sheet = { kind, ...(ctx || {}) };
+    // ``kind`` is last: a context key of the same name must never replace the sheet's own kind.
+    state.sheet = { ...(ctx || {}), kind };
     els.sheetTitle.textContent = title;
     els.sheetBody.innerHTML = bodyHtml;
     els.sheet.hidden = false;
@@ -351,6 +392,7 @@
     state.sheet = null;
     state.sheetSeq += 1;
     state.renewPreview = null;
+    state.addonPreview = null;
     state.topupCurrent = null;
     dropReviewImage();
     els.sheet.hidden = true;
@@ -443,6 +485,7 @@
       + R.noticeBannerHtml(brand().notice)
       + R.shortcutsHtml(customerShortcuts(home))
       + (persona() === "reseller" ? shopPeekHtml() : "")
+      + subscriptionCardHtml()
       + myServicesHtml(home);
   }
 
@@ -535,6 +578,7 @@
   function servicesViewHtml() {
     const q = (state.services && state.services.q) || "";
     return viewHead("سرویس‌ها")
+      + subscriptionCardHtml()
       + `<label class="search-field">${R.icon("search", 18)}<span class="visually-hidden">جست‌وجوی نام سرویس</span>
           <input type="search" data-input="service-search" maxlength="64" placeholder="جست‌وجوی نام سرویس" value="${core.esc(q)}" dir="auto"></label>
         <div id="svc-list">${serviceListHtml()}</div>`;
@@ -641,8 +685,8 @@
     const plan = selectedPlan();
     const wallet = customer().wallet;
     return state.checkout && plan && state.checkout.planId === plan.id
-      ? R.discountedCheckoutHtml(state.checkout, plan, wallet)
-      : R.checkoutHtml(plan, wallet, features());
+      ? R.discountedCheckoutHtml(state.checkout, plan, wallet, checkoutOptions())
+      : R.checkoutHtml(plan, wallet, features(), checkoutOptions());
   }
 
   function renderCheckout() {
@@ -718,6 +762,79 @@
     if (state.view === "ticket" && state.ticketId === id) renderView();
   }
 
+  /** A reseller who is also a customer finds the shop package next to their services. */
+  function subscriptionCardHtml() {
+    if (persona() !== "reseller") return "";
+    return `<section class="card" aria-label="اشتراک نمایندگی">
+      <div class="card-head"><h2 class="card-title">اشتراک نمایندگی</h2>
+        <button type="button" class="link-btn" data-action="goto" data-view="subscription">مشاهده</button></div>
+      <p class="muted sm">ظرفیت حجم و کاربر، زمان باقی‌مانده، تمدید و خرید بسته.</p>
+    </section>`;
+  }
+
+  function subscriptionViewHtml() {
+    const r = resource("resub");
+    return viewHead("اشتراک نمایندگی") + (settled(r, 3, "retry") || R.resellerSubscriptionHtml(r.data));
+  }
+
+  /** Re-read the subscription and the wallet after a purchase, or after a lost response. */
+  async function refreshSubscription() {
+    invalidate("resub");
+    await reloadMe().catch((err) => core.toast(err.message, "err"));
+    renderView();
+  }
+
+  function resubData() {
+    const r = state.resources.resub;
+    return r && r.status === "ready" ? r.data : null;
+  }
+
+  /** Confirm, then POST one purchase carrying the generation the screen was loaded with. */
+  async function resellerPurchase(key, trigger, { question, path, body, done }) {
+    const data = resubData();
+    if (!data || persona() !== "reseller") return;
+    await guarded(key, trigger, async () => {
+      if (!(await core.confirmAction(question))) return;
+      try {
+        const res = await core.api(path, { method: "POST", body: { ...body, generation: data.generation } });
+        core.toast(res.message || done);
+      } catch (err) {
+        core.toast(err.status === 0 ? UNKNOWN_OUTCOME : err.message, "err");
+      }
+      await refreshSubscription();
+    });
+  }
+
+  function buyResellerPack(packId, trigger) {
+    const data = resubData();
+    const pack = data && (data.packs || []).find((p) => p.id === packId);
+    if (!pack) return Promise.resolve();
+    return resellerPurchase("respack", trigger, {
+      question: `خرید بستهٔ «${pack.name}» به مبلغ ${core.money(pack.price)} از کیف پول؟ تاریخ انقضا تغییر نمی‌کند.`,
+      path: "/api/mini/reseller/pack", body: { pack_id: packId }, done: "بسته اعمال شد",
+    });
+  }
+
+  function buyResellerExtra(kind, amount, trigger) {
+    const data = resubData();
+    const offer = data && (kind === "gb" ? data.unit_gb : kind === "users" ? data.unit_users : null);
+    if (!offer || !(offer.options || []).includes(amount)) return Promise.resolve();
+    const unit = kind === "gb" ? "گیگ حجم" : "کاربر";
+    return resellerPurchase("resextra", trigger, {
+      question: `خرید ${core.num(amount)} ${unit} به مبلغ ${core.money(offer.unit_price * amount)} از کیف پول؟`,
+      path: "/api/mini/reseller/extra", body: { kind, amount }, done: "ظرفیت اضافه شد",
+    });
+  }
+
+  function renewResellerPackage(trigger) {
+    const data = resubData();
+    if (!data || data.renew_total === null || data.renew_total === undefined) return Promise.resolve();
+    return resellerPurchase("resrenew", trigger, {
+      question: `تمدید اشتراک نمایندگی به مبلغ ${core.money(data.renew_total)} از کیف پول؟ مدت اضافه و مصرف ادمین صفر می‌شود؛ مصرف مشتریان دست‌نخورده می‌ماند.`,
+      path: "/api/mini/reseller/renew", body: {}, done: "تمدید انجام شد",
+    });
+  }
+
   const VIEW_RENDERERS = {
     home: () => (commerce() ? customerHomeHtml() : adminHomeHtml()),
     services: servicesViewHtml,
@@ -729,6 +846,7 @@
     club: clubViewHtml,
     review: reviewViewHtml,
     ticket: ticketViewHtml,
+    subscription: subscriptionViewHtml,
   };
 
   function renderView() {
@@ -829,8 +947,9 @@
   async function showAddons(id, kind) {
     if (kind !== "volume" && kind !== "duration") return;
     const title = kind === "volume" ? "افزایش حجم" : "افزایش زمان";
-    const seq = openSheet("addons", title, R.loadingHtml(2), { serviceId: id, kind });
+    const seq = openSheet("addons", title, R.loadingHtml(2), { serviceId: id, addonKind: kind });
     state.addonPacks = [];
+    state.addonPreview = null;
     try {
       const data = await core.api(`/api/mini/service/${id}/addons?kind=${encodeURIComponent(kind)}`);
       if (seq !== state.sheetSeq) return;
@@ -842,27 +961,75 @@
     }
   }
 
-  async function buyAddon(id, packId, trigger) {
+  async function previewAddon(id, packId) {
     const sheet = state.sheet;
     const pack = state.addonPacks.find((p) => p.id === packId);
-    const svc = detailRow(id);
-    if (!sheet || sheet.kind !== "addons" || sheet.serviceId !== id || !pack || !svc || pack.kind !== sheet.kind) return;
+    if (!sheet || sheet.kind !== "addons" || sheet.serviceId !== id || !pack || pack.kind !== sheet.addonKind) {
+      core.toast("این بسته دیگر معتبر نیست؛ فهرست را دوباره باز کنید", "err");
+      return;
+    }
     if (!commerce() || !features().walletPay) {
       core.toast("پرداخت با کیف پول مجاز نیست", "err");
       return;
     }
+    const seq = state.sheetSeq;
+    state.addonPreview = null;
+    setSheetBody(seq, R.loadingHtml(2));
+    try {
+      const preview = await core.api(`/api/mini/service/${id}/addon-preview?pack_id=${packId}`);
+      if (seq !== state.sheetSeq) return;
+      if (preview.kind && preview.kind !== sheet.addonKind) {
+        throw new Error("نوع بسته با بخش انتخاب‌شده مطابقت ندارد؛ دوباره تلاش کنید");
+      }
+      state.addonPreview = {
+        serviceId: id,
+        packId,
+        kind: pack.kind,
+        terms: preview.terms,
+        price: preview.price,
+        requestKey: preview.request_key,
+      };
+      setSheetBody(seq, R.addonPreviewHtml(preview, id, packId, pack.kind));
+    } catch (err) {
+      setSheetBody(
+        seq,
+        R.errorHtml(err.message)
+          + `<button type="button" class="btn ghost block" data-action="addons" data-id="${id}" data-kind="${pack.kind}">انتخاب بسته</button>`,
+      );
+    }
+  }
+
+  async function confirmAddon(id, packId, trigger) {
+    const preview = state.addonPreview;
+    const sheet = state.sheet;
+    if (
+      !preview
+      || preview.serviceId !== id
+      || preview.packId !== packId
+      || !sheet
+      || sheet.kind !== "addons"
+      || sheet.serviceId !== id
+      || preview.kind !== sheet.addonKind
+      || !commerce()
+    ) {
+      return;
+    }
     await guarded("addon:" + id, trigger, async () => {
-      const label = pack.kind === "volume" ? "افزایش حجم" : "افزایش زمان";
-      const ok = await core.confirmAction(`${label} سرویس «${svc.username}» با بستهٔ «${pack.name}» (+${pack.amount_label}) به مبلغ ${core.money(pack.price)} از کیف پول؟`);
-      if (!ok) return;
       try {
         const res = await core.api("/api/mini/addon", {
-          method: "POST", body: { service_id: id, pack_id: packId, kind: pack.kind, price: pack.price },
+          method: "POST",
+          body: {
+            service_id: id,
+            pack_id: packId,
+            kind: preview.kind,
+            preview: { terms: preview.terms, price: preview.price, request_key: preview.requestKey },
+          },
         });
         await afterPurchase(res.message || "بسته اضافه شد", { serviceId: id });
       } catch (err) {
-        core.toast(err.status === 0 ? UNKNOWN_OUTCOME : err.message, "err");
-        if (err.status === 0) await showFreshState({ serviceId: id });
+        // Keep the preview: a retry re-sends its request key, which the server
+        // applies at most once, so a lost response can never charge twice.
+        core.toast(err.status === 0 ? ADDON_UNKNOWN_OUTCOME : err.message, "err");
       }
     });
   }
@@ -1123,15 +1290,50 @@
 
   /* ---------- purchases ---------- */
 
-  async function buyPlan(planId, trigger) {
+  function showBuyConfirm(planId) {
     const plan = selectedPlan();
     if (!plan || plan.id !== planId || !commerce()) return;
+    // Check the name on the card, where its field is, before the confirm sheet covers it.
+    if (serviceNameForPurchase() === null) return;
+    const title = plan.is_trial ? "تأیید دریافت" : "تأیید خرید";
+    openSheet("buy-confirm", title, R.buyConfirmHtml(plan), { planId });
+  }
+
+  async function confirmBuy(planId, trigger) {
+    const plan = selectedPlan();
+    const sheet = state.sheet;
+    if (!plan || plan.id !== planId || !sheet || sheet.kind !== "buy-confirm" || sheet.planId !== planId || !commerce()) {
+      return;
+    }
+    const serviceName = serviceNameForPurchase();
+    if (serviceName === null) return;
     await guarded("buy", trigger, async () => {
-      const ok = await core.confirmAction(`خرید «${plan.name}» به مبلغ ${core.money(plan.price)} از کیف پول؟`);
+      try {
+        const body = { plan_id: planId, price: plan.price, service_name: serviceName };
+        const res = await core.api("/api/mini/buy", { method: "POST", body });
+        state.serviceName = "";
+        await afterPurchase(res.message || "خرید انجام شد", { view: "services" });
+      } catch (err) {
+        core.toast(err.status === 0 ? UNKNOWN_OUTCOME : err.message, "err");
+        if (err.status === 0) await showFreshState({ view: "services" });
+      }
+    });
+  }
+
+  /** Shop staff with free checkout: the order is delivered at once, without paying. */
+  async function buyFree(planId, trigger) {
+    const plan = selectedPlan();
+    if (!plan || plan.id !== planId || !commerce() || !checkoutOptions().staffFree) return;
+    const serviceName = serviceNameForPurchase();
+    if (serviceName === null) return;
+    await guarded("buy-free", trigger, async () => {
+      const ok = await core.confirmAction(`دریافت رایگان «${plan.name}» برای خودتان؟`);
       if (!ok) return;
       try {
-        const res = await core.api("/api/mini/buy", { method: "POST", body: { plan_id: planId, price: plan.price } });
-        await afterPurchase(res.message || "خرید انجام شد", { view: "services" });
+        const body = { plan_id: planId, price: plan.price, mode: "staff_free", service_name: serviceName };
+        await core.api("/api/mini/buy", { method: "POST", body });
+        state.serviceName = "";
+        await afterPurchase("سرویس تحویل شد", { view: "services" });
       } catch (err) {
         core.toast(err.status === 0 ? UNKNOWN_OUTCOME : err.message, "err");
         if (err.status === 0) await showFreshState({ view: "services" });
@@ -1353,12 +1555,15 @@
   async function payCheckout(trigger) {
     const checkout = state.checkout;
     if (!checkout || !commerce()) return;
+    const serviceName = serviceNameForPurchase();
+    if (serviceName === null) return;
+    // The discounted summary card is the renew-style confirm surface; no native dialog.
     await guarded("checkout-pay", trigger, async () => {
-      const ok = await core.confirmAction(`پرداخت ${core.money(checkout.amount)} از کیف پول با کد «${checkout.code}»؟`);
-      if (!ok) return;
       try {
-        const res = await core.api(`/api/mini/checkout/${checkout.order_id}/pay`, { method: "POST", body: {} });
+        const body = { service_name: serviceName };
+        const res = await core.api(`/api/mini/checkout/${checkout.order_id}/pay`, { method: "POST", body });
         state.checkout = null;
+        state.serviceName = "";
         await afterPurchase(res.message || "خرید انجام شد", { view: "services" });
       } catch (err) {
         // Paying the same order again is safe: the server never debits it twice.
@@ -1462,10 +1667,17 @@
     "preview-renew": (el) => previewRenew(intAttr(el, "data-id"), intAttr(el, "data-plan")),
     "confirm-renew": (el) => confirmRenew(intAttr(el, "data-id"), intAttr(el, "data-plan"), el),
     addons: (el) => showAddons(intAttr(el, "data-id"), el.getAttribute("data-kind")),
-    "buy-addon": (el) => buyAddon(intAttr(el, "data-id"), intAttr(el, "data-pack"), el),
+    "preview-addon": (el) => previewAddon(intAttr(el, "data-id"), intAttr(el, "data-pack")),
+    "confirm-addon": (el) => confirmAddon(intAttr(el, "data-id"), intAttr(el, "data-pack"), el),
     automation: (el) => showAutomation(intAttr(el, "data-id")),
     cancellation: (el) => showCancellation(intAttr(el, "data-id")),
-    buy: (el) => buyPlan(intAttr(el, "data-id"), el),
+    buy: (el) => showBuyConfirm(intAttr(el, "data-id")),
+    "confirm-buy": (el) => confirmBuy(intAttr(el, "data-id"), el),
+    "buy-free": (el) => buyFree(intAttr(el, "data-id"), el),
+    "random-service-name": () => fillRandomServiceName(),
+    "res-pack-buy": (el) => buyResellerPack(intAttr(el, "data-pack"), el),
+    "res-extra-buy": (el) => buyResellerExtra(el.getAttribute("data-kind"), intAttr(el, "data-amount"), el),
+    "res-renew": (el) => renewResellerPackage(el),
     "open-panel": (el) => openPanelPath(el.getAttribute("data-path")),
     "services-more": () => loadServices(false),
     "activity-more": () => {
@@ -1556,6 +1768,10 @@
 
   function onInput(event) {
     const el = event.target;
+    if (el.matches && el.matches("[data-input=service-name]")) {
+      state.serviceName = String(el.value || "");
+      return;
+    }
     if (!el.matches || !el.matches("[data-input=service-search]")) return;
     root.clearTimeout(state.searchTimer);
     state.searchTimer = root.setTimeout(() => {

@@ -1,0 +1,8 @@
+{# «اشتراک من» tabs: the shop owner's package and money. Every tab is the same owner-only route family. #}
+{% macro my_account_tabs(active) -%}
+<nav class="section-tabs settings-tabs" aria-label="اشتراک من">
+  {% for key, label, href in [('subscription', 'اشتراک', '/my-subscription'), ('wallet', 'کیف پول', '/my-subscription/wallet'), ('credit', 'اعتبار و صورت‌حساب', '/my-subscription/credit'), ('charges', 'هزینه‌ها', '/my-subscription/charges')] %}
+  <a href="{{ href }}" class="{% if active == key %}active{% endif %}"{% if active == key %} aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
+{%- endmacro %}

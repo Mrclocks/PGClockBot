@@ -2,12 +2,13 @@
 {% from "macros.html" import page_title, modal_title %}
 {% from "_settings_tabs.html" import settings_tabs %}
 {% from "_panel_settings_tabs.html" import panel_settings_tabs %}
-{% block title %}{% if is_panel_settings %}تنظیمات وب پنل{% else %}تنظیمات{% endif %}{% endblock %}
+{% block title %}{% if is_panel_settings %}تنظیمات سیستم{% else %}تنظیمات ربات{% endif %}{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>
     {% if is_panel_settings %}
-    {{ page_title('panel-settings', 'تنظیمات وب پنل', 'neutral', help='settings-panel') }}
+    {{ page_title('panel-settings', 'تنظیمات سیستم', 'neutral', help='settings-panel') }}
     {% else %}
     {{ page_title('bot-settings', 'تنظیمات ربات', help='settings-bot') }}
     {% endif %}
@@ -219,4 +220,5 @@
 })();
 </script>
 {% endif %}
+</div>
 {% endblock %}

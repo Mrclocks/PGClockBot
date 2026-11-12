@@ -79,7 +79,13 @@ class GroupHandlerTests(unittest.IsolatedAsyncioTestCase):
         return callback
 
     async def test_a_group_opens_in_the_panel_message(self) -> None:
-        hub = reseller_hub.ResellerHub(profile=MagicMock(), ui={}, can_add_representative=False, queue=PendingCounts())
+        hub = reseller_hub.ResellerHub(
+            profile=MagicMock(),
+            ui={},
+            can_add_representative=False,
+            show_owner_creds=False,
+            queue=PendingCounts(),
+        )
         callback = self._callback("nv:res:grp:shop")
         with (
             patch.object(reseller_hub, "load_reseller_hub", AsyncMock(return_value=hub)),

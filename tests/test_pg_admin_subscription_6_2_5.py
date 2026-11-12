@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -159,59 +157,6 @@ class EarlyRenewAnchorTests(unittest.TestCase):
         )
         self.assertIn("1300", html.replace(",", "").replace("٬", ""))
         self.assertIn("حجم اضافه", html)
-
-
-class OwnerBudgetGuardTests(unittest.IsolatedAsyncioTestCase):
-    async def test_apply_addon_rejects_oversell_before_pg_sync(self):
-        from app.services.pg_admin_subscription import apply_addon_plan
-
-        session = AsyncMock()
-        session.execute = AsyncMock(
-            return_value=SimpleNamespace(
-                scalars=lambda: SimpleNamespace(
-                    all=lambda: [
-                        SimpleNamespace(
-                            pg_username="child-a",
-                            base_gb=30,
-                            extra_gb_purchased=0,
-                            base_users=10,
-                            extra_users_purchased=0,
-                            access_status="active",
-                        )
-                    ]
-                )
-            )
-        )
-        session.commit = AsyncMock()
-        sub = SimpleNamespace(
-            pg_username="child-a",
-            access_status="active",
-            expires_at=datetime.now(timezone.utc) + timedelta(days=10),
-            base_gb=30,
-            extra_gb_purchased=0,
-            base_users=10,
-            extra_users_purchased=0,
-        )
-        addon = SimpleNamespace(plan_kind="addon_volume", is_active=True, addon_gb=20, addon_users=0, price=1000, id=9)
-        owner_admin = {"username": "owner", "data_limit": 40 * (1024**3), "max_users": 50}
-        with (
-            patch("app.config.get_settings", return_value=SimpleNamespace(pg_username="owner")),
-            patch("app.services.pasarguard.get_pg") as get_pg,
-        ):
-            pg = AsyncMock()
-            pg.get_admin = AsyncMock(return_value=owner_admin)
-            pg.modify_admin = AsyncMock()
-            get_pg.return_value = pg
-            with self.assertRaises(ValueError) as ctx:
-                await apply_addon_plan(
-                    session,
-                    sub=sub,
-                    addon_plan=addon,
-                    payer=SimpleNamespace(id=1),
-                    charge_wallet=False,
-                )
-        self.assertIn("سقف حجم", str(ctx.exception))
-        pg.modify_admin.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -9,7 +9,12 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.gift_codes import describe_code, gift_code_scope, list_gift_codes
+from app.services.gift_codes import (
+    describe_code,
+    gift_code_plan_options,
+    gift_code_scope,
+    list_gift_codes,
+)
 
 DONE_MESSAGE = "انجام شد"
 GIFT_CODES_PATH = "/gift-codes"
@@ -37,6 +42,8 @@ def register_gift_code_pages(
         except PermissionError:
             return RedirectResponse("/home", status_code=303)
         codes = await list_gift_codes(session, shop_id=shop_id)
+        plans = await gift_code_plan_options(session, shop_id=shop_id)
+        plan_names = {plan_id: name for plan_id, name, _active in plans}
         flash_ok = request.query_params.get("ok")
         return render(
             request,
@@ -44,7 +51,8 @@ def register_gift_code_pages(
             {
                 "staff": staff,
                 "gift_codes": codes,
-                "gift_code_details": {code.id: describe_code(code) for code in codes},
+                "gift_code_details": {code.id: describe_code(code, plan_names) for code in codes},
+                "gift_code_plans": plans,
                 "flash_ok": DONE_MESSAGE if flash_ok == "1" else flash_ok,
                 "flash_err": request.query_params.get("err"),
             },

@@ -116,16 +116,8 @@ class SvcGuideCatalogTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("app.bot.handlers.services.customer_may_use_service", new=AsyncMock(return_value=True)),
             patch(
-                "app.bot.handlers.guides._audience_for_user",
-                new=AsyncMock(return_value="user"),
-            ),
-            patch(
                 "app.services.connection_guides.get_connection_guides",
                 new=AsyncMock(return_value=[{"id": "g1", "audience": "user", "enabled": True}]),
-            ),
-            patch(
-                "app.services.connection_guides.guides_for_audience",
-                return_value=[{"id": "g1"}],
             ),
             patch(
                 "app.bot.handlers.guides.show_guides_list",
@@ -136,6 +128,7 @@ class SvcGuideCatalogTests(unittest.IsolatedAsyncioTestCase):
 
         show.assert_awaited()
         self.assertEqual(show.await_args.kwargs.get("svc_id"), 5)
+        self.assertEqual(show.await_args.kwargs.get("audience"), "user")
 
     async def test_empty_catalog_falls_back_to_guide_text(self):
         from app.bot.handlers.services import svc_guide
@@ -156,16 +149,8 @@ class SvcGuideCatalogTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("app.bot.handlers.services.customer_may_use_service", new=AsyncMock(return_value=True)),
             patch(
-                "app.bot.handlers.guides._audience_for_user",
-                new=AsyncMock(return_value="user"),
-            ),
-            patch(
                 "app.services.connection_guides.get_connection_guides",
                 new=AsyncMock(return_value=[]),
-            ),
-            patch(
-                "app.services.connection_guides.guides_for_audience",
-                return_value=[],
             ),
             patch(
                 "app.bot.handlers.services.get_all_settings",

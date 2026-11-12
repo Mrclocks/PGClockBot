@@ -106,7 +106,7 @@ class TabPageTests(TabHarness):
         for response, base in ((owner, "/settings"), (shop, "/shop-settings")):
             head = response.text.split("settings-layout", 1)[0]
             self.assertIn(f'href="{base}?tab=service_import" class="active"', head)
-            self.assertIn(f'href="{base}?tab=naming"', head)
+            self.assertIn(f'href="{base}?tab=delivery"', head)
 
 
 class SavePlumbingTests(TabHarness):

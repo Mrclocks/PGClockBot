@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "macros.html" import switch, oversell_create_switch, row_actions, page_title, modal_title %}
-{% block title %}ادمین{% endblock %}
+{% block title %}ادمین‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    {{ page_title('admins', 'ادمین', 'pg', help='pg-admins') }}
+    {{ page_title('admins', 'ادمین‌های پاسارگارد', 'pg', help='pg-admins') }}
   </div>
   <button type="button" class="btn" data-modal-open="modal-pg-admin-create">ساخت ادمین</button>
 </div>
@@ -179,14 +179,17 @@
 {% set src = st.get('source') or 'none' %}
 {% if src == 'pg_staff' or src == 'none' %}
 {# Phase D2: PG-only pg_staff grant/edit — no reseller plan, no conversion #}
-<div class="ui-modal" id="modal-staff-{{ loop.index }}" hidden>
+<div class="ui-modal ds" id="modal-staff-{{ loop.index }}" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('nodes', ('ویرایش ادمین فرعی' if src == 'pg_staff' else 'اعطای ادمین فرعی (فقط پاسارگارد)'), caption='مدیریت پاسارگارد', tone='pg') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('nodes', ('ویرایش ادمین فرعی' if src == 'pg_staff' else 'اعطای ادمین فرعی (فقط پاسارگارد)'), tone='pg') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/pg/admins/{{ uname }}/web-access/staff" class="form-stack js-busy-form" data-busy-label="در حال ذخیره…">
+    <form method="post" action="/pg/admins/{{ uname }}/web-access/staff" class="form-stack ds-body js-busy-form" data-busy-label="در حال ذخیره…">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
         — فقط منوی پاسارگارد؛ فروشگاه/ربات ساخته نمی‌شود.</p>
       {% if src == 'pg_staff' and st.get('username_aligned') is sameas false %}
@@ -249,31 +252,37 @@
         </select>
         <small class="muted">با انقضا، ادمین و کاربرانش موقتاً غیرفعال می‌شوند</small>
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit">{% if src == 'pg_staff' %}ذخیره{% else %}اعطای دسترسی ادمین فرعی{% endif %}</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+
+      </div></div>
     </form>
     {% if src == 'pg_staff' %}
-    <form method="post" action="/pg/admins/{{ uname }}/subscription/renew" class="form-stack" style="margin-top:var(--space-2)">
+    <form method="post" action="/pg/admins/{{ uname }}/subscription/renew" class="form-stack ds-body" style="margin-top:var(--space-2)">
       <input type="hidden" name="plan_id" value="" />
-      <div class="actions">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn btn-ghost" type="submit">تمدید اشتراک زمانی (بدون کسر کیف پول)</button>
-      </div>
+      </div></div>
     </form>
     {% endif %}
   </div>
 </div>
 {% endif %}
 {% if src == 'pg_staff' %}
-<div class="ui-modal" id="modal-convert-{{ loop.index }}" hidden>
+<div class="ui-modal ds" id="modal-convert-{{ loop.index }}" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('resellers', 'تبدیل به نماینده', caption='مدیریت نمایندگی', tone='brand') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('resellers', 'تبدیل به نماینده', tone='brand') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/pg/admins/{{ uname }}/convert-to-reseller" class="form-stack js-busy-form" data-busy-label="در حال تبدیل…">
+    <form method="post" action="/pg/admins/{{ uname }}/convert-to-reseller" class="form-stack ds-body js-busy-form" data-busy-label="در حال تبدیل…">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
         — دسترسی «ادمین فرعی» حذف می‌شود و مسیر «نماینده» (پنل ربات + فروشگاه) جایگزین می‌شود.
         هر ادمین فقط یکی از این دو مسیر را می‌تواند داشته باشد. محدودیت‌های نقش پاسارگارد و پلن نمایندگی همچنان اعمال می‌شوند.</p>
@@ -311,24 +320,28 @@
       <label class="form-field">یادداشت
         <input name="note" placeholder="تبدیل از ادمین فرعی" />
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" {% if not grant_plans %}disabled{% endif %}>تبدیل به نماینده</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+
+      </div></div>
     </form>
   </div>
 </div>
 {% endif %}
 {% if src == 'none' %}
 {# Phase D2: separate shop/reseller grant #}
-<div class="ui-modal" id="modal-reseller-{{ loop.index }}" hidden>
+<div class="ui-modal ds" id="modal-reseller-{{ loop.index }}" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('resellers', 'اعطای دسترسی نماینده (فروشگاه)', caption='مدیریت نمایندگی', tone='brand') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('resellers', 'اعطای دسترسی نماینده (فروشگاه)', tone='brand') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/pg/admins/{{ uname }}/web-access/reseller" class="form-stack js-busy-form" data-busy-label="در حال ذخیره…">
+    <form method="post" action="/pg/admins/{{ uname }}/web-access/reseller" class="form-stack ds-body js-busy-form" data-busy-label="در حال ذخیره…">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
         — منوی پاسارگارد از نقش ادمین؛ فروشگاه/ربات از پلن نمایندگی.
         اگر این ادمین قبلاً ادمین فرعی باشد، ابتدا آن دسترسی را حذف کنید.</p>
@@ -367,10 +380,11 @@
         <small class="muted">اختیاری</small>
       </label>
       {% if owner_can_toggle_oversell %}<div class="ui-switch-list">{{ oversell_create_switch() }}</div>{% endif %}
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit" {% if not grant_plans %}disabled{% endif %}>اعطای دسترسی نماینده</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+
+      </div></div>
     </form>
   </div>
 </div>
@@ -378,14 +392,17 @@
 {% endif %}
 {% endfor %}
 
-<div class="ui-modal" id="modal-pg-admin-create" hidden>
+<div class="ui-modal ds" id="modal-pg-admin-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('admins', 'ساخت ادمین پنل', caption='ادمین پاسارگارد جدید', tone='pg') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('admins', 'ساخت ادمین پنل', tone='pg') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </div>
-    <form method="post" action="/pg/admins" class="form-stack js-busy-form" data-busy-label="در حال ساخت…">
+    <form method="post" action="/pg/admins" class="form-stack ds-body js-busy-form" data-busy-label="در حال ساخت…">
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <div class="form-row">
         <div>
           <label class="form-field">نام کاربری
@@ -475,10 +492,11 @@
       <div class="ui-switch-list">
         {{ switch('is_sudo', 'دسترسی کامل (قدیمی)', help='فقط پنل‌های قدیمی؛ در نسخه‌های جدید از نقش استفاده کنید') }}
       </div>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn" type="submit">ساخت ادمین</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+
+      </div></div>
     </form>
   </div>
 </div>

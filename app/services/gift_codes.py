@@ -34,6 +34,14 @@ PURCHASE_TYPES = {
 MAX_AMOUNT = 50_000_000
 MAX_USES = 1000
 GIFT_CODE_LIST_LIMIT = 200
+# A code limited to plans names at most this many; the form lists at most PLAN_OPTION_LIMIT.
+MAX_CODE_PLANS = 40
+PLAN_OPTION_LIMIT = 100
+PLAN_ID_MAX = 2**31 - 1
+# Add-ons are not bought with a plan, so a plan limit only fits these purchases.
+PLAN_PURCHASE_TYPES = frozenset({"new", "renew"})
+ALL_PLANS = "همه پلن‌ها"
+DELETED_PLANS = "پلن حذف‌شده"
 # Gift codes mint wallet credit in the shop, so they have their own key, apart from orders or plans.
 GIFT_CODES_PERMISSION = "gift_codes"
 
@@ -68,6 +76,36 @@ def parse_expiry(raw: str) -> datetime | None:
     return utc(value)
 
 
+def _plan_id_list(plan_ids) -> list[int]:
+    """Sorted distinct plan ids from a form list or a stored comma-separated value."""
+    raw = plan_ids.split(",") if isinstance(plan_ids, str) else list(plan_ids or [])
+    ids: set[int] = set()
+    for item in raw:
+        text = str(item).strip()
+        if not text:
+            continue
+        if isinstance(item, bool) or not text.isdigit() or not 0 < int(text) <= PLAN_ID_MAX:
+            raise ValueError("پلن انتخاب‌شده نامعتبر است")
+        ids.add(int(text))
+    if len(ids) > MAX_CODE_PLANS:
+        raise ValueError(f"حداکثر {MAX_CODE_PLANS} پلن برای یک کد قابل انتخاب است")
+    return sorted(ids)
+
+
+def _check_plan_limit(kind: str, types: set[str], plans: list[int]) -> None:
+    if not plans:
+        return
+    if kind != "discount":
+        raise ValueError("محدودیت پلن فقط برای کد تخفیف قابل تنظیم است")
+    if types and not types & PLAN_PURCHASE_TYPES:
+        raise ValueError("کد محدود به پلن فقط برای خرید جدید یا تمدید قابل استفاده است")
+
+
+def code_plan_ids(row: ChargeCode) -> set[int]:
+    """The plans a code is limited to; empty means every plan."""
+    return {int(part) for part in (row.plan_ids or "").split(",") if part.strip().isdigit()}
+
+
 def validate_rules(
     *,
     kind="wallet",
@@ -79,6 +117,7 @@ def validate_rules(
     expires_at=None,
     first_purchase_only=False,
     purchase_types=None,
+    plan_ids=None,
 ) -> dict:
     if kind not in {"wallet", "discount"}:
         raise ValueError("نوع کد نامعتبر است")
@@ -89,6 +128,8 @@ def validate_rules(
     )
     if types - PURCHASE_TYPES.keys():
         raise ValueError("نوع خرید نامعتبر است")
+    plans = _plan_id_list(plan_ids)
+    _check_plan_limit(kind, types, plans)
     if kind == "wallet" and (first_purchase_only or types):
         raise ValueError("محدودیت نوع خرید فقط برای کد تخفیف قابل تنظیم است")
     if first_purchase_only and types and "new" not in types:
@@ -117,7 +158,37 @@ def validate_rules(
         expires_at=utc(expires_at) if expires_at else None,
         first_purchase_only=bool(first_purchase_only),
         purchase_types=",".join(key for key in PURCHASE_TYPES if key in types) or None,
+        plan_ids=",".join(str(plan_id) for plan_id in plans) or None,
     )
+
+
+def _shop_plans(shop_id: int | None):
+    return Plan.owner_reseller_id.is_(None) if shop_id is None else Plan.owner_reseller_id == int(shop_id)
+
+
+async def check_code_plans(session: AsyncSession, plan_ids: str | None, *, shop_id: int | None) -> None:
+    """Refuse plans that are not this shop's own sellable plans (another shop's, or a trial)."""
+    wanted = _plan_id_list(plan_ids)
+    if not wanted:
+        return
+    found = await session.scalar(
+        select(func.count(Plan.id)).where(
+            Plan.id.in_(wanted), _shop_plans(shop_id), Plan.is_trial.is_(False)
+        )
+    )
+    if int(found or 0) != len(wanted):
+        raise ValueError("پلن انتخاب‌شده متعلق به این فروشگاه نیست")
+
+
+async def gift_code_plan_options(session: AsyncSession, *, shop_id: int | None) -> list[tuple[int, str, bool]]:
+    """``(id, name, is_active)`` of the shop's plans a discount code can be limited to; bounded."""
+    rows = await session.execute(
+        select(Plan.id, Plan.name, Plan.is_active)
+        .where(_shop_plans(shop_id), Plan.is_trial.is_(False))
+        .order_by(Plan.is_active.desc(), Plan.id)
+        .limit(PLAN_OPTION_LIMIT)
+    )
+    return [(int(row.id), row.name, bool(row.is_active)) for row in rows]
 
 
 async def create_gift_code(
@@ -128,6 +199,7 @@ async def create_gift_code(
     values = validate_rules(**rules)
     if values["expires_at"] and values["expires_at"] <= datetime.now(timezone.utc):
         raise ValueError("تاریخ انقضا باید در آینده باشد")
+    await check_code_plans(session, values["plan_ids"], shop_id=reseller_id)
     key = normalize_charge_code(code) if code else generate_charge_code()
     if (
         not key
@@ -312,6 +384,9 @@ async def check_purchase_rules(
     allowed = (row.purchase_types or "").split(",")
     if purchase_type is None or (row.purchase_types and purchase_type not in allowed):
         raise ValueError("این کد برای نوع این خرید قابل استفاده نیست")
+    plans = code_plan_ids(row)
+    if plans and int(order.plan_id or 0) not in plans:
+        raise ValueError("این کد برای این پلن قابل استفاده نیست")
     if row.first_purchase_only:
         if purchase_type != "new":
             raise ValueError("این کد فقط برای اولین خرید جدید است")
@@ -328,6 +403,7 @@ async def preview_gift_discount(
         if order is None and (
             row.first_purchase_only
             or row.purchase_types
+            or row.plan_ids
             or row.max_uses_per_user is not None
         ):
             return 0, None
@@ -421,7 +497,14 @@ async def consume_gift_discount(session: AsyncSession, order: Order) -> None:
     )
 
 
-def describe_code(row: ChargeCode) -> dict:
+def _plans_label(row: ChargeCode, plan_names: Mapping[int, str]) -> str:
+    plans = code_plan_ids(row)
+    if not plans:
+        return ALL_PLANS
+    return "، ".join(plan_names[plan_id] for plan_id in sorted(plans) if plan_id in plan_names) or DELETED_PLANS
+
+
+def describe_code(row: ChargeCode, plan_names: Mapping[int, str] | None = None) -> dict:
     expiry = utc(row.expires_at) if row.expires_at else None
     state = (
         "خاموش"
@@ -444,6 +527,7 @@ def describe_code(row: ChargeCode) -> dict:
         else "بدون انقضا",
         state=state,
         purchase_label="، ".join(types) or "همه خریدها",
+        plans_label=_plans_label(row, plan_names or {}),
     )
 
 

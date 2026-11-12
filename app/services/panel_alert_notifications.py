@@ -24,10 +24,12 @@ logger = logging.getLogger(__name__)
 ALERT_UPDATE = "update"
 ALERT_CAPACITY = "capacity"
 ALERT_FAILURES = "delivery_failures"
+ALERT_PANEL_MISSING = "panel_missing"
 
 KEY_UPDATE = "notify_panel_update"
 KEY_CAPACITY = "notify_panel_capacity"
 KEY_FAILURES = "notify_panel_delivery_failures"
+KEY_PANEL_MISSING = "notify_service_panel_missing"
 
 PLATFORM_SCOPE = "platform"
 REPEAT_AFTER = timedelta(hours=6)  # a growing alert is repeated at most this often
@@ -203,7 +205,7 @@ async def failure_signals(session: AsyncSession) -> list[Signal]:
 
 
 def failures_text(count: int) -> str:
-    return f"📦 <b>{int(count)}</b> تحویل ناموفق در انتظار بررسی است.\nاز مدیریت مالی ← تحویل ناموفق ادامه تحویل بدهید یا از لیست حذف کنید."
+    return f"📦 <b>{int(count)}</b> تحویل ناموفق در انتظار بررسی است.\nاز مالی ← تحویل ناموفق ادامه تحویل بدهید یا از لیست حذف کنید."
 
 
 def update_signal(info: dict | None) -> Signal | None:
