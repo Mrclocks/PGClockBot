@@ -25,7 +25,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
-from app.bot.edit_mode import EDIT_CALLBACK_ROOT, audience_code
+from app.bot.edit_mode import CATALOG_ROW_ROOT, CATALOG_ROW_SCREENS, EDIT_CALLBACK_ROOT, audience_code
 from app.bot.handlers.button_colors import shop_settings_shop_id
 from app.bot.reply_keyboard_state import is_menu_tap
 from app.bot.screen_registry import SCREENS, ScreenButton, ScreenContext, ScreenSpec, screen_buttons
@@ -90,6 +90,7 @@ BTN_EDIT_CUSTOMER_MAIN_MENU = "✏️ ویرایش منوی اصلی مشتری"
 BTN_EDIT_TEXT = "✏️ تغییر متن"
 BTN_RESET = "↺ رنگ پیش‌فرض"
 BTN_CONTINUE = "✏️ ادامهٔ ویرایش"
+BTN_CATALOG_ROWS = "🗂 نام و رنگ دسته‌ها و پلن‌ها"
 TEXT_FEATURE_OFF_FOR_SHOP = "✏️ <b>حالت ویرایش منوها</b>\n\nاین قابلیت فعلاً توسط مدیر سیستم خاموش است."
 TEXT_FEATURE_OFF = "قابلیت ویرایش منوها خاموش است."
 TEXT_SHOP_BOT_ONLY = "حالت ویرایش فروشگاه فقط داخل ربات فروشگاه کار می‌کند."
@@ -217,6 +218,8 @@ def panel_view(
     if has_caption(spec.id):
         text_rows.append([_button(f"📄 توضیح: {_caption_preview(ui, spec.id)}", _cb(actor, "d", spec.id))])
     rows = text_rows + rows
+    if spec.id in CATALOG_ROW_SCREENS:
+        rows.append([_button(BTN_CATALOG_ROWS, f"{CATALOG_ROW_ROOT}:{audience_code(actor)}:l")])
     rows.append([_button(BTN_BACK_TO_MENU, spec.reopen_callback)])
     hint = (
         "روی تیتر، توضیح یا یک دکمه بزنید تا آن را عوض کنید."
@@ -590,7 +593,7 @@ async def owner_label_text(message: Message, state: FSMContext, session: AsyncSe
     await _save_label_message(message, state, session, EditorActor(user_id=int(db_user.id), shop_id=None))
 
 
-async def _shop_actor(
+async def shop_editor_actor(
     session: AsyncSession, db_user: BotUser, *, is_reseller_bot: bool, reseller_owner_id: int | None
 ) -> EditorActor | None:
     if not is_reseller_bot:
@@ -614,7 +617,7 @@ async def shop_editor(
     if request is None:
         await callback.answer(feedback.INVALID, show_alert=True)
         return
-    actor = await _shop_actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    actor = await shop_editor_actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if actor is None:
         text = TEXT_SHOP_BOT_ONLY if not is_reseller_bot else feedback.NO_SHOP_SETTINGS_ACCESS
         await callback.answer(text, show_alert=True)
@@ -631,7 +634,7 @@ async def shop_label_text(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> None:
-    actor = await _shop_actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    actor = await shop_editor_actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if actor is None:
         await state.set_state(None)
         await message.answer(feedback.NO_SHOP_SETTINGS_ACCESS)

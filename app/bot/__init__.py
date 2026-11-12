@@ -122,6 +122,7 @@ def bot_routers() -> list[Router]:
         button_colors,
         broadcast_history,
         cancellation_review,
+        catalog_row_editor,
         connection_status_admin,
         connection_status_admin_input,
         action_reason,
@@ -184,6 +185,9 @@ def bot_routers() -> list[Router]:
         # A tap on a visible menu button is passed on (see screen_editor._is_menu_tap).
         screen_editor.owner_router,
         screen_editor.shop_router,
+        # Its typed names come before navigation, like the menu editor's above.
+        catalog_row_editor.owner_router,
+        catalog_row_editor.shop_router,
         start.router,
         terms.router,
         connection_status.router,
@@ -291,6 +295,7 @@ def create_dispatcher() -> Dispatcher:
         button_colors,
         connection_status_admin,
         connection_status_admin_input,
+        catalog_row_editor,
         guide_editor,
         reseller_plan_extra_packs_admin,
         screen_editor,
@@ -308,6 +313,7 @@ def create_dispatcher() -> Dispatcher:
         button_colors.owner_router,
         guide_editor.owner_router,
         screen_editor.owner_router,
+        catalog_row_editor.owner_router,
         admin_plans.router,
         admin_resplan_payg.router,
         reseller_plan_extra_packs_admin.router,

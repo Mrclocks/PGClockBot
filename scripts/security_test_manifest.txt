@@ -484,3 +484,4 @@ tests/test_notice_panels.py
 tests/test_panel_history.py
 tests/test_staff_notice_buttons.py
 tests/test_customer_notice_buttons.py
+tests/test_catalog_row_editor.py
