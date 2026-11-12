@@ -18,23 +18,16 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from app.bot.chat_cleanup import note_throwaway, sweep_above
 from app.bot.edit_mode import editable_screen
 from app.bot.hub_entries import (
-    SERVICE_SHOP_REVIEW_CALLBACK,
-    SERVICE_SHOP_REVIEW_LABEL,
-    STAFF_AUDIT_CALLBACK,
-    STAFF_AUDIT_LABEL,
-    TRIAL_USERS_CALLBACK,
-    TRIAL_USERS_LABEL,
+    ADMIN_STAFF_AUDIT,
+    ADMIN_TRIAL_USERS,
+    SERVICE_SHOP_REVIEW,
+    SHOP_STAFF_AUDIT,
+    SHOP_TRIAL_USERS,
+    HubEntry,
 )
-from app.bot.broadcast_entries import BROADCAST_HISTORY_CALLBACK, BROADCAST_HISTORY_LABEL
-from app.bot.keyboards import _ikb, _t
-from app.bot.pg_entries import (
-    PG_ADMINS_CALLBACK,
-    PG_ADMINS_LABEL,
-    PG_HOSTS_CALLBACK,
-    PG_HOSTS_LABEL,
-    PG_INBOUNDS_CALLBACK,
-    PG_INBOUNDS_LABEL,
-)
+from app.bot.broadcast_entries import BROADCAST_HISTORY
+from app.bot.keyboards import _ikb, _label_or, _t
+from app.bot.pg_entries import PG_ADMINS, PG_HOSTS, PG_INBOUNDS
 from app.bot.list_pages import Page, page_of, pager_row
 from app.services.resellers import has_bot_perm
 from app.bot.reseller_hub_groups import (
@@ -511,6 +504,17 @@ def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _hub_entry_button(ui: dict | None, entry: HubEntry) -> InlineKeyboardButton:
+    """A hub leaf whose label and color come from settings, like the other hub buttons."""
+    return _ikb(
+        _label_or(ui, entry.label_key, entry.fallback),
+        callback_data=entry.callback,
+        ui=ui,
+        label_key=entry.label_key,
+        style_id=entry.style_id,
+    )
+
+
 def _hub_back_row(
     ui: dict | None, *, callback_data: str
 ) -> list[InlineKeyboardButton]:
@@ -816,7 +820,7 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
                 label_key="btn_adm_cashback",
                 style_id="adm_cashback",
             ),
-            _ikb(TRIAL_USERS_LABEL, callback_data=TRIAL_USERS_CALLBACK, ui=ui),
+            _hub_entry_button(ui, ADMIN_TRIAL_USERS),
         ]
     )
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
@@ -847,8 +851,8 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         for key, text in _reply_admin_system_entries(ui)
         if key in cb_map
     ]
-    buttons.append(_ikb(STAFF_AUDIT_LABEL, callback_data=STAFF_AUDIT_CALLBACK, ui=ui))
-    buttons.append(_ikb(SERVICE_SHOP_REVIEW_LABEL, callback_data=SERVICE_SHOP_REVIEW_CALLBACK, ui=ui))
+    buttons.append(_hub_entry_button(ui, ADMIN_STAFF_AUDIT))
+    buttons.append(_hub_entry_button(ui, SERVICE_SHOP_REVIEW))
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
@@ -895,12 +899,12 @@ def pg_hub_keyboard(
         if key in cb_map
     ]
     if features is None or "pg_hosts" in features:
-        buttons.append(_ikb(PG_HOSTS_LABEL, callback_data=PG_HOSTS_CALLBACK, ui=ui))
+        buttons.append(_hub_entry_button(ui, PG_HOSTS))
     if features is None or "pg_inbounds" in features:
-        buttons.append(_ikb(PG_INBOUNDS_LABEL, callback_data=PG_INBOUNDS_CALLBACK, ui=ui))
+        buttons.append(_hub_entry_button(ui, PG_INBOUNDS))
     # Owner-only page: shown only when the actor's own feature set includes it, never for an unfiltered hub.
     if features is not None and "pg_admins" in features:
-        buttons.append(_ikb(PG_ADMINS_LABEL, callback_data=PG_ADMINS_CALLBACK, ui=ui))
+        buttons.append(_hub_entry_button(ui, PG_ADMINS))
     return _pack_hub_keyboard(buttons, ui, back_callback=back_callback)
 
 
@@ -1062,9 +1066,9 @@ def reseller_group_hub_keyboard(
     badge_for = {"res_payments": pending_payments, "res_tickets": pending_tickets, "res_orders": pending_deliveries}
     buttons = _reseller_entry_buttons(shown, ui, badge_for)
     if group_id == "customers" and has_bot_perm(profile, "trial_users"):
-        buttons.append(_ikb(TRIAL_USERS_LABEL, callback_data=TRIAL_USERS_CALLBACK, ui=ui))
+        buttons.append(_hub_entry_button(ui, SHOP_TRIAL_USERS))
     if group_id == "account":
-        buttons.append(_ikb(STAFF_AUDIT_LABEL, callback_data=STAFF_AUDIT_CALLBACK, ui=ui))
+        buttons.append(_hub_entry_button(ui, SHOP_STAFF_AUDIT))
     return _pack_hub_keyboard(buttons, ui, back_callback=RESELLER_HOME_CALLBACK)
 
 
@@ -1282,7 +1286,7 @@ def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
         for key, text in _admin_broadcast_submenu_entries(ui)
         if key.startswith("bc_aud_")
     ]
-    buttons.append(_ikb(BROADCAST_HISTORY_LABEL, callback_data=BROADCAST_HISTORY_CALLBACK, ui=ui))
+    buttons.append(_hub_entry_button(ui, BROADCAST_HISTORY))
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:marketing")
 
 

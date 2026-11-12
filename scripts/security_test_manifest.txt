@@ -44,6 +44,7 @@ tests/test_update_migration_metadata.py
 tests/test_button_color_editor.py
 # In-menu screen editor: owner/shop permissions, per-shop writes, edit-mode switch.
 tests/test_screen_editor.py
+tests/test_hub_entry_labels.py
 # Editable menu titles: owner/shop scope, unsafe titles refused.
 tests/test_screen_titles.py
 tests/test_update_owner_only.py

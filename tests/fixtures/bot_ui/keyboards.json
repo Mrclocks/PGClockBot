@@ -296,7 +296,7 @@
       [
         {
           "callback_data": "nv:adm:cb",
-          "text": "🎁 کش‌بک"
+          "text": "💸 کش‌بک"
         },
         {
           "callback_data": "tru:l:all:0",
@@ -820,7 +820,7 @@
         },
         {
           "callback_data": "saud:l:0",
-          "text": "🧾 گزارش اقدامات کارکنان"
+          "text": "🧾 گزارش کارکنان"
         }
       ],
       [
