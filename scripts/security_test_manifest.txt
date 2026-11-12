@@ -374,6 +374,7 @@ tests/test_custom_service_name.py
 tests/test_miniapp_checkout_options.py
 # Gift codes: own gift_codes key, own shop only; migration 0077 keeps current access.
 tests/test_gift_codes_permission.py
+tests/test_shop_marketing_bot.py
 # PasarGuard link reconnect: owner-only, CSRF, rate limit; never leak exception text.
 tests/test_pg_link_reconnect.py
 # PasarGuard read circuit: heal under concurrency, probe lease, budget exhaustion.

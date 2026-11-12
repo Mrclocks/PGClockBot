@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
+from app.bot.handlers.shop_marketing_bot import SHOP_LEAF_OPENERS
 from app.bot.menu_nav import restore_main_reply
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.reply_keyboards import _reply_admin_marketing_entries
@@ -2379,6 +2380,12 @@ async def _soft_reseller(
             reseller_owner_id=reseller_owner_id,
         )
         return
+    shop_marketing_opener = SHOP_LEAF_OPENERS.get(action)
+    if shop_marketing_opener is not None:
+        await shop_marketing_opener(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+        )
+        return
     if action == "res_cashback":
         from app.bot.handlers.cashback_tools import open_shop_cashback_panel
 
@@ -2618,6 +2625,7 @@ async def reply_main_nav(
         "res_loyalty",
         "res_cashback",
         "res_child_pricing",
+        *SHOP_LEAF_OPENERS,
         "res_broadcast",
         "res_renew",
         "res_buy_gb",

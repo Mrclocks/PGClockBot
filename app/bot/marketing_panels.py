@@ -27,6 +27,10 @@ CAMPAIGN_ACTION_PATTERN = re.compile(r"^adm:cmp:(start|pause):(\d{1,9})\Z")
 CASHBACK_FEATURE_PATTERN = re.compile(r"^adm:cb:en:([01])\Z")
 CASHBACK_RULE_PATTERN = re.compile(r"^adm:cb:set:(\d{1,9}):([01])\Z")
 # Shop-bot mirrors (same actions, scoped by the reseller actor).
+SHOP_GIFT_PANEL_CALLBACK = "res:gc"
+SHOP_CAMPAIGN_PANEL_CALLBACK = "res:cmp"
+SHOP_GIFT_SET_PATTERN = re.compile(r"^res:gc:set:(\d{1,9}):([01])\Z")
+SHOP_CAMPAIGN_ACTION_PATTERN = re.compile(r"^res:cmp:(start|pause):(\d{1,9})\Z")
 SHOP_CASHBACK_PANEL_CALLBACK = "res:cb"
 SHOP_CASHBACK_FEATURE_PATTERN = re.compile(r"^res:cb:en:([01])\Z")
 SHOP_CASHBACK_RULE_PATTERN = re.compile(r"^res:cb:set:(\d{1,9}):([01])\Z")
@@ -81,7 +85,10 @@ def gift_codes_panel(
     *,
     ui: Mapping | None = None,
     web_url: str | None = None,
+    action_prefix: str = "adm",
+    back_callback: str = MARKETING_HUB_CALLBACK,
 ) -> tuple[str, InlineKeyboardMarkup]:
+    """Code list with an on/off button each; ``action_prefix`` is ``adm`` (platform) or ``res`` (shop bot)."""
     lines = ["🎁 <b>کدهای هدیه</b>", "با دکمه‌ی هر کد، آن را روشن یا خاموش کنید.", ""]
     rows: list[list[InlineKeyboardButton]] = []
     for code in codes:
@@ -96,7 +103,7 @@ def gift_codes_panel(
             [
                 _ikb(
                     f"{icon}: {code.code}",
-                    callback_data=f"adm:gc:set:{code.id}:{target}",
+                    callback_data=f"{action_prefix}:gc:set:{code.id}:{target}",
                     ui=ui,
                     style=_style(dict(ui or {}), "reject" if code.is_active else "confirm"),
                 )
@@ -104,7 +111,7 @@ def gift_codes_panel(
         )
     if not codes:
         lines.append("هنوز کدی ساخته نشده. ساخت کد از وب‌پنل انجام می‌شود.")
-    rows.extend(_footer_rows(ui, web_url))
+    rows.extend(_footer_rows(ui, web_url, back_callback=back_callback))
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -120,7 +127,10 @@ def campaigns_panel(
     *,
     ui: Mapping | None = None,
     web_url: str | None = None,
+    action_prefix: str = "adm",
+    back_callback: str = MARKETING_HUB_CALLBACK,
 ) -> tuple[str, InlineKeyboardMarkup]:
+    """Recent campaigns with start/pause; ``action_prefix`` is ``adm`` (platform) or ``res`` (shop bot)."""
     lines = ["📣 <b>کمپین‌های هدفمند</b>", "وضعیت آخرین کمپین‌ها؛ ساخت کمپین از وب‌پنل انجام می‌شود.", ""]
     rows: list[list[InlineKeyboardButton]] = []
     for campaign in campaigns:
@@ -136,7 +146,7 @@ def campaigns_panel(
                 [
                     _ikb(
                         f"▶️ شروع/ادامه #{campaign.id}",
-                        callback_data=f"adm:cmp:start:{campaign.id}",
+                        callback_data=f"{action_prefix}:cmp:start:{campaign.id}",
                         ui=ui,
                         style=_style(dict(ui or {}), "confirm"),
                     )
@@ -147,7 +157,7 @@ def campaigns_panel(
                 [
                     _ikb(
                         f"⏸ توقف #{campaign.id}",
-                        callback_data=f"adm:cmp:pause:{campaign.id}",
+                        callback_data=f"{action_prefix}:cmp:pause:{campaign.id}",
                         ui=ui,
                         style=_style(dict(ui or {}), "reject"),
                     )
@@ -155,7 +165,7 @@ def campaigns_panel(
             )
     if not campaigns:
         lines.append("هنوز کمپینی ساخته نشده.")
-    rows.extend(_footer_rows(ui, web_url))
+    rows.extend(_footer_rows(ui, web_url, back_callback=back_callback))
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
