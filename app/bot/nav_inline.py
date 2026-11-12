@@ -30,6 +30,7 @@ from app.bot.keyboards import _ikb, _label_or, _t
 from app.bot.pg_entries import PG_ADMINS, PG_HOSTS, PG_INBOUNDS
 from app.bot.list_pages import Page, page_of, pager_row
 from app.bot.payg_review_entries import PAYG_REVIEW
+from app.bot.service_cleanup_entries import ADMIN_SERVICE_CLEANUP, SHOP_SERVICE_CLEANUP
 from app.services.resellers import has_bot_perm
 from app.bot.reseller_hub_groups import (
     RESELLER_GROUPS,
@@ -862,6 +863,7 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     ]
     buttons.append(_hub_entry_button(ui, ADMIN_STAFF_AUDIT))
     buttons.append(_hub_entry_button(ui, SERVICE_SHOP_REVIEW))
+    buttons.append(_hub_entry_button(ui, ADMIN_SERVICE_CLEANUP))
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
@@ -1076,6 +1078,8 @@ def reseller_group_hub_keyboard(
     buttons = _reseller_entry_buttons(shown, ui, badge_for)
     if group_id == "customers" and has_bot_perm(profile, "trial_users"):
         buttons.append(_hub_entry_button(ui, SHOP_TRIAL_USERS))
+    if group_id == "customers" and has_bot_perm(profile, "service_cleanup"):
+        buttons.append(_hub_entry_button(ui, SHOP_SERVICE_CLEANUP))
     if group_id == "account":
         buttons.append(_hub_entry_button(ui, SHOP_STAFF_AUDIT))
     return _pack_hub_keyboard(buttons, ui, back_callback=RESELLER_HOME_CALLBACK)
