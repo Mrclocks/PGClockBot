@@ -209,6 +209,7 @@ class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
                 session, 5003, reseller_id=owner.id, code="BUY5003"
             )
             buyer.referred_by_id = referrer.id
+            buyer.referral_shop_id = owner.id  # referred in this shop's bot
             await session.commit()
             await set_setting(
                 session, "referral_bonus", "25000", reseller_id=owner.id

@@ -517,6 +517,8 @@ async def get_or_create_user(
         role=Role.ADMIN.value if is_admin else Role.USER.value,
         referral_code=_referral_code(),
         referred_by_id=referred_by_id,
+        # The referrer was looked up in this bot's shop, so the referral belongs to it.
+        referral_shop_id=reseller_owner_id if referred_by_id else None,
         reseller_id=assign_reseller,
         color_tag=DEFAULT_COLOR_TAG,
     )
