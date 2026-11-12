@@ -11,7 +11,7 @@ from aiogram.types import TelegramObject
 
 from app.bot.chat_screen import ChatScreenMiddleware, install_screen_rules
 from app.bot.edit_mode import EditModeMiddleware
-from app.bot.notice_panels import NoticePanelMiddleware
+from app.bot.panel_history import PanelHistoryMiddleware
 from app.bot.screen_replay import install_replay_guard, set_dispatcher
 from app.bot.slow_updates import SlowUpdateMiddleware
 from app.bot.middlewares import (
@@ -271,7 +271,7 @@ def create_dispatcher() -> Dispatcher:
     dp.update.middleware(ForceJoinMiddleware())
     dp.update.middleware(TermsEntryMiddleware())
     dp.update.middleware(EditModeMiddleware())
-    dp.update.middleware(NoticePanelMiddleware())
+    dp.update.middleware(PanelHistoryMiddleware())
 
     for router in bot_routers():
         dp.include_router(router)

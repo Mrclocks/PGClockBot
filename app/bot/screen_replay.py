@@ -54,13 +54,21 @@ class ReplayAnswer:
 
 @dataclass(slots=True)
 class ReplayLog:
-    """What happened while a screen was replayed: its answers and the messages it edited."""
+    """What happened while it was watched: replayed answers and the messages the bot edited."""
 
     answers: list[ReplayAnswer] = field(default_factory=list)
-    edited: set[int] = field(default_factory=set)
+    # (chat id, message id) of every message edited while watched.
+    edited: set[tuple[int, int]] = field(default_factory=set)
+
+    def was_edited(self, chat_id: int, message_id: int) -> bool:
+        return (int(chat_id), int(message_id)) in self.edited
+
+    def edited_in(self, chat_id: int) -> set[int]:
+        return {message_id for chat, message_id in self.edited if chat == int(chat_id)}
 
 
-_replay_log: ContextVar[ReplayLog | None] = ContextVar("replay_log", default=None)
+# Watches nest (a replay inside an update that is itself watched); every open watch sees each request.
+_replay_logs: ContextVar[tuple[ReplayLog, ...]] = ContextVar("replay_logs", default=())
 
 _EDIT_METHODS = (EditMessageText, EditMessageCaption, EditMessageMedia, EditMessageReplyMarkup)
 
@@ -68,11 +76,11 @@ _EDIT_METHODS = (EditMessageText, EditMessageCaption, EditMessageMedia, EditMess
 @contextmanager
 def watching_replay() -> Iterator[ReplayLog]:
     log = ReplayLog()
-    token = _replay_log.set(log)
+    token = _replay_logs.set((*_replay_logs.get(), log))
     try:
         yield log
     finally:
-        _replay_log.reset(token)
+        _replay_logs.reset(token)
 
 
 def set_dispatcher(dispatcher: Dispatcher) -> None:
@@ -83,15 +91,24 @@ def set_dispatcher(dispatcher: Dispatcher) -> None:
 async def _drop_replay_answers(
     make_request: NextRequestMiddlewareType[TelegramType], bot: Bot, method: TelegramMethod[TelegramType]
 ) -> Any:
-    log = _replay_log.get()
+    logs = _replay_logs.get()
     if isinstance(method, AnswerCallbackQuery) and method.callback_query_id.startswith(REPLAY_PREFIX):
-        if log is not None:
+        for log in logs:
             log.answers.append(ReplayAnswer(text=method.text, show_alert=bool(method.show_alert)))
         return True
     result = await make_request(bot, method)
-    if log is not None and isinstance(method, _EDIT_METHODS) and method.message_id is not None:
-        log.edited.add(int(method.message_id))
+    if logs and isinstance(method, _EDIT_METHODS) and method.message_id is not None and _is_int(method.chat_id):
+        for log in logs:
+            log.edited.add((int(method.chat_id), int(method.message_id)))
     return result
+
+
+def _is_int(value: Any) -> bool:
+    try:
+        int(value)
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def install_replay_guard(bot: Bot) -> Bot:

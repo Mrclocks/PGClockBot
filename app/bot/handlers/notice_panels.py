@@ -8,7 +8,7 @@ from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery, Message
 
-from app.bot.notice_panels import notice_panels, panel_key
+from app.bot.panel_history import panel_history, panel_key
 from app.bot.screen_replay import ReplayAnswer, replay_screen, watching_replay
 from app.bot.tg_utils import safe_edit_text
 from app.services import bot_feedback_texts as feedback
@@ -32,7 +32,7 @@ def _toast(answers: list[ReplayAnswer]) -> str | None:
 
 
 async def _remove_panel(bot: Bot, panel: Message) -> None:
-    notice_panels.close(panel_key(bot, panel))
+    panel_history.forget(panel_key(bot, panel))
     try:
         await bot.delete_message(chat_id=panel.chat.id, message_id=panel.message_id)
     except TelegramAPIError:
@@ -54,12 +54,12 @@ async def open_notice_screen(callback: CallbackQuery, bot: Bot) -> None:
         logger.warning("notice panel not sent screen=%s", screen, exc_info=True)
         await callback.answer(feedback.INVALID, show_alert=True)
         return
-    notice_panels.open(panel_key(bot, panel), screen)
+    panel_history.open_from_notice(panel_key(bot, panel))
     with watching_replay() as replay:
         handled = await replay_screen(bot, user=callback.from_user, chat_id=panel.chat.id, data=screen, message=panel)
     refusal = _refusal(replay.answers)
     # A gate may refuse without a word (a platform screen on a shop bot), so only an edited panel counts.
-    if handled and refusal is None and int(panel.message_id) in replay.edited:
+    if handled and refusal is None and replay.was_edited(panel.chat.id, panel.message_id):
         await callback.answer(_toast(replay.answers))
         return
     await _remove_panel(bot, panel)
