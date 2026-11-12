@@ -32,13 +32,13 @@
     <div class="ds-grid-2">
       <div class="form-field">
         <span class="ds-label-row"><span class="ds-label-text">مدت</span>
-          <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#edit-plan-days" data-ds-empty-is-unlimited>نامحدود</button></span>
+          <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#edit-plan-days" data-ds-empty-is-unlimited data-ds-default="30">نامحدود</button></span>
         <span class="ds-unit" data-unlimited-label="نامحدود"><input name="duration_days" id="edit-plan-days" type="number" min="0" value="{{ plan.duration_days if plan.duration_days else '' }}" inputmode="numeric" dir="ltr" aria-label="مدت (روز)" /><span class="ds-unit-label">روز</span></span>
         {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_expire_max %}<small class="muted">سقف زنده: {{ (pg_limit_snapshot.per_user_expire_max // 86400) or 1 }} روز</small>{% endif %}
       </div>
       <div class="form-field">
         <span class="ds-label-row"><span class="ds-label-text">حجم</span>
-          <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#edit-plan-gb" data-ds-empty-is-unlimited>نامحدود</button></span>
+          <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#edit-plan-gb" data-ds-empty-is-unlimited data-ds-default="50">نامحدود</button></span>
         <span class="ds-unit" data-unlimited-label="نامحدود"><input name="data_limit_gb" id="edit-plan-gb" type="number" step="0.1" min="0" value="{{ plan.data_limit_gb if plan.data_limit_gb is not none else '' }}" inputmode="decimal" dir="ltr" aria-label="حجم (گیگ)" /><span class="ds-unit-label">گیگ</span></span>
         {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_data_max %}<small class="muted">سقف زنده: {{ pg_limit_snapshot.per_user_data_max | bytes }}</small>{% endif %}
       </div>
