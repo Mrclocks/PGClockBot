@@ -56,14 +56,14 @@
       <div class="ds-grid-2">
         <div class="form-field">
           <span class="ds-label-row"><span class="ds-label-text">مدت</span>
-            <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#user-plan-days" data-ds-empty-is-unlimited>نامحدود</button></span>
+            <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#user-plan-days" data-ds-empty-is-unlimited data-ds-default="30">نامحدود</button></span>
           <span class="ds-unit" data-unlimited-label="نامحدود"><input name="duration_days" id="user-plan-days" type="number" min="0" value="30" inputmode="numeric" dir="ltr" aria-label="مدت (روز)" /><span class="ds-unit-label">روز</span></span>
           {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_expire_max %}<small class="muted">سقف زنده: {{ (pg_limit_snapshot.per_user_expire_max // 86400) or 1 }} روز</small>{% endif %}
         </div>
         <div class="form-field">
           <span class="ds-label-row"><span class="ds-label-text">حجم</span>
-            <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#user-plan-gb" data-ds-empty-is-unlimited>نامحدود</button></span>
-          <span class="ds-unit" data-unlimited-label="نامحدود"><input name="data_limit_gb" id="user-plan-gb" type="number" step="0.1" min="0" inputmode="decimal" dir="ltr" aria-label="حجم (گیگ)" /><span class="ds-unit-label">گیگ</span></span>
+            <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#user-plan-gb" data-ds-empty-is-unlimited data-ds-default="50">نامحدود</button></span>
+          <span class="ds-unit" data-unlimited-label="نامحدود"><input name="data_limit_gb" id="user-plan-gb" type="number" step="0.1" min="0" value="50" inputmode="decimal" dir="ltr" aria-label="حجم (گیگ)" /><span class="ds-unit-label">گیگ</span></span>
           {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_data_max %}<small class="muted">سقف زنده: {{ pg_limit_snapshot.per_user_data_max | bytes }}</small>{% endif %}
         </div>
       </div>
@@ -151,8 +151,8 @@
         </label>
         <div class="form-field">
           <span class="ds-label-row"><span class="ds-label-text">حجم</span>
-            <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#trial-plan-gb" data-ds-empty-is-unlimited>نامحدود</button></span>
-          <span class="ds-unit" data-unlimited-label="نامحدود"><input name="data_limit_gb" id="trial-plan-gb" type="number" step="0.1" min="0" value="{% if trial and trial.data_limit_gb is not none %}{{ trial.data_limit_gb }}{% endif %}" inputmode="decimal" dir="ltr" aria-label="حجم (گیگ)" /><span class="ds-unit-label">گیگ</span></span>
+            <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#trial-plan-gb" data-ds-empty-is-unlimited data-ds-default="1">نامحدود</button></span>
+          <span class="ds-unit" data-unlimited-label="نامحدود"><input name="data_limit_gb" id="trial-plan-gb" type="number" step="0.1" min="0" value="{% if trial and trial.data_limit_gb is not none %}{{ trial.data_limit_gb }}{% elif not trial %}1{% endif %}" inputmode="decimal" dir="ltr" aria-label="حجم (گیگ)" /><span class="ds-unit-label">گیگ</span></span>
         </div>
       </div>
     {% endcall %}

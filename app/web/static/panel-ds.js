@@ -85,7 +85,8 @@
       if (String(input.value).trim() !== "" && String(input.value).trim() !== "0") input.dataset.dsLast = input.value;
       input.value = emptyIsUnlimited ? "" : "0";
     } else {
-      input.value = input.dataset.dsLast || "";
+      // An empty field would read as «نامحدود» again, so switching it off always leaves a number.
+      input.value = input.dataset.dsLast || btn.getAttribute("data-ds-default") || (emptyIsUnlimited ? "1" : "");
     }
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -334,7 +335,7 @@
     if (form) syncForm(form);
   }
 
-  const api = { syncAll, syncChoice, syncForm, missingFields, faDigits, resetPerms, syncPerms, showWhenMatches, unpairedCells };
+  const api = { syncAll, syncChoice, syncUnlimited, toggleUnlimited, syncForm, missingFields, faDigits, resetPerms, syncPerms, showWhenMatches, unpairedCells };
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   } else {
