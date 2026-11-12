@@ -571,6 +571,9 @@ _RESELLER_FEATURE_LEAVES: tuple[tuple[str, str, str], ...] = (
     ("loyalty", "res_loyalty", "btn_res_loyalty"),
     ("broadcast", "res_broadcast", "btn_res_broadcast"),
     ("cashback", "res_cashback", "btn_res_cashback"),
+    ("gift_codes", "res_gift_codes", "btn_res_gift_codes"),
+    ("campaigns", "res_campaigns", "btn_res_campaigns"),
+    ("catalog_discounts", "res_discounts", "btn_res_discounts"),
     ("shop_settings", "res_settings", "btn_res_settings"),
 )
 
@@ -607,6 +610,7 @@ def _reseller_submenu_entries(
         key="payments", profile=profile
     ):
         entries.append(("res_reports", _t(ui, "btn_res_reports")))
+        entries.append(("res_funnel", _t(ui, "btn_res_funnel")))
     for perm, action, label_key in _RESELLER_FEATURE_LEAVES:
         if shop_feature_allowed(key=perm, profile=profile):
             entries.append((action, _t(ui, label_key)))

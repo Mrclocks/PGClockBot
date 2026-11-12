@@ -47,6 +47,8 @@ class MarketingHubKeyboardTests(unittest.TestCase):
                 "nv:adm:gc",
                 "nv:adm:cmp",
                 "nv:adm:cb",
+                "dsc:l",
+                "fnl:v",
                 "tru:l:all:0",
                 "nv:adm:home",
             ],

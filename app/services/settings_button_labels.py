@@ -212,6 +212,8 @@ BTN_ADMIN_MARKETING_SUB: list[Field] = [
     ("btn_adm_cashback", "کش‌بک", "text"),
     ("btn_adm_trial_users", "کاربران تست", "text"),
     ("btn_adm_broadcast_history", "تاریخچهٔ ارسال‌ها", "text"),
+    ("btn_adm_discounts", "تخفیف‌ها", "text"),
+    ("btn_adm_funnel", "رفتار کاربر", "text"),
 ]
 
 BTN_SERVICE_MORE: list[Field] = [
@@ -275,6 +277,13 @@ BTN_RESELLER_HUB_EXTRA: list[Field] = [
     ("btn_res_trial_users", "کاربران تست", "text"),
     ("btn_res_staff_audit", "گزارش کارکنان", "text"),
     ("btn_res_service_cleanup", "پاکسازی سرویس‌ها", "text"),
+]
+
+BTN_RESELLER_MARKETING: list[Field] = [
+    ("btn_res_gift_codes", "کد هدیه", "text"),
+    ("btn_res_campaigns", "کمپین‌ها", "text"),
+    ("btn_res_discounts", "تخفیف‌ها", "text"),
+    ("btn_res_funnel", "رفتار کاربر", "text"),
 ]
 
 BTN_RESELLER_PLANS_SUB: list[Field] = [
@@ -393,6 +402,7 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
         ("btn_res_hub", "دکمه‌های پنل نماینده", BTN_RESELLER_HUB),
         ("btn_res_hub_more", "دکمه‌های پنل نماینده — مشتریان و حساب", BTN_RESELLER_HUB_MORE),
         ("btn_res_hub_extra", "دکمه‌های پنل نماینده — قیمت، کش‌بک و گزارش‌ها", BTN_RESELLER_HUB_EXTRA),
+        ("btn_res_marketing", "دکمه‌های پنل نماینده — بازاریابی", BTN_RESELLER_MARKETING),
         ("btn_res_plans_sub", "دکمه‌های پلن‌های فروش", BTN_RESELLER_PLANS_SUB),
         ("btn_res_st_sub", "دکمه‌های تنظیمات فروشگاه", BTN_RESELLER_SETTINGS_SUB),
         ("btn_res_st_more", "دکمه‌های تنظیمات فروشگاه — قوانین و ربات", BTN_RESELLER_SETTINGS_MORE),

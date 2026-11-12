@@ -299,6 +299,16 @@
           "text": "💸 کش‌بک"
         },
         {
+          "callback_data": "dsc:l",
+          "text": "🏷 تخفیف‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "fnl:v",
+          "text": "📊 رفتار کاربر"
+        },
+        {
           "callback_data": "tru:l:all:0",
           "text": "🧪 کاربران تست"
         }

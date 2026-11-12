@@ -31,6 +31,7 @@ from app.bot.pg_entries import PG_ADMINS, PG_HOSTS, PG_INBOUNDS
 from app.bot.list_pages import Page, page_of, pager_row
 from app.bot.payg_review_entries import PAYG_REVIEW
 from app.bot.service_cleanup_entries import ADMIN_SERVICE_CLEANUP, SHOP_SERVICE_CLEANUP
+from app.bot.shop_marketing_entries import ADMIN_DISCOUNTS, ADMIN_FUNNEL, DISCOUNTS_CALLBACK, FUNNEL_CALLBACK
 from app.services.resellers import has_bot_perm
 from app.bot.reseller_hub_groups import (
     RESELLER_GROUPS,
@@ -830,6 +831,8 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
                 label_key="btn_adm_cashback",
                 style_id="adm_cashback",
             ),
+            _hub_entry_button(ui, ADMIN_DISCOUNTS),
+            _hub_entry_button(ui, ADMIN_FUNNEL),
             _hub_entry_button(ui, ADMIN_TRIAL_USERS),
         ]
     )
@@ -965,6 +968,7 @@ def _reseller_entry_buttons(
 ) -> list[InlineKeyboardButton]:
     from app.bot.handlers.cashback_tools import SHOP_CASHBACK_PANEL_CALLBACK
     from app.bot.handlers.child_pricing_bot import PANEL_CALLBACK as CHILD_PRICING_HUB
+    from app.bot.marketing_panels import SHOP_CAMPAIGN_PANEL_CALLBACK, SHOP_GIFT_PANEL_CALLBACK
     from app.bot.handlers.shop_broadcast import CB_HUB as SHOP_BROADCAST_HUB
     from app.services.admin_counters import with_badge
 
@@ -973,6 +977,10 @@ def _reseller_entry_buttons(
         "res_broadcast": SHOP_BROADCAST_HUB,
         "res_cashback": SHOP_CASHBACK_PANEL_CALLBACK,
         "res_child_pricing": CHILD_PRICING_HUB,
+        "res_gift_codes": SHOP_GIFT_PANEL_CALLBACK,
+        "res_campaigns": SHOP_CAMPAIGN_PANEL_CALLBACK,
+        "res_discounts": DISCOUNTS_CALLBACK,
+        "res_funnel": FUNNEL_CALLBACK,
     }
     buttons: list[InlineKeyboardButton] = []
     for key, text in entries:

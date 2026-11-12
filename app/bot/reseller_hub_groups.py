@@ -38,7 +38,17 @@ RESELLER_GROUPS: tuple[ResellerGroup, ...] = (
     ResellerGroup(
         "shop",
         "btn_res_grp_shop",
-        ("res_plans", "res_loyalty", "res_broadcast", "res_cashback", "res_settings"),
+        (
+            "res_plans",
+            "res_loyalty",
+            "res_broadcast",
+            "res_campaigns",
+            "res_gift_codes",
+            "res_discounts",
+            "res_cashback",
+            "res_funnel",
+            "res_settings",
+        ),
     ),
     ResellerGroup(
         "account",
