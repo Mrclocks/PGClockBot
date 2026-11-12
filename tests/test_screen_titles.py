@@ -120,6 +120,7 @@ class MenuRendersTitleTests(unittest.IsolatedAsyncioTestCase):
             patch.object(reply_nav, "_deny_unless_owner", AsyncMock(return_value=True)),
             patch.object(reply_nav, "get_all_settings", AsyncMock(return_value=ui)),
             patch("app.services.admin_counters.pending_counts", AsyncMock(side_effect=RuntimeError)),
+            patch.object(reply_nav, "count_review_charges", AsyncMock(return_value=0)),
             patch("app.bot.nav_inline.present_nav_panel", AsyncMock()) as present,
         ):
             await reply_nav.open_admin_ops_hub(MagicMock(), MagicMock(), MagicMock(id=1), None)
