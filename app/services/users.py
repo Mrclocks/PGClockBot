@@ -1205,7 +1205,7 @@ DEFAULT_SETTINGS = {
     "action_center_expire_days": "3",
     "funnel_tracking_enabled": "1",
     "one_tap_renew_enabled": "1",
-    "service_import_enabled": "0",
+    "service_import_enabled": "1",
     "chat_cleanup_enabled": "1",
     "menu_keyboard_persistent": "0",
     # Shop Mini Apps: platform switch and each shop's own switch, both off until turned on.

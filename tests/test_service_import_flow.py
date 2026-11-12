@@ -150,10 +150,10 @@ class EntryPointTests(unittest.TestCase):
         self.assertNotIn(ui_mod.ADD_CALLBACK, off)
         self.assertEqual(on - {ui_mod.ADD_CALLBACK}, off)
 
-    def test_the_setting_defaults_to_off(self):
+    def test_the_setting_defaults_to_on(self):
         from app.services.users import DEFAULT_SETTINGS
 
-        self.assertFalse(ui_mod.import_enabled(DEFAULT_SETTINGS))
+        self.assertTrue(ui_mod.import_enabled(DEFAULT_SETTINGS))
         self.assertFalse(ui_mod.import_enabled({}))
         self.assertFalse(ui_mod.import_enabled(None))
         self.assertTrue(ui_mod.import_enabled({"service_import_enabled": "1"}))
