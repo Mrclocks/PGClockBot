@@ -23,9 +23,21 @@ A callback handler may send a **new** chat message only for:
 - subscription link / QR / photo / file delivery
 - receipts and payment invoices
 - notifications to other chats (admins, other users)
+- a screen opened from a button under a notice (see below)
 - the one-time main-keyboard healing reply after a legacy `cancel_reply` keyboard
 
 Everything else stays on the edited panel.
+
+## Buttons under a notice — open a panel, keep the notice
+
+A notice (a staff alert, a review item, a report) is a record and is never edited into another
+screen. Its buttons that open a read-only screen (customer card, service card, order, review
+card) carry `nto:<screen callback>` (`app.services.notice_links.notice_markup`, applied where
+notices are sent). The bot opens that screen in a new message under the notice; on that first
+screen, and on any screen of the panel at the same level (the card shown again after an action),
+«بازگشت» closes the panel and the notice is on screen again. Buttons that
+act (approve, reject, reply, close) keep acting on the notice. A new read-only screen that a
+notice links to is added to `NOTICE_SCREEN_PREFIXES`.
 
 ## Reply keyboard — main menu + contact only
 

@@ -141,7 +141,7 @@ class MultiAdminReviewTests(AsyncDatabaseTest):
                 self.assertIn("تأیید شد توسط علی &lt;ادمین&gt;", call.kwargs["text"])
                 self.assertNotIn("نیاز به تأیید", call.kwargs["text"])
                 self.assertNotIn("از دکمه‌های زیر", call.kwargs["text"])
-                self.assertEqual(_callbacks(call.kwargs["reply_markup"]), [f"adm:users:view:{self.user_id}"])
+                self.assertEqual(_callbacks(call.kwargs["reply_markup"]), [f"nto:adm:users:view:{self.user_id}"])
             self.assertEqual(
                 {c.kwargs["chat_id"] for c in self.bot.edit_message_text.await_args_list},
                 {201, 202},
@@ -172,7 +172,7 @@ class MultiAdminReviewTests(AsyncDatabaseTest):
         for call in self.bot.edit_message_caption.await_args_list:
             self.assertIn("رد شد توسط رضا", call.kwargs["caption"])
             self.assertIn("رسید خوانا نبود &lt;b&gt;", call.kwargs["caption"])
-            self.assertEqual(_callbacks(call.kwargs["reply_markup"]), [f"adm:users:view:{self.user_id}"])
+            self.assertEqual(_callbacks(call.kwargs["reply_markup"]), [f"nto:adm:users:view:{self.user_id}"])
 
     async def test_photo_failure_tracks_actual_fallback_text_message(self):
         self.bot.send_photo.side_effect = RuntimeError("photo unavailable")
