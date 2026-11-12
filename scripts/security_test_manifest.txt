@@ -482,3 +482,4 @@ tests/test_miniapp_purchase_notices.py
 tests/test_gift_code_plan_limit.py
 tests/test_notice_panels.py
 tests/test_panel_history.py
+tests/test_staff_notice_buttons.py

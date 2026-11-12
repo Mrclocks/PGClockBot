@@ -28,7 +28,7 @@ from aiogram.types import CallbackQuery, Message, TelegramObject, Update
 
 from app.bot.panel_back import BackPlan, Level, planning_back
 from app.bot.screen_replay import watching_replay
-from app.services.notice_links import NOTICE_CLOSE_CALLBACK, NOTICE_SCREEN_PREFIXES
+from app.services.notice_links import NOTICE_CLOSE_CALLBACK, NOTICE_SCREEN_PREFIXES, NOTICE_SCREENS
 
 PANELS_TRACKED = 5000
 HISTORY_DEPTH = 12
@@ -149,7 +149,7 @@ def panel_key(bot: Bot, message: Message) -> PanelKey:
 
 def notice_screens_are_views() -> bool:
     """A notice panel's first screen must be recorded, or its back could not close the panel."""
-    return all(view_family(prefix) == prefix for prefix in NOTICE_SCREEN_PREFIXES)
+    return all(view_family(screen) == screen for screen in (*NOTICE_SCREEN_PREFIXES, *NOTICE_SCREENS))
 
 
 Handler = Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]]

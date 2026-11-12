@@ -161,7 +161,7 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self) -> None:
                 self.session = _Session()
 
-            async def send_message(self, chat_id, text, parse_mode=None):
+            async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None):
                 calls["n"] += 1
                 if calls["n"] == 1:
                     raise TelegramRetryAfter(method=MagicMock(), message="slow", retry_after=1)

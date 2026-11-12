@@ -55,6 +55,7 @@ from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
 from app.services.redact import user_safe_error
 from app.services import bot_feedback_texts as feedback
+from app.services.notice_links import notice_markup
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1433,7 +1434,7 @@ async def resapply_buy(
                     await callback.bot.send_message(
                         aid,
                         notify,
-                        reply_markup=kb.reseller_app_review(app.id, user_id=db_user.id),
+                        reply_markup=notice_markup(kb.reseller_app_review(app.id, user_id=db_user.id)),
                     )
             except Exception:
                 logger.debug("resapply_buy: ignored failure", exc_info=True)

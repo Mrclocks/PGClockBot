@@ -22,6 +22,8 @@ from app.services.users import get_all_settings, on
 from app.services.wireguard_delivery import has_wireguard
 from app.services.wireguard_send import deliver_wireguard
 from app.services.chat_records import keeps_sent
+from app.services import notice_links
+from app.services.staff_notice_buttons import reseller_card_markup
 
 logger = logging.getLogger(__name__)
 
@@ -597,7 +599,7 @@ async def _deliver_reseller_app_order(
         )
         for aid in get_settings().admin_ids:
             try:
-                await bot.send_message(aid, notify, parse_mode="HTML")
+                await bot.send_message(aid, notify, parse_mode="HTML", reply_markup=reseller_card_markup(order.user_id))
             except Exception:
                 logger.debug("reseller approve admin notify failed", exc_info=True)
         return text
@@ -620,7 +622,7 @@ async def _deliver_reseller_app_order(
                 await bot.send_message(
                     aid,
                     notify,
-                    reply_markup=kb.reseller_app_review(app_id, user_id=order.user_id),
+                    reply_markup=notice_links.notice_markup(kb.reseller_app_review(app_id, user_id=order.user_id)),
                     parse_mode="HTML",
                 )
             except Exception:

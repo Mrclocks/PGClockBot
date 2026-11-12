@@ -132,7 +132,7 @@ class DeliveryNoticeTests(_Case):
             delivered = await tg.notify_backup_problem(session, "x")
         self.assertEqual(delivered, 1)
         markup = self.bot.send_message.await_args.kwargs["reply_markup"]
-        self.assertEqual([b.callback_data for row in markup.inline_keyboard for b in row], ["nv:adm:backup"])
+        self.assertEqual([b.callback_data for row in markup.inline_keyboard for b in row], ["nto:nv:adm:backup"])
 
     async def test_problem_notice_to_a_separate_backup_bot_has_no_panel_button(self) -> None:
         destination = tg.Destination("token", [5], custom=True)

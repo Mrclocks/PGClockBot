@@ -50,7 +50,9 @@ notices are sent). The bot opens that screen in a new message under the notice; 
 screen, and on any screen of the panel at the same level (the card shown again after an action),
 «بازگشت» closes the panel and the notice is on screen again. Buttons that
 act (approve, reject, reply, close) keep acting on the notice. A new read-only screen that a
-notice links to is added to `NOTICE_SCREEN_PREFIXES` and to the panel history's view screens.
+notice links to is added to `NOTICE_SCREEN_PREFIXES` (or `NOTICE_SCREENS` for a hub) and to the
+panel history's view screens. Staff reports and alerts build their buttons with
+`app.services.staff_notice_buttons`.
 
 ## Reply keyboard — main menu + contact only
 

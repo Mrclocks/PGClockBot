@@ -27,8 +27,18 @@ NOTICE_SCREEN_PREFIXES: tuple[str, ...] = (
 )
 
 
+# Hubs a notice may open, matched exactly.
+NOTICE_SCREENS: frozenset[str] = frozenset({
+    "adm:dash",
+    "nv:adm:backup",
+    "nv:adm:pg",
+    "nv:adm:resellers",
+    "nv:res:home",
+})
+
+
 def is_notice_screen(data: str | None) -> bool:
-    return bool(data) and str(data).startswith(NOTICE_SCREEN_PREFIXES)
+    return bool(data) and (data in NOTICE_SCREENS or str(data).startswith(NOTICE_SCREEN_PREFIXES))
 
 
 def notice_open_data(data: str) -> str:
