@@ -319,6 +319,12 @@
     };
     document.addEventListener("change", onEdit);
     document.addEventListener("input", onEdit);
+    // Fragment modals (reseller/user edit) inject HTML and fire panel:dom-ready — re-sync counters.
+    document.addEventListener("panel:dom-ready", (event) => {
+      const root = (event && event.detail && event.detail.root) || document;
+      syncAll(root);
+      revealActiveTabs(root);
+    });
     syncAll(document);
     revealActiveTabs(document);
   }
