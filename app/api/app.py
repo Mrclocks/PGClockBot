@@ -1519,6 +1519,8 @@ def create_api_app(lifespan=None) -> FastAPI:
     )
     from app.api.delivery_failure_pages import register_delivery_failure_pages
     register_delivery_failure_pages(app, require_orders=require_perm("orders"), get_db=get_db)
+    from app.api.user_link_search_pages import register_user_link_search_pages
+    register_user_link_search_pages(app, require_perm=require_perm, get_db=get_db)
     from app.api.service_shop_review_pages import register_service_shop_review_pages
     register_service_shop_review_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     from app.api.reseller_capacity_repair_pages import register_reseller_capacity_repair_pages
@@ -3735,7 +3737,9 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         from app.services.platform_identity import is_explicit_owner_staff
         from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
+        from app.api.user_link_search_pages import link_search_redirect
         from app.services.bot_user_admin import customer_service_actions
+        from app.services.subscription_lookup import link_token
         from app.services.color_tags import (
             color_tag_meta,
             color_tags_for_ui,
@@ -3756,6 +3760,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/home", status_code=303)
 
         search_q = normalize_search_q(request.query_params.get("q"))
+        if search_q and link_token(search_q):
+            # A link typed without the page script: answer it, but never echo the secret into the page.
+            return await link_search_redirect(session, search_q, shop_id=scope)
         filter_raw = request.query_params.get("filter")
         focus_uid = parse_focus_uid(request.query_params.get("uid"))
         color_filter = normalize_color_filter(request.query_params.get("color"))

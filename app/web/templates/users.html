@@ -75,7 +75,7 @@
   <a class="{% if flt=='alerts' %}active{% endif %}" href="{{ filter_href(filter_key='alerts', q=q) }}">دارای اعلان</a>
 </nav>
 <div class="card card-flush">
-  <form method="get" action="/users" class="search-bar search-bar--with-tag">
+  <form method="get" action="/users" class="search-bar search-bar--with-tag" data-users-search>
     {% if flt and flt != 'all' %}
     <input type="hidden" name="filter" value="{{ flt }}" />
     {% endif %}
@@ -83,7 +83,8 @@
     <input type="hidden" name="color" value="{{ color_filter }}" />
     {% endif %}
     <label class="search-bar-field">
-      <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، نقش…" autocomplete="off" />
+      <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، نقش یا لینک اشتراک…" autocomplete="off"
+             aria-label="جستجوی کاربر با نام، تلگرام، نقش یا لینک اشتراک" />
     </label>
     <button class="btn btn-ghost" type="submit">جستجو</button>
     {% if color_tags is defined and color_tags %}
@@ -102,6 +103,11 @@
       </select>
     </label>
     {% endif %}
+  </form>
+  {#- A pasted subscription link is a secret: users-link-search.js posts it here instead of the GET search. -#}
+  <form method="post" action="/users/find-by-link" id="users-link-form" hidden>
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
+    <input type="hidden" name="link" />
   </form>
   {% if manage and ops and pg_update %}
   {{ table_bulk_bar('/users/bulk-action', [
@@ -425,6 +431,7 @@
 {% endblock %}
 
 {% block page_scripts %}
+<script src="/static/users-link-search.js?v={{ asset_v('users-link-search.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 <script>
 (function(){
   function syncSvcMeta(sel){
