@@ -33,6 +33,18 @@ from app.services.settings_search import (
     search_settings,
 )
 from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.services.approval_rule import MAX_MINUTES as APPROVAL_MAX_MINUTES
+from app.services.catalog_pricing import MAX_PRICE
+from app.services.miniapp_branding import NOTICE_SETTING as MINIAPP_NOTICE, normalize_notice
+from app.services.miniapp_shop import PLATFORM_SWITCH as MINIAPP_SHOPS_SWITCH, set_platform_shop_miniapps
+from app.services.reseller_bots import schedule_shop_menu_sync
+from app.services.service_import_config import (
+    KEY_ENABLED as IMPORT_KEY_ENABLED,
+    KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
+    KEY_MODE as IMPORT_KEY_MODE,
+    MAX_PER_USER_LIMIT as IMPORT_MAX_PER_USER_LIMIT,
+)
+from app.services.user_errors import domain_error_text
 from app.services.settings_button_labels import (
     BTN_PAY_CARD,
     BTN_PAY_CRYPTO,
@@ -273,6 +285,12 @@ SECTIONS: dict[str, dict] = {
                 ("stars_description", "توضیح فاکتور", "text"),
                 *BTN_PAY_STARS,
             ]),
+            # Same keys as the web «رسیدها» section; they apply while «تأیید خودکار رسید» is on.
+            ("auto_after", "تأیید خودکار با مهلت", [
+                ("auto_approve_after_minutes", "مهلت تأیید خودکار (دقیقه، ۰ = فوری)", "number"),
+                ("auto_approve_after_max_amount", "سقف مبلغ (تومان، ۰ = بدون سقف)", "number"),
+                ("auto_approve_after_returning_only", "فقط مشتریان با خرید قبلی", "toggle"),
+            ]),
             # Same keys as web finance modal tab «مدیریت PAYG» (SETTING_GROUPS).
             ("payg", "مدیریت PAYG", [
                 ("billing_enabled", "فعال‌سازی PAYG", "toggle"),
@@ -300,6 +318,17 @@ SECTIONS: dict[str, dict] = {
                 ("qr_enabled", "ارسال خودکار QR", "toggle"),
                 ("show_sub_link_in_text", "لینک در کپشن", "toggle"),
                 ("qr_caption", "کپشن QR", "textarea"),
+            ]),
+            # Allowed paths and panel admins describe the one panel and stay on the web.
+            ("import", "افزودن سرویس قبلی", [
+                (IMPORT_KEY_ENABLED, "افزودن سرویس قبلی توسط مشتری", "toggle"),
+                (IMPORT_KEY_MODE, "روش پذیرش", "select"),
+                (IMPORT_KEY_MAX_PER_USER, "سقف سرویس هر مشتری", "number"),
+            ]),
+            # Same keys as the web «مینی‌اپ» tab; the brand colour stays on the web (it has a preview).
+            ("miniapp", "مینی‌اپ", [
+                (MINIAPP_SHOPS_SWITCH, "مینی‌اپ فروشگاه نمایندگان", "toggle"),
+                (MINIAPP_NOTICE, "اطلاعیهٔ صفحهٔ خانه", "text"),
             ]),
         ],
     },
@@ -376,6 +405,14 @@ SECTIONS: dict[str, dict] = {
     "notify": {
         "title": "اعلان‌ها",
         "kind": "notify",
+        # Opened from the notify screen; the report text and metrics stay on the web (placeholder picker).
+        "subs": [
+            ("daily", "گزارش روزانه", [
+                ("admin_daily_report_enabled", "ارسال گزارش روزانه", "toggle"),
+                ("subordinate_report_enabled", "گزارش نمایندگان زیرمجموعه", "toggle"),
+                ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، UTC)", "number"),
+            ]),
+        ],
     },
 }
 
@@ -431,6 +468,7 @@ FIELDS = _field_lookup()
 # Select fields cycle through these (value, Persian label); keep in sync with SETTING_GROUPS.
 SELECT_CYCLE_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
+    IMPORT_KEY_MODE: (("instant", "فوری"), ("approval", "با تأیید ادمین")),
 }
 
 # Integer ranges for PAYG settings (consumers clamp the same bounds).
@@ -441,7 +479,15 @@ NUMBER_INT_RANGES: dict[str, tuple[int, int]] = {
     "credit_block_create_days": (0, 365),
     "credit_block_changes_days": (0, 365),
     "credit_block_days": (0, 365),
+    # Same bounds the consumers apply (approval_rule, daily_report, service_import_config).
+    "auto_approve_after_minutes": (0, APPROVAL_MAX_MINUTES),
+    "auto_approve_after_max_amount": (0, MAX_PRICE),
+    "admin_daily_report_hour": (0, 23),
+    IMPORT_KEY_MAX_PER_USER: (1, IMPORT_MAX_PER_USER_LIMIT),
 }
+
+# Plain one-line texts saved through their service normalizer instead of rich-text packing.
+TEXT_NORMALIZERS = {MINIAPP_NOTICE: normalize_notice}
 
 NOTIFY_KEYS: frozenset[str] = frozenset(key for key, *_ in NOTIFY_PREFS)
 
@@ -786,6 +832,7 @@ async def _render_notify(callback: CallbackQuery, session: AsyncSession) -> None
             for key, title, _, default in PLATFORM_NOTIFY_PREFS
         ]
     )
+    rows.append([InlineKeyboardButton(text="📊 گزارش روزانه", callback_data="adm:st:sub:notify:daily")])
     rows.append(_back_row("adm:st:hub"))
     if callback.message:
         await callback.message.edit_text(
@@ -1105,16 +1152,25 @@ async def settings_toggle(
     if not _is_toggleable_setting_key(key):
         await callback.answer("کلید نامعتبر", show_alert=True)
         return
-    cur = await get_setting(session, key)
-    new_val = "0" if on(cur) else "1"
-    await set_setting(session, key, new_val)
+    await _flip_setting(session, key)
+    await callback.answer(feedback.SAVED)
+    await _rerender_after_key(callback, session, key)
+
+
+async def _flip_setting(session: AsyncSession, key: str) -> None:
+    """Flip one switch, with the side effects the web save of the same switch has."""
+    new_on = not on(await get_setting(session, key))
+    if key == MINIAPP_SHOPS_SWITCH:
+        if await set_platform_shop_miniapps(session, enabled=new_on):
+            # Shop bots' «Open» buttons appear or go away with the switch, as after the web save.
+            schedule_shop_menu_sync()
+        return
+    await set_setting(session, key, "1" if new_on else "0")
     if key == "trial_enabled":
         trial = (await session.execute(select(Plan).where(Plan.is_trial.is_(True)))).scalar_one_or_none()
         if trial:
-            trial.is_active = new_val == "1"
+            trial.is_active = new_on
             await session.commit()
-    await callback.answer(feedback.SAVED)
-    await _rerender_after_key(callback, session, key)
 
 
 @settings_actor_required
@@ -1347,6 +1403,13 @@ async def settings_edit_save(
                 await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
                 return
             text = raw
+        await set_setting(session, key, text)
+    elif key in TEXT_NORMALIZERS:
+        try:
+            text = TEXT_NORMALIZERS[key](text)
+        except ValueError as exc:
+            await message.answer(domain_error_text(exc))
+            return
         await set_setting(session, key, text)
     elif key == "force_join_channel":
         from app.services.users import normalize_force_join_channel_value
