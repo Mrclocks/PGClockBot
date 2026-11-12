@@ -9,6 +9,7 @@ from sqlalchemy import event
 from app.config import get_settings
 from app.db import Base
 from app.db.engine_url import normalize_async_url, parse_engine
+from app.db.random_discounts_schema import upgrade_random_discounts
 
 # Register models on Base.metadata for Alembic / legacy paths
 import app.db.models  # noqa: F401
@@ -640,6 +641,8 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
                     "ALTER TABLE user_services ADD COLUMN quota_synced_at DATETIME"
                 )
             )
+
+    upgrade_random_discounts(sync_conn)
 
     marker = None
     try:

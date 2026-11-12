@@ -22,6 +22,7 @@ from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
 CLUB = "club"
 CLUB_TRANSACTIONS = "club_transactions"
 DISCOUNTS = "discounts"
+RANDOM_DISCOUNTS = "random_discounts"
 GIFT_CODES = "gift_codes"
 CASHBACK = "cashback"
 FUNNEL = "funnel"
@@ -43,6 +44,7 @@ _CLUB_SECTIONS: tuple[MarketingSection, ...] = (
     MarketingSection(CLUB_TRANSACTIONS, "تراکنش‌ها", "/loyalty?tab=transactions"),
 )
 _DISCOUNT_SECTION = MarketingSection(DISCOUNTS, "تخفیف‌ها", "/catalog-discounts")
+_RANDOM_DISCOUNT_SECTION = MarketingSection(RANDOM_DISCOUNTS, "تخفیف تصادفی", "/random-discounts")
 _GIFT_CODE_SECTION = MarketingSection(GIFT_CODES, "کد هدیه", "/gift-codes")
 _CASHBACK_SECTION = MarketingSection(CASHBACK, "کش‌بک", "/cashback")
 _FUNNEL_SECTION = MarketingSection(FUNNEL, "رفتار کاربر", "/funnel")
@@ -117,6 +119,8 @@ def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSectio
         sections.extend(_CLUB_SECTIONS)
     if _can_open_feature(staff, "catalog_discounts"):
         sections.append(_DISCOUNT_SECTION)
+    if _can_open_feature(staff, "random_discounts"):
+        sections.append(_RANDOM_DISCOUNT_SECTION)
     if _can_open_gift_codes(staff):
         sections.append(_GIFT_CODE_SECTION)
     if _can_open_cashback(staff):
@@ -150,7 +154,7 @@ class MarketingGroup:
 # (group key, label, section keys in display order)
 _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("club", "باشگاه مشتریان", (CLUB, CLUB_TRANSACTIONS)),
-    ("offers", "تخفیف و کد هدیه", (DISCOUNTS, GIFT_CODES, CASHBACK)),
+    ("offers", "تخفیف و کد هدیه", (DISCOUNTS, RANDOM_DISCOUNTS, GIFT_CODES, CASHBACK)),
     ("messages", "پیام و کمپین", (BROADCAST, SHOP_BROADCAST, CAMPAIGNS)),
     ("trials", "کاربران تست", (TRIAL_USERS,)),
     ("funnel", "رفتار کاربر", (FUNNEL,)),

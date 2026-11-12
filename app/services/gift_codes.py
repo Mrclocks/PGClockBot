@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from app.db.models import (
     Order,
     OrderStatus,
     Plan,
+    RandomDiscount,
 )
 from app.services.authz import authz_from_staff, can_shop
 from app.services.shop_scope import is_platform_admin, shop_owner_id
@@ -191,6 +192,19 @@ async def gift_code_plan_options(session: AsyncSession, *, shop_id: int | None) 
     return [(int(row.id), row.name, bool(row.is_active)) for row in rows]
 
 
+async def _assert_gift_code_available(session: AsyncSession, code: str, *, shop_id: int | None) -> None:
+    collision = await session.scalar(select(or_(
+        exists(select(ChargeCode.id).where(ChargeCode.code == code)),
+        exists(select(DiscountCode.id).where(DiscountCode.code == code)),
+        exists(select(RandomDiscount.id).where(
+            RandomDiscount.shop_key == (shop_id or 0), RandomDiscount.reseller_id == shop_id,
+            RandomDiscount.code == code,
+        )),
+    )))
+    if collision:
+        raise ValueError("این کد از قبل وجود دارد")
+
+
 async def create_gift_code(
     session: AsyncSession, *, code=None, note=None, reseller_id=None, audit: StaffActor | None = None, **rules
 ) -> ChargeCode:
@@ -208,11 +222,7 @@ async def create_gift_code(
         or key.startswith("WHOLESALE:")
     ):
         raise ValueError("کد نامعتبر است؛ حداکثر ۶۴ کاراکتر و بدون پیشوند رزروشده")
-    for model in (ChargeCode, DiscountCode):
-        if (
-            await session.execute(select(model.id).where(model.code == key))
-        ).scalar_one_or_none():
-            raise ValueError("این کد از قبل وجود دارد")
+    await _assert_gift_code_available(session, key, shop_id=reseller_id)
     row = ChargeCode(
         code=key,
         note=(note or "").strip()[:255] or None,
