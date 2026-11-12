@@ -4505,8 +4505,15 @@ form.settings-form > .actions.sticky-actions,
   color: var(--brand-fg);
   opacity: 1;
 }
+.section-tabs a,
+.section-tabs .tab-btn {
+  justify-content: center;
+  text-align: center;
+}
 .section-tabs a .nav-item-label {
   gap: 6px;
+  flex: 0 1 auto;
+  justify-content: center;
 }
 .section-tabs a .nav-dot {
   margin-inline-start: 0;
