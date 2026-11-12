@@ -18,6 +18,7 @@ from typing import Any
 
 from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 
+from app.bot import keyboards as kb
 from app.bot import nav_inline as hubs
 from app.bot import reply_keyboards as rk
 from app.bot.button_sources import recording_button_sources
@@ -105,6 +106,16 @@ def _customer_screens() -> list[ScreenSpec]:
         # The card belongs to one service; the editor returns to the service list.
         customer("c.service", "کارت سرویس", lambda ctx: hubs.service_card_keyboard(0, ctx.ui), "svc:list"),
         customer("c.service_more", "بیشتر سرویس", lambda ctx: hubs.service_more_keyboard(0, ctx.ui, wireguard=True), "svc:list"),
+        # The shop's first step with every entry on, so each one can be renamed and recolored.
+        customer(
+            "c.shop",
+            "فروشگاه",
+            lambda ctx: kb.shop_kind_keyboard(ctx.ui, fixed_on=True, trial_on=True, custom_on=True, wholesale_on=True),
+            "shop:list",
+        ),
+        # Plan lists belong to a category or kind; the editor returns to the shop's first step.
+        customer("c.shop.plans", "لیست پلن‌ها", lambda ctx: kb.plans_keyboard([], ctx.ui), "shop:list"),
+        customer("c.shop.wholesale", "پلن‌های عمده", lambda ctx: kb.wholesale_plans_keyboard([], ctx.ui), "shop:list"),
     ]
 
 
