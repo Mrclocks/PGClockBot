@@ -237,14 +237,14 @@ class DeliveryToStaffTests(NoticeTestCase):
         kwargs = bot.send_photo.await_args.kwargs
         self.assertEqual((bot.send_photo.await_args.args[0], kwargs["photo"]), (self.ADMIN_CHAT, FILE_ID))
         self.assertIn("خودکار تأیید شد", kwargs["caption"])
-        self.assertEqual(_callbacks(kwargs["reply_markup"]), [f"adm:users:view:{self.user_id}", f"payvoid:v:{self.payment_id}"])
+        self.assertEqual(_callbacks(kwargs["reply_markup"]), [f"nto:adm:users:view:{self.user_id}", f"nto:payvoid:v:{self.payment_id}"])
         bot.send_message.assert_not_awaited()
 
     async def test_when_telegram_rejects_the_photo_the_text_notice_still_arrives_with_buttons(self) -> None:
         bot = self._bot(photo_works=False)
         await self._deliver(bot)
         bot.send_message.assert_awaited_once()
-        self.assertEqual(_callbacks(bot.send_message.await_args.kwargs["reply_markup"]), [f"adm:users:view:{self.user_id}", f"payvoid:v:{self.payment_id}"])
+        self.assertEqual(_callbacks(bot.send_message.await_args.kwargs["reply_markup"]), [f"nto:adm:users:view:{self.user_id}", f"nto:payvoid:v:{self.payment_id}"])
 
 
 if __name__ == "__main__":

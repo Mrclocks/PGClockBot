@@ -8,7 +8,9 @@ from aiogram.types import (
 )
 
 from app.bot.button_sources import is_recording, note_button_source
+from app.bot.edit_mode import editable_screen
 from app.bot.list_pages import page_of, pager_row
+from app.bot.panel_back import BACK_LABEL_KEY, back_callback
 from app.services.catalog_pricing import sale_price
 from app.config import get_settings
 from app.db.models import Plan, Role
@@ -660,6 +662,8 @@ def _ikb(
     """Inline button; pass ``style_id`` (not a resolved ``style``) so the color stays editable."""
     if style_id is not None:
         style = _style(ui, style_id, fallback=style_fallback)
+    if label_key == BACK_LABEL_KEY and callback_data is not None:
+        callback_data = back_callback(callback_data)
     button = _build_inline_button(
         text,
         callback_data=callback_data,
@@ -1046,6 +1050,7 @@ REPLY_ACTION_ADM_PLAN_CUSTOM = "adm_plan_custom"
 REPLY_ACTION_ADM_PLAN_TRIAL = "adm_plan_trial"
 
 
+@editable_screen("c.shop")
 def shop_kind_keyboard(
     ui: dict | None = None,
     *,
@@ -1114,16 +1119,22 @@ def shop_kind_keyboard(
             ]
         )
     if custom_on:
-        from app.services.button_styles import resolve_custom_plan_button_style
+        from app.services.button_styles import has_custom_plan_style_override, resolve_custom_plan_button_style
 
+        # The custom plan's own color setting wins; only without it is the catalog color (and the editor's) used.
+        color = (
+            {"style": resolve_custom_plan_button_style(ui)}
+            if has_custom_plan_style_override(ui)
+            else {"style_id": "shop_kind_custom", "style_fallback": "primary"}
+        )
         rows.append(
             [
                 _ikb(
                     _label_or(ui, "btn_shop_kind_custom", "دلخواه"),
                     callback_data="shop:kind:custom",
-                    style=resolve_custom_plan_button_style(ui),
                     ui=ui,
                     label_key="btn_shop_kind_custom",
+                    **color,
                 )
             ]
         )
@@ -1242,6 +1253,7 @@ def admin_plan_kind_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=pack_detail_rows(rows))
 
 
+@editable_screen("c.shop.plans")
 def plans_keyboard(
     plans: list[Plan],
     ui: dict | None = None,
@@ -1258,9 +1270,7 @@ def plans_keyboard(
 
     _ = custom_enabled, wholesale_enabled  # call-site compat
     fallback_kind = kind or "fixed"
-    kind_style = _style(
-        ui, plan_kind_style_id(fallback_kind) or "shop_kind_fixed", fallback="primary"
-    )
+    kind_style_id = plan_kind_style_id(fallback_kind) or "shop_kind_fixed"
     cat_names = category_names or {}
     cat_objs = categories or {}
     rows = []
@@ -1292,7 +1302,9 @@ def plans_keyboard(
                 _ikb(
                     feedback.NO_PLANS,
                     callback_data=back_callback,
-                    style=kind_style,
+                    style_id=kind_style_id,
+                    style_fallback="primary",
+                    ui=ui,
                 )
             ]
         ]
@@ -1301,6 +1313,7 @@ def plans_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("c.shop.wholesale")
 def wholesale_plans_keyboard(
     plans: list[Plan],
     ui: dict | None = None,
@@ -1320,14 +1333,15 @@ def wholesale_plans_keyboard(
             for p in plans
         ]
     )
-    kind_style = _style(ui, "shop_kind_wholesale", fallback="primary")
     if not rows:
         rows = [
             [
                 _ikb(
                     feedback.NO_PLANS,
                     callback_data=back_callback,
-                    style=kind_style,
+                    style_id="shop_kind_wholesale",
+                    style_fallback="primary",
+                    ui=ui,
                 )
             ]
         ]

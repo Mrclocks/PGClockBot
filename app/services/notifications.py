@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment
 from app.services.message_variables import DOMAIN_QR
+from app.services.notice_links import notice_markup
 from app.services.formatting import (
     format_bytes,
     format_bytes_ratio,
@@ -24,6 +25,7 @@ from app.services.formatting import (
     kv_line,
 )
 from app.services.replaceable_notices import replace_notices
+from app.services.support_button import support_markup
 from app.services.ticket_notices import ticket_notice_key
 from app.services.users import get_all_settings, on, set_settings_bulk
 from app.services.chat_records import keeps_sent
@@ -307,6 +309,8 @@ async def _send_to_chats(
 
     if not targets:
         return 0
+    # Screen buttons open a panel under the notice, so the notice itself is never overwritten.
+    markup = notice_markup(markup)
 
     ok = 0
     lock = asyncio.Lock()
@@ -1796,14 +1800,16 @@ def format_account_edit_admin(
 
 
 @keeps_sent
-async def _send_via_shop_bot(session: AsyncSession, shop_id: int, chat_id: int, text: str) -> bool:
+async def _send_via_shop_bot(
+    session: AsyncSession, shop_id: int, chat_id: int, text: str, *, markup: InlineKeyboardMarkup | None = None
+) -> bool:
     from app.services.reseller_bots import open_notify_bot_for_reseller
 
     shop_bot, should_close = await open_notify_bot_for_reseller(session, int(shop_id))
     if shop_bot is None:
         return False
     try:
-        await shop_bot.send_message(chat_id, text, parse_mode="HTML")
+        await shop_bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
         return True
     except Exception:
         logging.getLogger(__name__).warning("account edit notice via shop bot failed shop=%s", shop_id, exc_info=True)
@@ -1820,6 +1826,7 @@ async def _send_to_user_chat(
     text: str,
     *,
     shop_id: int | None = None,
+    markup: InlineKeyboardMarkup | None = None,
 ) -> bool:
     """Notify the user via main bot and, when available, their shop/reseller bot.
 
@@ -1830,7 +1837,7 @@ async def _send_to_user_chat(
     if not user.telegram_id:
         return False
     if shop_id is not None:
-        return await _send_via_shop_bot(session, shop_id, int(user.telegram_id), text)
+        return await _send_via_shop_bot(session, shop_id, int(user.telegram_id), text, markup=markup)
     from app.bot import create_bot
     from app.services.reseller_bots import open_notify_bot_for_reseller
 
@@ -1842,7 +1849,7 @@ async def _send_to_user_chat(
     try:
         bot = create_bot()
         try:
-            await bot.send_message(chat_id, text, parse_mode="HTML")
+            await bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
             sent = True
             tok = getattr(bot, "token", None)
             if tok:
@@ -1870,7 +1877,7 @@ async def _send_to_user_chat(
             tok = str(getattr(shop_bot, "token", "") or "")
             if tok and tok in tokens_used:
                 continue
-            await shop_bot.send_message(chat_id, text, parse_mode="HTML")
+            await shop_bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
             sent = True
             if tok:
                 tokens_used.add(tok)
@@ -1884,6 +1891,11 @@ async def _send_to_user_chat(
                     logger.debug("_send_to_user_chat: ignored failure", exc_info=True)
 
     return sent
+
+
+def _account_edit_markup(event: str) -> InlineKeyboardMarkup | None:
+    """Support under a revoked agency; a block, deletion or role change has nothing to follow up in the bot."""
+    return support_markup() if event == "reseller_revoke" else None
 
 
 async def notify_account_edit(
@@ -1923,7 +1935,9 @@ async def notify_account_edit(
     )
 
     if notify_subject:
-        result["subject"] = await _send_to_user_chat(session, user, subject_text, shop_id=shop_id)
+        result["subject"] = await _send_to_user_chat(
+            session, user, subject_text, shop_id=shop_id, markup=_account_edit_markup(event)
+        )
 
     if shop_id is None and await notify_enabled(session, "notify_account_edits"):
         try:

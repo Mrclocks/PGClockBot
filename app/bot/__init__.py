@@ -11,6 +11,7 @@ from aiogram.types import TelegramObject
 
 from app.bot.chat_screen import ChatScreenMiddleware, install_screen_rules
 from app.bot.edit_mode import EditModeMiddleware
+from app.bot.panel_history import PanelHistoryMiddleware
 from app.bot.screen_replay import install_replay_guard, set_dispatcher
 from app.bot.slow_updates import SlowUpdateMiddleware
 from app.bot.middlewares import (
@@ -121,6 +122,7 @@ def bot_routers() -> list[Router]:
         button_colors,
         broadcast_history,
         cancellation_review,
+        catalog_row_editor,
         connection_status_admin,
         connection_status_admin_input,
         action_reason,
@@ -130,6 +132,7 @@ def bot_routers() -> list[Router]:
         guide_editor,
         loyalty,
         nav_hubs,
+        notice_panels,
         marketing_tools,
         cashback_tools,
         child_pricing_bot,
@@ -182,12 +185,16 @@ def bot_routers() -> list[Router]:
         # A tap on a visible menu button is passed on (see screen_editor._is_menu_tap).
         screen_editor.owner_router,
         screen_editor.shop_router,
+        # Its typed names come before navigation, like the menu editor's above.
+        catalog_row_editor.owner_router,
+        catalog_row_editor.shop_router,
         start.router,
         terms.router,
         connection_status.router,
         connection_status_admin.router,
         # Reply-keyboard nav early so menu labels win over FSM amount parsers
         reply_nav.router,
+        notice_panels.router,
         nav_hubs.router,
         reseller_hub.router,
         nav_marketing.router,
@@ -268,6 +275,7 @@ def create_dispatcher() -> Dispatcher:
     dp.update.middleware(ForceJoinMiddleware())
     dp.update.middleware(TermsEntryMiddleware())
     dp.update.middleware(EditModeMiddleware())
+    dp.update.middleware(PanelHistoryMiddleware())
 
     for router in bot_routers():
         dp.include_router(router)
@@ -287,6 +295,7 @@ def create_dispatcher() -> Dispatcher:
         button_colors,
         connection_status_admin,
         connection_status_admin_input,
+        catalog_row_editor,
         guide_editor,
         reseller_plan_extra_packs_admin,
         screen_editor,
@@ -304,6 +313,7 @@ def create_dispatcher() -> Dispatcher:
         button_colors.owner_router,
         guide_editor.owner_router,
         screen_editor.owner_router,
+        catalog_row_editor.owner_router,
         admin_plans.router,
         admin_resplan_payg.router,
         reseller_plan_extra_packs_admin.router,

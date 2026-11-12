@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment, PaymentReviewMessage, PaymentStatus
 from app.services.formatting import format_message, format_user_label
+from app.services.notice_links import notice_markup
 from app.services.notifications import customer_markup
 
 logger = logging.getLogger(__name__)
@@ -94,10 +95,10 @@ async def sync_review_messages(
     )).one_or_none() if state.order_id else None
     rid = (order_row.reseller_id if order_row else None) or state.wallet_shop_id
     # The reviewed card keeps the way to the customer and service, so staff can follow up in one tap.
-    follow_up = customer_markup(
+    follow_up = notice_markup(customer_markup(
         user_id=state.user_id, service_id=order_row.service_id if order_row else None,
         shop_id=int(rid) if rid else None,
-    )
+    ))
 
     send_bot = bot
     should_close = False

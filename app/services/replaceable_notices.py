@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotChatMessage
 from app.services.chat_message_ledger import DELETE_WINDOW
 from app.services.db_safe import rollback_quiet
+from app.services.notice_links import notice_markup
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +145,8 @@ async def send_replacing_report(
 
     Returns how many chats received it; a chat that cannot be reached is skipped and logged.
     """
+    if send_kw.get("reply_markup") is not None:
+        send_kw["reply_markup"] = notice_markup(send_kw["reply_markup"])
     sent: list[Message] = []
     for chat_id in chat_ids:
         try:

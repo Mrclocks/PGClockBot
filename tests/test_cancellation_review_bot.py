@@ -142,7 +142,7 @@ class CancellationCustomerNoticeTests(ReviewCase):
         self.assertIn("&lt;b&gt;x&lt;/b&gt;", body)
         self.assertNotIn("<b>x</b>", body)
         markup = sent.await_args.kwargs["reply_markup"]
-        self.assertEqual([b.callback_data for row in markup.inline_keyboard for b in row], ["nv:s:home"])
+        self.assertEqual([b.callback_data for row in markup.inline_keyboard for b in row], ["nto:nv:s:home"])
         again = await self.run_service("reject_cancellation", self.shop_request, shop_id=2, actor="tg:1", note="n")
         again.assert_not_awaited()
 

@@ -12,7 +12,8 @@ from app.db.models import Base, BotUser, Order, Payment, PaymentStatus
 from app.services import payment_voids
 from app.services.delivery import build_delivery_content
 from app.services.payer_notify import notify_payer
-from app.services.support_button import SUPPORT_HOME_CALLBACK, support_markup, with_support_row
+from app.services.notice_links import opened_screen
+from app.services.support_button import SUPPORT_HOME_CALLBACK, SUPPORT_NOTICE_CALLBACK, support_markup, with_support_row
 
 
 def callbacks(markup) -> list[str]:
@@ -21,14 +22,15 @@ def callbacks(markup) -> list[str]:
 
 class SupportButtonTests(unittest.TestCase):
     def test_the_button_opens_the_support_home(self) -> None:
-        self.assertEqual(callbacks(support_markup()), [SUPPORT_HOME_CALLBACK])
+        self.assertEqual(callbacks(support_markup()), [SUPPORT_NOTICE_CALLBACK])
+        self.assertEqual(opened_screen(SUPPORT_NOTICE_CALLBACK), SUPPORT_HOME_CALLBACK)
 
     def test_a_support_row_is_appended_once(self) -> None:
         base = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="x", callback_data="x:1")]])
         once = with_support_row(base)
-        self.assertEqual(callbacks(once), ["x:1", SUPPORT_HOME_CALLBACK])
-        self.assertEqual(callbacks(with_support_row(once)), ["x:1", SUPPORT_HOME_CALLBACK])
-        self.assertEqual(callbacks(with_support_row(None)), [SUPPORT_HOME_CALLBACK])
+        self.assertEqual(callbacks(once), ["x:1", SUPPORT_NOTICE_CALLBACK])
+        self.assertEqual(callbacks(with_support_row(once)), ["x:1", SUPPORT_NOTICE_CALLBACK])
+        self.assertEqual(callbacks(with_support_row(None)), [SUPPORT_NOTICE_CALLBACK])
 
 
 class NotifyPayerMarkupTests(unittest.IsolatedAsyncioTestCase):
@@ -45,7 +47,7 @@ class NotifyPayerMarkupTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_the_markup_is_sent_with_the_message(self) -> None:
         sent = await self.send(reply_markup=support_markup())
-        self.assertEqual(callbacks(sent["reply_markup"]), [SUPPORT_HOME_CALLBACK])
+        self.assertEqual(callbacks(sent["reply_markup"]), [SUPPORT_NOTICE_CALLBACK])
 
     async def test_without_markup_nothing_is_attached(self) -> None:
         self.assertNotIn("reply_markup", await self.send())
@@ -62,7 +64,7 @@ class VoidNoticeTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(payment_voids, "notify_payer", AsyncMock(return_value=True)) as notify:
             await payment_voids.void_and_notify(session, 5, shop_id=None, actor="a", reason="r")
         notify.assert_awaited_once()
-        self.assertEqual(callbacks(notify.await_args.kwargs["reply_markup"]), [SUPPORT_HOME_CALLBACK])
+        self.assertEqual(callbacks(notify.await_args.kwargs["reply_markup"]), [SUPPORT_NOTICE_CALLBACK])
 
 
 class BotRejectionTests(unittest.IsolatedAsyncioTestCase):
@@ -84,7 +86,7 @@ class BotRejectionTests(unittest.IsolatedAsyncioTestCase):
         callback.bot.send_message.assert_awaited_once()
         sent = callback.bot.send_message.await_args
         self.assertEqual(sent.args[0], 777)
-        self.assertEqual(callbacks(sent.kwargs["reply_markup"]), [SUPPORT_HOME_CALLBACK])
+        self.assertEqual(callbacks(sent.kwargs["reply_markup"]), [SUPPORT_NOTICE_CALLBACK])
         self.assertIn("پشتیبانی", sent.args[1])
 
 

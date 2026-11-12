@@ -664,12 +664,15 @@ def resolve_category_button_style(ui: dict | None, category: object | None) -> s
     return style_or_none(ui, "shop_kind_fixed", fallback="primary")
 
 
+def has_custom_plan_style_override(ui: dict | None) -> bool:
+    """Whether the custom plan's own color setting replaces the «دلخواه» catalog color."""
+    raw = (ui or {}).get("custom_plan_button_style")
+    return raw is not None and bool(str(raw).strip()) and str(raw).strip().lower() not in {"inherit", "none"}
+
+
 def resolve_custom_plan_button_style(ui: dict | None) -> str | None:
     raw = (ui or {}).get("custom_plan_button_style")
-    if raw is not None and str(raw).strip() and str(raw).strip().lower() not in {
-        "inherit",
-        "none",
-    }:
+    if has_custom_plan_style_override(ui):
         explicit = normalize_style(str(raw))
         if explicit:
             return explicit

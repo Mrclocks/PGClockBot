@@ -120,6 +120,13 @@ BTN_STORE_EXTRA: list[Field] = [
     ("btn_buy_continue", "ادامه خرید", "text"),
 ]
 
+# The shop's first step; a shop renames its own copy, like the other customer buttons.
+BTN_SHOP_KINDS: list[Field] = [
+    ("btn_shop_kind_trial", "تست", "text"),
+    ("btn_shop_kind_fixed", "پلن ثابت", "text"),
+    ("btn_shop_kind_custom", "پلن دلخواه", "text"),
+]
+
 BTN_ADMIN_HUBS: list[Field] = [
     ("btn_adm_hub_ops", "گروه عملیات روزانه", "text"),
     ("btn_adm_hub_people", "گروه افراد", "text"),
@@ -378,6 +385,7 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
     """Telegram shop-section subsections for button label editing."""
     pairs: list[tuple[str, str, list[Field]]] = [
         ("btn_main", "دکمه‌های منوی اصلی", BTN_MAIN_MENU),
+        ("btn_shop_kinds", "دکمه‌های قدم اول خرید", BTN_SHOP_KINDS),
         ("btn_wallet_sub", "دکمه‌های کیف پول", BTN_WALLET_SUB),
         ("btn_support_sub", "دکمه‌های پشتیبانی", BTN_SUPPORT_SUB),
         ("btn_loyalty_sub", "دکمه‌های باشگاه", BTN_LOYALTY_SUB),

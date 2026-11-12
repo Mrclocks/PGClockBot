@@ -8,6 +8,7 @@ from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser
+from app.services.notice_links import notice_markup
 from app.services.reseller_bots import ATTRIBUTED_SHOP
 from app.services.chat_records import keeps_sent
 
@@ -59,7 +60,7 @@ async def notify_payer(
         try:
             msg_kw = {"parse_mode": "HTML", **kw}
             if reply_markup is not None:
-                msg_kw["reply_markup"] = reply_markup
+                msg_kw["reply_markup"] = notice_markup(reply_markup)
             await bot.send_message(user.telegram_id, text, **msg_kw)
         finally:
             if should_close:

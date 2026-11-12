@@ -906,6 +906,7 @@ async def order_reject_cb(callback: CallbackQuery, session: AsyncSession, db_use
                         user.telegram_id,
                         format_message("❌ سفارش رد شد", f"سفارش #{order_id} رد شد."),
                         parse_mode="HTML",
+                        reply_markup=support_markup(),
                     )
             except Exception:
                 logger.debug("order_reject_cb: ignored failure", exc_info=True)

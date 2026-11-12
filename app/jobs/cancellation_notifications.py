@@ -12,6 +12,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from app.config import get_settings
 from app.db.session import SessionLocal
 from app.services.cancellation_notifications import CancellationNotice, NOTIFY_KEY, NoticeOutcome, process_cancellation_notifications
+from app.services.notice_links import notice_markup
 from app.services.notifications import _merge_markups, _shop_recipient_chat_ids, customer_markup, notify_enabled
 from app.services.reseller_bots import open_notify_bot_for_reseller
 
@@ -51,7 +52,7 @@ def _notice_markup(notice: CancellationNotice) -> InlineKeyboardMarkup | None:
         parts.append(InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="🌐 باز کردن در پنل وب", url=base_url + "/finance?tab=cancellations"),
         ]]))
-    return _merge_markups(*parts)
+    return notice_markup(_merge_markups(*parts))
 
 
 async def _send_to_targets(bot: Bot, notice: CancellationNotice, targets: list[int]) -> NoticeOutcome:

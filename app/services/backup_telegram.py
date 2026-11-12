@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.services.backup_settings import CHAT_IDS_KEY, TOKEN_KEY, parse_chat_ids
 from app.services.formatting import format_bytes
+from app.services.notice_links import notice_markup
 from app.services.secret_box import reveal_bot_token
 from app.services.users import get_setting, on, set_setting
 
@@ -150,7 +151,7 @@ async def notify_backup_problem(session: AsyncSession, text: str) -> int:
         logger.warning("no recipient for a backup problem notice", exc_info=True)
         return 0
     # The backup screen belongs to the panel bot, so a separate backup bot cannot open it.
-    markup = None if destination.custom else InlineKeyboardMarkup(inline_keyboard=[[
+    markup = None if destination.custom else notice_markup(InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="💾 باز کردن بکاپ‌ها", callback_data=BACKUP_SCREEN_CALLBACK),
-    ]])
+    ]]))
     return await _send_text(destination, text, markup=markup)

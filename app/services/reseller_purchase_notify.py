@@ -17,6 +17,7 @@ from app.config import get_settings
 from app.db.models import BotUser, ResellerPlan
 from app.services.formatting import format_message, format_toman, info_block, kv_line
 from app.services.notifications import _buyer_lines, _dispatch_dual_notify
+from app.services.staff_notice_buttons import reseller_card_markup
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ async def notify_owner_of_reseller_purchase(
             # Platform sale: never route to a shop bot / shop prefs.
             return await _dispatch_dual_notify(
                 bot, session, NOTIFY_KEY, text, shop=False, platform=True,
+                markup=reseller_card_markup(buyer.id),
             )
         except (TelegramAPIError, OSError, TimeoutError):
             logger.warning(

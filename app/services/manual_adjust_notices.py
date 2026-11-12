@@ -12,6 +12,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from aiogram.types import InlineKeyboardMarkup
+
+from app.services.customer_notice_buttons import customer_notice_markup
 from app.services.formatting import format_toman
 from app.services.reseller_bots import ATTRIBUTED_SHOP
 
@@ -45,7 +48,9 @@ def points_change_notice(*, mode: str, points: int, balance: int) -> str:
     )
 
 
-async def _send_customer_notice(user_id: int, text: str, *, shop_id: int | None | object) -> None:
+async def _send_customer_notice(
+    user_id: int, text: str, *, shop_id: int | None | object, markup: InlineKeyboardMarkup | None = None
+) -> None:
     # Own session: the request session is closed by the time this runs.
     from app.db.models import BotUser
     from app.db.session import SessionLocal
@@ -58,7 +63,7 @@ async def _send_customer_notice(user_id: int, text: str, *, shop_id: int | None 
         try:
             bot, should_close = await open_notify_bot_for_user(session, user, shop_id=shop_id)
             try:
-                await bot.send_message(int(user.telegram_id), text, parse_mode="HTML")
+                await bot.send_message(int(user.telegram_id), text, parse_mode="HTML", reply_markup=markup)
             finally:
                 if should_close:
                     await bot.session.close()
@@ -88,12 +93,13 @@ def schedule_customer_notice(
     *,
     shop_id: int | None | object = ATTRIBUTED_SHOP,
     replayed: bool = False,
+    markup: InlineKeyboardMarkup | None = None,
 ) -> None:
     """Send ``text`` to the customer after commit; no-op when the adjust was a replay."""
     if replayed:
         return
     task = asyncio.get_running_loop().create_task(
-        _send_customer_notice(int(user_id), text, shop_id=shop_id),
+        _send_customer_notice(int(user_id), text, shop_id=shop_id, markup=markup),
         name="manual-adjust-notice",
     )
     _pending.add(task)
@@ -114,6 +120,7 @@ def schedule_wallet_notice(
         wallet_change_notice(mode=mode, amount=amount, balance=balance),
         shop_id=shop_id,
         replayed=replayed,
+        markup=customer_notice_markup(wallet=True),
     )
 
 
@@ -131,4 +138,5 @@ def schedule_points_notice(
         points_change_notice(mode=mode, points=points, balance=balance),
         shop_id=shop_id,
         replayed=replayed,
+        markup=customer_notice_markup(club=True),
     )

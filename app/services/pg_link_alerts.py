@@ -23,6 +23,7 @@ from app.db.models import Setting
 from app.services import pg_link_health
 from app.services.formatting import format_message, info_block, kv_line
 from app.services.pg_read_resilience import circuit_status
+from app.services.staff_notice_buttons import pasarguard_markup
 from app.services.users import clear_settings_cache, get_setting, set_setting
 
 logger = logging.getLogger(__name__)
@@ -265,7 +266,7 @@ async def _send_to_owners(text: str) -> int:
             for attempt in range(2):
                 try:
                     await asyncio.wait_for(
-                        bot.send_message(chat_id, text, parse_mode="HTML"),
+                        bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=pasarguard_markup()),
                         timeout=20,
                     )
                     delivered += 1
