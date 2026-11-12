@@ -359,3 +359,5 @@ tests/test_shop_customer_block.py
 tests/test_campaign_broad_audiences.py
 # Shop bot customer card tools: same keys and checks as the web, own shop only, once per flow.
 tests/test_shop_bot_customer_tools.py
+# Home offer to add an old service: only for a customer of this shop with no service there.
+tests/test_import_home_prompt.py
