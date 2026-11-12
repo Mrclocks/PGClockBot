@@ -6,20 +6,33 @@ scope check and renderer of that screen runs exactly as on a real tap, and no sc
 second «reopen» implementation.
 
 Telegram does not know these taps, so their ``answerCallbackQuery`` calls are dropped by
-``install_replay_guard`` and the flood limiter does not count them.
+``install_replay_guard`` and the flood limiter does not count them. Inside ``watching_replay()``
+the dropped answers and the messages the screen edited are noted, so the caller can tell whether
+the screen opened and show the person an alert it raised (no access, not found) on the real tap.
 """
 
 from __future__ import annotations
 
 import logging
 import secrets
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.middlewares.base import NextRequestMiddlewareType
 from aiogram.dispatcher.event.bases import UNHANDLED
-from aiogram.methods import AnswerCallbackQuery, TelegramMethod
+from aiogram.methods import (
+    AnswerCallbackQuery,
+    EditMessageCaption,
+    EditMessageMedia,
+    EditMessageReplyMarkup,
+    EditMessageText,
+    TelegramMethod,
+)
 from aiogram.methods.base import TelegramType
 from aiogram.types import CallbackQuery, Chat, Message, Update, User
 
@@ -31,6 +44,37 @@ _MAX_DATA = 64
 _dispatcher: Dispatcher | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ReplayAnswer:
+    """What a replayed screen answered to its synthetic tap."""
+
+    text: str | None
+    show_alert: bool
+
+
+@dataclass(slots=True)
+class ReplayLog:
+    """What happened while a screen was replayed: its answers and the messages it edited."""
+
+    answers: list[ReplayAnswer] = field(default_factory=list)
+    edited: set[int] = field(default_factory=set)
+
+
+_replay_log: ContextVar[ReplayLog | None] = ContextVar("replay_log", default=None)
+
+_EDIT_METHODS = (EditMessageText, EditMessageCaption, EditMessageMedia, EditMessageReplyMarkup)
+
+
+@contextmanager
+def watching_replay() -> Iterator[ReplayLog]:
+    log = ReplayLog()
+    token = _replay_log.set(log)
+    try:
+        yield log
+    finally:
+        _replay_log.reset(token)
+
+
 def set_dispatcher(dispatcher: Dispatcher) -> None:
     global _dispatcher
     _dispatcher = dispatcher
@@ -39,9 +83,15 @@ def set_dispatcher(dispatcher: Dispatcher) -> None:
 async def _drop_replay_answers(
     make_request: NextRequestMiddlewareType[TelegramType], bot: Bot, method: TelegramMethod[TelegramType]
 ) -> Any:
+    log = _replay_log.get()
     if isinstance(method, AnswerCallbackQuery) and method.callback_query_id.startswith(REPLAY_PREFIX):
+        if log is not None:
+            log.answers.append(ReplayAnswer(text=method.text, show_alert=bool(method.show_alert)))
         return True
-    return await make_request(bot, method)
+    result = await make_request(bot, method)
+    if log is not None and isinstance(method, _EDIT_METHODS) and method.message_id is not None:
+        log.edited.add(int(method.message_id))
+    return result
 
 
 def install_replay_guard(bot: Bot) -> Bot:

@@ -273,16 +273,16 @@ class ContactAndNoticeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(str(self.user.telegram_id), text)
         markup = self.main_bot.send_message.await_args.kwargs["reply_markup"]
         callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
-        self.assertEqual(callbacks[0], f"cnrv:v:{request_id}")
-        self.assertIn(f"adm:users:view:{self.user.id}", callbacks)
-        self.assertIn(f"adm:users:svc:{self.user.id}:11", callbacks)
+        self.assertEqual(callbacks[0], f"nto:cnrv:v:{request_id}")
+        self.assertIn(f"nto:adm:users:view:{self.user.id}", callbacks)
+        self.assertIn(f"nto:adm:users:svc:{self.user.id}:11", callbacks)
 
     async def test_shop_notice_offers_only_the_shop_customer_card(self) -> None:
         request_id = await self.request(12, 2)
         await self.dispatch_notices()
         markup = self.shop_bot.send_message.await_args.kwargs["reply_markup"]
         callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
-        self.assertEqual(callbacks[:2], [f"cnrv:v:{request_id}", f"res:user:{self.user.id}"])
+        self.assertEqual(callbacks[:2], [f"nto:cnrv:v:{request_id}", f"nto:res:user:{self.user.id}"])
         self.assertFalse([c for c in callbacks if c and c.startswith("adm:")])
 
     async def test_concurrent_workers_do_not_send_the_same_notice_twice(self) -> None:

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment
 from app.services.message_variables import DOMAIN_QR
+from app.services.notice_links import notice_markup
 from app.services.formatting import (
     format_bytes,
     format_bytes_ratio,
@@ -307,6 +308,8 @@ async def _send_to_chats(
 
     if not targets:
         return 0
+    # Screen buttons open a panel under the notice, so the notice itself is never overwritten.
+    markup = notice_markup(markup)
 
     ok = 0
     lock = asyncio.Lock()

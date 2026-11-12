@@ -9,6 +9,7 @@ from aiogram.types import (
 
 from app.bot.button_sources import is_recording, note_button_source
 from app.bot.list_pages import page_of, pager_row
+from app.bot.panel_back import BACK_LABEL_KEY, back_callback
 from app.services.catalog_pricing import sale_price
 from app.config import get_settings
 from app.db.models import Plan, Role
@@ -660,6 +661,8 @@ def _ikb(
     """Inline button; pass ``style_id`` (not a resolved ``style``) so the color stays editable."""
     if style_id is not None:
         style = _style(ui, style_id, fallback=style_fallback)
+    if label_key == BACK_LABEL_KEY and callback_data is not None:
+        callback_data = back_callback(callback_data)
     button = _build_inline_button(
         text,
         callback_data=callback_data,
