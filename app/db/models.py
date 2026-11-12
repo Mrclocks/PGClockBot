@@ -1937,6 +1937,8 @@ class ChargeCode(Base):
     max_uses_per_user: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     first_purchase_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     purchase_types: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Comma-separated ids of the shop's plans a discount code is limited to; NULL = every plan.
+    plan_ids: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     max_uses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     used_count: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

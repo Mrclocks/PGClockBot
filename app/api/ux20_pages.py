@@ -50,6 +50,7 @@ def _gift_rules(form) -> dict:
         expires_at=parse_expiry(str(form.get("expires_at") or "")),
         first_purchase_only=str(form.get("first_purchase_only") or "") in {"1", "on", "true"},
         purchase_types=form.getlist("purchase_types"),
+        plan_ids=form.getlist("plan_ids"),
     )
 
 
@@ -218,7 +219,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         code_id: int, request: Request,
         staff: dict = Depends(require_staff), session: AsyncSession = Depends(get_db),
     ):
-        from app.services.gift_codes import validate_rules
+        from app.services.gift_codes import check_code_plans, validate_rules
 
         try:
             rid = gift_code_scope(staff)
@@ -236,6 +237,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             rules = validate_rules(**_gift_rules(form))
             if rules["kind"] != row.kind:
                 raise ValueError("نوع کد پس از ساخت قابل تغییر نیست؛ یک کد جدید بسازید")
+            await check_code_plans(session, rules["plan_ids"], shop_id=rid)
             for name, value in rules.items():
                 setattr(row, name, value)
             row.note = str(form.get("note") or "").strip()[:255] or None
