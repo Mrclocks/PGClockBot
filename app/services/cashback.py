@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, CashbackBudget, CashbackGrant, CashbackRule, Order, OrderStatus
 from app.py_compat import StrEnum
+from app.services.customer_notice_buttons import customer_notice_markup
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_toman
 from app.services.platform_identity import deliverable_telegram_id
@@ -310,6 +311,7 @@ async def _send_shop_batch(session: AsyncSession, shop_id: int | None, grants: l
     first = users.get(int(grants[0].user_id))
     if first is None:
         return
+    wallet_markup = customer_notice_markup(wallet=True)
     try:
         bot, should_close = await open_notify_bot_for_user(session, first, shop_id=shop_id)
     except ShopBotUnavailable:
@@ -321,7 +323,7 @@ async def _send_shop_batch(session: AsyncSession, shop_id: int | None, grants: l
             if chat_id is None:
                 continue
             try:
-                await bot.send_message(chat_id, credited_text(grant), parse_mode="HTML")
+                await bot.send_message(chat_id, credited_text(grant), parse_mode="HTML", reply_markup=wallet_markup)
             except Exception:  # noqa: BLE001 - one undeliverable chat never stops the others; logged
                 logger.debug("cashback notice failed grant=%s", grant.id, exc_info=True)
             await asyncio.sleep(SEND_INTERVAL_SECONDS)

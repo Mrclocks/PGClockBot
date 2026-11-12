@@ -24,7 +24,7 @@ from app.services.alert_rearm import rearm_flagged_alerts
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
 from app.services.replaceable_notices import DAILY_REPORT_KEY, SUBORDINATE_REPORT_KEY, send_replacing_report
-from app.services.staff_notice_buttons import platform_report_markup, shop_report_markup, subordinate_report_markup
+from app.services.staff_notice_buttons import platform_report_markup, shop_panel_markup, subordinate_report_markup
 from app.services.usage_alerts import (
     ALERT_TIME,
     ALERT_TRAFFIC,
@@ -632,7 +632,7 @@ async def run_admin_daily_report(bot: Bot) -> None:
                         try:
                             await send_replacing_report(
                                 session, shop_bot, await shop_daily_report_chat_ids(session, rid), text,
-                                replace_key=DAILY_REPORT_KEY, reply_markup=shop_report_markup(),
+                                replace_key=DAILY_REPORT_KEY, reply_markup=shop_panel_markup(),
                                 **{"parse_mode": "HTML", **report_kw},
                             )
                             await set_setting(

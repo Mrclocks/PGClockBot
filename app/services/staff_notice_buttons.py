@@ -27,7 +27,7 @@ def platform_report_markup() -> InlineKeyboardMarkup:
     return _one(PLATFORM_DASHBOARD)
 
 
-def shop_report_markup() -> InlineKeyboardMarkup:
+def shop_panel_markup() -> InlineKeyboardMarkup:
     return _one(SHOP_PANEL)
 
 

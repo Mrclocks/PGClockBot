@@ -53,6 +53,7 @@ VIEW_FAMILIES: tuple[str, ...] = (
     "adm:order:", "adm:cancel:view:", "adm:resapp:view:",
     "res:users:", "res:user:", "res:cancel:view:",
     "cnrv:v:", "payvoid:v:", "autorv:v:", "stk:l:", "stk:v:", "tru:l:", "saud:l:",
+    "svc:auto:",
 )
 
 PanelKey = tuple[int, int, int]

@@ -52,7 +52,8 @@ screen, and on any screen of the panel at the same level (the card shown again a
 act (approve, reject, reply, close) keep acting on the notice. A new read-only screen that a
 notice links to is added to `NOTICE_SCREEN_PREFIXES` (or `NOTICE_SCREENS` for a hub) and to the
 panel history's view screens. Staff reports and alerts build their buttons with
-`app.services.staff_notice_buttons`.
+`app.services.staff_notice_buttons`; customer notices use `app.services.customer_notice_buttons`, and
+«✉️ تماس با پشتیبانی» (`support_markup`) always opens under the notice it sits on.
 
 ## Reply keyboard — main menu + contact only
 
