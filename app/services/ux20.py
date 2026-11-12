@@ -1086,14 +1086,14 @@ def shop_bundle_allowed_setting_keys() -> set[str]:
         RESELLER_SETTINGS_TABS,
         SHOP_SETTINGS_DOMAIN_POST_TABS,
     )
-    from app.services.users import keys_for_tab
+    from app.services.users import PLATFORM_ONLY_SETTING_KEYS, keys_for_tab
 
     keys: set[str] = {"menu_order"}
     for tab, _label in RESELLER_SETTINGS_TABS:
         keys |= keys_for_tab(tab)
     for tab in SHOP_SETTINGS_DOMAIN_POST_TABS:
         keys |= keys_for_tab(tab)
-    return keys
+    return keys - PLATFORM_ONLY_SETTING_KEYS
 
 
 def _parse_import_group_ids(raw: Any) -> list[int]:

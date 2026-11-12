@@ -1274,6 +1274,10 @@ SETTING_VISIBILITY: dict[str, tuple[str, tuple[str, ...]]] = {
     "crypto_rate_api_divisor": ("crypto_rate_mode", ("api",)),
 }
 
+# Main-bot switch only: a shop gets the name step from its package permission instead.
+CUSTOM_SERVICE_NAME_GROUP = "نام دلخواه سرویس"
+PLATFORM_ONLY_SETTING_GROUPS: frozenset[str] = frozenset({CUSTOM_SERVICE_NAME_GROUP})
+
 SETTING_GROUPS = {
     "خوش‌آمد و هویت": [
         ("shop_title", "نام فروشگاه", "text", "بالای منوی اصلی ربات دیده می‌شود"),
@@ -1875,6 +1879,15 @@ SETTING_GROUPS = {
             "نام دلخواه خریدار جای {random} می‌نشیند (بدون {random}: الگوی پیش‌فرض).",
         ),
     ],
+    CUSTOM_SERVICE_NAME_GROUP: [
+        (
+            "custom_service_name_enabled",
+            "نام دلخواه سرویس هنگام خرید",
+            "toggle",
+            "روشن باشد، خریدار ربات اصلی و مینی‌اپ بعد از انتخاب پلن نام سرویس را خودش می‌نویسد یا «اسم تصادفی» را می‌زند. "
+            "فروشگاه‌ها این امکان را از دسترسی «نام دلخواه سرویس» در پلن نمایندگی می‌گیرند.",
+        ),
+    ],
     "کانال اجباری": [
         ("force_join_enabled", "عضویت اجباری کانال", "toggle", "قبل از استفاده از ربات"),
         (
@@ -2038,7 +2051,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     ],
     "supports": ["متن پشتیبانی ربات"],
     "loyalty": ["متن دعوت دوستان"],
-    "naming": ["نام‌گذاری سرویس در پاسارگارد"],
+    "naming": ["نام‌گذاری سرویس در پاسارگارد", CUSTOM_SERVICE_NAME_GROUP],
     "limits": [
         "معرف اجباری",
         "شماره تماس خرید",
@@ -2095,6 +2108,12 @@ SECRET_KEEP_VALUES = {"", "••••", "****", "__keep__", "__unchanged__"}
 
 def should_keep_secret_value(raw: str | None) -> bool:
     return str(raw if raw is not None else "").strip() in SECRET_KEEP_VALUES
+
+
+# Keys of PLATFORM_ONLY_SETTING_GROUPS: never shown on or saved from a shop's settings.
+PLATFORM_ONLY_SETTING_KEYS: frozenset[str] = frozenset(
+    field[0] for name in PLATFORM_ONLY_SETTING_GROUPS for field in SETTING_GROUPS[name]
+)
 
 
 def keys_for_tab(tab: str) -> set[str]:
