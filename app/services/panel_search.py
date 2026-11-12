@@ -16,6 +16,7 @@ from app.services.settings_search import SettingsSearchEntry, search_settings
 from app.services.settings_tab_groups import group_settings_tabs
 from app.services.users import (
     PANEL_SETTINGS_TABS,
+    PLATFORM_ONLY_SETTING_GROUPS,
     SETTING_GROUPS,
     SETTINGS_DOMAIN_REDIRECTS,
     SETTINGS_TABS,
@@ -47,18 +48,28 @@ def _entry(label: str, where: str, href: str) -> SettingsSearchEntry:
     return SettingsSearchEntry(label=label, section_id=href, section_title=where, sub_id="", sub_title="")
 
 
-def _field_labels(tab_key: str) -> list[str]:
-    return [str(field[1]) for group_name in TAB_SETTING_GROUPS.get(tab_key, []) for field in SETTING_GROUPS.get(group_name, [])]
+def _field_labels(tab_key: str, *, for_shop: bool = False) -> list[str]:
+    hidden = PLATFORM_ONLY_SETTING_GROUPS if for_shop else frozenset()
+    return [
+        str(field[1])
+        for group_name in TAB_SETTING_GROUPS.get(tab_key, [])
+        if group_name not in hidden
+        for field in SETTING_GROUPS.get(group_name, [])
+    ]
 
 
-def _tab_entries(tab_key: str, tab_label: str, href: str, *, tab_where: str, area: str) -> list[SettingsSearchEntry]:
+def _tab_entries(
+    tab_key: str, tab_label: str, href: str, *, tab_where: str, area: str, for_shop: bool = False
+) -> list[SettingsSearchEntry]:
     """The tab itself plus every setting field on it, all linking to the tab."""
     entries = [_entry(tab_label, tab_where, href)]
-    entries.extend(_entry(label, f"{area} › {tab_label}", href) for label in _field_labels(tab_key))
+    entries.extend(_entry(label, f"{area} › {tab_label}", href) for label in _field_labels(tab_key, for_shop=for_shop))
     return entries
 
 
-def _settings_tab_entries(base: str, tabs: Sequence[tuple[str, str]], area: str) -> list[SettingsSearchEntry]:
+def _settings_tab_entries(
+    base: str, tabs: Sequence[tuple[str, str]], area: str, *, for_shop: bool = False
+) -> list[SettingsSearchEntry]:
     entries: list[SettingsSearchEntry] = []
     for group in group_settings_tabs(tabs, ""):
         for tab in group.tabs:
@@ -67,7 +78,9 @@ def _settings_tab_entries(base: str, tabs: Sequence[tuple[str, str]], area: str)
             for section in tab.sections or (tab,):
                 href = section.href or f"{base}?tab={section.key}"
                 where = f"{area} › {tab.label}" if tab.sections else f"{area} › {group.label}"
-                entries.extend(_tab_entries(section.key, section.label, href, tab_where=where, area=area))
+                entries.extend(
+                    _tab_entries(section.key, section.label, href, tab_where=where, area=area, for_shop=for_shop)
+                )
     return entries
 
 
@@ -100,7 +113,7 @@ def search_entries(viewer: NavViewer) -> list[SettingsSearchEntry]:
     if "bot_settings" in keys:
         entries += _settings_tab_entries(OWNER_SETTINGS_BASE, SETTINGS_TABS, "تنظیمات ربات")
     if "shop_settings" in keys:
-        entries += _settings_tab_entries(SHOP_SETTINGS_BASE, RESELLER_SETTINGS_TABS, "تنظیمات فروشگاه")
+        entries += _settings_tab_entries(SHOP_SETTINGS_BASE, RESELLER_SETTINGS_TABS, "تنظیمات فروشگاه", for_shop=True)
     if "system_settings" in keys:
         entries += _system_entries()
     return entries

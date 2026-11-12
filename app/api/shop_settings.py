@@ -43,6 +43,8 @@ from app.services.rich_text import merge_rich_settings_on_save, prepare_settings
 from app.services.screen_titles import SCREEN_TEXT_TAB, platform_only_screen_text_keys, validate_screen_text_settings
 from app.services.users import (
     IMAGE_KEYS,
+    PLATFORM_ONLY_SETTING_GROUPS,
+    PLATFORM_ONLY_SETTING_KEYS,
     RESETTABLE_SETTINGS_TABS,
     SECRET_KEYS,
     TAB_SETTING_GROUPS,
@@ -234,7 +236,11 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             values = enrich_payment_settings(values)
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
         # Hide platform-only fields from reseller menu tab
-        groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}
+        groups = {
+            name: SETTING_GROUPS[name]
+            for name in tab_groups
+            if name in SETTING_GROUPS and name not in PLATFORM_ONLY_SETTING_GROUPS
+        }
         if tab == "service_import":
             groups.pop("مسیرها و ادمین‌های مجاز", None)
         if tab == "menu":
@@ -446,7 +452,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         from app.services.service_import_config import PLATFORM_ONLY_KEYS
 
         # Subscription paths and extra panel admins describe the one panel: Owner only.
-        known = keys_for_tab(tab) - PLATFORM_ONLY_KEYS - PLATFORM_ONLY_BTN_KEYS
+        known = keys_for_tab(tab) - PLATFORM_ONLY_KEYS - PLATFORM_ONLY_BTN_KEYS - PLATFORM_ONLY_SETTING_KEYS
         if tab == "menu":
             known = known | {"menu_order"}
             known.discard("show_reseller_apply")
