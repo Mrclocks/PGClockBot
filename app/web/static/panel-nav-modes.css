@@ -155,12 +155,17 @@
 /* .shell is laid out LTR and sets RTL back on .side and .main; the bar is its child too. */
 .bottom-dock { display: none; direction: rtl; }
 @media (max-width: 900px) {
+  /* Invariant E (panel.css, mobile geometry): Safari 26 tints its bottom toolbar with a fixed box near the
+     screen edge, which turned the area under the bar solid. The fixed box stays transparent and every painted
+     layer (the shadow, the capsule, the ×) is an absolute child, so the toolbar keeps showing the page as glass. */
   .bottom-dock {
     position: fixed;
     z-index: 40;
     inset-inline: var(--dock-inline);
     bottom: var(--dock-bottom);
     display: block;
+    height: var(--dock-h);
+    background: transparent;
     transform: translate3d(0, 0, 0);
     /* Transform only, never opacity: while an ancestor is part-transparent the browser drops the capsule's
        backdrop blur, so a fading bar would come back clear and turn matte only when the fade ended. */
@@ -188,6 +193,9 @@
     transition: opacity var(--motion-fast) var(--ease-in);
   }
   .bottom-dock-bar {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
     box-sizing: border-box;
     display: grid;
     grid-auto-flow: column;
