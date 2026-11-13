@@ -69,22 +69,16 @@ class WalletHomePointsTextTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WalletHubLoyaltyShortcutTests(unittest.TestCase):
-    def test_club_shortcut_when_loyalty_enabled(self) -> None:
-        data = [
-            b.callback_data
-            for row in wallet_hub_keyboard(_ui(loyalty_enabled="1")).inline_keyboard
-            for b in row
-        ]
-        self.assertIn("nv:loy:home", data)
-
-    def test_club_shortcut_hidden_when_loyalty_disabled(self) -> None:
-        data = [
-            b.callback_data
-            for row in wallet_hub_keyboard(_ui(loyalty_enabled="0")).inline_keyboard
-            for b in row
-        ]
-        self.assertNotIn("nv:loy:home", data)
-        self.assertIn("nv:w:topup", data)
+    def test_wallet_hub_has_no_club_shortcut_even_when_loyalty_enabled(self) -> None:
+        for flag in ("1", "0"):
+            data = [
+                b.callback_data
+                for row in wallet_hub_keyboard(_ui(loyalty_enabled=flag)).inline_keyboard
+                for b in row
+            ]
+            self.assertNotIn("nv:loy:home", data)
+            self.assertIn("nv:w:topup", data)
+            self.assertIn("menu:home", data)
 
 
 class WalletHomeShopSettingsParityTests(unittest.IsolatedAsyncioTestCase):
