@@ -25,7 +25,7 @@ from app.bot.nav_input import (
     register_cancel_code,
     try_legacy_cancel,
 )
-from app.bot.import_prompt import HOME_ADD_CALLBACK
+from app.bot.import_prompt import HIDE_DONE, HOME_ADD_CALLBACK, HOME_HIDE_CALLBACK
 from app.bot.service_import_ui import ADD_CALLBACK, announce_new_request, import_enabled
 from app.db.models import BotUser
 from app.services.formatting import format_message, service_card
@@ -37,7 +37,8 @@ from app.services.service_import import (
     ServiceImportError,
     import_existing_service,
 )
-from app.services.users import get_all_settings
+from app.services.service_import_offer import dismiss_offer
+from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services import bot_feedback_texts as feedback
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,18 @@ async def svc_add_existing_from_home(
     if offer is not None:
         try:
             await offer.delete()
+        except TelegramAPIError:
+            logger.debug("home offer already gone", exc_info=True)
+
+
+@router.callback_query(F.data == HOME_HIDE_CALLBACK)
+async def svc_hide_home_offer(callback: CallbackQuery, session: AsyncSession, db_user: BotUser) -> None:
+    """«نمایش نده»: the home offer never comes back for this customer in this shop."""
+    await dismiss_offer(session, int(db_user.id), current_shop_reseller_id())
+    await callback.answer(HIDE_DONE)
+    if callback.message is not None:
+        try:
+            await callback.message.delete()
         except TelegramAPIError:
             logger.debug("home offer already gone", exc_info=True)
 

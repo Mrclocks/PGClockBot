@@ -2230,6 +2230,16 @@ class MarketingPreference(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class ServiceImportOfferDismissal(Base):
+    """A customer chose «نمایش نده» on the home offer to add a previous service."""
+
+    __tablename__ = "service_import_offer_dismissals"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), primary_key=True)
+    shop_key: Mapped[int] = mapped_column(Integer, primary_key=True)  # 0 = platform
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class CatalogDiscount(Base):
     """Shop price adjustments, with a deduplicated announcement campaign."""
 
