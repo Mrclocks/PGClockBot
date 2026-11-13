@@ -64,6 +64,24 @@ class TelegramSessionProxyTests(unittest.TestCase):
         self.assertIsInstance(session, AiohttpSession)
 
     @_skip_if_no_aiogram()
+    def test_socks_proxy_session_carries_proxy_url(self):
+        # Constructing the session with a SOCKS URL requires aiohttp-socks;
+        # the proxy must be retained on the session for the connector to use.
+        with patch("app.bot.get_settings") as settings_mock:
+            settings_mock.return_value.tg_proxy = "socks5://host:1080"
+            session = telegram_session()
+        self.assertIsNotNone(session)
+        self.assertEqual(session.proxy, "socks5://host:1080")
+
+    @_skip_if_no_aiogram()
+    def test_http_proxy_session_carries_proxy_url(self):
+        with patch("app.bot.get_settings") as settings_mock:
+            settings_mock.return_value.tg_proxy = "http://127.0.0.1:10809"
+            session = telegram_session()
+        self.assertIsNotNone(session)
+        self.assertEqual(session.proxy, "http://127.0.0.1:10809")
+
+    @_skip_if_no_aiogram()
     def test_proxy_string_is_stripped(self):
         from aiogram.client.session.aiohttp import AiohttpSession
 
