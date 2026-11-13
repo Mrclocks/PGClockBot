@@ -265,13 +265,20 @@ class RenderedBottomBarTests(unittest.TestCase):
         self.assertIn('aria-expanded="false"', menu)
         self.assertIn("منو", menu)
 
-    def test_phone_header_has_search_and_no_hamburger_and_the_drawer_can_close(self) -> None:
+    def test_phone_header_has_brand_version_and_search_and_no_hamburger(self) -> None:
         html = _render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True)
         header = html.split('<header class="topbar')[1].split("</header>")[0]
+        self.assertRegex(header.split('class="topbar-brand-text"')[1], r'^>\s*<strong dir="auto">[^<]+</strong>')
+        self.assertIn('class="topbar-version"', header)
         self.assertIn('id="panel-search-input-top"', header)
         self.assertIn("data-panel-search-input", header)
         self.assertNotIn("menu-toggle", html)
-        self.assertIn('data-drawer-close aria-controls="sidebar" aria-label="بستن منو"', html)
+
+    def test_the_bar_carries_the_drawer_close_button(self) -> None:
+        html = _render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True)
+        dock = html.split("data-bottom-dock>")[1].split("{# ")[0].split("</div>")[0]
+        self.assertIn('class="bottom-dock-close" data-drawer-close aria-controls="sidebar" aria-label="بستن منو"', dock)
+        self.assertEqual(html.count("data-drawer-close"), 1)
         # One search field per screen size: the sidebar keeps its own for desktop, with its own ids.
         self.assertEqual(html.count('id="panel-search-input"'), 1)
         self.assertEqual(html.count("data-panel-search-results"), 2)

@@ -528,7 +528,7 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 :is(.side, .topbar) .side-search-empty { margin: 0; padding: var(--space-2); text-align: center; font-size: 13px; color: var(--muted-fg); }
 @media (max-width: 900px) {
   .side .side-search { display: none; }
-  .topbar .topbar-search { direction: rtl; flex: 1 1 auto; min-width: 0; margin: 0; }
+  .topbar .topbar-search { direction: rtl; flex: 0 1 var(--topbar-search-w); min-width: 0; margin: 0; }
   /* 16px keeps iOS from zooming the page when the field takes focus. */
   .topbar .topbar-search input[type="search"] { font-size: var(--control-fs) !important; }
 }

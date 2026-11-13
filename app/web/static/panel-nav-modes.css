@@ -104,32 +104,34 @@
   .side-search input:not(:placeholder-shown) ~ .side-search-key { display: none; }
 }
 
-/* —— Phone header and drawer head. The header holds the logo and the panel search (the sidebar search
-   component, styled in panel-ds.css §14); «منو» in the bottom bar opens the drawer, whose head has the brand,
-   the version and a close button. —— */
-.side-drawer-head { display: none; }
+/* —— Phone header: a round logo, the brand name and version beside it, and the panel search (the sidebar
+   search component, styled in panel-ds.css §14). All three share the field height (--btn-h). —— */
 @media (max-width: 900px) {
   .topbar { gap: var(--space-1_5); }
-  .side-drawer-head {
+  .topbar-brand { height: var(--btn-h); gap: var(--space-1); }
+  .topbar-brand .brand-logo { width: var(--btn-h); height: var(--btn-h); border-radius: 50%; }
+  .topbar-brand-text {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-1);
-    margin-bottom: var(--space-1);
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-0);
+    height: var(--btn-h);
+    min-width: 0;
   }
-  .side-drawer-title { display: flex; flex-direction: column; gap: var(--space-0); min-width: 0; }
-  .side-drawer-title strong {
+  .topbar-brand-text strong {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--title-size);
     font-weight: 600;
+    line-height: 1.25;
   }
-  .side-drawer-close { flex: none; }
 }
 
 /* —— Phone bottom bar: a frosted capsule with the most used items and «منو».
-   Shown exactly where the sidebar becomes a drawer. Same matte glass as the drawer and modal chrome. —— */
+   Shown exactly where the sidebar becomes a drawer. Same matte glass as the drawer and modal chrome.
+   While the drawer is open the capsule folds into a round red × at its inline end (bottom left), above the
+   dim, and unfolds again when the drawer closes. —— */
 /* .shell is laid out LTR and sets RTL back on .side and .main; the bar is its child too. */
 .bottom-dock { display: none; direction: rtl; }
 @media (max-width: 900px) {
@@ -161,6 +163,9 @@
     backdrop-filter: var(--modal-frost-blur);
     -webkit-backdrop-filter: var(--modal-frost-blur);
     box-shadow: var(--dock-shadow);
+    clip-path: inset(0 0 0 0 round var(--dock-h));
+    /* Unfolding: starts just after the × has faded, then eases out to full width. */
+    transition: clip-path var(--dock-morph) var(--ease-out) var(--dock-morph-lead);
   }
   .bottom-dock-item {
     position: relative;
@@ -184,7 +189,8 @@
     transition:
       background-color var(--motion-fast) var(--ease-standard),
       color var(--motion-fast) var(--ease-standard),
-      transform var(--motion-fast) var(--ease-standard);
+      transform var(--motion-fast) var(--ease-standard),
+      opacity var(--motion-med) var(--ease-out) var(--dock-morph-items);
   }
   .bottom-dock-item .nav-ico { width: var(--dock-ico); height: var(--dock-ico); }
   .bottom-dock-label {
@@ -208,10 +214,66 @@
   .bottom-dock-item:active { transform: scale(0.94); }
   .bottom-dock-item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
-  /* Out of the way while the drawer or a modal is open, or the keyboard is up for a field; it slides fully
-     below the screen edge while fading, and only turns invisible once the slide has finished.
+  /* The close button sits where the folded capsule ends up; hidden until the drawer opens. */
+  .bottom-dock-close {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: 0;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    width: var(--dock-h);
+    height: var(--dock-h);
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--destructive) 40%, var(--modal-frost-line));
+    border-radius: 50%;
+    background: transparent;
+    color: var(--destructive);
+    box-shadow: none;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: rotate(-90deg) scale(0.6);
+    transition:
+      opacity var(--motion-fast) var(--ease-in),
+      transform var(--motion-fast) var(--ease-in),
+      box-shadow var(--motion-fast) var(--ease-in),
+      visibility 0s linear var(--motion-fast);
+  }
+  .bottom-dock-close .nav-ico { width: var(--dock-ico); height: var(--dock-ico); stroke-width: 2.4; }
+  .bottom-dock-close:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+  /* Drawer open: above the dim (the drawer itself is on the other side), folded into the red ×. */
+  body.nav-open .bottom-dock { z-index: 5250; }
+  body.nav-open .bottom-dock-bar {
+    clip-path: inset(0 calc(100% - var(--dock-h)) 0 0 round var(--dock-h));
+    transition: clip-path var(--dock-morph) var(--ease-standard);
+  }
+  body.nav-open .bottom-dock-item {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--motion-fast) var(--ease-in);
+  }
+  body.nav-open .bottom-dock-close {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+    box-shadow: var(--dock-shadow);
+    transition:
+      opacity var(--motion-med) var(--ease-out) var(--dock-morph-items),
+      transform var(--dock-morph) var(--ease-out) var(--dock-morph-items),
+      box-shadow var(--motion-med) var(--ease-out) var(--dock-morph-items),
+      visibility 0s linear 0s;
+  }
+  body.nav-open .bottom-dock-close:active { transform: scale(0.94); }
+
+  /* Out of the way while a modal is open or the keyboard is up for a field; it slides fully below the
+     screen edge while fading, and only turns invisible once the slide has finished.
      body.modal-open is the panel's modal lock (some pages set it themselves); .ui-modal.open covers the rest. */
-  body.nav-open .bottom-dock,
   body.modal-open .bottom-dock,
   body:has(.ui-modal.open) .bottom-dock,
   body:has(:is(input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="range"]), textarea, select, [contenteditable="true"]):focus) .bottom-dock {
@@ -238,6 +300,12 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .bottom-dock,
-  .bottom-dock-item { transition: none; }
-  .bottom-dock-item:active { transform: none; }
+  .bottom-dock-bar,
+  .bottom-dock-item,
+  .bottom-dock-close,
+  body.nav-open .bottom-dock-bar,
+  body.nav-open .bottom-dock-item,
+  body.nav-open .bottom-dock-close { transition: none; }
+  .bottom-dock-item:active,
+  body.nav-open .bottom-dock-close:active { transform: none; }
 }

@@ -75,6 +75,12 @@
   /* Hide is quicker than show: it gets out of the way, then settles back in with a soft deceleration. */
   --dock-show: 360ms;
   --dock-hide: 240ms;
+  /* Folding into the drawer's close button: the items fade first, the capsule folds, the × turns in;
+     unfolding runs the same steps backwards. */
+  --dock-morph: 380ms;
+  --dock-morph-lead: 80ms;
+  --dock-morph-items: 160ms;
+  --topbar-search-w: 11rem;
   --dock-ico: 20px;
   --dock-label-fs: 11px;
   --dock-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
@@ -181,6 +187,7 @@ a:hover { opacity: 0.8; }
 .page-title > span,
 .page-title > strong,
 .brand strong,
+.topbar-brand strong,
 .nav a,
 .dnd-item > span:not(.dnd-actions),
 .svc-item-title strong,
@@ -198,6 +205,7 @@ th, td:not(.col-actions),
 .page-title > span,
 .page-title > strong,
 .brand strong,
+.topbar-brand strong,
 .nav a,
 .dnd-item > span:not(.dnd-actions),
 .progress-meta > span,
