@@ -32,10 +32,25 @@ DOT_LABELS: dict[str, str] = {
 MARKETING_KEY = "marketing"
 
 # Phone bottom bar: dashboard and action center, then the most used pages the viewer may open.
+# The owner can put other pages first (app/services/mobile_bar.py); these fill whatever is left.
 DOCK_SLOTS = 4
 DOCK_PRIORITY: tuple[str, ...] = (
     "home", "inbox", "finance", "users", "customers", "tickets", "pg_tickets", "pg_users", "plans",
 )
+# Entries that open the same page for different roles are one choice in the bar settings: choosing the
+# first key also brings the others, so the setting works for the owner, shops and PasarGuard staff alike.
+DOCK_ALIASES: dict[str, tuple[str, ...]] = {
+    "users": ("users", "customers"),
+    "tickets": ("tickets", "pg_tickets"),
+    "resellers": ("resellers", "my_resellers"),
+    "bot_settings": ("bot_settings", "shop_settings"),
+}
+# Labels in the settings list, which is one flat list in the panel's dropdown: each must say which page it is.
+_DOCK_CHOICE_LABELS: dict[str, str] = {
+    "users": "کاربران ربات / مشتریان",
+    "bot_settings": "تنظیمات ربات / فروشگاه",
+    "pg_users": "کاربران پاسارگارد",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,15 +280,26 @@ def build_sidebar(viewer: NavViewer, *, path: str, tab: str = "") -> tuple[NavSe
     return tuple(sections)
 
 
-def build_dock(sections: Iterable[NavSection]) -> NavDock:
+def dock_order(preferred: Iterable[str] = ()) -> tuple[str, ...]:
+    """Bar keys in order: the configured choices (with their role aliases), then ``DOCK_PRIORITY``."""
+    order: list[str] = []
+    for key in (*preferred, *DOCK_PRIORITY):
+        for alias in DOCK_ALIASES.get(key, (key,)):
+            if alias not in order:
+                order.append(alias)
+    return tuple(order)
+
+
+def build_dock(sections: Iterable[NavSection], preferred: Iterable[str] = ()) -> NavDock:
     """Phone bottom bar for the sidebar ``sections`` the viewer was given.
 
-    Items come in ``DOCK_PRIORITY`` order; a second entry for a page already in the bar (PasarGuard staff who
-    also hold the shop's ticket right see «پشتیبانی» twice in the sidebar) is skipped."""
+    Items come in ``dock_order(preferred)``: pages the viewer may not open are skipped and the default order
+    fills the rest. A second entry for a page already in the bar (PasarGuard staff who also hold the shop's
+    ticket right see «پشتیبانی» twice in the sidebar) is skipped."""
     by_key = {item.key: item for section in sections for item in section.items}
     items: list[NavItem] = []
     hrefs: set[str] = set()
-    for key in DOCK_PRIORITY:
+    for key in dock_order(preferred):
         item = by_key.get(key)
         if item is None or item.href in hrefs:
             continue
@@ -281,6 +307,30 @@ def build_dock(sections: Iterable[NavSection]) -> NavDock:
         hrefs.add(item.href)
     items = tuple(items[:DOCK_SLOTS])
     return NavDock(items=items, more_active=not any(item.active for item in items))
+
+
+@dataclass(frozen=True, slots=True)
+class DockChoice:
+    """A page the owner can put in the phone bar, with the sidebar section it belongs to."""
+
+    key: str
+    label: str
+    section: str
+
+
+def dock_choices() -> tuple[DockChoice, ...]:
+    """Every sidebar page once, in sidebar order, for the bar settings; role aliases fold into one choice."""
+    folded = {alias for keys in DOCK_ALIASES.values() for alias in keys[1:]}
+    groups = (("سیستم", (*_SYSTEM_OWNER, *_SYSTEM_STAFF)), ("فروشگاه", _SHOP_ITEMS), ("پاسارگارد", _PG_ITEMS))
+    choices: list[DockChoice] = []
+    seen: set[str] = set()
+    for section, specs in groups:
+        for spec in specs:
+            if spec.key in folded or spec.key in seen:
+                continue
+            seen.add(spec.key)
+            choices.append(DockChoice(spec.key, _DOCK_CHOICE_LABELS.get(spec.key, spec.label), section))
+    return tuple(choices)
 
 
 _ALL_SPECS: dict[str, _ItemSpec] = {
