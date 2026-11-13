@@ -59,10 +59,15 @@ class ResellerBotManager:
         async with self._lock:
             await self._stop_locked(reseller_profile_id)
             # app.bot imports this module; import here, like chat_menu below, to avoid a cycle.
+            from app.bot import telegram_session
             from app.bot.chat_screen import install_screen_rules
             from app.bot.screen_replay import install_replay_guard
 
-            bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+            bot = Bot(
+                token=token,
+                session=telegram_session(),
+                default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+            )
             bot = install_screen_rules(install_replay_guard(bot))
             registered = False
             try:

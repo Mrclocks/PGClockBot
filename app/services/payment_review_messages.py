@@ -111,7 +111,9 @@ async def sync_review_messages(
             token = get_settings().bot_token
             if not token:
                 return 0
-            send_bot, should_close = Bot(token=token), True
+            from app.bot import telegram_session
+
+            send_bot, should_close = Bot(token=token, session=telegram_session()), True
     if send_bot is None:
         return 0
     updated = 0

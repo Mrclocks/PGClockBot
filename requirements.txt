@@ -1,4 +1,4 @@
-aiogram>=3.29.1,<4
+aiogram>=3.15,<4
 fastapi>=0.115,<1
 uvicorn[standard]>=0.32,<1
 sqlalchemy[asyncio]>=2.0,<3
@@ -21,4 +21,8 @@ bcrypt>=4.0.1,<4.1
 greenlet>=3.1
 # Transitive floor for aiogram's aiohttp (request-smuggling / DoS fixes)
 aiohttp>=3.14.1
+# Proxy support for aiogram AiohttpSession: http, socks4, socks5 and proxy chains
+aiohttp-socks>=0.6
+# Enables SOCKS proxies for the httpx client used in app/services/tg_http.py
+socksio>=1.0
 cryptography>=41,<46

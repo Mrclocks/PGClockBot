@@ -267,18 +267,24 @@ def cmd_doctor(ctx: CliContext) -> int:
     # Bot getMe — never print token
     if bot_token:
         try:
-            req = urllib.request.Request(
-                f"https://api.telegram.org/bot{bot_token}/getMe", method="GET"
-            )
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                body = json.loads(resp.read().decode("utf-8", errors="replace"))
+            import httpx
+
+            from app.config import get_settings
+
+            proxy = (get_settings().tg_proxy or "").strip()
+            kwargs: dict[str, object] = {"timeout": 5}
+            if proxy:
+                kwargs["proxy"] = proxy
+            with httpx.Client(**kwargs) as client:
+                resp = client.get(f"https://api.telegram.org/bot{bot_token}/getMe")
+                body = resp.json()
             if body.get("ok"):
                 uname = ((body.get("result") or {}).get("username")) or "?"
                 add("bot_getMe", "OK", f"@{uname}")
             else:
                 add("bot_getMe", "FAIL", "telegram rejected token", fix="rotate BOT_TOKEN")
         except Exception as e:
-            add("bot_getMe", "FAIL", str(e)[:160], fix="check BOT_TOKEN / network")
+            add("bot_getMe", "FAIL", str(e)[:160], fix="check BOT_TOKEN / network / TG_PROXY")
     else:
         add("bot_getMe", "WARN", "skipped — no BOT_TOKEN")
 

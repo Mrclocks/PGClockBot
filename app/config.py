@@ -112,6 +112,10 @@ class Settings(BaseSettings):
 
     bot_token: str = Field(default="", alias="BOT_TOKEN")
     bot_username: str = Field(default="", alias="BOT_USERNAME")
+    # Optional HTTP/HTTPS proxy for Telegram Bot API calls (aiogram AiohttpSession).
+    # Use when the server cannot reach api.telegram.org directly (e.g. behind an
+    # outbound proxy at http://127.0.0.1:10809). Empty = direct connection.
+    tg_proxy: str = Field(default="", alias="TG_PROXY")
     # NoDecode: prevent pydantic-settings from json.loads("") on empty ADMIN_IDS
     admin_ids: Annotated[List[int], NoDecode, BeforeValidator(_parse_admin_ids)] = Field(
         default_factory=list,
