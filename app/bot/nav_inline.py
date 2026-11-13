@@ -366,8 +366,6 @@ def topup_methods_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 @editable_screen("c.wallet")
 def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    from app.services.users import on
-
     rows = [
         [
             _ikb(
@@ -386,18 +384,6 @@ def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             ),
         ],
     ]
-    if on((ui or {}).get("loyalty_enabled")):
-        rows.append(
-            [
-                _ikb(
-                    _t(ui, "btn_loyalty") or "⭐ باشگاه",
-                    callback_data="nv:loy:home",
-                    ui=ui,
-                    label_key="btn_loyalty",
-                    style_id="loyalty",
-                )
-            ]
-        )
     rows.append(
         [
             _ikb(
