@@ -5320,5 +5320,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     from starlette.middleware.gzip import GZipMiddleware
 
     app.add_middleware(PanelConnectionMiddleware)
-    app.add_middleware(GZipMiddleware, minimum_size=400)
+    # Level 6, not the default 9: measured on panel.css (367 KB) 7 ms instead of 14 ms of CPU per
+    # response for 71.0 KB instead of 70.3 KB; panel.js 4 ms instead of 12.5 ms for the same size.
+    app.add_middleware(GZipMiddleware, minimum_size=400, compresslevel=6)
     return app
