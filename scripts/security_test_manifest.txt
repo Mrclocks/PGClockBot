@@ -496,3 +496,4 @@ tests/test_random_discount_purge.py
 tests/test_random_discount_code_namespace.py
 tests/test_renewal_categories.py
 tests/test_miniapp_renewal_options.py
+tests/test_magic_links_bot_token.py
