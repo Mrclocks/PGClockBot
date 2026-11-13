@@ -91,6 +91,7 @@ from app.services.psp_gateways import psp_gateways_form_json
 from app.services.panel_assets import asset_version, get_panel_asset_cache_key
 from app.services.redact import operator_error
 from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.mobile_bar import load_bar_form, load_bar_order
 from app.services.panel_brand import (
     BRAND_PRESET_CSS,
     DEFAULT_BRAND,
@@ -144,6 +145,7 @@ from app.api.billing_report_pages import register_billing_report_pages
 from app.api.child_pricing_pages import register_child_pricing_pages
 from app.api.shop_points_pages import register_shop_points_pages
 from app.api.shop_customer_block_pages import register_shop_customer_block_pages
+from app.api.mobile_bar_settings import register_mobile_bar_settings
 from app.api.panel_brand_pages import register_panel_brand_pages
 from app.api.trial_users_pages import register_trial_users_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
@@ -329,6 +331,7 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     ctx.setdefault("csp_nonce", nonce)
     ctx.setdefault("panel_brand", getattr(request.state, "panel_brand", None) or DEFAULT_BRAND)
     ctx.setdefault("panel_brand_css", BRAND_PRESET_CSS)
+    ctx.setdefault("mobile_bar_order", getattr(request.state, "mobile_bar_order", ()))
     if "pwa_name" not in ctx:
         try:
             from app.services.pwa import panel_display_name
@@ -834,6 +837,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         await recover_session(session)
         # Header brand of the shop this person works for (default on any failure).
         request.state.panel_brand = await brand_for_staff(session, user)
+        # The owner's page order for the phone bar (cached; the default order on any failure).
+        request.state.mobile_bar_order = await load_bar_order(session)
         finish_panel_authentication(request)
         return user
 
@@ -1634,6 +1639,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_shop_customer_block_pages(app, require_staff=require_staff, get_db=get_db)
     register_trial_users_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_panel_brand_pages(app, require_staff=require_staff, get_db=get_db)
+    register_mobile_bar_settings(app, require_admin=require_admin, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
     register_connection_status_pages(app, render=render, require_staff=require_staff, get_db=get_db)
 
@@ -4535,6 +4541,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             from app.services.pwa import load_pwa_settings
 
             ctx["pwa"] = await load_pwa_settings(session)
+            ctx["mobile_bar"] = await load_bar_form(session)
             ctx["brand_values"] = await load_own_values(session, None)
             ctx["brand_form_action"] = "/panel-brand"
         elif tab == "backup":

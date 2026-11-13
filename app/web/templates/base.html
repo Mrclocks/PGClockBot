@@ -217,8 +217,8 @@
 
     <div class="side-backdrop" id="side-backdrop" aria-hidden="true"></div>
 
-    {# Phone bottom bar: the most used sidebar items plus «منو» (the full sidebar as a drawer); it becomes the drawer's close button. #}
-    {% set dock = panel_dock(nav_sections) if (nav_sections and panel_dock is defined) else none %}
+    {# Phone bottom bar: sidebar items in the owner's order (default: the most used) plus «منو» (the full sidebar as a drawer); it becomes the drawer's close button. #}
+    {% set dock = panel_dock(nav_sections, mobile_bar_order|default(())) if (nav_sections and panel_dock is defined) else none %}
     {% if dock and dock.items %}
     <div class="bottom-dock" data-bottom-dock>
       <nav class="bottom-dock-bar" aria-label="دسترسی سریع">
