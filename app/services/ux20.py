@@ -104,8 +104,17 @@ async def resolve_pg_open_url(session: AsyncSession, *, is_admin: bool) -> str:
     return await get_reseller_pg_panel_base_url(session)
 
 
-async def check_pg_connection(*, reseller_user_id: int | None = None, session: AsyncSession | None = None) -> dict[str, Any]:
-    """Lightweight PasarGuard reachability probe."""
+async def check_pg_connection(
+    *,
+    reseller_user_id: int | None = None,
+    session: AsyncSession | None = None,
+    stats_max_age: float | None = None,
+) -> dict[str, Any]:
+    """Lightweight PasarGuard reachability probe.
+
+    ``stats_max_age`` lets a page reuse system stats it already read (the dashboard overview reads them
+    just before); the live ``/home/pg-health`` endpoint leaves it unset.
+    """
     try:
         if reseller_user_id and session is not None:
             from app.services.pasarguard import get_pg_for_reseller
@@ -118,7 +127,7 @@ async def check_pg_connection(*, reseller_user_id: int | None = None, session: A
         await pg.ensure_token()
         stats = None
         try:
-            stats = await pg.get_system_stats()
+            stats = await pg.get_system_stats(cache_max_age=stats_max_age)
         except Exception as exc:
             if not is_pg_permission_denied(exc):
                 raise

@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import logging
+import time
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -61,8 +65,56 @@ def _tone_class(pct: float | None) -> str:
     return "ok"
 
 
+# Telegram getMe answers for dashboard tiles. A working bot is re-checked every minute, a failing one
+# sooner; a changed token is a different key, so it is checked at once.
+BOT_PROBE_TTL_SEC = 60.0
+BOT_PROBE_FAILURE_TTL_SEC = 15.0
+BOT_PROBE_CACHE_SIZE = 256
+BOT_PROBE_TIMEOUT_SEC = 6.0
+_bot_probe_cache: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
+_telegram_client: httpx.AsyncClient | None = None
+_log = logging.getLogger(__name__)
+
+
+def _telegram_http() -> httpx.AsyncClient:
+    """One client for every probe, so repeated dashboard loads reuse its connection to Telegram."""
+    global _telegram_client
+    if _telegram_client is None or _telegram_client.is_closed:
+        _telegram_client = httpx.AsyncClient(timeout=BOT_PROBE_TIMEOUT_SEC)
+    return _telegram_client
+
+
+async def close_bot_probe_client() -> None:
+    """Close the shared getMe client on shutdown; the next probe opens a new one."""
+    global _telegram_client
+    client, _telegram_client = _telegram_client, None
+    if client is not None and not client.is_closed:
+        await client.aclose()
+
+
+async def _probe_bot(token: str) -> dict[str, Any]:
+    try:
+        resp = await _telegram_http().get(f"https://api.telegram.org/bot{token}/getMe")
+        data = resp.json()
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
+        # The request URL carries the token, so only the error type is logged and nothing is returned.
+        _log.warning("Telegram getMe failed: %s", type(exc).__name__)
+        return {"ok": False, "error": "عدم اتصال به تلگرام", "username": None, "name": None}
+    if isinstance(data, dict) and data.get("ok") and isinstance(data.get("result"), dict):
+        me = data["result"]
+        return {
+            "ok": True,
+            "error": None,
+            "username": me.get("username"),
+            "name": me.get("first_name"),
+            "id": me.get("id"),
+        }
+    description = data.get("description") if isinstance(data, dict) else None
+    return {"ok": False, "error": description or "توکن نامعتبر", "username": None, "name": None}
+
+
 async def check_bot_connection(token: str | None = None) -> dict[str, Any]:
-    """Probe Telegram getMe for the given token only.
+    """Probe Telegram getMe for the given token only, through a short per-token cache.
 
     Never falls back to the platform admin BOT_TOKEN. Callers that need the
     main bot must pass that token explicitly — empty/missing means unset.
@@ -70,33 +122,18 @@ async def check_bot_connection(token: str | None = None) -> dict[str, Any]:
     token = (token or "").strip()
     if not token:
         return {"ok": False, "error": "توکن تنظیم نشده", "username": None, "name": None}
-    try:
-        async with httpx.AsyncClient(timeout=6.0) as client:
-            resp = await client.get(f"https://api.telegram.org/bot{token}/getMe")
-            data = resp.json()
-        if data.get("ok") and isinstance(data.get("result"), dict):
-            me = data["result"]
-            return {
-                "ok": True,
-                "error": None,
-                "username": me.get("username"),
-                "name": me.get("first_name"),
-                "id": me.get("id"),
-            }
-        return {
-            "ok": False,
-            "error": data.get("description") or "توکن نامعتبر",
-            "username": None,
-            "name": None,
-        }
-    except Exception as exc:
-        return {
-            "ok": False,
-            "error": "عدم اتصال به تلگرام",
-            "detail": str(exc),
-            "username": None,
-            "name": None,
-        }
+    key = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    now = time.monotonic()
+    hit = _bot_probe_cache.get(key)
+    if hit and now < hit[0]:
+        return dict(hit[1])
+    result = await _probe_bot(token)
+    ttl = BOT_PROBE_TTL_SEC if result["ok"] else BOT_PROBE_FAILURE_TTL_SEC
+    _bot_probe_cache[key] = (now + ttl, result)
+    _bot_probe_cache.move_to_end(key)
+    while len(_bot_probe_cache) > BOT_PROBE_CACHE_SIZE:
+        _bot_probe_cache.popitem(last=False)
+    return dict(result)
 
 
 def _summarize_nodes(nodes: list | None) -> dict[str, Any]:

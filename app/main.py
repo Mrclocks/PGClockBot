@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.db.models import Plan
 from app.db.session import SessionLocal, init_db
 from app.jobs.scheduler import start_background_scheduler, start_scheduler, stop_scheduler
+from app.services.home_overview import close_bot_probe_client
 from app.services.pasarguard import get_pg
 from app.services.users import ensure_default_settings
 from app.services.web_auth import load_web_admin
@@ -319,6 +320,10 @@ def main() -> None:
                     logger.debug("lifespan: ignored failure", exc_info=True)
             try:
                 await get_pg().close()
+            except Exception:
+                logger.debug("lifespan: ignored failure", exc_info=True)
+            try:
+                await close_bot_probe_client()
             except Exception:
                 logger.debug("lifespan: ignored failure", exc_info=True)
             if bot is not None:
