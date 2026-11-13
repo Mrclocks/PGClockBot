@@ -231,6 +231,7 @@ class RenderedBottomBarTests(unittest.TestCase):
         self.assertRegex(header.split('class="topbar-brand-text"')[1], r'^>\s*<strong dir="auto">[^<]+</strong>')
         self.assertIn('class="topbar-version"', header)
         self.assertIn('id="panel-search-input-top"', header)
+        self.assertRegex(header, r'<button type="button" class="topbar-search-close" aria-label="بستن جستجو" data-panel-search-clear>')
         self.assertIn("data-panel-search-input", header)
         self.assertNotIn("menu-toggle", html)
 

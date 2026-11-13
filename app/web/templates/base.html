@@ -95,6 +95,10 @@
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input id="panel-search-input-top" type="search" autocomplete="off" maxlength="60" placeholder="جستجو…"
                aria-controls="panel-search-results-top" aria-expanded="false" data-panel-search-input />
+        {# Takes the magnifier's place while the field is open: clears it and folds it back into the circle. #}
+        <button type="button" class="topbar-search-close" aria-label="بستن جستجو" data-panel-search-clear>
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
         <div id="panel-search-results-top" class="side-search-results" role="listbox" aria-label="نتیجه‌های جستجو" hidden data-panel-search-results></div>
       </div>
     </header>

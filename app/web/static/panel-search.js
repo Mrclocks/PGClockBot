@@ -158,6 +158,17 @@
     document.addEventListener("click", (event) => {
       if (!wrap.contains(event.target)) close();
     });
+    const clear = wrap.querySelector("[data-panel-search-clear]");
+    if (clear) {
+      clear.addEventListener("click", () => {
+        clearTimeout(timer);
+        seq++;
+        input.value = "";
+        close();
+        clear.blur();
+        input.blur();
+      });
+    }
   }
 
   const api = { nextIndex, isSafeHref, normalizeQuery, renderHits, isSearchHotkey };
