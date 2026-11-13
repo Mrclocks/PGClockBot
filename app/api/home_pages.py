@@ -16,6 +16,7 @@ from app.services.dashboard_trend import empty_trend, own_account_summary, sales
 from app.services.host_gauges import gauges_json, local_host_gauges
 from app.services.home_overview import build_home_overview, reseller_shop_summary
 from app.services import pg_link_health
+from app.services.pg_read_cache import SYSTEM_SUMMARY_MAX_AGE_SEC
 from app.services.pg_read_resilience import circuit_status
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 from app.services.secret_box import reveal_bot_token
@@ -166,7 +167,11 @@ async def _parallel_home_ops(*, reseller_id: int | None, funnel_enabled: bool, e
 
 
 async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
-    """Display-only PG reachability — never used for allow/deny."""
+    """Display-only PG reachability — never used for allow/deny.
+
+    Reuses system stats up to SYSTEM_SUMMARY_MAX_AGE_SEC old, as the overview does, so the dashboard
+    does not read them from the panel a second time.
+    """
     from app.services.db_safe import rollback_quiet
     from app.services.panel_display_timeout import display_await
     from app.services.ux20 import check_pg_connection
@@ -174,7 +179,7 @@ async def _safe_pg_health(*, reseller_user_id: int | None = None, session: Async
     async def _probe():
         try:
             return await check_pg_connection(
-                reseller_user_id=reseller_user_id, session=session
+                reseller_user_id=reseller_user_id, session=session, stats_max_age=SYSTEM_SUMMARY_MAX_AGE_SEC
             )
         except Exception:
             logger.exception("pg_health failed reseller_user_id=%s", reseller_user_id)
@@ -315,19 +320,54 @@ async def _safe_pg_limits(staff: dict, session: AsyncSession, *, label: str) -> 
     return ov if ov and ov.get("ready") else None
 
 
+async def _pg_limits_in_own_session(staff: dict, *, label: str) -> dict | None:
+    async with SessionLocal() as own:
+        return await _safe_pg_limits(staff, own, label=label)
+
+
+async def _shop_pg_state(staff: dict, rid: int) -> tuple[dict | None, dict]:
+    """The shop's PasarGuard limits and reachability, read at the same time in their own sessions.
+
+    A shop without its own PasarGuard login shows the platform panel's reachability, as before.
+    """
+    if not staff.get("pg_admin_username"):
+        return None, await _safe_pg_health()
+
+    async def health() -> dict:
+        async with SessionLocal() as own:
+            return await _safe_pg_health(reseller_user_id=rid, session=own)
+
+    limits, pg_health = await asyncio.gather(
+        _pg_limits_in_own_session(staff, label="reseller_home_pg_overview"), health()
+    )
+    return limits, pg_health
+
+
 async def _owner_home_context(staff: dict, session: AsyncSession):
     """Platform admin: server and both panels."""
     from app.services.db_safe import recover_session, rollback_quiet
 
     await recover_session(session)
     show_pg_nodes = "pg_nodes" in (staff.get("pg_permissions") or [])
-    overview = await _safe_home_overview(session, include_nodes=show_pg_nodes)
-    # settings uses session; pg_health (platform) does not — safe to gather.
-    ui, pg_health = await asyncio.gather(_safe_settings(session, reseller_id=None), _safe_pg_health())
-    funnel_enabled, expire_days = _ops_options(ui)
-    (funnel, periods, action_center), trend = await asyncio.gather(
+    # Settings come from a short in-process cache; everything slow below runs at the same time.
+    funnel_enabled, expire_days = _ops_options(await _safe_settings(session, reseller_id=None))
+
+    async def overview_then_health() -> tuple[dict, dict]:
+        # The health probe follows the overview so it reuses the system stats the overview just read.
+        overview = await _safe_home_overview(session, include_nodes=show_pg_nodes)
+        return overview, await _safe_pg_health()
+
+    async def hybrid_limits() -> dict | None:
+        if staff.get("pg_is_owner") is not False:
+            return None
+        return await _pg_limits_in_own_session(staff, label="hybrid_home_pg_limits")
+
+    # Only overview_then_health uses the request session; the other steps open their own.
+    (overview, pg_health), (funnel, periods, action_center), trend, pg_limits = await asyncio.gather(
+        overview_then_health(),
         _parallel_home_ops(reseller_id=None, funnel_enabled=funnel_enabled, expire_days=expire_days),
         _safe_trend(reseller_id=None),
+        hybrid_limits(),
     )
     action_center = await _visible_action_center(session, staff, action_center)
     wallet_card = None
@@ -336,9 +376,6 @@ async def _owner_home_context(staff: dict, session: AsyncSession):
     except Exception:
         logger.exception("owner home account card failed")
         await rollback_quiet(session)
-    pg_limits = None
-    if staff.get("pg_is_owner") is False:
-        pg_limits = await _safe_pg_limits(staff, session, label="hybrid_home_pg_limits")
     return (
         "home.html",
         {
@@ -454,26 +491,17 @@ async def _shop_home_context(staff: dict, session: AsyncSession, rid: int):
     await recover_session(session)
     profile = await _shop_profile(session, rid)
     bot_setup_needed = bot_needs_setup(profile)
-    # stats uses session; bot probe does not — safe to gather.
-    stats, bot = await asyncio.gather(
-        _shop_stats(session, rid, bot_setup_needed=bot_setup_needed), _shop_bot_probe(profile)
-    )
-    pg_limits = None
-    if staff.get("pg_admin_username"):
-        pg_limits = await _safe_pg_limits(staff, session, label="reseller_home_pg_overview")
-        await _warn_capacity(session, profile, pg_limits)
-    billing_card = await _shop_billing_card(session, profile, rid)
-    ui = await _safe_settings(session, reseller_id=rid)
-    # Reseller pg_health may use session — after settings, not gathered with it.
-    pg_health = await _safe_pg_health(
-        reseller_user_id=rid if staff.get("pg_admin_username") else None,
-        session=session if staff.get("pg_admin_username") else None,
-    )
-    funnel_enabled, expire_days = _ops_options(ui)
-    (funnel, periods, action_center), trend = await asyncio.gather(
+    funnel_enabled, expire_days = _ops_options(await _safe_settings(session, reseller_id=rid))
+    # Only the shop stats use the request session; the bot probe needs none and the rest open their own.
+    stats, bot, (pg_limits, pg_health), (funnel, periods, action_center), trend = await asyncio.gather(
+        _shop_stats(session, rid, bot_setup_needed=bot_setup_needed),
+        _shop_bot_probe(profile),
+        _shop_pg_state(staff, rid),
         _parallel_home_ops(reseller_id=rid, funnel_enabled=funnel_enabled, expire_days=expire_days),
         _safe_trend(reseller_id=rid),
     )
+    await _warn_capacity(session, profile, pg_limits)
+    billing_card = await _shop_billing_card(session, profile, rid)
     action_center = await _visible_action_center(session, staff, action_center)
     return (
         "reseller_home.html",
