@@ -8095,7 +8095,8 @@ html[data-theme="light"] {
   --accent-fg: var(--brand-fg);
   --accent-soft: color-mix(in srgb, var(--brand) 10%, transparent);
   --danger: var(--destructive);
-  --side-dim: rgba(0, 0, 0, 0.32);
+  /* Light enough that the frosted menu over it still reads as glass, not a grey film. */
+  --side-dim: rgba(0, 0, 0, 0.18);
   --table-head-bg: color-mix(in srgb, var(--muted) 72%, var(--bg-card));
 }
 html[data-theme="light"] * { scrollbar-color: #d4d4d8 transparent; }

@@ -268,14 +268,6 @@
 
   /* Drawer open: above the dim (the drawer itself is on the other side), folded into the red ×. */
   body.nav-open .bottom-dock { z-index: 5250; }
-  /* Over the dim the glass would turn into a grey film, and its blur would cost frames while the sheet moves:
-     header and bar take the solid frost colour instead. */
-  body.nav-open .bottom-dock-bar,
-  body.nav-open .topbar {
-    background: var(--modal-frost-bg-fallback);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
   body.nav-open .bottom-dock-bar {
     clip-path: inset(0 calc(100% - var(--dock-h)) 0 0 round var(--dock-h));
     transition: clip-path var(--dock-morph) var(--ease-standard);
@@ -327,8 +319,8 @@
    The sidebar's own items become tiles, four per row, grouped by section with the section's colour:
    web panel neutral, shop orange, PasarGuard blue. Every section is open (no accordion on phones).
    Theme and help share the top row; the signed-in user and «خروج» close the sheet.
-   Only transform and opacity move, the sheet is solid (no blur), and the dim is a plain colour,
-   so weak phones keep their frame rate. —— */
+   The sheet has the same matte glass as the header and the bar. Only transform and opacity move and the dim
+   is a plain colour (no blur), so weak phones keep their frame rate. —— */
 @media (max-width: 900px) {
   .side {
     top: auto;
@@ -348,11 +340,12 @@
     height: auto;
     max-height: calc(100svh - var(--hdr-top) - 2 * var(--dock-h) - 3 * var(--dock-edge) - var(--dock-bottom));
     padding: var(--space-2) var(--space-2) 0;
+    /* The same matte glass as the bottom bar and the header. */
     border: 1px solid var(--modal-frost-line);
     border-radius: var(--radius);
-    background: var(--bg-card);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    background: var(--modal-frost-bg);
+    backdrop-filter: var(--modal-frost-blur);
+    -webkit-backdrop-filter: var(--modal-frost-blur);
     box-shadow: var(--sheet-shadow);
     overscroll-behavior: contain;
     transform: translate3d(0, calc(100% + var(--dock-h) + var(--dock-bottom) + var(--space-3)), 0);
@@ -483,6 +476,9 @@
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .bottom-dock-bar { background: var(--modal-frost-bg-fallback); }
+  @media (max-width: 900px) {
+    .side-panel { background: var(--modal-frost-bg-fallback); }
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .bottom-dock,
