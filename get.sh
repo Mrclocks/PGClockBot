@@ -34,9 +34,13 @@ unset _raw_branch
 if [[ "$CHANNEL_FROM_ENV" -eq 1 ]]; then
   export PGCLOCK_CHANNEL="$REMOTE_BRANCH"
 fi
-# Optional pin: tag or commit SHA (e.g. v10.0.0). When set, sync checks out this
-# ref instead of tracking the branch tip — prefer for production installs.
+# Optional pin: a release tag or full commit SHA. When set, sync checks out
+# this ref instead of tracking the branch tip — prefer for production installs.
+# Exported so pgclock.sh install/update keep the pin instead of moving to the tip.
 REMOTE_REF="${PGCLOCK_REF:-}"
+if [[ -n "$REMOTE_REF" ]]; then
+  export PGCLOCK_REF="$REMOTE_REF"
+fi
 
 info() { echo "  > $*"; }
 ok()   { echo "  + $*"; }
@@ -52,8 +56,7 @@ fi
 
 backup_runtime() {
   # Preserve config + DB outside of git reset
-  RUNTIME_BAK="$(mktemp -d /tmp/pgclock-runtime.XXXXXX)"
-  mkdir -p "$RUNTIME_BAK"
+  RUNTIME_BAK="$(mktemp -d "${TMPDIR:-/tmp}/pgclock-runtime.XXXXXX")"
   # Never copy .venv — it can be hundreds of MB and slows force-sync badly.
   for item in .env data; do
     if [[ -e "$item" ]]; then
@@ -73,24 +76,31 @@ backup_runtime() {
 restore_runtime() {
   local bak_dir="${1:-}"
   [[ -n "$bak_dir" && -d "$bak_dir" ]] || return 0
+  local copy_failed=0
   if [[ -e "${bak_dir}/.env" && ! -e .env ]]; then
-    cp -a "${bak_dir}/.env" .env
+    cp -a "${bak_dir}/.env" .env || copy_failed=1
     ok "Restored .env"
   elif [[ -e "${bak_dir}/.env" && -e .env ]]; then
     # Prefer existing .env in tree; keep backup copy nearby
-    cp -a "${bak_dir}/.env" ".env.restored.from.backup" 2>/dev/null || true
+    cp -a "${bak_dir}/.env" ".env.restored.from.backup" || copy_failed=1
   fi
   if [[ -d "${bak_dir}/data" ]]; then
     mkdir -p data
-    cp -a "${bak_dir}/data/." data/ 2>/dev/null || true
+    cp -a "${bak_dir}/data/." data/ || copy_failed=1
     ok "Restored data/"
   fi
   shopt -s nullglob
   local bak
   for bak in "${bak_dir}"/.env.bak.*; do
-    cp -a "$bak" . 2>/dev/null || true
+    cp -a "$bak" . || copy_failed=1
   done
   shopt -u nullglob
+  # The copy holds secrets, so drop it once everything is back in the tree.
+  if [[ "$copy_failed" -eq 0 ]]; then
+    rm -rf "$bak_dir"
+  else
+    warn "Some runtime files were not restored — copy kept at ${bak_dir}"
+  fi
 }
 
 force_sync_to_remote() {
@@ -104,11 +114,19 @@ force_sync_to_remote() {
   # Explicit refspec is required: a single-branch clone only tracks main, so
   # `git fetch origin dev` succeeds onto FETCH_HEAD but never creates origin/dev.
   if [[ -n "$REMOTE_REF" ]]; then
-    git fetch --no-tags --prune origin "$REMOTE_REF" \
-      || git fetch --tags --prune origin "$REMOTE_REF" \
-      || git fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'
-    git checkout -f "$REMOTE_REF"
-    git reset --hard "$REMOTE_REF"
+    if [[ "$REMOTE_REF" == -* ]]; then
+      err "PGCLOCK_REF is not a valid tag or commit: ${REMOTE_REF}"
+      return 1
+    fi
+    # The ref lands on FETCH_HEAD; a --no-tags clone has no local tag to check out.
+    git fetch --no-tags origin "$REMOTE_REF"
+    local pinned
+    if ! pinned="$(git rev-parse --verify -q 'FETCH_HEAD^{commit}')"; then
+      err "${REMOTE_REF} does not point at a commit"
+      return 1
+    fi
+    git checkout -f --detach "$pinned"
+    git reset --hard "$pinned"
   else
     if ! git config --get-all remote.origin.fetch 2>/dev/null \
         | grep -qx "+refs/heads/${REMOTE_BRANCH}:refs/remotes/origin/${REMOTE_BRANCH}"; then
@@ -167,13 +185,24 @@ git_update() {
   force_sync_to_remote
 }
 
+# Changing files under a live panel mixes old and new code (lazy imports,
+# templates). pgclock.sh update stops the service before it syncs.
+panel_service_running() {
+  command -v systemctl >/dev/null 2>&1 \
+    && systemctl is-active --quiet pgclockbot 2>/dev/null
+}
+
 ensure_repo() {
   if [[ -d "$ROOT" ]]; then
     cd "$ROOT"
     ok "Found existing folder: ${ROOT}"
 
     if [[ -d .git ]]; then
-      git_update
+      if panel_service_running; then
+        info "Panel service is running — code left as is (Update in the menu applies new code safely)"
+      else
+        git_update
+      fi
     elif [[ ! -f pgclock.sh && ! -f run.py ]]; then
       err "Folder exists but is empty/incomplete and has no .git: ${ROOT}"
       err "Remove or rename it, then re-run:"
@@ -198,6 +227,9 @@ ensure_repo() {
   git clone -b "$REMOTE_BRANCH" --single-branch "$REPO_URL" "$ROOT"
   cd "$ROOT"
   ok "Clone complete (branch: ${REMOTE_BRANCH})"
+  if [[ -n "$REMOTE_REF" ]]; then
+    force_sync_to_remote
+  fi
 }
 
 ensure_repo
@@ -232,7 +264,8 @@ fi
 
 # Pass through optional subcommand (install/update/...), default = menu
 # Re-attach TTY so the menu can read keyboard even when launched via curl|bash
-if [[ ! -t 0 && -r /dev/tty ]]; then
+# (/dev/tty can exist without a controlling terminal, e.g. under cron: probe it.)
+if [[ ! -t 0 ]] && { : </dev/tty; } 2>/dev/null; then
   exec bash pgclock.sh "${_args[@]}" </dev/tty
 fi
 exec bash pgclock.sh "${_args[@]}"
