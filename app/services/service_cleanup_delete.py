@@ -1,7 +1,8 @@
 """Delete the services whose cleanup deadline passed, with every safety check repeated at the point of deletion.
 
 A service is deleted only when all of this holds *now*:
-* its scope's rule is on and the customer already got the notice (stage 1 or later);
+* its scope's rule is on and the customer already got the notice (stage 1 or later), or the panel had already
+  removed it: it is marked missing and a fresh lookup confirms it is gone, so there was nothing left to warn about;
 * the panel, read again just now through the shop's own client, still says it is expired / out of volume
   and the deadline (later of the start and the switch-on, plus the days, or a staff hold) has passed;
 * it is not exempt, held, cancelled, waiting for a cancellation decision, under shop review, or covered by
@@ -20,7 +21,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import ColumnElement, and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, ServiceAutomation, UserService
@@ -99,6 +100,27 @@ async def _blocked_by_other_state(session: AsyncSession, service_ids: list[int])
     return {int(i) for i in open_orders.all() if i} | {int(i) for i in auto_renew.all() if i}
 
 
+def _warned_clause(kind: str, now: datetime) -> ColumnElement[bool]:
+    """The customer got the notice long enough ago."""
+    return and_(
+        stage_column(kind) >= STAGE_NOTICE,
+        UserService.cleanup_warned_at.is_not(None),
+        UserService.cleanup_warned_at <= now - MIN_WARNING_GAP,
+    )
+
+
+def _warning_clause(kind: str, now: datetime) -> ColumnElement[bool]:
+    """Warned, or already removed by the panel (which the delete step confirms again before acting)."""
+    return or_(_warned_clause(kind, now), UserService.panel_missing_at.is_not(None))
+
+
+def _was_warned(service: UserService, kind: str, now: datetime) -> bool:
+    return (
+        stage_of(service, kind) >= STAGE_NOTICE and service.cleanup_warned_at is not None
+        and _aware(service.cleanup_warned_at) <= now - MIN_WARNING_GAP
+    )
+
+
 def _due_clause(kind: str, policy: CleanupPolicy, now: datetime):
     make = time_due_clause if kind == KIND_TIME else volume_due_clause
     return make(policy, now)
@@ -124,9 +146,7 @@ async def _claim_lease(
             *eligible_clauses(),
             not_held_clause(now),
             over,
-            stage_column(kind) >= STAGE_NOTICE,
-            UserService.cleanup_warned_at.is_not(None),
-            UserService.cleanup_warned_at <= now - MIN_WARNING_GAP,
+            _warning_clause(kind, now),
             or_(UserService.cleanup_claimed_at.is_(None), UserService.cleanup_claimed_at < now - LEASE),
         )
         .values(cleanup_claimed_at=now),
@@ -145,7 +165,6 @@ async def delete_due_services(
     due = _due_clause(kind, policy, now)
     if due is None:
         return DeleteResult()
-    column = stage_column(kind)
     days = policy.time_days if kind == KIND_TIME else policy.volume_days
     rows = (
         await session.execute(
@@ -153,7 +172,7 @@ async def delete_due_services(
             .join(BotUser, BotUser.id == UserService.bot_user_id)
             .where(
                 shop_services_clause(shop_id), *eligible_clauses(), not_held_clause(now), due,
-                column >= STAGE_NOTICE, UserService.cleanup_warned_at <= now - MIN_WARNING_GAP, BotUser.is_blocked.is_(False),
+                _warning_clause(kind, now), BotUser.is_blocked.is_(False),
                 or_(UserService.cleanup_claimed_at.is_(None), UserService.cleanup_claimed_at < now - LEASE),
             )
             .order_by(UserService.id)
@@ -172,23 +191,23 @@ async def delete_due_services(
     await session.commit()
     # Decide for every service first, from the freshly read data: a failed delete rolls the session back,
     # which would expire the other loaded rows.
-    decisions: list[tuple[int, int]] = []
+    decisions: list[tuple[int, int, bool]] = []
     skipped = 0
     for service in services:
         service_id = int(service.id)
         deadline = deadline_for(service, policy, kind)
+        warned = _was_warned(service, kind, now)
+        removed_by_panel = service_id in gone and service.panel_missing_at is not None
         still_due = (
             (service_id in fresh or service_id in gone) and service_id not in blocked and is_over(service, kind, now)
-            and deadline is not None and deadline <= now and stage_of(service, kind) >= STAGE_NOTICE
-            and not service.cleanup_exempt and service.cleanup_warned_at is not None
-            and _aware(service.cleanup_warned_at) <= now - MIN_WARNING_GAP
+            and deadline is not None and deadline <= now and not service.cleanup_exempt and (warned or removed_by_panel)
         )
         if still_due:
-            decisions.append((service_id, telegram[service_id]))
+            decisions.append((service_id, telegram[service_id], not warned))
         else:
             skipped += 1
     deleted = failed = 0
-    for service_id, telegram_id in decisions:
+    for service_id, telegram_id, require_absent in decisions:
         # Open orders and automatic renewal are read again right before this service, not once per batch.
         if await _blocked_by_other_state(session, [service_id]) or not await _claim_lease(session, service_id, kind=kind, now=now):
             skipped += 1
@@ -196,7 +215,10 @@ async def delete_due_services(
         service = await session.get(UserService, service_id)
         if service is None:
             continue
-        outcome = await _delete_one(session, service, kind=kind, days=days, telegram_id=telegram_id, shop_id=shop_id, now=now)
+        outcome = await _delete_one(
+            session, service, kind=kind, days=days, telegram_id=telegram_id, shop_id=shop_id, now=now,
+            require_absent=require_absent,
+        )
         deleted += outcome == "deleted"
         failed += outcome == "failed"
         skipped += outcome == "skipped"
@@ -247,9 +269,13 @@ async def _release_lease(session: AsyncSession, service_id: int) -> None:
 
 async def _delete_one(
     session: AsyncSession, service: UserService, *, kind: str, days: int, telegram_id: int, shop_id: int | None,
-    now: datetime,
+    now: datetime, require_absent: bool = False,
 ) -> str:
-    """Delete one claimed service; on any failure the row and the lease stay as they were."""
+    """Delete one claimed service; on any failure the row and the lease stay as they were.
+
+    ``require_absent`` (a service never warned because the panel had removed it) stops the deletion
+    when the panel user turns out to exist again.
+    """
     service_id, user_id = int(service.id), int(service.bot_user_id)
     name, owner_shop = service.pg_username or "", service.shop_id
     pg_user_id = int(service.pg_user_id) if service.pg_user_id else None
@@ -263,7 +289,7 @@ async def _delete_one(
         # One last read right before the irreversible step: a renewal made in the panel meanwhile stops it.
         # A clean 404 means the panel user is already gone and only the local row is left to remove.
         record = await _read_panel_user(pg, pg_user_id)
-        if record is not None and not _still_over(record, kind, now):
+        if record is not None and (require_absent or not _still_over(record, kind, now)):
             await _release_lease(session, service_id)
             return "skipped"
         await ensure_pg_user_removed_or_absent(pg, pg_user_id, staff=None, allow_disable_fallback=False)

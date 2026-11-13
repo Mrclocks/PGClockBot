@@ -18,6 +18,7 @@ from app.db import Base
 from app.db.models import BotUser, CustomerNotice, ResellerProfile, UserService
 from app.services import service_cleanup as cleanup
 from app.services import service_cleanup_notices as notices
+from app.services.pasarguard import PasarGuardError
 from app.services.customer_action_notices import CLEANUP_NOTICE_TEXTS, deliver_notice, notice_text
 from app.services.service_cleanup import KIND_TIME, KIND_VOLUME, CleanupPolicy
 from app.services.users import clear_settings_cache
@@ -206,6 +207,20 @@ class SkipTests(NoticeCase):
         panel = FakePanel({1000 + i: user_info(expire=old) for i in range(1, 6)})
         result = await self.scan(panel, limit=2)
         self.assertEqual((result.queued, len(panel.calls)), (2, 2))
+
+
+class PanelRemovedTests(NoticeCase):
+    async def test_services_the_panel_already_removed_cannot_stop_the_warnings_for_the_rest(self) -> None:
+        old = NOW - timedelta(days=2)
+        for i in range(1, 4):
+            await self.add(i, quota_expire_at=old, panel_missing_at=NOW - timedelta(days=1))
+        await self.add(4, quota_expire_at=old)
+        missing = PasarGuardError("not found", 404)
+        panel = FakePanel({1001: missing, 1002: missing, 1003: missing, 1004: user_info(expire=old)})
+        result = await self.scan(panel, limit=3)
+        self.assertEqual(result.queued, 1)
+        self.assertEqual(panel.calls, [1004])
+        self.assertEqual([r.service_id for r in await self.queued()], [4])
 
 
 class VolumeStageTests(NoticeCase):
