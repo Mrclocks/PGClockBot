@@ -153,11 +153,21 @@ class ShopDashboardTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PgHealthStatsReuseTests(unittest.IsolatedAsyncioTestCase):
-    async def test_dashboard_probe_reuses_recent_system_stats(self) -> None:
+    async def test_dashboard_probe_reuses_only_a_few_seconds_old_system_stats(self) -> None:
         probe = AsyncMock(return_value={"ok": True})
-        with patch("app.services.ux20.check_pg_connection", probe):
+        with patch.object(home_pages, "circuit_status", return_value={"paused": False}), \
+                patch("app.services.ux20.check_pg_connection", probe):
             await home_pages._safe_pg_health()
-        self.assertEqual(probe.await_args.kwargs["stats_max_age"], SYSTEM_SUMMARY_MAX_AGE_SEC)
+        max_age = probe.await_args.kwargs["stats_max_age"]
+        self.assertEqual(max_age, home_pages.PG_REACHABILITY_MAX_AGE_SEC)
+        self.assertLessEqual(max_age, 15, "an outage must not show as connected for long")
+
+    async def test_dashboard_probe_asks_the_panel_while_its_circuit_is_paused(self) -> None:
+        probe = AsyncMock(return_value={"ok": None, "unchecked": True})
+        with patch.object(home_pages, "circuit_status", return_value={"paused": True}), \
+                patch("app.services.ux20.check_pg_connection", probe):
+            await home_pages._safe_pg_health()
+        self.assertIsNone(probe.await_args.kwargs["stats_max_age"])
 
     async def test_live_endpoint_probe_keeps_reading_fresh_stats(self) -> None:
         from app.services import ux20
@@ -231,6 +241,13 @@ class BotProbeCacheTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(home_overview.time, "monotonic", return_value=soon):
             await home_overview.check_bot_connection("123:SECRET")
         self.assertEqual(len(self.requests), 2)
+
+    async def test_shutdown_closes_the_shared_client_and_a_later_probe_opens_a_new_one(self) -> None:
+        client = home_overview._telegram_client
+        await home_overview.close_bot_probe_client()
+        self.assertTrue(client.is_closed)
+        self.assertIsNone(home_overview._telegram_client)
+        home_overview._telegram_client = client  # asyncTearDown closes it again, harmlessly
 
     async def test_callers_get_a_copy_they_can_change(self) -> None:
         first = await home_overview.check_bot_connection("123:AAA")

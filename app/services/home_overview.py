@@ -84,6 +84,14 @@ def _telegram_http() -> httpx.AsyncClient:
     return _telegram_client
 
 
+async def close_bot_probe_client() -> None:
+    """Close the shared getMe client on shutdown; the next probe opens a new one."""
+    global _telegram_client
+    client, _telegram_client = _telegram_client, None
+    if client is not None and not client.is_closed:
+        await client.aclose()
+
+
 async def _probe_bot(token: str) -> dict[str, Any]:
     try:
         resp = await _telegram_http().get(f"https://api.telegram.org/bot{token}/getMe")

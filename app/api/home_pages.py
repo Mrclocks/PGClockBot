@@ -16,10 +16,13 @@ from app.services.dashboard_trend import empty_trend, own_account_summary, sales
 from app.services.host_gauges import gauges_json, local_host_gauges
 from app.services.home_overview import build_home_overview, reseller_shop_summary
 from app.services import pg_link_health
-from app.services.pg_read_cache import SYSTEM_SUMMARY_MAX_AGE_SEC
+from app.services.pg_read_cache import NODE_LIST_MAX_AGE_SEC
 from app.services.pg_read_resilience import circuit_status
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 from app.services.secret_box import reveal_bot_token
+
+# Same freshness as the node list on this page.
+PG_REACHABILITY_MAX_AGE_SEC = NODE_LIST_MAX_AGE_SEC
 
 logger = logging.getLogger(__name__)
 
@@ -166,12 +169,17 @@ async def _parallel_home_ops(*, reseller_id: int | None, funnel_enabled: bool, e
     return funnel, periods, action
 
 
-async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
-    """Display-only PG reachability — never used for allow/deny.
+def pg_reachability_max_age() -> float | None:
+    """How old a system-stats read the dashboard's PasarGuard tile may reuse.
 
-    Reuses system stats up to SYSTEM_SUMMARY_MAX_AGE_SEC old, as the overview does, so the dashboard
-    does not read them from the panel a second time.
-    """
+    A read from the last few seconds (another tab, the overview just before) proves the panel answered;
+    older than that, or while the read circuit is paused after failures, the tile asks the panel itself
+    so an outage does not show as «متصل» for a minute."""
+    return None if circuit_status()["paused"] else PG_REACHABILITY_MAX_AGE_SEC
+
+
+async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
+    """Display-only PG reachability — never used for allow/deny (stats reuse: pg_reachability_max_age)."""
     from app.services.db_safe import rollback_quiet
     from app.services.panel_display_timeout import display_await
     from app.services.ux20 import check_pg_connection
@@ -179,7 +187,7 @@ async def _safe_pg_health(*, reseller_user_id: int | None = None, session: Async
     async def _probe():
         try:
             return await check_pg_connection(
-                reseller_user_id=reseller_user_id, session=session, stats_max_age=SYSTEM_SUMMARY_MAX_AGE_SEC
+                reseller_user_id=reseller_user_id, session=session, stats_max_age=pg_reachability_max_age()
             )
         except Exception:
             logger.exception("pg_health failed reseller_user_id=%s", reseller_user_id)
