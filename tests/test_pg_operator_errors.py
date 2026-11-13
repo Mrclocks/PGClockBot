@@ -109,7 +109,7 @@ class TemplateCreateErrorTests(unittest.TestCase):
         msg = template_create_error_message(
             PasarGuardError("POST /api/user_template failed (409)", 409)
         )
-        self.assertIn("تمپلیت", msg)
+        self.assertIn("قبلاً استفاده شده", msg)
         self.assertNotIn("409", msg)
         self.assertNotIn("نام کاربری", msg)
 
