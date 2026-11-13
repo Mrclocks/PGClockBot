@@ -128,7 +128,7 @@ class SelectionTests(ApprovalTestCase):
             await self._receipt(session, topup=True)
             await self._receipt(session, method="crypto")
             await self._receipt(session, method="wallet")
-            for note in ("renew:3", "svc_addon:1:2:volume:5", "reseller_app:9"):
+            for note in ("svc_addon:1:2:volume:5", "reseller_app:9"):
                 await self._receipt(session, note=note)
             await self._receipt(session, order_status="pending")
             await self._receipt(session, order_status="delivered")
@@ -138,6 +138,17 @@ class SelectionTests(ApprovalTestCase):
             await self._receipt(session, file_id=None)
             await session.commit()
             self.assertEqual(await self._due(session), [good.id])
+
+    async def test_a_renewal_waits_like_a_new_purchase(self) -> None:
+        async with self.Session() as session:
+            customer = await self._user(session)
+            session.add(Order(user_id=customer.id, reseller_id=None, amount=50000, status="delivered"))
+            due = await self._receipt(session, note="renew:3", user=customer, minutes_ago=6)
+            await self._receipt(session, note="renew:4", user=customer, minutes_ago=4)
+            await self._receipt(session, note="renew:5", user=customer, status="rejected")
+            await session.commit()
+            self.assertEqual(await self._due(session), [due.id])
+            self.assertEqual(await self._due(session, rule=ApprovalRule(5, 0, True)), [due.id], "the first purchase makes a returning customer")
 
     async def test_a_duplicate_or_unfingerprinted_receipt_stays_for_a_person(self) -> None:
         async with self.Session() as session:
@@ -374,8 +385,13 @@ class InstantPathStaysTests(ApprovalTestCase):
         shared.assert_not_awaited()
         notice.assert_awaited_once()
 
-    async def test_a_renewal_is_still_approved_at_once_when_a_wait_is_set(self) -> None:
+    async def test_a_renewal_waits_for_the_schedule_when_a_wait_is_set(self) -> None:
         shared, notice = await self._process(wait="5", note="renew:1")
+        shared.assert_not_awaited()
+        notice.assert_awaited_once()
+
+    async def test_an_add_on_is_still_approved_at_once_when_a_wait_is_set(self) -> None:
+        shared, notice = await self._process(wait="5", note="svc_addon:1:2:volume:5")
         shared.assert_awaited_once()
         notice.assert_not_awaited()
 
