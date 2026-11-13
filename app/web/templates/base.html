@@ -347,6 +347,7 @@
   <script src="/static/money-inputs.js?v={{ money_inputs_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/nav-accordion.js?v={{ asset_v('nav-accordion.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/panel-search.js?v={{ asset_v('panel-search.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/panel-keyboard.js?v={{ asset_v('panel-keyboard.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/panel.js?v={{ panel_script_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/list-inputs.js?v={{ list_inputs_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/table-list.js?v={{ asset_v('table-list.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>

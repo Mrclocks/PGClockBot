@@ -268,8 +268,7 @@
       document.querySelectorAll('[data-drawer-open]').forEach(function (el) {
         el.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
-      /* A field left focused in the closed drawer would keep the phone keyboard and hide the bottom bar. */
-      if (!open && document.activeElement && side.contains(document.activeElement)) document.activeElement.blur();
+      moveMenuFocus(open);
       /* Ported ui-select / kebab menus sit at z-index 5000; drawer is ~50.
          Close them when opening so they cannot paint over the sidebar. */
       if (open) {
@@ -283,6 +282,22 @@
             side.classList.remove('side-nav-closing');
           });
         });
+      }
+    }
+    /* Opening moves focus into the menu (onto its ×, the control under the thumb); closing hands it back to
+       «منو» when it was inside, which also drops a phone keyboard left up by a field in the menu. */
+    function moveMenuFocus(open) {
+      var opener = document.querySelector('.bottom-dock [data-drawer-open]');
+      var closer = document.querySelector('.bottom-dock [data-drawer-close]');
+      var current = document.activeElement;
+      if (!opener || !closer || !opener.getClientRects().length) {
+        if (!open && current && side.contains(current)) current.blur();
+        return;
+      }
+      if (open) {
+        closer.focus({ preventScroll: true });
+      } else if (current && (side.contains(current) || current === closer)) {
+        opener.focus({ preventScroll: true });
       }
     }
     setOpen(false);
@@ -320,6 +335,7 @@
         run(e);
       });
     }
+    window.PanelTap = { bind: bindTap };
     /* Bottom bar «منو» opens the drawer; the × in the drawer head closes it. */
     document.querySelectorAll('[data-drawer-open]').forEach(function (el) {
       bindTap(el, function () { setOpen(!side.classList.contains('open')); });

@@ -22,18 +22,26 @@
     return String(text == null ? "" : text).trim().slice(0, 60);
   }
 
-  /** Ctrl/⌘+K opens search from anywhere; "/" only while nothing is being typed and no modal is open.
-      Physical key codes keep both working on the Persian layout. */
+  /** The "/" key, by what it types or, on the Persian layout, by its place. Latin layouts that put
+      another sign there (German "-", French "!") type that sign instead of opening search. */
+  function isSlashKey(key, code) {
+    if (key === "/") return true;
+    return code === "Slash" && (key === "." || /[^\x00-\x7f]/.test(key));
+  }
+
+  /** Ctrl/⌘+K opens search from anywhere, "/" only while nothing is being typed; neither while a modal
+      is open, since focus must stay inside it. Physical key codes keep both working on the Persian layout. */
   function isSearchHotkey(event, context) {
     if (!event || event.defaultPrevented || event.isComposing) return false;
+    if (context && context.modalOpen) return false;
     const key = String(event.key || "").toLowerCase();
     const code = String(event.code || "");
     if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
       return key === "k" || code === "KeyK";
     }
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
-    if (key !== "/" && code !== "Slash") return false;
-    return !(context && (context.typing || context.modalOpen));
+    if (!isSlashKey(key, code)) return false;
+    return !(context && context.typing);
   }
 
   function isTypingTarget(el) {
@@ -89,6 +97,7 @@
     const input = wrap.querySelector("[data-panel-search-input]");
     const box = wrap.querySelector("[data-panel-search-results]");
     if (!input || !box) return;
+    const clear = wrap.querySelector("[data-panel-search-clear]");
     let timer = 0;
     let active = -1;
     let seq = 0;
@@ -98,6 +107,16 @@
       input.setAttribute("aria-expanded", "false");
       input.removeAttribute("aria-activedescendant");
       active = -1;
+    }
+
+    /** Empty the field and let it fold back (the phone header field is open only while focused or filled). */
+    function collapse() {
+      clearTimeout(timer);
+      seq++;
+      input.value = "";
+      close();
+      if (clear) clear.blur();
+      input.blur();
     }
 
     function highlight(index) {
@@ -152,22 +171,20 @@
         event.preventDefault();
         hits[active].click();
       } else if (event.key === "Escape") {
-        close();
+        // First Escape closes the results; with none open, the phone header field folds back into its circle.
+        if (!box.hidden || !clear) close();
+        else collapse();
       }
     });
     document.addEventListener("click", (event) => {
       if (!wrap.contains(event.target)) close();
     });
-    const clear = wrap.querySelector("[data-panel-search-clear]");
     if (clear) {
-      clear.addEventListener("click", () => {
-        clearTimeout(timer);
-        seq++;
-        input.value = "";
-        close();
-        clear.blur();
-        input.blur();
-      });
+      // The press must not blur the field first: an empty field would fold at once, the × would stop taking
+      // pointer events, and the rest of the tap would land on the field under it and open it again.
+      clear.addEventListener("mousedown", (event) => event.preventDefault());
+      if (root.PanelTap) root.PanelTap.bind(clear, collapse);
+      else clear.addEventListener("click", collapse);
     }
   }
 

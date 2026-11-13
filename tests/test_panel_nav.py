@@ -182,6 +182,14 @@ class BottomBarTests(unittest.TestCase):
     def test_pasarguard_staff_bar_has_only_their_pages(self) -> None:
         self.assertEqual(dock_keys(PG_STAFF), ["home", "inbox", "pg_tickets", "pg_users"])
 
+    def test_a_page_reached_from_two_sidebar_entries_is_in_the_bar_once(self) -> None:
+        both_supports = viewer("pg_staff", perms=("tickets",), pg=frozenset({"pg_users"}))
+        dock = build_dock(build_sidebar(both_supports, path="/tickets"))
+        hrefs = [i.href for i in dock.items]
+        self.assertEqual(hrefs.count("/tickets"), 1)
+        self.assertEqual(len(hrefs), len(set(hrefs)))
+        self.assertEqual(sum(i.active for i in dock.items), 1)
+
     def test_bar_never_offers_an_item_the_sidebar_hides(self) -> None:
         for v in (OWNER, RESELLER, PG_STAFF, viewer("reseller", perms=("dashboard",)), viewer("staff")):
             sidebar_keys = {i.key for s in build_sidebar(v, path="/home") for i in s.items}

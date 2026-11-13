@@ -265,14 +265,21 @@ def build_sidebar(viewer: NavViewer, *, path: str, tab: str = "") -> tuple[NavSe
     return tuple(sections)
 
 
-def _items_by_key(sections: Iterable[NavSection]) -> dict[str, tuple[NavItem, NavSection]]:
-    return {item.key: (item, section) for section in sections for item in section.items}
-
-
 def build_dock(sections: Iterable[NavSection]) -> NavDock:
-    """Phone bottom bar for the sidebar ``sections`` the viewer was given."""
-    by_key = _items_by_key(sections)
-    items = tuple(by_key[key][0] for key in DOCK_PRIORITY if key in by_key)[:DOCK_SLOTS]
+    """Phone bottom bar for the sidebar ``sections`` the viewer was given.
+
+    Items come in ``DOCK_PRIORITY`` order; a second entry for a page already in the bar (PasarGuard staff who
+    also hold the shop's ticket right see «پشتیبانی» twice in the sidebar) is skipped."""
+    by_key = {item.key: item for section in sections for item in section.items}
+    items: list[NavItem] = []
+    hrefs: set[str] = set()
+    for key in DOCK_PRIORITY:
+        item = by_key.get(key)
+        if item is None or item.href in hrefs:
+            continue
+        items.append(item)
+        hrefs.add(item.href)
+    items = tuple(items[:DOCK_SLOTS])
     return NavDock(items=items, more_active=not any(item.active for item in items))
 
 

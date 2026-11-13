@@ -52,6 +52,8 @@ assert.equal(normalizeQuery("x".repeat(80)).length, 60);
   // Ctrl/⌘+K opens search from anywhere, even while typing in another field.
   assert.equal(isSearchHotkey({key: "k", ctrlKey: true}, idle), true);
   assert.equal(isSearchHotkey({key: "K", metaKey: true}, {typing: true, modalOpen: false}), true);
+  // Never while a modal is open: focus must not leave it for the search behind it.
+  assert.equal(isSearchHotkey({key: "k", ctrlKey: true}, {typing: false, modalOpen: true}), false);
   // Persian layout: the K key types «ن», the physical code still says KeyK.
   assert.equal(isSearchHotkey({key: "ن", code: "KeyK", ctrlKey: true}, idle), true);
   // Other combinations are left to the browser.
@@ -66,6 +68,12 @@ assert.equal(normalizeQuery("x".repeat(80)).length, 60);
   assert.equal(isSearchHotkey({key: "/"}, {typing: true, modalOpen: false}), false);
   assert.equal(isSearchHotkey({key: "/"}, {typing: false, modalOpen: true}), false);
   assert.equal(isSearchHotkey({key: "?", code: "Slash", shiftKey: true}, idle), false);
+  // Latin layouts with another sign on that key type the sign (German "-", French "!").
+  assert.equal(isSearchHotkey({key: "-", code: "Slash"}, idle), false);
+  assert.equal(isSearchHotkey({key: "!", code: "Slash"}, idle), false);
+  // A layout with a non-Latin sign there still opens search; "/" opens it wherever it sits.
+  assert.equal(isSearchHotkey({key: "ـ", code: "Slash"}, idle), true);
+  assert.equal(isSearchHotkey({key: "/", code: "Digit7"}, idle), true);
 
   // Already handled, or mid-composition (IME), is never taken over.
   assert.equal(isSearchHotkey({key: "k", ctrlKey: true, defaultPrevented: true}, idle), false);

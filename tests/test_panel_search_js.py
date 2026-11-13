@@ -1,4 +1,4 @@
-"""Browser rules of the sidebar search: result rendering and escaping, and the Ctrl/⌘+K and "/" hotkey."""
+"""Browser rules of the panel search (rendering, escaping, Ctrl/⌘+K and "/") and of the phone keyboard check."""
 
 from __future__ import annotations
 
@@ -19,6 +19,14 @@ class PanelSearchBrowserTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("panel_search tests passed", result.stdout)
+
+    def test_keyboard_rules(self) -> None:
+        result = subprocess.run(
+            [shutil.which("node"), str(ROOT / "tests/panel_keyboard.test.cjs")],
+            capture_output=True, text=True, timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("panel_keyboard tests passed", result.stdout)
 
 
 if __name__ == "__main__":
