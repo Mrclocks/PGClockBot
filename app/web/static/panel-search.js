@@ -45,7 +45,7 @@
     doc.addEventListener("keydown", (event) => {
       const context = {
         typing: isTypingTarget(event.target),
-        modalOpen: Boolean(doc.querySelector(".ui-modal:not([hidden])")),
+        modalOpen: doc.body.classList.contains("modal-open") || Boolean(doc.querySelector(".ui-modal.open")),
       };
       if (!isSearchHotkey(event, context)) return;
       event.preventDefault();

@@ -202,8 +202,11 @@
   .bottom-dock-item:focus-visible,
   .bottom-dock-search:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
-  /* Out of the way while the drawer is open or the keyboard is up for a field. */
+  /* Out of the way while the drawer or a modal is open, or the keyboard is up for a field.
+     body.modal-open is the panel's modal lock (some pages set it themselves); .ui-modal.open covers the rest. */
   body.nav-open .bottom-dock,
+  body.modal-open .bottom-dock,
+  body:has(.ui-modal.open) .bottom-dock,
   body:has(:is(input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="range"]), textarea, select, [contenteditable="true"]):focus) .bottom-dock {
     opacity: 0;
     visibility: hidden;
