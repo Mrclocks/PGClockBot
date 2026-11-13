@@ -17,6 +17,7 @@ from app.bot import import_prompt as prompt
 from app.bot.handlers import service_import as flow
 from app.bot.handlers import start
 from app.db.models import BotUser, UserService
+from app.services.service_import_offer import dismiss_offer, is_offer_dismissed
 from tests.test_chat_screen import _Rules
 from tests.test_service_import import ImportCase
 
@@ -25,19 +26,23 @@ OFF = {"service_import_enabled": "0"}
 
 
 class OfferRuleTests(unittest.TestCase):
-    def test_only_a_customer_without_services_gets_it_while_the_feature_is_on(self):
-        self.assertTrue(prompt.should_offer_import(ON, has_services=False))
-        self.assertFalse(prompt.should_offer_import(ON, has_services=True))
-        self.assertFalse(prompt.should_offer_import(OFF, has_services=False))
-        self.assertFalse(prompt.should_offer_import(None, has_services=False))
+    def test_only_a_customer_without_services_who_did_not_opt_out_gets_it_while_the_feature_is_on(self):
+        self.assertTrue(prompt.should_offer_import(ON, has_services=False, dismissed=False))
+        self.assertFalse(prompt.should_offer_import(ON, has_services=True, dismissed=False))
+        self.assertFalse(prompt.should_offer_import(ON, has_services=False, dismissed=True))
+        self.assertFalse(prompt.should_offer_import(OFF, has_services=False, dismissed=False))
+        self.assertFalse(prompt.should_offer_import(None, has_services=False, dismissed=False))
 
-    def test_the_message_has_the_note_above_one_callback_button(self):
-        blocks = prompt.build_import_prompt(ON).blocks
+    def test_the_message_has_the_note_above_the_add_and_the_red_hide_button_side_by_side(self):
+        blocks = prompt.build_import_prompt().blocks
         self.assertEqual(blocks[0].text, prompt.HOME_ADD_NOTE)
         self.assertIn("از بخش «سرویس‌های من»", prompt.HOME_ADD_NOTE)
-        (button,) = blocks[1].buttons
-        self.assertEqual(button.callback_data, prompt.HOME_ADD_CALLBACK)
-        self.assertLessEqual(len(prompt.HOME_ADD_CALLBACK.encode()), 64)
+        self.assertEqual(len(blocks), 2)
+        add, hide = blocks[1].buttons
+        self.assertEqual((add.text, add.callback_data), ("اتصال اشتراک قبلی", prompt.HOME_ADD_CALLBACK))
+        self.assertEqual((hide.text, hide.callback_data, hide.style), ("نمایش نده", prompt.HOME_HIDE_CALLBACK, "danger"))
+        for data in (prompt.HOME_ADD_CALLBACK, prompt.HOME_HIDE_CALLBACK):
+            self.assertLessEqual(len(data.encode()), 64)
 
 
 class SendTests(unittest.IsolatedAsyncioTestCase):
@@ -47,13 +52,13 @@ class SendTests(unittest.IsolatedAsyncioTestCase):
         message.bot.send_rich_message = AsyncMock(
             side_effect=TelegramBadRequest(method=MagicMock(), message="Bad Request: unsupported")
         )
-        self.assertIsNone(await prompt.send_import_prompt(message, ON))
+        self.assertIsNone(await prompt.send_import_prompt(message))
 
     async def test_it_is_sent_without_a_keyboard(self):
         message = MagicMock()
         message.chat.id = 5
         message.bot.send_rich_message = AsyncMock(return_value="sent")
-        self.assertEqual(await prompt.send_import_prompt(message, ON), "sent")
+        self.assertEqual(await prompt.send_import_prompt(message), "sent")
         self.assertNotIn("reply_markup", message.bot.send_rich_message.await_args.kwargs)
 
 
@@ -62,7 +67,7 @@ class ChatScreenTests(_Rules):
         sent = self.chat.message()
         sent.chat = SimpleNamespace(id=100, type="private")
         make_request = AsyncMock(return_value=sent)
-        method = SendRichMessage(chat_id=100, rich_message=prompt.build_import_prompt(ON))
+        method = SendRichMessage(chat_id=100, rich_message=prompt.build_import_prompt())
         with patch.object(chat_screen, "Message", MagicMock):
             with chat_screen.turn((int(self.chat.bot.id), 100)) as active:
                 await chat_screen.screen_requests(make_request, self.chat.bot, method)
@@ -108,6 +113,13 @@ class HomeTests(ImportCase):
         message = await self._home(OFF)
         message.offer.assert_not_awaited()
 
+    async def test_a_customer_who_chose_not_to_see_it_gets_the_plain_welcome_only(self):
+        async with self.Session() as session:
+            await dismiss_offer(session, 1, None)
+        message = await self._home(ON)
+        message.answer.assert_awaited_once()
+        message.offer.assert_not_awaited()
+
     async def test_a_service_in_another_shop_does_not_hide_the_offer(self):
         async with self.Session() as session:
             session.add(UserService(id=802, bot_user_id=1, pg_user_id=802, pg_username="other", remark="order:2", shop_id=7))
@@ -141,6 +153,35 @@ class ButtonFlowTests(ImportCase):
                 await flow.svc_add_existing_from_home(callback, session, user, AsyncMock())
         ask.assert_not_awaited()
         callback.message.delete.assert_not_awaited()
+
+
+class HideOfferTests(ImportCase):
+    def _tap(self):
+        return SimpleNamespace(data=prompt.HOME_HIDE_CALLBACK, message=AsyncMock(), answer=AsyncMock())
+
+    async def test_choosing_not_to_see_it_is_remembered_and_removes_the_message(self):
+        callback = self._tap()
+        async with self.Session() as session:
+            user = await session.get(BotUser, 1)
+            await flow.svc_hide_home_offer(callback, session, user)
+            self.assertTrue(await is_offer_dismissed(session, 1, None))
+        callback.message.delete.assert_awaited_once()
+        callback.answer.assert_awaited_once()
+
+    async def test_tapping_twice_keeps_one_record_and_does_not_fail(self):
+        async with self.Session() as session:
+            user = await session.get(BotUser, 1)
+            await flow.svc_hide_home_offer(self._tap(), session, user)
+            await flow.svc_hide_home_offer(self._tap(), session, user)
+            self.assertTrue(await is_offer_dismissed(session, 1, None))
+
+    async def test_the_choice_belongs_to_one_customer_in_one_shop(self):
+        async with self.Session() as session:
+            await dismiss_offer(session, 1, 7)
+            self.assertTrue(await is_offer_dismissed(session, 1, 7))
+            self.assertFalse(await is_offer_dismissed(session, 1, None))
+            self.assertFalse(await is_offer_dismissed(session, 1, 8))
+            self.assertFalse(await is_offer_dismissed(session, 2, 7))
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
 from app.services.referral_scope import is_referral_of_shop
+from app.services.service_import_offer import is_offer_dismissed
 from app.services.service_scope import customer_may_use_service, list_customer_services, shop_services_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
@@ -126,7 +127,11 @@ async def render_home(
             reseller_owner_id=reseller_owner_id,
             ui=ui,
         )
-        offer_import = should_offer_import(ui, has_services=await _has_services(session, int(db_user.id)))
+        offer_import = should_offer_import(
+            ui,
+            has_services=await _has_services(session, int(db_user.id)),
+            dismissed=await is_offer_dismissed(session, int(db_user.id), current_shop_reseller_id()),
+        )
 
     # Home is a fresh start: a new welcome with the menu at the bottom; the older welcome and
     # every temporary message go, records (deliveries, receipts, configs) stay. A notice (a
@@ -137,7 +142,7 @@ async def render_home(
         home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
     await replace_home(home, sweep=True)
     if offer_import:
-        await send_import_prompt(message, ui)
+        await send_import_prompt(message)
     _ = seed_reply_kb
 
 
