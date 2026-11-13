@@ -9,6 +9,7 @@ from sqlalchemy import event
 from app.config import get_settings
 from app.db import Base
 from app.db.engine_url import normalize_async_url, parse_engine
+from app.db.random_discounts_schema import upgrade_random_discounts
 
 # Register models on Base.metadata for Alembic / legacy paths
 import app.db.models  # noqa: F401
@@ -174,6 +175,10 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
         sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN pg_username_pattern VARCHAR(255)"))
     if "category_id" not in cols:
         sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN category_id INTEGER"))
+    if "carry_remaining_quota" not in cols:
+        sync_conn.execute(
+            sql_text("ALTER TABLE plans ADD COLUMN carry_remaining_quota BOOLEAN DEFAULT 1")
+        )
 
     if not insp.has_table("plan_categories"):
         sync_conn.execute(
@@ -251,6 +256,10 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             "bot_username": "VARCHAR(64)",
             "bot_telegram_id": "BIGINT",
             "share_pg_panel_url": "BOOLEAN DEFAULT 0",
+            "allow_pg_panel_access": "BOOLEAN DEFAULT 1",
+            "pg_password_rotation_enc": "TEXT",
+            "child_plan_id": "INTEGER",
+            "payg_baseline_at": "DATETIME",
             "bot_admin_ids": "TEXT",
             "pg_admin_password_enc": "TEXT",
             "pg_api_key_enc": "TEXT",
@@ -327,6 +336,35 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
         if "is_system" not in pcols:
             sync_conn.execute(
                 sql_text("ALTER TABLE reseller_plans ADD COLUMN is_system BOOLEAN DEFAULT 0")
+            )
+        if "carry_remaining_period" not in pcols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE reseller_plans ADD COLUMN carry_remaining_period BOOLEAN DEFAULT 1"
+                )
+            )
+        if "keep_extras_on_renew" not in pcols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE reseller_plans ADD COLUMN keep_extras_on_renew BOOLEAN DEFAULT 1"
+                )
+            )
+        for col, typ in (
+            ("payg_basis", "VARCHAR(16) DEFAULT 'traffic'"),
+            ("payg_charge_upfront", "BOOLEAN DEFAULT 0"),
+            ("payg_user_price", "INTEGER DEFAULT 0"),
+            ("payg_user_price_per_30d", "BOOLEAN DEFAULT 0"),
+            ("payg_unlimited_price", "INTEGER"),
+        ):
+            if col not in pcols:
+                sync_conn.execute(
+                    sql_text(f"ALTER TABLE reseller_plans ADD COLUMN {col} {typ}")
+                )
+        if "allow_pg_panel_access" not in pcols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE reseller_plans ADD COLUMN allow_pg_panel_access BOOLEAN DEFAULT 1"
+                )
             )
 
     if not insp.has_table("pg_admin_subscriptions"):
@@ -603,6 +641,8 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
                     "ALTER TABLE user_services ADD COLUMN quota_synced_at DATETIME"
                 )
             )
+
+    upgrade_random_discounts(sync_conn)
 
     marker = None
     try:

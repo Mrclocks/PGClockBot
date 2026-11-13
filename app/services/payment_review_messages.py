@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 
 from aiogram import Bot
@@ -14,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment, PaymentReviewMessage, PaymentStatus
 from app.services.formatting import format_message, format_user_label
+from app.services.notice_links import notice_markup
+from app.services.notifications import customer_markup
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,7 @@ async def remember_review_message(
     )
 
 
-def _reviewed_text(message: PaymentReviewMessage, status: str, actor: str) -> str:
+def _reviewed_text(message: PaymentReviewMessage, status: str, actor: str, note: str | None = None) -> str:
     approved = status == PaymentStatus.APPROVED.value
     title = "✅ پرداخت تأیید شد" if approved else "❌ پرداخت رد شد"
     outcome = "✅ تأیید شد" if approved else "❌ رد شد"
@@ -47,6 +50,8 @@ def _reviewed_text(message: PaymentReviewMessage, status: str, actor: str) -> st
         if "از دکمه‌های زیر تأیید یا رد کنید." not in line
     ).rstrip().replace("⏳ نیاز به تأیید", title)
     text = f"{text}\n\n{outcome} توسط {actor}"
+    if not approved and note and note.strip():
+        text += f"\n📝 <b>یادداشت بررسی:</b> {html.escape(note.strip()[:300])}"
     limit = 1024 if message.is_photo else 4096
     # Never truncate HTML mid-tag when the original card fills a photo caption.
     if len(text) > limit:
@@ -70,7 +75,8 @@ async def sync_review_messages(
     if not messages:
         return 0
     state = (await session.execute(
-        select(Payment.status, Payment.reviewed_by, Payment.order_id)
+        select(Payment.status, Payment.reviewed_by, Payment.order_id, Payment.user_id, Payment.review_note,
+               Payment.wallet_shop_id)
         .where(Payment.id == payment_id)
     )).one_or_none()
     if state is None or state.status not in {
@@ -84,12 +90,19 @@ async def sync_review_messages(
         )).scalar_one_or_none()
     actor = format_user_label(reviewer, telegram_id=state.reviewed_by) if state.reviewed_by else "مدیریت"
 
+    order_row = (await session.execute(
+        select(Order.reseller_id, Order.service_id).where(Order.id == state.order_id)
+    )).one_or_none() if state.order_id else None
+    rid = (order_row.reseller_id if order_row else None) or state.wallet_shop_id
+    # The reviewed card keeps the way to the customer and service, so staff can follow up in one tap.
+    follow_up = notice_markup(customer_markup(
+        user_id=state.user_id, service_id=order_row.service_id if order_row else None,
+        shop_id=int(rid) if rid else None,
+    ))
+
     send_bot = bot
     should_close = False
     if send_bot is None or not any(m.bot_id == send_bot.id for m in messages):
-        rid = (await session.execute(
-            select(Order.reseller_id).where(Order.id == state.order_id)
-        )).scalar_one_or_none() if state.order_id else None
         if rid:
             from app.services.reseller_bots import open_notify_bot_for_reseller
 
@@ -108,9 +121,9 @@ async def sync_review_messages(
                 continue
             kwargs = dict(
                 chat_id=message.chat_id, message_id=message.message_id,
-                parse_mode="HTML", reply_markup=None,
+                parse_mode="HTML", reply_markup=follow_up,
             )
-            text = _reviewed_text(message, state.status, actor)
+            text = _reviewed_text(message, state.status, actor, state.review_note)
             try:
                 if message.is_photo:
                     await send_bot.edit_message_caption(caption=text, **kwargs)

@@ -29,7 +29,9 @@ from app.db.models import (
     ResellerApplication,
     ResellerApplicationStatus,
 )
+from app.services.customer_notice_buttons import customer_notice_markup
 from app.services.orders import is_mutation_order_note
+from app.services.payer_notify import notify_payer
 from app.services.shop_scope import assert_order_retry_in_scope
 from app.services.wallet import credit_wallet
 
@@ -226,6 +228,10 @@ def _order_kind(note: str) -> str:
         return "بستهٔ افزودنی"
     if note.startswith("reseller_app:"):
         return "درخواست نمایندگی"
+    if note.startswith("res_cap:"):
+        return "ظرفیت نمایندگی"
+    if note.startswith("res_pkg:"):
+        return "تمدید بسته نمایندگی"
     return "خرید سرویس"
 
 
@@ -236,6 +242,10 @@ def _reason_text(order: Order, app: ResellerApplication | None) -> str:
     if is_mutation_order_note(note):
         if _mutation_may_be_applied(order):
             return "آخرین تلاش برای اعمال در پاسارگارد نتیجهٔ نامعلومی داشت"
+        if note.startswith("res_cap:"):
+            return "پرداخت شده ولی ظرفیت روی ادمین نماینده اعمال نشد"
+        if note.startswith("res_pkg:"):
+            return "پرداخت شده ولی تمدید بسته روی ادمین نماینده اعمال نشد"
         return "سرویسی که باید تمدید یا افزوده شود دیگر وجود ندارد (حذف یا لغو شده)"
     if order.status == OrderStatus.DELIVERING.value:
         return "ساخت سرویس شروع شد ولی تمام نشد"
@@ -276,4 +286,19 @@ async def count_still_stuck(session: AsyncSession, order_ids: list[int]) -> int:
             )
         )
         or 0
+    )
+
+
+REFUND_NOTICE_TITLE = "↩️ بازگشت وجه"
+
+
+async def tell_customer_refunded(session: AsyncSession, result: Resolution) -> None:
+    """Tell the customer that a cancelled stuck order returned money to the wallet."""
+    if result.refunded <= 0:
+        return
+    await notify_payer(
+        session, result.user_id, title=REFUND_NOTICE_TITLE,
+        body=f"سفارش #{result.order_id} به‌دلیل انجام‌نشدن تحویل لغو شد و {result.refunded:,} به کیف پول شما برگشت.",
+        shop_id=result.shop_id,
+        reply_markup=customer_notice_markup(wallet=True, support=True),
     )

@@ -4,23 +4,24 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from tests.template_source import template_with_includes
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class PlansAddonCategoryUiTests(unittest.TestCase):
-    def test_add_plan_category_before_name_fields(self):
-        html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+    def test_add_plan_category_sits_with_the_bot_display_options(self):
+        html = template_with_includes("plans.html")
         fixed = html.split('id="panel-user-fixed"', 1)[1].split(
             'id="panel-user-trial"', 1
         )[0]
-        cat_at = fixed.find("برچسب دسته")
-        name_at = fixed.find("نام پلن")
-        self.assertGreater(cat_at, 0)
-        self.assertGreater(name_at, cat_at)
+        display = fixed.split("نمایش در ربات", 1)[1]
+        self.assertIn("برچسب دسته", display)
+        self.assertIn('data-category-audience="users"', display)
+        self.assertLess(fixed.find("نام پلن"), fixed.find("برچسب دسته"))
 
     def test_template_missing_warn_wiring(self):
-        html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        html = template_with_includes("plans.html")
         self.assertIn("tpl_missing", html)
         self.assertIn("plan-pg-warn-dot", html)
         self.assertIn('badge warn', html)
@@ -29,7 +30,7 @@ class PlansAddonCategoryUiTests(unittest.TestCase):
         self.assertIn("pg_live_template_ids", app)
 
     def test_reseller_addon_category_not_hidden(self):
-        html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        html = template_with_includes("plans.html")
         self.assertIn("setVisible(catField, true)", html)
         self.assertNotIn("setVisible(catField, !isAddon)", html)
         edit = (ROOT / "app/web/templates/reseller_plan_edit.html").read_text(
@@ -57,7 +58,7 @@ class PlansAddonCategoryUiTests(unittest.TestCase):
         self.assertIn("list_packs_for_service", bot)
         mini = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
         self.assertIn("list_packs_for_service", mini)
-        self.assertIn("pack_matches_service_category", mini)
+        self.assertIn("pack_matches_service", mini)
         res = (ROOT / "app/bot/handlers/reseller.py").read_text(encoding="utf-8")
         self.assertIn("category_id=sub_cat", res)
 

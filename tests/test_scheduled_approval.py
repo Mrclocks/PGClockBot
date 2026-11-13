@@ -401,18 +401,15 @@ class SettingsLayoutTests(unittest.TestCase):
 
         for key in ("auto_approve_after_minutes", "auto_approve_after_max_amount", "auto_approve_after_returning_only"):
             self.assertEqual(SETTING_VISIBILITY[key], ("auto_approve_payments", ("1",)))
-        order = [row[0] for row in SETTING_GROUPS["روش‌های پرداخت"]]
-        card = order.index("pay_card_enabled")
+        # Receipt approval rules sit together in «رسیدها», the timed rules right after the switch.
+        order = [row[0] for row in SETTING_GROUPS["رسیدها"]]
         self.assertEqual(
-            order[card : card + 7],
+            order[:4],
             [
-                "pay_card_enabled",
                 "auto_approve_payments",
                 "auto_approve_after_minutes",
                 "auto_approve_after_max_amount",
                 "auto_approve_after_returning_only",
-                "pay_card_auto_enabled",
-                "pay_bbc_enabled",
             ],
         )
 

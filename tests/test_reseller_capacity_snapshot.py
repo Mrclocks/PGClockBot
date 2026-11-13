@@ -103,6 +103,24 @@ class DbCase(unittest.IsolatedAsyncioTestCase):
             return await subs.get_subscription(session, username)
 
 
+class CreateSubscriptionTests(DbCase):
+    async def test_new_subscription_copies_plan_id_from_the_shop_profile(self):
+        async with self.Session() as session:
+            session.add(
+                BotUser(id=7, telegram_id=77, referral_code="r7", role="reseller", wallet_balance=0)
+            )
+            await session.flush()
+            session.add(
+                ResellerProfile(
+                    user_id=7, pg_admin_username="newadmin", plan_id=self.plan_id, is_active=True
+                )
+            )
+            await session.commit()
+            sub = await subs.get_or_create_subscription(session, "newadmin")
+            await session.commit()
+        self.assertEqual(sub.plan_id, self.plan_id)
+
+
 class SnapshotTests(DbCase):
     async def start(self, admins, username="a", **kw):
         pg = FakePg(admins)
@@ -222,6 +240,43 @@ class RepairTests(DbCase):
         again = await self.run_repair(admins)
         self.assertEqual(again.fixed, 0)
 
+    async def test_repair_subtracts_purchased_extras_from_live_base(self):
+        await self.seed()
+        async with self.Session() as session:
+            row = await session.scalar(
+                select(subs.PgAdminSubscription).where(subs.PgAdminSubscription.pg_username == "zero1")
+            )
+            row.extra_gb_purchased = 200
+            await session.commit()
+        report = await self.run_repair({"zero1": {"data_limit": 400 * GB, "max_users": 10}})
+        self.assertEqual(report.fixed, 1)
+        fixed = await self.subscription("zero1")
+        self.assertEqual((fixed.base_gb, fixed.extra_gb_purchased, fixed.base_users), (200, 200, 10))
+
+    async def test_repair_copies_missing_plan_id_from_the_shop_profile(self):
+        await self.seed()
+        async with self.Session() as session:
+            session.add(
+                BotUser(id=9, telegram_id=99, referral_code="r9", role="reseller", wallet_balance=0)
+            )
+            await session.flush()
+            session.add(
+                ResellerProfile(
+                    user_id=9, pg_admin_username="orphan", plan_id=self.plan_id, is_active=True
+                )
+            )
+            session.add(
+                subs.PgAdminSubscription(
+                    pg_username="orphan", plan_id=None, base_gb=0, base_users=0, access_status="active"
+                )
+            )
+            await session.commit()
+        report = await self.run_repair({"orphan": {"data_limit": 300 * GB, "max_users": 8}})
+        self.assertEqual(report.plan_linked, 1)
+        self.assertEqual(report.fixed, 1)
+        fixed = await self.subscription("orphan")
+        self.assertEqual((fixed.plan_id, fixed.base_gb, fixed.base_users), (self.plan_id, 300, 8))
+
 
 class RepairRouteTests(RoutesHarness):
     async def post(self, session_payload: dict):
@@ -231,7 +286,9 @@ class RepairRouteTests(RoutesHarness):
 
     async def test_the_owner_runs_it_and_is_told_the_result(self):
         with patch("app.api.reseller_capacity_repair_pages.repair_current_capacity_snapshots", AsyncMock(
-            return_value=type("R", (), {"fixed": 3, "unreadable": 1, "unlimited": 0})()
+            return_value=type(
+                "R", (), {"fixed": 3, "unreadable": 1, "unlimited": 0, "plan_linked": 2}
+            )()
         )) as repair:
             response = await self.post(OWNER_SESSION)
         self.assertEqual(response.status_code, 303)

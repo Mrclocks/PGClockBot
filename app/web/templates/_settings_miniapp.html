@@ -79,4 +79,4 @@
     <button class="btn" type="submit">ذخیرهٔ تنظیمات مینی‌اپ</button>
   </div>
 </form>
-<script src="/static/miniapp-brand-form.js?v={{ app_version }}" defer></script>
+<script src="/static/miniapp-brand-form.js?v={{ asset_v('miniapp-brand-form.js') if asset_v is defined else app_version }}" defer></script>

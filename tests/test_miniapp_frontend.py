@@ -37,6 +37,9 @@ class MiniAppFrontendTests(unittest.TestCase):
     def test_club_behavior(self) -> None:
         self.run_node("miniapp_club.test.cjs")
 
+    def test_wallet_points_behavior(self) -> None:
+        self.run_node("miniapp_wallet_points.test.cjs")
+
     def test_receipt_review_behavior(self) -> None:
         self.run_node("miniapp_review.test.cjs")
 
@@ -48,6 +51,9 @@ class MiniAppFrontendTests(unittest.TestCase):
 
     def test_launch_without_the_telegram_sdk(self) -> None:
         self.run_node("miniapp_launch.test.cjs")
+
+    def test_renewal_offers_the_current_plan_then_categories(self) -> None:
+        self.run_node("miniapp_renew_categories.test.cjs")
 
 
 if __name__ == "__main__":

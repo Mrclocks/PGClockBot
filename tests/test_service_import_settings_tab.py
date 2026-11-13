@@ -106,7 +106,7 @@ class TabPageTests(TabHarness):
         for response, base in ((owner, "/settings"), (shop, "/shop-settings")):
             head = response.text.split("settings-layout", 1)[0]
             self.assertIn(f'href="{base}?tab=service_import" class="active"', head)
-            self.assertIn(f'href="{base}?tab=naming"', head)
+            self.assertIn(f'href="{base}?tab=delivery"', head)
 
 
 class SavePlumbingTests(TabHarness):
@@ -132,7 +132,7 @@ class SavePlumbingTests(TabHarness):
         self.assertEqual((shop["service_import_enabled"], shop["service_import_max_per_user"]), ("1", "3"))
         self.assertEqual((shop["service_import_paths"], shop["service_import_admins"]), ("", ""))
         platform = await self.stored(None)
-        self.assertEqual(platform["service_import_enabled"], "0")
+        self.assertEqual(platform["service_import_enabled"], "1")
         self.assertEqual((platform["service_import_paths"], platform["service_import_admins"]), ("", ""))
 
     async def test_a_shops_own_values_never_change_the_platforms(self):

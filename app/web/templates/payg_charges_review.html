@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title, row_actions %}
+{% block title %}بازبینی هزینه‌های PAYG{% endblock %}
+{% set events = {'create': 'ساخت', 'renew': 'تمدید', 'add_volume': 'افزایش حجم', 'add_days': 'افزایش روز', 'reset': 'ریست ترافیک', 'reactivate': 'فعال‌سازی دوباره'} %}
+{% block content %}
+<div class="page-head">
+  <div>{{ page_title('receipt', 'بازبینی هزینه‌های PAYG', 'neutral') }}</div>
+</div>
+
+<div class="card card-flush">
+  <div class="card-flush-head">
+    <h2>در انتظار بازبینی</h2>
+    <p class="muted">پنل به این تغییرها پاسخ روشن نداد؛ مبلغ از کیف پول نماینده کم شده و نگه داشته شده است.</p>
+  </div>
+  <div class="table-wrap">
+    <table class="table-compact table-list-sm">
+      <thead>
+        <tr>
+          <th>نماینده</th>
+          <th>تغییر</th>
+          <th class="col-hide-sm">کاربر پنل</th>
+          <th class="col-hide-sm">زمان</th>
+          <th>مبلغ</th>
+          <th class="col-actions"><span class="sr-only">اقدام</span></th>
+          <th class="li-head" scope="col"><span class="li-count">{{ charges | length | num }} هزینه</span></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for c in charges %}
+        {% set event = events.get(c.event, c.event) %}
+        <tr>
+          <td class="li-title"><span dir="auto">{{ shop_names.get(c.shop_id, c.shop_id) }}</span></td>
+          <td class="li-sub">
+            {#- On phones line two: change, panel user and time. -#}
+            <span>{{ event }}{% if c.quantity and c.quantity > 1 %} × <bdi dir="ltr">{{ c.quantity }}</bdi>{% endif %}</span>
+            <span class="li-only">· <bdi dir="ltr">{{ c.pg_username or '—' }}</bdi></span>
+          </td>
+          <td class="col-hide-sm" dir="ltr">{{ c.pg_username or '—' }}</td>
+          <td class="col-hide-sm mono" dir="ltr">{{ c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '—' }}</td>
+          <td class="cell-tight li-value"><span dir="ltr">{{ c.amount | money }}</span></td>
+          <td class="col-actions">
+            {% call row_actions() %}
+            <form method="post" action="/payg/charges/{{ c.id }}/settle"
+                  data-confirm="کاربر در پنل همان‌طور که خواسته شده بود تغییر کرده است؟ مبلغ کسرشده قطعی می‌شود."
+                  data-confirm-title="تأیید هزینه" data-confirm-label="اعمال شده">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-sm" type="submit">اعمال شده</button>
+            </form>
+            <form method="post" action="/payg/charges/{{ c.id }}/refund"
+                  data-confirm="تغییر در پنل انجام نشده است؟ مبلغ به کیف پول نماینده برمی‌گردد."
+                  data-confirm-title="برگشت مبلغ" data-confirm-label="برگشت مبلغ" data-confirm-danger="1">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-sm btn-danger" type="submit">انجام نشده، برگشت مبلغ</button>
+            </form>
+            {% endcall %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="muted">هزینه‌ای در انتظار بازبینی نیست</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

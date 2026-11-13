@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from tests.reason_support import ReasonedState
 from app.db import Base
 import app.db.models  # noqa: F401
 from app.db.models import BotUser, ResellerProfile, Role
@@ -586,7 +587,7 @@ class Phase4BBotPgUserPilotTests(unittest.IsolatedAsyncioTestCase):
             )
             patches = self._l1_patches(USERS_VIEW_UPDATE, fake_pg)
             with self._enter(patches):
-                await mod.pg_dis(cb, db_user=fx.ua, session=session)
+                await mod.pg_dis(cb, db_user=fx.ua, session=session, state=ReasonedState(cb.data))
             fake_pg.set_disabled_by_id.assert_awaited_once_with(101, True)
 
             cb_b = SimpleNamespace(
@@ -596,7 +597,7 @@ class Phase4BBotPgUserPilotTests(unittest.IsolatedAsyncioTestCase):
             )
             fake_pg.set_disabled_by_id.reset_mock()
             with self._enter(patches):
-                await mod.pg_dis(cb_b, db_user=fx.ua, session=session)
+                await mod.pg_dis(cb_b, db_user=fx.ua, session=session, state=ReasonedState(cb_b.data))
             fake_pg.set_disabled_by_id.assert_not_called()
 
     async def test_handler_detail_read(self) -> None:

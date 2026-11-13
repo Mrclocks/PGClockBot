@@ -32,10 +32,28 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class RenewalArithmeticTests(unittest.TestCase):
-    def result(self, *, limit=10 * GB, used=3 * GB, expire=1_700_000_000 + 5 * DAY, status="active", gb=10, days=30, **extra):
+    def result(
+        self,
+        *,
+        limit=10 * GB,
+        used=3 * GB,
+        expire=1_700_000_000 + 5 * DAY,
+        status="active",
+        gb=10,
+        days=30,
+        carry_remaining_quota=True,
+        **extra,
+    ):
         return calculate_renewal(
             {"status": status, "data_limit": limit, "used_traffic": used, "expire": expire, **extra},
-            renewal_terms(SimpleNamespace(data_limit_gb=gb, duration_days=days)), now=1_700_000_000,
+            renewal_terms(
+                SimpleNamespace(
+                    data_limit_gb=gb,
+                    duration_days=days,
+                    carry_remaining_quota=carry_remaining_quota,
+                )
+            ),
+            now=1_700_000_000,
         )
 
     def test_adds_live_remaining_volume_and_time_without_reset(self):
@@ -44,6 +62,21 @@ class RenewalArithmeticTests(unittest.TestCase):
         self.assertEqual(result["result_remaining_bytes"], 17 * GB)
         self.assertEqual(result["payload"]["data_limit"], 20 * GB)
         self.assertEqual(result["payload"]["expire"], 1_700_000_000 + 35 * DAY)
+        self.assertTrue(result["carry_remaining"])
+
+    def test_disabled_carry_uses_only_plan_quota_from_now(self):
+        result = self.result(carry_remaining_quota=False)
+        self.assertEqual(result["remaining_bytes"], 7 * GB)
+        self.assertEqual(result["result_remaining_bytes"], 10 * GB)
+        self.assertEqual(result["payload"]["data_limit"], 13 * GB)
+        self.assertEqual(result["payload"]["expire"], 1_700_000_000 + 30 * DAY)
+        self.assertFalse(result["carry_remaining"])
+        self.assertIn("منتقل نمی‌شود", result["warnings"][0])
+
+    def test_renewal_terms_freeze_carry_flag_from_plan(self):
+        terms = renewal_terms(SimpleNamespace(data_limit_gb=10, duration_days=30, carry_remaining_quota=False))
+        self.assertEqual(terms["carry_remaining"], False)
+        self.assertEqual(terms["volume_bytes"], 10 * GB)
 
     def test_overused_and_expired_service_gets_full_purchased_quota(self):
         result = self.result(used=12 * GB, expire=1_700_000_000 - DAY, status="limited")
@@ -403,6 +436,17 @@ class MiniAppRenewalTests(RenewalFixture):
         self.assertEqual(retry.json()["order_id"], response.json()["order_id"])
         self.assertEqual(retry.json()["wallet"], 800)
         self.assertEqual(len(self.pg.writes), 1)
+
+    async def test_api_renewal_tells_staff_once_even_when_retried(self):
+        quote = await self.quote()
+        body = {"service_id": 1, "plan_id": 1, "preview": quote}
+        send = AsyncMock()
+        with patch("app.services.purchase_notices._send_notice", send):
+            first = await self.client.post("/api/mini/renew", json=body)
+            retry = await self.client.post("/api/mini/renew", json=body)
+        self.assertEqual((first.status_code, retry.status_code), (200, 200), first.text)
+        send.assert_awaited_once()
+        self.assertEqual(send.await_args.kwargs["order"].id, first.json()["order_id"])
 
     async def test_api_retry_after_lost_response_succeeds_when_wallet_is_now_empty(self):
         self.user.wallet_balance = 200

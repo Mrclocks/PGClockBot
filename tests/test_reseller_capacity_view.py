@@ -105,7 +105,8 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
     async def test_the_base_follows_the_live_limits_and_purchased_extras_are_kept(self):
         await self.add_sub(self.cc_id, base=(0, 0), extra=(20, 5))
         self.assertEqual(await self.sync(AsyncMock(return_value=(500, 50))), (500, 50))
-        self.assertEqual(await self.stored(), (500, 50, 20, 5))
+        # Live already includes extras; base stores only the residual so the sales ceiling is 500.
+        self.assertEqual(await self.stored(), (480, 45, 20, 5))
 
     async def test_a_panel_that_cannot_be_read_changes_nothing(self):
         await self.add_sub(self.cc_id, base=(10, 2))

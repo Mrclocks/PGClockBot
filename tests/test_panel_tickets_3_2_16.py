@@ -108,12 +108,10 @@ class TemplateNavTests(unittest.TestCase):
         self.assertIn("بستن تیکت", src)
 
     def test_pg_staff_nav_has_support(self):
-        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("is_pg_staff", base)
-        # Support link for pg_staff in web-panel section
-        chunk = base[base.find("{% if is_pg_staff %}") : base.find("{% if has_bot %}")]
-        self.assertIn('href="/tickets"', chunk)
-        self.assertIn("پشتیبانی", chunk)
+        from tests.sidebar_view import sidebar
+
+        # Support link for pg_staff in the account section
+        self.assertIn(("پشتیبانی", "/tickets"), sidebar("pg_staff", pg=frozenset({"pg_users"}))["system"])
 
     def test_dashboard_answered_banner(self):
         # pg_home.html (PasarGuard-only dashboard) still has its own dedicated

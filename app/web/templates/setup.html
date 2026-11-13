@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_list_input.html" import list_input %}
+{% from "macros.html" import switch %}
 {% block title %}راه‌اندازی اولیه{% endblock %}
 {% block auth %}
 <div class="auth-wrap auth-wrap--atmo">
@@ -8,7 +9,7 @@
     <span class="auth-orb auth-orb-b"></span>
     <span class="auth-grid"></span>
   </div>
-  <div class="auth-panel auth-panel--stage setup-panel">
+  <div class="auth-panel auth-panel--stage setup-panel ds">
     <div class="auth-brand">
       <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" /></span>
       <h1 dir="ltr">MrClockBot</h1>
@@ -124,12 +125,9 @@
         </small>
       </label>
       {% if has_pg_api_key %}
-      <label>
-        <span class="ui-check">
-          <input type="checkbox" name="clear_pg_api_key" value="1" />
-          حذف کلید API (بازگشت به احراز هویت با رمز)
-        </span>
-      </label>
+      <div class="ui-switch-list">
+        {{ switch('clear_pg_api_key', 'حذف کلید API', help='بازگشت به احراز هویت با رمز') }}
+      </div>
       {% endif %}
       <label>پورت وب‌پنل (WEB_PORT)
         <input name="web_port" value="{{ values.WEB_PORT or '9000' }}" required dir="ltr" />

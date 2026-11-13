@@ -47,6 +47,50 @@ class WalletStates(StatesGroup):
     waiting_receipt = State()
     gift_code = State()
 
+
+async def build_wallet_home_text(
+    session: AsyncSession,
+    db_user: BotUser,
+    ui: dict,
+) -> str:
+    """Customer wallet hub HTML: balance, and this shop's points while loyalty is on.
+
+    Loyalty on/off must come from the same ``ui`` dict used for ``wallet_hub_keyboard``
+    (shop-scoped ``get_all_settings``), not a second settings read.
+    """
+    from app.services.formatting import format_number, format_toman, kv_line
+    from app.services.loyalty import points_balance
+    from app.services.users import current_shop_reseller_id, on
+    from app.services.wallet import wallet_balance_for_context
+
+    shop_id = current_shop_reseller_id()
+    bal = await wallet_balance_for_context(session, db_user)
+    lines = [
+        kv_line(
+            "💵",
+            "موجودی",
+            f"<b>{format_toman(bal, get_settings().currency)}</b>",
+        ),
+    ]
+    if on(ui.get("loyalty_enabled")):
+        pts = await points_balance(session, db_user, shop_id)
+        lines.append(kv_line("⭐", "امتیاز", f"<b>{format_number(pts)}</b>"))
+    lines.extend(["", screen_caption(ui, "c.wallet")])
+    return format_message(screen_title_html(ui, "c.wallet"), "\n".join(lines))
+
+
+async def load_wallet_home(
+    session: AsyncSession, db_user: BotUser
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Shop-scoped wallet hub text + keyboard from one settings load."""
+    from app.bot.nav_inline import wallet_hub_keyboard
+    from app.services.users import current_shop_reseller_id, get_all_settings
+
+    ui = await get_all_settings(session, reseller_id=current_shop_reseller_id())
+    text = await build_wallet_home_text(session, db_user, ui)
+    return text, wallet_hub_keyboard(ui)
+
+
 async def prompt_gift_code(
     message: Message,
     state: FSMContext,
@@ -186,30 +230,9 @@ async def wallet_gift_code(
 @router.callback_query(F.data == "wallet:home")
 async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
-    ui = await get_all_settings(session)
-    from app.services.wallet import wallet_balance_for_context
-
-    bal = await wallet_balance_for_context(session, db_user)
-    text = format_message(
-        screen_title_html(ui, "c.wallet"),
-        "\n".join(
-            [
-                kv_line(
-                    "💵",
-                    "موجودی",
-                    f"<b>{format_toman(bal, get_settings().currency)}</b>",
-                ),
-                "",
-                screen_caption(ui, "c.wallet"),
-            ]
-        ),
-    )
+    text, markup = await load_wallet_home(session, db_user)
     if callback.message:
-        from app.bot.nav_inline import wallet_hub_keyboard
-
-        await safe_edit_text(
-            callback.message, text, reply_markup=wallet_hub_keyboard(ui)
-        )
+        await safe_edit_text(callback.message, text, reply_markup=markup)
 
 @router.callback_query(F.data == "wallet:tx")
 async def wallet_tx(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -786,9 +809,11 @@ async def wallet_receipt_photo(
         file_unique_id=getattr(photo, "file_unique_id", None),
         user_tg_id=message.from_user.id if message.from_user else None,
     )
-    # Always leave payment/cancel keyboards — delivery already attaches main KB on auto-approve
+    # Receipt ack only — do not re-send welcome (restore_main_reply would glue the notice under it).
+    from app.bot.menu_nav import acknowledge_receipt, clear_checkout_nav
+
     if text:
-        await restore_main_reply(
+        await acknowledge_receipt(
             message,
             session,
             db_user,
@@ -796,10 +821,9 @@ async def wallet_receipt_photo(
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
+            order=await session.get(Order, payment.order_id) if payment.order_id else None,
         )
     else:
-        from app.bot.menu_nav import clear_checkout_nav
-
         await clear_checkout_nav(state)
 
 @router.message(WalletStates.waiting_receipt)
@@ -878,9 +902,10 @@ async def generic_receipt(
         file_unique_id=getattr(photo, "file_unique_id", None),
         user_tg_id=message.from_user.id if message.from_user else None,
     )
-    # Leave pay-method / cancel reply keyboards after receipt (success or pending review)
+    from app.bot.menu_nav import acknowledge_receipt, clear_checkout_nav
+
     if text:
-        await restore_main_reply(
+        await acknowledge_receipt(
             message,
             session,
             db_user,
@@ -888,10 +913,9 @@ async def generic_receipt(
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
+            order=await session.get(Order, payment.order_id) if payment.order_id else None,
         )
     else:
-        from app.bot.menu_nav import clear_checkout_nav
-
         await clear_checkout_nav(state)
 
 

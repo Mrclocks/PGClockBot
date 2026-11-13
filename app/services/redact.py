@@ -70,10 +70,8 @@ def user_safe_error(
     low = msg.lower()
     if "traceback" in low or "/app/" in msg or 'file "' in low:
         return fallback
-    # Unmapped English HTTP/API noise → generic Persian, never raw status lines.
-    if re.search(r"\b(failed\s*\(|traceback|exception)\b", low) and not re.search(
-        r"[\u0600-\u06FF]", msg
-    ):
+    # Unmapped English text (HTTP noise, database or library errors) is never shown raw.
+    if not re.search(r"[\u0600-\u06FF]", msg):
         return fallback
     return msg
 

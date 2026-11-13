@@ -35,7 +35,7 @@ class InboxTitleTests(unittest.TestCase):
             "capacity_warn": False, "payg_risk": {}, "inbox_count": 0, "inbox_has": False,
         }
         html = app_module.render(_request("/inbox"), "inbox.html", ctx).body.decode("utf-8")
-        self.assertIn("<h1>اعلان‌ها و مرکز اقدام</h1>", html)
+        self.assertIn("<h1>مرکز اقدام</h1>", html)
         self.assertNotIn("page-sub", html)
 
 

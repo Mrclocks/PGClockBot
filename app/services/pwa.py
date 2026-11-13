@@ -277,7 +277,7 @@ def build_manifest(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def service_worker_js() -> str:
     return """/* PGClockBot panel service worker — static shell only */
-const CACHE = 'pgclock-shell-v52';
+const CACHE = 'pgclock-shell-v53';
 const PRECACHE = [
   '/static/logo.png',
   '/static/logo-64.png',

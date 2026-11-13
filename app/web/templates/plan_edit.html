@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% from "macros.html" import switch_chip, page_title %}
+{% from "_ds.html" import ds_sec, ds_switch %}
 {% block title %}ویرایش پلن{% endblock %}
 {% block content %}
+<div class="ds ds-settings">
 <div class="page-head">
   <div>
     {{ page_title('plan-edit', 'ویرایش پلن #' ~ plan.id, help='plans') }}
@@ -13,56 +15,47 @@
 {% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}
 {{ pg_snapshot_limit_board(pg_limit_cards) }}
 
-<div class="card">
-  <form method="post" action="/plans/{{ plan.id }}/edit" class="form-stack">
-    <div class="form-row">
-      <label class="form-field">نام پلن
-        <input name="name" required value="{{ plan.name }}" />
-      </label>
-      <label class="form-field">قیمت (تومان)
-        <input name="price" type="number" data-money min="0" required value="{{ plan.price }}" />
-      </label>
-      <label class="form-field">مدت (روز)
-        <input name="duration_days" type="number" min="0" value="{{ plan.duration_days if plan.duration_days else '' }}" placeholder="خالی = نامحدود" />
-        <small class="muted">برای مدت نامحدود فیلد را <b>خالی</b> بگذارید (یا ۰){% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_expire_max %} — سقف زنده: {{ (pg_limit_snapshot.per_user_expire_max // 86400) or 1 }} روز{% endif %}</small>
-      </label>
-      <label class="form-field">حجم (گیگ)
-        <input name="data_limit_gb" type="number" step="0.1" min="0" value="{{ plan.data_limit_gb if plan.data_limit_gb is not none else '' }}" placeholder="خالی = نامحدود" />
-        <small class="muted">برای حجم نامحدود فیلد را <b>خالی</b> بگذارید — عدد صفر نامحدود نیست{% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_data_max %} — سقف زنده: {{ pg_limit_snapshot.per_user_data_max | bytes }}{% endif %}</small>
-      </label>
-    </div>
-
+<form method="post" action="/plans/{{ plan.id }}/edit" class="form-stack ds-body ds-edit-form" data-ds-form>
+  {% call ds_sec('مشخصات') %}
+    <label class="form-field"><span class="ds-label-text">نام پلن <span class="ds-req" aria-hidden="true">*</span></span>
+      <input name="name" required value="{{ plan.name }}" data-ds-label="نام پلن" />
+    </label>
+    <label class="form-field"><span class="ds-label-text">قیمت <span class="ds-req" aria-hidden="true">*</span></span>
+      <span class="ds-unit"><input name="price" type="number" data-money min="0" required value="{{ plan.price }}" inputmode="numeric" dir="ltr" data-ds-label="قیمت" /><span class="ds-unit-label">تومان</span></span>
+    </label>
     <label class="form-field">توضیح کوتاه
-      <input name="description" value="{{ plan.description or '' }}" placeholder="نمایش در بات" />
+      <input name="description" value="{{ plan.description or '' }}" placeholder="نمایش در ربات" />
     </label>
+  {% endcall %}
 
-    <label class="form-field">برچسب دسته (اختیاری)
-      <select name="category_id">
-        <option value="">— بدون برچسب —</option>
-        {% for c in plan_categories or [] %}
-          {% if (c.audience or 'users') == 'users' or plan.category_id == c.id %}
-          <option value="{{ c.id }}" {% if plan.category_id == c.id %}selected{% endif %}>{{ c.name }}{% if not c.is_active %} (خاموش){% endif %}</option>
-          {% endif %}
-        {% endfor %}
-      </select>
-      <small class="muted">نوع پلن (ثابت/تست/…) عوض نمی‌شود؛ برچسب خاموش فعلی قابل نگه‌داشتن است</small>
-    </label>
+  {% call ds_sec('مدت و حجم') %}
+    <div class="ds-grid-2">
+      <div class="form-field">
+        <span class="ds-label-row"><span class="ds-label-text">مدت</span>
+          <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#edit-plan-days" data-ds-empty-is-unlimited data-ds-default="30">نامحدود</button></span>
+        <span class="ds-unit" data-unlimited-label="نامحدود"><input name="duration_days" id="edit-plan-days" type="number" min="0" value="{{ plan.duration_days if plan.duration_days else '' }}" inputmode="numeric" dir="ltr" aria-label="مدت (روز)" /><span class="ds-unit-label">روز</span></span>
+        {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_expire_max %}<small class="muted">سقف زنده: {{ (pg_limit_snapshot.per_user_expire_max // 86400) or 1 }} روز</small>{% endif %}
+      </div>
+      <div class="form-field">
+        <span class="ds-label-row"><span class="ds-label-text">حجم</span>
+          <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#edit-plan-gb" data-ds-empty-is-unlimited data-ds-default="50">نامحدود</button></span>
+        <span class="ds-unit" data-unlimited-label="نامحدود"><input name="data_limit_gb" id="edit-plan-gb" type="number" step="0.1" min="0" value="{{ plan.data_limit_gb if plan.data_limit_gb is not none else '' }}" inputmode="decimal" dir="ltr" aria-label="حجم (گیگ)" /><span class="ds-unit-label">گیگ</span></span>
+        {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_data_max %}<small class="muted">سقف زنده: {{ pg_limit_snapshot.per_user_data_max | bytes }}</small>{% endif %}
+      </div>
+    </div>
+    <div class="ds-rows">{{ ds_switch('carry_remaining_quota', 'انتقال مانده حجم و زمان در تمدید', 'مانده سرویس به تمدید، ارتقا یا تنزل اضافه می‌شود؛ خاموش: فقط حجم و مدت همین پلن', plan.carry_remaining_quota) }}</div>
+  {% endcall %}
 
-    <label class="form-field">ترتیب نمایش
-      <input name="sort_order" type="number" value="{{ plan.sort_order }}" />
-    </label>
-
+  {% call ds_sec('اتصال پاسارگارد') %}
     <label class="form-field">حالت ساخت در پاسارگارد
       <select name="mode" id="plan-mode">
         <option value="custom" {% if not plan.pg_template_id %}selected{% endif %}>سفارشی (گروه + حجم + مدت)</option>
         <option value="template" {% if plan.pg_template_id %}selected{% endif %}>از تمپلیت آماده پاسارگارد</option>
       </select>
     </label>
-
     {% set selected_groups = (plan.pg_group_ids or '').split(',') %}
     <div id="mode-custom" class="form-stack">
-      <div class="form-field">
-        <span class="form-field-label">گروه‌های پاسارگارد (حداقل یکی)</span>
+      <div class="form-field"><span class="ds-label-text">گروه‌ها</span>
         <div class="ui-switch-grid">
           {% for g in groups %}
           {% set gid = g.get('id')|string %}
@@ -71,22 +64,20 @@
           <span class="muted">گروهی نیست — از منوی پاسارگارد → گروه‌ها بسازید.</span>
           {% endfor %}
         </div>
+        <small class="muted">حداقل یک گروه</small>
       </div>
     </div>
-
     <div id="mode-template" class="form-stack" style="display:none">
       <label class="form-field">تمپلیت پاسارگارد
         <select name="pg_template_id">
-          <option value="">— انتخاب کنید —</option>
+          <option value="">انتخاب کنید…</option>
           {% for t in templates %}
-          <option value="{{ t.get('id') }}" {% if plan.pg_template_id == t.get('id') %}selected{% endif %}>
-            #{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}
-          </option>
+          <option value="{{ t.get('id') }}" {% if plan.pg_template_id == t.get('id') %}selected{% endif %}>#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
           {% endfor %}
         </select>
       </label>
     </div>
-
+    <div class="ds-divider"></div>
     {% set naming_prefix = plan.pg_username_prefix or '' %}
     {% set naming_suffix = plan.pg_username_suffix or '' %}
     {% set naming_pattern = plan.pg_username_pattern or '' %}
@@ -95,26 +86,79 @@
     {% set global_suffix = (values or {}).get('pg_username_suffix','') if values is defined else '' %}
     {% set global_pattern = (values or {}).get('pg_username_pattern','{prefix}_{random}{suffix}') if values is defined else '{prefix}_{random}{suffix}' %}
     {% include "_plan_naming_fields.html" %}
+  {% endcall %}
 
-    {% if plan.button_style is none %}
-    {% set plan_button_style = 'inherit' %}
-    {% else %}
-    {% set plan_button_style = plan.button_style or '' %}
-    {% endif %}
-    {% include "_plan_button_style_field.html" %}
-
-    <div class="actions">
-      <button class="btn" type="submit">ذخیره تغییرات</button>
-      <a class="btn btn-ghost" href="/plans">انصراف</a>
+  <section class="ds-sec" id="edit-user-buy-extra-block">
+    <div class="ds-sec-head"><h3 class="ds-sec-title">فروش حجم و زمان اضافه</h3></div>
+    <div class="ds-card">
+      {{ ds_switch('allow_buy_extra', 'کاربر بتواند حجم و زمان اضافه بخرد', 'بسته‌های همین پلن در ربات و مینی‌اپ دیده می‌شوند؛ قیمت هر پله = نرخ واحد × مقدار', plan.allow_buy_extra) }}
+      <div class="ds-grid-2" id="edit-user-extra-prices" {% if not plan.allow_buy_extra %}hidden{% endif %}>
+        <label class="form-field">قیمت هر گیگ
+          <span class="ds-unit"><input name="extra_gb_price" type="number" data-money min="0" value="{{ plan.extra_gb_price or 0 }}" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
+        </label>
+        <label class="form-field">قیمت هر ماه
+          <span class="ds-unit"><input name="extra_month_price" type="number" data-money min="0" value="{{ plan.extra_month_price or 0 }}" inputmode="numeric" dir="ltr" /><span class="ds-unit-label">تومان</span></span>
+        </label>
+      </div>
+      {% set packs_editor_id = 'user-plan-addon-packs-edit' %}
+      {% set packs_hidden = not plan.allow_buy_extra %}
+      {% set pack_style_options = pack_style_options if pack_style_options is defined else plan_style_options %}
+      {% include "_user_plan_addon_packs_editor.html" %}
     </div>
-  </form>
-</div>
+  </section>
 
+  {% call ds_sec('نمایش در ربات') %}
+    <label class="form-field">برچسب دسته
+      <select name="category_id">
+        <option value="">بدون برچسب</option>
+        {% for c in plan_categories or [] %}
+          {% if (c.audience or 'users') == 'users' or plan.category_id == c.id %}
+          <option value="{{ c.id }}" {% if plan.category_id == c.id %}selected{% endif %}>{{ c.name }}{% if not c.is_active %} (خاموش){% endif %}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+      <small class="muted">نوع پلن (ثابت/تست/…) عوض نمی‌شود؛ برچسب خاموش فعلی قابل نگه‌داشتن است</small>
+    </label>
+    <div class="ds-grid-2">
+      <label class="form-field">ترتیب نمایش
+        <input name="sort_order" type="number" value="{{ plan.sort_order }}" inputmode="numeric" dir="ltr" />
+      </label>
+      {% if plan.button_style is none %}{% set plan_button_style = 'inherit' %}{% else %}{% set plan_button_style = plan.button_style or '' %}{% endif %}
+      {% set plan_color_compact = true %}
+      <div class="form-field">رنگ دکمه{% include "_plan_button_style_field.html" %}</div>
+    </div>
+  {% endcall %}
+
+  <div class="actions sticky-actions">
+    <button class="btn" type="submit">ذخیره تغییرات</button>
+
+  </div>
+</form>
+
+<script src="/static/pack-rows.js?v={{ asset_v('pack-rows.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/user-plan-addon-packs.js?v={{ asset_v('user-plan-addon-packs.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 <script>
 (function(){
   const mode = document.getElementById('plan-mode');
   const custom = document.getElementById('mode-custom');
   const tpl = document.getElementById('mode-template');
+  function syncUserExtras(){
+    const prices = document.getElementById('edit-user-extra-prices');
+    const packs = document.getElementById('user-plan-addon-packs-edit');
+    const sw = document.querySelector('#edit-user-buy-extra-block input[name="allow_buy_extra"]');
+    const on = sw ? !!sw.checked : false;
+    if (prices) prices.hidden = !on;
+    if (window.UserPlanAddonPacks && packs) {
+      if (on) window.UserPlanAddonPacks.seedDefaultsIfEmpty(packs);
+      window.UserPlanAddonPacks.setEditorVisible(packs, on);
+    } else if (packs) {
+      packs.hidden = !on;
+    }
+  }
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.name === 'allow_buy_extra') syncUserExtras();
+  });
+  syncUserExtras();
   function sync(){
     const isTpl = mode.value === 'template';
     custom.style.display = isTpl ? 'none' : '';
@@ -161,4 +205,5 @@
   })();
 })();
 </script>
+</div>
 {% endblock %}

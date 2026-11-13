@@ -42,6 +42,44 @@ async def create_ticket(
     return ticket
 
 
+STAFF_OUTBOUND_SUBJECT = "پیام پشتیبانی"
+
+
+async def create_staff_outbound_ticket(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    body: str,
+    sender_tg: int,
+    reseller_id: int | None,
+    subject: str = STAFF_OUTBOUND_SUBJECT,
+) -> Ticket:
+    """Open a ticket from a staff DM so the customer can reply/close inline.
+
+    ``reseller_id`` is taken from the acting shop scope (``None`` = platform),
+    never from ambient shop context — callers already resolved the target shop.
+    """
+    ticket = Ticket(
+        user_id=int(user_id),
+        subject=(subject or STAFF_OUTBOUND_SUBJECT)[:250],
+        status=TicketStatus.ANSWERED.value,
+        reseller_id=int(reseller_id) if reseller_id is not None else None,
+    )
+    session.add(ticket)
+    await session.flush()
+    session.add(
+        TicketMessage(
+            ticket_id=ticket.id,
+            sender_id=int(sender_tg),
+            is_staff=True,
+            body=body,
+        )
+    )
+    await session.commit()
+    await session.refresh(ticket)
+    return ticket
+
+
 async def reply_ticket(
     session: AsyncSession,
     ticket: Ticket,

@@ -345,8 +345,45 @@
       : '<button type="button" class="btn ghost block" data-action="topup">شارژ کیف پول</button>'}`;
   }
 
+  const SERVICE_NAME_RE = /^[a-z][a-z0-9_]{2,19}$/;
+  const SERVICE_NAME_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+  /** Lower-cased name, or "" when it breaks the rules (3–20 of a-z 0-9 _, starting with a letter). */
+  function validServiceName(value) {
+    const name = String(value || "").trim().replace(/^@/, "").toLowerCase();
+    return SERVICE_NAME_RE.test(name) ? name : "";
+  }
+
+  /** «🎲 تصادفی»: a letter, then seven letters or digits. ``rand`` returns [0, 1). */
+  function randomServiceName(rand) {
+    const pick = (chars) => chars[Math.floor(rand() * chars.length) % chars.length];
+    let name = pick(SERVICE_NAME_CHARS.slice(0, 26));
+    for (let i = 0; i < 7; i += 1) name += pick(SERVICE_NAME_CHARS);
+    return name;
+  }
+
+  function serviceNameFieldHtml(value) {
+    return `<label class="form-field"><span class="muted sm">نام سرویس (الزامی)</span>
+        <span class="code-line"><input type="text" name="service_name" data-input="service-name" maxlength="20"
+          autocomplete="off" autocapitalize="none" spellcheck="false" dir="ltr" value="${esc(value || "")}"
+          aria-describedby="service-name-hint">
+        <button type="button" class="btn ghost" data-action="random-service-name">🎲 تصادفی</button></span>
+        <span class="muted sm" id="service-name-hint">حروف انگلیسی کوچک، عدد و _ ؛ ۳ تا ۲۰ نویسه و با یک حرف شروع شود.</span></label>`;
+  }
+
+  /** ``options``: ``nameRequired`` shows the name field, ``staffFree`` the free button for shop staff. */
+  function checkoutExtrasHtml(options) {
+    return options && options.nameRequired ? serviceNameFieldHtml(options.name) : "";
+  }
+
+  function staffFreeButtonHtml(plan, options) {
+    return options && options.staffFree
+      ? `<button type="button" class="btn ghost block" data-action="buy-free" data-id="${Number(plan.id) || 0}">🎁 دریافت رایگان (مدیر)</button>`
+      : "";
+  }
+
   /** ``features`` (from the app) hides the code field and top-up button where a shop has not opened them. */
-  function checkoutHtml(plan, wallet, features) {
+  function checkoutHtml(plan, wallet, features, options) {
     if (!plan) return `<section class="card"><p class="muted">یک پلن را انتخاب کنید.</p></section>`;
     const f = features || {};
     const price = Number(plan.price) || 0;
@@ -360,21 +397,37 @@
           <span class="code-line"><input type="text" name="code" maxlength="64" autocomplete="off" dir="ltr" autocapitalize="characters">
           <button type="submit" class="btn ghost">اعمال</button></span></label>
       </form>`}
+      ${checkoutExtrasHtml(options)}
       ${enough ? "" : lowBalanceHtml(f)}
-      <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "دریافت سرویس تست" : "پرداخت از کیف پول"}</button>
+      <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "ادامه دریافت تست" : "ادامه پرداخت"}</button>
+      ${staffFreeButtonHtml(plan, options)}
     </section>`;
   }
 
-  function discountedCheckoutHtml(checkout, plan, wallet) {
+  function buyConfirmHtml(plan) {
+    if (!plan) return emptyHtml("پلن انتخاب نشده است.");
+    const pid = Number(plan.id) || 0;
+    const confirmLabel = plan.is_trial ? "تأیید و دریافت سرویس تست" : "تأیید و پرداخت از کیف پول";
+    return `<div class="sum-row"><span class="muted">پلن</span><strong>${esc(plan.name)}</strong></div>
+      <div class="sum-row is-total"><span>مبلغ</span><span>${priceHtml(plan)}</span></div>
+      <p class="sm">${esc(planMetaText(plan))}</p>
+      <div class="btn-col">
+        <button type="button" class="btn block" data-action="confirm-buy" data-id="${pid}">${esc(confirmLabel)}</button>
+        <button type="button" class="btn ghost block" data-action="close-sheet">انصراف</button>
+      </div>`;
+  }
+
+  function discountedCheckoutHtml(checkout, plan, wallet, options) {
     const enough = Number(checkout.amount) <= (Number(wallet) || 0);
     return `<section class="card" aria-label="خلاصهٔ سفارش با تخفیف">
-      <div class="sum-row"><span class="muted">پلن</span><span>${esc(plan ? plan.name : "")}</span></div>
+      <div class="sum-row"><span class="muted">پلن</span><strong>${esc(plan ? plan.name : "")}</strong></div>
       <div class="sum-row"><span class="muted">قیمت</span><s>${esc(money(checkout.original_amount))}</s></div>
       <div class="sum-row"><span class="muted">تخفیف <bdi dir="ltr">${esc(checkout.code)}</bdi></span><span class="is-plus tx-amt"><span aria-hidden="true">−</span><bdi>${esc(money(checkout.discount))}</bdi></span></div>
-      <div class="sum-row is-total"><span>قابل پرداخت</span><span>${esc(money(checkout.amount))}</span></div>
+      <div class="sum-row is-total"><span>مبلغ</span><span>${esc(money(checkout.amount))}</span></div>
+      ${checkoutExtrasHtml(options)}
       ${enough ? "" : lowBalanceHtml()}
       <div class="btn-col">
-        <button type="button" class="btn block" data-action="checkout-pay"${enough ? "" : " disabled"}>پرداخت از کیف پول</button>
+        <button type="button" class="btn block" data-action="checkout-pay"${enough ? "" : " disabled"}>تأیید و پرداخت از کیف پول</button>
         <button type="button" class="btn ghost block" data-action="checkout-cancel">حذف کد و انصراف</button>
       </div>
     </section>`;
@@ -388,14 +441,55 @@
     </form>`;
   }
 
+  // How a plan compares to the service's own plan, as the bot labels it.
+  const RENEWAL_RELATIONS = { current: ["پلن فعلی", "ok"], upgrade: ["ارتقا", ""], downgrade: ["تنزل", "warn"] };
+  const OTHER_CATEGORY = "none";
+
+  function renewPlanButton(p, serviceId) {
+    const relation = RENEWAL_RELATIONS[p.relation];
+    return `<button type="button" class="plan-option" data-action="preview-renew" data-id="${Number(serviceId) || 0}" data-plan="${Number(p.id) || 0}">
+        <span class="plan-meta"><strong>${relation ? badge(relation[0], relation[1]) + " " : ""}${esc(p.name)}</strong><span class="muted sm">${esc(planMetaText(p))}</span></span>
+        <span class="plan-price">${priceHtml(p)}</span>
+      </button>`;
+  }
+
   function renewPlansHtml(plans, serviceId) {
     const list = (plans || []).filter((p) => !p.is_trial);
     if (!list.length) return emptyHtml("پلنی برای تمدید فعال نیست.");
     return `<p class="muted sm">پلن تمدید را انتخاب کنید؛ پیش از پرداخت، نتیجه را می‌بینید.</p>
-      <div class="plan-list">${list.map((p) => `<button type="button" class="plan-option" data-action="preview-renew" data-id="${Number(serviceId) || 0}" data-plan="${Number(p.id) || 0}">
-        <span class="plan-meta"><strong>${esc(p.name)}</strong><span class="muted sm">${esc(planMetaText(p))}</span></span>
-        <span class="plan-price">${priceHtml(p)}</span>
-      </button>`).join("")}</div>`;
+      <div class="plan-list">${list.map((p) => renewPlanButton(p, serviceId)).join("")}</div>`;
+  }
+
+  function renewCategoryButton(serviceId, key, name, count) {
+    return `<button type="button" class="plan-option" data-action="renew-category" data-id="${Number(serviceId) || 0}" data-cat="${esc(key)}">
+        <span class="plan-meta"><strong>${esc(name)}</strong><span class="muted sm">${esc(num(count))} پلن</span></span>
+      </button>`;
+  }
+
+  /** The service's own plan first, then the shop's categories (and «سایر»), like the bot. */
+  function renewChoicesHtml(data, serviceId) {
+    const d = data || {};
+    if (!d.grouped) return renewPlansHtml(d.plans, serviceId);
+    const categories = (d.categories || []).filter((c) => (c.plans || []).length);
+    const other = d.other || [];
+    if (!d.current && !categories.length && !other.length) return emptyHtml("پلنی برای تمدید فعال نیست.");
+    const buttons = categories.map((c) => renewCategoryButton(serviceId, String(Number(c.id) || 0), c.name, c.plans.length));
+    if (other.length) buttons.push(renewCategoryButton(serviceId, OTHER_CATEGORY, "سایر", other.length));
+    return `<p class="muted sm">پلن فعلی را تمدید کنید یا از دسته‌ها پلن دیگری انتخاب کنید؛ پیش از پرداخت، نتیجه را می‌بینید.</p>
+      ${d.current ? `<div class="plan-list">${renewPlanButton(d.current, serviceId)}</div>` : ""}
+      <div class="plan-list">${buttons.join("")}</div>`;
+  }
+
+  /** One category's plans; «سایر» is the plans without a category. Null when the key is unknown. */
+  function renewCategoryHtml(data, serviceId, key) {
+    const d = data || {};
+    const category = key === OTHER_CATEGORY
+      ? { name: "سایر", plans: d.other || [] }
+      : (d.categories || []).find((c) => String(Number(c.id) || 0) === String(key));
+    if (!category || !(category.plans || []).length) return null;
+    return `<p><strong>${esc(category.name)}</strong></p>
+      <div class="plan-list">${category.plans.map((p) => renewPlanButton(p, serviceId)).join("")}</div>
+      <button type="button" class="btn ghost block" data-action="renew-groups" data-id="${Number(serviceId) || 0}">بازگشت به دسته‌ها</button>`;
   }
 
   function renewPreviewHtml(preview, serviceId, planId) {
@@ -415,11 +509,27 @@
   function addonPacksHtml(packs, serviceId) {
     if (!packs || !packs.length) return emptyHtml("بسته‌ای برای خرید فعال نیست.");
     const sid = Number(serviceId) || 0;
-    return `<p class="muted sm">بسته پس از پرداخت به همین سرویس اضافه می‌شود.</p>
-      <div class="plan-list">${packs.map((p) => `<button type="button" class="plan-option" data-action="buy-addon" data-id="${sid}" data-pack="${Number(p.id) || 0}">
+    return `<p class="muted sm">بسته را انتخاب کنید؛ پیش از پرداخت، نتیجه را می‌بینید.</p>
+      <div class="plan-list">${packs.map((p) => `<button type="button" class="plan-option" data-action="preview-addon" data-id="${sid}" data-pack="${Number(p.id) || 0}">
         <span class="plan-meta"><strong>${esc(p.name)}</strong><span class="muted sm">+${esc(p.amount_label)}</span>${p.description ? `<span class="muted sm">${esc(p.description)}</span>` : ""}</span>
         <span class="plan-price">${priceHtml(p)}</span>
       </button>`).join("")}</div>`;
+  }
+
+  function addonPreviewHtml(preview, serviceId, packId, kind) {
+    const sid = Number(serviceId) || 0;
+    const pid = Number(packId) || 0;
+    const k = kind === "duration" ? "duration" : "volume";
+    return `<div class="sum-row"><span class="muted">بسته</span><strong>${esc(preview.pack_name)}</strong></div>
+      <div class="sum-row"><span class="muted">افزایش</span><span>+${esc(preview.amount_label)}</span></div>
+      <div class="sum-row is-total"><span>مبلغ</span><span>${priceHtml(preview)}</span></div>
+      ${(preview.lines || []).map((line) => `<p class="sm">${esc(line)}</p>`).join("")}
+      ${(preview.warnings || []).map((line) => `<p class="inline-error">${esc(line)}</p>`).join("")}
+      ${preview.notice ? `<p class="muted sm">${esc(preview.notice)}</p>` : ""}
+      <div class="btn-col">
+        <button type="button" class="btn block" data-action="confirm-addon" data-id="${sid}" data-pack="${pid}">تأیید و پرداخت از کیف پول</button>
+        <button type="button" class="btn ghost block" data-action="addons" data-id="${sid}" data-kind="${esc(k)}">انتخاب بسته دیگر</button>
+      </div>`;
   }
 
   function automationHtml(data, serviceId) {
@@ -476,16 +586,21 @@
   function walletCardHtml(customer, { actions, features } = {}) {
     const c = customer || {};
     const f = features || {};
+    const loyaltyOn = !!c.loyalty_enabled;
     const buttons = [
       f.topup !== false ? `<button type="button" class="btn on-hero" data-action="topup">${icon("plus", 18)}شارژ کیف پول</button>` : "",
       actions
         ? (f.shop !== false ? `<button type="button" class="btn hero-ghost" data-action="goto" data-view="shop">${icon("shop", 18)}خرید سرویس</button>` : "")
         : (f.gift !== false ? `<button type="button" class="btn hero-ghost" data-action="gift-code">${icon("gift", 18)}کد هدیه</button>` : ""),
+      loyaltyOn && f.club !== false
+        ? `<button type="button" class="btn hero-ghost" data-action="goto" data-view="club">${icon("gift", 18)}باشگاه</button>`
+        : "",
     ].join("");
     return heroHtml({
       label: "موجودی کیف پول",
       chip: c.wallet_pay_enabled ? "پرداخت فعال" : "فقط مشاهده",
       value: money(c.wallet),
+      sub: loyaltyOn ? `${num(c.points)} امتیاز` : "",
       footer: buttons ? `<div class="btn-row">${buttons}</div>` : "",
       aria: "کیف پول",
     });
@@ -893,12 +1008,73 @@
     return `<div class="error-box" role="alert"><p>${esc(message)}</p>${button}${code}</div>`;
   }
 
+  /* ---------- reseller subscription ---------- */
+
+  function capacityText(base, extra, unit) {
+    return base || extra ? `${num(base + extra)} ${unit}${extra ? ` (${num(extra)} اضافه)` : ""}` : "نامحدود";
+  }
+
+  function resellerUsageHtml(d) {
+    const u = d.usage;
+    if (!u) return '<p class="muted sm">مصرف فعلی از پنل خوانده نشد.</p>';
+    return `<p class="muted sm">مصرف فعلی: ${esc(num(u.users))} کاربر · ${esc(num(u.used_gb))} گیگ</p>`;
+  }
+
+  function resellerStatusCardHtml(d) {
+    const state = d.status === "active" && !d.unavailable ? "فعال" : "نیازمند تمدید";
+    const left = d.days_left === null || d.days_left === undefined ? "بدون انقضا" : `${num(d.days_left)} روز مانده`;
+    return `<section class="card" aria-label="وضعیت اشتراک">
+      <div class="card-head"><h2 class="card-title">${esc(d.plan_name || "بدون پلن")}</h2>${badge(state, d.unavailable ? "warn" : "ok")}</div>
+      <p>${icon("clock", 16)} ${esc(d.is_payg ? "پرداخت به‌ازای مصرف" : left)}</p>
+      <p>${icon("svc", 16)} حجم: <bdi>${esc(capacityText(d.base_gb, d.extra_gb, "گیگ"))}</bdi></p>
+      <p>${icon("users", 16)} کاربر: <bdi>${esc(capacityText(d.base_users, d.extra_users, "کاربر"))}</bdi></p>
+      ${resellerUsageHtml(d)}
+    </section>`;
+  }
+
+  function resellerPackLabel(p) {
+    return [p.gb ? `+${num(p.gb)} گیگ` : "", p.users ? `+${num(p.users)} کاربر` : ""].filter(Boolean).join(" ");
+  }
+
+  function resellerPacksHtml(packs) {
+    if (!packs || !packs.length) return "";
+    return `<section class="card" aria-label="بسته‌های آماده"><h2 class="card-title">بسته‌های آماده</h2>
+      <div class="plan-list">${packs.map((p) => `<button type="button" class="plan-option" data-action="res-pack-buy" data-pack="${Number(p.id) || 0}">
+        <span class="plan-meta"><strong>${esc(p.name)}</strong><span class="muted sm">${esc(resellerPackLabel(p))}</span>${p.description ? `<span class="muted sm">${esc(p.description)}</span>` : ""}</span>
+        <span class="plan-price"><bdi>${esc(money(p.price))}</bdi></span>
+      </button>`).join("")}</div></section>`;
+  }
+
+  function resellerUnitHtml(title, kind, unitLabel, offer) {
+    if (!offer) return "";
+    return `<section class="card" aria-label="${esc(title)}"><h2 class="card-title">${esc(title)}</h2>
+      <p class="muted sm">نرخ: <bdi>${esc(money(offer.unit_price))}</bdi> برای هر ${esc(unitLabel)}</p>
+      <div class="btn-row">${(offer.options || []).map((n) => `<button type="button" class="btn ghost sm" data-action="res-extra-buy" data-kind="${esc(kind)}" data-amount="${Number(n) || 0}">${esc(num(n))} ${esc(unitLabel)}</button>`).join("")}</div>
+    </section>`;
+  }
+
+  /** The reseller's own package: capacity, time, wallet, renewal and the packs they can buy. */
+  function resellerSubscriptionHtml(d) {
+    const notice = d.unavailable ? `<div class="notice is-warn" role="status"><div class="notice-body"><span>${esc(d.unavailable)}</span></div></div>` : "";
+    const renew = d.renew_total !== null && d.renew_total !== undefined && !d.is_payg
+      ? `<button type="button" class="btn block" data-action="res-renew">${icon("refresh", 18)} تمدید — <bdi>${esc(money(d.renew_total))}</bdi></button>
+        <p class="muted sm">مدت بسته اضافه و مصرف خود ادمین صفر می‌شود؛ مصرف مشتریان شما دست‌نخورده می‌ماند.</p>`
+      : (d.renew_note ? `<p class="muted sm">${esc(d.renew_note)}</p>` : "");
+    return heroHtml({
+      label: "موجودی کیف پول", value: money(d.wallet), aria: "کیف پول",
+      footer: '<div class="btn-row"><button type="button" class="btn on-hero" data-action="topup">شارژ کیف پول</button></div>',
+    }) + notice + resellerStatusCardHtml(d) + (renew ? `<section class="card">${renew}</section>` : "")
+      + resellerPacksHtml(d.packs) + resellerUnitHtml("حجم اضافه", "gb", "گیگ", d.unit_gb)
+      + resellerUnitHtml("کاربر اضافه", "users", "کاربر", d.unit_users);
+  }
+
   root.PGMini.render = Object.freeze({
     icon, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
     brandHeaderHtml, noticeBannerHtml, shortcutsHtml, panelShortcutsHtml, heroHtml,
-    attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, discountedCheckoutHtml, giftFormHtml, renewPlansHtml,
-    renewPreviewHtml, addonPacksHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
+    attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, buyConfirmHtml, discountedCheckoutHtml,
+    validServiceName, randomServiceName, giftFormHtml, renewPlansHtml, renewChoicesHtml, renewCategoryHtml,
+    renewPreviewHtml, addonPacksHtml, addonPreviewHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
     backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, reviewQueueHtml, reviewSheetHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, navHtml, loadingHtml, emptyHtml,
-    errorHtml,
+    errorHtml, resellerSubscriptionHtml,
   });
 })(typeof window === "object" ? window : globalThis);

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.services.authz import authz_from_staff, can_shop
+from app.services.cashback_rules import cashback_scope
 from app.services.funnel_access import funnel_shop_scope
 from app.services.gift_codes import gift_code_scope
 from app.services.platform_identity import is_explicit_owner_staff
@@ -21,11 +22,14 @@ from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
 CLUB = "club"
 CLUB_TRANSACTIONS = "club_transactions"
 DISCOUNTS = "discounts"
+RANDOM_DISCOUNTS = "random_discounts"
 GIFT_CODES = "gift_codes"
+CASHBACK = "cashback"
 FUNNEL = "funnel"
 CAMPAIGNS = "campaigns"
 TRIAL_USERS = "trial_users"
 BROADCAST = "broadcast"
+SHOP_BROADCAST = "shop_broadcast"
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,15 +40,18 @@ class MarketingSection:
 
 
 _CLUB_SECTIONS: tuple[MarketingSection, ...] = (
-    MarketingSection(CLUB, "باشگاه مشتریان", "/loyalty?tab=overview"),
-    MarketingSection(CLUB_TRANSACTIONS, "تراکنش‌های باشگاه", "/loyalty?tab=transactions"),
+    MarketingSection(CLUB, "باشگاه", "/loyalty?tab=overview"),
+    MarketingSection(CLUB_TRANSACTIONS, "تراکنش‌ها", "/loyalty?tab=transactions"),
 )
 _DISCOUNT_SECTION = MarketingSection(DISCOUNTS, "تخفیف‌ها", "/catalog-discounts")
+_RANDOM_DISCOUNT_SECTION = MarketingSection(RANDOM_DISCOUNTS, "تخفیف تصادفی", "/random-discounts")
 _GIFT_CODE_SECTION = MarketingSection(GIFT_CODES, "کد هدیه", "/gift-codes")
+_CASHBACK_SECTION = MarketingSection(CASHBACK, "کش‌بک", "/cashback")
 _FUNNEL_SECTION = MarketingSection(FUNNEL, "رفتار کاربر", "/funnel")
 _CAMPAIGN_SECTION = MarketingSection(CAMPAIGNS, "کمپین هدفمند", "/campaigns")
 _TRIAL_USERS_SECTION = MarketingSection(TRIAL_USERS, "کاربران تست", "/trial-users")
 _BROADCAST_SECTION = MarketingSection(BROADCAST, "پیام گروهی", "/broadcast")
+_SHOP_BROADCAST_SECTION = MarketingSection(SHOP_BROADCAST, "پیام گروهی", "/shop-broadcast")
 
 
 def _has_shop_scope(staff: Mapping[str, Any]) -> bool:
@@ -70,6 +77,15 @@ def _can_open_gift_codes(staff: Mapping[str, Any]) -> bool:
     return True
 
 
+def _can_open_cashback(staff: Mapping[str, Any]) -> bool:
+    """Same rule as the cashback page and its POST routes (``cashback_scope``)."""
+    try:
+        cashback_scope(staff)
+    except PermissionError:
+        return False
+    return True
+
+
 def _can_open_funnel(staff: Mapping[str, Any]) -> bool:
     """Same rule as the funnel page (``funnel_shop_scope``)."""
     try:
@@ -84,6 +100,16 @@ def _can_open_broadcast(staff: Mapping[str, Any]) -> bool:
     return staff.get("role") == "admin" and is_explicit_owner_staff(dict(staff))
 
 
+def _can_open_shop_broadcast(staff: Mapping[str, Any]) -> bool:
+    """Same rule as ``shop_broadcast_scope``: ``broadcast`` plus a concrete shop id."""
+    if not can_shop(authz_from_staff(staff), "broadcast"):
+        return False
+    try:
+        return resolve_shop_scope_id(dict(staff)) is not None
+    except ShopScopeError:
+        return False
+
+
 def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSection, ...]:
     """Sections the staff member can open, in display order. Empty when unauthenticated."""
     if not staff:
@@ -93,14 +119,54 @@ def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSectio
         sections.extend(_CLUB_SECTIONS)
     if _can_open_feature(staff, "catalog_discounts"):
         sections.append(_DISCOUNT_SECTION)
+    if _can_open_feature(staff, "random_discounts"):
+        sections.append(_RANDOM_DISCOUNT_SECTION)
     if _can_open_gift_codes(staff):
         sections.append(_GIFT_CODE_SECTION)
+    if _can_open_cashback(staff):
+        sections.append(_CASHBACK_SECTION)
     if _can_open_feature(staff, "campaigns"):
         sections.append(_CAMPAIGN_SECTION)
     if _can_open_feature(staff, "trial_users"):
         sections.append(_TRIAL_USERS_SECTION)
     if _can_open_funnel(staff):
         sections.append(_FUNNEL_SECTION)
+    if _can_open_shop_broadcast(staff):
+        sections.append(_SHOP_BROADCAST_SECTION)
     if _can_open_broadcast(staff):
         sections.append(_BROADCAST_SECTION)
     return tuple(sections)
+
+
+@dataclass(frozen=True, slots=True)
+class MarketingGroup:
+    """One entry of the marketing tab strip; sections of the same topic open as sub-tabs."""
+
+    key: str
+    label: str
+    sections: tuple[MarketingSection, ...]
+
+    @property
+    def href(self) -> str:
+        return self.sections[0].href
+
+
+# (group key, label, section keys in display order)
+_GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("club", "باشگاه مشتریان", (CLUB, CLUB_TRANSACTIONS)),
+    ("offers", "تخفیف و کد هدیه", (DISCOUNTS, RANDOM_DISCOUNTS, GIFT_CODES, CASHBACK)),
+    ("messages", "پیام و کمپین", (BROADCAST, SHOP_BROADCAST, CAMPAIGNS)),
+    ("trials", "کاربران تست", (TRIAL_USERS,)),
+    ("funnel", "رفتار کاربر", (FUNNEL,)),
+)
+
+
+def marketing_groups(sections: tuple[MarketingSection, ...]) -> tuple[MarketingGroup, ...]:
+    """Group the sections a staff member may open; a group with none of them is left out."""
+    by_key = {s.key: s for s in sections}
+    groups = []
+    for key, label, members in _GROUP_LAYOUT:
+        allowed = tuple(by_key[m] for m in members if m in by_key)
+        if allowed:
+            groups.append(MarketingGroup(key, label, allowed))
+    return tuple(groups)

@@ -10,12 +10,13 @@ from pathlib import Path
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import FSInputFile
+from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.services.backup_settings import CHAT_IDS_KEY, TOKEN_KEY, parse_chat_ids
 from app.services.formatting import format_bytes
+from app.services.notice_links import notice_markup
 from app.services.secret_box import reveal_bot_token
 from app.services.users import get_setting, on, set_setting
 
@@ -30,6 +31,7 @@ TOO_LARGE_MESSAGE = (
     "آن را از وب‌پنل ← تنظیمات ← بکاپ دانلود کنید و جای امن نگه دارید."
 )
 STATUS_AT_KEY = "backup_telegram_last_at"
+BACKUP_SCREEN_CALLBACK = "nv:adm:backup"
 
 
 class BackupTelegramError(ValueError):
@@ -120,13 +122,13 @@ async def send_backup(session: AsyncSession, path: Path, *, include_env: bool, c
     return "error"
 
 
-async def _send_text(destination: Destination, text: str) -> int:
+async def _send_text(destination: Destination, text: str, *, markup: InlineKeyboardMarkup | None = None) -> int:
     bot = _open_bot(destination.token)
     delivered = 0
     try:
         for chat_id in destination.chat_ids:
             try:
-                await bot.send_message(chat_id, text)
+                await bot.send_message(chat_id, text, reply_markup=markup)
                 delivered += 1
             except TelegramAPIError:
                 logger.warning("backup message failed chat=%s", chat_id, exc_info=True)
@@ -148,4 +150,8 @@ async def notify_backup_problem(session: AsyncSession, text: str) -> int:
     except BackupTelegramError:
         logger.warning("no recipient for a backup problem notice", exc_info=True)
         return 0
-    return await _send_text(destination, text)
+    # The backup screen belongs to the panel bot, so a separate backup bot cannot open it.
+    markup = None if destination.custom else notice_markup(InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="💾 باز کردن بکاپ‌ها", callback_data=BACKUP_SCREEN_CALLBACK),
+    ]]))
+    return await _send_text(destination, text, markup=markup)

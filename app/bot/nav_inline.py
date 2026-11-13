@@ -17,8 +17,22 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.bot.chat_cleanup import note_throwaway, sweep_above
 from app.bot.edit_mode import editable_screen
-from app.bot.keyboards import _ikb, _t
+from app.bot.hub_entries import (
+    ADMIN_STAFF_AUDIT,
+    ADMIN_TRIAL_USERS,
+    SERVICE_SHOP_REVIEW,
+    SHOP_STAFF_AUDIT,
+    SHOP_TRIAL_USERS,
+    HubEntry,
+)
+from app.bot.broadcast_entries import BROADCAST_HISTORY
+from app.bot.keyboards import _ikb, _label_or, _t
+from app.bot.pg_entries import PG_ADMINS, PG_HOSTS, PG_INBOUNDS
 from app.bot.list_pages import Page, page_of, pager_row
+from app.bot.payg_review_entries import PAYG_REVIEW
+from app.bot.service_cleanup_entries import ADMIN_SERVICE_CLEANUP, SHOP_SERVICE_CLEANUP
+from app.bot.shop_marketing_entries import ADMIN_DISCOUNTS, ADMIN_FUNNEL, DISCOUNTS_CALLBACK, FUNNEL_CALLBACK
+from app.services.resellers import has_bot_perm
 from app.bot.reseller_hub_groups import (
     RESELLER_GROUPS,
     RESELLER_HOME_CALLBACK,
@@ -352,6 +366,8 @@ def topup_methods_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 @editable_screen("c.wallet")
 def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.services.users import on
+
     rows = [
         [
             _ikb(
@@ -369,6 +385,20 @@ def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 style_id="wallet_tx",
             ),
         ],
+    ]
+    if on((ui or {}).get("loyalty_enabled")):
+        rows.append(
+            [
+                _ikb(
+                    _t(ui, "btn_loyalty") or "⭐ باشگاه",
+                    callback_data="nv:loy:home",
+                    ui=ui,
+                    label_key="btn_loyalty",
+                    style_id="loyalty",
+                )
+            ]
+        )
+    rows.append(
         [
             _ikb(
                 _t(ui, "btn_back") or "⬅️ بازگشت",
@@ -377,8 +407,8 @@ def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 label_key="btn_back",
                 style_id="back",
             )
-        ],
-    ]
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -475,6 +505,19 @@ def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _hub_entry_button(ui: dict | None, entry: HubEntry, *, badge: int = 0) -> InlineKeyboardButton:
+    """A hub leaf whose label and color come from settings, like the other hub buttons."""
+    from app.services.admin_counters import with_badge
+
+    return _ikb(
+        with_badge(_label_or(ui, entry.label_key, entry.fallback), badge),
+        callback_data=entry.callback,
+        ui=ui,
+        label_key=entry.label_key,
+        style_id=entry.style_id,
+    )
 
 
 def _hub_back_row(
@@ -631,8 +674,12 @@ def admin_ops_hub_keyboard(
     pending_payments: int = 0,
     pending_tickets: int = 0,
     pending_deliveries: int = 0,
+    pending_payg_review: int = 0,
 ) -> InlineKeyboardMarkup:
-    """Daily ops — leaf buttons reuse existing ``adm:*`` callbacks."""
+    """Daily ops — leaf buttons reuse existing ``adm:*`` callbacks.
+
+    PAYG charges waiting for a decision add their own button, only while there is one.
+    """
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADMIN_DASH,
         REPLY_ACTION_ADMIN_ORDERS,
@@ -666,6 +713,8 @@ def admin_ops_hub_keyboard(
         for key, text in _reply_admin_ops_entries(ui)
         if key in cb_map
     ]
+    if pending_payg_review > 0:
+        buttons.append(_hub_entry_button(ui, PAYG_REVIEW, badge=pending_payg_review))
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
@@ -732,7 +781,11 @@ def admin_product_hub_keyboard(
 @editable_screen("a.marketing")
 def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     """Club and broadcast leaves reuse ``nv:adm:*``; gift codes and campaigns are inline-only."""
-    from app.bot.marketing_panels import CAMPAIGN_PANEL_CALLBACK, GIFT_PANEL_CALLBACK
+    from app.bot.marketing_panels import (
+        CAMPAIGN_PANEL_CALLBACK,
+        CASHBACK_PANEL_CALLBACK,
+        GIFT_PANEL_CALLBACK,
+    )
 
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADMIN_BROADCAST,
@@ -771,6 +824,16 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
                 label_key="btn_adm_campaigns",
                 style_id="adm_campaigns",
             ),
+            _ikb(
+                _t(ui, "btn_adm_cashback"),
+                callback_data=CASHBACK_PANEL_CALLBACK,
+                ui=ui,
+                label_key="btn_adm_cashback",
+                style_id="adm_cashback",
+            ),
+            _hub_entry_button(ui, ADMIN_DISCOUNTS),
+            _hub_entry_button(ui, ADMIN_FUNNEL),
+            _hub_entry_button(ui, ADMIN_TRIAL_USERS),
         ]
     )
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
@@ -801,6 +864,9 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         for key, text in _reply_admin_system_entries(ui)
         if key in cb_map
     ]
+    buttons.append(_hub_entry_button(ui, ADMIN_STAFF_AUDIT))
+    buttons.append(_hub_entry_button(ui, SERVICE_SHOP_REVIEW))
+    buttons.append(_hub_entry_button(ui, ADMIN_SERVICE_CLEANUP))
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
@@ -846,6 +912,13 @@ def pg_hub_keyboard(
         )
         if key in cb_map
     ]
+    if features is None or "pg_hosts" in features:
+        buttons.append(_hub_entry_button(ui, PG_HOSTS))
+    if features is None or "pg_inbounds" in features:
+        buttons.append(_hub_entry_button(ui, PG_INBOUNDS))
+    # Owner-only page: shown only when the actor's own feature set includes it, never for an unfiltered hub.
+    if features is not None and "pg_admins" in features:
+        buttons.append(_hub_entry_button(ui, PG_ADMINS))
     return _pack_hub_keyboard(buttons, ui, back_callback=back_callback)
 
 
@@ -893,18 +966,43 @@ def admin_loyalty_manage_hub_keyboard(
 def _reseller_entry_buttons(
     entries: list[tuple[str, str]], ui: dict | None, badge_for: dict[str, int]
 ) -> list[InlineKeyboardButton]:
+    from app.bot.handlers.cashback_tools import SHOP_CASHBACK_PANEL_CALLBACK
+    from app.bot.handlers.child_pricing_bot import PANEL_CALLBACK as CHILD_PRICING_HUB
+    from app.bot.marketing_panels import SHOP_CAMPAIGN_PANEL_CALLBACK, SHOP_GIFT_PANEL_CALLBACK
+    from app.bot.handlers.shop_broadcast import CB_HUB as SHOP_BROADCAST_HUB
     from app.services.admin_counters import with_badge
 
-    return [
-        _ikb(
-            with_badge(text, badge_for.get(key, 0)),
-            callback_data=f"nv:res:ra:{key}",
-            ui=ui,
-            action=key,
-            style_id=key, style_fallback="primary",
+    # Dedicated leaf callbacks stay off the generic ``nv:res:ra:*`` soft path (like broadcast).
+    dedicated = {
+        "res_broadcast": SHOP_BROADCAST_HUB,
+        "res_cashback": SHOP_CASHBACK_PANEL_CALLBACK,
+        "res_child_pricing": CHILD_PRICING_HUB,
+        "res_gift_codes": SHOP_GIFT_PANEL_CALLBACK,
+        "res_campaigns": SHOP_CAMPAIGN_PANEL_CALLBACK,
+        "res_discounts": DISCOUNTS_CALLBACK,
+        "res_funnel": FUNNEL_CALLBACK,
+    }
+    buttons: list[InlineKeyboardButton] = []
+    for key, text in entries:
+        callback = dedicated.get(key) or f"nv:res:ra:{key}"
+        buttons.append(
+            _ikb(
+                with_badge(text, badge_for.get(key, 0)),
+                callback_data=callback,
+                ui=ui,
+                action=key,
+                style_id=key,
+                style_fallback="primary",
+            )
         )
-        for key, text in entries
-    ]
+    return buttons
+
+
+@editable_screen("r.broadcast")
+def shop_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.bot.handlers.shop_broadcast import _hub_keyboard
+
+    return _hub_keyboard(ui or {})
 
 
 @editable_screen("r.home")
@@ -913,6 +1011,7 @@ def reseller_manage_hub_keyboard(
     ui: dict | None = None,
     *,
     can_add_representative: bool = False,
+    show_owner_creds: bool = False,
     pending_payments: int = 0,
     pending_tickets: int = 0,
     pending_cancellations: int = 0,
@@ -923,7 +1022,10 @@ def reseller_manage_hub_keyboard(
     from app.services.admin_counters import with_badge
 
     entries = _reseller_submenu_entries(
-        profile, can_add_representative=can_add_representative, ui=ui
+        profile,
+        can_add_representative=can_add_representative,
+        show_owner_creds=show_owner_creds,
+        ui=ui,
     )
     group_badge = {"daily": pending_payments + pending_tickets + pending_deliveries}
     buttons = [
@@ -964,6 +1066,7 @@ def reseller_group_hub_keyboard(
     ui: dict | None = None,
     *,
     can_add_representative: bool = False,
+    show_owner_creds: bool = False,
     pending_payments: int = 0,
     pending_tickets: int = 0,
     pending_deliveries: int = 0,
@@ -973,13 +1076,21 @@ def reseller_group_hub_keyboard(
 
     group = reseller_group(group_id)
     entries = _reseller_submenu_entries(
-        profile, can_add_representative=can_add_representative, ui=ui
+        profile,
+        can_add_representative=can_add_representative,
+        show_owner_creds=show_owner_creds,
+        ui=ui,
     )
     shown = group_entries(group, entries) if group else []
     badge_for = {"res_payments": pending_payments, "res_tickets": pending_tickets, "res_orders": pending_deliveries}
-    return _pack_hub_keyboard(
-        _reseller_entry_buttons(shown, ui, badge_for), ui, back_callback=RESELLER_HOME_CALLBACK
-    )
+    buttons = _reseller_entry_buttons(shown, ui, badge_for)
+    if group_id == "customers" and has_bot_perm(profile, "trial_users"):
+        buttons.append(_hub_entry_button(ui, SHOP_TRIAL_USERS))
+    if group_id == "customers" and has_bot_perm(profile, "service_cleanup"):
+        buttons.append(_hub_entry_button(ui, SHOP_SERVICE_CLEANUP))
+    if group_id == "account":
+        buttons.append(_hub_entry_button(ui, SHOP_STAFF_AUDIT))
+    return _pack_hub_keyboard(buttons, ui, back_callback=RESELLER_HOME_CALLBACK)
 
 
 def reseller_access_card_keyboard(
@@ -1196,6 +1307,7 @@ def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
         for key, text in _admin_broadcast_submenu_entries(ui)
         if key.startswith("bc_aud_")
     ]
+    buttons.append(_hub_entry_button(ui, BROADCAST_HISTORY))
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:marketing")
 
 

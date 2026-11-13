@@ -47,6 +47,8 @@ class ColorTagFilterDropdownTests(unittest.TestCase):
         self.assertIn("color-tag-select", form)
         self.assertIn("قرمز", form)
         self.assertNotIn("color-tag-filters", html)
+        # Full-height search row control — not the compact select-sm tier.
+        self.assertNotIn("select-sm", form)
 
     def test_users_uses_dropdown_not_pills(self):
         html = _render_list_page("users.html", "/users", flt="all")
@@ -54,6 +56,7 @@ class ColorTagFilterDropdownTests(unittest.TestCase):
         self.assertIn("data-color-tag-nav", form)
         self.assertIn("قرمز", form)
         self.assertNotIn("color-tag-filters", html)
+        self.assertNotIn("select-sm", form)
 
     def test_tag_filter_hidden_without_tags(self):
         html = _render_list_page("users.html", "/users", flt="all", color_tags=[])
@@ -63,6 +66,27 @@ class ColorTagFilterDropdownTests(unittest.TestCase):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
         self.assertIn("data-color-tag-nav", js)
         self.assertIn("window.location.assign", js)
+
+    def test_tag_filter_ds_override_beats_compact_select(self):
+        """Only panel-ds fights .ui-select-sm !important; base wrap stays btn-h + capsule."""
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        ds = (ROOT / "app/web/static/panel-ds.css").read_text(encoding="utf-8")
+        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
+        wrap_block = css.split(".color-tag-select-wrap {", 1)[1].split("}", 1)[0]
+        self.assertIn("height: var(--btn-h)", wrap_block)
+        self.assertIn("border-radius: var(--control-radius)", wrap_block)
+        self.assertNotIn("!important", wrap_block)
+        override = ds.split(
+            "/* Tag filter in the search row must match the adjacent search .btn", 1
+        )[1].split("@media", 1)[0]
+        self.assertIn("height: var(--btn-h) !important", override)
+        self.assertIn("border-radius: var(--control-radius) !important", override)
+        self.assertIn("forceFullHeight", js)
+        self.assertIn(
+            "color-tag-select",
+            js.split("forceFullHeight", 1)[1].split("useSm", 1)[0],
+        )
+        self.assertIn("search-bar.search-bar--with-tag", css)
 
 
 if __name__ == "__main__":
