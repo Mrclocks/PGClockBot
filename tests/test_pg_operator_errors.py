@@ -118,3 +118,12 @@ class TemplateCreateErrorTests(unittest.TestCase):
 
         msg = template_create_error_message(PasarGuardError("boom", 403))
         self.assertEqual(msg, "اجازه این عمل را ندارید.")
+
+
+class RawExceptionHidingTests(unittest.TestCase):
+    def test_unmapped_english_exception_is_not_echoed(self) -> None:
+        msg = user_safe_error(RuntimeError("sqlite3.OperationalError: no such table (failed)"))
+        self.assertEqual(msg, "خطای داخلی. دوباره تلاش کنید.")
+
+    def test_persian_domain_message_is_kept(self) -> None:
+        self.assertEqual(user_safe_error(ValueError("عنوان تیکت الزامی است")), "عنوان تیکت الزامی است")
