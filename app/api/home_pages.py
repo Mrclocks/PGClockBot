@@ -247,6 +247,265 @@ async def _reseller_shop_stats(session: AsyncSession, rid: int) -> dict[str, int
     return await reseller_shop_summary(session, rid)
 
 
+def _ops_options(ui: dict) -> tuple[bool, int]:
+    """Funnel switch and action-center expiry window from the shop's settings."""
+    from app.services.users import on
+
+    funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
+    try:
+        expire_days = int(ui.get("action_center_expire_days") or 3)
+    except (TypeError, ValueError):
+        expire_days = 3
+    return funnel_enabled, expire_days
+
+
+async def _safe_settings(session: AsyncSession, *, reseller_id: int | None) -> dict:
+    from app.services.db_safe import rollback_quiet
+    from app.services.users import get_all_settings
+
+    try:
+        ui = await get_all_settings(session, reseller_id=reseller_id)
+    except Exception:
+        logger.exception("home get_all_settings failed reseller_id=%s", reseller_id)
+        await rollback_quiet(session)
+        return {}
+    return ui if isinstance(ui, dict) else {}
+
+
+async def _visible_action_center(session: AsyncSession, staff: dict, action_center: dict) -> dict:
+    """The action center without the items this staff member dismissed."""
+    try:
+        from app.services.inbox_dismissals import filter_action_center_for_staff
+
+        return await filter_action_center_for_staff(session, staff, action_center)
+    except Exception:
+        logger.exception("home action_center dismiss filter failed")
+        return action_center
+
+
+async def _safe_home_overview(session: AsyncSession, *, include_nodes: bool) -> dict:
+    from app.services.db_safe import rollback_quiet
+    from app.services.home_overview import empty_home_overview
+    from app.services.panel_display_timeout import display_await
+
+    try:
+        return await display_await(
+            build_home_overview(session, include_nodes=include_nodes),
+            fallback=_unchecked_overview(),
+            label="home_overview",
+        )
+    except Exception:
+        logger.exception("build_home_overview failed")
+        await rollback_quiet(session)
+        return empty_home_overview()
+
+
+async def _safe_pg_limits(staff: dict, session: AsyncSession, *, label: str) -> dict | None:
+    """The staff member's live PasarGuard limits, or None when they are not ready or not readable."""
+    from app.services.db_safe import rollback_quiet
+    from app.services.panel_display_timeout import display_await
+    from app.services.pg_overview import build_reseller_pg_overview
+
+    try:
+        ov = await display_await(build_reseller_pg_overview(staff, session=session), fallback=None, label=label)
+    except Exception:
+        logger.exception("%s failed", label)
+        await rollback_quiet(session)
+        return None
+    return ov if ov and ov.get("ready") else None
+
+
+async def _owner_home_context(staff: dict, session: AsyncSession):
+    """Platform admin: server and both panels."""
+    from app.services.db_safe import recover_session, rollback_quiet
+
+    await recover_session(session)
+    show_pg_nodes = "pg_nodes" in (staff.get("pg_permissions") or [])
+    overview = await _safe_home_overview(session, include_nodes=show_pg_nodes)
+    # settings uses session; pg_health (platform) does not — safe to gather.
+    ui, pg_health = await asyncio.gather(_safe_settings(session, reseller_id=None), _safe_pg_health())
+    funnel_enabled, expire_days = _ops_options(ui)
+    (funnel, periods, action_center), trend = await asyncio.gather(
+        _parallel_home_ops(reseller_id=None, funnel_enabled=funnel_enabled, expire_days=expire_days),
+        _safe_trend(reseller_id=None),
+    )
+    action_center = await _visible_action_center(session, staff, action_center)
+    wallet_card = None
+    try:
+        wallet_card = await _staff_wallet_card(session, staff)
+    except Exception:
+        logger.exception("owner home account card failed")
+        await rollback_quiet(session)
+    pg_limits = None
+    if staff.get("pg_is_owner") is False:
+        pg_limits = await _safe_pg_limits(staff, session, label="hybrid_home_pg_limits")
+    return (
+        "home.html",
+        {
+            "staff": staff,
+            "overview": overview,
+            "pg_health": pg_health,
+            "pg_link_health": await pg_link_health.load_persisted_snapshot(session, circuit_status()),
+            "funnel_enabled": funnel_enabled,
+            "funnel": funnel,
+            "periods": periods,
+            "action_center": action_center,
+            "dashboard_degraded": False,
+            "pg_limits": pg_limits,
+            "wallet_card": wallet_card,
+            "trend": trend,
+            "show_pg_nodes": show_pg_nodes,
+        },
+    )
+
+
+async def _shop_profile(session: AsyncSession, rid: int):
+    from app.db.models import ResellerProfile
+    from app.services.db_safe import rollback_quiet
+
+    try:
+        return (
+            await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == rid))
+        ).scalar_one_or_none()
+    except Exception:
+        logger.exception("reseller home profile load failed rid=%s", rid)
+        await rollback_quiet(session)
+        return None
+
+
+async def _shop_stats(session: AsyncSession, rid: int, *, bot_setup_needed: bool) -> dict:
+    from app.services.db_safe import rollback_quiet
+
+    if bot_setup_needed:
+        return empty_shop_stats()
+    try:
+        return await _reseller_shop_stats(session, rid)
+    except Exception:
+        logger.exception("reseller home stats failed rid=%s", rid)
+        await rollback_quiet(session)
+        return empty_shop_stats()
+
+
+async def _shop_bot_probe(profile) -> dict:
+    """The shop's own bot — never the platform BOT_TOKEN."""
+    from app.config import get_settings
+    from app.services.home_overview import check_bot_connection
+    from app.services.panel_display_timeout import display_await
+
+    bot_token = ((reveal_bot_token(profile.bot_token) if profile else None) or "").strip()
+    main_token = (get_settings().bot_token or "").strip()
+    if not bot_token or (main_token and bot_token == main_token):
+        return {
+            "ok": False,
+            "error": "توکن تنظیم نشده" if not bot_token else "توکن نامعتبر",
+            "username": None,
+            "name": None,
+        }
+    unchecked_bot = {"ok": None, "error": None, "username": None, "name": None, "unchecked": True}
+    return await display_await(check_bot_connection(bot_token), fallback=unchecked_bot, label="reseller_bot_probe")
+
+
+async def _shop_billing_card(session: AsyncSession, profile, rid: int) -> dict | None:
+    """The PAYG wallet card of a shop that pays per use."""
+    from app.services.billing import is_billing_enabled, is_payg
+    from app.services.db_safe import rollback_quiet
+    from app.services.formatting import format_toman
+
+    if profile is None:
+        return None
+    try:
+        if not (is_payg(profile) and await is_billing_enabled(session)):
+            return None
+        from app.services.billing import ensure_payg_shop_wallet
+
+        _u, bal = await ensure_payg_shop_wallet(session, profile)
+        await session.commit()
+        return {
+            "balance": int(bal),
+            "balance_fa": format_toman(int(bal)),
+            "mode": "payg",
+            "suspended": profile.billing_suspended_at is not None,
+        }
+    except Exception:
+        logger.exception("reseller home billing card failed rid=%s", rid)
+        await rollback_quiet(session)
+        return None
+
+
+async def _warn_capacity(session: AsyncSession, profile, pg_limits: dict | None) -> None:
+    from app.services.db_safe import rollback_quiet
+
+    if not pg_limits:
+        return
+    try:
+        from app.services.ux20 import maybe_warn_reseller_capacity
+
+        await maybe_warn_reseller_capacity(session, profile, pg_limits)
+    except Exception:
+        logger.warning("reseller home capacity warning failed", exc_info=True)
+        await rollback_quiet(session)
+
+
+async def _shop_home_context(staff: dict, session: AsyncSession, rid: int):
+    """Shop owner or sub-admin: the shop's bot and PasarGuard summaries."""
+    from app.services.db_safe import recover_session
+    from app.services.resellers import bot_needs_setup
+
+    await recover_session(session)
+    profile = await _shop_profile(session, rid)
+    bot_setup_needed = bot_needs_setup(profile)
+    # stats uses session; bot probe does not — safe to gather.
+    stats, bot = await asyncio.gather(
+        _shop_stats(session, rid, bot_setup_needed=bot_setup_needed), _shop_bot_probe(profile)
+    )
+    pg_limits = None
+    if staff.get("pg_admin_username"):
+        pg_limits = await _safe_pg_limits(staff, session, label="reseller_home_pg_overview")
+        await _warn_capacity(session, profile, pg_limits)
+    billing_card = await _shop_billing_card(session, profile, rid)
+    ui = await _safe_settings(session, reseller_id=rid)
+    # Reseller pg_health may use session — after settings, not gathered with it.
+    pg_health = await _safe_pg_health(
+        reseller_user_id=rid if staff.get("pg_admin_username") else None,
+        session=session if staff.get("pg_admin_username") else None,
+    )
+    funnel_enabled, expire_days = _ops_options(ui)
+    (funnel, periods, action_center), trend = await asyncio.gather(
+        _parallel_home_ops(reseller_id=rid, funnel_enabled=funnel_enabled, expire_days=expire_days),
+        _safe_trend(reseller_id=rid),
+    )
+    action_center = await _visible_action_center(session, staff, action_center)
+    return (
+        "reseller_home.html",
+        {
+            "staff": staff,
+            "stats": stats,
+            "trend": trend,
+            "pg_limits": pg_limits,
+            "bot_setup_needed": bot_setup_needed,
+            "bot": bot,
+            "billing_card": billing_card,
+            "pg_health": pg_health,
+            "funnel_enabled": funnel_enabled,
+            "funnel": funnel,
+            "periods": periods,
+            "action_center": action_center,
+            "dashboard_degraded": False,
+        },
+    )
+
+
+async def _home_dashboard_context(request, staff, session):
+    if is_platform_admin(staff):
+        return await _owner_home_context(staff, session)
+    rid = shop_owner_id(staff)
+    if not rid:
+        if staff.get("pg_permissions"):
+            return RedirectResponse("/pg", status_code=303)
+        return RedirectResponse("/security", status_code=303)
+    return await _shop_home_context(staff, session, int(rid))
+
+
 def register_home_pages(app, *, render, require_admin, require_staff, get_db):
     def _flash_from_query(request: Request, ctx: dict) -> dict:
         out = dict(ctx)
@@ -555,259 +814,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "funnel": dict(_EMPTY_FUNNEL),
                 "periods": periods,
                 "action_center": action,
-                "dashboard_degraded": False,
-            },
-        )
-
-    async def _home_dashboard_context(request, staff, session):
-        # Platform admin: server + both panels.
-        if is_platform_admin(staff):
-            from app.services.db_safe import recover_session, rollback_quiet
-            from app.services.home_overview import empty_home_overview
-            from app.services.panel_display_timeout import display_await
-
-            await recover_session(session)
-            show_pg_nodes = "pg_nodes" in (staff.get("pg_permissions") or [])
-            try:
-                overview = await display_await(
-                    build_home_overview(session, include_nodes=show_pg_nodes),
-                    fallback=_unchecked_overview(),
-                    label="home_overview",
-                )
-            except Exception:
-                logger.exception("build_home_overview failed")
-                await rollback_quiet(session)
-                overview = empty_home_overview()
-            from app.services.users import get_all_settings, on
-
-            # settings uses session; pg_health (platform) does not — safe to gather.
-            try:
-                ui, pg_health = await asyncio.gather(
-                    get_all_settings(session, reseller_id=None),
-                    _safe_pg_health(),
-                )
-            except Exception:
-                logger.exception("home settings/health gather failed")
-                await rollback_quiet(session)
-                ui = {}
-                pg_health = dict(_UNCHECKED_CONN)
-            if not isinstance(ui, dict):
-                ui = {}
-            funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
-            try:
-                expire_days = int(ui.get("action_center_expire_days") or 3)
-            except (TypeError, ValueError):
-                expire_days = 3
-            (funnel, periods, action_center), trend = await asyncio.gather(
-                _parallel_home_ops(reseller_id=None, funnel_enabled=funnel_enabled, expire_days=expire_days),
-                _safe_trend(reseller_id=None),
-            )
-            try:
-                from app.services.inbox_dismissals import filter_action_center_for_staff
-
-                action_center = await filter_action_center_for_staff(
-                    session, staff, action_center
-                )
-            except Exception:
-                logger.exception("home action_center dismiss filter failed")
-            pg_limits = None
-            wallet_card = None
-            try:
-                wallet_card = await _staff_wallet_card(session, staff)
-            except Exception:
-                logger.exception("owner home account card failed")
-                await rollback_quiet(session)
-            if staff.get("pg_is_owner") is False:
-                from app.services.pg_overview import build_reseller_pg_overview
-
-                try:
-                    ov = await display_await(
-                        build_reseller_pg_overview(staff, session=session),
-                        fallback=None,
-                        label="hybrid_home_pg_limits",
-                    )
-                    if ov and ov.get("ready"):
-                        pg_limits = ov
-                except Exception:
-                    logger.exception("hybrid owner home pg limits failed")
-                    await rollback_quiet(session)
-                    pg_limits = None
-            return (
-                "home.html",
-                {
-                    "staff": staff,
-                    "overview": overview,
-                    "pg_health": pg_health,
-                    "pg_link_health": await pg_link_health.load_persisted_snapshot(
-                        session, circuit_status()
-                    ),
-                    "funnel_enabled": funnel_enabled,
-                    "funnel": funnel,
-                    "periods": periods,
-                    "action_center": action_center,
-                    "dashboard_degraded": False,
-                    "pg_limits": pg_limits,
-                    "wallet_card": wallet_card,
-                    "trend": trend,
-                    "show_pg_nodes": show_pg_nodes,
-                },
-            )
-
-        # Reseller / sub-admin web dashboard: bot + PasarGuard summaries.
-        rid = shop_owner_id(staff)
-        if not rid:
-            if staff.get("pg_permissions"):
-                return RedirectResponse("/pg", status_code=303)
-            return RedirectResponse("/security", status_code=303)
-
-        from app.config import get_settings
-        from app.db.models import ResellerProfile
-        from app.services.db_safe import recover_session, rollback_quiet
-        from app.services.home_overview import check_bot_connection
-        from app.services.panel_display_timeout import display_await
-        from app.services.resellers import bot_needs_setup
-
-        await recover_session(session)
-
-        try:
-            profile = (
-                await session.execute(
-                    select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
-                )
-            ).scalar_one_or_none()
-        except Exception:
-            logger.exception("reseller home profile load failed rid=%s", rid)
-            await rollback_quiet(session)
-            profile = None
-
-        bot_setup_needed = bot_needs_setup(profile)
-
-        async def _stats_task():
-            if bot_setup_needed:
-                return empty_shop_stats()
-            try:
-                return await _reseller_shop_stats(session, int(rid))
-            except Exception:
-                logger.exception("reseller home stats failed rid=%s", rid)
-                await rollback_quiet(session)
-                return empty_shop_stats()
-
-        async def _bot_task():
-            # Tenant bot only — never probe platform BOT_TOKEN.
-            bot_token = ((reveal_bot_token(profile.bot_token) if profile else None) or "").strip()
-            main_token = (get_settings().bot_token or "").strip()
-            if not bot_token or (main_token and bot_token == main_token):
-                return {
-                    "ok": False,
-                    "error": "توکن تنظیم نشده" if not bot_token else "توکن نامعتبر",
-                    "username": None,
-                    "name": None,
-                }
-            unchecked_bot = {
-                "ok": None,
-                "error": None,
-                "username": None,
-                "name": None,
-                "unchecked": True,
-            }
-            return await display_await(
-                check_bot_connection(bot_token),
-                fallback=unchecked_bot,
-                label="reseller_bot_probe",
-            )
-
-        # stats uses session; bot probe does not — safe to gather.
-        stats, bot = await asyncio.gather(_stats_task(), _bot_task())
-
-        pg_limits = None
-        if staff.get("pg_admin_username"):
-            from app.services.pg_overview import build_reseller_pg_overview
-
-            try:
-                ov = await display_await(
-                    build_reseller_pg_overview(staff, session=session),
-                    fallback=None,
-                    label="reseller_home_pg_overview",
-                )
-                if ov and ov.get("ready"):
-                    pg_limits = ov
-                    try:
-                        from app.services.ux20 import maybe_warn_reseller_capacity
-
-                        await maybe_warn_reseller_capacity(session, profile, pg_limits)
-                    except Exception:
-                        await rollback_quiet(session)
-            except Exception:
-                logger.exception("reseller home pg overview failed rid=%s", rid)
-                await rollback_quiet(session)
-                pg_limits = None
-
-        billing_card = None
-        if profile is not None:
-            from app.services.billing import is_billing_enabled, is_payg
-            from app.services.formatting import format_toman
-
-            try:
-                if is_payg(profile) and await is_billing_enabled(session):
-                    from app.services.billing import ensure_payg_shop_wallet
-
-                    _u, bal = await ensure_payg_shop_wallet(session, profile)
-                    await session.commit()
-                    billing_card = {
-                        "balance": int(bal),
-                        "balance_fa": format_toman(int(bal)),
-                        "mode": "payg",
-                        "suspended": profile.billing_suspended_at is not None,
-                    }
-            except Exception:
-                logger.exception("reseller home billing card failed rid=%s", rid)
-                await rollback_quiet(session)
-                billing_card = None
-        from app.services.users import get_all_settings, on
-
-        try:
-            ui = await get_all_settings(session, reseller_id=int(rid))
-        except Exception:
-            logger.exception("reseller home get_all_settings failed rid=%s", rid)
-            await rollback_quiet(session)
-            ui = {}
-        # Reseller pg_health may use session — after settings, not gathered with it.
-        pg_health = await _safe_pg_health(
-            reseller_user_id=int(rid) if staff.get("pg_admin_username") else None,
-            session=session if staff.get("pg_admin_username") else None,
-        )
-        funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
-        try:
-            expire_days = int(ui.get("action_center_expire_days") or 3)
-        except (TypeError, ValueError):
-            expire_days = 3
-        (funnel, periods, action_center), trend = await asyncio.gather(
-            _parallel_home_ops(reseller_id=int(rid), funnel_enabled=funnel_enabled, expire_days=expire_days),
-            _safe_trend(reseller_id=int(rid)),
-        )
-        try:
-            from app.services.inbox_dismissals import filter_action_center_for_staff
-
-            action_center = await filter_action_center_for_staff(
-                session, staff, action_center
-            )
-        except Exception:
-            logger.exception("reseller home action_center dismiss filter failed")
-        return (
-            "reseller_home.html",
-            {
-                "staff": staff,
-                "stats": stats,
-                "trend": trend,
-                "pg_limits": pg_limits,
-                "bot_setup_needed": bot_setup_needed,
-                "bot": bot,
-                "billing_card": billing_card,
-                "pg_health": pg_health,
-                "funnel_enabled": funnel_enabled,
-                "funnel": funnel,
-                "periods": periods,
-                "action_center": action_center,
                 "dashboard_degraded": False,
             },
         )
