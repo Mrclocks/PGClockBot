@@ -1,4 +1,4 @@
-"""0112 creates the table of customers who dismissed the home offer; it is safe to repeat."""
+"""0113 creates the table of customers who dismissed the home offer; it is safe to repeat."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ TABLE = "service_import_offer_dismissals"
 
 
 def _load_migration():
-    path = ROOT / "alembic/versions/0112_service_import_offer_dismissal.py"
+    path = ROOT / "alembic/versions/0113_service_import_offer_dismissal.py"
     spec = importlib.util.spec_from_file_location("service_import_offer_migration", path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -52,7 +52,7 @@ class ServiceImportOfferMigrationTests(unittest.TestCase):
             self.assertTrue(sa.inspect(conn).has_table(TABLE))
 
     def test_revision_follows_the_current_head(self) -> None:
-        self.assertEqual(self.migration.down_revision, "0111_referral_shop")
+        self.assertEqual(self.migration.down_revision, "0112_random_discounts")
 
 
 if __name__ == "__main__":

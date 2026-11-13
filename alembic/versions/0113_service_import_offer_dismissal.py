@@ -1,7 +1,7 @@
 """Remember who dismissed the home offer to add a previous service.
 
-Revision ID: 0112_service_import_offer_dismissal
-Revises: 0111_referral_shop
+Revision ID: 0113_service_import_offer_dismissal
+Revises: 0112_random_discounts
 
 One row per customer and shop (``shop_key`` 0 is the platform) once they pick «نمایش نده».
 Idempotent (the table is only created when missing); the downgrade drops it, which only means
@@ -15,8 +15,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0112_service_import_offer_dismissal"
-down_revision: Union[str, None] = "0111_referral_shop"
+revision: str = "0113_service_import_offer_dismissal"
+down_revision: Union[str, None] = "0112_random_discounts"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
