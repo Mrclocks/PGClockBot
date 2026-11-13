@@ -89,7 +89,7 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
   display: flex; flex-direction: row; align-items: center; gap: var(--g3); width: 100%; min-height: var(--ctl-h);
 }
 .ui-modal.ds .modal-title { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--g3); margin: 0; }
-.ui-modal.ds .modal-title .page-title-ico { width: var(--ctl-h); height: var(--ctl-h); border-radius: 14px; }
+.ui-modal.ds .modal-title .page-title-ico { width: var(--ctl-h); height: var(--ctl-h); }
 .ui-modal.ds .modal-title-copy { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
 .ui-modal.ds .modal-title h2 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ui-modal.ds .modal-title-caption { margin: 0; font-size: 12px; line-height: 1.4; }
@@ -262,7 +262,8 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 }
 .ds .section-tabs:not(.settings-subtabs) a.active, .ds .section-tabs:not(.settings-subtabs) .tab-btn.active,
 .ds .ds-seg button.on, .ds .ds-aud button.on, .ds .sales-seg button.on, .ds .sales-seg a.on, .ds .modal-section-tabs .tab-btn.active {
-  background: var(--bg-card); color: var(--sel-fg); box-shadow: inset 0 0 0 1.5px var(--sel-line); font-weight: 600;
+  /* The bottom bar's active pill: a soft brand fill, no outline. */
+  background: var(--sel-bg); color: var(--sel-fg); box-shadow: none; font-weight: 600;
 }
 .ds .ds-seg { width: 100%; }
 .ds .ds-seg button { flex: 1 1 0; }
@@ -288,7 +289,7 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
   flex: 0 0 auto; height: var(--cmp-h); min-height: var(--cmp-h); padding: 0 var(--g4); margin: 0;
   border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted-fg); font-size: 13px; text-decoration: none;
 }
-.ds .section-tabs.settings-subtabs a.active { background: var(--sel-bg); color: var(--sel-fg); border: 1px solid var(--sel-line); box-shadow: inset 0 0 0 0.5px var(--sel-line); font-weight: 600; }
+.ds .section-tabs.settings-subtabs a.active { background: var(--sel-bg); color: var(--sel-fg); border-color: transparent; box-shadow: none; font-weight: 600; }
 
 /* ===================================================================== 7. Choices, chips and tags */
 .ds .ds-steps { display: flex; gap: 6px; width: 100%; overflow-x: auto; scrollbar-width: none; }

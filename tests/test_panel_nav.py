@@ -1,5 +1,5 @@
 """Web panel navigation registry: items per role, active item, real routes, Mini App shortcuts,
-the phone bottom bar and the dashboard shortcuts."""
+and the phone bottom bar."""
 
 from __future__ import annotations
 
@@ -14,13 +14,11 @@ from app.api.app import create_api_app, templates
 from app.services.guide_catalog import TOPICS
 from app.services.marketing_nav import MarketingSection
 from app.services.panel_nav import (
-    DASHBOARD_SHORTCUT_LIMIT,
     DOCK_SLOTS,
     MINIAPP_OWNER_SHORTCUTS,
     MINIAPP_RESELLER_SHORTCUTS,
     NavViewer,
     build_dock,
-    build_shortcuts,
     build_sidebar,
     miniapp_shortcuts,
 )
@@ -170,10 +168,6 @@ def dock_keys(v: NavViewer, path: str = "/home") -> list[str]:
     return [i.key for i in build_dock(build_sidebar(v, path=path)).items]
 
 
-def shortcut_rows(v: NavViewer) -> list[tuple[str, str, bool]]:
-    return [(sc.item.label, sc.section_label, sc.in_dock) for sc in build_shortcuts(build_sidebar(v, path="/home"))]
-
-
 class BottomBarTests(unittest.TestCase):
     def test_owner_bar_holds_dashboard_action_center_finance_and_users(self) -> None:
         dock = build_dock(build_sidebar(OWNER, path="/home"))
@@ -207,40 +201,6 @@ class BottomBarTests(unittest.TestCase):
         items = {i.key: i for i in build_dock(build_sidebar(OWNER, path="/home")).items}
         self.assertEqual(items["inbox"].dot, "inbox_alert")
         self.assertEqual(items["finance"].dot, "cancel_alert")
-
-
-class DashboardShortcutTests(unittest.TestCase):
-    def test_owner_shortcuts_follow_priority_and_name_their_sidebar_section(self) -> None:
-        self.assertEqual(shortcut_rows(OWNER), [
-            ("مالی", "فروشگاه", True),
-            ("کاربران ربات", "فروشگاه", True),
-            ("پلن‌ها", "فروشگاه", False),
-            ("پشتیبانی", "فروشگاه", False),
-            ("نمایندگان", "فروشگاه", False),
-            ("کاربران", "پاسارگارد", False),
-            ("نمای کلی فروشگاه", "فروشگاه", False),
-            ("نمای کلی پاسارگارد", "پاسارگارد", False),
-        ])
-
-    def test_shortcuts_use_the_sidebar_tone_and_never_exceed_the_limit(self) -> None:
-        shortcuts = build_shortcuts(build_sidebar(OWNER, path="/home"))
-        self.assertEqual(len(shortcuts), DASHBOARD_SHORTCUT_LIMIT)
-        tones = {sc.item.key: sc.tone for sc in shortcuts}
-        self.assertEqual((tones["finance"], tones["pg_users"]), ("bot", "pg"))
-
-    def test_missing_permission_hides_the_shortcut(self) -> None:
-        labels_only = [row[0] for row in shortcut_rows(viewer("reseller", perms=("dashboard",)))]
-        for hidden in ("مالی", "پلن‌ها", "پشتیبانی", "تنظیمات فروشگاه", "کاربران ربات"):
-            self.assertNotIn(hidden, labels_only)
-        self.assertEqual(labels_only[0], "مشتریان")
-
-    def test_marketing_shortcut_opens_the_first_allowed_section(self) -> None:
-        shop = viewer("reseller", perms=("dashboard",), marketing=("/catalog-discounts", "/shop-broadcast"))
-        marketing = [sc.item for sc in build_shortcuts(build_sidebar(shop, path="/home")) if sc.item.key == "marketing"]
-        self.assertEqual([m.href for m in marketing], ["/catalog-discounts"])
-
-    def test_pasarguard_staff_gets_only_granted_shortcuts(self) -> None:
-        self.assertEqual(shortcut_rows(PG_STAFF), [("پشتیبانی", "حساب", True), ("کاربران", "پاسارگارد", True)])
 
 
 def _render_page(staff: dict | None, identity: dict, *, is_owner: bool, path: str = "/home", **ctx) -> str:
@@ -298,35 +258,6 @@ class RenderedBottomBarTests(unittest.TestCase):
     def test_signed_out_pages_have_no_bar(self) -> None:
         html = _render_page(None, {}, is_owner=False, path="/login")
         self.assertNotIn("data-bottom-dock", html)
-
-
-class RenderedShortcutTests(unittest.TestCase):
-    def render(self, staff: dict, identity: dict, *, is_owner: bool, **ctx) -> str:
-        return templates.env.get_template("_home_shortcuts.html").render(
-            staff=staff, identity=identity, is_owner=is_owner, marketing_sections=(), **ctx)
-
-    def test_owner_shortcuts_render_links_sections_and_bar_markers(self) -> None:
-        html = self.render({"role": "admin", "permissions": [], "pg_permissions": ["pg_users"]}, {"kind": "owner"},
-                           is_owner=True)
-        self.assertEqual(re.findall(r'class="home-shortcut [^"]*" href="([^"]+)"', html)[:3],
-                         ["/finance", "/users", "/plans"])
-        finance = re.search(r'<a class="home-shortcut [^"]*" href="/finance">.*?</a>', html, re.S).group(0)
-        self.assertIn("is-in-dock", finance)
-        self.assertIn("<small>فروشگاه</small>", finance)
-        pg_users = re.search(r'<a class="home-shortcut [^"]*" href="/pg/users">.*?</a>', html, re.S).group(0)
-        self.assertIn("home-shortcut-pg", pg_users)
-        self.assertNotIn("is-in-dock", pg_users)
-
-    def test_reseller_without_finance_right_gets_no_finance_shortcut(self) -> None:
-        html = self.render({"role": "reseller", "permissions": ["dashboard"]}, {"kind": "reseller"}, is_owner=False)
-        self.assertNotIn('href="/finance"', html)
-        self.assertIn('href="/users"', html)
-
-    def test_cancellation_dot_follows_the_flag(self) -> None:
-        staff = {"role": "admin", "permissions": []}
-        self.assertIn('aria-label="درخواست لغو در انتظار"',
-                      self.render(staff, {"kind": "owner"}, is_owner=True, cancel_alert=True))
-        self.assertNotIn("nav-dot", self.render(staff, {"kind": "owner"}, is_owner=True, cancel_alert=False))
 
 
 if __name__ == "__main__":

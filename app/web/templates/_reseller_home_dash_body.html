@@ -41,7 +41,6 @@
 
 {% from "_home_widgets.html" import kpi_strip, status_tiles %}
 {{ kpi_strip(periods, action_center, trend if trend is defined else none, kpi_links if kpi_links is defined else none) }}
-{% include "_home_shortcuts.html" %}
 
 {% set tiles = [] %}
 {% set bot_state = 'neutral' if bot.unchecked else ('ok' if bot.ok else 'err') %}

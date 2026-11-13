@@ -36,8 +36,6 @@
   /* Bot / PG solid chrome — no gradient borders */
   --bot-line: #e08a3c;
   --pg-line: #3d8fd1;
-  --bot-fill: color-mix(in srgb, var(--bot-line) 12%, transparent);
-  --pg-fill: color-mix(in srgb, var(--pg-line) 12%, transparent);
   /* Motion — visible but calm */
   --motion-fast: 180ms;
   --motion-med: 280ms;
@@ -1085,7 +1083,10 @@ tr.principal-row-l2 td:first-child {
   gap: var(--space-1);
   min-width: 0;
 }
+/* Page and modal title icon: the launcher tile (panel-nav-modes.css) at title size — the icon centred in a
+   rounded square tinted with the section colour (shop orange, PasarGuard blue, web panel neutral), no outline. */
 .page-title-ico {
+  --tile-tone: var(--bot-line);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1094,30 +1095,25 @@ tr.principal-row-l2 td:first-child {
   flex: 0 0 auto;
   outline: none;
   box-shadow: none;
-  border-radius: 18px;
-  border: 1px solid color-mix(in srgb, var(--bot-line) 55%, var(--border));
-  background: var(--bg-card);
-  color: var(--bot-line);
+  border: 0;
+  border-radius: var(--menu-radius);
+  background: color-mix(in srgb, var(--tile-tone) 10%, transparent);
+  color: var(--tile-tone);
   animation: page-title-ico-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .page-title-ico svg {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   stroke: currentColor;
   fill: none;
   stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.page-title-ico--pg {
-  border-color: color-mix(in srgb, var(--pg-line) 55%, var(--border));
-  background: var(--bg-card);
-  color: var(--pg-line);
-}
+.page-title-ico--pg { --tile-tone: var(--pg-line); }
 .page-title-ico--neutral {
-  border: 1px solid var(--border);
-  background: var(--muted);
-  color: var(--muted-fg);
+  --tile-tone: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
 }
 .page-head h1,
 .page-title h1 {
@@ -4570,7 +4566,7 @@ form.settings-form > .actions.sticky-actions,
 .section-tabs .tab-btn.active {
   background: color-mix(in srgb, var(--brand-base) 12%, transparent);
   color: var(--brand-fg);
-  border: 1px solid color-mix(in srgb, var(--brand-base) 42%, transparent);
+  border-color: transparent;
   font-weight: 600;
 }
 .section-tabs a.active:hover,
@@ -5574,8 +5570,8 @@ form.settings-form > .actions.sticky-actions,
   .pg-head > .section-tabs { margin-bottom: 0; padding-bottom: 0; }
   .pg-head > .page-head { margin-bottom: var(--page-title-gap); }
   .page-title { gap: var(--space-1); }
-  .page-title-ico { width: 34px; height: 34px; border-radius: 14px; }
-  .page-title-ico svg { width: 17px; height: 17px; }
+  .page-title-ico { width: var(--btn-h); height: var(--btn-h); border-radius: 14px; }
+  .page-title-ico svg { width: 20px; height: 20px; }
   .page-head h1,
   .page-title h1 { font-size: 18px; }
   .page-head p { font-size: 12px; margin-top: var(--space-0); }
@@ -6275,140 +6271,76 @@ form.settings-form > .actions.sticky-actions,
   }
 }
 
-/* ── Panel split: Home / Bot / PasarGuard (+ help button below) ── */
+/* ── Sidebar sections: web panel / shop / PasarGuard, in the phone launcher's language (panel-nav-modes.css)
+   at list size: no boxes, a hairline between sections, the title in the section colour, every icon in a small
+   rounded square tinted with that colour, and the active item as a soft pill of the same colour. The colour
+   is one variable per section, so dark and light themes need no separate rules. ── */
+.nav-section-home { --tile-tone: var(--foreground); }
+.nav-section-bot { --tile-tone: var(--bot-line); }
+.nav-section-pg { --tile-tone: var(--pg-line); }
 .nav-section-bot,
 .nav-section-pg,
 .nav-section-home {
-  margin-top: var(--space-2);
-  padding: var(--space-1);
-  border-radius: var(--radius);
-  gap: var(--space-0);
+  margin-top: 0;
+  padding: var(--space-1) 0;
+  border: 0;
+  border-radius: 0;
+  gap: 2px;
   background: transparent;
-  /* Instant collapsed/open fill — transitioning background flashed the tinted
-     collapsed color for --motion-fast on every accordion open/close. */
+  /* Instant collapsed/open fill — a transitioning background flashed on every accordion open/close. */
   transition: none;
 }
-.nav-section-home {
-  margin-top: var(--space-1);
-  border: 1px solid var(--border);
-  background: transparent;
-}
-/* Closed: soft tinted fill. Open: border only (transparent fill). */
-.nav-section-home.is-collapsed {
-  background: color-mix(in srgb, var(--muted-fg) 8%, transparent);
-}
-.nav-section-home:not(.is-collapsed) {
-  background: transparent;
-}
-.nav-section-home:first-child { margin-top: var(--space-1); }
-.nav-label-home {
-  color: var(--foreground);
+.side-nav > .nav-section + .nav-section { border-top: 1px solid var(--border); }
+.nav-section > .nav-label {
+  color: var(--tile-tone);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
-/* Accordion title: capsule only while pressing (and hover on desktop) — never sticky open/closed */
-.nav-section-home > .nav-label-toggle:active {
-  background: color-mix(in srgb, var(--muted-fg) 12%, var(--muted));
-  border-color: var(--border);
-  color: var(--foreground);
+/* Accordion title: a faint capsule of the section colour only while pressing (and on desktop hover). */
+.nav-section > .nav-label-toggle:active {
+  background: color-mix(in srgb, var(--tile-tone) 10%, transparent);
+  border-color: transparent;
+  color: var(--tile-tone);
 }
 @media (hover: hover) and (pointer: fine) {
-  .nav-section-home > .nav-label-toggle:hover {
-    background: color-mix(in srgb, var(--muted-fg) 12%, var(--muted));
-    border-color: var(--border);
-    color: var(--foreground);
+  .nav-section > .nav-label-toggle:hover {
+    background: color-mix(in srgb, var(--tile-tone) 10%, transparent);
+    border-color: transparent;
+    color: var(--tile-tone);
   }
 }
-.nav-item-home.active {
-  background: var(--muted);
+.nav-section > .nav-item {
+  gap: var(--space-1_5);
+  min-height: 40px;
+  padding: 6px var(--space-1);
   border-color: transparent;
   color: var(--foreground);
 }
-.nav-item-home:hover {
-  background: color-mix(in srgb, var(--muted-fg) 12%, var(--muted));
-  border-color: var(--border);
+.nav-section > .nav-item .nav-ico {
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border-radius: 9px;
+  color: var(--tile-tone);
+  background: color-mix(in srgb, var(--tile-tone) 10%, transparent);
+}
+.nav-section-home > .nav-item .nav-ico { background: color-mix(in srgb, var(--foreground) 7%, transparent); }
+.nav-section > .nav-item:hover {
+  background: color-mix(in srgb, var(--tile-tone) 6%, transparent);
+  border-color: transparent;
   color: var(--foreground);
 }
-.nav-section-bot:first-child { margin-top: var(--space-1); }
-.nav-section-bot {
-  border: 1px solid color-mix(in srgb, var(--bot-line) 38%, var(--border));
-  background: transparent;
-}
-.nav-section-bot.is-collapsed {
-  background: color-mix(in srgb, var(--bot-line) 10%, transparent);
-}
-.nav-section-bot:not(.is-collapsed) {
-  background: transparent;
-}
-.nav-section-pg {
-  border: 1px solid color-mix(in srgb, var(--pg-line) 35%, var(--border));
-  background: transparent;
-}
-.nav-section-pg.is-collapsed {
-  background: color-mix(in srgb, var(--pg-line) 10%, transparent);
-}
-.nav-section-pg:not(.is-collapsed) {
-  background: transparent;
-}
-.nav-label-bot {
-  color: var(--bot-line);
+.nav-section > .nav-item.active,
+.nav-section > .nav-item.active:hover {
+  background: color-mix(in srgb, var(--tile-tone) 12%, transparent);
+  border-color: transparent;
+  color: var(--tile-tone);
   font-weight: 600;
-  letter-spacing: 0.02em;
 }
-.nav-label-pg {
-  color: var(--pg-line);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.nav-section-bot .nav-ico { color: var(--bot-line); }
-.nav-section-pg .nav-ico { color: var(--pg-line); }
-/* Accordion title: capsule only while pressing (and hover on desktop) — never sticky open/closed */
-.nav-section-bot > .nav-label-toggle:active {
-  background: color-mix(in srgb, var(--bot-line) 12%, transparent);
-  border-color: color-mix(in srgb, var(--bot-line) 40%, transparent);
-  color: var(--bot-line);
-}
-.nav-section-pg > .nav-label-toggle:active {
-  background: color-mix(in srgb, var(--pg-line) 12%, transparent);
-  border-color: color-mix(in srgb, var(--pg-line) 40%, transparent);
-  color: var(--pg-line);
-}
-@media (hover: hover) and (pointer: fine) {
-  .nav-section-bot > .nav-label-toggle:hover {
-    background: color-mix(in srgb, var(--bot-line) 12%, transparent);
-    border-color: color-mix(in srgb, var(--bot-line) 40%, transparent);
-    color: var(--bot-line);
-  }
-  .nav-section-pg > .nav-label-toggle:hover {
-    background: color-mix(in srgb, var(--pg-line) 12%, transparent);
-    border-color: color-mix(in srgb, var(--pg-line) 40%, transparent);
-    color: var(--pg-line);
-  }
-}
-.nav-item-bot.active,
-.nav-item-bot.active:hover {
-  background: var(--bot-fill);
-  border-color: transparent;
-  color: var(--foreground);
-}
-.nav-item-bot.active .nav-ico { color: var(--bot-line); }
-.nav-item-bot:hover {
-  background: color-mix(in srgb, var(--bot-line) 8%, transparent);
-  border-color: color-mix(in srgb, var(--bot-line) 36%, transparent);
-  color: var(--foreground);
-}
-.nav-item-pg.active,
-.nav-item-pg.active:hover {
-  background: var(--pg-fill);
-  border-color: transparent;
-  color: var(--foreground);
-}
-.nav-item-pg.active .nav-ico { color: var(--pg-line); }
-.nav-item-pg:hover {
-  background: color-mix(in srgb, var(--pg-line) 8%, transparent);
-  border-color: color-mix(in srgb, var(--pg-line) 36%, transparent);
-  color: var(--foreground);
-}
+.nav-section-home > .nav-item.active,
+.nav-section-home > .nav-item.active:hover { background: color-mix(in srgb, var(--foreground) 8%, transparent); }
+.nav-section > .nav-item.active .nav-ico { background: color-mix(in srgb, var(--tile-tone) 20%, transparent); }
 
 /* Help — bottom sidebar chip, same language as «فعال» status tags */
 .side-help-btn {
@@ -7354,9 +7286,9 @@ td.byte-size {
   flex: 1 1 auto;
 }
 .modal-title .page-title-ico {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 16px;
+  width: var(--btn-h);
+  height: var(--btn-h);
+  border-radius: 14px;
 }
 .modal-title .page-title-ico svg {
   width: 20px;
@@ -8154,8 +8086,6 @@ html[data-theme="light"] {
   --brand-fg: #c2410c;
   --bot-line: #ea580c;
   --pg-line: #2563eb;
-  --bot-fill: color-mix(in srgb, var(--bot-line) 8%, transparent);
-  --pg-fill: color-mix(in srgb, var(--pg-line) 8%, transparent);
   --bg: var(--background);
   --bg-card: #ffffff;
   --bg-muted: var(--muted);
@@ -8235,21 +8165,6 @@ html[data-theme="light"] .update-meta-box.update-meta-err {
 }
 html[data-theme="light"] .update-meta-box.update-meta-err .muted,
 html[data-theme="light"] .update-meta-box.update-meta-err strong { color: #b91c1c; }
-html[data-theme="light"] .nav-item:hover { background: var(--bg-hover); }
-html[data-theme="light"] .nav-item.active {
-  background: var(--muted);
-  color: var(--foreground);
-}
-/* Web-panel box stays colorless (border only) — never share backdrop fill */
-html[data-theme="light"] .nav-section-home {
-  border-color: var(--border);
-}
-html[data-theme="light"] .nav-section-home.is-collapsed {
-  background: color-mix(in srgb, var(--foreground) 5%, transparent);
-}
-html[data-theme="light"] .nav-section-home:not(.is-collapsed) {
-  background: transparent;
-}
 html[data-theme="light"] .ui-modal-backdrop {
   background: rgba(0, 0, 0, 0.28);
 }
@@ -8270,41 +8185,6 @@ html[data-theme="light"] .ui-modal-scroll {
 html[data-theme="light"] .ui-modal-scroll::-webkit-scrollbar-thumb {
   background: #d4d4d8;
 }
-html[data-theme="light"] .nav-label-home { color: var(--foreground); }
-/* Neutral select/hover for the border-only home box (no brand tint) */
-html[data-theme="light"] .nav-item-home.active,
-html[data-theme="light"] .nav-item-home.active:hover {
-  background: color-mix(in srgb, var(--foreground) 7%, transparent);
-  border-color: transparent;
-  color: var(--foreground);
-}
-html[data-theme="light"] .nav-item-home:hover {
-  background: color-mix(in srgb, var(--foreground) 4%, transparent);
-  border-color: var(--border);
-  color: var(--foreground);
-}
-html[data-theme="light"] .nav-section-bot {
-  border-color: color-mix(in srgb, var(--bot-line) 28%, var(--border));
-}
-html[data-theme="light"] .nav-section-bot.is-collapsed {
-  background: color-mix(in srgb, var(--bot-line) 8%, transparent);
-}
-html[data-theme="light"] .nav-section-bot:not(.is-collapsed) {
-  background: transparent;
-}
-html[data-theme="light"] .nav-section-pg {
-  border-color: color-mix(in srgb, var(--pg-line) 28%, var(--border));
-}
-html[data-theme="light"] .nav-section-pg.is-collapsed {
-  background: color-mix(in srgb, var(--pg-line) 8%, transparent);
-}
-html[data-theme="light"] .nav-section-pg:not(.is-collapsed) {
-  background: transparent;
-}
-html[data-theme="light"] .nav-label-bot,
-html[data-theme="light"] .nav-section-bot .nav-ico { color: var(--bot-line); }
-html[data-theme="light"] .nav-label-pg,
-html[data-theme="light"] .nav-section-pg .nav-ico { color: var(--pg-line); }
 html[data-theme="light"] .side-help-btn {
   background: rgba(22, 163, 74, 0.1);
   color: #15803d;
@@ -8317,29 +8197,6 @@ html[data-theme="light"] .side-help-btn.is-active:hover {
   color: #15803d;
   border-color: rgba(22, 163, 74, 0.36);
 }
-html[data-theme="light"] .nav-item-bot.active,
-html[data-theme="light"] .nav-item-bot.active:hover {
-  background: var(--bot-fill);
-  border-color: transparent;
-  color: var(--foreground);
-}
-html[data-theme="light"] .nav-item-bot:hover {
-  background: color-mix(in srgb, var(--bot-line) 6%, transparent);
-  border-color: color-mix(in srgb, var(--bot-line) 28%, transparent);
-  color: var(--foreground);
-}
-html[data-theme="light"] .nav-item-pg.active,
-html[data-theme="light"] .nav-item-pg.active:hover {
-  background: var(--pg-fill);
-  border-color: transparent;
-  color: var(--foreground);
-}
-html[data-theme="light"] .nav-item-pg:hover {
-  background: color-mix(in srgb, var(--pg-line) 6%, transparent);
-  border-color: color-mix(in srgb, var(--pg-line) 28%, transparent);
-  color: var(--foreground);
-}
-
 html[data-theme="light"] .btn-warn { color: #a16207 !important; }
 
 html[data-theme="light"] .icon-btn,
@@ -8484,21 +8341,6 @@ html[data-theme="light"] .upload-box.has-file .upload-box-name {
   color: #15803d;
 }
 html[data-theme="light"] .stat-ico { background: var(--muted); color: var(--muted-fg); }
-html[data-theme="light"] .page-title-ico {
-  background: #fff;
-  border-color: color-mix(in srgb, var(--bot-line) 40%, var(--border));
-  color: var(--bot-line);
-}
-html[data-theme="light"] .page-title-ico--pg {
-  background: #fff;
-  border-color: color-mix(in srgb, var(--pg-line) 40%, var(--border));
-  color: var(--pg-line);
-}
-html[data-theme="light"] .page-title-ico--neutral {
-  background: #f4f4f5;
-  border: 1px solid var(--border);
-  color: #52525b;
-}
 html[data-theme="light"] .logout-link {
   background: rgba(220, 38, 38, 0.08);
   border-color: rgba(220, 38, 38, 0.3);
@@ -9205,76 +9047,6 @@ html[data-theme="light"] .pg-node-metric {
 .home-dash > .card,
 .home-conn-card {
   padding: var(--card-pad);
-}
-
-/* —— Home shortcuts: same four-column grid as the KPI strip above; the icon takes the colour of the
-   sidebar section the page sits in, and the second line names that section. —— */
-.home-shortcuts {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-2);
-  margin-bottom: var(--section-gap);
-}
-.home-shortcut {
-  --shortcut-tone: var(--muted-fg);
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1_5);
-  min-width: 0;
-  min-height: var(--dock-h);
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--control-radius);
-  background: var(--card);
-  color: inherit;
-  text-decoration: none;
-  box-sizing: border-box;
-  transition:
-    border-color var(--motion-fast) var(--ease-standard),
-    transform var(--motion-fast) var(--ease-standard);
-}
-.home-shortcut-bot { --shortcut-tone: var(--bot-line); }
-.home-shortcut-pg { --shortcut-tone: var(--pg-line); }
-.home-shortcut:hover {
-  border-color: color-mix(in srgb, var(--shortcut-tone) 50%, var(--border));
-  transform: translateY(-1px);
-}
-.home-shortcut:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--shortcut-tone) 55%, transparent);
-}
-.home-shortcut > .nav-ico { width: var(--dock-ico); height: var(--dock-ico); color: var(--shortcut-tone); }
-.home-shortcut-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.home-shortcut-copy strong,
-.home-shortcut-copy small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home-shortcut-copy strong { font-size: var(--title-size); font-weight: 600; }
-.home-shortcut-copy small { font-size: 12px; color: var(--muted-fg); }
-.home-shortcut > .nav-dot { position: absolute; top: var(--space-1_5); inset-inline-end: var(--space-2); }
-/* Phones and tablets have the bottom bar: shortcuts it already holds are hidden, the rest scroll in one row. */
-@media (max-width: 900px) {
-  .home-shortcuts {
-    display: flex;
-    gap: var(--space-1);
-    margin-inline: calc(-1 * var(--space-2));
-    padding-inline: var(--space-2);
-    overflow-x: auto;
-    scroll-snap-type: x proximity;
-    scroll-padding-inline: var(--space-2);
-    scrollbar-width: none;
-  }
-  .home-shortcuts::-webkit-scrollbar { display: none; }
-  .home-shortcut { flex: 0 0 auto; max-width: 70vw; scroll-snap-align: start; }
-  .home-shortcut.is-in-dock { display: none; }
-  .home-shortcut:hover { transform: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .home-shortcut { transition: none; }
-  .home-shortcut:hover { transform: none; }
 }
 
 /* —— Period sales —— */
@@ -12160,25 +11932,32 @@ html[data-theme="light"] .panel-status-card {
 }
 
 
-/* Card titles with a line icon (macros.card_title): neutral like the web-panel sidebar, orange in the bot panel. */
+/* Card titles: the launcher tile at card-title size (28px), tinted with the section colour. */
 .card h2.card-title {
   display: flex;
   align-items: center;
   gap: var(--space-1);
 }
 .card-title-ico {
-  width: 16px;
-  height: 16px;
+  --tile-tone: var(--foreground);
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
   flex: 0 0 auto;
+  border-radius: 9px;
+  color: var(--tile-tone);
+  background: color-mix(in srgb, var(--tile-tone) 7%, transparent);
   stroke: currentColor;
   fill: none;
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.card-title--neutral .card-title-ico { color: var(--foreground); }
-.card-title--bot .card-title-ico { color: #f0b27a; }
-html[data-theme="light"] .card-title--bot .card-title-ico { color: #c2691c; }
+.card-title--bot .card-title-ico,
+.card-title--pg .card-title-ico { background: color-mix(in srgb, var(--tile-tone) 11%, transparent); }
+.card-title--bot .card-title-ico { --tile-tone: var(--bot-line); }
+.card-title--pg .card-title-ico { --tile-tone: var(--pg-line); }
 
 /* ---- Dashboard: KPI strip, status tiles, sales chart, account card ---- */
 .kpi-strip {

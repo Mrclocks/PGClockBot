@@ -2,8 +2,8 @@
 
 Each item carries the same visibility rule as the route it opens, so the menu never offers a
 link that ends in «دسترسی مجاز نیست». Labels follow the panel glossary (docs/NAV_SETTINGS.md).
-The phone bottom bar and the dashboard shortcuts are views over the built sidebar, so they show
-exactly the items, names, active state and unread dots the sidebar shows.
+The phone bottom bar is a view over the built sidebar, so it shows exactly the items, names, active
+state and unread dots the sidebar shows.
 """
 
 from __future__ import annotations
@@ -35,12 +35,6 @@ MARKETING_KEY = "marketing"
 DOCK_SLOTS = 4
 DOCK_PRIORITY: tuple[str, ...] = (
     "home", "inbox", "finance", "users", "customers", "tickets", "pg_tickets", "pg_users", "plans",
-)
-# Dashboard shortcuts, most used first; four per row on desktop, the same grid as the KPI strip.
-DASHBOARD_SHORTCUT_LIMIT = 8
-SHORTCUT_PRIORITY: tuple[str, ...] = (
-    "finance", "users", "customers", "plans", "tickets", "pg_tickets", "resellers", "my_resellers",
-    "pg_users", "shop_overview", "pg_overview", MARKETING_KEY, "shop_settings", "my_subscription", "pg_nodes",
 )
 
 
@@ -140,16 +134,6 @@ class NavDock:
 
     items: tuple[NavItem, ...]
     more_active: bool
-
-
-@dataclass(frozen=True, slots=True)
-class NavShortcut:
-    """A dashboard shortcut with the sidebar section it sits in."""
-
-    item: NavItem
-    section_label: str
-    tone: str
-    in_dock: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,18 +276,6 @@ def build_dock(sections: Iterable[NavSection]) -> NavDock:
     return NavDock(items=items, more_active=not any(item.active for item in items))
 
 
-def build_shortcuts(sections: Iterable[NavSection]) -> tuple[NavShortcut, ...]:
-    """Dashboard shortcuts for the sidebar ``sections``; ``in_dock`` marks the ones the phone bar already has."""
-    sections = tuple(sections)
-    by_key = _items_by_key(sections)
-    dock_keys = {item.key for item in build_dock(sections).items}
-    picked = [by_key[key] for key in SHORTCUT_PRIORITY if key in by_key][:DASHBOARD_SHORTCUT_LIMIT]
-    return tuple(
-        NavShortcut(item=item, section_label=section.label, tone=section.tone, in_dock=item.key in dock_keys)
-        for item, section in picked
-    )
-
-
 _ALL_SPECS: dict[str, _ItemSpec] = {
     s.key: s for s in (*_SYSTEM_OWNER, *_SYSTEM_STAFF, *_SHOP_ITEMS, *_PG_ITEMS) if s.key != MARKETING_KEY
 }
@@ -340,14 +312,3 @@ def sidebar_for_template(
     """Jinja entry point used by ``base.html``."""
     viewer = viewer_from_context(staff, identity, is_owner=is_owner, marketing_sections=marketing_sections or ())
     return build_sidebar(viewer, path=path, tab=tab)
-
-
-def shortcuts_for_template(
-    staff: Mapping[str, Any] | None,
-    identity: Mapping[str, Any] | None,
-    is_owner: bool,
-    marketing_sections: Iterable[Any],
-) -> tuple[NavShortcut, ...]:
-    """Jinja entry point used by the dashboard body."""
-    viewer = viewer_from_context(staff, identity, is_owner=is_owner, marketing_sections=marketing_sections or ())
-    return build_shortcuts(build_sidebar(viewer, path="/home"))

@@ -407,9 +407,6 @@
     font-weight: 600;
     pointer-events: none;
   }
-  .side .nav-label-home { color: var(--muted-fg); }
-  .side .nav-label-bot { color: var(--bot-line); }
-  .side .nav-label-pg { color: var(--pg-line); }
   .side .nav-label-caret,
   .side .nav-section > .nav-empty { display: none !important; }
 
