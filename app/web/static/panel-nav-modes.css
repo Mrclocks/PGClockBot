@@ -162,12 +162,11 @@
     bottom: var(--dock-bottom);
     display: block;
     transform: translate3d(0, 0, 0);
-    opacity: 1;
-    /* transform only: hinting opacity would make the bar a backdrop root and switch off the capsule's blur. */
+    /* Transform only, never opacity: while an ancestor is part-transparent the browser drops the capsule's
+       backdrop blur, so a fading bar would come back clear and turn matte only when the fade ended. */
     will-change: transform;
     transition:
       transform var(--dock-show) var(--ease-out),
-      opacity var(--dock-show) var(--ease-out),
       visibility 0s linear 0s;
   }
   .bottom-dock-bar {
@@ -297,19 +296,17 @@
   body.nav-open .bottom-dock-close:active { transform: scale(0.94); }
 
   /* Out of the way while a modal is open or the on-screen keyboard is up; it slides fully below the
-     screen edge while fading, and only turns invisible once the slide has finished.
+     screen edge, and only turns invisible once the slide has finished.
      body.modal-open is the panel's modal lock (some pages set it themselves); .ui-modal.open covers the rest;
      body.kbd-up comes from panel-keyboard.js. */
   body.modal-open .bottom-dock,
   body:has(.ui-modal.open) .bottom-dock,
   body.kbd-up .bottom-dock {
     transform: translate3d(0, calc(100% + var(--dock-bottom) + var(--space-1)), 0);
-    opacity: 0;
     visibility: hidden;
     pointer-events: none;
     transition:
       transform var(--dock-hide) var(--ease-in),
-      opacity var(--dock-hide) var(--ease-in),
       visibility 0s linear var(--dock-hide);
   }
 
