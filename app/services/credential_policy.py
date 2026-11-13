@@ -388,11 +388,7 @@ def friendly_pg_error(text: str, *, status_code: int | None = None) -> str:
     return raw
 
 
-TEMPLATE_NAME_CONFLICT_MESSAGE = (
-    "تمپلیتی با این نام (یا نامی که پاسارگارد آن را یکسان می‌داند) از قبل وجود دارد. "
-    "پاسارگارد ایموجی‌ها را در مقایسه نام نادیده می‌گیرد؛ بخشی از نام را با حرف یا عدد "
-    "تغییر دهید، یا تمپلیت قبلی را از پنل حذف کنید."
-)
+TEMPLATE_NAME_CONFLICT_MESSAGE = "این نام قبلاً استفاده شده است. یک نام دیگر انتخاب کنید."
 
 
 def template_create_error_message(exc: object) -> str:
