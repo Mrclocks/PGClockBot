@@ -84,16 +84,17 @@
      header, bar and sheet stop at --dock-max-w and centre. */
   --dock-max-w: 560px;
   --dock-inline: max(var(--dock-edge), calc((100vw - var(--dock-max-w)) / 2));
-  /* Below the status bar and Dynamic Island by the same 12px the bar keeps from the screen edge. */
-  --hdr-top: calc(env(safe-area-inset-top, 0px) + var(--dock-edge));
+  /* Below the status bar and Dynamic Island with the panel's own top air (--safe-top: the inset plus 16px in a
+     phone browser, plus 24px in the installed web app), never closer than 12px to the screen edge. */
+  --hdr-top: max(var(--dock-edge), var(--safe-top));
   --sheet-in: 420ms;
   --sheet-out: 260ms;
   --tile-ico: 48px;
   --sheet-shadow: 0 24px 64px rgb(0 0 0 / 0.28);
   --dock-ico: 20px;
   --dock-label-fs: 11px;
-  /* A tight contact line plus a soft lift, so the capsules read against busy or dark pages. */
-  --dock-shadow: 0 1px 3px rgb(0 0 0 / 0.14), 0 10px 28px rgb(0 0 0 / 0.22);
+  /* One soft shadow for the header and the bar: a faint contact line and a light lift. */
+  --dock-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 6px 18px rgb(0 0 0 / 0.14);
   /* Shared matte glass — modal sticky chrome + shell topbar/footers/mobile drawer.
      Keep the mix/blur numbers identical everywhere (see .ui-modal-head). */
   --modal-frost-bg: color-mix(in srgb, var(--bg-card) 52%, transparent);

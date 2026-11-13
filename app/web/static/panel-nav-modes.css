@@ -169,6 +169,24 @@
       transform var(--dock-show) var(--ease-out),
       visibility 0s linear 0s;
   }
+  /* The bar's shadow lives on this layer: the bar's own box-shadow would be cut off by the clip-path that folds
+     it into the ×. An outer shadow is painted only outside its box, so it never darkens the glass above it.
+     It fades out while the bar folds (the × has its own) and back in once the bar has unfolded. */
+  .bottom-dock::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline: 0;
+    height: var(--dock-h);
+    border-radius: var(--control-radius);
+    box-shadow: var(--dock-shadow);
+    pointer-events: none;
+    transition: opacity var(--motion-med) var(--ease-out) calc(var(--dock-morph-lead) + var(--dock-morph));
+  }
+  body.nav-open .bottom-dock::before {
+    opacity: 0;
+    transition: opacity var(--motion-fast) var(--ease-in);
+  }
   .bottom-dock-bar {
     box-sizing: border-box;
     display: grid;
@@ -181,7 +199,6 @@
     background: var(--modal-frost-bg);
     backdrop-filter: var(--modal-frost-blur);
     -webkit-backdrop-filter: var(--modal-frost-blur);
-    box-shadow: var(--dock-shadow);
     clip-path: inset(0 0 0 0 round var(--dock-h));
     /* Unfolding: starts just after the × has faded, then eases out to full width. */
     transition: clip-path var(--dock-morph) var(--ease-out) var(--dock-morph-lead);
@@ -491,6 +508,8 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .bottom-dock,
+  .bottom-dock::before,
+  body.nav-open .bottom-dock::before,
   .bottom-dock-bar,
   .bottom-dock-item,
   .bottom-dock-close,
