@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.6.4": [
+        "موبایل: صفحات و ترتیب نوار پایین به انتخاب مالک در تنظیمات ظاهر (#1354)",
+        "موبایل: رفع‌های بازبینی هدر، نوار و منو از دستگاه واقعی (#1355)",
+        "ریستور: backup/dev-pre-v0.6.4 (commit 1825830e)",
+    ],
     "0.6.3": [
         "موبایل: هدر و نوار پایین ۶۰px، فاصلهٔ safe-area، سایهٔ dock، ارتفاع شیت منو (#1352)",
         "موبایل: بدون حلقهٔ فوکوس بعد از لمس؛ برگشت matte نوار بدون پرش شفاف (#1352)",
