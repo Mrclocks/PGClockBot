@@ -41,6 +41,13 @@ def _callback(update_id: int, user_id: int, *, with_message: bool = True) -> Upd
     return Update.model_validate({"update_id": update_id, "callback_query": query})
 
 
+def _payment(update_id: int, user_id: int) -> Update:
+    return Update.model_validate({"update_id": update_id, "message": {
+        "message_id": update_id, "date": NOW, "chat": {"id": user_id, "type": "private"}, "from": _user(user_id),
+        "successful_payment": {"currency": "XTR", "total_amount": 50, "invoice_payload": "order:1",
+                               "telegram_payment_charge_id": "tg-1", "provider_payment_charge_id": "p-1"}}})
+
+
 async def _until(predicate, within: float = 2.0) -> None:
     loop = asyncio.get_running_loop()
     deadline = loop.time() + within
@@ -289,6 +296,43 @@ class FairnessTests(unittest.IsolatedAsyncioTestCase):
         again = await scheduler.submit(dispatcher, bot, _callback(5, 500))
         await asyncio.wait_for(again, 1)
         self.assertEqual(dispatcher.handled[-1], 5, "the customer can tap again once their updates are done")
+
+
+    async def test_a_payment_or_message_past_the_customer_limit_is_still_queued(self) -> None:
+        scheduler = BotUpdateScheduler(SchedulerLimits(pending_per_customer=2))
+        dispatcher = FakeDispatcher()
+        bot = FakeBot([])
+        dispatcher.gates[1] = asyncio.Event()
+        await scheduler.submit(dispatcher, bot, _callback(1, 500))
+        await scheduler.submit(dispatcher, bot, _callback(2, 500))
+        payment = await scheduler.submit(dispatcher, bot, _payment(3, 500))
+        text = await scheduler.submit(dispatcher, bot, _message(4, 500))
+        self.assertIsNotNone(payment, "a successful payment is never dropped")
+        self.assertIsNotNone(text)
+        dispatcher.gates[1].set()
+        await asyncio.gather(payment, text)
+        self.assertEqual(dispatcher.handled, [1, 2, 3, 4], "kept updates still run in the customer's order")
+
+    async def test_a_bot_backlog_is_rechecked_after_waiting_for_the_process_backlog(self) -> None:
+        scheduler = BotUpdateScheduler(SchedulerLimits(concurrent=8, pending=2, pending_per_bot=1))
+        dispatcher = FakeDispatcher()
+        for update_id in (1, 2, 3, 4):
+            dispatcher.gates[update_id] = asyncio.Event()
+        await scheduler.submit(dispatcher, FakeBot([], bot_id=2), _message(1, 600))
+        await scheduler.submit(dispatcher, FakeBot([], bot_id=3), _message(2, 700))
+        shop = FakeBot([], bot_id=1)
+        first = asyncio.create_task(scheduler.submit(dispatcher, shop, _message(3, 500)))
+        second = asyncio.create_task(scheduler.submit(dispatcher, shop, _message(4, 501)))
+        await asyncio.sleep(0.05)
+        dispatcher.gates[1].set()  # room in the process backlog: the first update of bot 1 goes in
+        await asyncio.wait_for(first, 1)
+        dispatcher.gates[2].set()  # room again, but bot 1's own backlog is now full
+        await asyncio.sleep(0.05)
+        self.assertFalse(second.done(), "bot 1 must not go past its own backlog")
+        dispatcher.gates[3].set()
+        await asyncio.wait_for(second, 1)
+        dispatcher.gates[4].set()
+        await scheduler.drain_all(grace_sec=1)
 
 
 class ShopBotPollingTests(unittest.IsolatedAsyncioTestCase):

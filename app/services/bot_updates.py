@@ -28,7 +28,9 @@ MAX_CONCURRENT_PER_BOT = 8
 # without touching other bots; the process limit only bounds memory if many bots are stuck at once.
 MAX_PENDING_UPDATES = 1024
 MAX_PENDING_PER_BOT = 64
-# Updates one customer may have waiting; more taps while the panel is slow are dropped, not queued.
+# Updates one customer may have waiting. Past this, further button taps (callback queries) are dropped
+# instead of queued; every other update (a payment, a pre-checkout query, a typed message) is always kept,
+# since polling has already moved past it and Telegram would not send it again.
 MAX_PENDING_PER_CUSTOMER = 8
 # How long a stopping shop bot lets its running updates finish before they are cancelled.
 STOP_GRACE_SEC = 10.0
@@ -148,16 +150,15 @@ class BotUpdateScheduler:
         return self._runner.pending
 
     async def submit(self, dispatcher: UpdateFeeder, bot: Any, update: Any) -> asyncio.Task[None] | None:
-        """Queue ``update`` for ``bot``; waits while that bot's backlog is full.
+        """Queue ``update`` for ``bot``; waits while that bot's or the process backlog is full.
 
-        Returns ``None`` when the sender already has the maximum number of updates waiting."""
+        Returns ``None`` when the update is a button tap and its sender already has the maximum number
+        of updates waiting."""
         bot_id = int(bot.id)
         lane = await self._lane_with_room(bot_id)
-        await self._runner.wait_for_room(self._limits.pending)
-        lane = self._lane(bot_id)
         key = update_order_key(bot_id, update)
-        if lane.per_key.get(key, 0) >= self._limits.pending_per_customer:
-            log.warning("bot %s: update %s dropped, its sender already has %s waiting",
+        if _is_button_tap(update) and lane.per_key.get(key, 0) >= self._limits.pending_per_customer:
+            log.warning("bot %s: button tap %s dropped, its sender already has %s updates waiting",
                         bot_id, getattr(update, "update_id", "?"), self._limits.pending_per_customer)
             return None
         task = self._runner.submit(key, _handler(dispatcher, bot, update), gate=lane.slots)
@@ -183,13 +184,17 @@ class BotUpdateScheduler:
         return lane
 
     async def _lane_with_room(self, bot_id: int) -> _BotLane:
-        lane = self._lane(bot_id)
-        while len(lane.tasks) >= self._limits.pending_per_bot:
-            lane.room.clear()
-            await lane.room.wait()
-            # An emptied lane is removed; take whichever lane the bot has now.
+        """The bot's lane once both it and the process backlog have room, checked together after any wait."""
+        while True:
             lane = self._lane(bot_id)
-        return lane
+            if len(lane.tasks) >= self._limits.pending_per_bot:
+                lane.room.clear()
+                await lane.room.wait()
+            elif self._runner.pending >= self._limits.pending:
+                await self._runner.wait_for_room(self._limits.pending)
+            else:
+                # An emptied lane is removed, so the lane is looked up again after every wait.
+                return lane
 
     @staticmethod
     async def _drain(tasks: set[asyncio.Task[None]], *, grace_sec: float | None, label: str) -> None:
@@ -216,6 +221,11 @@ class BotUpdateScheduler:
         lane.room.set()
         if not lane.tasks:
             del self._lanes[bot_id]
+
+
+def _is_button_tap(update: Any) -> bool:
+    """A callback query: safe to drop, the customer can tap again. Payments and messages never are."""
+    return getattr(update, "callback_query", None) is not None
 
 
 def _handler(dispatcher: UpdateFeeder, bot: Any, update: Any) -> Job:
