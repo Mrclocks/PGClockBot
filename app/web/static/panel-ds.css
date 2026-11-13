@@ -526,11 +526,63 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 :is(.side, .topbar) .side-search-label { font-size: 13.5px; font-weight: 600; line-height: 1.4; }
 :is(.side, .topbar) .side-search-where { font-size: 12px; line-height: 1.4; color: var(--muted-fg); }
 :is(.side, .topbar) .side-search-empty { margin: 0; padding: var(--space-2); text-align: center; font-size: 13px; color: var(--muted-fg); }
+/* Phones: the header search is a round button at the capsule's end that opens into a field across the
+   capsule. The field is always full width and only its clip changes, so the opening runs on the compositor;
+   the clip reaches far below while open so the results list is never cut. The real input covers the circle,
+   so a tap focuses it straight away and the phone keyboard rises. */
 @media (max-width: 900px) {
   .side .side-search { display: none; }
-  .topbar .topbar-search { direction: rtl; flex: 0 1 var(--topbar-search-w); min-width: 0; margin: 0; }
-  /* 16px keeps iOS from zooming the page when the field takes focus. */
-  .topbar .topbar-search input[type="search"] { font-size: var(--control-fs) !important; }
+  .topbar .side-search.topbar-search {
+    position: absolute;
+    inset-block-start: var(--space-0);
+    inset-inline: var(--space-0);
+    z-index: 2;
+    direction: rtl;
+    height: var(--btn-h);
+    margin: 0;
+    padding: 0;
+    border-color: transparent;
+    background: color-mix(in srgb, var(--foreground) 6%, var(--bg-card));
+    /* The header is laid out LTR: the circle is the field's right end, the logo stays clear on the left. */
+    clip-path: inset(0 0 0 calc(100% - var(--btn-h)) round calc(var(--btn-h) / 2));
+    transition:
+      clip-path var(--dock-morph) var(--ease-in) var(--dock-morph-lead),
+      background-color var(--motion-fast) var(--ease-standard),
+      border-color var(--motion-fast) var(--ease-standard);
+  }
+  .topbar .side-search.topbar-search > .nav-ico {
+    position: absolute;
+    inset-inline-start: calc((var(--btn-h) - 18px) / 2);
+    pointer-events: none;
+  }
+  .topbar .side-search.topbar-search input[type="search"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    padding-inline: var(--btn-h) var(--space-2) !important;
+    /* 16px keeps iOS from zooming the page when the field takes focus. */
+    font-size: var(--control-fs) !important;
+    opacity: 0;
+    transition: opacity var(--motion-fast) var(--ease-standard);
+  }
+  .topbar .side-search.topbar-search:is(:focus-within, :has(input:not(:placeholder-shown))) {
+    border-color: color-mix(in srgb, var(--brand) 60%, transparent);
+    background: var(--bg-card);
+    clip-path: inset(0 0 -100vh 0 round calc(var(--btn-h) / 2));
+    transition:
+      clip-path var(--dock-morph) var(--ease-out),
+      background-color var(--motion-fast) var(--ease-standard),
+      border-color var(--motion-fast) var(--ease-standard);
+  }
+  .topbar .side-search.topbar-search:is(:focus-within, :has(input:not(:placeholder-shown))) input[type="search"] {
+    opacity: 1;
+    transition-delay: var(--dock-morph-items);
+  }
+  .topbar .side-search-results { top: calc(100% + var(--space-1_5)); }
+}
+@media (max-width: 900px) and (prefers-reduced-motion: reduce) {
+  .topbar .side-search.topbar-search,
+  .topbar .side-search.topbar-search input[type="search"] { transition: none !important; }
 }
 .side .side-theme-btn { min-height: var(--btn-h); padding: 0 var(--space-2); font-size: 13px; }
 

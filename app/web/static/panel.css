@@ -80,7 +80,15 @@
   --dock-morph: 380ms;
   --dock-morph-lead: 80ms;
   --dock-morph-items: 160ms;
-  --topbar-search-w: 11rem;
+  /* Phone header and menu sheet (panel-nav-modes.css): the header capsule mirrors the bottom bar; on tablets
+     header, bar and sheet stop at --dock-max-w and centre. */
+  --dock-max-w: 560px;
+  --dock-inline: max(var(--dock-edge), calc((100vw - var(--dock-max-w)) / 2));
+  --hdr-top: max(var(--dock-edge), calc(env(safe-area-inset-top, 0px) + var(--space-1)));
+  --sheet-in: 420ms;
+  --sheet-out: 260ms;
+  --tile-ico: 48px;
+  --sheet-shadow: 0 24px 64px rgb(0 0 0 / 0.28);
   --dock-ico: 20px;
   --dock-label-fs: 11px;
   --dock-shadow: 0 8px 24px rgb(0 0 0 / 0.16);

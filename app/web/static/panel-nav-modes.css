@@ -104,17 +104,35 @@
   .side-search input:not(:placeholder-shown) ~ .side-search-key { display: none; }
 }
 
-/* —— Phone header: a round logo, the brand name and version beside it, and the panel search (the sidebar
-   search component, styled in panel-ds.css §14). All three share the field height (--btn-h). —— */
+/* —— Phone header: a floating capsule that mirrors the bottom bar (same height, glass, shadow and side
+   margins). A round logo flush with its inner edge, the brand name and version beside it at field height, and
+   the search as a round button at the other end (panel-ds.css §14). —— */
 @media (max-width: 900px) {
-  .topbar { gap: var(--space-1_5); }
-  .topbar-brand { height: var(--btn-h); gap: var(--space-1); }
+  .shell { padding-top: calc(var(--hdr-top) + var(--dock-h)); }
+  .topbar {
+    top: var(--hdr-top);
+    left: var(--dock-inline);
+    right: var(--dock-inline);
+    width: auto;
+    height: var(--dock-h);
+    padding: var(--space-0);
+    border: 1px solid var(--modal-frost-line);
+    border-radius: var(--control-radius);
+    box-shadow: var(--dock-shadow);
+    transition: background-color var(--drawer-motion) var(--ease-standard);
+  }
+  .topbar-brand {
+    height: var(--btn-h);
+    gap: var(--space-1);
+    /* Clear of the search circle at the other end. */
+    max-width: calc(100% - var(--btn-h) - var(--space-2));
+  }
   .topbar-brand .brand-logo { width: var(--btn-h); height: var(--btn-h); border-radius: 50%; }
   .topbar-brand-text {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: var(--space-0);
+    gap: 2px;
     height: var(--btn-h);
     min-width: 0;
   }
@@ -126,6 +144,8 @@
     font-weight: 600;
     line-height: 1.25;
   }
+  /* The release channel stays in the desktop sidebar; the header keeps the dot and the version. */
+  .topbar .channel-badge { display: none; }
 }
 
 /* —— Phone bottom bar: a frosted capsule with the most used items and «منو».
@@ -138,7 +158,7 @@
   .bottom-dock {
     position: fixed;
     z-index: 40;
-    inset-inline: var(--dock-edge);
+    inset-inline: var(--dock-inline);
     bottom: var(--dock-bottom);
     display: block;
     transform: translate3d(0, 0, 0);
@@ -248,6 +268,14 @@
 
   /* Drawer open: above the dim (the drawer itself is on the other side), folded into the red ×. */
   body.nav-open .bottom-dock { z-index: 5250; }
+  /* Over the dim the glass would turn into a grey film, and its blur would cost frames while the sheet moves:
+     header and bar take the solid frost colour instead. */
+  body.nav-open .bottom-dock-bar,
+  body.nav-open .topbar {
+    background: var(--modal-frost-bg-fallback);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
   body.nav-open .bottom-dock-bar {
     clip-path: inset(0 calc(100% - var(--dock-h)) 0 0 round var(--dock-h));
     transition: clip-path var(--dock-morph) var(--ease-standard);
@@ -294,6 +322,167 @@
     min-height: calc(var(--footer-bar-h) + var(--bottom-inset) + var(--dock-room));
     max-height: calc(var(--footer-bar-h) + var(--bottom-inset) + var(--dock-room));
   }
+}
+/* —— Phone menu: a launcher sheet that rises above the bottom bar while the bar folds into its ×.
+   The sidebar's own items become tiles, four per row, grouped by section with the section's colour:
+   web panel neutral, shop orange, PasarGuard blue. Every section is open (no accordion on phones).
+   Theme and help share the top row; the signed-in user and «خروج» close the sheet.
+   Only transform and opacity move, the sheet is solid (no blur), and the dim is a plain colour,
+   so weak phones keep their frame rate. —— */
+@media (max-width: 900px) {
+  .side {
+    top: auto;
+    left: var(--dock-inline);
+    right: var(--dock-inline);
+    bottom: calc(var(--dock-bottom) + var(--dock-h) + var(--dock-edge));
+    width: auto;
+    height: auto;
+    overflow: visible;
+  }
+  .side-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "theme help" "nav nav" "foot foot";
+    align-content: start;
+    column-gap: var(--space-1);
+    height: auto;
+    max-height: calc(100svh - var(--hdr-top) - 2 * var(--dock-h) - 3 * var(--dock-edge) - var(--dock-bottom));
+    padding: var(--space-2) var(--space-2) 0;
+    border: 1px solid var(--modal-frost-line);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: var(--sheet-shadow);
+    overscroll-behavior: contain;
+    transform: translate3d(0, calc(100% + var(--dock-h) + var(--dock-bottom) + var(--space-3)), 0);
+    transition: transform var(--sheet-out) var(--ease-in);
+  }
+  .side.open .side-panel {
+    transform: translate3d(0, 0, 0);
+    transition: transform var(--sheet-in) var(--ease-out);
+  }
+  .side-backdrop::before,
+  .side-backdrop.show::before { top: 0; left: 0; right: 0; transform: none; transition: none; }
+
+  .side-panel > .side-theme { grid-area: theme; margin: 0; padding: 0; border: 0; }
+  .side-panel > .side-help-btn {
+    grid-area: help;
+    width: auto;
+    min-height: var(--btn-h);
+    margin: 0;
+    padding: 0 var(--space-2);
+  }
+  .side-panel > .side-nav { grid-area: nav; margin: var(--space-2) 0 0; border-top: 1px solid var(--border); }
+  .side-panel > .side-foot {
+    grid-area: foot;
+    min-height: 0;
+    max-height: none;
+    margin: 0 calc(-1 * var(--space-2));
+    padding: var(--space-1_5) var(--space-2);
+    border-top: 1px solid var(--border);
+    background: transparent;
+  }
+
+  /* Sections: a coloured title over a four-column grid of tiles, a hairline between sections. */
+  .side .side-nav > .nav-section {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-1_5) var(--space-0);
+    margin: 0;
+    padding: var(--space-2) 0;
+    border: 0 !important;
+    border-radius: 0;
+    background: transparent !important;
+  }
+  .side .side-nav > .nav-section + .nav-section { border-top: 1px solid var(--border) !important; }
+  .side .side-nav > .nav-section:not(:has(> .nav-item)) { display: none !important; }
+  .side .nav-section > .nav-label-toggle {
+    grid-column: 1 / -1;
+    min-height: 0;
+    padding: 0 var(--space-0);
+    border: 0;
+    background: transparent !important;
+    font-size: 12px;
+    font-weight: 600;
+    pointer-events: none;
+  }
+  .side .nav-label-home { color: var(--muted-fg); }
+  .side .nav-label-bot { color: var(--bot-line); }
+  .side .nav-label-pg { color: var(--pg-line); }
+  .side .nav-label-caret,
+  .side .nav-section > .nav-empty { display: none !important; }
+
+  /* Tile: the icon centred in a 48px rounded square tinted with the section colour, the name under it
+     (two lines at most, the same height in every tile so rows line up). */
+  .side .nav-section > .nav-item {
+    --tile-tone: var(--foreground);
+    position: relative;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-1);
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+    margin: 0;
+    padding: var(--space-0) 2px;
+    border: 0 !important;
+    border-radius: var(--menu-radius);
+    background: transparent !important;
+    color: var(--foreground) !important;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    text-align: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .side .nav-section-bot > .nav-item { --tile-tone: var(--bot-line); }
+  .side .nav-section-pg > .nav-item { --tile-tone: var(--pg-line); }
+  .side .nav-section > .nav-item > .nav-ico {
+    flex: none;
+    box-sizing: border-box;
+    width: var(--tile-ico);
+    height: var(--tile-ico);
+    padding: calc((var(--tile-ico) - 22px) / 2);
+    margin: 0;
+    border-radius: var(--menu-radius);
+    color: var(--tile-tone);
+    background: color-mix(in srgb, var(--tile-tone) 10%, transparent);
+    transition: transform var(--motion-fast) var(--ease-standard);
+  }
+  .side .nav-section > .nav-item > span,
+  .side .nav-section > .nav-item > .nav-item-label > span:first-child {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    max-width: 100%;
+    min-height: calc(2em * 1.35);
+    white-space: normal;
+  }
+  .side .nav-section > .nav-item > .nav-item-label { display: block; max-width: 100%; }
+  .side .nav-section > .nav-item .nav-dot {
+    position: absolute;
+    top: 0;
+    inset-inline-start: calc(50% + var(--tile-ico) / 2 - var(--space-1));
+    margin: 0;
+  }
+  .side .nav-section > .nav-item.active { font-weight: 600; }
+  .side .nav-section-bot > .nav-item.active,
+  .side .nav-section-pg > .nav-item.active { color: var(--tile-tone) !important; }
+  .side .nav-section > .nav-item.active > .nav-ico {
+    background: color-mix(in srgb, var(--tile-tone) 18%, transparent);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tile-tone) 55%, transparent);
+  }
+  .side .nav-section > .nav-item:active > .nav-ico { transform: scale(0.92); }
+  .side .nav-section > .nav-item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
+@media (max-width: 900px) and (prefers-reduced-motion: reduce) {
+  .side .nav-section > .nav-item > .nav-ico { transition: none; }
+  .side .nav-section > .nav-item:active > .nav-ico { transform: none; }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .bottom-dock-bar { background: var(--modal-frost-bg-fallback); }
