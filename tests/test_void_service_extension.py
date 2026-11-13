@@ -157,6 +157,20 @@ class RenewalVoidTests(ExtensionVoidCase):
         refunded = (await self.session.get(type(self.user), self.user.id, populate_existing=True)).wallet_balance
         self.assertEqual(refunded - balance, payment.amount, "the refund is paid once, after the put-back")
 
+    async def test_it_waits_for_another_change_on_the_service(self) -> None:
+        payment, _order, _before = await self.renewed()
+        payment_id = payment.id  # the refused claim rolls back and expires the loaded rows
+        self.session.add(Order(
+            user_id=self.user.id, plan_id=1, amount=200, status="paid", note=f"renew:{self.service.id}",
+            service_id=self.service.id, service_mutation_pending=True,
+        ))
+        await self.session.commit()
+        with self.assertRaisesRegex(ValueError, "تغییر دیگری"):
+            await self.void(payment)
+        self.assertEqual(len(self.pg.writes), 1)
+        self.assertEqual(await self.void_count(), 0)
+        self.assertEqual((await self.session.get(Payment, payment_id, populate_existing=True)).status, "approved")
+
     async def test_another_shop_cannot_void_it(self) -> None:
         payment, _order, _before = await self.renewed()
         with self.assertRaisesRegex(ValueError, "یافت نشد"):
