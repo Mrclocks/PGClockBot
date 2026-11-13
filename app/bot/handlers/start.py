@@ -142,7 +142,7 @@ async def render_home(
         home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
     await replace_home(home, sweep=True)
     if offer_import:
-        await send_import_prompt(message)
+        await send_import_prompt(message, ui)
     _ = seed_reply_kb
 
 

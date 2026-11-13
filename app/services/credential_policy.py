@@ -388,6 +388,18 @@ def friendly_pg_error(text: str, *, status_code: int | None = None) -> str:
     return raw
 
 
+TEMPLATE_NAME_CONFLICT_MESSAGE = "این نام قبلاً استفاده شده است. یک نام دیگر انتخاب کنید."
+
+
+def template_create_error_message(exc: object) -> str:
+    """Persian message for a failed PasarGuard template creation."""
+    from app.services.redact import user_safe_error
+
+    if getattr(exc, "status_code", None) == 409:
+        return TEMPLATE_NAME_CONFLICT_MESSAGE
+    return user_safe_error(exc)
+
+
 def generate_compliant_password(length: int = 14) -> str:
     """Generate a password that always satisfies ``validate_password_strength``."""
     import secrets

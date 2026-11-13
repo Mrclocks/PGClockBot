@@ -5,12 +5,17 @@ from __future__ import annotations
 import math
 import secrets
 import time
+from dataclasses import dataclass, field
 from datetime import timezone
+from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.catalog_pricing import quote_product
 from app.db.models import Order
+from app.services.orders import list_active_plans
+from app.services.plan_categories import shop_categories_for_menu
 from app.services.formatting import (
     format_bytes, format_expire_short, hold_duration_from_info, is_on_hold_status,
     parse_expire,
@@ -29,6 +34,55 @@ RENEWAL_LABELS = {
     RENEWAL_UPGRADE: "⬆️ ارتقا",
     RENEWAL_DOWNGRADE: "⬇️ تنزل",
 }
+
+
+@dataclass(slots=True)
+class RenewalChoices:
+    """The plans a service can be renewed onto, as the renewal screen groups them.
+
+    With shop categories, the service's own plan is offered first on its own and the other plans
+    are reached through their category, like in the shop; without categories every plan is
+    listed, the current one first.
+    """
+
+    options: list[Any]
+    current: Any | None
+    categories: list[Any]
+    relations: dict[int, str | None] = field(default_factory=dict)
+
+    @property
+    def uncategorized(self) -> list[Any]:
+        return [p for p in self.options if getattr(p, "category_id", None) is None]
+
+    def category(self, category_id: int) -> Any | None:
+        return next((c for c in self.categories if int(c.id) == int(category_id)), None)
+
+    def in_category(self, category_id: int | None) -> list[Any]:
+        if category_id is None:
+            return self.uncategorized
+        return [p for p in self.options if getattr(p, "category_id", None) is not None
+                and int(p.category_id) == int(category_id)]
+
+
+async def load_renewal_choices(session: AsyncSession, service: Any, *, shop_id: int | None = None) -> RenewalChoices:
+    """The renewal choices of ``service`` in its shop's catalog (``shop_id`` None: the bot's own shop)."""
+    plans = await list_active_plans(session, include_trial=False, reseller_id=shop_id)
+    categories = await shop_categories_for_menu(session, fixed_plans=plans, reseller_id=shop_id)
+    return renewal_choices(plans, categories, current_plan_id=getattr(service, "plan_id", None))
+
+
+def renewal_choices(plans: list[Any], categories: list[Any], *, current_plan_id: int | None) -> RenewalChoices:
+    """Group the shop's renewable ``plans``; ``categories`` are the shop's categories that list them."""
+    current = next((p for p in plans if current_plan_id is not None and int(p.id) == int(current_plan_id)), None)
+    relations = {int(p.id): renewal_relation(current, p) for p in plans}
+    ordered = sorted(plans, key=lambda p: relations[int(p.id)] != RENEWAL_CURRENT)
+    used = {int(p.category_id) for p in plans if getattr(p, "category_id", None) is not None}
+    return RenewalChoices(
+        options=ordered,
+        current=current,
+        categories=[c for c in categories if int(c.id) in used],
+        relations=relations,
+    )
 
 
 def _plan_size(plan) -> tuple[float, float]:
