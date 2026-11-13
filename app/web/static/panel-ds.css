@@ -539,13 +539,13 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
     inset-inline: var(--space-0);
     z-index: 2;
     direction: rtl;
-    height: var(--btn-h);
+    height: var(--dock-inner);
     margin: 0;
     padding: 0;
     border-color: transparent;
     background: color-mix(in srgb, var(--foreground) 6%, var(--bg-card));
     /* The header is laid out LTR: the circle is the field's right end, the logo stays clear on the left. */
-    clip-path: inset(0 0 0 calc(100% - var(--btn-h)) round calc(var(--btn-h) / 2));
+    clip-path: inset(0 0 0 calc(100% - var(--dock-inner)) round calc(var(--dock-inner) / 2));
     transition:
       clip-path var(--dock-morph) var(--ease-in) var(--dock-morph-lead),
       background-color var(--motion-fast) var(--ease-standard),
@@ -553,7 +553,7 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   }
   .topbar .side-search.topbar-search > .nav-ico {
     position: absolute;
-    inset-inline-start: calc((var(--btn-h) - 18px) / 2);
+    inset-inline-start: calc((var(--dock-inner) - 18px) / 2);
     pointer-events: none;
     transition:
       opacity var(--motion-med) var(--ease-out) var(--dock-morph-lead),
@@ -567,8 +567,8 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
     z-index: 1;
     display: grid;
     place-items: center;
-    width: var(--btn-h);
-    height: var(--btn-h);
+    width: var(--dock-inner);
+    height: var(--dock-inner);
     padding: 0;
     border: 0;
     border-radius: 50%;
@@ -592,7 +592,7 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
     position: absolute;
     inset: 0;
     width: 100%;
-    padding-inline: var(--btn-h) var(--space-2) !important;
+    padding-inline: var(--dock-inner) var(--space-2) !important;
     /* 16px keeps iOS from zooming the page when the field takes focus. */
     font-size: var(--control-fs) !important;
     opacity: 0;
@@ -601,7 +601,7 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   .topbar .side-search.topbar-search:is(:focus-within, :has(input:not(:placeholder-shown))) {
     border-color: color-mix(in srgb, var(--brand) 60%, transparent);
     background: var(--bg-card);
-    clip-path: inset(0 0 -100vh 0 round calc(var(--btn-h) / 2));
+    clip-path: inset(0 0 -100vh 0 round calc(var(--dock-inner) / 2));
     transition:
       clip-path var(--dock-morph) var(--ease-out),
       background-color var(--motion-fast) var(--ease-standard),
