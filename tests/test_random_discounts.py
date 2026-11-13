@@ -209,6 +209,54 @@ class RandomDiscountTests(unittest.IsolatedAsyncioTestCase):
         await self.session.rollback()
         self.assertEqual(await self.session.scalar(select(func.count()).select_from(RandomDiscountDraw)), 1)
 
+    async def test_automatic_rule_does_not_block_a_plan_cheaper_than_its_smallest_discount(self) -> None:
+        await self.policy(minimum=1000, maximum=5000)
+        self.session.add(Plan(id=9, name="ارزان", price=500))
+        await self.session.commit()
+        order = await create_order(self.session, user_id=1, plan_id=9)
+        self.assertEqual((order.amount, order.discount_amount, order.random_discount_id), (500, 0, None))
+        self.assertEqual(await self.session.scalar(select(func.count()).select_from(RandomDiscountDraw)), 0)
+
+    async def test_code_rule_still_refuses_an_order_too_small_for_its_range(self) -> None:
+        await self.policy(mode="code", code="SURPRISE", minimum=1000, maximum=5000)
+        self.session.add(Plan(id=9, name="ارزان", price=500))
+        await self.session.commit()
+        order = await create_order(self.session, user_id=1, plan_id=9)
+        with self.assertRaises(ValueError):
+            await apply_discount_to_order(self.session, order, "SURPRISE")
+        await self.session.rollback()
+
+    async def _plans_with_distinct_prices(self, count: int) -> list[int]:
+        self.session.add_all([Plan(id=20 + n, name=f"قیمت {n}", price=2000 + n * 100) for n in range(count)])
+        await self.session.commit()
+        return [20 + n for n in range(count)]
+
+    async def test_a_customer_cannot_hold_more_than_the_open_draw_limit(self) -> None:
+        from app.services.random_discounts import MAX_OPEN_DRAWS_PER_USER
+
+        await self.policy(minimum=10, maximum=500)
+        plan_ids = await self._plans_with_distinct_prices(MAX_OPEN_DRAWS_PER_USER + 1)
+        for plan_id in plan_ids[:MAX_OPEN_DRAWS_PER_USER]:
+            await create_order(self.session, user_id=1, plan_id=plan_id)
+        with self.assertRaises(ValueError):
+            await create_order(self.session, user_id=1, plan_id=plan_ids[-1])
+        await self.session.rollback()
+        self.assertEqual(
+            await self.session.scalar(select(func.count()).select_from(RandomDiscountDraw)), MAX_OPEN_DRAWS_PER_USER,
+        )
+        other = await create_order(self.session, user_id=4, plan_id=plan_ids[-1])
+        self.assertIsNotNone(other.random_discount_id)
+
+    async def test_cancelling_an_open_order_frees_room_for_another_draw(self) -> None:
+        from app.services.random_discounts import MAX_OPEN_DRAWS_PER_USER
+
+        await self.policy(minimum=10, maximum=500)
+        plan_ids = await self._plans_with_distinct_prices(MAX_OPEN_DRAWS_PER_USER + 1)
+        orders = [await create_order(self.session, user_id=1, plan_id=plan_id) for plan_id in plan_ids[:-1]]
+        await cancel_order(self.session, orders[0])
+        extra = await create_order(self.session, user_id=1, plan_id=plan_ids[-1])
+        self.assertIsNotNone(extra.random_discount_id)
+
     async def test_completed_purchase_allows_another_discounted_purchase(self) -> None:
         await self.policy()
         order = await create_order(self.session, user_id=1, plan_id=1)

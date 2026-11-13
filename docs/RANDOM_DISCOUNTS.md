@@ -44,6 +44,12 @@ range. At most 10,001 distinct protected candidate amounts are read; exceeding
 An exhausted range returns a retry-later message. The service never enlarges the
 configured reduction, falls back to an occupied amount, or makes the order free.
 
+An automatic rule leaves an order alone when no reduction of its range fits it (a plan
+cheaper than the smallest reduction), so such plans stay purchasable; a code-based rule
+refuses that order. One customer may hold at most three unpaid orders with a reserved
+amount per shop; paying or cancelling an order frees the room. This keeps a few accounts
+from occupying every free amount of a small range.
+
 The same transaction writes an immutable draw, a unique `(shop_key, final_amount)`
 reservation, and the order's payable amount and discount totals. The caller commits
 before starting a payment or making a panel request. No panel or provider call is

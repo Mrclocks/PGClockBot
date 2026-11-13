@@ -6,7 +6,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, exists, or_, select, union, update
+from sqlalchemy import and_, exists, func, or_, select, union, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -22,6 +22,13 @@ from app.services.users import current_shop_reseller_id
 MAX_AMOUNT = 2_000_000_000
 MAX_WINDOW_MINUTES = 10080
 MAX_CANDIDATES = 10000
+# One customer can hold this many unpaid orders with a reserved amount; more would let a few
+# accounts keep every free amount of a small range occupied.
+MAX_OPEN_DRAWS_PER_USER = 3
+_UNPAID_STATUSES = (
+    OrderStatus.PENDING.value, OrderStatus.REJECTED.value,
+    OrderStatus.AWAITING_RECEIPT.value, OrderStatus.AWAITING_APPROVAL.value,
+)
 RANDOM_DISCOUNTS_PERMISSION = "random_discounts"
 _CODE_PATTERN = re.compile(r"[A-Z0-9_-]{1,64}\Z")
 _OPEN_STATUSES = (
@@ -209,7 +216,8 @@ async def _existing_draw(session: AsyncSession, order: Order, code: str | None) 
     return True
 
 
-def _discount_limits(policy: RandomDiscount, amount: int) -> tuple[int, int]:
+def _discount_bounds(policy: RandomDiscount, amount: int) -> tuple[int, int] | None:
+    """The reduction range that fits an order of ``amount``, or None when no reduction fits."""
     if policy.reduction_kind == "percent":
         minimum = (amount * policy.minimum + 99) // 100
         maximum = amount * policy.maximum // 100
@@ -217,8 +225,15 @@ def _discount_limits(policy: RandomDiscount, amount: int) -> tuple[int, int]:
         minimum, maximum = policy.minimum, policy.maximum
     maximum = min(maximum, amount - 1)
     if minimum < 1 or minimum > maximum:
-        raise ValueError("مبلغ سفارش برای بازهٔ تخفیف کافی نیست")
+        return None
     return minimum, maximum
+
+
+def _discount_limits(policy: RandomDiscount, amount: int) -> tuple[int, int]:
+    bounds = _discount_bounds(policy, amount)
+    if bounds is None:
+        raise ValueError("مبلغ سفارش برای بازهٔ تخفیف کافی نیست")
+    return bounds
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +250,21 @@ class _AmountRange:
 def _amount_range(policy: RandomDiscount, base_amount: int) -> _AmountRange:
     minimum, maximum = _discount_limits(policy, base_amount)
     return _AmountRange(base_amount - minimum, (maximum - minimum) // policy.step + 1, policy.step)
+
+
+async def _assert_open_draw_room(session: AsyncSession, order: Order, now: datetime) -> None:
+    open_draws = await session.scalar(select(func.count()).select_from(RandomDiscountDraw).join(
+        Order, Order.id == RandomDiscountDraw.order_id,
+    ).where(
+        RandomDiscountDraw.shop_key == (order.reseller_id or 0),
+        RandomDiscountDraw.user_id == order.user_id,
+        RandomDiscountDraw.protected_until > now,
+        RandomDiscountDraw.order_id != order.id,
+        Order.reseller_id == order.reseller_id,
+        Order.status.in_(_UNPAID_STATUSES),
+    ))
+    if int(open_draws or 0) >= MAX_OPEN_DRAWS_PER_USER:
+        raise ValueError("چند خرید نیمه‌تمام با تخفیف دارید؛ ابتدا آن‌ها را پرداخت یا لغو کنید")
 
 
 async def _assert_not_rerolled(
@@ -326,6 +356,7 @@ async def _allocate_draw(session: AsyncSession, order: Order, policy: RandomDisc
     _integer(order.amount, 1, MAX_AMOUNT, "مبلغ سفارش نامعتبر است")
     now = datetime.now(timezone.utc)
     await _assert_not_rerolled(session, order, policy, now)
+    await _assert_open_draw_room(session, order, now)
     amounts = _amount_range(policy, order.amount)
     blocked = await _blocked_amounts(session, order, amounts, now - timedelta(minutes=policy.window_minutes), now)
     amount = _choose_free_amount(amounts, blocked)
@@ -350,6 +381,22 @@ def _has_ordinary_discount(order: Order) -> bool:
     return bool(order.discount_code and not order.discount_code.startswith("wholesale:"))
 
 
+async def _is_exempt_from_discount(
+    session: AsyncSession, order: Order, policy: RandomDiscount, code: str | None,
+) -> bool:
+    """Orders an automatic rule leaves alone: free, trial, already discounted, or cheaper than its range."""
+    if code is None and order.amount == 0:
+        return True
+    if _has_ordinary_discount(order):
+        if code is not None:
+            raise ValueError("تخفیف تصادفی با کد تخفیف دیگری قابل ترکیب نیست")
+        return True
+    if order.plan_id is not None and await session.scalar(select(Plan.is_trial).where(Plan.id == order.plan_id)):
+        return True
+    # An automatic rule must not stop the sale of a plan cheaper than its smallest reduction.
+    return code is None and _discount_bounds(policy, int(order.amount)) is None
+
+
 async def apply_random_discount(session: AsyncSession, order: Order, *, code: str | None = None) -> bool:
     """Apply or reuse one draw without committing the caller's order transaction."""
     if order.id is None:
@@ -364,16 +411,8 @@ async def apply_random_discount(session: AsyncSession, order: Order, *, code: st
         return False
     if order.reseller_id != current_shop_reseller_id():
         raise ValueError("سفارش این فروشگاه یافت نشد")
-    if code is None and order.amount == 0:
+    if await _is_exempt_from_discount(session, order, policy, code):
         return False
-    if _has_ordinary_discount(order):
-        if code is not None:
-            raise ValueError("تخفیف تصادفی با کد تخفیف دیگری قابل ترکیب نیست")
-        return False
-    if order.plan_id is not None:
-        trial = await session.scalar(select(Plan.is_trial).where(Plan.id == order.plan_id))
-        if trial:
-            return False
     await _begin_sqlite_transaction(session)
     try:
         async with session.begin_nested():
