@@ -68,7 +68,13 @@
      items are control-height (--btn-h) inside it. --dock-room is what the page footer leaves free under it. */
   --dock-h: calc(var(--btn-h) + 2 * var(--space-0));
   --dock-edge: var(--space-1_5);
+  /* Distance from the screen bottom: 12px, or the home-indicator safe area where that is larger, so the bar
+     never sits in the system gesture strip and never floats needlessly high above it. */
+  --dock-bottom: max(var(--dock-edge), var(--safe-bottom));
   --dock-room: calc(var(--dock-h) + var(--dock-edge));
+  /* Hide is quicker than show: it gets out of the way, then settles back in with a soft deceleration. */
+  --dock-show: 360ms;
+  --dock-hide: 240ms;
   --dock-ico: 20px;
   --dock-label-fs: 11px;
   --dock-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
@@ -175,7 +181,6 @@ a:hover { opacity: 0.8; }
 .page-title > span,
 .page-title > strong,
 .brand strong,
-.topbar-brand strong,
 .nav a,
 .dnd-item > span:not(.dnd-actions),
 .svc-item-title strong,
@@ -193,7 +198,6 @@ th, td:not(.col-actions),
 .page-title > span,
 .page-title > strong,
 .brand strong,
-.topbar-brand strong,
 .nav a,
 .dnd-item > span:not(.dnd-actions),
 .progress-meta > span,
@@ -1169,8 +1173,7 @@ tr.principal-row-l2 td:first-child {
   }
   .btn:active:not(:disabled), a.btn:active,
   .nav-item:active, .icon-btn:active,
-  .section-tabs a:active, .section-tabs .tab-btn:active,
-  .menu-toggle:active {
+  .section-tabs a:active, .section-tabs .tab-btn:active {
     transform: none;
   }
 }
@@ -5167,19 +5170,6 @@ form.settings-form > .actions.sticky-actions,
   height: var(--brand-logo-size);
   border-radius: var(--r-sm);
 }
-.topbar-brand-text {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0);
-  min-width: 0;
-}
-.topbar-brand strong {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-  line-height: 1.25;
-}
 .topbar-version {
   display: flex;
   align-items: center;
@@ -5188,60 +5178,6 @@ form.settings-form > .actions.sticky-actions,
   color: var(--muted-fg);
   line-height: 1;
   font-variant-numeric: tabular-nums;
-}
-.menu-toggle {
-  /* Square circle at the same height as .btn; fully round like other controls */
-  width: var(--btn-h);
-  height: var(--btn-h);
-  min-height: var(--btn-h);
-  box-sizing: border-box;
-  border-radius: var(--control-radius);
-  /* Closed: neutral like the secondary .btn-ghost, so the header does not shout. Open: the panel brand colour
-     (تنظیمات → ظاهر و برند), marking it as the active control while the drawer is on screen. */
-  border: 1.5px solid color-mix(in srgb, var(--foreground) 24%, transparent);
-  background: color-mix(in srgb, var(--foreground) 3%, transparent);
-  color: var(--foreground);
-  cursor: pointer;
-  display: inline-grid;
-  place-items: center;
-  padding: 0;
-  flex: 0 0 auto;
-  margin-inline-start: auto;
-  transition:
-    background var(--motion-fast) var(--ease-standard),
-    border-color var(--motion-fast) var(--ease-standard),
-    color var(--motion-fast) var(--ease-standard),
-    opacity var(--motion-fast) var(--ease-standard),
-    transform var(--motion-fast) var(--ease-standard);
-}
-.menu-toggle:hover {
-  background: color-mix(in srgb, var(--foreground) 8%, transparent);
-  opacity: 1;
-}
-.menu-toggle[aria-expanded="true"] {
-  border-color: color-mix(in srgb, var(--brand) 72%, transparent);
-  background: color-mix(in srgb, var(--brand) 8%, transparent);
-  color: var(--brand-fg);
-}
-.menu-toggle[aria-expanded="true"]:hover {
-  background: color-mix(in srgb, var(--brand) 15%, transparent);
-}
-.menu-toggle:active {
-  /* Same press feedback as .btn */
-  transform: scale(0.96);
-}
-.burger {
-  width: 16px;
-  height: 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-.burger i {
-  display: block;
-  height: 1.8px;
-  border-radius: 2px;
-  background: currentColor;
 }
 .side-backdrop {
   /* Always in the tree — toggling display killed the opacity fade and forced
@@ -5382,21 +5318,12 @@ form.settings-form > .actions.sticky-actions,
 
   .topbar { display: flex; }
 
-  .menu-toggle {
-    position: relative;
-    z-index: 60;
-    /* Cancels the 300ms tap delay; pairs with pointerup in panel.js so a tap
-       during momentum scroll still opens the drawer (click alone waits for settle). */
-    touch-action: manipulation;
-  }
   /* Ported ui-select / kebab menus use inline z-index ~5000 (above modals).
      When the drawer is open, raise shell chrome above those leftovers so the
      sidebar never paints under an open dropdown (JS also closes menus on open).
 
-     Raise the whole `.topbar` — not only `.menu-toggle`. Toggle lives inside
-     topbar's stacking context (z-index 55); bumping the button alone cannot
-     escape it, so the drawer at 5200 covered the header. Keep topbar above
-     the drawer so header + hamburger stay flush with the shell. */
+     Raise the whole `.topbar` (z-index 55 otherwise), so the drawer at 5200 never covers the header
+     and its search stays usable while the drawer is open. */
   body.nav-open .side-backdrop {
     z-index: 5100;
   }

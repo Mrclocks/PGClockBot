@@ -195,7 +195,7 @@ class BottomBarTests(unittest.TestCase):
             self.assertLessEqual(len(keys), DOCK_SLOTS)
             self.assertTrue(set(keys) <= sidebar_keys, keys)
 
-    def test_more_is_lit_only_when_the_page_is_not_in_the_bar(self) -> None:
+    def test_menu_is_lit_only_when_the_page_is_not_in_the_bar(self) -> None:
         on_finance = build_dock(build_sidebar(OWNER, path="/service-cancellations"))
         self.assertEqual([i.key for i in on_finance.items if i.active], ["finance"])
         self.assertFalse(on_finance.more_active)
@@ -261,8 +261,20 @@ class RenderedBottomBarTests(unittest.TestCase):
         self.assertEqual(re.findall(r'<a href="([^"]+)" class="bottom-dock-item', bar),
                          ["/home", "/inbox", "/finance", "/users"])
         self.assertIn('aria-current="page"', bar.split('href="/inbox"')[0])
-        self.assertIn("data-drawer-open", bar)
-        self.assertIn('data-drawer-search aria-controls="sidebar" aria-label="جستجو در پنل"', html)
+        menu = re.search(r'<button[^>]*data-drawer-open[^>]*>.*?</button>', bar, re.S).group(0)
+        self.assertIn('aria-expanded="false"', menu)
+        self.assertIn("منو", menu)
+
+    def test_phone_header_has_search_and_no_hamburger_and_the_drawer_can_close(self) -> None:
+        html = _render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True)
+        header = html.split('<header class="topbar')[1].split("</header>")[0]
+        self.assertIn('id="panel-search-input-top"', header)
+        self.assertIn("data-panel-search-input", header)
+        self.assertNotIn("menu-toggle", html)
+        self.assertIn('data-drawer-close aria-controls="sidebar" aria-label="بستن منو"', html)
+        # One search field per screen size: the sidebar keeps its own for desktop, with its own ids.
+        self.assertEqual(html.count('id="panel-search-input"'), 1)
+        self.assertEqual(html.count("data-panel-search-results"), 2)
 
     def test_unread_dot_is_shown_on_the_bar_item(self) -> None:
         bar = self.bar(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, inbox_alert=True))
@@ -271,7 +283,7 @@ class RenderedBottomBarTests(unittest.TestCase):
         quiet = self.bar(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, inbox_alert=False))
         self.assertNotIn("nav-dot", re.search(r'<a href="/inbox".*?</a>', quiet, re.S).group(0))
 
-    def test_more_is_lit_on_a_page_outside_the_bar(self) -> None:
+    def test_menu_is_lit_on_a_page_outside_the_bar(self) -> None:
         bar = self.bar(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, path="/plans"))
         self.assertIn('class="bottom-dock-item is-active" data-drawer-open', bar)
         self.assertNotIn('aria-current="page"', bar)

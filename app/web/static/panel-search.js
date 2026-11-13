@@ -41,20 +41,17 @@
     return /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || Boolean(el.isContentEditable);
   }
 
-  function installHotkey(doc, input) {
+  function installHotkey(doc) {
     doc.addEventListener("keydown", (event) => {
       const context = {
         typing: isTypingTarget(event.target),
         modalOpen: doc.body.classList.contains("modal-open") || Boolean(doc.querySelector(".ui-modal.open")),
       };
       if (!isSearchHotkey(event, context)) return;
+      // The header search on phones, the sidebar search on desktop: whichever is on screen.
+      const input = [...doc.querySelectorAll("[data-panel-search-input]")].find((el) => el.getClientRects().length);
+      if (!input) return;
       event.preventDefault();
-      // Where the sidebar is a drawer, the bottom bar's search button opens it with the field focused.
-      const opener = doc.querySelector("[data-drawer-search]");
-      if (opener && opener.offsetParent !== null) {
-        opener.click();
-        return;
-      }
       input.focus();
       input.select();
     });
@@ -169,7 +166,6 @@
   } else {
     root.PanelSearch = api;
     document.querySelectorAll("[data-panel-search]").forEach(bind);
-    const input = document.querySelector("[data-panel-search-input]");
-    if (input) installHotkey(document, input);
+    installHotkey(document);
   }
 })(typeof window !== "undefined" ? window : globalThis);

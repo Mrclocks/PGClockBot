@@ -136,7 +136,7 @@ ActiveRule = Callable[[NavLocation], bool]
 
 @dataclass(frozen=True, slots=True)
 class NavDock:
-    """Phone bottom bar: up to ``DOCK_SLOTS`` items; «بیشتر» is lit when the page lives elsewhere."""
+    """Phone bottom bar: up to ``DOCK_SLOTS`` items; «منو» is lit when the page lives elsewhere."""
 
     items: tuple[NavItem, ...]
     more_active: bool

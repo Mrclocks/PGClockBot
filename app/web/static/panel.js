@@ -250,7 +250,6 @@
     }
 
     const side = document.getElementById('sidebar');
-    const btn = document.getElementById('menu-toggle');
     const back = document.getElementById('side-backdrop');
     function setOpen(v, instant){
       if (!side) return;
@@ -266,7 +265,9 @@
         back.setAttribute('aria-hidden', open ? 'false' : 'true');
       }
       document.body.classList.toggle('nav-open', open);
-      if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      document.querySelectorAll('[data-drawer-open]').forEach(function (el) {
+        el.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
       /* A field left focused in the closed drawer would keep the phone keyboard and hide the bottom bar. */
       if (!open && document.activeElement && side.contains(document.activeElement)) document.activeElement.blur();
       /* Ported ui-select / kebab menus sit at z-index 5000; drawer is ~50.
@@ -285,7 +286,7 @@
       }
     }
     setOpen(false);
-    /* click alone waits for iOS momentum scroll to settle on fixed chrome (topbar, bottom bar).
+    /* click alone waits for iOS momentum scroll to settle on fixed chrome (bottom bar, drawer head).
        pointerup acts immediately; click still covers mouse / keyboard. */
     function bindTap(el, action) {
       var ignoreClick = false;
@@ -294,9 +295,9 @@
         e.stopPropagation();
         action();
       }
-      /* A touch acts on pointerup, which may open the drawer over this spot. The tap's follow-up mouse
-         events and click would then land on the drawer or its backdrop: the mousedown takes focus from the
-         search field the action just focused, the click on the backdrop closes the drawer again. */
+      /* A touch acts on pointerup, which may open or close the drawer over this spot. The tap's follow-up
+         mouse events and click would then land on whatever is there now (the drawer, its backdrop or the
+         page) and act a second time. */
       el.addEventListener('pointerdown', function (e) {
         if (e.pointerType !== 'mouse') e.preventDefault();
       });
@@ -319,18 +320,12 @@
         run(e);
       });
     }
-    if (btn) bindTap(btn, function () { setOpen(!side.classList.contains('open')); });
-    /* Bottom bar: «بیشتر» opens the drawer; the search circle opens it with the search field focused.
-       Focus runs inside the tap so phones raise the keyboard. */
+    /* Bottom bar «منو» opens the drawer; the × in the drawer head closes it. */
     document.querySelectorAll('[data-drawer-open]').forEach(function (el) {
-      bindTap(el, function () { setOpen(true); });
+      bindTap(el, function () { setOpen(!side.classList.contains('open')); });
     });
-    document.querySelectorAll('[data-drawer-search]').forEach(function (el) {
-      bindTap(el, function () {
-        setOpen(true);
-        var input = document.getElementById('panel-search-input');
-        if (input) input.focus({ preventScroll: true });
-      });
+    document.querySelectorAll('[data-drawer-close]').forEach(function (el) {
+      bindTap(el, function () { setOpen(false); });
     });
     if (back) back.addEventListener('click', function () { setOpen(false); });
     window.addEventListener('pageshow', function () {

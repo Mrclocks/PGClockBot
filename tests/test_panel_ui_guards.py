@@ -335,8 +335,8 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("height: var(--ctl-sm-h)", logout.group(1))
         self.assertIn("padding: 0 var(--space-1)", logout.group(1))
 
-    def test_shell_chrome_matches_modal_frost_and_brand_menu(self):
-        """Mobile topbar / drawer use the same frost tokens; menu follows brand colour."""
+    def test_shell_chrome_matches_modal_frost(self):
+        """Mobile topbar / drawer use the same frost tokens."""
         css = CSS.read_text(encoding="utf-8")
         # Prefer the fixed chrome block (not the short `.topbar { direction: ltr; }`)
         top = re.search(
@@ -352,30 +352,6 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertNotIn("topbar-pad-top", top_body)
         self.assertIn("--topbar-pad-bottom: var(--space-1_5);", css)
         self.assertIn("--topbar-content-h: 58px;", css)
-        menu = re.search(r"(?ms)^\.menu-toggle\s*\{([^}]+)\}", css)
-        self.assertIsNotNone(menu)
-        menu_body = menu.group(1)
-        self.assertIn("border-radius: var(--control-radius);", menu_body)
-        self.assertIn("height: var(--btn-h);", menu_body)
-        self.assertIn("min-height: var(--btn-h);", menu_body)
-        # Closed: neutral like .btn-ghost. Open: brand colour (see test_drawer_frost_browser_e2e for rendered colours).
-        self.assertIn("color: var(--foreground);", menu_body)
-        self.assertIn(
-            "border: 1.5px solid color-mix(in srgb, var(--foreground) 24%, transparent);",
-            menu_body,
-        )
-        open_menu = re.search(r'(?ms)^\.menu-toggle\[aria-expanded="true"\]\s*\{([^}]+)\}', css)
-        self.assertIsNotNone(open_menu)
-        open_body = open_menu.group(1)
-        self.assertIn("color: var(--brand-fg);", open_body)
-        self.assertIn("border-color: color-mix(in srgb, var(--brand) 72%, transparent);", open_body)
-        self.assertIn("background: color-mix(in srgb, var(--brand) 8%, transparent);", open_body)
-        self.assertRegex(
-            css,
-            r"(?ms)\.menu-toggle:active\s*\{[^}]*transform:\s*scale\(0\.96\);",
-        )
-        self.assertNotIn("var(--bot-line)", menu_body)
-        self.assertNotIn("var(--r-sm)", menu_body)
         self.assertRegex(
             css,
             r"(?ms)\.side-panel\s*\{[^}]*backdrop-filter:\s*var\(--modal-frost-blur\);",

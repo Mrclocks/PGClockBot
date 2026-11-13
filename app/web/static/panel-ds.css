@@ -492,39 +492,46 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 }
 
 /* ===================================================================== 14. Sidebar: search and theme rows
-   Search sits right under the menu header; both rows are 44 high, same box as every field. */
-.side .side-search {
+   Search sits right under the menu header; both rows are 44 high, same box as every field.
+   On phones the same search lives in the header (.topbar-search) and the drawer's copy is hidden. */
+:is(.side, .topbar) .side-search {
   position: relative; display: flex; align-items: center; gap: var(--space-1);
   min-height: var(--btn-h); height: var(--btn-h); margin: 0 0 var(--space-1); padding: 0 var(--space-2);
   border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--control-bg, rgba(255, 255, 255, 0.04));
   box-sizing: border-box;
 }
-.side .side-search:focus-within { border-color: color-mix(in srgb, var(--brand) 72%, transparent); }
-.side .side-search > .nav-ico { flex: 0 0 18px; width: 18px; height: 18px; color: var(--muted-fg); margin: 0; }
-.side .side-search input[type="search"] {
+:is(.side, .topbar) .side-search:focus-within { border-color: color-mix(in srgb, var(--brand) 72%, transparent); }
+:is(.side, .topbar) .side-search > .nav-ico { flex: 0 0 18px; width: 18px; height: 18px; color: var(--muted-fg); margin: 0; }
+:is(.side, .topbar) .side-search input[type="search"] {
   flex: 1 1 auto; min-width: 0; width: auto; height: 100%; min-height: 0; margin: 0; padding: 0;
   border: 0 !important; border-radius: 0; background: transparent !important; box-shadow: none !important;
   color: var(--foreground); font: inherit; font-size: 14px !important; outline: none; -webkit-appearance: none; appearance: none;
 }
-.side .side-search input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
-.side .side-search-results {
+:is(.side, .topbar) .side-search input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
+:is(.side, .topbar) .side-search-results {
   position: absolute; inset-inline: 0; top: calc(100% + var(--space-1)); z-index: 60;
   display: flex; flex-direction: column; max-height: min(60vh, 440px); overflow-y: auto; padding: var(--space-0);
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
 }
-.side .side-search-results[hidden] { display: none; }
-.side .side-search-hit {
+:is(.side, .topbar) .side-search-results[hidden] { display: none; }
+:is(.side, .topbar) .side-search-hit {
   display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: var(--btn-h);
   padding: var(--space-1) var(--space-1_5); border-radius: 12px; color: var(--foreground); text-decoration: none;
 }
-.side .side-search-hit + .side-search-hit { box-shadow: 0 -1px 0 color-mix(in srgb, var(--border) 70%, transparent); }
-.side .side-search-hit:hover, .side .side-search-hit:focus-visible, .side .side-search-hit.is-active {
+:is(.side, .topbar) .side-search-hit + .side-search-hit { box-shadow: 0 -1px 0 color-mix(in srgb, var(--border) 70%, transparent); }
+:is(.side, .topbar) .side-search-hit:hover, :is(.side, .topbar) .side-search-hit:focus-visible, :is(.side, .topbar) .side-search-hit.is-active {
   background: color-mix(in srgb, var(--brand) 10%, transparent); outline: none;
 }
-.side .side-search-label { font-size: 13.5px; font-weight: 600; line-height: 1.4; }
-.side .side-search-where { font-size: 12px; line-height: 1.4; color: var(--muted-fg); }
-.side .side-search-empty { margin: 0; padding: var(--space-2); text-align: center; font-size: 13px; color: var(--muted-fg); }
+:is(.side, .topbar) .side-search-label { font-size: 13.5px; font-weight: 600; line-height: 1.4; }
+:is(.side, .topbar) .side-search-where { font-size: 12px; line-height: 1.4; color: var(--muted-fg); }
+:is(.side, .topbar) .side-search-empty { margin: 0; padding: var(--space-2); text-align: center; font-size: 13px; color: var(--muted-fg); }
+@media (max-width: 900px) {
+  .side .side-search { display: none; }
+  .topbar .topbar-search { direction: rtl; flex: 1 1 auto; min-width: 0; margin: 0; }
+  /* 16px keeps iOS from zooming the page when the field takes focus. */
+  .topbar .topbar-search input[type="search"] { font-size: var(--control-fs) !important; }
+}
 .side .side-theme-btn { min-height: var(--btn-h); padding: 0 var(--space-2); font-size: 13px; }
 
 /* ===================================================================== 15. Optical spacing

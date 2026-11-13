@@ -75,10 +75,24 @@
   {% set is_pg_staff = staff.role == 'pg_staff' %}
   {% set ident = identity if identity is defined and identity else {} %}
   <div class="shell">
+    {# Phone header: logo and the panel search. The menu opens from «منو» in the bottom bar. #}
     <header class="topbar mobile-only">
       <a class="topbar-brand" href="/home" aria-label="داشبورد">
         <span class="brand-logo{% if brand_custom_logo %} brand-logo--custom{% endif %}" aria-hidden="true"><img src="{{ brand_logo }}" alt="" width="40" height="40" /></span>
-        <div class="topbar-brand-text">
+      </a>
+      <div class="side-search topbar-search" data-panel-search role="search">
+        <label class="sr-only" for="panel-search-input-top">جستجو در پنل</label>
+        <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="panel-search-input-top" type="search" autocomplete="off" maxlength="60" placeholder="جستجوی صفحه یا تنظیم…"
+               aria-controls="panel-search-results-top" aria-expanded="false" data-panel-search-input />
+        <div id="panel-search-results-top" class="side-search-results" role="listbox" aria-label="نتیجه‌های جستجو" hidden data-panel-search-results></div>
+      </div>
+    </header>
+
+    <aside class="side" id="sidebar" aria-label="منوی اصلی">
+      <div class="side-panel">
+      <div class="side-drawer-head">
+        <div class="side-drawer-title">
           <strong dir="auto">{{ brand_name }}</strong>
           {% if is_owner %}
           <span class="topbar-version" dir="ltr">
@@ -88,14 +102,8 @@
           </span>
           {% endif %}
         </div>
-      </a>
-      <button type="button" class="menu-toggle" id="menu-toggle" aria-label="منو" aria-expanded="false" aria-controls="sidebar">
-        <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span>
-      </button>
-    </header>
-
-    <aside class="side" id="sidebar" aria-label="منوی اصلی">
-      <div class="side-panel">
+        <button type="button" class="icon-btn side-drawer-close" data-drawer-close aria-controls="sidebar" aria-label="بستن منو"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
       <a class="brand desk-only" href="/home" aria-label="داشبورد">
         <span class="brand-logo{% if brand_custom_logo %} brand-logo--custom{% endif %}" aria-hidden="true"><img src="{{ brand_logo }}" alt="" width="40" height="40" /></span>
         <div>
@@ -208,7 +216,7 @@
 
     <div class="side-backdrop" id="side-backdrop" aria-hidden="true"></div>
 
-    {# Phone bottom bar: the most used sidebar items plus «بیشتر» (the full menu) and search. #}
+    {# Phone bottom bar: the most used sidebar items plus «منو» (the full sidebar as a drawer). #}
     {% set dock = panel_dock(nav_sections) if (nav_sections and panel_dock is defined) else none %}
     {% if dock and dock.items %}
     <div class="bottom-dock" data-bottom-dock>
@@ -220,14 +228,11 @@
           {% if item.dot and nav_dots[item.dot] %}<i class="nav-dot" aria-label="{{ nav_dot_labels[item.dot] }}"></i>{% endif %}
         </a>
         {% endfor %}
-        <button type="button" class="bottom-dock-item{% if dock.more_active %} is-active{% endif %}" data-drawer-open aria-controls="sidebar">
+        <button type="button" class="bottom-dock-item{% if dock.more_active %} is-active{% endif %}" data-drawer-open aria-controls="sidebar" aria-expanded="false">
           {{ nav_icon('menu') }}
-          <span class="bottom-dock-label">بیشتر</span>
+          <span class="bottom-dock-label">منو</span>
         </button>
       </nav>
-      <button type="button" class="bottom-dock-search" data-drawer-search aria-controls="sidebar" aria-label="جستجو در پنل">
-        <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      </button>
     </div>
     {% endif %}
 
