@@ -2766,8 +2766,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                     if isinstance(created, dict) and created.get("id"):
                         tpl = int(created["id"])
                 except Exception as e:
+                    from app.services.credential_policy import template_create_error_message
+
+                    logger.warning("PasarGuard template creation failed", exc_info=True)
                     return RedirectResponse(
-                        f"/plans?err={quote(f'ساخت تمپلیت در پاسارگارد ناموفق: {e}')}",
+                        f"/plans?err={quote('ساخت تمپلیت در پاسارگارد ناموفق: ' + template_create_error_message(e))}",
                         status_code=303,
                     )
 

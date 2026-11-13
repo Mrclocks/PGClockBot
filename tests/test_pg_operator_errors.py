@@ -100,3 +100,21 @@ class UserPagesContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TemplateCreateErrorTests(unittest.TestCase):
+    def test_conflict_explains_duplicate_template_name(self) -> None:
+        from app.services.credential_policy import template_create_error_message
+
+        msg = template_create_error_message(
+            PasarGuardError("POST /api/user_template failed (409)", 409)
+        )
+        self.assertIn("تمپلیت", msg)
+        self.assertNotIn("409", msg)
+        self.assertNotIn("نام کاربری", msg)
+
+    def test_other_errors_use_safe_message(self) -> None:
+        from app.services.credential_policy import template_create_error_message
+
+        msg = template_create_error_message(PasarGuardError("boom", 403))
+        self.assertEqual(msg, "اجازه این عمل را ندارید.")
