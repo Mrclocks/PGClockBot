@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.6.3": [
+        "موبایل: هدر و نوار پایین ۶۰px، فاصلهٔ safe-area، سایهٔ dock، ارتفاع شیت منو (#1352)",
+        "موبایل: بدون حلقهٔ فوکوس بعد از لمس؛ برگشت matte نوار بدون پرش شفاف (#1352)",
+        "ریستور: backup/dev-pre-v0.6.3 (commit f8d49cdb)",
+    ],
     "0.6.2": [
         "تخفیف تصادفی پایدار با مبلغ پرداخت محافظت‌شده (#1332)",
         "تخفیف تصادفی: رد پلن ارزان‌تر از بازه و سقف قرعهٔ پرداخت‌نشده (#1334)",
