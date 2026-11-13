@@ -66,7 +66,9 @@ async def fetch_telegram_file(
 ) -> tuple[bytes, str] | None:
     """Download a receipt photo; None unless it is an image of at most ``RECEIPT_MAX_BYTES``."""
     if client is None:
-        async with httpx.AsyncClient(timeout=TELEGRAM_FILE_TIMEOUT_SECONDS) as own_client:
+        from app.services.tg_http import tg_client
+
+        async with tg_client(timeout=TELEGRAM_FILE_TIMEOUT_SECONDS) as own_client:
             return await fetch_telegram_file(token, file_id, client=own_client)
     meta = await client.get(f"https://api.telegram.org/bot{token}/getFile", params={"file_id": file_id})
     data = meta.json() if meta.status_code == 200 else {}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,12 +66,12 @@ async def fetch_appearance(token: str, *, local_photo: str = "") -> BotAppearanc
     if not token:
         return BotAppearance(error="توکن ربات تنظیم نشده", photo_url=local_photo)
 
-    bot = Bot(token=token, session=_tg_session())
+    bot: Bot | None = None
     try:
-        me = await bot.get_me()
-        name_obj = await bot.get_my_name()
-        desc_obj = await bot.get_my_description()
-        short_obj = await bot.get_my_short_description()
+        bot = Bot(token=token, session=_tg_session())
+        me, name_obj, desc_obj, short_obj = await asyncio.wait_for(
+            _fetch_appearance_data(bot), timeout=20
+        )
         name = (getattr(name_obj, "name", None) or me.first_name or "").strip()
         return BotAppearance(
             name=name,
@@ -80,11 +81,27 @@ async def fetch_appearance(token: str, *, local_photo: str = "") -> BotAppearanc
             photo_url=local_photo,
             ok=True,
         )
+    except asyncio.TimeoutError:
+        log.warning("fetch_appearance timed out")
+        return BotAppearance(error="خواندن از تلگرام ناموفق: زمان‌بسته شد", photo_url=local_photo)
     except Exception as exc:
         log.warning("fetch_appearance failed: %s", exc)
         return BotAppearance(error=f"خواندن از تلگرام ناموفق: {exc}", photo_url=local_photo)
     finally:
-        await bot.session.close()
+        if bot is not None:
+            try:
+                await bot.session.close()
+            except Exception:
+                pass
+
+
+async def _fetch_appearance_data(bot: Bot):
+    """Run the four Bot API reads in sequence; returns (me, name, description, short_description)."""
+    me = await bot.get_me()
+    name_obj = await bot.get_my_name()
+    desc_obj = await bot.get_my_description()
+    short_obj = await bot.get_my_short_description()
+    return me, name_obj, desc_obj, short_obj
 
 
 async def _sync_platform_menu_button(bot: Bot) -> None:
@@ -132,8 +149,9 @@ async def apply_appearance(
     if err:
         return BotAppearance(error=err)
 
-    bot = Bot(token=token, session=_tg_session())
+    bot: Bot | None = None
     try:
+        bot = Bot(token=token, session=_tg_session())
         me = await bot.get_me()
         await bot.set_my_name(name=name)
         await bot.set_my_description(description=description)
@@ -177,7 +195,11 @@ async def apply_appearance(
         log.warning("apply_appearance failed: %s", exc)
         return BotAppearance(error=f"اعمال در تلگرام ناموفق: {exc}")
     finally:
-        await bot.session.close()
+        if bot is not None:
+            try:
+                await bot.session.close()
+            except Exception:
+                pass
 
 
 def appearance_to_form_dict(app: BotAppearance, *, local_photo: str = "") -> dict[str, str]:

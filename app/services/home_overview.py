@@ -71,7 +71,9 @@ async def check_bot_connection(token: str | None = None) -> dict[str, Any]:
     if not token:
         return {"ok": False, "error": "توکن تنظیم نشده", "username": None, "name": None}
     try:
-        async with httpx.AsyncClient(timeout=6.0) as client:
+        from app.services.tg_http import tg_client
+
+        async with tg_client(timeout=6.0) as client:
             resp = await client.get(f"https://api.telegram.org/bot{token}/getMe")
             data = resp.json()
         if data.get("ok") and isinstance(data.get("result"), dict):

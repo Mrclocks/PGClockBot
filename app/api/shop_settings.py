@@ -38,13 +38,11 @@ from app.services.miniapp_shop import (
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
 from app.services.panel_brand import load_own_values
-from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
+from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.rich_text import merge_rich_settings_on_save, prepare_settings_values_for_web
 from app.services.screen_titles import SCREEN_TEXT_TAB, platform_only_screen_text_keys, validate_screen_text_settings
 from app.services.users import (
     IMAGE_KEYS,
-    PLATFORM_ONLY_SETTING_GROUPS,
-    PLATFORM_ONLY_SETTING_KEYS,
     RESETTABLE_SETTINGS_TABS,
     SECRET_KEYS,
     TAB_SETTING_GROUPS,
@@ -140,9 +138,9 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if not token:
             return {"ok": False, "error": "توکن تنظیم نشده"}
         try:
-            import httpx
+            from app.services.tg_http import tg_client
 
-            async with httpx.AsyncClient(timeout=8.0) as client:
+            async with tg_client(timeout=8.0) as client:
                 resp = await client.get(f"https://api.telegram.org/bot{token}/getMe")
                 data = resp.json()
             if data.get("ok") and isinstance(data.get("result"), dict):
@@ -197,7 +195,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if not rid:
             return _deny_scope()
 
-        tab = resolve_merged_tab((request.query_params.get("tab") or "welcome").strip())
+        tab = (request.query_params.get("tab") or "welcome").strip()
         if tab == "security":
             return RedirectResponse("/security", status_code=303)
         if tab in SHOP_SETTINGS_DOMAIN_REDIRECTS:
@@ -236,11 +234,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             values = enrich_payment_settings(values)
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
         # Hide platform-only fields from reseller menu tab
-        groups = {
-            name: SETTING_GROUPS[name]
-            for name in tab_groups
-            if name in SETTING_GROUPS and name not in PLATFORM_ONLY_SETTING_GROUPS
-        }
+        groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}
         if tab == "service_import":
             groups.pop("مسیرها و ادمین‌های مجاز", None)
         if tab == "menu":
@@ -454,7 +448,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         from app.services.service_import_config import PLATFORM_ONLY_KEYS
 
         # Subscription paths and extra panel admins describe the one panel: Owner only.
-        known = keys_for_tab(tab) - PLATFORM_ONLY_KEYS - PLATFORM_ONLY_BTN_KEYS - PLATFORM_ONLY_SETTING_KEYS
+        known = keys_for_tab(tab) - PLATFORM_ONLY_KEYS - PLATFORM_ONLY_BTN_KEYS
         if tab == "menu":
             known = known | {"menu_order"}
             known.discard("show_reseller_apply")
@@ -581,6 +575,35 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if "connection_guides" in payload:
             await prune_guide_media(session, reseller_id=rid)
         return _redirect_after_save(request, f"/shop-settings?tab={tab}")
+
+    @app.post("/shop-settings/cancel-pending-orders")
+    async def shop_cancel_pending_orders(
+        request: Request,
+        staff: dict = Depends(shop_dep),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if _is_owner_settings_actor(staff):
+            return RedirectResponse("/finance?tab=orders&settings=cleanup", status_code=303)
+        rid = _rid(staff)
+        if not rid:
+            return _deny_scope()
+        from app.services.orders import cancel_stale_pending_for_settings
+
+        fallback = "/finance?tab=orders&settings=cleanup"
+        try:
+            n = await cancel_stale_pending_for_settings(
+                session, reseller_id=int(rid), force=True
+            )
+        except Exception:
+            logger.exception("manual pending order cancel failed shop=%s", rid)
+            dest = _safe_next(request, fallback)
+            sep = "&" if "?" in dest else "?"
+            return RedirectResponse(
+                f"{dest}{sep}err={quote('لغو سفارش‌ها ناموفق بود. لاگ سرور را بررسی کنید.')}",
+                status_code=303,
+            )
+        msg = f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود"
+        return _redirect_after_save(request, fallback, msg=msg)
 
     @app.post("/shop-notifications")
     async def shop_notifications_save(
