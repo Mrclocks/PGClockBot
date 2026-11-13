@@ -13,16 +13,23 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Hashable
+from contextlib import nullcontext
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from aiogram.types.update import UpdateTypeLookupError
 
 log = logging.getLogger(__name__)
 
-# Handlers running at the same time across every bot in this process.
+# Handlers running at the same time across every bot in this process, and for one bot.
 MAX_CONCURRENT_UPDATES = 32
-# Updates accepted but not finished; past this, polling and the webhook wait for room.
-MAX_PENDING_UPDATES = 512
+MAX_CONCURRENT_PER_BOT = 8
+# Updates accepted but not finished. A bot at its own limit waits for room (its polling or webhook pauses)
+# without touching other bots; the process limit only bounds memory if many bots are stuck at once.
+MAX_PENDING_UPDATES = 1024
+MAX_PENDING_PER_BOT = 64
+# Updates one customer may have waiting; more taps while the panel is slow are dropped, not queued.
+MAX_PENDING_PER_CUSTOMER = 8
 # How long a stopping shop bot lets its running updates finish before they are cancelled.
 STOP_GRACE_SEC = 10.0
 
@@ -43,10 +50,13 @@ class KeyedTaskRunner:
     def pending(self) -> int:
         return len(self._tasks)
 
-    def submit(self, key: Hashable, job: Job) -> asyncio.Task[None]:
-        """Start ``job`` after every earlier job of the same key has finished."""
+    def submit(self, key: Hashable, job: Job, *, gate: asyncio.Semaphore | None = None) -> asyncio.Task[None]:
+        """Start ``job`` after every earlier job of the same key has finished.
+
+        ``gate`` is an extra limit taken before a shared slot, so a group that is at its own limit
+        waits without holding a slot another group could use."""
         previous = self._tails.get(key)
-        task = asyncio.create_task(self._run(previous, job))
+        task = asyncio.create_task(self._run(previous, job, gate))
         self._tails[key] = task
         self._tasks.add(task)
         task.add_done_callback(lambda done, k=key: self._finished(k, done))
@@ -58,11 +68,11 @@ class KeyedTaskRunner:
             self._room.clear()
             await self._room.wait()
 
-    async def _run(self, previous: asyncio.Task[None] | None, job: Job) -> None:
+    async def _run(self, previous: asyncio.Task[None] | None, job: Job, gate: asyncio.Semaphore | None) -> None:
         if previous is not None:
             # Order only: the earlier job's own outcome is logged where it ran.
             await asyncio.wait({previous})
-        async with self._slots:
+        async with gate or nullcontext(), self._slots:
             try:
                 await job()
             except asyncio.CancelledError:
@@ -97,50 +107,95 @@ def update_order_key(bot_id: int, update: Any) -> Hashable:
     return (bot_id, chat_id, user_id)
 
 
-class BotUpdateScheduler:
-    """Feeds updates to the dispatcher through a :class:`KeyedTaskRunner` and tracks them per bot."""
+@dataclass(frozen=True, slots=True)
+class SchedulerLimits:
+    concurrent: int = MAX_CONCURRENT_UPDATES
+    concurrent_per_bot: int = MAX_CONCURRENT_PER_BOT
+    pending: int = MAX_PENDING_UPDATES
+    pending_per_bot: int = MAX_PENDING_PER_BOT
+    pending_per_customer: int = MAX_PENDING_PER_CUSTOMER
 
-    def __init__(self, *, limit: int = MAX_CONCURRENT_UPDATES, max_pending: int = MAX_PENDING_UPDATES) -> None:
-        self._runner = KeyedTaskRunner(limit=limit)
-        self._max_pending = max_pending
-        self._by_bot: dict[int, set[asyncio.Task[None]]] = {}
+
+def _open_event() -> asyncio.Event:
+    event = asyncio.Event()
+    event.set()
+    return event
+
+
+@dataclass(slots=True)
+class _BotLane:
+    """One bot's share of the scheduler: its running limit, its queued updates and each sender's count."""
+
+    slots: asyncio.Semaphore
+    tasks: set[asyncio.Task[None]] = field(default_factory=set)
+    per_key: dict[Hashable, int] = field(default_factory=dict)
+    room: asyncio.Event = field(default_factory=_open_event)
+
+
+class BotUpdateScheduler:
+    """Feeds updates to the dispatcher through a :class:`KeyedTaskRunner`, with limits per bot and per sender.
+
+    A slow panel or one customer tapping repeatedly fills only that bot's lane: other shops and the main
+    bot keep their own room and their own running slots."""
+
+    def __init__(self, limits: SchedulerLimits | None = None) -> None:
+        self._limits = limits or SchedulerLimits()
+        self._runner = KeyedTaskRunner(limit=self._limits.concurrent)
+        self._lanes: dict[int, _BotLane] = {}
 
     @property
     def pending(self) -> int:
         return self._runner.pending
 
-    async def submit(self, dispatcher: UpdateFeeder, bot: Any, update: Any) -> asyncio.Task[None]:
-        """Queue ``update`` for ``bot``; waits only while the backlog is full."""
-        await self._runner.wait_for_room(self._max_pending)
+    async def submit(self, dispatcher: UpdateFeeder, bot: Any, update: Any) -> asyncio.Task[None] | None:
+        """Queue ``update`` for ``bot``; waits while that bot's backlog is full.
+
+        Returns ``None`` when the sender already has the maximum number of updates waiting."""
         bot_id = int(bot.id)
-
-        async def handle() -> None:
-            try:
-                await dispatcher.feed_update(bot, update)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                # Last resort for one update: log it and keep the bot serving everyone else.
-                log.exception("bot %s failed to handle update %s", bot_id, getattr(update, "update_id", "?"))
-
-        task = self._runner.submit(update_order_key(bot_id, update), handle)
-        tracked = self._by_bot.setdefault(bot_id, set())
-        tracked.add(task)
-        task.add_done_callback(lambda done: self._forget(bot_id, done))
+        lane = await self._lane_with_room(bot_id)
+        await self._runner.wait_for_room(self._limits.pending)
+        lane = self._lane(bot_id)
+        key = update_order_key(bot_id, update)
+        if lane.per_key.get(key, 0) >= self._limits.pending_per_customer:
+            log.warning("bot %s: update %s dropped, its sender already has %s waiting",
+                        bot_id, getattr(update, "update_id", "?"), self._limits.pending_per_customer)
+            return None
+        task = self._runner.submit(key, _handler(dispatcher, bot, update), gate=lane.slots)
+        lane.tasks.add(task)
+        lane.per_key[key] = lane.per_key.get(key, 0) + 1
+        task.add_done_callback(lambda done: self._forget(bot_id, key, done))
         return task
 
-    async def drain_bot(self, bot_id: int, *, grace_sec: float = STOP_GRACE_SEC) -> None:
-        """Let a stopping bot's updates finish for up to ``grace_sec`` seconds, then cancel the rest."""
-        await self._drain(set(self._by_bot.get(int(bot_id), ())), grace_sec=grace_sec, label=f"bot {bot_id}")
+    async def drain_bot(self, bot_id: int, *, grace_sec: float | None = None) -> None:
+        """Let a stopping bot's updates finish for up to ``grace_sec`` (default STOP_GRACE_SEC), then cancel the rest."""
+        lane = self._lanes.get(int(bot_id))
+        await self._drain(set(lane.tasks) if lane else set(), grace_sec=grace_sec, label=f"bot {bot_id}")
 
-    async def drain_all(self, *, grace_sec: float = STOP_GRACE_SEC) -> None:
-        """On shutdown: let every queued update finish for up to ``grace_sec`` seconds, then cancel the rest."""
-        await self._drain({t for tasks in self._by_bot.values() for t in tasks}, grace_sec=grace_sec, label="shutdown")
+    async def drain_all(self, *, grace_sec: float | None = None) -> None:
+        """On shutdown: let every queued update finish for up to ``grace_sec``, then cancel the rest."""
+        tasks = {t for lane in self._lanes.values() for t in lane.tasks}
+        await self._drain(tasks, grace_sec=grace_sec, label="shutdown")
+
+    def _lane(self, bot_id: int) -> _BotLane:
+        lane = self._lanes.get(bot_id)
+        if lane is None:
+            lane = self._lanes[bot_id] = _BotLane(slots=asyncio.Semaphore(self._limits.concurrent_per_bot))
+        return lane
+
+    async def _lane_with_room(self, bot_id: int) -> _BotLane:
+        lane = self._lane(bot_id)
+        while len(lane.tasks) >= self._limits.pending_per_bot:
+            lane.room.clear()
+            await lane.room.wait()
+            # An emptied lane is removed; take whichever lane the bot has now.
+            lane = self._lane(bot_id)
+        return lane
 
     @staticmethod
-    async def _drain(tasks: set[asyncio.Task[None]], *, grace_sec: float, label: str) -> None:
+    async def _drain(tasks: set[asyncio.Task[None]], *, grace_sec: float | None, label: str) -> None:
         if not tasks:
             return
+        grace_sec = STOP_GRACE_SEC if grace_sec is None else grace_sec
         _done, still_running = await asyncio.wait(tasks, timeout=grace_sec)
         for task in still_running:
             task.cancel()
@@ -148,13 +203,34 @@ class BotUpdateScheduler:
             log.warning("%s: %s update(s) cancelled after %ss", label, len(still_running), grace_sec)
             await asyncio.wait(still_running)
 
-    def _forget(self, bot_id: int, task: asyncio.Task[None]) -> None:
-        tracked = self._by_bot.get(bot_id)
-        if tracked is None:
+    def _forget(self, bot_id: int, key: Hashable, task: asyncio.Task[None]) -> None:
+        lane = self._lanes.get(bot_id)
+        if lane is None or task not in lane.tasks:
             return
-        tracked.discard(task)
-        if not tracked:
-            del self._by_bot[bot_id]
+        lane.tasks.discard(task)
+        left = lane.per_key.get(key, 1) - 1
+        if left > 0:
+            lane.per_key[key] = left
+        else:
+            lane.per_key.pop(key, None)
+        lane.room.set()
+        if not lane.tasks:
+            del self._lanes[bot_id]
+
+
+def _handler(dispatcher: UpdateFeeder, bot: Any, update: Any) -> Job:
+    bot_id = int(bot.id)
+
+    async def handle() -> None:
+        try:
+            await dispatcher.feed_update(bot, update)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Last resort for one update: log it and keep the bot serving everyone else.
+            log.exception("bot %s failed to handle update %s", bot_id, getattr(update, "update_id", "?"))
+
+    return handle
 
 
 _scheduler: BotUpdateScheduler | None = None

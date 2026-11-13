@@ -35,6 +35,8 @@ class ResellerBotManager:
         self._tasks: dict[int, asyncio.Task] = {}
         self._bots: dict[int, Bot] = {}
         self._lock = asyncio.Lock()
+        # Stopped bots still letting their in-flight updates finish (see _stop_locked).
+        self._stopping: set[asyncio.Task[None]] = set()
 
     async def start_all(self) -> None:
         async with SessionLocal() as session:
@@ -148,27 +150,29 @@ class ResellerBotManager:
         return await self.start_reseller(profile_id, token, bot_telegram_id=tg_id)
 
     async def _stop_locked(self, reseller_profile_id: int) -> None:
+        """Stop polling now; the bot's in-flight updates finish in the background.
+
+        Cancelling the poll loop ends getUpdates at once, so a new bot for the same shop can start polling
+        right away. The loop then drains its updates for up to STOP_GRACE_SEC, which a web request that
+        changed the token, or the next shop in stop_all, should not wait for."""
         task = self._tasks.pop(reseller_profile_id, None)
         bot = self._bots.pop(reseller_profile_id, None)
-        if task and not task.done():
+        if task is None and bot is None:
+            return
+        if task is not None:
             task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            except Exception:
-                log.debug("_stop_locked: ignored failure", exc_info=True)
-        if bot:
-            try:
-                await bot.session.close()
-            except Exception:
-                log.debug("_stop_locked: ignored failure", exc_info=True)
+        finishing = asyncio.create_task(_finish_stop(task, bot), name=f"reseller-bot-stop-{reseller_profile_id}")
+        self._stopping.add(finishing)
+        finishing.add_done_callback(self._stopping.discard)
 
     async def stop_all(self) -> None:
+        """Stop every shop bot and wait until all of them have finished draining, in parallel."""
         async with self._lock:
-            ids = list(self._tasks.keys())
-            for rid in ids:
+            for rid in list(self._tasks.keys()):
                 await self._stop_locked(rid)
+            stopping = set(self._stopping)
+        if stopping:
+            await asyncio.wait(stopping)
 
     async def _poll_loop(self, reseller_profile_id: int, bot: Bot) -> None:
         offset: int | None = None
@@ -412,3 +416,19 @@ async def sync_reseller_bot_runtime(profile: ResellerProfile) -> None:
         return
     if profile.bot_token and profile.setup_completed_at:
         await mgr.restart_reseller_profile(profile_id)
+
+
+async def _finish_stop(task: asyncio.Task | None, bot: Bot | None) -> None:
+    """Wait for a cancelled poll loop to drain, then close the bot's session (closing twice is harmless)."""
+    if task is not None:
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            log.warning("reseller bot poll loop ended with an error while stopping", exc_info=True)
+    if bot is not None:
+        try:
+            await bot.session.close()
+        except Exception:
+            log.debug("closing a stopped reseller bot session failed", exc_info=True)

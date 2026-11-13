@@ -11,7 +11,10 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from aiogram.types import Update
 
-from app.services.bot_updates import BotUpdateScheduler, KeyedTaskRunner, update_order_key
+from unittest import mock
+
+from app.services import bot_updates
+from app.services.bot_updates import BotUpdateScheduler, KeyedTaskRunner, SchedulerLimits, update_order_key
 from app.services.reseller_bots import ResellerBotManager
 
 BOT_ID = 7
@@ -182,7 +185,8 @@ class FakeSession:
 class FakeBot:
     id = BOT_ID
 
-    def __init__(self, batches: list[list[Update]]) -> None:
+    def __init__(self, batches: list[list[Update]], bot_id: int = BOT_ID) -> None:
+        self.id = bot_id
         self._batches = batches
         self.session = FakeSession()
 
@@ -198,7 +202,7 @@ class FakeBot:
 
 class SchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def test_submit_returns_before_the_update_is_handled(self) -> None:
-        scheduler = BotUpdateScheduler(limit=2, max_pending=10)
+        scheduler = BotUpdateScheduler(SchedulerLimits(concurrent=2, pending=10))
         dispatcher = FakeDispatcher()
         dispatcher.gates[1] = asyncio.Event()
         task = await scheduler.submit(dispatcher, FakeBot([]), _message(1, 500))
@@ -209,7 +213,7 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(dispatcher.handled, [1])
 
     async def test_drain_cancels_updates_that_outlive_the_grace_period(self) -> None:
-        scheduler = BotUpdateScheduler(limit=2, max_pending=10)
+        scheduler = BotUpdateScheduler(SchedulerLimits(concurrent=2, pending=10))
         dispatcher = FakeDispatcher()
         dispatcher.gates[1] = asyncio.Event()
         task = await scheduler.submit(dispatcher, FakeBot([]), _message(1, 500))
@@ -218,7 +222,7 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(task.cancelled())
 
     async def test_shutdown_drain_waits_for_every_bots_updates(self) -> None:
-        scheduler = BotUpdateScheduler(limit=2, max_pending=10)
+        scheduler = BotUpdateScheduler(SchedulerLimits(concurrent=2, pending=10))
         dispatcher = FakeDispatcher()
         dispatcher.gates[1] = asyncio.Event()
         task = await scheduler.submit(dispatcher, FakeBot([]), _message(1, 500))
@@ -228,12 +232,71 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(dispatcher.handled, [1])
 
 
+class FairnessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_bot_with_a_full_backlog_does_not_hold_up_another_bot(self) -> None:
+        scheduler = BotUpdateScheduler(SchedulerLimits(concurrent=8, concurrent_per_bot=2, pending=100,
+                                                       pending_per_bot=3, pending_per_customer=8))
+        dispatcher = FakeDispatcher()
+        stuck = FakeBot([], bot_id=1)
+        for update_id in (1, 2, 3):
+            dispatcher.gates[update_id] = asyncio.Event()
+            await scheduler.submit(dispatcher, stuck, _message(update_id, 500 + update_id))
+        waiting = asyncio.create_task(scheduler.submit(dispatcher, stuck, _message(4, 600)))
+        await asyncio.sleep(0.05)
+        self.assertFalse(waiting.done(), "the stuck bot waits for room in its own backlog")
+
+        other = await asyncio.wait_for(scheduler.submit(dispatcher, FakeBot([], bot_id=2), _message(10, 700)), 1)
+        await asyncio.wait_for(other, 1)
+        self.assertEqual(dispatcher.handled, [10], "another shop is served while the first is stuck")
+
+        dispatcher.gates[1].set()
+        await asyncio.wait_for(waiting, 1)
+        for gate in dispatcher.gates.values():
+            gate.set()
+        await scheduler.drain_all(grace_sec=1)
+
+    async def test_a_stuck_bot_uses_only_its_own_running_slots(self) -> None:
+        scheduler = BotUpdateScheduler(SchedulerLimits(concurrent=3, concurrent_per_bot=2, pending=100,
+                                                       pending_per_bot=50, pending_per_customer=8))
+        dispatcher = FakeDispatcher()
+        stuck = FakeBot([], bot_id=1)
+        for update_id in range(1, 6):
+            dispatcher.gates[update_id] = asyncio.Event()
+            await scheduler.submit(dispatcher, stuck, _message(update_id, 500 + update_id))
+        other = await scheduler.submit(dispatcher, FakeBot([], bot_id=2), _message(10, 700))
+        await asyncio.wait_for(other, 1)
+        self.assertEqual(dispatcher.handled, [10])
+        for gate in dispatcher.gates.values():
+            gate.set()
+        await scheduler.drain_all(grace_sec=1)
+        self.assertEqual(sorted(dispatcher.handled), [1, 2, 3, 4, 5, 10])
+
+    async def test_repeated_taps_past_the_customer_limit_are_dropped(self) -> None:
+        scheduler = BotUpdateScheduler(SchedulerLimits(pending_per_customer=2))
+        dispatcher = FakeDispatcher()
+        bot = FakeBot([])
+        dispatcher.gates[1] = asyncio.Event()
+        first = await scheduler.submit(dispatcher, bot, _callback(1, 500))
+        second = await scheduler.submit(dispatcher, bot, _callback(2, 500))
+        with self.assertLogs("app.services.bot_updates", level="WARNING"):
+            third = await scheduler.submit(dispatcher, bot, _callback(3, 500))
+        self.assertIsNone(third)
+        other_customer = await scheduler.submit(dispatcher, bot, _message(4, 501))
+        await asyncio.wait_for(other_customer, 1)
+        dispatcher.gates[1].set()
+        await asyncio.gather(first, second)
+        self.assertEqual(dispatcher.handled, [4, 1, 2])
+        again = await scheduler.submit(dispatcher, bot, _callback(5, 500))
+        await asyncio.wait_for(again, 1)
+        self.assertEqual(dispatcher.handled[-1], 5, "the customer can tap again once their updates are done")
+
+
 class ShopBotPollingTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_slow_customer_does_not_hold_up_another_customer_of_the_shop(self) -> None:
         dispatcher = FakeDispatcher()
         dispatcher.gates[1] = asyncio.Event()
         bot = FakeBot([[_message(1, 500), _message(2, 501)]])
-        manager = ResellerBotManager(dispatcher, scheduler=BotUpdateScheduler(limit=4, max_pending=50))
+        manager = ResellerBotManager(dispatcher, scheduler=BotUpdateScheduler(SchedulerLimits(concurrent=4, pending=50)))
         poll = asyncio.create_task(manager._poll_loop(1, bot))
         await _until(lambda: dispatcher.handled == [2])
         self.assertEqual(dispatcher.handled, [2], "customer 501 is served while 500 waits on the panel")
@@ -248,7 +311,7 @@ class ShopBotPollingTests(unittest.IsolatedAsyncioTestCase):
         dispatcher.gates[1] = asyncio.Event()
         bot = FakeBot([[_message(1, 500)]])
         bot.session.handled_ref = dispatcher.handled
-        manager = ResellerBotManager(dispatcher, scheduler=BotUpdateScheduler(limit=4, max_pending=50))
+        manager = ResellerBotManager(dispatcher, scheduler=BotUpdateScheduler(SchedulerLimits(concurrent=4, pending=50)))
         poll = asyncio.create_task(manager._poll_loop(1, bot))
         await _until(lambda: 1 in dispatcher.gates and manager._scheduler.pending == 1)
         poll.cancel()
@@ -256,6 +319,42 @@ class ShopBotPollingTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(asyncio.CancelledError):
             await poll
         self.assertEqual(bot.session.closed_after, [1], "the in-flight update finished before the session closed")
+
+
+class StopTests(unittest.IsolatedAsyncioTestCase):
+    async def _running_shop(self, manager: ResellerBotManager, dispatcher: FakeDispatcher, rid: int) -> FakeBot:
+        update_id = 100 + rid
+        dispatcher.gates[update_id] = asyncio.Event()
+        bot = FakeBot([[_message(update_id, 900 + rid)]], bot_id=rid)
+        bot.session.handled_ref = dispatcher.handled
+        manager._bots[rid] = bot
+        manager._tasks[rid] = asyncio.create_task(manager._poll_loop(rid, bot))
+        await _until(lambda: manager._scheduler.pending >= 1 and update_id in dispatcher.gates)
+        return bot
+
+    async def test_stopping_one_shop_returns_without_waiting_for_its_updates(self) -> None:
+        dispatcher = FakeDispatcher()
+        manager = ResellerBotManager(dispatcher, scheduler=BotUpdateScheduler())
+        bot = await self._running_shop(manager, dispatcher, 1)
+        await asyncio.wait_for(manager.stop_reseller(1), 0.5)
+        self.assertIsNone(bot.session.closed_after, "the in-flight update is still finishing")
+        dispatcher.gates[101].set()
+        await manager.stop_all()
+        self.assertEqual(bot.session.closed_after, [101])
+
+    async def test_stop_all_drains_every_shop_at_the_same_time(self) -> None:
+        dispatcher = FakeDispatcher()
+        manager = ResellerBotManager(dispatcher, scheduler=BotUpdateScheduler())
+        for rid in (1, 2, 3):
+            await self._running_shop(manager, dispatcher, rid)
+        loop = asyncio.get_running_loop()
+        with mock.patch.object(bot_updates, "STOP_GRACE_SEC", 0.3), \
+                self.assertLogs("app.services.bot_updates", level="WARNING"):
+            started = loop.time()
+            await manager.stop_all()
+            elapsed = loop.time() - started
+        self.assertLess(elapsed, 0.6, "three stuck shops drain in parallel, not one after another")
+        self.assertEqual(manager._scheduler.pending, 0)
 
 
 if __name__ == "__main__":
