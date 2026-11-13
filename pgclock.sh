@@ -6,10 +6,16 @@
 set -euo pipefail
 set +H
 
+# Sourcing (tests) loads the functions only: no TTY rewiring and no dispatch.
+_PGCLOCK_SOURCED=0
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  _PGCLOCK_SOURCED=1
+fi
+
 # curl|bash leaves stdin as a dead pipe. For interactive menus, attach to TTY.
 # Install, update, status, help and Xray setup can run without a TTY.
 _CMD="${1:-}"
-if [[ ! -t 0 ]]; then
+if [[ "$_PGCLOCK_SOURCED" -eq 0 && ! -t 0 ]]; then
   case "${_CMD}" in
     install|i|update|u|status|s|xray|help|h|-h|--help) ;;
     *)
@@ -65,6 +71,12 @@ prompt_read() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 SERVICE_NAME="pgclockbot"
+# PGCLOCK_REPO (also read by get.sh) points installs at a fork or mirror.
+PGCLOCK_DEFAULT_REPO="https://github.com/Mrclocks/PGClockBot.git"
+# Rollback point recorded by cmd_update before it stops the service.
+UPDATE_PREV_COMMIT=""
+UPDATE_PREV_BRANCH=""
+UPDATE_PREV_SCHEMA=""
 SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 PY="${SCRIPT_DIR}/.venv/bin/python"
 PIP="${SCRIPT_DIR}/.venv/bin/pip"
@@ -617,6 +629,12 @@ PY
   return 1
 }
 
+# /health answers {"ok": true}; an error page or {"ok": false} must not count as up.
+health_body_is_ok() {
+  local pattern='"ok"[[:space:]]*:[[:space:]]*true'
+  [[ "${1:-}" =~ $pattern ]]
+}
+
 probe_panel_health() {
   # Sets: health_ok (0/1), health_scheme (http|https), health_url
   # Tries HTTPS first when SSL meta is on, then HTTP fallback (detects TLS mismatch).
@@ -631,7 +649,7 @@ probe_panel_health() {
   local body
   if [[ "$want_ssl" -eq 1 ]]; then
     body="$(curl -skS --max-time 2 "https://127.0.0.1:${port}/health" 2>/dev/null || true)"
-    if [[ "$body" == *'"ok"'* ]] || [[ "$body" == *'ok'* && "$body" == *'true'* ]]; then
+    if health_body_is_ok "$body"; then
       health_ok=1
       health_scheme="https"
       health_url="https://127.0.0.1:${port}/health"
@@ -639,7 +657,7 @@ probe_panel_health() {
     fi
   fi
   body="$(curl -sS --max-time 2 "http://127.0.0.1:${port}/health" 2>/dev/null || true)"
-  if [[ "$body" == *'"ok"'* ]] || [[ "$body" == *'ok'* && "$body" == *'true'* ]]; then
+  if health_body_is_ok "$body"; then
     health_ok=1
     health_scheme="http"
     health_url="http://127.0.0.1:${port}/health"
@@ -1322,6 +1340,12 @@ persist_channel_env() {
   ok "Channel saved in .env: ${ch}"
 }
 
+# Hard reset keeps runtime state: config, database files, venv and .env backups.
+git_clean_keep_runtime() {
+  git clean -fd --exclude=.env --exclude=data --exclude=.venv --exclude='.env.bak.*' \
+    --exclude='.env.restored.*' >/dev/null 2>&1 || true
+}
+
 sync_code_to_channel() {
   local ch fetch_err
   ch="$(normalize_channel "${1:-${INSTALL_CHANNEL:-main}}")"
@@ -1329,11 +1353,12 @@ sync_code_to_channel() {
     warn "Not a git repo — skipped channel sync (using files on disk)."
     return 0
   fi
+  point_origin_at_repo
+  if [[ -n "${PGCLOCK_REF:-}" ]]; then
+    sync_code_to_ref "$PGCLOCK_REF"
+    return
+  fi
   info "Syncing code to origin/${ch}…"
-  git remote get-url origin >/dev/null 2>&1 || \
-    git remote add origin "https://github.com/Mrclocks/PGClockBot.git" 2>/dev/null || true
-  # Prefer the public repo URL (drop stale mirrors / dead remotes).
-  git remote set-url origin "https://github.com/Mrclocks/PGClockBot.git" 2>/dev/null || true
   # A single-branch clone only has +refs/heads/main:… in remote.origin.fetch.
   # Plain `git fetch origin dev` then lands on FETCH_HEAD and never creates
   # refs/remotes/origin/dev — Update then dies with "origin/dev not found".
@@ -1364,9 +1389,44 @@ sync_code_to_channel() {
   # Keep runtime files; hard-sync tree to the channel tip.
   git checkout -f -B "$ch" "origin/${ch}"
   git reset --hard "origin/${ch}"
-  git clean -fd --exclude=.env --exclude=data --exclude=.venv --exclude='.env.bak.*' \
-    --exclude='.env.restored.*' >/dev/null 2>&1 || true
+  git_clean_keep_runtime
   ok "Code synced to origin/${ch}"
+}
+
+point_origin_at_repo() {
+  local repo_url="${PGCLOCK_REPO:-$PGCLOCK_DEFAULT_REPO}"
+  git remote get-url origin >/dev/null 2>&1 || \
+    git remote add origin "$repo_url" 2>/dev/null || true
+  # Re-point every run so stale mirrors or dead remotes do not stick.
+  git remote set-url origin "$repo_url" 2>/dev/null || true
+}
+
+# PGCLOCK_REF pins a tag or full commit SHA instead of the channel tip.
+sync_code_to_ref() {
+  local ref="$1" commit fetch_err
+  if [[ "$ref" == -* || "$ref" =~ [[:space:]] ]]; then
+    err "PGCLOCK_REF is not a valid tag or commit: ${ref}"
+    return 1
+  fi
+  info "Syncing code to pinned ref ${ref}…"
+  fetch_err="$(mktemp)"
+  # A plain fetch lands the ref (branch, tag or SHA) on FETCH_HEAD without
+  # needing a matching local ref, which a --no-tags clone never has.
+  if ! timeout 120 git fetch --no-tags origin "$ref" 2>"$fetch_err"; then
+    err "Could not fetch ${ref}. Use an existing tag or a full commit SHA."
+    [[ -s "$fetch_err" ]] && warn "git: $(tr '\n' ' ' <"$fetch_err" | head -c 300)"
+    rm -f "$fetch_err"
+    return 1
+  fi
+  rm -f "$fetch_err"
+  if ! commit="$(git rev-parse --verify -q 'FETCH_HEAD^{commit}')"; then
+    err "${ref} does not point at a commit."
+    return 1
+  fi
+  git checkout -f -q --detach "$commit"
+  git reset --hard -q "$commit"
+  git_clean_keep_runtime
+  ok "Code pinned to ${ref} (${commit:0:12})"
 }
 
 panel_is_installed() {
@@ -1869,25 +1929,42 @@ PY
   return 0
 }
 
-cmd_update() {
-  # Optional $1 = main|dev (menu passes this; env PGCLOCK_CHANNEL is fallback).
-  set_install_channel "${1:-}"
-  banner_small "Update (${INSTALL_CHANNEL})"
-  if [[ ! -f .env ]]; then
-    err ".env not found. Run Install first."
+# Alembic revision of the live database, empty when it cannot be read.
+db_schema_revision() {
+  [[ -x "$PY" ]] || return 0
+  (
+    cd "$SCRIPT_DIR" && \
+    PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" "$PY" - 2>/dev/null <<'PY'
+from app.config import get_settings
+from app.db.alembic_runner import current_revision
+
+print(current_revision(get_settings().database_url) or "")
+PY
+  ) | tail -n1 || true
+}
+
+# A pre-update backup lets an operator undo a migration with `pgclock restore`.
+backup_before_update() {
+  if [[ "${PGCLOCK_SKIP_BACKUP:-0}" == "1" ]]; then
+    warn "PGCLOCK_SKIP_BACKUP=1 — updating without a backup"
+    return 0
+  fi
+  if [[ ! -x "$PY" ]]; then
+    warn "No .venv yet — skipped the pre-update backup"
+    return 0
+  fi
+  step "Backup before update"
+  if ! "$PY" -m app.cli --root "$SCRIPT_DIR" backup --note pre-update; then
+    err "Backup failed — update stopped; the running panel was not touched."
+    warn "Check: bash pgclock.sh doctor"
+    warn "Or update without a backup: PGCLOCK_SKIP_BACKUP=1 bash pgclock.sh update"
     return 1
   fi
-  ok "Keeping existing .env"
-  cp -a .env ".env.bak.$(date +%Y%m%d%H%M%S)"
-  ok ".env backup created"
+  ok "Backup saved in data/backups/"
+}
 
-  # Stop first: syncing under a live process leaves Python stuck on SIGTERM and
-  # makes "Restarting…" hang until TimeoutStopSec.
-  stop_service_if_any
-
-  sync_code_to_channel "$INSTALL_CHANNEL" || return 1
-  persist_channel_env "$INSTALL_CHANNEL"
-
+# Interpreter, packages and .env for the synced code; no schema change yet.
+update_prepare_runtime() {
   ensure_python || return 1
   ensure_venv || return 1
   mkdir -p data
@@ -1908,17 +1985,94 @@ PY
       return 1
     fi
   fi
-
   ensure_public_web_host
+}
+
+restore_previous_code() {
+  local commit="$1" branch="$2"
+  warn "Restoring the previous code (${commit:0:12})…"
+  if [[ -n "$branch" ]]; then
+    git checkout -f -q -B "$branch" "$commit" || return 1
+  else
+    git checkout -f -q --detach "$commit" || return 1
+  fi
+  git reset --hard -q "$commit" || return 1
+  git_clean_keep_runtime
+  if ! ensure_venv; then
+    warn "Could not reinstall the previous Python packages — starting anyway"
+  fi
+}
+
+# After a failed update: put the previous version back and start it, unless the
+# schema already moved on (old code cannot run against a newer schema).
+# $1 = 1 when migrations were attempted.
+update_recover() {
+  local schema_attempted="${1:-0}"
+  if [[ "$schema_attempted" -eq 1 ]]; then
+    local schema_now
+    schema_now="$(db_schema_revision)"
+    if [[ -z "$UPDATE_PREV_SCHEMA" || "$schema_now" != "$UPDATE_PREV_SCHEMA" ]]; then
+      err "Database schema is no longer the pre-update one (${UPDATE_PREV_SCHEMA:-unknown} → ${schema_now:-unknown}); previous code was not restored."
+      warn "Logs:    journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
+      warn "Backups: pgclock backup --list   ·   Undo: pgclock restore <backup_id>"
+      return 1
+    fi
+  fi
+  if [[ -n "$UPDATE_PREV_COMMIT" ]] \
+      && [[ "$(git rev-parse -q --verify HEAD 2>/dev/null || true)" != "$UPDATE_PREV_COMMIT" ]]; then
+    if ! restore_previous_code "$UPDATE_PREV_COMMIT" "$UPDATE_PREV_BRANCH"; then
+      err "Could not restore the previous code."
+      warn "Backups: pgclock backup --list   ·   Logs: journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
+      return 1
+    fi
+  fi
+  if restart_service_if_any; then
+    ok "Update failed — the previous version is running again"
+    return 0
+  fi
+  err "Update failed and the previous version did not start either."
+  warn "Logs: journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
+  return 1
+}
+
+cmd_update() {
+  # Optional $1 = main|dev (menu passes this; env PGCLOCK_CHANNEL is fallback).
+  set_install_channel "${1:-}"
+  banner_small "Update (${INSTALL_CHANNEL})"
+  if [[ ! -f .env ]]; then
+    err ".env not found. Run Install first."
+    return 1
+  fi
+  ok "Keeping existing .env"
+  cp -a .env ".env.bak.$(date +%Y%m%d%H%M%S)"
+  ok ".env backup created"
+
+  # Backup tools + systemd PATH (pg_dump must be visible to the backup and the service).
+  ensure_pg_client_tools || true
+  # While the old version still runs: a failed backup leaves the panel untouched.
+  backup_before_update || return 1
+
+  UPDATE_PREV_COMMIT="$(git rev-parse -q --verify HEAD 2>/dev/null || true)"
+  UPDATE_PREV_BRANCH="$(git symbolic-ref -q --short HEAD 2>/dev/null || true)"
+  UPDATE_PREV_SCHEMA="$(db_schema_revision)"
+
+  # Stop first: syncing under a live process leaves Python stuck on SIGTERM and
+  # makes "Restarting…" hang until TimeoutStopSec.
+  stop_service_if_any
+
+  if ! sync_code_to_channel "$INSTALL_CHANNEL" || ! update_prepare_runtime; then
+    err "Update could not install the new code."
+    update_recover 0
+    return 1
+  fi
 
   # Migrate while the service is still stopped so the new process does not race init_db.
-  ensure_db_schema || {
-    err "Schema migration failed — not restarting a broken panel."
+  if ! ensure_db_schema; then
+    err "Schema migration failed — not starting the new version."
+    update_recover 1
     return 1
-  }
-
-  # Backup tools + systemd PATH (pg_dump must be visible to the service).
-  ensure_pg_client_tools || true
+  fi
+  persist_channel_env "$INSTALL_CHANNEL"
 
   # Rewrite unit (PATH / TimeoutStopSec) without starting yet — one clean start below.
   if service_installed; then
@@ -1929,20 +2083,19 @@ PY
     install_restart_helper "$svc_user" || true
   fi
 
-  restart_service_if_any || {
-    err "Update finished code sync but the web panel did not come up."
-    warn "Fix: journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
-    warn "Then: sudo systemctl restart ${SERVICE_NAME}"
+  if ! restart_service_if_any; then
+    err "The new version did not come up."
+    update_recover 1
     return 1
-  }
+  fi
 
   # Xray is optional for the panel — run after the port is open so Update is not blocked.
   ensure_monitor_xray || true
 
   print_success "Update complete" \
     "Config:     .env kept (WEB_HOST forced public if it was loopback)" \
+    "Backup:     data/backups/ (pre-update)" \
     "Schema:     migrated before restart" \
-    "Backups:    postgresql-client / systemd PATH refreshed" \
     "Logs:       journalctl -u ${SERVICE_NAME} -f"
   return 0
 }
@@ -2501,4 +2654,6 @@ dispatch() {
   esac
 }
 
-dispatch "$@"
+if [[ "$_PGCLOCK_SOURCED" -eq 0 ]]; then
+  dispatch "$@"
+fi
