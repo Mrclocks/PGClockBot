@@ -284,20 +284,25 @@
         });
       }
     }
-    /* Opening moves focus into the menu (onto its ×, the control under the thumb); closing hands it back to
-       «منو» when it was inside, which also drops a phone keyboard left up by a field in the menu. */
+    /* Keyboard use moves focus into the menu (onto its ×) and back to «منو» on close. A touch moves no focus:
+       iOS paints a ring on a programmatically focused button, which would stay on × or «منو». Either way a
+       field left focused in the closed menu is released, which drops the phone keyboard. */
+    var keyboardUse = false;
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Tab' || e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') keyboardUse = true;
+    }, true);
+    document.addEventListener('pointerdown', function () { keyboardUse = false; }, true);
     function moveMenuFocus(open) {
       var opener = document.querySelector('.bottom-dock [data-drawer-open]');
       var closer = document.querySelector('.bottom-dock [data-drawer-close]');
       var current = document.activeElement;
-      if (!opener || !closer || !opener.getClientRects().length) {
-        if (!open && current && side.contains(current)) current.blur();
-        return;
-      }
-      if (open) {
+      var inMenu = current && (side.contains(current) || current === closer || current === opener);
+      var canMove = keyboardUse && opener && closer && opener.getClientRects().length;
+      if (open && canMove) {
         closer.focus({ preventScroll: true });
-      } else if (current && (side.contains(current) || current === closer)) {
-        opener.focus({ preventScroll: true });
+      } else if (!open && inMenu) {
+        if (canMove) opener.focus({ preventScroll: true });
+        else current.blur();
       }
     }
     setOpen(false);
