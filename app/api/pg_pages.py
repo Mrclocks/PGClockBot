@@ -54,6 +54,7 @@ from app.services.provision_gate import (
     settle_failed_hold,
 )
 from app.services.platform_identity import is_explicit_owner_staff
+from app.services.redact import user_safe_error
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 from app.services.volume_allocation import apply_create_form_oversell
 
@@ -2365,7 +2366,8 @@ def register_pg_pages(
                         )
                         await session.commit()
                     except Exception as e:
-                        err = f"ذخیره شد ولی اشتراک زمانی اعمال نشد: {e}"
+                        logger.warning("Subscription apply failed", exc_info=True)
+                        err = f"ذخیره شد ولی اشتراک زمانی اعمال نشد: {user_safe_error(e)}"
         else:
             row, err = await grant_web_access_with_plan(
                 session,
