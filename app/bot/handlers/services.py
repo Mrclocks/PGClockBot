@@ -15,9 +15,15 @@ from app.services.catalog_pricing import displayed_quote, price_html, quote_prod
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
 from app.bot.list_pages import page_line, page_number
+from app.bot.renewal_keyboards import (
+    OTHER_CATEGORY_CODE,
+    OTHER_CATEGORY_LABEL,
+    renewal_category_keyboard,
+    renewal_keyboard,
+)
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
-from app.db.models import BotUser, Plan, UserService
+from app.db.models import BotUser, UserService
 from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import get_catalog_plan, list_active_plans
 from app.services.pasarguard import absolutize_subscription_url, get_pg
@@ -35,7 +41,8 @@ from app.services.service_scope import customer_may_use_service, list_customer_s
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
 from app.services.service_live_info import fetch_live_service_info, with_stored_quota
-from app.services.service_renewals import RENEWAL_CURRENT, RENEWAL_LABELS, renewal_relation
+from app.services.plan_categories import shop_categories_for_menu, shop_category_map
+from app.services.service_renewals import RenewalChoices, renewal_choices
 from app.services.wireguard_delivery import REASON_DISABLED, REASON_UNAVAILABLE, fetch_wireguard, has_wireguard
 from app.services.wireguard_send import send_wireguard_files
 from app.services import bot_feedback_texts as feedback
@@ -584,59 +591,77 @@ async def svc_wireguard(callback: CallbackQuery, session: AsyncSession, db_user:
     else:
         await callback.answer(WIREGUARD_SEND_FAILED, show_alert=True)
 
-def _renewal_button_text(plan: Plan, relation: str | None) -> str:
-    label = f"{RENEWAL_LABELS[relation]} · " if relation else ""
-    return f"{label}{plan.name} — {format_toman(sale_price(plan), get_settings().currency)}"
+LINKED_NOT_RENEWABLE = "سرویس متصل‌شده فقط مشاهده است؛ تمدید از این مسیر ممکن نیست"
+RENEWAL_HINT = "پلن تمدید را انتخاب کنید:"
+RENEWAL_GROUPED_HINT = "پلن فعلی را تمدید کنید یا از دسته‌ها پلن دیگری انتخاب کنید:"
+
+
+async def _renewable_service(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, svc_id: int) -> UserService | None:
+    """The customer's own service on this bot, when it can be renewed; otherwise answers why not."""
+    svc = await session.get(UserService, svc_id)
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        return None
+    if (svc.remark or "").strip() == "linked":
+        await callback.answer(LINKED_NOT_RENEWABLE, show_alert=True)
+        return None
+    return svc
+
+
+async def _renewal_choices(session: AsyncSession, svc: UserService) -> tuple[RenewalChoices, dict]:
+    """The shop's renewable plans grouped like the shop, and its categories by id (for icons)."""
+    plans = await list_active_plans(session, include_trial=False)
+    categories = await shop_categories_for_menu(session, fixed_plans=plans)
+    choices = renewal_choices(plans, categories, current_plan_id=svc.plan_id)
+    return choices, await shop_category_map(session)
 
 
 @router.callback_query(F.data.startswith("svc:renew:"))
 async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    ui = await get_all_settings(session)
-    svc_id = int(callback.data.split(":")[-1])
-    svc = await session.get(UserService, svc_id)
-    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
-        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+    try:
+        svc_id = int((callback.data or "").split(":")[-1])
+    except ValueError:
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
-    if (svc.remark or "").strip() == "linked":
-        await callback.answer(
-            "سرویس متصل‌شده فقط مشاهده است؛ تمدید از این مسیر ممکن نیست",
-            show_alert=True,
-        )
+    svc = await _renewable_service(callback, session, db_user, svc_id)
+    if svc is None:
         return
-    plans = await list_active_plans(session, include_trial=False)
-    if not plans:
+    choices, categories = await _renewal_choices(session, svc)
+    if not choices.options:
         await callback.answer(feedback.NO_PLANS, show_alert=True)
         return
     await callback.answer()
-    from app.services.plan_categories import shop_category_map
+    ui = await get_all_settings(session)
+    hint = RENEWAL_GROUPED_HINT if choices.categories and choices.current else RENEWAL_HINT
+    if callback.message:
+        await safe_edit_text(
+            callback.message, hint, reply_markup=renewal_keyboard(svc_id, choices, ui, categories)
+        )
 
-    categories = await shop_category_map(session)
-    current_plan = next((p for p in plans if svc.plan_id is not None and int(p.id) == int(svc.plan_id)), None)
-    relations = {int(p.id): renewal_relation(current_plan, p) for p in plans}
-    plans = sorted(plans, key=lambda p: relations[int(p.id)] != RENEWAL_CURRENT)
-    rows = [
-        [
-            InlineKeyboardButton(
-                text=_renewal_button_text(p, relations[int(p.id)]),
-                callback_data=f"svc:renewpay:{svc_id}:{p.id}",
-                icon_custom_emoji_id=kb.category_icon_for(p, categories),
-            )
-        ]
-        for p in plans
-    ]
 
-    rows.append(
-        [
-            kb.back_button(ui, f"svc:view:{svc_id}")
-        ]
-    )
-    hint = "پلن تمدید را انتخاب کنید:"
+@router.callback_query(F.data.regexp(r"^svc:renewcat:\d{1,10}:(\d{1,10}|none)$"))
+async def svc_renew_category(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    _, _, svc_raw, cat_raw = (callback.data or "").split(":")
+    svc = await _renewable_service(callback, session, db_user, int(svc_raw))
+    if svc is None:
+        return
+    choices, categories = await _renewal_choices(session, svc)
+    category = None if cat_raw == OTHER_CATEGORY_CODE else choices.category(int(cat_raw))
+    plans = choices.in_category(None if category is None else int(category.id))
+    # Only a category this shop lists for renewal opens; another shop's or an empty one does not.
+    if (cat_raw != OTHER_CATEGORY_CODE and category is None) or not plans:
+        await callback.answer(feedback.NO_PLANS_IN_CATEGORY, show_alert=True)
+        return
+    await callback.answer()
+    ui = await get_all_settings(session)
+    title = OTHER_CATEGORY_LABEL if category is None else kb._category_button_label(category)
     if callback.message:
         await safe_edit_text(
             callback.message,
-            hint,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            format_message(title, RENEWAL_HINT),
+            reply_markup=renewal_category_keyboard(svc.id, plans, choices, ui, categories),
         )
+
 
 @router.callback_query(F.data.startswith("svc:renewpay:"))
 async def svc_renew_preview(
@@ -686,10 +711,7 @@ async def svc_renew_pay(
         await callback.answer(feedback.INVALID, show_alert=True)
         return
     if (svc.remark or "").strip() == "linked":
-        await callback.answer(
-            "سرویس متصل‌شده فقط مشاهده است؛ تمدید از این مسیر ممکن نیست",
-            show_alert=True,
-        )
+        await callback.answer(LINKED_NOT_RENEWABLE, show_alert=True)
         return
     if sale_price(plan) > 0 and not kb.any_checkout_method_enabled(ui):
         await callback.answer(feedback.NO_PAYMENT_METHOD, show_alert=True)

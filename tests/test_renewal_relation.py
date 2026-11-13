@@ -55,7 +55,8 @@ class RenewalPlanButtonsTests(unittest.IsolatedAsyncioTestCase):
             patch.object(service_handlers, "get_all_settings", AsyncMock(return_value={})),
             patch.object(service_handlers, "customer_may_use_service", AsyncMock(return_value=True)),
             patch.object(service_handlers, "list_active_plans", AsyncMock(return_value=plans)),
-            patch("app.services.plan_categories.shop_category_map", AsyncMock(return_value={})),
+            patch.object(service_handlers, "shop_categories_for_menu", AsyncMock(return_value=[])),
+            patch.object(service_handlers, "shop_category_map", AsyncMock(return_value={})),
             patch.object(service_handlers, "safe_edit_text", edit),
         ):
             await service_handlers.svc_renew(callback, session, SimpleNamespace(id=4))
