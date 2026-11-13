@@ -189,9 +189,9 @@
       {% endif %}
       <label class="form-field">نام کاربری
         <input name="username" id="pg-create-username" required autocomplete="off" placeholder="user_01"
-               pattern="[A-Za-z0-9_]{3,32}" maxlength="32" dir="ltr"
-               title="فقط حروف انگلیسی، عدد و _ — بدون فاصله و فارسی" />
-        <small class="muted">۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ — بدون فاصله و فارسی</small>
+               maxlength="128" dir="ltr"
+               title="حروف انگلیسی (بزرگ و کوچک)، عدد و - _ @ ." />
+        <small class="muted">۳ تا ۱۲۸ کاراکتر: حروف انگلیسی (بزرگ و کوچک)، عدد و - _ @ . — نمادها پشت‌سرهم نباشند</small>
       </label>
 
       <label class="form-field">حالت ساخت
@@ -349,7 +349,7 @@
 
 <script>
 (function(){
-  const USERNAME_RE = /^[A-Za-z0-9_]{3,32}$/;
+  const USERNAME_RE = /^(?!.*[-_@.]{2})[A-Za-z0-9_@.-]{3,128}$/;
   function showFormErr(el, msg) {
     if (!el) return;
     el.hidden = !msg;
@@ -389,7 +389,7 @@
       const uname = ((unameEl && unameEl.value) || '').trim();
       if (!USERNAME_RE.test(uname)) {
         e.preventDefault();
-        showFormErr(createErr, 'نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ باشد (بدون فاصله و فارسی)');
+        showFormErr(createErr, 'نام کاربری باید ۳ تا ۱۲۸ کاراکتر، فقط حروف انگلیسی، عدد و - _ @ . باشد (نمادها پشت‌سرهم نباشند)');
         if (unameEl) unameEl.focus();
         return;
       }

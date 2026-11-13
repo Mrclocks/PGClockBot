@@ -23,6 +23,7 @@ from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.handlers.action_reason import ask_reason, take_reason
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import safe_edit_text
+from app.services.credential_policy import validate_pg_username
 from app.db.models import BotUser
 from app.services.action_reasons import bot_actor
 from app.services.chat_records import keep_sent
@@ -225,7 +226,6 @@ def _unused_owner_client_import_anchor():
     return get_pg()
 
 PAGE_SIZE = 10
-_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,32}$")
 
 class PgUserStates(StatesGroup):
     search = State()
@@ -1463,9 +1463,9 @@ async def pg_create_username(
         await state.clear()
         await message.answer(feedback.CANCELLED)
         return
-    uname = (message.text or "").strip()
-    if not _USERNAME_RE.fullmatch(uname):
-        await message.answer("نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ باشد.")
+    uname, uname_error = validate_pg_username(message.text or "")
+    if uname_error:
+        await message.answer(uname_error)
         return
     data = await state.get_data()
     mode = data.get("pg_create_mode")
@@ -1850,9 +1850,9 @@ async def pg_edit_name_save(
         await state.clear()
         await message.answer(feedback.CANCELLED)
         return
-    uname = (message.text or "").strip()
-    if not _USERNAME_RE.fullmatch(uname):
-        await message.answer("نام کاربری نامعتبر است.")
+    uname, uname_error = validate_pg_username(message.text or "")
+    if uname_error:
+        await message.answer(uname_error)
         return
     data = await state.get_data()
     uid = int(data.get("pg_edit_uid") or 0)

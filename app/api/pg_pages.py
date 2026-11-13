@@ -11,8 +11,9 @@ from fastapi import Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.customer_action_notices import notify_customers, pg_user_targets
 from app.services.action_reasons import ReasonRequired, log_reasoned_action, reason_from_form
+from app.services.credential_policy import validate_pg_username
+from app.services.customer_action_notices import notify_customers, pg_user_targets
 from app.services.formatting import data_limit_to_gb, pg_expire_fields
 from app.services.numbers import normalize_number_text, parse_float, parse_int, parse_optional_float, parse_optional_int
 from app.services.pasarguard import (
@@ -743,13 +744,9 @@ def register_pg_pages(
             mode = "template" if str(form.get("template_id") or "").strip() else "custom"
 
         note = f"web panel · {staff.get('username') or 'staff'}"
-        import re
-
-        if not re.fullmatch(r"[A-Za-z0-9_]{3,32}", uname):
-            return _pg_form_err(
-                "نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ باشد (بدون فاصله و فارسی)",
-                modal="create",
-            )
+        uname, uname_error = validate_pg_username(uname)
+        if uname_error:
+            return _pg_form_err(uname_error, modal="create")
         # Non-admin must have a PG admin identity — otherwise create-as-owner
         # bypasses every role quota (max_users / volume / expire).
         if not _is_admin(staff) and not _pg_owner(staff):
