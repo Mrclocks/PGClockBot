@@ -49,6 +49,8 @@ class Signal:
     text: str
     path: str  # panel page the button opens (platform path; shops get their own settings page)
     fingerprint: str = ""
+    # Quiet period after any announcement, also across a clear and a return; ``None`` keeps the default rules.
+    min_interval: timedelta | None = None
 
 
 def scope_key(shop_id: int | None) -> str:
@@ -74,7 +76,8 @@ async def claim_signal(session: AsyncSession, signal: Signal, *, now: datetime |
 
     A signal is sent when the alert turns on, its count grows or its fingerprint changes. While it
     stays on, a growing alert is repeated at most every ``REPEAT_AFTER``. When it turns off the state
-    is cleared so the next occurrence is announced again.
+    is cleared so the next occurrence is announced again, unless the signal's ``min_interval`` since
+    the last announcement has not passed yet.
     """
     now = now or _utcnow()
     if signal.count <= 0:
@@ -97,6 +100,8 @@ async def claim_signal(session: AsyncSession, signal: Signal, *, now: datetime |
     if not changed:
         return False
     notified_at = _aware(row.notified_at)
+    if notified_at and signal.min_interval is not None and now - notified_at < signal.min_interval:
+        return False
     if row.active and signal.fingerprint == row.fingerprint and notified_at and now - notified_at < REPEAT_AFTER:
         return False
     result = await session.execute(

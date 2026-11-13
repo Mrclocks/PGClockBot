@@ -11,14 +11,20 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select, update
+from sqlalchemy import ColumnElement, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import PanelAlertState, UserService
 from app.services.bot_user_admin import panel_client_for_service, probe_panel_presence
-from app.services.panel_alert_notifications import ALERT_PANEL_MISSING, KEY_PANEL_MISSING, Signal
+from app.services.panel_alert_notifications import (
+    ALERT_PANEL_MISSING,
+    KEY_PANEL_MISSING,
+    PLATFORM_SCOPE,
+    Signal,
+    scope_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +32,8 @@ PRESENT = "present"
 ABSENT = "absent"
 SCAN_BATCH_LIMIT = 100
 SCAN_CONCURRENCY = 4
+# The scan revisits every service several times a day; staff hear about new removals once a day at most.
+MISSING_ALERT_INTERVAL = timedelta(hours=24)
 STATUS_LABEL = "حذف‌شده از پنل"
 CUSTOMER_TEXT = (
     "این سرویس دیگر روی سرور فعال نیست و از پنل حذف شده است.\n"
@@ -129,25 +137,60 @@ async def scan_panel_presence(session: AsyncSession, *, limit: int = SCAN_BATCH_
     return results
 
 
+def _removed_while_usable() -> ColumnElement[bool]:
+    """Marked services that were still usable when they disappeared, by their last cached quota.
+
+    The panel deletes expired and volume-finished users on its own schedule; those are routine, owe
+    the customer nothing, and are left to the expired-service cleanup instead of the staff alert.
+    """
+    return and_(
+        UserService.panel_missing_at.is_not(None),
+        UserService.is_cancelled.is_(False),
+        UserService.volume_exhausted_at.is_(None),
+        or_(UserService.quota_expire_at.is_(None), UserService.quota_expire_at > UserService.panel_missing_at),
+    )
+
+
+def _aware(moment: datetime | None) -> datetime | None:
+    return moment if moment is None or moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def _fingerprint(newest: datetime | None, state: PanelAlertState | None) -> str:
+    """Changes only when a service was marked after the last announcement.
+
+    Removing marked services (the newest included) keeps the previous value, so a cleanup never
+    triggers a new message on its own.
+    """
+    newest = _aware(newest)
+    notified_at = _aware(state.notified_at) if state is not None else None
+    if state is not None and notified_at is not None and (newest is None or newest <= notified_at):
+        return state.fingerprint
+    return newest.isoformat() if newest is not None else ""
+
+
 async def missing_signals(session: AsyncSession) -> list[Signal]:
-    """One alert per shop (and the platform) that has services the panel no longer knows."""
+    """One alert per shop (and the platform) with services removed from the panel while still usable.
+
+    It is announced when such services first appear, and again only for services marked after
+    the previous announcement, at most once per ``MISSING_ALERT_INTERVAL``.
+    """
     rows = (
         await session.execute(
-            select(UserService.shop_id, func.count(UserService.id))
-            .where(UserService.panel_missing_at.is_not(None), UserService.is_cancelled.is_(False))
+            select(UserService.shop_id, func.count(UserService.id), func.max(UserService.panel_missing_at))
+            .where(_removed_while_usable())
             .group_by(UserService.shop_id)
         )
     ).all()
-    counts = {(int(shop) if shop else None): int(n) for shop, n in rows}
-    known = (
-        await session.execute(
-            select(PanelAlertState.scope_key).where(
-                PanelAlertState.alert == ALERT_PANEL_MISSING, PanelAlertState.active.is_(True)
-            )
-        )
-    ).scalars().all()
-    for key in known:
-        counts.setdefault(None if key == "platform" else int(key.split(":", 1)[1]), 0)
+    found = {(int(shop) if shop else None): (int(n), newest) for shop, n, newest in rows}
+    states = {
+        state.scope_key: state
+        for state in (
+            await session.scalars(select(PanelAlertState).where(PanelAlertState.alert == ALERT_PANEL_MISSING))
+        ).all()
+    }
+    for key, state in states.items():
+        if state.active:
+            found.setdefault(None if key == PLATFORM_SCOPE else int(key.split(":", 1)[1]), (0, None))
     return [
         Signal(
             shop_id=owner,
@@ -156,13 +199,16 @@ async def missing_signals(session: AsyncSession) -> list[Signal]:
             count=count,
             text=missing_text(count),
             path="/users",
+            fingerprint=_fingerprint(newest, states.get(scope_key(owner))),
+            min_interval=MISSING_ALERT_INTERVAL,
         )
-        for owner, count in counts.items()
+        for owner, (count, newest) in found.items()
     ]
 
 
 def missing_text(count: int) -> str:
     return (
-        f"🗑 <b>{int(count)}</b> سرویس از پاسارگارد حذف شده است.\n"
-        "مشتری‌ها پیام «حذف‌شده از پنل» می‌بینند؛ هر مورد را بررسی و در صورت نیاز بازپرداخت کنید."
+        f"🗑 <b>{int(count)}</b> سرویس پیش از پایان اعتبار از پاسارگارد حذف شده است.\n"
+        "مشتری‌ها پیام «حذف‌شده از پنل» می‌بینند؛ هر مورد را بررسی و در صورت نیاز بازپرداخت کنید.\n"
+        "سرویس‌های منقضی یا تمام‌حجم که پنل حذف کرده شمرده نمی‌شوند."
     )
