@@ -32,6 +32,7 @@
     selectedPlanId: null,
     activityLimit: ACTIVITY_PAGE,
     renewPreview: null,
+    renewChoices: null,
     addonPreview: null,
     topupCurrent: null,
     checkout: null,
@@ -392,6 +393,7 @@
     state.sheet = null;
     state.sheetSeq += 1;
     state.renewPreview = null;
+    state.renewChoices = null;
     state.addonPreview = null;
     state.topupCurrent = null;
     dropReviewImage();
@@ -902,14 +904,32 @@
 
   async function showRenew(id) {
     const seq = openSheet("renew", "تمدید سرویس", R.loadingHtml(2), { serviceId: id });
-    const r = await ensure("plans");
-    if (r.status !== "ready") {
-      setSheetBody(seq, R.errorHtml(r.error || "دریافت پلن‌ها ناموفق بود"));
+    let data;
+    try {
+      data = await core.api(`/api/mini/service/${id}/renewal-options`);
+    } catch (err) {
+      setSheetBody(seq, R.errorHtml(err.message || "دریافت پلن‌ها ناموفق بود"));
       return;
     }
-    setSheetBody(seq, r.data.wallet_pay_enabled
-      ? R.renewPlansHtml(r.data.plans, id)
+    if (seq !== state.sheetSeq) return;
+    state.renewChoices = { serviceId: id, data };
+    setSheetBody(seq, data.wallet_pay_enabled
+      ? R.renewChoicesHtml(data, id)
       : R.emptyHtml("پرداخت با کیف پول غیرفعال است."));
+  }
+
+  /** A category of the open renewal sheet, from the choices already loaded for that service. */
+  function showRenewCategory(id, key) {
+    const choices = state.renewChoices;
+    const html = choices && choices.serviceId === id ? R.renewCategoryHtml(choices.data, id, key) : null;
+    if (html === null) return showRenew(id);
+    setSheetBody(state.sheetSeq, html);
+  }
+
+  function showRenewGroups(id) {
+    const choices = state.renewChoices;
+    if (!choices || choices.serviceId !== id) return showRenew(id);
+    setSheetBody(state.sheetSeq, R.renewChoicesHtml(choices.data, id));
   }
 
   async function previewRenew(id, planId) {
@@ -1664,6 +1684,8 @@
     "open-link": (el) => openLink(intAttr(el, "data-id")),
     "show-qr": (el) => showQr(intAttr(el, "data-id")),
     renew: (el) => showRenew(intAttr(el, "data-id")),
+    "renew-category": (el) => showRenewCategory(intAttr(el, "data-id"), el.getAttribute("data-cat")),
+    "renew-groups": (el) => showRenewGroups(intAttr(el, "data-id")),
     "preview-renew": (el) => previewRenew(intAttr(el, "data-id"), intAttr(el, "data-plan")),
     "confirm-renew": (el) => confirmRenew(intAttr(el, "data-id"), intAttr(el, "data-plan"), el),
     addons: (el) => showAddons(intAttr(el, "data-id"), el.getAttribute("data-kind")),
