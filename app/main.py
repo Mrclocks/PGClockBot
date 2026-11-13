@@ -15,6 +15,7 @@ from app.bot import create_bot, create_dispatcher
 from app.config import get_settings
 from app.db.models import Plan
 from app.db.session import SessionLocal, init_db
+from app.services.bot_updates import get_update_scheduler
 from app.jobs.scheduler import start_background_scheduler, start_scheduler, stop_scheduler
 from app.services.pasarguard import get_pg
 from app.services.users import ensure_default_settings
@@ -312,6 +313,8 @@ def main() -> None:
                     await pg_warmup_task
                 except asyncio.CancelledError:
                     pass
+            # Webhook updates run outside their request: let them finish before the bot session closes.
+            await get_update_scheduler().drain_all()
             if bot is not None and settings.webhook_url.strip():
                 try:
                     await bot.delete_webhook(drop_pending_updates=False)
@@ -368,7 +371,11 @@ def main() -> None:
             except json.JSONDecodeError:
                 return JSONResponse({"ok": False}, status_code=400)
             update = Update.model_validate(data, context={"bot": bot})
-            await dp.feed_update(bot, update)
+            # Answer Telegram as soon as the update is queued, not after it is handled: a slow handler
+            # would hold Telegram's delivery connection and could make it resend the update. The
+            # scheduler keeps one customer's updates in order. An update queued at the moment the
+            # process dies is not resent, as with polling, where the offset also moves on fetch.
+            await get_update_scheduler().submit(dp, bot, update)
             return {"ok": True}
 
     from app.services.setup_wizard import is_setup_complete, persist_setup_entry_url

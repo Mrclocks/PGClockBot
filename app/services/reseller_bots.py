@@ -11,6 +11,7 @@ from aiogram.enums import ParseMode
 from sqlalchemy import select
 
 from app.db.models import ResellerProfile
+from app.services.bot_updates import BotUpdateScheduler, get_update_scheduler
 from app.services.secret_box import hash_bot_token, reveal_bot_token
 from app.db.session import SessionLocal
 
@@ -22,10 +23,15 @@ _TOKEN_LOOKUP_TTL = 60.0
 
 
 class ResellerBotManager:
-    """Polls each reseller bot and feeds updates into the shared dispatcher."""
+    """Polls each reseller bot and hands its updates to the shared update scheduler.
 
-    def __init__(self, dispatcher: Dispatcher):
+    Updates are not handled inline: one slow update would hold up every other customer of the shop.
+    The scheduler runs customers in parallel and each customer's updates in order.
+    """
+
+    def __init__(self, dispatcher: Dispatcher, scheduler: BotUpdateScheduler | None = None):
         self.dispatcher = dispatcher
+        self._scheduler = scheduler or get_update_scheduler()
         self._tasks: dict[int, asyncio.Task] = {}
         self._bots: dict[int, Bot] = {}
         self._lock = asyncio.Lock()
@@ -180,14 +186,7 @@ class ResellerBotManager:
                     )
                     for update in updates:
                         offset = update.update_id + 1
-                        try:
-                            await self.dispatcher.feed_update(bot, update)
-                        except Exception:
-                            log.exception(
-                                "reseller bot %s failed to handle update %s",
-                                reseller_profile_id,
-                                getattr(update, "update_id", "?"),
-                            )
+                        await self._scheduler.submit(self.dispatcher, bot, update)
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
@@ -198,6 +197,8 @@ class ResellerBotManager:
                     )
                     await asyncio.sleep(3)
         finally:
+            # Updates already taken from Telegram finish (or are cancelled) before the session closes.
+            await self._scheduler.drain_bot(bot.id)
             try:
                 await bot.session.close()
             except Exception:
