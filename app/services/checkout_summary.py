@@ -70,6 +70,18 @@ async def _cashback_line(session: AsyncSession, order: Order, currency: str) -> 
     return kv_line("🎁", "کش‌بک این خرید", f"<b>{format_toman(amount, currency)}</b> (بعد از تحویل، در کیف پول)")
 
 
+def _discount_lines(order: Order, currency: str) -> list[str]:
+    random_discount = int(order.random_discount_amount or 0)
+    reductions = (
+        (int(order.discount_amount or 0) - random_discount, "تخفیف"),
+        (random_discount, "تخفیف تصادفی"),
+    )
+    return [
+        kv_line("🏷", label, f"−{format_toman(amount, currency)}")
+        for amount, label in reductions if amount > 0
+    ]
+
+
 async def checkout_summary(
     session: AsyncSession, order: Order, *, currency: str, notice: str | None = None
 ) -> str:
@@ -83,9 +95,7 @@ async def checkout_summary(
     if order.requested_username:
         username = await preview_username(session, order, order.requested_username)
         lines.append(kv_line("✏️", "نام سرویس", copyable(username)))
-    discount = int(order.discount_amount or 0)
-    if discount > 0:
-        lines.append(kv_line("🏷", "تخفیف", f"−{format_toman(discount, currency)}"))
+    lines.extend(_discount_lines(order, currency))
     if notice:
         lines.append(notice)
     lines.append(kv_line("💰", "مبلغ قابل پرداخت", f"<b>{format_toman(order.amount, currency)}</b>"))

@@ -44,6 +44,7 @@ from app.services.pasarguard import (
     user_subscription_url,
 )
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
+from app.services.random_discounts import apply_random_discount
 from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
 from app.services.cashback import grant_after_delivery
@@ -545,6 +546,10 @@ async def apply_discount_to_order(
     code: str | None,
 ) -> Order:
     """Reserve a discount code onto a still-payable order (consumes one use)."""
+    if await apply_random_discount(session, order, code=code):
+        await session.commit()
+        await session.refresh(order)
+        return order
     # Only before a payment method is locked in — otherwise Payment.amount drifts.
     if order.status not in {
         OrderStatus.PENDING.value,
@@ -630,6 +635,24 @@ async def _reserve_discount_code(
     return discount, row.code
 
 
+async def _apply_new_order_discount(
+    session: AsyncSession, order: Order, code: str | None, *, automatic: bool = True,
+) -> None:
+    """Freeze one checkout reduction before any payment can be created."""
+    try:
+        if code and await apply_random_discount(session, order, code=code):
+            return
+        discount, used_code = await _reserve_discount_code(session, code, int(order.amount), order=order)
+        order.amount = max(0, int(order.amount) - discount)
+        order.discount_amount = int(order.discount_amount or 0) + discount
+        order.discount_code = used_code
+        if automatic:
+            await apply_random_discount(session, order)
+    except ValueError:
+        await session.rollback()
+        raise
+
+
 async def create_order(
     session: AsyncSession,
     *,
@@ -640,6 +663,7 @@ async def create_order(
     trial_phone_hash: str | None = None,
     trial_telegram_id: int | None = None,
     expected_price: int | None = None,
+    apply_automatic_discount: bool = True,
 ) -> Order:
     plan = await get_catalog_plan(session, plan_id)
     if not plan or not plan.is_active:
@@ -691,14 +715,7 @@ async def create_order(
     session.add(order)
     await session.flush()
     await ensure_member(session, user_id, shop_rid)
-    try:
-        discount, used_code = await _reserve_discount_code(session, discount_code, sale_price(plan), order=order)
-    except ValueError:
-        await session.rollback()
-        raise
-    order.amount = max(0, sale_price(plan) - discount)
-    order.discount_amount = discount
-    order.discount_code = used_code
+    await _apply_new_order_discount(session, order, discount_code, automatic=apply_automatic_discount)
     if plan.is_trial:
         shop_key = str(int(shop_rid)) if shop_rid is not None else "platform"
         row = (
@@ -882,14 +899,7 @@ async def create_custom_order(
     session.add(order)
     await session.flush()
     await ensure_member(session, user_id, shop_rid)
-    try:
-        discount, used_code = await _reserve_discount_code(session, discount_code, amount, order=order)
-    except ValueError:
-        await session.rollback()
-        raise
-    order.amount = max(0, amount - discount)
-    order.discount_amount = discount
-    order.discount_code = used_code
+    await _apply_new_order_discount(session, order, discount_code)
     await session.commit()
     await session.refresh(order)
     return order
@@ -1149,6 +1159,7 @@ async def create_wholesale_order(
     )
     session.add(order)
     await ensure_member(session, user_id, shop_rid)
+    await apply_random_discount(session, order)
     await session.commit()
     await session.refresh(order)
     return order
@@ -1557,6 +1568,8 @@ async def revert_failed_free_delivery(
 
 async def _release_discount_code(session: AsyncSession, code: str | None, *, order: Order | None = None) -> None:
     """Best-effort decrement of a previously reserved discount use."""
+    if order is not None and order.random_discount_id is not None:
+        return
     if not code:
         return
     if order is not None:
@@ -1581,6 +1594,8 @@ async def _release_discount_code(session: AsyncSession, code: str | None, *, ord
 
 async def _release_order_discount(session: AsyncSession, order: Order) -> None:
     """Release both shop DiscountCode uses and loyalty entitlements for an unpaid order."""
+    if order.random_discount_id is not None:
+        return
     code = order.discount_code
     if not code:
         return
@@ -2693,6 +2708,7 @@ async def renew_service_with_plan(
             if (existing.user_id, existing.service_id, existing.plan_id, existing.reseller_id) != (user_id, service.id, plan.id, shop_rid):
                 raise ValueError("درخواست تمدید نامعتبر است") from None
             return existing
+    await apply_random_discount(session, order)
     if commit:
         await session.commit()
         await session.refresh(order)
