@@ -393,10 +393,13 @@
     padding: 0 var(--space-2);
   }
   .side-panel > .side-nav { grid-area: nav; margin: var(--space-2) 0 0; border-top: 1px solid var(--border); }
+  /* Never squeezed: when the menu is taller than its space the grid gives each row only its minimum size, so
+     a zero minimum (or the drawer's overflow:hidden) cut «خروج» in half. The whole sheet scrolls instead. */
   .side-panel > .side-foot {
     grid-area: foot;
-    min-height: 0;
+    min-height: auto;
     max-height: none;
+    overflow: visible;
     margin: 0 calc(-1 * var(--space-2));
     padding: var(--space-1_5) var(--space-2);
     border-top: 1px solid var(--border);
