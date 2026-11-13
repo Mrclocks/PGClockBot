@@ -14,7 +14,8 @@ function fakeCaches() {
       stores.set(name, {
         entries,
         match: async (req) => entries.get(req.url),
-        put: async (req, res) => { entries.set(req.url, res); },
+        // Storing takes a moment, as in a browser: only work kept alive with waitUntil is sure to finish.
+        put: (req, res) => new Promise((resolve) => setTimeout(() => { entries.set(req.url, res); resolve(); }, 5)),
         keys: async () => [...entries.keys()].map((url) => ({ url })),
         delete: async (req) => entries.delete(req.url),
         addAll: async () => {},
@@ -41,11 +42,13 @@ function load() {
   new Function("self", "caches", "fetch", "URL", source)(self, caches, fetch, URL);
   const request = async (path, method = "GET") => {
     let response;
+    const kept = [];
     const event = { request: { url: path.startsWith("http") ? path : ORIGIN + path, method },
-      respondWith(p) { response = p; } };
+      respondWith(p) { response = p; }, waitUntil(p) { kept.push(p); } };
     handlers.fetch(event);
     const res = response ? await response : undefined;
-    await new Promise((r) => setImmediate(r));
+    // The browser may stop the worker once the response and the waitUntil work are done.
+    await Promise.all(kept);
     return res;
   };
   return { request, calls, caches, setOk: (v) => { nextOk = v; } };

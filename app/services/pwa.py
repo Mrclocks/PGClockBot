@@ -323,14 +323,14 @@ function storeLatest(req, url, res) {
   const copy = res.clone();
   return caches.open(CACHE).then((c) =>
     c.keys().then((keys) => {
-      keys.forEach((k) => {
+      const stale = keys.filter((k) => {
         try {
-          if (new URL(k.url).pathname === url.pathname && k.url !== req.url) {
-            c.delete(k);
-          }
-        } catch (e) {}
+          return new URL(k.url).pathname === url.pathname && k.url !== req.url;
+        } catch (e) {
+          return false;
+        }
       });
-      return c.put(req, copy);
+      return Promise.all(stale.map((k) => c.delete(k))).then(() => c.put(req, copy));
     })
   );
 }
@@ -347,7 +347,8 @@ self.addEventListener('fetch', (event) => {
       matchExact(req).then((hit) =>
         hit ||
         fetch(req).then((res) => {
-          if (res && res.ok) storeLatest(req, url, res);
+          // waitUntil keeps the worker alive until the copy is stored, after the page has its response.
+          if (res && res.ok) event.waitUntil(storeLatest(req, url, res));
           return res;
         })
       )
