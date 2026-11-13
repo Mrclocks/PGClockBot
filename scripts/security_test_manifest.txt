@@ -488,3 +488,9 @@ tests/test_catalog_row_editor.py
 # Home offer to add an old service: only for a customer of this shop with no service there.
 tests/test_import_home_prompt.py
 tests/test_service_import_offer_migration.py
+# Random checkout amounts: shop isolation, authorization and durable duplicate protection.
+tests/test_random_discounts.py
+tests/test_random_discount_admin.py
+tests/test_random_discount_migration.py
+tests/test_random_discount_purge.py
+tests/test_random_discount_code_namespace.py

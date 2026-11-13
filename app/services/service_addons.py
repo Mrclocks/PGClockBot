@@ -45,6 +45,7 @@ from app.services.payg_gate import (
 )
 from app.services.payg_pricing import ChargeEvent, ServiceChange
 from app.services.provision_gate import ProvisionError, hold_limit_change, new_hold_key
+from app.services.random_discounts import apply_random_discount
 from app.services.service_live_info import validate_service_info
 from app.services.volume_allocation import (
     HeldVolume,
@@ -1214,6 +1215,7 @@ async def create_addon_order(
             ) != (user_id, service.id, int(pack.id), shop_rid):
                 raise ValueError("درخواست افزایش نامعتبر است") from None
             return existing
+    await apply_random_discount(session, order)
     if commit:
         await session.commit()
         await session.refresh(order)

@@ -126,6 +126,7 @@ from app.services.web_auth import (
     verify_web_admin,
 )
 from app.api.catalog_discounts import register_catalog_discounts
+from app.api.random_discounts import register_random_discounts
 from app.api.connection_status_pages import register_connection_status_pages
 from app.api.funnel_pages import register_funnel_pages
 from app.api.panel_search_pages import register_panel_search_pages
@@ -1611,6 +1612,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_shop_broadcast_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_random_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_panel_search_pages(app, require_staff=require_staff)
     register_order_purge_pages(app, require_staff=require_staff, get_db=get_db)

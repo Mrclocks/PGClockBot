@@ -69,6 +69,10 @@ MARKETING_PARTLY_IN_BOT: dict[str, str] = {
     marketing_nav.FUNNEL: "خلاصهٔ ۷ روزه در ربات؛ نمودار فقط در وب",
 }
 
+MARKETING_WEB_ONLY: dict[str, str] = {
+    marketing_nav.RANDOM_DISCOUNTS: "مدیریت بازه و محافظت مبلغ در وب؛ اعمال خودکار و استفاده از کد در ربات و مینی‌اپ",
+}
+
 # Owner-bot settings that are not fields of the web settings tabs, and where the web edits them.
 BOT_SETTINGS_OUTSIDE_WEB_TABS: dict[str, str] = {
     **{key: "وب: مالی › مقصدهای پرداخت" for key in (
@@ -114,7 +118,7 @@ class ParityClassificationTests(unittest.TestCase):
         self.assert_classified(set(panel_nav._ALL_SPECS), NAV_IN_BOT, NAV_PARTLY_IN_BOT, NAV_WEB_ONLY)
 
     def test_every_marketing_section_is_classified(self) -> None:
-        self.assert_classified(_marketing_keys(), MARKETING_IN_BOT, MARKETING_PARTLY_IN_BOT)
+        self.assert_classified(_marketing_keys(), MARKETING_IN_BOT, MARKETING_PARTLY_IN_BOT, MARKETING_WEB_ONLY)
 
     def test_every_owner_bot_setting_is_editable_on_the_web(self) -> None:
         outside = set(admin_settings.FIELDS) - _web_setting_keys()

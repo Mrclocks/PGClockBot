@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title, row_actions %}
+{% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
+{% from "_marketing_tabs.html" import marketing_tabs %}
+{% block title %}تخفیف تصادفی{% endblock %}
+{% block content %}
+<div class="ds ds-settings">
+  <div class="page-head">
+    <div>{{ page_title('discounts', 'تخفیف تصادفی') }}</div>
+    <div class="page-head-actions"><button type="button" class="btn" data-modal-open="modal-random-discount">تخفیف تازه</button></div>
+  </div>
+  {{ marketing_tabs(marketing_sections|default(()), 'random_discounts') }}
+  {% if request.query_params.get('error') %}<div class="flash warn" role="alert">{{ request.query_params.get('error') }}</div>{% endif %}
+  <div class="card">
+    <h2>مبلغ متفاوت برای سفارش‌ها</h2>
+    <p class="muted">تخفیف از بازهٔ انتخابی و میان مبلغ‌های آزاد همین فروشگاه تعیین می‌شود. مقدار دقیق هنگام ثبت سفارش مشخص می‌شود و با تلاش مجدد پرداخت تغییر نمی‌کند. اگر مبلغ آزادی باقی نماند، مشتری باید بعداً تلاش کند.</p>
+    <p class="muted">در هر فروشگاه یک قانون فعال است. تخفیف تصادفی با کد تخفیف دیگر جمع نمی‌شود. لغو و ساخت دوبارهٔ سفارش هم‌قیمت تا پایان بازه، فرصت انتخاب مجدد تخفیف نمی‌دهد. این قابلیت جایگزین بررسی رسید نیست و برای کارت مشترک چند فروشگاه، مبلغ یکتا را تضمین نمی‌کند.</p>
+  </div>
+  <div class="card card-flush">
+    <div class="card-flush-head"><h2>قانون‌ها</h2></div>
+    <div class="table-wrap">
+      <table class="table-compact table-list-sm">
+        <thead><tr>
+          <th class="col-text">عنوان</th><th class="col-hide-sm">حالت</th><th>بازهٔ تخفیف</th>
+          <th class="col-hide-sm">گام (تومان)</th><th class="col-hide-sm">جلوگیری از تکرار</th>
+          <th class="col-hide-sm">کد</th><th class="col-status">وضعیت</th><th class="col-actions"></th>
+          <th class="li-head" scope="col"><span class="li-count">{{ discounts | length | num }} قانون</span></th>
+        </tr></thead>
+        <tbody>
+        {% for row in discounts %}
+          <tr>
+            <td class="li-title"><span dir="auto">{{ row.title }}</span></td>
+            <td class="col-hide-sm li-sub">{{ 'خودکار' if row.mode == 'automatic' else 'کد تخفیف' }}<span class="li-only"> · {{ row.window_minutes | num }} دقیقه{% if row.code %} · <bdi dir="ltr">{{ row.code }}</bdi>{% endif %}</span></td>
+            <td class="cell-tight li-value"><bdi dir="ltr">{{ row.minimum | num if row.reduction_kind == 'percent' else row.minimum | money }} – {{ row.maximum | num if row.reduction_kind == 'percent' else row.maximum | money }}</bdi> {{ '٪' if row.reduction_kind == 'percent' else 'تومان' }}</td>
+            <td class="col-hide-sm"><bdi dir="ltr">{{ row.step | money }}</bdi></td>
+            <td class="col-hide-sm">{{ row.window_minutes | num }} دقیقه</td>
+            <td class="col-hide-sm"><bdi dir="ltr">{{ row.code or '—' }}</bdi></td>
+            <td class="cell-tight li-badge"><span class="badge {{ 'ok' if row.is_active else 'neutral' }}">{{ 'فعال' if row.is_active else 'متوقف' }}</span></td>
+            <td class="col-actions">
+              {% if row.is_active %}
+              {% call row_actions() %}
+              <form method="post" action="/random-discounts/{{ row.id }}/stop" data-confirm="تخفیف تصادفی برای سفارش‌های تازه متوقف می‌شود. مبلغ سفارش‌های قبلی تغییر نمی‌کند. ادامه می‌دهید؟" data-confirm-title="توقف تخفیف تصادفی" data-confirm-danger="1" data-confirm-label="توقف">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="btn btn-danger btn-sm" type="submit">توقف</button>
+              </form>
+              {% endcall %}
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}<tr><td colspan="8" class="muted">هنوز تخفیف تصادفی تعریف نشده است. برای شروع، تخفیف تازه بسازید.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if next_before %}<div class="actions"><a class="btn btn-ghost" href="/random-discounts?before={{ next_before }}">قانون‌های قدیمی‌تر</a></div>{% endif %}
+  </div>
+  <div class="ui-modal ds" id="modal-random-discount" hidden>
+    <div class="ui-modal-backdrop" data-modal-close></div>
+    <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-random-discount-title">
+      {{ ds_modal_head('discounts', 'تخفیف تصادفی تازه', 'modal-random-discount-title') }}
+      <form method="post" action="/random-discounts" class="form-stack ds-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="request_key" value="{{ request_key }}">
+        {% call ds_sec('نحوهٔ اعمال', extra_class='ds-sec-first') %}
+          <label class="form-field">عنوان <input name="title" required maxlength="128"></label>
+          <div class="form-field">
+            <span class="ds-label-text">حالت</span>
+            <select name="mode" id="random-mode" hidden data-ui-select="1"><option value="automatic" selected>خودکار</option><option value="code">کد تخفیف</option></select>
+            <div class="sales-seg ds-seg" role="radiogroup" aria-label="حالت تخفیف تصادفی" data-ds-choice data-ds-target="#random-mode">
+              <button type="button" role="radio" data-value="automatic">خودکار</button><button type="button" role="radio" data-value="code">کد تخفیف</button>
+            </div>
+            <small class="muted">خودکار برای خرید سرویس، پلن دلخواه، عمده، تمدید و حجم یا زمان اضافه؛ سرویس رایگان و شارژ کیف پول مشمول نیستند.</small>
+          </div>
+          <label class="form-field" data-ds-show-when="#random-mode:code" hidden>کد تخفیف <input name="code" maxlength="64" dir="ltr" autocomplete="off"><small class="muted">حروف انگلیسی، عدد، خط تیره یا زیرخط؛ مشتری همین کد را هنگام خرید وارد می‌کند.</small></label>
+        {% endcall %}
+        {% call ds_sec('بازهٔ تخفیف') %}
+          <div class="form-field">
+            <span class="ds-label-text">نوع بازه</span>
+            <select name="reduction_kind" id="random-kind" hidden data-ui-select="1"><option value="amount" selected>مبلغ</option><option value="percent">درصد</option></select>
+            <div class="sales-seg ds-seg" role="radiogroup" aria-label="نوع بازهٔ تخفیف" data-ds-choice data-ds-target="#random-kind">
+              <button type="button" role="radio" data-value="amount">مبلغ</button><button type="button" role="radio" data-value="percent">درصد</button>
+            </div>
+          </div>
+          <div class="ds-grid-2">
+            <label class="form-field">حداقل تخفیف <span class="ds-unit"><input name="minimum" type="number" min="1" max="2000000000" step="1" inputmode="numeric" dir="ltr" data-money-kind="reduction_kind" data-money-value="amount" required><span class="ds-unit-label" data-ds-show-when="#random-kind:amount">تومان</span><span class="ds-unit-label" data-ds-show-when="#random-kind:percent" hidden>٪</span></span></label>
+            <label class="form-field">حداکثر تخفیف <span class="ds-unit"><input name="maximum" type="number" min="1" max="2000000000" step="1" inputmode="numeric" dir="ltr" data-money-kind="reduction_kind" data-money-value="amount" required><span class="ds-unit-label" data-ds-show-when="#random-kind:amount">تومان</span><span class="ds-unit-label" data-ds-show-when="#random-kind:percent" hidden>٪</span></span></label>
+          </div>
+          <p class="ds-desc">درصد بین ۱ تا ۱۰۰ است. حتی در بازهٔ درصدی، مبلغ تخفیف به تومان و با گام زیر انتخاب می‌شود؛ مبلغ پرداخت هرگز رایگان نمی‌شود.</p>
+          <label class="form-field">گام انتخاب مبلغ <span class="ds-unit"><input name="step" type="number" min="1" max="2000000000" value="1" inputmode="numeric" dir="ltr" data-money required><span class="ds-unit-label">تومان</span></span><small class="muted">گام کوچک‌تر، مبلغ‌های متفاوت بیشتری فراهم می‌کند. برای بازهٔ مبلغی حداکثر ده‌هزار انتخاب تعریف کنید.</small></label>
+        {% endcall %}
+        {% call ds_sec('جلوگیری از تکرار') %}
+          <label class="form-field">مدت محافظت مبلغ <span class="ds-unit"><input name="window_minutes" type="number" min="1" max="10080" value="60" inputmode="numeric" dir="ltr" required><span class="ds-unit-label">دقیقه</span></span><small class="muted">از ۱ دقیقه تا ۷ روز. مبلغ سفارش‌های در انتظار پرداخت ممکن است بیشتر محفوظ بماند.</small></label>
+          <div class="ds-note">برای تغییر قانون، ابتدا قانون فعال را متوقف و قانون تازه بسازید. مبلغ سفارش‌های قبلی ثابت می‌ماند.</div>
+        {% endcall %}
+        {{ ds_foot('ساخت تخفیف') }}
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

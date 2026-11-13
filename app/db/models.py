@@ -264,6 +264,7 @@ class Order(Base):
             sqlite_where=text(OPEN_NAMED_ORDER_SQL),
             postgresql_where=text(OPEN_NAMED_ORDER_SQL),
         ),
+        Index("ix_orders_shop_amount_created", "reseller_id", "amount", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -278,6 +279,10 @@ class Order(Base):
     )
     amount: Mapped[int] = mapped_column(Integer)
     discount_amount: Mapped[int] = mapped_column(Integer, default=0)
+    random_discount_amount: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    random_discount_id: Mapped[int | None] = mapped_column(
+        ForeignKey("random_discounts.id"), nullable=True, index=True
+    )
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     status: Mapped[str] = mapped_column(String(32), default=OrderStatus.PENDING.value, index=True)
     payment_method: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
@@ -317,6 +322,7 @@ class Payment(Base):
             sqlite_where=text("status = 'pending' AND receipt_at IS NOT NULL"),
             postgresql_where=text("status = 'pending' AND receipt_at IS NOT NULL"),
         ),
+        Index("ix_payments_wallet_shop_amount", "wallet_shop_id", "amount", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -2427,3 +2433,70 @@ class ShopBroadCampaignDay(Base):
     shop_id: Mapped[int] = mapped_column(Integer)
     day: Mapped[str] = mapped_column(String(10))
     used: Mapped[int] = mapped_column(BigInteger, server_default="0")
+
+
+class RandomDiscount(Base):
+    """One active shop offer draws an unpredictable checkout reduction."""
+
+    __tablename__ = "random_discounts"
+    __table_args__ = (
+        UniqueConstraint("shop_key", "active_slot", name="uq_random_discount_active"),
+        UniqueConstraint("shop_key", "request_key", name="uq_random_discount_request"),
+        UniqueConstraint("shop_key", "code", name="uq_random_discount_code"),
+        Index("ix_random_discounts_shop_history", "shop_key", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_key: Mapped[int] = mapped_column(Integer)
+    reseller_id: Mapped[int | None] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
+    title: Mapped[str] = mapped_column(String(128))
+    mode: Mapped[str] = mapped_column(String(16))
+    reduction_kind: Mapped[str] = mapped_column(String(16))
+    minimum: Mapped[int] = mapped_column(Integer)
+    maximum: Mapped[int] = mapped_column(Integer)
+    step: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    window_minutes: Mapped[int] = mapped_column(Integer)
+    code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    request_key: Mapped[str] = mapped_column(String(32))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    active_slot: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RandomDiscountDraw(Base):
+    """Immutable amount selection, kept after cancellation to prevent repeated draws."""
+
+    __tablename__ = "random_discount_draws"
+    __table_args__ = (
+        UniqueConstraint("order_id", name="uq_random_discount_draw_order"),
+        Index("ix_random_draw_customer", "shop_key", "user_id", "policy_id", "base_amount", "protected_until"),
+        Index("ix_random_draw_amount", "shop_key", "final_amount", "protected_until"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_key: Mapped[int] = mapped_column(Integer)
+    reseller_id: Mapped[int | None] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
+    policy_id: Mapped[int] = mapped_column(ForeignKey("random_discounts.id"))
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
+    base_amount: Mapped[int] = mapped_column(Integer)
+    discount_amount: Mapped[int] = mapped_column(Integer)
+    final_amount: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    protected_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class RandomDiscountReservation(Base):
+    """A shop cannot allocate an amount twice while its reservation is protected."""
+
+    __tablename__ = "random_discount_reservations"
+    __table_args__ = (
+        UniqueConstraint("shop_key", "final_amount", name="uq_random_reservation_amount"),
+        Index("ix_random_reservation_expiry", "shop_key", "protected_until"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_key: Mapped[int] = mapped_column(Integer)
+    final_amount: Mapped[int] = mapped_column(Integer)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
+    protected_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
