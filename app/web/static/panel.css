@@ -64,7 +64,9 @@
   --brand-logo-size: 40px;
   /* Phone bottom bar (panel-nav-modes.css): the capsule and the search circle share one height,
      items are control-height (--btn-h) inside it. --dock-room is what the page footer leaves free under it. */
-  --dock-h: calc(var(--btn-h) + 2 * var(--space-0));
+  --dock-h: calc(var(--btn-h) + 2 * var(--space-1));
+  /* Items, logo and search circle inside the capsules: 4px clear of its edge. */
+  --dock-inner: calc(var(--dock-h) - 2 * var(--space-0));
   --dock-edge: var(--space-1_5);
   /* Distance from the screen bottom: 12px, or the home-indicator safe area where that is larger, so the bar
      never sits in the system gesture strip and never floats needlessly high above it. */
@@ -82,14 +84,16 @@
      header, bar and sheet stop at --dock-max-w and centre. */
   --dock-max-w: 560px;
   --dock-inline: max(var(--dock-edge), calc((100vw - var(--dock-max-w)) / 2));
-  --hdr-top: max(var(--dock-edge), calc(env(safe-area-inset-top, 0px) + var(--space-1)));
+  /* Below the status bar and Dynamic Island by the same 12px the bar keeps from the screen edge. */
+  --hdr-top: calc(env(safe-area-inset-top, 0px) + var(--dock-edge));
   --sheet-in: 420ms;
   --sheet-out: 260ms;
   --tile-ico: 48px;
   --sheet-shadow: 0 24px 64px rgb(0 0 0 / 0.28);
   --dock-ico: 20px;
   --dock-label-fs: 11px;
-  --dock-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+  /* A tight contact line plus a soft lift, so the capsules read against busy or dark pages. */
+  --dock-shadow: 0 1px 3px rgb(0 0 0 / 0.14), 0 10px 28px rgb(0 0 0 / 0.22);
   /* Shared matte glass — modal sticky chrome + shell topbar/footers/mobile drawer.
      Keep the mix/blur numbers identical everywhere (see .ui-modal-head). */
   --modal-frost-bg: color-mix(in srgb, var(--bg-card) 52%, transparent);

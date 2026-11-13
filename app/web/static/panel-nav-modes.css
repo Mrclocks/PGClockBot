@@ -122,18 +122,18 @@
     transition: background-color var(--drawer-motion) var(--ease-standard);
   }
   .topbar-brand {
-    height: var(--btn-h);
+    height: var(--dock-inner);
     gap: var(--space-1);
     /* Clear of the search circle at the other end. */
-    max-width: calc(100% - var(--btn-h) - var(--space-2));
+    max-width: calc(100% - var(--dock-inner) - var(--space-2));
   }
-  .topbar-brand .brand-logo { width: var(--btn-h); height: var(--btn-h); border-radius: 50%; }
+  .topbar-brand .brand-logo { width: var(--dock-inner); height: var(--dock-inner); border-radius: 50%; }
   .topbar-brand-text {
     display: flex;
     flex-direction: column;
     justify-content: center;
     gap: 2px;
-    height: var(--btn-h);
+    height: var(--dock-inner);
     min-width: 0;
   }
   .topbar-brand-text strong {
@@ -195,7 +195,7 @@
     justify-content: center;
     gap: 2px;
     min-width: 0;
-    height: var(--btn-h);
+    height: var(--dock-inner);
     padding: 0 2px;
     border: 0;
     border-radius: var(--control-radius);
@@ -328,23 +328,29 @@
    The sheet has the same matte glass as the header and the bar. Only transform and opacity move and the dim
    is a plain colour (no blur), so weak phones keep their frame rate. —— */
 @media (max-width: 900px) {
+  /* The sheet grows up from the bar to at most 12px under the header (the same gap it keeps from the ×);
+     the empty part of .side above a short sheet lets taps through to the dim, which closes the menu. */
   .side {
-    top: auto;
+    top: calc(var(--hdr-top) + var(--dock-h) + var(--dock-edge));
     left: var(--dock-inline);
     right: var(--dock-inline);
     bottom: calc(var(--dock-bottom) + var(--dock-h) + var(--dock-edge));
     width: auto;
     height: auto;
+    justify-content: flex-end;
     overflow: visible;
+    pointer-events: none;
   }
+  .side.open .side-panel { pointer-events: auto; }
   .side-panel {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: "theme help" "nav nav" "foot foot";
     align-content: start;
     column-gap: var(--space-1);
+    flex: 0 1 auto;
     height: auto;
-    max-height: calc(100svh - var(--hdr-top) - 2 * var(--dock-h) - 3 * var(--dock-edge) - var(--dock-bottom));
+    max-height: 100%;
     padding: var(--space-2) var(--space-2) 0;
     /* The same matte glass as the bottom bar and the header. */
     border: 1px solid var(--modal-frost-line);
