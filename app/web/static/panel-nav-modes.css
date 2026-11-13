@@ -80,3 +80,155 @@
 .nav-section:not(:has(.nav-item)) > .nav-empty {
   display: block;
 }
+
+/* —— Sidebar search hotkey hint: one compact «/» key (Ctrl/⌘+K works too) so the placeholder keeps its room.
+   Desktop only; the phone bar has its own search button. —— */
+.side-search-key { display: none; }
+@media (min-width: 901px) {
+  .side-search-key {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    justify-content: center;
+    min-width: var(--space-2_5);
+    height: var(--space-2_5);
+    padding: 0 var(--space-0);
+    border: 1px solid var(--border);
+    border-radius: var(--menu-item-radius);
+    color: var(--muted-fg);
+    font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    direction: ltr;
+    pointer-events: none;
+  }
+  .side-search input:focus ~ .side-search-key,
+  .side-search input:not(:placeholder-shown) ~ .side-search-key { display: none; }
+}
+
+/* —— Phone bottom bar: a frosted capsule with the most used items and «بیشتر», plus a search circle.
+   Shown exactly where the sidebar becomes a drawer. Same matte glass as the drawer and modal chrome. —— */
+/* .shell is laid out LTR and sets RTL back on .side and .main; the bar is its child too. */
+.bottom-dock { display: none; direction: rtl; }
+@media (max-width: 900px) {
+  .bottom-dock {
+    position: fixed;
+    z-index: 40;
+    inset-inline: var(--dock-edge);
+    bottom: calc(var(--dock-edge) + var(--safe-bottom));
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    /* Only the capsule and the circle take taps; the gap between them stays part of the page. */
+    pointer-events: none;
+    transition:
+      opacity var(--motion-fast) var(--ease-standard),
+      transform var(--motion-med) var(--ease-standard),
+      visibility 0s linear 0s;
+  }
+  .bottom-dock-bar,
+  .bottom-dock-search {
+    pointer-events: auto;
+    box-sizing: border-box;
+    height: var(--dock-h);
+    border: 1px solid var(--modal-frost-line);
+    background: var(--modal-frost-bg);
+    backdrop-filter: var(--modal-frost-blur);
+    -webkit-backdrop-filter: var(--modal-frost-blur);
+    box-shadow: var(--dock-shadow);
+  }
+  .bottom-dock-bar {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    padding: var(--space-0);
+    border-radius: var(--control-radius);
+  }
+  .bottom-dock-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+    height: var(--btn-h);
+    padding: 0 2px;
+    border: 0;
+    border-radius: var(--control-radius);
+    background: transparent;
+    color: var(--muted-fg);
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+  }
+  .bottom-dock-item .nav-ico { width: var(--dock-ico); height: var(--dock-ico); }
+  .bottom-dock-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--dock-label-fs);
+    line-height: 1.2;
+  }
+  .bottom-dock-item.is-active {
+    color: var(--accent);
+    background: var(--accent-soft);
+    font-weight: 600;
+  }
+  .bottom-dock-item .nav-dot {
+    position: absolute;
+    top: var(--space-0);
+    inset-inline-start: calc(50% + var(--space-1));
+  }
+  .bottom-dock-search {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: var(--dock-h);
+    padding: 0;
+    border-radius: 50%;
+    color: var(--text);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bottom-dock-search .nav-ico { width: var(--dock-ico); height: var(--dock-ico); }
+  .bottom-dock-item:active,
+  .bottom-dock-search:active { transform: scale(0.94); }
+  .bottom-dock-item:focus-visible,
+  .bottom-dock-search:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+  /* Out of the way while the drawer is open or the keyboard is up for a field. */
+  body.nav-open .bottom-dock,
+  body:has(:is(input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="range"]), textarea, select, [contenteditable="true"]):focus) .bottom-dock {
+    opacity: 0;
+    visibility: hidden;
+    transform: translate3d(0, calc(100% + var(--dock-edge)), 0);
+    transition:
+      opacity var(--motion-fast) var(--ease-standard),
+      transform var(--motion-med) var(--ease-standard),
+      visibility 0s linear var(--motion-med);
+  }
+
+  /* The footer is the one bottom-inset owner (panel.css mobile geometry, rule C): it grows by the bar's room
+     so its text is never under the bar. */
+  html:has(.bottom-dock) .site-footer {
+    padding-bottom: calc(var(--bottom-inset) + var(--dock-room));
+    min-height: calc(var(--footer-bar-h) + var(--bottom-inset) + var(--dock-room));
+    max-height: calc(var(--footer-bar-h) + var(--bottom-inset) + var(--dock-room));
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .bottom-dock-bar,
+  .bottom-dock-search { background: var(--modal-frost-bg-fallback); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bottom-dock,
+  .bottom-dock-item { transition: none; }
+  .bottom-dock-item:active,
+  .bottom-dock-search:active { transform: none; }
+}

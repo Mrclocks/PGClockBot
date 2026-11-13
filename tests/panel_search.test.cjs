@@ -1,6 +1,8 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { nextIndex, isSafeHref, normalizeQuery, renderHits } = require("../app/web/static/panel-search.js");
+const {
+  nextIndex, isSafeHref, normalizeQuery, renderHits, isSearchHotkey,
+} = require("../app/web/static/panel-search.js");
 
 function fakeDoc() {
   const make = (tag) => ({
@@ -43,5 +45,31 @@ assert.equal(normalizeQuery("x".repeat(80)).length, 60);
   const box = doc.createElement("div");
   assert.equal(renderHits(doc, box, []), 0);
   assert.equal(box.children[0].textContent, "موردی پیدا نشد.");
+}
+{
+  const idle = {typing: false, modalOpen: false};
+
+  // Ctrl/⌘+K opens search from anywhere, even while typing in another field.
+  assert.equal(isSearchHotkey({key: "k", ctrlKey: true}, idle), true);
+  assert.equal(isSearchHotkey({key: "K", metaKey: true}, {typing: true, modalOpen: false}), true);
+  // Persian layout: the K key types «ن», the physical code still says KeyK.
+  assert.equal(isSearchHotkey({key: "ن", code: "KeyK", ctrlKey: true}, idle), true);
+  // Other combinations are left to the browser.
+  assert.equal(isSearchHotkey({key: "k", ctrlKey: true, shiftKey: true}, idle), false);
+  assert.equal(isSearchHotkey({key: "k", ctrlKey: true, altKey: true}, idle), false);
+  assert.equal(isSearchHotkey({key: "k"}, idle), false);
+  assert.equal(isSearchHotkey({key: "j", ctrlKey: true}, idle), false);
+
+  // "/" only while nothing is being typed and no modal is open.
+  assert.equal(isSearchHotkey({key: "/", code: "Slash"}, idle), true);
+  assert.equal(isSearchHotkey({key: ".", code: "Slash"}, idle), true);
+  assert.equal(isSearchHotkey({key: "/"}, {typing: true, modalOpen: false}), false);
+  assert.equal(isSearchHotkey({key: "/"}, {typing: false, modalOpen: true}), false);
+  assert.equal(isSearchHotkey({key: "?", code: "Slash", shiftKey: true}, idle), false);
+
+  // Already handled, or mid-composition (IME), is never taken over.
+  assert.equal(isSearchHotkey({key: "k", ctrlKey: true, defaultPrevented: true}, idle), false);
+  assert.equal(isSearchHotkey({key: "/", isComposing: true}, idle), false);
+  assert.equal(isSearchHotkey(null, idle), false);
 }
 console.log("panel_search tests passed");

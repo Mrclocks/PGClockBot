@@ -1,6 +1,5 @@
-{# Shared home ops block: portals → work queue → period sales
-   Expects: periods, action_center (optional), portal_bot_href, portal_pg_href,
-            portal_bot_show (bool, default true), portal_pg_show (bool, default true)
+{# Shared home ops block: work queue and sales chart → period sales
+   Expects: periods, action_center (optional)
 #}
 {% from "macros.html" import action_center_icon, inbox_dismiss_btn, card_title %}
 {% from "_home_widgets.html" import account_card %}
@@ -9,43 +8,6 @@
 {% set day = periods.day or {} %}
 {% set week = periods.week or {} %}
 {% set month = periods.month or {} %}
-{% set show_bot = portal_bot_show if portal_bot_show is defined else true %}
-{% set show_pg = portal_pg_show if portal_pg_show is defined else true %}
-{% set bot_href = portal_bot_href or '/dashboard' %}
-{% set pg_href = portal_pg_href or '/pg' %}
-
-{% if show_bot or show_pg %}
-<div class="home-portal-row" role="navigation" aria-label="نمای کلی">
-  {% if show_bot %}
-  <a class="home-portal home-portal-bot" href="{{ bot_href }}">
-    <span class="home-portal-ico" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V5H9"/><path d="M2 14h2M20 14h2"/><circle cx="9.5" cy="13.5" r="1.1"/><circle cx="14.5" cy="13.5" r="1.1"/><path d="M9.5 17h5"/></svg>
-    </span>
-    <span class="home-portal-copy">
-      <strong>نمای کلی ربات</strong>
-      <span class="muted">فروشگاه، کاربران و مالی</span>
-    </span>
-    <span class="home-portal-go" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
-    </span>
-  </a>
-  {% endif %}
-  {% if show_pg %}
-  <a class="home-portal home-portal-pg" href="{{ pg_href }}">
-    <span class="home-portal-ico" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
-    </span>
-    <span class="home-portal-copy">
-      <strong>نمای کلی پاسارگارد</strong>
-      <span class="muted">نود، کاربر پنل و ظرفیت</span>
-    </span>
-    <span class="home-portal-go" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
-    </span>
-  </a>
-  {% endif %}
-</div>
-{% endif %}
 
 <div class="home-main-grid">
 {% include "_home_sales_chart.html" %}

@@ -22,6 +22,44 @@
     return String(text == null ? "" : text).trim().slice(0, 60);
   }
 
+  /** Ctrl/⌘+K opens search from anywhere; "/" only while nothing is being typed and no modal is open.
+      Physical key codes keep both working on the Persian layout. */
+  function isSearchHotkey(event, context) {
+    if (!event || event.defaultPrevented || event.isComposing) return false;
+    const key = String(event.key || "").toLowerCase();
+    const code = String(event.code || "");
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+      return key === "k" || code === "KeyK";
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
+    if (key !== "/" && code !== "Slash") return false;
+    return !(context && (context.typing || context.modalOpen));
+  }
+
+  function isTypingTarget(el) {
+    if (!el || !el.tagName) return false;
+    return /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || Boolean(el.isContentEditable);
+  }
+
+  function installHotkey(doc, input) {
+    doc.addEventListener("keydown", (event) => {
+      const context = {
+        typing: isTypingTarget(event.target),
+        modalOpen: Boolean(doc.querySelector(".ui-modal:not([hidden])")),
+      };
+      if (!isSearchHotkey(event, context)) return;
+      event.preventDefault();
+      // Where the sidebar is a drawer, the bottom bar's search button opens it with the field focused.
+      const opener = doc.querySelector("[data-drawer-search]");
+      if (opener && opener.offsetParent !== null) {
+        opener.click();
+        return;
+      }
+      input.focus();
+      input.select();
+    });
+  }
+
   function renderHits(doc, box, hits) {
     box.textContent = "";
     const safe = (hits || []).filter((h) => h && isSafeHref(h.href));
@@ -125,11 +163,13 @@
     });
   }
 
-  const api = { nextIndex, isSafeHref, normalizeQuery, renderHits };
+  const api = { nextIndex, isSafeHref, normalizeQuery, renderHits, isSearchHotkey };
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   } else {
     root.PanelSearch = api;
     document.querySelectorAll("[data-panel-search]").forEach(bind);
+    const input = document.querySelector("[data-panel-search-input]");
+    if (input) installHotkey(document, input);
   }
 })(typeof window !== "undefined" ? window : globalThis);

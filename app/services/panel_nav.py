@@ -2,6 +2,8 @@
 
 Each item carries the same visibility rule as the route it opens, so the menu never offers a
 link that ends in «دسترسی مجاز نیست». Labels follow the panel glossary (docs/NAV_SETTINGS.md).
+The phone bottom bar and the dashboard shortcuts are views over the built sidebar, so they show
+exactly the items, names, active state and unread dots the sidebar shows.
 """
 
 from __future__ import annotations
@@ -28,6 +30,18 @@ DOT_LABELS: dict[str, str] = {
 }
 
 MARKETING_KEY = "marketing"
+
+# Phone bottom bar: dashboard and action center, then the most used pages the viewer may open.
+DOCK_SLOTS = 4
+DOCK_PRIORITY: tuple[str, ...] = (
+    "home", "inbox", "finance", "users", "customers", "tickets", "pg_tickets", "pg_users", "plans",
+)
+# Dashboard shortcuts, most used first; four per row on desktop, the same grid as the KPI strip.
+DASHBOARD_SHORTCUT_LIMIT = 8
+SHORTCUT_PRIORITY: tuple[str, ...] = (
+    "finance", "users", "customers", "plans", "tickets", "pg_tickets", "resellers", "my_resellers",
+    "pg_users", "shop_overview", "pg_overview", MARKETING_KEY, "shop_settings", "my_subscription", "pg_nodes",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +114,12 @@ class NavItem:
     icon: str
     active: bool = False
     dot: str = ""
+    short: str = ""
+
+    @property
+    def short_label(self) -> str:
+        """Label for the narrow phone bar; the glossary name unless a shorter one is registered."""
+        return self.short or self.label
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +135,24 @@ ActiveRule = Callable[[NavLocation], bool]
 
 
 @dataclass(frozen=True, slots=True)
+class NavDock:
+    """Phone bottom bar: up to ``DOCK_SLOTS`` items; «بیشتر» is lit when the page lives elsewhere."""
+
+    items: tuple[NavItem, ...]
+    more_active: bool
+
+
+@dataclass(frozen=True, slots=True)
+class NavShortcut:
+    """A dashboard shortcut with the sidebar section it sits in."""
+
+    item: NavItem
+    section_label: str
+    tone: str
+    in_dock: bool
+
+
+@dataclass(frozen=True, slots=True)
 class _ItemSpec:
     key: str
     label: str
@@ -123,6 +161,7 @@ class _ItemSpec:
     visible: Rule
     active: ActiveRule
     dot: str = ""
+    short: str = ""
 
 
 def _starts(*prefixes: str) -> ActiveRule:
@@ -173,7 +212,7 @@ _SHOP_ITEMS: tuple[_ItemSpec, ...] = (
     # A shop owner's own package belongs with the shop, not with the account section.
     _ItemSpec("my_subscription", "اشتراک من", "/my-subscription", "card",
               lambda v: v.is_reseller and not v.is_owner, _starts("/my-subscription")),
-    _ItemSpec("users", "کاربران ربات", "/users", "users", _owner, _starts("/users")),
+    _ItemSpec("users", "کاربران ربات", "/users", "users", _owner, _starts("/users"), short="کاربران"),
     _ItemSpec("customers", "مشتریان", "/users", "users",
               lambda v: not v.is_owner and "dashboard" in v.perms, _starts("/users")),
     _ItemSpec("my_resellers", "نمایندگان من", "/resellers", "users",
@@ -216,7 +255,7 @@ def _items(specs: Iterable[_ItemSpec], viewer: NavViewer, loc: NavLocation) -> l
             if marketing is not None:
                 items.append(marketing)
         elif spec.visible(viewer):
-            items.append(NavItem(spec.key, spec.label, spec.href, spec.icon, bool(spec.active(loc)), spec.dot))
+            items.append(NavItem(spec.key, spec.label, spec.href, spec.icon, bool(spec.active(loc)), spec.dot, spec.short))
     return items
 
 
@@ -240,6 +279,29 @@ def build_sidebar(viewer: NavViewer, *, path: str, tab: str = "") -> tuple[NavSe
     if viewer.has_pg or pg_items:
         sections.append(NavSection(PG, "پاسارگارد", "pg", pg_items))
     return tuple(sections)
+
+
+def _items_by_key(sections: Iterable[NavSection]) -> dict[str, tuple[NavItem, NavSection]]:
+    return {item.key: (item, section) for section in sections for item in section.items}
+
+
+def build_dock(sections: Iterable[NavSection]) -> NavDock:
+    """Phone bottom bar for the sidebar ``sections`` the viewer was given."""
+    by_key = _items_by_key(sections)
+    items = tuple(by_key[key][0] for key in DOCK_PRIORITY if key in by_key)[:DOCK_SLOTS]
+    return NavDock(items=items, more_active=not any(item.active for item in items))
+
+
+def build_shortcuts(sections: Iterable[NavSection]) -> tuple[NavShortcut, ...]:
+    """Dashboard shortcuts for the sidebar ``sections``; ``in_dock`` marks the ones the phone bar already has."""
+    sections = tuple(sections)
+    by_key = _items_by_key(sections)
+    dock_keys = {item.key for item in build_dock(sections).items}
+    picked = [by_key[key] for key in SHORTCUT_PRIORITY if key in by_key][:DASHBOARD_SHORTCUT_LIMIT]
+    return tuple(
+        NavShortcut(item=item, section_label=section.label, tone=section.tone, in_dock=item.key in dock_keys)
+        for item, section in picked
+    )
 
 
 _ALL_SPECS: dict[str, _ItemSpec] = {
@@ -278,3 +340,14 @@ def sidebar_for_template(
     """Jinja entry point used by ``base.html``."""
     viewer = viewer_from_context(staff, identity, is_owner=is_owner, marketing_sections=marketing_sections or ())
     return build_sidebar(viewer, path=path, tab=tab)
+
+
+def shortcuts_for_template(
+    staff: Mapping[str, Any] | None,
+    identity: Mapping[str, Any] | None,
+    is_owner: bool,
+    marketing_sections: Iterable[Any],
+) -> tuple[NavShortcut, ...]:
+    """Jinja entry point used by the dashboard body."""
+    viewer = viewer_from_context(staff, identity, is_owner=is_owner, marketing_sections=marketing_sections or ())
+    return build_shortcuts(build_sidebar(viewer, path="/home"))

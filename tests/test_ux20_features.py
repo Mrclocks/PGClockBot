@@ -119,7 +119,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertNotIn("home-panel-bot", home)
         self.assertIn("home-pg-health", home)
         self.assertIn("_home_ops.html", home)
-        self.assertIn("home-portal-bot", Path("app/web/templates/_home_ops.html").read_text(encoding="utf-8"))
+        self.assertIn("_home_shortcuts.html", home)
         ops = Path("app/web/templates/_home_ops.html").read_text(encoding="utf-8")
         self.assertIn("صف کار", ops)
         self.assertIn("ac.entries", ops)

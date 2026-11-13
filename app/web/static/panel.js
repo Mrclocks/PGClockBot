@@ -267,6 +267,8 @@
       }
       document.body.classList.toggle('nav-open', open);
       if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      /* A field left focused in the closed drawer would keep the phone keyboard and hide the bottom bar. */
+      if (!open && document.activeElement && side.contains(document.activeElement)) document.activeElement.blur();
       /* Ported ui-select / kebab menus sit at z-index 5000; drawer is ~50.
          Close them when opening so they cannot paint over the sidebar. */
       if (open) {
@@ -283,31 +285,53 @@
       }
     }
     setOpen(false);
-    if (btn) {
-      /* click alone waits for iOS momentum scroll to settle on a fixed topbar.
-         pointerup opens immediately; click still covers mouse / keyboard. */
+    /* click alone waits for iOS momentum scroll to settle on fixed chrome (topbar, bottom bar).
+       pointerup acts immediately; click still covers mouse / keyboard. */
+    function bindTap(el, action) {
       var ignoreClick = false;
-      function toggleMenu(e) {
+      function run(e) {
         e.preventDefault();
         e.stopPropagation();
-        setOpen(!side.classList.contains('open'));
+        action();
       }
-      btn.addEventListener('pointerup', function (e) {
+      /* A touch acts on pointerup, which may open the drawer over this spot. The tap's follow-up mouse
+         events and click would then land on the drawer or its backdrop: the mousedown takes focus from the
+         search field the action just focused, the click on the backdrop closes the drawer again. */
+      el.addEventListener('pointerdown', function (e) {
+        if (e.pointerType !== 'mouse') e.preventDefault();
+      });
+      el.addEventListener('touchend', function (e) {
+        if (e.cancelable) e.preventDefault();
+      }, { passive: false });
+      el.addEventListener('pointerup', function (e) {
         if (e.pointerType === 'mouse') return;
         if (e.button != null && e.button !== 0) return;
         ignoreClick = true;
-        toggleMenu(e);
+        run(e);
         setTimeout(function () { ignoreClick = false; }, 400);
       });
-      btn.addEventListener('click', function (e) {
+      el.addEventListener('click', function (e) {
         if (ignoreClick) {
           e.preventDefault();
           e.stopPropagation();
           return;
         }
-        toggleMenu(e);
+        run(e);
       });
     }
+    if (btn) bindTap(btn, function () { setOpen(!side.classList.contains('open')); });
+    /* Bottom bar: «بیشتر» opens the drawer; the search circle opens it with the search field focused.
+       Focus runs inside the tap so phones raise the keyboard. */
+    document.querySelectorAll('[data-drawer-open]').forEach(function (el) {
+      bindTap(el, function () { setOpen(true); });
+    });
+    document.querySelectorAll('[data-drawer-search]').forEach(function (el) {
+      bindTap(el, function () {
+        setOpen(true);
+        var input = document.getElementById('panel-search-input');
+        if (input) input.focus({ preventScroll: true });
+      });
+    });
     if (back) back.addEventListener('click', function () { setOpen(false); });
     window.addEventListener('pageshow', function () {
       setOpen(false, true);

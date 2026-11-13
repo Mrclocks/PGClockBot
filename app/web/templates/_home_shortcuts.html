@@ -1,0 +1,19 @@
+{# Dashboard shortcuts: the most used pages, built from the sidebar registry (same rights, names and unread dots).
+   Each one names its sidebar section. On phones the ones already in the bottom bar are hidden. #}
+{% from "_nav_icons.html" import nav_icon %}
+{% set shortcuts = panel_shortcuts(staff, identity if identity is defined else {}, is_owner if is_owner is defined else false, marketing_sections if marketing_sections is defined else ()) if panel_shortcuts is defined else () %}
+{% set sc_dots = {'inbox_alert': inbox_alert|default(false), 'tickets_unread': tickets_unread|default(0), 'cancel_alert': cancel_alert|default(false)} %}
+{% if shortcuts %}
+<nav class="home-shortcuts" aria-label="میانبرهای پرکاربرد">
+  {% for sc in shortcuts %}
+  <a class="home-shortcut home-shortcut-{{ sc.tone }}{% if sc.in_dock %} is-in-dock{% endif %}" href="{{ sc.item.href }}">
+    {{ nav_icon(sc.item.icon) }}
+    <span class="home-shortcut-copy">
+      <strong>{{ sc.item.label }}</strong>
+      <small>{{ sc.section_label }}</small>
+    </span>
+    {% if sc.item.dot and sc_dots[sc.item.dot] %}<i class="nav-dot" aria-label="{{ nav_dot_labels[sc.item.dot] }}"></i>{% endif %}
+  </a>
+  {% endfor %}
+</nav>
+{% endif %}

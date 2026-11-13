@@ -64,6 +64,14 @@
   /* One duration for the drawer slide, the dim's edge and its fade, so they move as one sheet. */
   --drawer-motion: 240ms;
   --brand-logo-size: 40px;
+  /* Phone bottom bar (panel-nav-modes.css): the capsule and the search circle share one height,
+     items are control-height (--btn-h) inside it. --dock-room is what the page footer leaves free under it. */
+  --dock-h: calc(var(--btn-h) + 2 * var(--space-0));
+  --dock-edge: var(--space-1_5);
+  --dock-room: calc(var(--dock-h) + var(--dock-edge));
+  --dock-ico: 20px;
+  --dock-label-fs: 11px;
+  --dock-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
   /* Shared matte glass — modal sticky chrome + shell topbar/footers/mobile drawer.
      Keep the mix/blur numbers identical everywhere (see .ui-modal-head). */
   --modal-frost-bg: color-mix(in srgb, var(--bg-card) 52%, transparent);
@@ -9256,122 +9264,75 @@ html[data-theme="light"] .pg-node-metric {
   padding: var(--card-pad);
 }
 
-/* —— Home portals (bot orange / PG blue) —— */
-.home-portal-row {
+/* —— Home shortcuts: same four-column grid as the KPI strip above; the icon takes the colour of the
+   sidebar section the page sits in, and the second line names that section. —— */
+.home-shortcuts {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-2);
   margin-bottom: var(--section-gap);
 }
-.home-portal {
+.home-shortcut {
+  --shortcut-tone: var(--muted-fg);
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  min-height: 72px;
-  padding: var(--space-2) var(--card-pad);
-  border-radius: var(--radius);
+  gap: var(--space-1_5);
+  min-width: 0;
+  min-height: var(--dock-h);
+  padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border);
-  text-decoration: none !important;
-  color: inherit !important;
+  border-radius: var(--control-radius);
+  background: var(--card);
+  color: inherit;
+  text-decoration: none;
   box-sizing: border-box;
   transition:
-    background var(--motion-fast) var(--ease-standard),
     border-color var(--motion-fast) var(--ease-standard),
     transform var(--motion-fast) var(--ease-standard);
 }
-.home-portal:hover { transform: translateY(-1px); }
-.home-portal:focus-visible {
+.home-shortcut-bot { --shortcut-tone: var(--bot-line); }
+.home-shortcut-pg { --shortcut-tone: var(--pg-line); }
+.home-shortcut:hover {
+  border-color: color-mix(in srgb, var(--shortcut-tone) 50%, var(--border));
+  transform: translateY(-1px);
+}
+.home-shortcut:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--shortcut-tone) 55%, transparent);
 }
-.home-portal-bot {
-  background: var(--bg-card);
-  border: 1px solid color-mix(in srgb, var(--bot-line) 42%, var(--border));
+.home-shortcut > .nav-ico { width: var(--dock-ico); height: var(--dock-ico); color: var(--shortcut-tone); }
+.home-shortcut-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.home-shortcut-copy strong,
+.home-shortcut-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.home-portal-bot:hover {
-  background: color-mix(in srgb, var(--muted) 35%, var(--bg-card));
-  border-color: color-mix(in srgb, var(--bot-line) 55%, var(--border));
+.home-shortcut-copy strong { font-size: var(--title-size); font-weight: 600; }
+.home-shortcut-copy small { font-size: 12px; color: var(--muted-fg); }
+.home-shortcut > .nav-dot { position: absolute; top: var(--space-1_5); inset-inline-end: var(--space-2); }
+/* Phones and tablets have the bottom bar: shortcuts it already holds are hidden, the rest scroll in one row. */
+@media (max-width: 900px) {
+  .home-shortcuts {
+    display: flex;
+    gap: var(--space-1);
+    margin-inline: calc(-1 * var(--space-2));
+    padding-inline: var(--space-2);
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: var(--space-2);
+    scrollbar-width: none;
+  }
+  .home-shortcuts::-webkit-scrollbar { display: none; }
+  .home-shortcut { flex: 0 0 auto; max-width: 70vw; scroll-snap-align: start; }
+  .home-shortcut.is-in-dock { display: none; }
+  .home-shortcut:hover { transform: none; }
 }
-.home-portal-bot:focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bot-line) 55%, transparent);
+@media (prefers-reduced-motion: reduce) {
+  .home-shortcut { transition: none; }
+  .home-shortcut:hover { transform: none; }
 }
-.home-portal-pg {
-  background: var(--bg-card);
-  border: 1px solid color-mix(in srgb, var(--pg-line) 42%, var(--border));
-}
-.home-portal-pg:hover {
-  background: color-mix(in srgb, var(--muted) 35%, var(--bg-card));
-  border-color: color-mix(in srgb, var(--pg-line) 55%, var(--border));
-}
-.home-portal-ico {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  flex: 0 0 auto;
-  border-radius: 14px;
-  background: transparent;
-  border: 1px solid transparent;
-}
-.home-portal-bot .home-portal-ico {
-  color: var(--bot-line);
-  border-color: color-mix(in srgb, var(--bot-line) 40%, var(--border));
-}
-.home-portal-pg .home-portal-ico {
-  color: var(--pg-line);
-  border-color: color-mix(in srgb, var(--pg-line) 40%, var(--border));
-}
-.home-portal-ico svg {
-  width: 20px;
-  height: 20px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 1.75;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.home-portal-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-.home-portal-copy strong {
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.home-portal-copy .muted {
-  font-size: 12px;
-  line-height: 1.35;
-}
-.home-portal-go {
-  flex: 0 0 auto;
-  align-self: center;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  margin: 0;
-  padding: 0;
-  line-height: 0;
-  opacity: 0.55;
-  color: inherit;
-}
-.home-portal-go svg {
-  width: 16px;
-  height: 16px;
-  display: block;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.home-portal-bot .home-portal-go { color: var(--bot-line); }
-.home-portal-pg .home-portal-go { color: var(--pg-line); }
 
 /* —— Period sales —— */
 .home-periods-card {
@@ -9491,53 +9452,9 @@ html[data-theme="light"] .pg-node-metric {
   margin: 0;
   font-size: 13px;
 }
-html[data-theme="light"] .home-portal-bot {
-  background: #fff;
-  border-color: color-mix(in srgb, var(--bot-line) 36%, var(--border));
-}
-html[data-theme="light"] .home-portal-pg {
-  background: #fff;
-  border-color: color-mix(in srgb, var(--pg-line) 36%, var(--border));
-}
-html[data-theme="light"] .home-portal-bot:hover {
-  background: #fafafa;
-  border-color: color-mix(in srgb, var(--bot-line) 48%, var(--border));
-}
-html[data-theme="light"] .home-portal-pg:hover {
-  background: #fafafa;
-  border-color: color-mix(in srgb, var(--pg-line) 48%, var(--border));
-}
 html[data-theme="light"] .home-period {
   background: rgba(0, 0, 0, 0.02);
 }
-@media (max-width: 560px) {
-  /* Portals stay side-by-side on mobile (first row) */
-  .home-portal-row {
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-1);
-  }
-  .home-portal {
-    min-height: 64px;
-    padding: var(--space-1_5) var(--space-1_5);
-    gap: var(--space-1);
-  }
-  .home-portal-ico {
-    width: 34px;
-    height: 34px;
-    border-radius: 12px;
-  }
-  .home-portal-ico svg {
-    width: 17px;
-    height: 17px;
-  }
-  .home-portal-copy strong {
-    font-size: 12.5px;
-  }
-  .home-portal-copy .muted {
-    display: none;
-  }
-}
-
 .home-dash > .card > h2,
 .home-conn-card > h2 {
   margin: 0;
