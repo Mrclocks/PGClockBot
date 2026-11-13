@@ -2,6 +2,8 @@
 
 Each item carries the same visibility rule as the route it opens, so the menu never offers a
 link that ends in «دسترسی مجاز نیست». Labels follow the panel glossary (docs/NAV_SETTINGS.md).
+The phone bottom bar is a view over the built sidebar, so it shows exactly the items, names, active
+state and unread dots the sidebar shows.
 """
 
 from __future__ import annotations
@@ -28,6 +30,12 @@ DOT_LABELS: dict[str, str] = {
 }
 
 MARKETING_KEY = "marketing"
+
+# Phone bottom bar: dashboard and action center, then the most used pages the viewer may open.
+DOCK_SLOTS = 4
+DOCK_PRIORITY: tuple[str, ...] = (
+    "home", "inbox", "finance", "users", "customers", "tickets", "pg_tickets", "pg_users", "plans",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +108,12 @@ class NavItem:
     icon: str
     active: bool = False
     dot: str = ""
+    short: str = ""
+
+    @property
+    def short_label(self) -> str:
+        """Label for the narrow phone bar; the glossary name unless a shorter one is registered."""
+        return self.short or self.label
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +129,14 @@ ActiveRule = Callable[[NavLocation], bool]
 
 
 @dataclass(frozen=True, slots=True)
+class NavDock:
+    """Phone bottom bar: up to ``DOCK_SLOTS`` items; «منو» is lit when the page lives elsewhere."""
+
+    items: tuple[NavItem, ...]
+    more_active: bool
+
+
+@dataclass(frozen=True, slots=True)
 class _ItemSpec:
     key: str
     label: str
@@ -123,6 +145,7 @@ class _ItemSpec:
     visible: Rule
     active: ActiveRule
     dot: str = ""
+    short: str = ""
 
 
 def _starts(*prefixes: str) -> ActiveRule:
@@ -173,7 +196,7 @@ _SHOP_ITEMS: tuple[_ItemSpec, ...] = (
     # A shop owner's own package belongs with the shop, not with the account section.
     _ItemSpec("my_subscription", "اشتراک من", "/my-subscription", "card",
               lambda v: v.is_reseller and not v.is_owner, _starts("/my-subscription")),
-    _ItemSpec("users", "کاربران ربات", "/users", "users", _owner, _starts("/users")),
+    _ItemSpec("users", "کاربران ربات", "/users", "users", _owner, _starts("/users"), short="کاربران"),
     _ItemSpec("customers", "مشتریان", "/users", "users",
               lambda v: not v.is_owner and "dashboard" in v.perms, _starts("/users")),
     _ItemSpec("my_resellers", "نمایندگان من", "/resellers", "users",
@@ -216,7 +239,7 @@ def _items(specs: Iterable[_ItemSpec], viewer: NavViewer, loc: NavLocation) -> l
             if marketing is not None:
                 items.append(marketing)
         elif spec.visible(viewer):
-            items.append(NavItem(spec.key, spec.label, spec.href, spec.icon, bool(spec.active(loc)), spec.dot))
+            items.append(NavItem(spec.key, spec.label, spec.href, spec.icon, bool(spec.active(loc)), spec.dot, spec.short))
     return items
 
 
@@ -240,6 +263,24 @@ def build_sidebar(viewer: NavViewer, *, path: str, tab: str = "") -> tuple[NavSe
     if viewer.has_pg or pg_items:
         sections.append(NavSection(PG, "پاسارگارد", "pg", pg_items))
     return tuple(sections)
+
+
+def build_dock(sections: Iterable[NavSection]) -> NavDock:
+    """Phone bottom bar for the sidebar ``sections`` the viewer was given.
+
+    Items come in ``DOCK_PRIORITY`` order; a second entry for a page already in the bar (PasarGuard staff who
+    also hold the shop's ticket right see «پشتیبانی» twice in the sidebar) is skipped."""
+    by_key = {item.key: item for section in sections for item in section.items}
+    items: list[NavItem] = []
+    hrefs: set[str] = set()
+    for key in DOCK_PRIORITY:
+        item = by_key.get(key)
+        if item is None or item.href in hrefs:
+            continue
+        items.append(item)
+        hrefs.add(item.href)
+    items = tuple(items[:DOCK_SLOTS])
+    return NavDock(items=items, more_active=not any(item.active for item in items))
 
 
 _ALL_SPECS: dict[str, _ItemSpec] = {

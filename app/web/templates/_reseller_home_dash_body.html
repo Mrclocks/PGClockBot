@@ -51,10 +51,6 @@
 {% set _ = tiles.append({'name': 'پاسارگارد', 'detail': pg_detail, 'state': pg_state, 'icon': 'pg', 'href': '/pg'}) %}
 {{ status_tiles(tiles) }}
 
-{% set portal_bot_show = ('dashboard' in (staff.get('permissions') or []) or staff.role == 'reseller') %}
-{% set portal_pg_show = ('pg_overview' in (staff.get('pg_permissions') or []) or staff.role == 'reseller' or staff.get('pg_admin_username')) %}
-{% set portal_bot_href = '/dashboard' %}
-{% set portal_pg_href = '/pg' %}
 {% include "_home_ops.html" %}
 
 {% if pg_limits and pg_limits.ready %}

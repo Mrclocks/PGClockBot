@@ -75,10 +75,11 @@
   {% set is_pg_staff = staff.role == 'pg_staff' %}
   {% set ident = identity if identity is defined and identity else {} %}
   <div class="shell">
+    {# Phone header: logo, brand and version, and the panel search. The menu opens from «منو» in the bottom bar. #}
     <header class="topbar mobile-only">
       <a class="topbar-brand" href="/home" aria-label="داشبورد">
         <span class="brand-logo{% if brand_custom_logo %} brand-logo--custom{% endif %}" aria-hidden="true"><img src="{{ brand_logo }}" alt="" width="40" height="40" /></span>
-        <div class="topbar-brand-text">
+        <span class="topbar-brand-text">
           <strong dir="auto">{{ brand_name }}</strong>
           {% if is_owner %}
           <span class="topbar-version" dir="ltr">
@@ -87,11 +88,19 @@
             <span class="channel-badge channel-badge-{{ deployed_channel|default('main') }}" title="کانال نصب‌شده فعلی">{{ deployed_channel_label|default('پایدار') }}</span>
           </span>
           {% endif %}
-        </div>
+        </span>
       </a>
-      <button type="button" class="menu-toggle" id="menu-toggle" aria-label="منو" aria-expanded="false" aria-controls="sidebar">
-        <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span>
-      </button>
+      <div class="side-search topbar-search" data-panel-search role="search">
+        <label class="sr-only" for="panel-search-input-top">جستجو در پنل</label>
+        <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="panel-search-input-top" type="search" autocomplete="off" maxlength="60" placeholder="جستجو…"
+               aria-controls="panel-search-results-top" aria-expanded="false" data-panel-search-input />
+        {# Takes the magnifier's place while the field is open: clears it and folds it back into the circle. #}
+        <button type="button" class="topbar-search-close" aria-label="بستن جستجو" data-panel-search-clear>
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+        <div id="panel-search-results-top" class="side-search-results" role="listbox" aria-label="نتیجه‌های جستجو" hidden data-panel-search-results></div>
+      </div>
     </header>
 
     <aside class="side" id="sidebar" aria-label="منوی اصلی">
@@ -113,7 +122,8 @@
         <label class="sr-only" for="panel-search-input">جستجو در پنل</label>
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input id="panel-search-input" type="search" autocomplete="off" maxlength="60" placeholder="جستجوی صفحه یا تنظیم…"
-               aria-controls="panel-search-results" aria-expanded="false" data-panel-search-input />
+               aria-controls="panel-search-results" aria-expanded="false" aria-keyshortcuts="Control+K /" data-panel-search-input />
+        <kbd class="side-search-key" aria-hidden="true">/</kbd>
         <div id="panel-search-results" class="side-search-results" role="listbox" aria-label="نتیجه‌های جستجو" hidden data-panel-search-results></div>
       </div>
       <div class="side-theme" id="side-theme">
@@ -206,6 +216,30 @@
     </aside>
 
     <div class="side-backdrop" id="side-backdrop" aria-hidden="true"></div>
+
+    {# Phone bottom bar: the most used sidebar items plus «منو» (the full sidebar as a drawer); it becomes the drawer's close button. #}
+    {% set dock = panel_dock(nav_sections) if (nav_sections and panel_dock is defined) else none %}
+    {% if dock and dock.items %}
+    <div class="bottom-dock" data-bottom-dock>
+      <nav class="bottom-dock-bar" aria-label="دسترسی سریع">
+        {% for item in dock.items %}
+        <a href="{{ item.href }}" class="bottom-dock-item{% if item.active %} is-active{% endif %}"{% if item.active %} aria-current="page"{% endif %}>
+          {{ nav_icon(item.icon) }}
+          <span class="bottom-dock-label">{{ item.short_label }}</span>
+          {% if item.dot and nav_dots[item.dot] %}<i class="nav-dot" aria-label="{{ nav_dot_labels[item.dot] }}"></i>{% endif %}
+        </a>
+        {% endfor %}
+        <button type="button" class="bottom-dock-item{% if dock.more_active %} is-active{% endif %}" data-drawer-open aria-controls="sidebar" aria-expanded="false">
+          {{ nav_icon('menu') }}
+          <span class="bottom-dock-label">منو</span>
+        </button>
+      </nav>
+      {# While the drawer is open the bar folds into this button at its inline end. #}
+      <button type="button" class="bottom-dock-close" data-drawer-close aria-controls="sidebar" aria-label="بستن منو">
+        <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    {% endif %}
 
     <main class="main ds">
       <div class="main-body">
@@ -313,6 +347,7 @@
   <script src="/static/money-inputs.js?v={{ money_inputs_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/nav-accordion.js?v={{ asset_v('nav-accordion.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/panel-search.js?v={{ asset_v('panel-search.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/panel-keyboard.js?v={{ asset_v('panel-keyboard.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/panel.js?v={{ panel_script_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/list-inputs.js?v={{ list_inputs_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/table-list.js?v={{ asset_v('table-list.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>

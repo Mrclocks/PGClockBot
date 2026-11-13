@@ -89,7 +89,7 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
   display: flex; flex-direction: row; align-items: center; gap: var(--g3); width: 100%; min-height: var(--ctl-h);
 }
 .ui-modal.ds .modal-title { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--g3); margin: 0; }
-.ui-modal.ds .modal-title .page-title-ico { width: var(--ctl-h); height: var(--ctl-h); border-radius: 14px; }
+.ui-modal.ds .modal-title .page-title-ico { width: var(--ctl-h); height: var(--ctl-h); }
 .ui-modal.ds .modal-title-copy { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
 .ui-modal.ds .modal-title h2 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ui-modal.ds .modal-title-caption { margin: 0; font-size: 12px; line-height: 1.4; }
@@ -262,7 +262,8 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 }
 .ds .section-tabs:not(.settings-subtabs) a.active, .ds .section-tabs:not(.settings-subtabs) .tab-btn.active,
 .ds .ds-seg button.on, .ds .ds-aud button.on, .ds .sales-seg button.on, .ds .sales-seg a.on, .ds .modal-section-tabs .tab-btn.active {
-  background: var(--bg-card); color: var(--sel-fg); box-shadow: inset 0 0 0 1.5px var(--sel-line); font-weight: 600;
+  /* The bottom bar's active pill: a soft brand fill, no outline. */
+  background: var(--sel-bg); color: var(--sel-fg); box-shadow: none; font-weight: 600;
 }
 .ds .ds-seg { width: 100%; }
 .ds .ds-seg button { flex: 1 1 0; }
@@ -288,7 +289,7 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
   flex: 0 0 auto; height: var(--cmp-h); min-height: var(--cmp-h); padding: 0 var(--g4); margin: 0;
   border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted-fg); font-size: 13px; text-decoration: none;
 }
-.ds .section-tabs.settings-subtabs a.active { background: var(--sel-bg); color: var(--sel-fg); border: 1px solid var(--sel-line); box-shadow: inset 0 0 0 0.5px var(--sel-line); font-weight: 600; }
+.ds .section-tabs.settings-subtabs a.active { background: var(--sel-bg); color: var(--sel-fg); border-color: transparent; box-shadow: none; font-weight: 600; }
 
 /* ===================================================================== 7. Choices, chips and tags */
 .ds .ds-steps { display: flex; gap: 6px; width: 100%; overflow-x: auto; scrollbar-width: none; }
@@ -492,39 +493,149 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 }
 
 /* ===================================================================== 14. Sidebar: search and theme rows
-   Search sits right under the menu header; both rows are 44 high, same box as every field. */
-.side .side-search {
+   Search sits right under the menu header; both rows are 44 high, same box as every field.
+   On phones the same search lives in the header (.topbar-search) and the drawer's copy is hidden. */
+:is(.side, .topbar) .side-search {
   position: relative; display: flex; align-items: center; gap: var(--space-1);
   min-height: var(--btn-h); height: var(--btn-h); margin: 0 0 var(--space-1); padding: 0 var(--space-2);
   border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--control-bg, rgba(255, 255, 255, 0.04));
   box-sizing: border-box;
 }
-.side .side-search:focus-within { border-color: color-mix(in srgb, var(--brand) 72%, transparent); }
-.side .side-search > .nav-ico { flex: 0 0 18px; width: 18px; height: 18px; color: var(--muted-fg); margin: 0; }
-.side .side-search input[type="search"] {
+:is(.side, .topbar) .side-search:focus-within { border-color: color-mix(in srgb, var(--brand) 72%, transparent); }
+:is(.side, .topbar) .side-search > .nav-ico { flex: 0 0 18px; width: 18px; height: 18px; color: var(--muted-fg); margin: 0; }
+:is(.side, .topbar) .side-search input[type="search"] {
   flex: 1 1 auto; min-width: 0; width: auto; height: 100%; min-height: 0; margin: 0; padding: 0;
   border: 0 !important; border-radius: 0; background: transparent !important; box-shadow: none !important;
   color: var(--foreground); font: inherit; font-size: 14px !important; outline: none; -webkit-appearance: none; appearance: none;
 }
-.side .side-search input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
-.side .side-search-results {
+:is(.side, .topbar) .side-search input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
+:is(.side, .topbar) .side-search-results {
   position: absolute; inset-inline: 0; top: calc(100% + var(--space-1)); z-index: 60;
   display: flex; flex-direction: column; max-height: min(60vh, 440px); overflow-y: auto; padding: var(--space-0);
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
 }
-.side .side-search-results[hidden] { display: none; }
-.side .side-search-hit {
+:is(.side, .topbar) .side-search-results[hidden] { display: none; }
+:is(.side, .topbar) .side-search-hit {
   display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: var(--btn-h);
   padding: var(--space-1) var(--space-1_5); border-radius: 12px; color: var(--foreground); text-decoration: none;
 }
-.side .side-search-hit + .side-search-hit { box-shadow: 0 -1px 0 color-mix(in srgb, var(--border) 70%, transparent); }
-.side .side-search-hit:hover, .side .side-search-hit:focus-visible, .side .side-search-hit.is-active {
+:is(.side, .topbar) .side-search-hit + .side-search-hit { box-shadow: 0 -1px 0 color-mix(in srgb, var(--border) 70%, transparent); }
+:is(.side, .topbar) .side-search-hit:hover, :is(.side, .topbar) .side-search-hit:focus-visible, :is(.side, .topbar) .side-search-hit.is-active {
   background: color-mix(in srgb, var(--brand) 10%, transparent); outline: none;
 }
-.side .side-search-label { font-size: 13.5px; font-weight: 600; line-height: 1.4; }
-.side .side-search-where { font-size: 12px; line-height: 1.4; color: var(--muted-fg); }
-.side .side-search-empty { margin: 0; padding: var(--space-2); text-align: center; font-size: 13px; color: var(--muted-fg); }
+:is(.side, .topbar) .side-search-label { font-size: 13.5px; font-weight: 600; line-height: 1.4; }
+:is(.side, .topbar) .side-search-where { font-size: 12px; line-height: 1.4; color: var(--muted-fg); }
+:is(.side, .topbar) .side-search-empty { margin: 0; padding: var(--space-2); text-align: center; font-size: 13px; color: var(--muted-fg); }
+/* Phones: the header search is a round button at the capsule's end that opens into a field across the
+   capsule. The field is always full width and only its clip changes, so the opening runs on the compositor;
+   the clip reaches far below while open so the results list is never cut. The real input covers the circle,
+   so a tap focuses it straight away and the phone keyboard rises. */
+@media (max-width: 900px) {
+  .side .side-search { display: none; }
+  .topbar .side-search.topbar-search {
+    position: absolute;
+    inset-block-start: var(--space-0);
+    inset-inline: var(--space-0);
+    z-index: 2;
+    direction: rtl;
+    height: var(--btn-h);
+    margin: 0;
+    padding: 0;
+    border-color: transparent;
+    background: color-mix(in srgb, var(--foreground) 6%, var(--bg-card));
+    /* The header is laid out LTR: the circle is the field's right end, the logo stays clear on the left. */
+    clip-path: inset(0 0 0 calc(100% - var(--btn-h)) round calc(var(--btn-h) / 2));
+    transition:
+      clip-path var(--dock-morph) var(--ease-in) var(--dock-morph-lead),
+      background-color var(--motion-fast) var(--ease-standard),
+      border-color var(--motion-fast) var(--ease-standard);
+  }
+  .topbar .side-search.topbar-search > .nav-ico {
+    position: absolute;
+    inset-inline-start: calc((var(--btn-h) - 18px) / 2);
+    pointer-events: none;
+    transition:
+      opacity var(--motion-med) var(--ease-out) var(--dock-morph-lead),
+      transform var(--dock-morph) var(--ease-out) var(--dock-morph-lead);
+  }
+  /* The × sits on the magnifier's spot: it turns in as the field opens and out as it folds. */
+  .topbar .topbar-search-close {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: var(--btn-h);
+    height: var(--btn-h);
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted-fg);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: rotate(-90deg) scale(0.6);
+    transition:
+      opacity var(--motion-fast) var(--ease-in),
+      transform var(--motion-fast) var(--ease-in),
+      visibility 0s linear var(--motion-fast);
+  }
+  .topbar .topbar-search-close .nav-ico { width: 18px; height: 18px; stroke-width: 2; }
+  .topbar .topbar-search-close:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+  .topbar .side-search.topbar-search input[type="search"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    padding-inline: var(--btn-h) var(--space-2) !important;
+    /* 16px keeps iOS from zooming the page when the field takes focus. */
+    font-size: var(--control-fs) !important;
+    opacity: 0;
+    transition: opacity var(--motion-fast) var(--ease-standard);
+  }
+  .topbar .side-search.topbar-search:is(:focus-within, :has(input:not(:placeholder-shown))) {
+    border-color: color-mix(in srgb, var(--brand) 60%, transparent);
+    background: var(--bg-card);
+    clip-path: inset(0 0 -100vh 0 round calc(var(--btn-h) / 2));
+    transition:
+      clip-path var(--dock-morph) var(--ease-out),
+      background-color var(--motion-fast) var(--ease-standard),
+      border-color var(--motion-fast) var(--ease-standard);
+  }
+  .topbar .side-search.topbar-search:is(:focus-within, :has(input:not(:placeholder-shown))) input[type="search"] {
+    opacity: 1;
+    transition-delay: var(--dock-morph-items);
+  }
+  .topbar .side-search.topbar-search:is(:focus-within, :has(input:not(:placeholder-shown))) > .nav-ico {
+    opacity: 0;
+    transform: rotate(90deg) scale(0.6);
+    transition:
+      opacity var(--motion-fast) var(--ease-in),
+      transform var(--motion-fast) var(--ease-in);
+  }
+  .topbar .side-search.topbar-search:is(:focus-within, :has(input:not(:placeholder-shown))) .topbar-search-close {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+    transition:
+      opacity var(--motion-med) var(--ease-out) var(--dock-morph-items),
+      transform var(--dock-morph) var(--ease-out) var(--dock-morph-items),
+      visibility 0s linear 0s;
+  }
+  .topbar .side-search-results { top: calc(100% + var(--space-1_5)); }
+}
+@media (max-width: 900px) and (prefers-reduced-motion: reduce) {
+  .topbar .side-search.topbar-search,
+  .topbar .side-search.topbar-search > .nav-ico,
+  .topbar .side-search.topbar-search input[type="search"],
+  .topbar .topbar-search-close { transition: none !important; }
+}
 .side .side-theme-btn { min-height: var(--btn-h); padding: 0 var(--space-2); font-size: 13px; }
 
 /* ===================================================================== 15. Optical spacing

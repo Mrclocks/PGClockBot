@@ -250,7 +250,6 @@
     }
 
     const side = document.getElementById('sidebar');
-    const btn = document.getElementById('menu-toggle');
     const back = document.getElementById('side-backdrop');
     function setOpen(v, instant){
       if (!side) return;
@@ -266,7 +265,10 @@
         back.setAttribute('aria-hidden', open ? 'false' : 'true');
       }
       document.body.classList.toggle('nav-open', open);
-      if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      document.querySelectorAll('[data-drawer-open]').forEach(function (el) {
+        el.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      moveMenuFocus(open);
       /* Ported ui-select / kebab menus sit at z-index 5000; drawer is ~50.
          Close them when opening so they cannot paint over the sidebar. */
       if (open) {
@@ -282,32 +284,65 @@
         });
       }
     }
+    /* Opening moves focus into the menu (onto its ×, the control under the thumb); closing hands it back to
+       «منو» when it was inside, which also drops a phone keyboard left up by a field in the menu. */
+    function moveMenuFocus(open) {
+      var opener = document.querySelector('.bottom-dock [data-drawer-open]');
+      var closer = document.querySelector('.bottom-dock [data-drawer-close]');
+      var current = document.activeElement;
+      if (!opener || !closer || !opener.getClientRects().length) {
+        if (!open && current && side.contains(current)) current.blur();
+        return;
+      }
+      if (open) {
+        closer.focus({ preventScroll: true });
+      } else if (current && (side.contains(current) || current === closer)) {
+        opener.focus({ preventScroll: true });
+      }
+    }
     setOpen(false);
-    if (btn) {
-      /* click alone waits for iOS momentum scroll to settle on a fixed topbar.
-         pointerup opens immediately; click still covers mouse / keyboard. */
+    /* click alone waits for iOS momentum scroll to settle on fixed chrome (bottom bar, drawer head).
+       pointerup acts immediately; click still covers mouse / keyboard. */
+    function bindTap(el, action) {
       var ignoreClick = false;
-      function toggleMenu(e) {
+      function run(e) {
         e.preventDefault();
         e.stopPropagation();
-        setOpen(!side.classList.contains('open'));
+        action();
       }
-      btn.addEventListener('pointerup', function (e) {
+      /* A touch acts on pointerup, which may open or close the drawer over this spot. The tap's follow-up
+         mouse events and click would then land on whatever is there now (the drawer, its backdrop or the
+         page) and act a second time. */
+      el.addEventListener('pointerdown', function (e) {
+        if (e.pointerType !== 'mouse') e.preventDefault();
+      });
+      el.addEventListener('touchend', function (e) {
+        if (e.cancelable) e.preventDefault();
+      }, { passive: false });
+      el.addEventListener('pointerup', function (e) {
         if (e.pointerType === 'mouse') return;
         if (e.button != null && e.button !== 0) return;
         ignoreClick = true;
-        toggleMenu(e);
+        run(e);
         setTimeout(function () { ignoreClick = false; }, 400);
       });
-      btn.addEventListener('click', function (e) {
+      el.addEventListener('click', function (e) {
         if (ignoreClick) {
           e.preventDefault();
           e.stopPropagation();
           return;
         }
-        toggleMenu(e);
+        run(e);
       });
     }
+    window.PanelTap = { bind: bindTap };
+    /* Bottom bar «منو» opens the drawer; the × in the drawer head closes it. */
+    document.querySelectorAll('[data-drawer-open]').forEach(function (el) {
+      bindTap(el, function () { setOpen(!side.classList.contains('open')); });
+    });
+    document.querySelectorAll('[data-drawer-close]').forEach(function (el) {
+      bindTap(el, function () { setOpen(false); });
+    });
     if (back) back.addEventListener('click', function () { setOpen(false); });
     window.addEventListener('pageshow', function () {
       setOpen(false, true);

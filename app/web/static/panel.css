@@ -36,8 +36,6 @@
   /* Bot / PG solid chrome — no gradient borders */
   --bot-line: #e08a3c;
   --pg-line: #3d8fd1;
-  --bot-fill: color-mix(in srgb, var(--bot-line) 12%, transparent);
-  --pg-fill: color-mix(in srgb, var(--pg-line) 12%, transparent);
   /* Motion — visible but calm */
   --motion-fast: 180ms;
   --motion-med: 280ms;
@@ -64,6 +62,34 @@
   /* One duration for the drawer slide, the dim's edge and its fade, so they move as one sheet. */
   --drawer-motion: 240ms;
   --brand-logo-size: 40px;
+  /* Phone bottom bar (panel-nav-modes.css): the capsule and the search circle share one height,
+     items are control-height (--btn-h) inside it. --dock-room is what the page footer leaves free under it. */
+  --dock-h: calc(var(--btn-h) + 2 * var(--space-0));
+  --dock-edge: var(--space-1_5);
+  /* Distance from the screen bottom: 12px, or the home-indicator safe area where that is larger, so the bar
+     never sits in the system gesture strip and never floats needlessly high above it. */
+  --dock-bottom: max(var(--dock-edge), var(--safe-bottom));
+  --dock-room: calc(var(--dock-h) + var(--dock-edge));
+  /* Hide is quicker than show: it gets out of the way, then settles back in with a soft deceleration. */
+  --dock-show: 360ms;
+  --dock-hide: 240ms;
+  /* Folding into the drawer's close button: the items fade first, the capsule folds, the × turns in;
+     unfolding runs the same steps backwards. */
+  --dock-morph: 380ms;
+  --dock-morph-lead: 80ms;
+  --dock-morph-items: 160ms;
+  /* Phone header and menu sheet (panel-nav-modes.css): the header capsule mirrors the bottom bar; on tablets
+     header, bar and sheet stop at --dock-max-w and centre. */
+  --dock-max-w: 560px;
+  --dock-inline: max(var(--dock-edge), calc((100vw - var(--dock-max-w)) / 2));
+  --hdr-top: max(var(--dock-edge), calc(env(safe-area-inset-top, 0px) + var(--space-1)));
+  --sheet-in: 420ms;
+  --sheet-out: 260ms;
+  --tile-ico: 48px;
+  --sheet-shadow: 0 24px 64px rgb(0 0 0 / 0.28);
+  --dock-ico: 20px;
+  --dock-label-fs: 11px;
+  --dock-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
   /* Shared matte glass — modal sticky chrome + shell topbar/footers/mobile drawer.
      Keep the mix/blur numbers identical everywhere (see .ui-modal-head). */
   --modal-frost-bg: color-mix(in srgb, var(--bg-card) 52%, transparent);
@@ -1057,7 +1083,10 @@ tr.principal-row-l2 td:first-child {
   gap: var(--space-1);
   min-width: 0;
 }
+/* Page and modal title icon: the launcher tile (panel-nav-modes.css) at title size — the icon centred in a
+   rounded square tinted with the section colour (shop orange, PasarGuard blue, web panel neutral), no outline. */
 .page-title-ico {
+  --tile-tone: var(--bot-line);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1066,30 +1095,25 @@ tr.principal-row-l2 td:first-child {
   flex: 0 0 auto;
   outline: none;
   box-shadow: none;
-  border-radius: 18px;
-  border: 1px solid color-mix(in srgb, var(--bot-line) 55%, var(--border));
-  background: var(--bg-card);
-  color: var(--bot-line);
+  border: 0;
+  border-radius: var(--menu-radius);
+  background: color-mix(in srgb, var(--tile-tone) 10%, transparent);
+  color: var(--tile-tone);
   animation: page-title-ico-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .page-title-ico svg {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   stroke: currentColor;
   fill: none;
   stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.page-title-ico--pg {
-  border-color: color-mix(in srgb, var(--pg-line) 55%, var(--border));
-  background: var(--bg-card);
-  color: var(--pg-line);
-}
+.page-title-ico--pg { --tile-tone: var(--pg-line); }
 .page-title-ico--neutral {
-  border: 1px solid var(--border);
-  background: var(--muted);
-  color: var(--muted-fg);
+  --tile-tone: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
 }
 .page-head h1,
 .page-title h1 {
@@ -1161,8 +1185,7 @@ tr.principal-row-l2 td:first-child {
   }
   .btn:active:not(:disabled), a.btn:active,
   .nav-item:active, .icon-btn:active,
-  .section-tabs a:active, .section-tabs .tab-btn:active,
-  .menu-toggle:active {
+  .section-tabs a:active, .section-tabs .tab-btn:active {
     transform: none;
   }
 }
@@ -4543,7 +4566,7 @@ form.settings-form > .actions.sticky-actions,
 .section-tabs .tab-btn.active {
   background: color-mix(in srgb, var(--brand-base) 12%, transparent);
   color: var(--brand-fg);
-  border: 1px solid color-mix(in srgb, var(--brand-base) 42%, transparent);
+  border-color: transparent;
   font-weight: 600;
 }
 .section-tabs a.active:hover,
@@ -5159,19 +5182,6 @@ form.settings-form > .actions.sticky-actions,
   height: var(--brand-logo-size);
   border-radius: var(--r-sm);
 }
-.topbar-brand-text {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0);
-  min-width: 0;
-}
-.topbar-brand strong {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-  line-height: 1.25;
-}
 .topbar-version {
   display: flex;
   align-items: center;
@@ -5180,60 +5190,6 @@ form.settings-form > .actions.sticky-actions,
   color: var(--muted-fg);
   line-height: 1;
   font-variant-numeric: tabular-nums;
-}
-.menu-toggle {
-  /* Square circle at the same height as .btn; fully round like other controls */
-  width: var(--btn-h);
-  height: var(--btn-h);
-  min-height: var(--btn-h);
-  box-sizing: border-box;
-  border-radius: var(--control-radius);
-  /* Closed: neutral like the secondary .btn-ghost, so the header does not shout. Open: the panel brand colour
-     (تنظیمات → ظاهر و برند), marking it as the active control while the drawer is on screen. */
-  border: 1.5px solid color-mix(in srgb, var(--foreground) 24%, transparent);
-  background: color-mix(in srgb, var(--foreground) 3%, transparent);
-  color: var(--foreground);
-  cursor: pointer;
-  display: inline-grid;
-  place-items: center;
-  padding: 0;
-  flex: 0 0 auto;
-  margin-inline-start: auto;
-  transition:
-    background var(--motion-fast) var(--ease-standard),
-    border-color var(--motion-fast) var(--ease-standard),
-    color var(--motion-fast) var(--ease-standard),
-    opacity var(--motion-fast) var(--ease-standard),
-    transform var(--motion-fast) var(--ease-standard);
-}
-.menu-toggle:hover {
-  background: color-mix(in srgb, var(--foreground) 8%, transparent);
-  opacity: 1;
-}
-.menu-toggle[aria-expanded="true"] {
-  border-color: color-mix(in srgb, var(--brand) 72%, transparent);
-  background: color-mix(in srgb, var(--brand) 8%, transparent);
-  color: var(--brand-fg);
-}
-.menu-toggle[aria-expanded="true"]:hover {
-  background: color-mix(in srgb, var(--brand) 15%, transparent);
-}
-.menu-toggle:active {
-  /* Same press feedback as .btn */
-  transform: scale(0.96);
-}
-.burger {
-  width: 16px;
-  height: 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-.burger i {
-  display: block;
-  height: 1.8px;
-  border-radius: 2px;
-  background: currentColor;
 }
 .side-backdrop {
   /* Always in the tree — toggling display killed the opacity fade and forced
@@ -5374,21 +5330,12 @@ form.settings-form > .actions.sticky-actions,
 
   .topbar { display: flex; }
 
-  .menu-toggle {
-    position: relative;
-    z-index: 60;
-    /* Cancels the 300ms tap delay; pairs with pointerup in panel.js so a tap
-       during momentum scroll still opens the drawer (click alone waits for settle). */
-    touch-action: manipulation;
-  }
   /* Ported ui-select / kebab menus use inline z-index ~5000 (above modals).
      When the drawer is open, raise shell chrome above those leftovers so the
      sidebar never paints under an open dropdown (JS also closes menus on open).
 
-     Raise the whole `.topbar` — not only `.menu-toggle`. Toggle lives inside
-     topbar's stacking context (z-index 55); bumping the button alone cannot
-     escape it, so the drawer at 5200 covered the header. Keep topbar above
-     the drawer so header + hamburger stay flush with the shell. */
+     Raise the whole `.topbar` (z-index 55 otherwise), so the drawer at 5200 never covers the header
+     and its search stays usable while the drawer is open. */
   body.nav-open .side-backdrop {
     z-index: 5100;
   }
@@ -5623,8 +5570,8 @@ form.settings-form > .actions.sticky-actions,
   .pg-head > .section-tabs { margin-bottom: 0; padding-bottom: 0; }
   .pg-head > .page-head { margin-bottom: var(--page-title-gap); }
   .page-title { gap: var(--space-1); }
-  .page-title-ico { width: 34px; height: 34px; border-radius: 14px; }
-  .page-title-ico svg { width: 17px; height: 17px; }
+  .page-title-ico { width: var(--btn-h); height: var(--btn-h); border-radius: 14px; }
+  .page-title-ico svg { width: 20px; height: 20px; }
   .page-head h1,
   .page-title h1 { font-size: 18px; }
   .page-head p { font-size: 12px; margin-top: var(--space-0); }
@@ -6324,140 +6271,76 @@ form.settings-form > .actions.sticky-actions,
   }
 }
 
-/* ── Panel split: Home / Bot / PasarGuard (+ help button below) ── */
+/* ── Sidebar sections: web panel / shop / PasarGuard, in the phone launcher's language (panel-nav-modes.css)
+   at list size: no boxes, a hairline between sections, the title in the section colour, every icon in a small
+   rounded square tinted with that colour, and the active item as a soft pill of the same colour. The colour
+   is one variable per section, so dark and light themes need no separate rules. ── */
+.nav-section-home { --tile-tone: var(--foreground); }
+.nav-section-bot { --tile-tone: var(--bot-line); }
+.nav-section-pg { --tile-tone: var(--pg-line); }
 .nav-section-bot,
 .nav-section-pg,
 .nav-section-home {
-  margin-top: var(--space-2);
-  padding: var(--space-1);
-  border-radius: var(--radius);
-  gap: var(--space-0);
+  margin-top: 0;
+  padding: var(--space-1) 0;
+  border: 0;
+  border-radius: 0;
+  gap: 2px;
   background: transparent;
-  /* Instant collapsed/open fill — transitioning background flashed the tinted
-     collapsed color for --motion-fast on every accordion open/close. */
+  /* Instant collapsed/open fill — a transitioning background flashed on every accordion open/close. */
   transition: none;
 }
-.nav-section-home {
-  margin-top: var(--space-1);
-  border: 1px solid var(--border);
-  background: transparent;
-}
-/* Closed: soft tinted fill. Open: border only (transparent fill). */
-.nav-section-home.is-collapsed {
-  background: color-mix(in srgb, var(--muted-fg) 8%, transparent);
-}
-.nav-section-home:not(.is-collapsed) {
-  background: transparent;
-}
-.nav-section-home:first-child { margin-top: var(--space-1); }
-.nav-label-home {
-  color: var(--foreground);
+.side-nav > .nav-section + .nav-section { border-top: 1px solid var(--border); }
+.nav-section > .nav-label {
+  color: var(--tile-tone);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
-/* Accordion title: capsule only while pressing (and hover on desktop) — never sticky open/closed */
-.nav-section-home > .nav-label-toggle:active {
-  background: color-mix(in srgb, var(--muted-fg) 12%, var(--muted));
-  border-color: var(--border);
-  color: var(--foreground);
+/* Accordion title: a faint capsule of the section colour only while pressing (and on desktop hover). */
+.nav-section > .nav-label-toggle:active {
+  background: color-mix(in srgb, var(--tile-tone) 10%, transparent);
+  border-color: transparent;
+  color: var(--tile-tone);
 }
 @media (hover: hover) and (pointer: fine) {
-  .nav-section-home > .nav-label-toggle:hover {
-    background: color-mix(in srgb, var(--muted-fg) 12%, var(--muted));
-    border-color: var(--border);
-    color: var(--foreground);
+  .nav-section > .nav-label-toggle:hover {
+    background: color-mix(in srgb, var(--tile-tone) 10%, transparent);
+    border-color: transparent;
+    color: var(--tile-tone);
   }
 }
-.nav-item-home.active {
-  background: var(--muted);
+.nav-section > .nav-item {
+  gap: var(--space-1_5);
+  min-height: 40px;
+  padding: 6px var(--space-1);
   border-color: transparent;
   color: var(--foreground);
 }
-.nav-item-home:hover {
-  background: color-mix(in srgb, var(--muted-fg) 12%, var(--muted));
-  border-color: var(--border);
+.nav-section > .nav-item .nav-ico {
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border-radius: 9px;
+  color: var(--tile-tone);
+  background: color-mix(in srgb, var(--tile-tone) 10%, transparent);
+}
+.nav-section-home > .nav-item .nav-ico { background: color-mix(in srgb, var(--foreground) 7%, transparent); }
+.nav-section > .nav-item:hover {
+  background: color-mix(in srgb, var(--tile-tone) 6%, transparent);
+  border-color: transparent;
   color: var(--foreground);
 }
-.nav-section-bot:first-child { margin-top: var(--space-1); }
-.nav-section-bot {
-  border: 1px solid color-mix(in srgb, var(--bot-line) 38%, var(--border));
-  background: transparent;
-}
-.nav-section-bot.is-collapsed {
-  background: color-mix(in srgb, var(--bot-line) 10%, transparent);
-}
-.nav-section-bot:not(.is-collapsed) {
-  background: transparent;
-}
-.nav-section-pg {
-  border: 1px solid color-mix(in srgb, var(--pg-line) 35%, var(--border));
-  background: transparent;
-}
-.nav-section-pg.is-collapsed {
-  background: color-mix(in srgb, var(--pg-line) 10%, transparent);
-}
-.nav-section-pg:not(.is-collapsed) {
-  background: transparent;
-}
-.nav-label-bot {
-  color: var(--bot-line);
+.nav-section > .nav-item.active,
+.nav-section > .nav-item.active:hover {
+  background: color-mix(in srgb, var(--tile-tone) 12%, transparent);
+  border-color: transparent;
+  color: var(--tile-tone);
   font-weight: 600;
-  letter-spacing: 0.02em;
 }
-.nav-label-pg {
-  color: var(--pg-line);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.nav-section-bot .nav-ico { color: var(--bot-line); }
-.nav-section-pg .nav-ico { color: var(--pg-line); }
-/* Accordion title: capsule only while pressing (and hover on desktop) — never sticky open/closed */
-.nav-section-bot > .nav-label-toggle:active {
-  background: color-mix(in srgb, var(--bot-line) 12%, transparent);
-  border-color: color-mix(in srgb, var(--bot-line) 40%, transparent);
-  color: var(--bot-line);
-}
-.nav-section-pg > .nav-label-toggle:active {
-  background: color-mix(in srgb, var(--pg-line) 12%, transparent);
-  border-color: color-mix(in srgb, var(--pg-line) 40%, transparent);
-  color: var(--pg-line);
-}
-@media (hover: hover) and (pointer: fine) {
-  .nav-section-bot > .nav-label-toggle:hover {
-    background: color-mix(in srgb, var(--bot-line) 12%, transparent);
-    border-color: color-mix(in srgb, var(--bot-line) 40%, transparent);
-    color: var(--bot-line);
-  }
-  .nav-section-pg > .nav-label-toggle:hover {
-    background: color-mix(in srgb, var(--pg-line) 12%, transparent);
-    border-color: color-mix(in srgb, var(--pg-line) 40%, transparent);
-    color: var(--pg-line);
-  }
-}
-.nav-item-bot.active,
-.nav-item-bot.active:hover {
-  background: var(--bot-fill);
-  border-color: transparent;
-  color: var(--foreground);
-}
-.nav-item-bot.active .nav-ico { color: var(--bot-line); }
-.nav-item-bot:hover {
-  background: color-mix(in srgb, var(--bot-line) 8%, transparent);
-  border-color: color-mix(in srgb, var(--bot-line) 36%, transparent);
-  color: var(--foreground);
-}
-.nav-item-pg.active,
-.nav-item-pg.active:hover {
-  background: var(--pg-fill);
-  border-color: transparent;
-  color: var(--foreground);
-}
-.nav-item-pg.active .nav-ico { color: var(--pg-line); }
-.nav-item-pg:hover {
-  background: color-mix(in srgb, var(--pg-line) 8%, transparent);
-  border-color: color-mix(in srgb, var(--pg-line) 36%, transparent);
-  color: var(--foreground);
-}
+.nav-section-home > .nav-item.active,
+.nav-section-home > .nav-item.active:hover { background: color-mix(in srgb, var(--foreground) 8%, transparent); }
+.nav-section > .nav-item.active .nav-ico { background: color-mix(in srgb, var(--tile-tone) 20%, transparent); }
 
 /* Help — bottom sidebar chip, same language as «فعال» status tags */
 .side-help-btn {
@@ -7403,9 +7286,9 @@ td.byte-size {
   flex: 1 1 auto;
 }
 .modal-title .page-title-ico {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 16px;
+  width: var(--btn-h);
+  height: var(--btn-h);
+  border-radius: 14px;
 }
 .modal-title .page-title-ico svg {
   width: 20px;
@@ -8203,8 +8086,6 @@ html[data-theme="light"] {
   --brand-fg: #c2410c;
   --bot-line: #ea580c;
   --pg-line: #2563eb;
-  --bot-fill: color-mix(in srgb, var(--bot-line) 8%, transparent);
-  --pg-fill: color-mix(in srgb, var(--pg-line) 8%, transparent);
   --bg: var(--background);
   --bg-card: #ffffff;
   --bg-muted: var(--muted);
@@ -8214,7 +8095,8 @@ html[data-theme="light"] {
   --accent-fg: var(--brand-fg);
   --accent-soft: color-mix(in srgb, var(--brand) 10%, transparent);
   --danger: var(--destructive);
-  --side-dim: rgba(0, 0, 0, 0.32);
+  /* Light enough that the frosted menu over it still reads as glass, not a grey film. */
+  --side-dim: rgba(0, 0, 0, 0.18);
   --table-head-bg: color-mix(in srgb, var(--muted) 72%, var(--bg-card));
 }
 html[data-theme="light"] * { scrollbar-color: #d4d4d8 transparent; }
@@ -8284,21 +8166,6 @@ html[data-theme="light"] .update-meta-box.update-meta-err {
 }
 html[data-theme="light"] .update-meta-box.update-meta-err .muted,
 html[data-theme="light"] .update-meta-box.update-meta-err strong { color: #b91c1c; }
-html[data-theme="light"] .nav-item:hover { background: var(--bg-hover); }
-html[data-theme="light"] .nav-item.active {
-  background: var(--muted);
-  color: var(--foreground);
-}
-/* Web-panel box stays colorless (border only) — never share backdrop fill */
-html[data-theme="light"] .nav-section-home {
-  border-color: var(--border);
-}
-html[data-theme="light"] .nav-section-home.is-collapsed {
-  background: color-mix(in srgb, var(--foreground) 5%, transparent);
-}
-html[data-theme="light"] .nav-section-home:not(.is-collapsed) {
-  background: transparent;
-}
 html[data-theme="light"] .ui-modal-backdrop {
   background: rgba(0, 0, 0, 0.28);
 }
@@ -8319,41 +8186,6 @@ html[data-theme="light"] .ui-modal-scroll {
 html[data-theme="light"] .ui-modal-scroll::-webkit-scrollbar-thumb {
   background: #d4d4d8;
 }
-html[data-theme="light"] .nav-label-home { color: var(--foreground); }
-/* Neutral select/hover for the border-only home box (no brand tint) */
-html[data-theme="light"] .nav-item-home.active,
-html[data-theme="light"] .nav-item-home.active:hover {
-  background: color-mix(in srgb, var(--foreground) 7%, transparent);
-  border-color: transparent;
-  color: var(--foreground);
-}
-html[data-theme="light"] .nav-item-home:hover {
-  background: color-mix(in srgb, var(--foreground) 4%, transparent);
-  border-color: var(--border);
-  color: var(--foreground);
-}
-html[data-theme="light"] .nav-section-bot {
-  border-color: color-mix(in srgb, var(--bot-line) 28%, var(--border));
-}
-html[data-theme="light"] .nav-section-bot.is-collapsed {
-  background: color-mix(in srgb, var(--bot-line) 8%, transparent);
-}
-html[data-theme="light"] .nav-section-bot:not(.is-collapsed) {
-  background: transparent;
-}
-html[data-theme="light"] .nav-section-pg {
-  border-color: color-mix(in srgb, var(--pg-line) 28%, var(--border));
-}
-html[data-theme="light"] .nav-section-pg.is-collapsed {
-  background: color-mix(in srgb, var(--pg-line) 8%, transparent);
-}
-html[data-theme="light"] .nav-section-pg:not(.is-collapsed) {
-  background: transparent;
-}
-html[data-theme="light"] .nav-label-bot,
-html[data-theme="light"] .nav-section-bot .nav-ico { color: var(--bot-line); }
-html[data-theme="light"] .nav-label-pg,
-html[data-theme="light"] .nav-section-pg .nav-ico { color: var(--pg-line); }
 html[data-theme="light"] .side-help-btn {
   background: rgba(22, 163, 74, 0.1);
   color: #15803d;
@@ -8366,29 +8198,6 @@ html[data-theme="light"] .side-help-btn.is-active:hover {
   color: #15803d;
   border-color: rgba(22, 163, 74, 0.36);
 }
-html[data-theme="light"] .nav-item-bot.active,
-html[data-theme="light"] .nav-item-bot.active:hover {
-  background: var(--bot-fill);
-  border-color: transparent;
-  color: var(--foreground);
-}
-html[data-theme="light"] .nav-item-bot:hover {
-  background: color-mix(in srgb, var(--bot-line) 6%, transparent);
-  border-color: color-mix(in srgb, var(--bot-line) 28%, transparent);
-  color: var(--foreground);
-}
-html[data-theme="light"] .nav-item-pg.active,
-html[data-theme="light"] .nav-item-pg.active:hover {
-  background: var(--pg-fill);
-  border-color: transparent;
-  color: var(--foreground);
-}
-html[data-theme="light"] .nav-item-pg:hover {
-  background: color-mix(in srgb, var(--pg-line) 6%, transparent);
-  border-color: color-mix(in srgb, var(--pg-line) 28%, transparent);
-  color: var(--foreground);
-}
-
 html[data-theme="light"] .btn-warn { color: #a16207 !important; }
 
 html[data-theme="light"] .icon-btn,
@@ -8533,21 +8342,6 @@ html[data-theme="light"] .upload-box.has-file .upload-box-name {
   color: #15803d;
 }
 html[data-theme="light"] .stat-ico { background: var(--muted); color: var(--muted-fg); }
-html[data-theme="light"] .page-title-ico {
-  background: #fff;
-  border-color: color-mix(in srgb, var(--bot-line) 40%, var(--border));
-  color: var(--bot-line);
-}
-html[data-theme="light"] .page-title-ico--pg {
-  background: #fff;
-  border-color: color-mix(in srgb, var(--pg-line) 40%, var(--border));
-  color: var(--pg-line);
-}
-html[data-theme="light"] .page-title-ico--neutral {
-  background: #f4f4f5;
-  border: 1px solid var(--border);
-  color: #52525b;
-}
 html[data-theme="light"] .logout-link {
   background: rgba(220, 38, 38, 0.08);
   border-color: rgba(220, 38, 38, 0.3);
@@ -9256,123 +9050,6 @@ html[data-theme="light"] .pg-node-metric {
   padding: var(--card-pad);
 }
 
-/* —— Home portals (bot orange / PG blue) —— */
-.home-portal-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-2);
-  margin-bottom: var(--section-gap);
-}
-.home-portal {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 72px;
-  padding: var(--space-2) var(--card-pad);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  text-decoration: none !important;
-  color: inherit !important;
-  box-sizing: border-box;
-  transition:
-    background var(--motion-fast) var(--ease-standard),
-    border-color var(--motion-fast) var(--ease-standard),
-    transform var(--motion-fast) var(--ease-standard);
-}
-.home-portal:hover { transform: translateY(-1px); }
-.home-portal:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent);
-}
-.home-portal-bot {
-  background: var(--bg-card);
-  border: 1px solid color-mix(in srgb, var(--bot-line) 42%, var(--border));
-}
-.home-portal-bot:hover {
-  background: color-mix(in srgb, var(--muted) 35%, var(--bg-card));
-  border-color: color-mix(in srgb, var(--bot-line) 55%, var(--border));
-}
-.home-portal-bot:focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bot-line) 55%, transparent);
-}
-.home-portal-pg {
-  background: var(--bg-card);
-  border: 1px solid color-mix(in srgb, var(--pg-line) 42%, var(--border));
-}
-.home-portal-pg:hover {
-  background: color-mix(in srgb, var(--muted) 35%, var(--bg-card));
-  border-color: color-mix(in srgb, var(--pg-line) 55%, var(--border));
-}
-.home-portal-ico {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  flex: 0 0 auto;
-  border-radius: 14px;
-  background: transparent;
-  border: 1px solid transparent;
-}
-.home-portal-bot .home-portal-ico {
-  color: var(--bot-line);
-  border-color: color-mix(in srgb, var(--bot-line) 40%, var(--border));
-}
-.home-portal-pg .home-portal-ico {
-  color: var(--pg-line);
-  border-color: color-mix(in srgb, var(--pg-line) 40%, var(--border));
-}
-.home-portal-ico svg {
-  width: 20px;
-  height: 20px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 1.75;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.home-portal-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-.home-portal-copy strong {
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.home-portal-copy .muted {
-  font-size: 12px;
-  line-height: 1.35;
-}
-.home-portal-go {
-  flex: 0 0 auto;
-  align-self: center;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  margin: 0;
-  padding: 0;
-  line-height: 0;
-  opacity: 0.55;
-  color: inherit;
-}
-.home-portal-go svg {
-  width: 16px;
-  height: 16px;
-  display: block;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.home-portal-bot .home-portal-go { color: var(--bot-line); }
-.home-portal-pg .home-portal-go { color: var(--pg-line); }
-
 /* —— Period sales —— */
 .home-periods-card {
   margin-bottom: var(--section-gap);
@@ -9491,53 +9168,9 @@ html[data-theme="light"] .pg-node-metric {
   margin: 0;
   font-size: 13px;
 }
-html[data-theme="light"] .home-portal-bot {
-  background: #fff;
-  border-color: color-mix(in srgb, var(--bot-line) 36%, var(--border));
-}
-html[data-theme="light"] .home-portal-pg {
-  background: #fff;
-  border-color: color-mix(in srgb, var(--pg-line) 36%, var(--border));
-}
-html[data-theme="light"] .home-portal-bot:hover {
-  background: #fafafa;
-  border-color: color-mix(in srgb, var(--bot-line) 48%, var(--border));
-}
-html[data-theme="light"] .home-portal-pg:hover {
-  background: #fafafa;
-  border-color: color-mix(in srgb, var(--pg-line) 48%, var(--border));
-}
 html[data-theme="light"] .home-period {
   background: rgba(0, 0, 0, 0.02);
 }
-@media (max-width: 560px) {
-  /* Portals stay side-by-side on mobile (first row) */
-  .home-portal-row {
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-1);
-  }
-  .home-portal {
-    min-height: 64px;
-    padding: var(--space-1_5) var(--space-1_5);
-    gap: var(--space-1);
-  }
-  .home-portal-ico {
-    width: 34px;
-    height: 34px;
-    border-radius: 12px;
-  }
-  .home-portal-ico svg {
-    width: 17px;
-    height: 17px;
-  }
-  .home-portal-copy strong {
-    font-size: 12.5px;
-  }
-  .home-portal-copy .muted {
-    display: none;
-  }
-}
-
 .home-dash > .card > h2,
 .home-conn-card > h2 {
   margin: 0;
@@ -12300,25 +11933,32 @@ html[data-theme="light"] .panel-status-card {
 }
 
 
-/* Card titles with a line icon (macros.card_title): neutral like the web-panel sidebar, orange in the bot panel. */
+/* Card titles: the launcher tile at card-title size (28px), tinted with the section colour. */
 .card h2.card-title {
   display: flex;
   align-items: center;
   gap: var(--space-1);
 }
 .card-title-ico {
-  width: 16px;
-  height: 16px;
+  --tile-tone: var(--foreground);
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
   flex: 0 0 auto;
+  border-radius: 9px;
+  color: var(--tile-tone);
+  background: color-mix(in srgb, var(--tile-tone) 7%, transparent);
   stroke: currentColor;
   fill: none;
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.card-title--neutral .card-title-ico { color: var(--foreground); }
-.card-title--bot .card-title-ico { color: #f0b27a; }
-html[data-theme="light"] .card-title--bot .card-title-ico { color: #c2691c; }
+.card-title--bot .card-title-ico,
+.card-title--pg .card-title-ico { background: color-mix(in srgb, var(--tile-tone) 11%, transparent); }
+.card-title--bot .card-title-ico { --tile-tone: var(--bot-line); }
+.card-title--pg .card-title-ico { --tile-tone: var(--pg-line); }
 
 /* ---- Dashboard: KPI strip, status tiles, sales chart, account card ---- */
 .kpi-strip {

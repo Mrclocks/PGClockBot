@@ -43,7 +43,7 @@ from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
 from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
 from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.panel_nav import DOT_LABELS as NAV_DOT_LABELS
-from app.services.panel_nav import sidebar_for_template
+from app.services.panel_nav import build_dock, sidebar_for_template
 from app.services.resellers import feature_perm_groups
 from app.services.marketing_nav import marketing_groups
 from app.services.reseller_bots import schedule_shop_menu_sync
@@ -206,6 +206,7 @@ except Exception:
     templates.env.globals["deployed_channel_label"] = "پایدار"
 templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["panel_sidebar"] = sidebar_for_template
+templates.env.globals["panel_dock"] = build_dock
 templates.env.globals["nav_dot_labels"] = NAV_DOT_LABELS
 templates.env.globals["feature_perm_groups"] = feature_perm_groups
 templates.env.globals["marketing_groups"] = marketing_groups

@@ -21,8 +21,7 @@ PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="/static/panel.css" /></head>
 <body class="nav-open"><div class="app">
-<header class="topbar mobile-only"><a class="topbar-brand" href="#">MrClock</a>
-<button type="button" class="menu-toggle" aria-label="منو"></button></header>
+<header class="topbar mobile-only"><a class="topbar-brand" href="#">MrClock</a></header>
 <aside class="side open" id="sidebar"><div class="side-panel"><p>منو</p></div></aside>
 <main class="main ds"><div class="card"><p>صفحه</p></div></main>
 <div class="side-backdrop show" id="side-backdrop" aria-hidden="true"></div>
@@ -128,53 +127,6 @@ class DrawerFrostE2E(unittest.TestCase):
                 browser.close()
         finally:
             server.stop()
-
-    def test_menu_button_is_neutral_when_closed_and_brand_coloured_when_open(self) -> None:
-        from playwright.sync_api import sync_playwright
-
-        server = _Server()
-        server.start()
-        try:
-            with sync_playwright() as playwright:
-                browser = _launch(playwright)
-                page = browser.new_page(viewport={"width": 390, "height": 800})
-                for theme in ("light", "dark"):
-                    with self.subTest(theme=theme):
-                        page.goto(f"http://127.0.0.1:{server.port}/{theme}", wait_until="networkidle")
-                        colours = page.evaluate(MENU_BUTTON_COLOURS_JS)
-                        self.assertEqual(colours["closed"], colours["foreground"])
-                        self.assertNotEqual(colours["closed"], colours["brand"])
-                        self.assertEqual(colours["open"], colours["brand"])
-                browser.close()
-        finally:
-            server.stop()
-
-
-# Reads the menu button's text colour closed and open, next to the theme's foreground and brand colours.
-MENU_BUTTON_COLOURS_JS = """() => {
-  const btn = document.querySelector('.menu-toggle');
-  const colourOf = (value) => {
-    const probe = document.createElement('span');
-    probe.style.color = value;
-    document.body.appendChild(probe);
-    const colour = getComputedStyle(probe).color;
-    probe.remove();
-    return colour;
-  };
-  const read = (expanded) => {
-    btn.setAttribute('aria-expanded', expanded);
-    document.getAnimations().forEach((a) => a.finish());
-    return getComputedStyle(btn).color;
-  };
-  return {
-    closed: read('false'),
-    open: read('true'),
-    foreground: colourOf('var(--foreground)'),
-    brand: colourOf('var(--brand-fg)'),
-  };
-}"""
-
-
 # Opens the drawer, freezes every running transition at the same point, and returns the two edges in px.
 FREEZE_OPEN_JS = """(fraction) => {
   const side = document.getElementById('sidebar');

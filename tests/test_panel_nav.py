@@ -1,4 +1,5 @@
-"""Web panel navigation registry: items per role, active item, real routes, Mini App shortcuts."""
+"""Web panel navigation registry: items per role, active item, real routes, Mini App shortcuts,
+and the phone bottom bar."""
 
 from __future__ import annotations
 
@@ -13,9 +14,11 @@ from app.api.app import create_api_app, templates
 from app.services.guide_catalog import TOPICS
 from app.services.marketing_nav import MarketingSection
 from app.services.panel_nav import (
+    DOCK_SLOTS,
     MINIAPP_OWNER_SHORTCUTS,
     MINIAPP_RESELLER_SHORTCUTS,
     NavViewer,
+    build_dock,
     build_sidebar,
     miniapp_shortcuts,
 )
@@ -159,6 +162,111 @@ class RenderedSidebarTests(unittest.TestCase):
         link = re.search(r'<a href="/service-cleanup" class="nav-item[^"]*"[^>]*>.*?</a>', html, re.S)
         self.assertIsNotNone(link)
         self.assertRegex(link.group(0), r'<svg class="nav-ico"[^>]*>\s*<path ')
+
+
+def dock_keys(v: NavViewer, path: str = "/home") -> list[str]:
+    return [i.key for i in build_dock(build_sidebar(v, path=path)).items]
+
+
+class BottomBarTests(unittest.TestCase):
+    def test_owner_bar_holds_dashboard_action_center_finance_and_users(self) -> None:
+        dock = build_dock(build_sidebar(OWNER, path="/home"))
+        self.assertEqual([i.key for i in dock.items], ["home", "inbox", "finance", "users"])
+        self.assertEqual([i.short_label for i in dock.items], ["داشبورد", "مرکز اقدام", "مالی", "کاربران"])
+
+    def test_reseller_bar_uses_customers_and_skips_pages_without_permission(self) -> None:
+        self.assertEqual(dock_keys(RESELLER), ["home", "inbox", "finance", "customers"])
+        self.assertEqual(dock_keys(viewer("reseller", perms=("dashboard", "tickets"))),
+                         ["home", "inbox", "customers", "tickets"])
+
+    def test_pasarguard_staff_bar_has_only_their_pages(self) -> None:
+        self.assertEqual(dock_keys(PG_STAFF), ["home", "inbox", "pg_tickets", "pg_users"])
+
+    def test_a_page_reached_from_two_sidebar_entries_is_in_the_bar_once(self) -> None:
+        both_supports = viewer("pg_staff", perms=("tickets",), pg=frozenset({"pg_users"}))
+        dock = build_dock(build_sidebar(both_supports, path="/tickets"))
+        hrefs = [i.href for i in dock.items]
+        self.assertEqual(hrefs.count("/tickets"), 1)
+        self.assertEqual(len(hrefs), len(set(hrefs)))
+        self.assertEqual(sum(i.active for i in dock.items), 1)
+
+    def test_bar_never_offers_an_item_the_sidebar_hides(self) -> None:
+        for v in (OWNER, RESELLER, PG_STAFF, viewer("reseller", perms=("dashboard",)), viewer("staff")):
+            sidebar_keys = {i.key for s in build_sidebar(v, path="/home") for i in s.items}
+            keys = dock_keys(v)
+            self.assertLessEqual(len(keys), DOCK_SLOTS)
+            self.assertTrue(set(keys) <= sidebar_keys, keys)
+
+    def test_menu_is_lit_only_when_the_page_is_not_in_the_bar(self) -> None:
+        on_finance = build_dock(build_sidebar(OWNER, path="/service-cancellations"))
+        self.assertEqual([i.key for i in on_finance.items if i.active], ["finance"])
+        self.assertFalse(on_finance.more_active)
+        on_plans = build_dock(build_sidebar(OWNER, path="/plans"))
+        self.assertFalse(any(i.active for i in on_plans.items))
+        self.assertTrue(on_plans.more_active)
+
+    def test_bar_keeps_the_unread_flag_of_its_items(self) -> None:
+        items = {i.key: i for i in build_dock(build_sidebar(OWNER, path="/home")).items}
+        self.assertEqual(items["inbox"].dot, "inbox_alert")
+        self.assertEqual(items["finance"].dot, "cancel_alert")
+
+
+def _render_page(staff: dict | None, identity: dict, *, is_owner: bool, path: str = "/home", **ctx) -> str:
+    request = SimpleNamespace(query_params={}, url=SimpleNamespace(path=path), state=SimpleNamespace())
+    return templates.env.get_template("base.html").render(
+        request=request, app_version="t", staff=staff, identity=identity, is_owner=is_owner, **ctx)
+
+
+class RenderedBottomBarTests(unittest.TestCase):
+    OWNER_STAFF = {"role": "admin", "permissions": []}
+
+    def bar(self, html: str) -> str:
+        return html.split('data-bottom-dock>')[1].split("</nav>")[0]
+
+    def test_bar_renders_items_in_order_with_more_and_search(self) -> None:
+        html = _render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True)
+        bar = self.bar(html)
+        self.assertEqual(re.findall(r'<a href="([^"]+)" class="bottom-dock-item', bar),
+                         ["/home", "/inbox", "/finance", "/users"])
+        self.assertIn('aria-current="page"', bar.split('href="/inbox"')[0])
+        menu = re.search(r'<button[^>]*data-drawer-open[^>]*>.*?</button>', bar, re.S).group(0)
+        self.assertIn('aria-expanded="false"', menu)
+        self.assertIn("منو", menu)
+
+    def test_phone_header_has_brand_version_and_search_and_no_hamburger(self) -> None:
+        html = _render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True)
+        header = html.split('<header class="topbar')[1].split("</header>")[0]
+        self.assertRegex(header.split('class="topbar-brand-text"')[1], r'^>\s*<strong dir="auto">[^<]+</strong>')
+        self.assertIn('class="topbar-version"', header)
+        self.assertIn('id="panel-search-input-top"', header)
+        self.assertRegex(header, r'<button type="button" class="topbar-search-close" aria-label="بستن جستجو" data-panel-search-clear>')
+        self.assertIn("data-panel-search-input", header)
+        self.assertNotIn("menu-toggle", html)
+
+    def test_the_bar_carries_the_drawer_close_button(self) -> None:
+        html = _render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True)
+        dock = html.split("data-bottom-dock>")[1].split("{# ")[0].split("</div>")[0]
+        self.assertIn('class="bottom-dock-close" data-drawer-close aria-controls="sidebar" aria-label="بستن منو"', dock)
+        self.assertEqual(html.count("data-drawer-close"), 1)
+        # One search field per screen size: the sidebar keeps its own for desktop, with its own ids.
+        self.assertEqual(html.count('id="panel-search-input"'), 1)
+        self.assertEqual(html.count("data-panel-search-results"), 2)
+
+    def test_unread_dot_is_shown_on_the_bar_item(self) -> None:
+        bar = self.bar(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, inbox_alert=True))
+        inbox = re.search(r'<a href="/inbox".*?</a>', bar, re.S).group(0)
+        self.assertIn('aria-label="اعلان خوانده‌نشده"', inbox)
+        quiet = self.bar(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, inbox_alert=False))
+        self.assertNotIn("nav-dot", re.search(r'<a href="/inbox".*?</a>', quiet, re.S).group(0))
+
+    def test_menu_is_lit_on_a_page_outside_the_bar(self) -> None:
+        bar = self.bar(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, path="/plans"))
+        self.assertIn('class="bottom-dock-item is-active" data-drawer-open', bar)
+        self.assertNotIn('aria-current="page"', bar)
+
+    def test_signed_out_pages_have_no_bar(self) -> None:
+        html = _render_page(None, {}, is_owner=False, path="/login")
+        self.assertNotIn("data-bottom-dock", html)
 
 
 if __name__ == "__main__":
