@@ -546,18 +546,21 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
     background: color-mix(in srgb, var(--foreground) 6%, var(--bg-card));
     /* The header is laid out LTR: the circle is the field's right end, the logo stays clear on the left. */
     clip-path: inset(0 0 0 calc(100% - var(--dock-inner)) round calc(var(--dock-inner) / 2));
+    /* Folding back: starts at once and slows into the circle (--motion-med, --ease-standard); the fill and edge
+       change over the same time, so the open field never flashes the circle's colour before it has folded. */
     transition:
-      clip-path var(--dock-morph) var(--ease-in) var(--dock-morph-lead),
-      background-color var(--motion-fast) var(--ease-standard),
-      border-color var(--motion-fast) var(--ease-standard);
+      clip-path var(--motion-med) var(--ease-standard),
+      background-color var(--motion-med) var(--ease-standard),
+      border-color var(--motion-med) var(--ease-standard);
   }
   .topbar .side-search.topbar-search > .nav-ico {
     position: absolute;
     inset-inline-start: calc((var(--dock-inner) - 18px) / 2);
     pointer-events: none;
+    /* Turns back in while the field folds, as the × turns out. */
     transition:
-      opacity var(--motion-med) var(--ease-out) var(--dock-morph-lead),
-      transform var(--dock-morph) var(--ease-out) var(--dock-morph-lead);
+      opacity var(--motion-med) var(--ease-out),
+      transform var(--motion-med) var(--ease-out);
   }
   /* The × sits on the magnifier's spot: it turns in as the field opens and out as it folds. */
   .topbar .topbar-search-close {
@@ -596,7 +599,8 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
     /* 16px keeps iOS from zooming the page when the field takes focus. */
     font-size: var(--control-fs) !important;
     opacity: 0;
-    transition: opacity var(--motion-fast) var(--ease-standard);
+    /* The text goes first so the fold never drags it along. */
+    transition: opacity calc(var(--motion-fast) / 2) var(--ease-in);
   }
   .topbar .side-search.topbar-search:is(:focus-within, :has(input:not(:placeholder-shown))) {
     border-color: color-mix(in srgb, var(--brand) 60%, transparent);
@@ -609,7 +613,7 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   }
   .topbar .side-search.topbar-search:is(:focus-within, :has(input:not(:placeholder-shown))) input[type="search"] {
     opacity: 1;
-    transition-delay: var(--dock-morph-items);
+    transition: opacity var(--motion-fast) var(--ease-standard) var(--dock-morph-items);
   }
   .topbar .side-search.topbar-search:is(:focus-within, :has(input:not(:placeholder-shown))) > .nav-ico {
     opacity: 0;

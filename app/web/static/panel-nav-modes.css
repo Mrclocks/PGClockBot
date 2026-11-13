@@ -147,6 +147,11 @@
   /* The release channel stays in the desktop sidebar; the header keeps the dot and the version. */
   .topbar .channel-badge { display: none; }
 }
+/* Phones turned sideways: a fixed header and bar would leave a strip of page between them, so the header
+   scrolls away with the page there; the bar stays. */
+@media (max-width: 900px) and (max-height: 500px) {
+  .topbar { position: absolute; }
+}
 
 /* —— Phone bottom bar: a frosted capsule with the most used items and «منو».
    Shown exactly where the sidebar becomes a drawer. Same matte glass as the drawer and modal chrome.
@@ -155,12 +160,17 @@
 /* .shell is laid out LTR and sets RTL back on .side and .main; the bar is its child too. */
 .bottom-dock { display: none; direction: rtl; }
 @media (max-width: 900px) {
+  /* Invariant E (panel.css, mobile geometry): Safari 26 tints its bottom toolbar with a fixed box near the
+     screen edge, which turned the area under the bar solid. The fixed box stays transparent and every painted
+     layer (the shadow, the capsule, the ×) is an absolute child, so the toolbar keeps showing the page as glass. */
   .bottom-dock {
     position: fixed;
     z-index: 40;
     inset-inline: var(--dock-inline);
     bottom: var(--dock-bottom);
     display: block;
+    height: var(--dock-h);
+    background: transparent;
     transform: translate3d(0, 0, 0);
     /* Transform only, never opacity: while an ancestor is part-transparent the browser drops the capsule's
        backdrop blur, so a fading bar would come back clear and turn matte only when the fade ended. */
@@ -169,7 +179,28 @@
       transform var(--dock-show) var(--ease-out),
       visibility 0s linear 0s;
   }
+  /* The bar's shadow lives on this layer: the bar's own box-shadow would be cut off by the clip-path that folds
+     it into the ×. An outer shadow is painted only outside its box, so it never darkens the glass above it.
+     It fades out while the bar folds (the × has its own) and back in once the bar has unfolded. */
+  .bottom-dock::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline: 0;
+    height: var(--dock-h);
+    border-radius: var(--control-radius);
+    box-shadow: var(--dock-shadow);
+    pointer-events: none;
+    transition: opacity var(--motion-med) var(--ease-out) calc(var(--dock-morph-lead) + var(--dock-morph));
+  }
+  body.nav-open .bottom-dock::before {
+    opacity: 0;
+    transition: opacity var(--motion-fast) var(--ease-in);
+  }
   .bottom-dock-bar {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
     box-sizing: border-box;
     display: grid;
     grid-auto-flow: column;
@@ -181,7 +212,6 @@
     background: var(--modal-frost-bg);
     backdrop-filter: var(--modal-frost-blur);
     -webkit-backdrop-filter: var(--modal-frost-blur);
-    box-shadow: var(--dock-shadow);
     clip-path: inset(0 0 0 0 round var(--dock-h));
     /* Unfolding: starts just after the × has faded, then eases out to full width. */
     transition: clip-path var(--dock-morph) var(--ease-out) var(--dock-morph-lead);
@@ -310,6 +340,9 @@
       visibility 0s linear var(--dock-hide);
   }
 
+  /* Fixed notices at the bottom (upload progress) sit above the bar instead of covering it. */
+  html:has(.bottom-dock) .upload-toast { bottom: calc(var(--dock-bottom) + var(--dock-h) + var(--space-1_5)); }
+
   /* The footer is the one bottom-inset owner (panel.css mobile geometry, rule C): it grows by the bar's room
      so its text is never under the bar. */
   html:has(.bottom-dock) .site-footer {
@@ -358,11 +391,20 @@
     box-shadow: var(--sheet-shadow);
     overscroll-behavior: contain;
     transform: translate3d(0, calc(100% + var(--dock-h) + var(--dock-bottom) + var(--space-3)), 0);
-    transition: transform var(--sheet-out) var(--ease-in);
+    /* Closed, the sheet waits just below the screen edge. Android Chrome moves fixed boxes a moment late while
+       its address bar shows or hides during a scroll, which let the sheet's top peek out under the bar; once
+       the slide has finished it is hidden, so it is never painted while closed. */
+    visibility: hidden;
+    transition:
+      transform var(--sheet-out) var(--ease-in),
+      visibility 0s linear var(--sheet-out);
   }
   .side.open .side-panel {
     transform: translate3d(0, 0, 0);
-    transition: transform var(--sheet-in) var(--ease-out);
+    visibility: visible;
+    transition:
+      transform var(--sheet-in) var(--ease-out),
+      visibility 0s linear 0s;
   }
   .side-backdrop::before,
   .side-backdrop.show::before { top: 0; left: 0; right: 0; transform: none; transition: none; }
@@ -376,10 +418,13 @@
     padding: 0 var(--space-2);
   }
   .side-panel > .side-nav { grid-area: nav; margin: var(--space-2) 0 0; border-top: 1px solid var(--border); }
+  /* Never squeezed: when the menu is taller than its space the grid gives each row only its minimum size, so
+     a zero minimum (or the drawer's overflow:hidden) cut «خروج» in half. The whole sheet scrolls instead. */
   .side-panel > .side-foot {
     grid-area: foot;
-    min-height: 0;
+    min-height: auto;
     max-height: none;
+    overflow: visible;
     margin: 0 calc(-1 * var(--space-2));
     padding: var(--space-1_5) var(--space-2);
     border-top: 1px solid var(--border);
@@ -491,6 +536,8 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .bottom-dock,
+  .bottom-dock::before,
+  body.nav-open .bottom-dock::before,
   .bottom-dock-bar,
   .bottom-dock-item,
   .bottom-dock-close,
