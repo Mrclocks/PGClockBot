@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.bot.handlers import services as service_handlers
+from app.services import service_renewals
 from app.services.service_renewals import (
     RENEWAL_CURRENT,
     RENEWAL_DOWNGRADE,
@@ -54,8 +55,8 @@ class RenewalPlanButtonsTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(service_handlers, "get_all_settings", AsyncMock(return_value={})),
             patch.object(service_handlers, "customer_may_use_service", AsyncMock(return_value=True)),
-            patch.object(service_handlers, "list_active_plans", AsyncMock(return_value=plans)),
-            patch.object(service_handlers, "shop_categories_for_menu", AsyncMock(return_value=[])),
+            patch.object(service_renewals, "list_active_plans", AsyncMock(return_value=plans)),
+            patch.object(service_renewals, "shop_categories_for_menu", AsyncMock(return_value=[])),
             patch.object(service_handlers, "shop_category_map", AsyncMock(return_value={})),
             patch.object(service_handlers, "safe_edit_text", edit),
         ):

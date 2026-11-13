@@ -10,9 +10,12 @@ from datetime import timezone
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.catalog_pricing import quote_product
 from app.db.models import Order
+from app.services.orders import list_active_plans
+from app.services.plan_categories import shop_categories_for_menu
 from app.services.formatting import (
     format_bytes, format_expire_short, hold_duration_from_info, is_on_hold_status,
     parse_expire,
@@ -59,6 +62,13 @@ class RenewalChoices:
             return self.uncategorized
         return [p for p in self.options if getattr(p, "category_id", None) is not None
                 and int(p.category_id) == int(category_id)]
+
+
+async def load_renewal_choices(session: AsyncSession, service: Any, *, shop_id: int | None = None) -> RenewalChoices:
+    """The renewal choices of ``service`` in its shop's catalog (``shop_id`` None: the bot's own shop)."""
+    plans = await list_active_plans(session, include_trial=False, reseller_id=shop_id)
+    categories = await shop_categories_for_menu(session, fixed_plans=plans, reseller_id=shop_id)
+    return renewal_choices(plans, categories, current_plan_id=getattr(service, "plan_id", None))
 
 
 def renewal_choices(plans: list[Any], categories: list[Any], *, current_plan_id: int | None) -> RenewalChoices:

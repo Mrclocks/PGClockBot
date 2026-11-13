@@ -25,7 +25,7 @@ from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, UserService
 from app.services.formatting import format_message, format_toman, service_card
-from app.services.orders import get_catalog_plan, list_active_plans
+from app.services.orders import get_catalog_plan
 from app.services.pasarguard import absolutize_subscription_url, get_pg
 from app.services.service_import import is_external_service
 from app.services.service_panel_presence import (
@@ -41,8 +41,8 @@ from app.services.service_scope import customer_may_use_service, list_customer_s
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
 from app.services.service_live_info import fetch_live_service_info, with_stored_quota
-from app.services.plan_categories import shop_categories_for_menu, shop_category_map
-from app.services.service_renewals import RenewalChoices, renewal_choices
+from app.services.plan_categories import shop_category_map
+from app.services.service_renewals import RenewalChoices, load_renewal_choices
 from app.services.wireguard_delivery import REASON_DISABLED, REASON_UNAVAILABLE, fetch_wireguard, has_wireguard
 from app.services.wireguard_send import send_wireguard_files
 from app.services import bot_feedback_texts as feedback
@@ -610,10 +610,7 @@ async def _renewable_service(callback: CallbackQuery, session: AsyncSession, db_
 
 async def _renewal_choices(session: AsyncSession, svc: UserService) -> tuple[RenewalChoices, dict]:
     """The shop's renewable plans grouped like the shop, and its categories by id (for icons)."""
-    plans = await list_active_plans(session, include_trial=False)
-    categories = await shop_categories_for_menu(session, fixed_plans=plans)
-    choices = renewal_choices(plans, categories, current_plan_id=svc.plan_id)
-    return choices, await shop_category_map(session)
+    return await load_renewal_choices(session, svc), await shop_category_map(session)
 
 
 @router.callback_query(F.data.startswith("svc:renew:"))
