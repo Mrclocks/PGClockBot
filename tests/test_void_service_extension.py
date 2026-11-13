@@ -228,7 +228,7 @@ class ServiceRestoreMigrationTests(unittest.TestCase):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
-        path = ROOT / "alembic/versions/0112_order_service_restore.py"
+        path = ROOT / "alembic/versions/0114_order_service_restore.py"
         spec = importlib.util.spec_from_file_location("order_service_restore_migration", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)

@@ -1,7 +1,7 @@
 """Save the quota a renewal or add-on replaced.
 
-Revision ID: 0112_order_service_restore
-Revises: 0111_referral_shop
+Revision ID: 0114_order_service_restore
+Revises: 0113_service_import_offer_dismissal
 
 Adds the nullable ``orders.service_restore``: the service's panel quota (status, volume limit,
 expiry, hold time) and plan from just before a renewal or add-on wrote to the panel, plus what
@@ -16,8 +16,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0112_order_service_restore"
-down_revision: Union[str, None] = "0111_referral_shop"
+revision: str = "0114_order_service_restore"
+down_revision: Union[str, None] = "0113_service_import_offer_dismissal"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
