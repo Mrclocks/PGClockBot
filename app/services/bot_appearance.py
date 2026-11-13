@@ -12,6 +12,13 @@ from aiogram.types import BufferedInputFile, InputProfilePhotoStatic
 
 log = logging.getLogger(__name__)
 
+
+def _tg_session():
+    # app.bot imports app.services modules, so import locally to break the cycle.
+    from app.bot import telegram_session
+
+    return telegram_session()
+
 # Shared with bot_profile_photo, which copies a photo set in @BotFather for the Mini App logo.
 PHOTO_SOURCE_SETTING = "bot_tg_photo_source"
 PANEL_PHOTO_SOURCE = "panel"
@@ -58,7 +65,7 @@ async def fetch_appearance(token: str, *, local_photo: str = "") -> BotAppearanc
     if not token:
         return BotAppearance(error="توکن ربات تنظیم نشده", photo_url=local_photo)
 
-    bot = Bot(token=token)
+    bot = Bot(token=token, session=_tg_session())
     try:
         me = await bot.get_me()
         name_obj = await bot.get_my_name()
@@ -125,7 +132,7 @@ async def apply_appearance(
     if err:
         return BotAppearance(error=err)
 
-    bot = Bot(token=token)
+    bot = Bot(token=token, session=_tg_session())
     try:
         me = await bot.get_me()
         await bot.set_my_name(name=name)

@@ -390,7 +390,9 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             try:
                 from aiogram import Bot
 
-                bot = Bot(token=token)
+                from app.bot import telegram_session
+
+                bot = Bot(token=token, session=telegram_session())
                 try:
                     me = await bot.get_me()
                     uname = me.username or str(me.id)

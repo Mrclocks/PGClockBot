@@ -69,7 +69,9 @@ def pick_photo_size(sizes: Sequence, *, min_side: int = LOGO_MIN_SIDE) -> object
 
 async def fetch_bot_profile_photo(token: str) -> ProfilePhoto | None:
     """The bot's current profile photo, or None when it has none. Raises on Telegram errors."""
-    bot = Bot(token=token)
+    from app.bot import telegram_session
+
+    bot = Bot(token=token, session=telegram_session())
     try:
         me = await bot.get_me(request_timeout=TELEGRAM_TIMEOUT_SECONDS)
         photos = await bot.get_user_profile_photos(me.id, limit=1, request_timeout=TELEGRAM_TIMEOUT_SECONDS)

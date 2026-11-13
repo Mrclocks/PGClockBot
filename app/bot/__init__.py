@@ -91,12 +91,29 @@ class _RequireBotOwnerPrincipal(BaseMiddleware):
         return await handler(event, data)
 
 
+def telegram_session() -> BaseSession | None:
+    """A proxy-aware Telegram session, or ``None`` to let aiogram use its default.
+
+    Centralises the ``TG_PROXY`` setting so every ``Bot`` instance in the project can
+    reach the Bot API through the configured outbound proxy. ``None`` keeps behaviour
+    identical to before (direct connection) when no proxy is set — the default
+    ``AiohttpSession`` is constructed by aiogram itself.
+    """
+    settings = get_settings()
+    proxy = (settings.tg_proxy or "").strip()
+    if not proxy:
+        return None
+    from aiogram.client.session.aiohttp import AiohttpSession
+
+    return AiohttpSession(proxy=proxy)
+
+
 def create_bot(token: str | None = None, *, session: BaseSession | None = None) -> Bot:
     """The platform bot with its request rules; ``session`` replaces Telegram in tests."""
     settings = get_settings()
     bot = Bot(
         token=(token or settings.bot_token).strip(),
-        session=session,
+        session=session if session is not None else telegram_session(),
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     return install_screen_rules(install_replay_guard(bot))
