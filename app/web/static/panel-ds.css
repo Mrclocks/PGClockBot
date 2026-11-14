@@ -7,7 +7,7 @@
   --g1: 4px; --g2: 8px; --g3: 12px; --g4: 16px; --g6: 24px; --g8: 32px;
   --box-pad: var(--g4);          /* inside every box, all four sides */
   --box-gap: var(--g4);          /* between items inside a box */
-  --sec-gap: var(--g6);          /* between boxes / sections */
+  --sec-gap: var(--section-gap); /* between boxes / sections: the panel's one box gap (panel.css) */
   --ctl-h: var(--btn-h);         /* 44: fields, selects, buttons, tabs, icon buttons */
   --cmp-h: var(--ctl-sm-h);      /* 36: compact controls */
   --num-w: 96px;                 /* number box in a list row (amount); 72 on phones */
@@ -277,8 +277,7 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 }
 /* Rows of tabs: 16 below every row; a topic row and its page chips sit 8 apart. */
 /* A page's tab track sits 16 below what is above it and 16 above what follows — never touching a box. */
-.ds .section-tabs:not(.settings-subtabs):not(.modal-section-tabs) { margin: 0 0 var(--g4) !important; }
-.ds :is(.main-body, .ds-settings) > :has(+ .section-tabs:not(.modal-section-tabs)) { margin-bottom: var(--g4) !important; }
+.ds .section-tabs:not(.settings-subtabs):not(.modal-section-tabs) { margin: 0 !important; }
 .ds .section-tabs.settings-subtabs {
   display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: var(--g2);
   min-height: 0; height: auto; padding: 0; border: 0; background: none; border-radius: 0;
@@ -533,8 +532,8 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   .side .side-search { display: none; }
   .topbar .side-search.topbar-search {
     position: absolute;
-    inset-block-start: var(--dock-pad);
-    inset-inline: var(--dock-pad);
+    inset-block-start: var(--dock-pad-in);
+    inset-inline: var(--dock-pad-in);
     z-index: 2;
     direction: rtl;
     height: var(--dock-inner);

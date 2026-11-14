@@ -38,6 +38,8 @@ IMPORTANT = re.compile(r"!\s*important")
 # An icon is drawn on the 24 or 16 unit grid; a gauge, chart or sparkline has its own viewBox and is data, not an icon.
 # A transition of a layout property re-lays the page out every frame; motion uses transform, opacity or clip-path.
 TOKEN_DEF = re.compile(r"(--[\w-]+)\s*:([^;}]*)")
+# A gap is a spacing token or zero; a raw length here is how two pages end up with different spacing.
+RAW_GAP = re.compile(r"(?<![\w-])(?:row-|column-)?gap\s*:\s*([^;}]*)")
 LAYOUT_MOTION = re.compile(
     r"\btransition(?:-property)?\s*:[^;}]*?(?<![\w-])(width|height|max-height|min-height|top|right|bottom|left|margin(?:-[a-z]+)?|padding(?:-[a-z]+)?|inset)\b"
 )
@@ -58,6 +60,7 @@ RULE_HELP = {
     "token-loop": "a custom property that refers to itself is invalid and makes every use of it fall back to nothing (§1)",
     "bom": "no byte order mark in a template: inside the page it prints an invisible character that takes a line (§1)",
     "inline-svg": "icons come from icon() in _icons.html, not hand-written <svg> in templates (§2)",
+    "raw-gap": "gaps come from the spacing tokens (var(--space-*), var(--g*), var(--section-gap)) or 0 (§1)",
     "layout-motion": "only transform, opacity and clip-path animate; a width, height or position transition lays out every frame (§7-1)",
 }
 
@@ -171,6 +174,11 @@ def css_findings(source: str) -> list[Finding]:
         findings.extend(Finding("raw-font-size", number, match.group(0)[:60]) for match in FONT_SIZE.finditer(code))
         findings.extend(Finding("important", number, code.strip()[:60]) for _ in IMPORTANT.finditer(code))
         findings.extend(Finding("layout-motion", number, match.group(0)[:60]) for match in LAYOUT_MOTION.finditer(code))
+        findings.extend(
+            Finding("raw-gap", number, match.group(0)[:60])
+            for match in RAW_GAP.finditer(code)
+            if any(float(length.group(1)) > 0 for length in LENGTH.finditer(re.sub(r"var\([^)]*\)", "", match.group(1))))
+        )
         findings.extend(
             Finding("raw-radius", number, match.group(0)[:60])
             for match in RADIUS.finditer(code)
