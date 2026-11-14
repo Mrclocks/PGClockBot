@@ -76,6 +76,9 @@
   /* Controls inside both capsules sit in the control tier (44) with 8 to the capsule edge (DESIGN_SYSTEM.md §7). */
   --dock-pad: var(--space-1);
   --dock-inner: calc(var(--dock-h) - 2 * var(--dock-pad));
+  /* The bars draw a hairline border inside their height: padding gives it back so the controls sit dead centre. */
+  --dock-line: 1px;
+  --dock-pad-in: calc(var(--dock-pad) - var(--dock-line));
   --dock-edge: var(--space-1_5);
   /* Distance from the screen bottom: the mirror of the header's distance from the top (--hdr-top): the bottom
      safe area plus the same air (--safe-top-extra: 16px in a phone browser, 24px in the installed web app),
