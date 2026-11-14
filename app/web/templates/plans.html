@@ -1,5 +1,5 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch, switch_chip, page_header, act_label, modal_title, row_actions, table_select_head, table_select_cell, table_bulk_bar %}
+{% from "macros.html" import switch, switch_chip, page_header, act_label, modal_title, row_actions, table_select_head, table_select_cell, table_bulk_bar, empty_state %}
 {% block title %}پلن‌ها{% endblock %}
 {% block content %}
 {% call(slot) page_header('plans', 'پلن‌ها', help='plans') %}
@@ -37,7 +37,7 @@
   <div class="table-wrap">
   <table class="table-compact table-list-sm" data-bulk-select>
     <thead>
-      <tr>{{ table_select_head() }}<th>نام</th><th class="col-hide-sm">برچسب</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ (plans | length + 3) | num }} پلن</span></th></tr>
+      <tr>{{ table_select_head() }}<th>نام</th><th class="col-hide-sm">برچسب</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ plans | length | num }} پلن ثابت</span></th></tr>
     </thead>
     <tbody>
     {% for p in plans %}
@@ -99,7 +99,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="9" class="muted">پلن ثابتی نیست — از «افزودن پلن» بسازید.</td></tr>
+      {{ empty_state('هنوز پلن ثابتی نساخته‌اید.', 'plans', colspan=9, action_label='افزودن پلن', action_modal='modal-plan-unified') }}
     {% endfor %}
       <tr>
         <td class="col-select"></td>
@@ -244,7 +244,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">هنوز بسته‌ای نیست — از «افزودن پلن» با نوع بسته حجم یا زمان بسازید.</td></tr>
+      {{ empty_state('هنوز بسته‌ای نیست — از «افزودن پلن» با نوع بسته حجم یا زمان بسازید.', 'plans', colspan=7) }}
     {% endfor %}
     </tbody>
   </table>
@@ -311,7 +311,7 @@
         <td class="li-only-cell li-sub">{% if is_system_plan %}<span class="badge neutral">سیستمی</span>{% endif %}<span dir="auto">{{ p.description or 'اشتراک ثابت' }}</span></td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">پلن اشتراک ثابت نیست — از «افزودن پلن» با مخاطب نمایندگان بسازید.</td></tr>
+      {{ empty_state('پلن اشتراک ثابت نیست — از «افزودن پلن» با مخاطب نمایندگان بسازید.', 'plans', colspan=5) }}
     {% endfor %}
     </tbody>
   </table>
@@ -362,7 +362,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">پلن PAYG نیست — از «افزودن پلن» با نوع PAYG بسازید.</td></tr>
+      {{ empty_state('پلن PAYG نیست — از «افزودن پلن» با نوع PAYG بسازید.', 'plans', colspan=7) }}
     {% endfor %}
     </tbody>
   </table>
@@ -419,7 +419,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">بسته اضافه نیست — مخاطب پلن: نمایندگان → نوع: بسته حجم/کاربر.</td></tr>
+      {{ empty_state('بسته اضافه نیست — مخاطب پلن: نمایندگان → نوع: بسته حجم/کاربر.', 'plans', colspan=8) }}
     {% endfor %}
     </tbody>
   </table>
@@ -660,7 +660,7 @@
               </td>
             </tr>
           {% else %}
-            <tr><td colspan="7" class="muted">هنوز برچسبی نیست — از فرم بالا بسازید.</td></tr>
+            {{ empty_state('هنوز برچسبی نیست — از فرم بالا بسازید.', 'plans', colspan=7) }}
           {% endfor %}
           </tbody>
         </table>
@@ -816,7 +816,7 @@
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="7" class="muted">هنوز بسته‌ای نیست — از فرم بالا بسازید.</td></tr>
+          {{ empty_state('هنوز بسته‌ای نیست — از فرم بالا بسازید.', 'plans', colspan=7) }}
         {% endfor %}
         </tbody>
       </table>

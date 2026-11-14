@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_header, act_label %}
+{% from "macros.html" import page_header, act_label, empty_state %}
 {% from "_finance_tabs.html" import finance_tabs %}
 {% block title %}نمایندگان PAYG{% endblock %}
 {% set credit_labels = {'frozen': 'منجمد', 'overdue': 'سررسید گذشته', 'blocked': 'مسدود'} %}
@@ -61,7 +61,7 @@
         <a class="btn btn-sm btn-ghost li-hide" href="/resellers?edit={{ r.shop_id }}">کارت نماینده</a>
         <a class="li-only li-open" href="/resellers?edit={{ r.shop_id }}" aria-label="کارت نماینده {{ r.label }}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></a>
       </td>
-    </tr>{% else %}<tr><td colspan="8" class="muted">نمایندهٔ PAYG وجود ندارد</td></tr>{% endfor %}</tbody>
+    </tr>{% else %}{{ empty_state('نمایندهٔ PAYG وجود ندارد', 'payg', colspan=8) }}{% endfor %}</tbody>
   </table></div>
 </div>
 {% endblock %}

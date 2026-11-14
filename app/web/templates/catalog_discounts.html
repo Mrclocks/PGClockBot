@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_header %}
+{% from "macros.html" import row_actions, page_header, empty_state %}
 {% block title %}تخفیف‌ها{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
@@ -119,7 +119,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="8" class="muted">هنوز تغییری در قیمت ثبت نشده است.</td></tr>
+        {{ empty_state('هنوز تغییری در قیمت ثبت نشده است.', 'discounts', colspan=8) }}
       {% endfor %}
       </tbody>
     </table>

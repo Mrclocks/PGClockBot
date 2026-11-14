@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, oversell_create_switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
+{% from "macros.html" import switch, oversell_create_switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label, empty_state %}
 {% from "_ds.html" import ds_perm_groups %}
 {% block title %}{% if owner_view %}نمایندگان{% else %}نمایندگان من{% endif %}{% endblock %}
 {% block content %}
@@ -254,7 +254,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="{% if owner_view %}13{% else %}12{% endif %}" class="muted">نماینده‌ای نیست</td></tr>
+      {{ empty_state('نماینده‌ای نیست', 'resellers', colspan=(13 if owner_view else 12)) }}
     {% endfor %}
     </tbody>
   </table>

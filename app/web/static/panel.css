@@ -2717,7 +2717,7 @@ a.btn.btn-ghost:hover {
     border-bottom: 1px solid var(--border);
   }
   .table-list-sm > tbody > tr:last-child { border-bottom: 0; }
-  /* The empty-state row («… نیست») is one centred caption line. */
+  /* The empty-state row is one centred block (empty_state). */
   .table-list-sm > tbody > tr:has(> td[colspan]) { display: block; padding: var(--space-2) var(--space-1_5); }
   .table-list-sm > tbody > tr > td[colspan] {
     display: block;
@@ -12786,3 +12786,28 @@ input[dir="ltr"], input[inputmode="numeric"], input[inputmode="decimal"], input[
 .btn-color-card > .ui-select, .btn-color-card > select { margin-top: auto; }
 /* «سیستم» tag on alerts about the panel itself. */
 .notify-system-badge { margin-inline-start: var(--space-0); font-size: 0.75em; vertical-align: middle; }
+
+/* Empty list (DESIGN_SYSTEM.md §6-3): icon square, one sentence, the create action if any. A table whose only row
+   is the empty one has nothing to name or select, so its column headers and «انتخاب همه» are not shown. */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1_5);
+  padding: var(--space-3) var(--space-2);
+  text-align: center;
+}
+.empty-state-ico {
+  display: grid;
+  place-items: center;
+  width: var(--btn-h);
+  height: var(--btn-h);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--muted-fg) 12%, transparent);
+  color: var(--muted-fg);
+}
+.empty-state-ico svg { width: var(--ico-md); height: var(--ico-md); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.empty-state-text { max-width: 36em; margin: 0; color: var(--muted-fg); font-size: var(--fs-3); line-height: 1.7; white-space: normal; }
+table:has(> tbody > tr.table-empty:only-child) > thead { display: none; }
+/* Built-in rows beside an empty list (plans) cannot be selected, so there is nothing for «انتخاب همه» to pick. */
+table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }

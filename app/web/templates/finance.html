@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import ord_status, pay_status, row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import ord_status, pay_status, row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state %}
 {% from "_stuck_order_actions.html" import stuck_close_actions %}
 {% from "_finance_tabs.html" import finance_tabs %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot, ds_switch, ico %}
@@ -166,7 +166,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="9" class="muted">سفارشی نیست</td></tr>
+      {{ empty_state('سفارشی نیست', 'card', colspan=9) }}
     {% endfor %}
     </tbody>
   </table>
@@ -293,7 +293,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">پرداختی نیست</td></tr>
+      {{ empty_state('پرداختی نیست', 'card', colspan=8) }}
     {% endfor %}
     </tbody>
   </table>
@@ -434,7 +434,7 @@
       </tr>
     {% else %}
       {% if not (stuck_only_order_ids or []) %}
-      <tr><td colspan="7" class="muted">صف تحویل ناموفق خالی است.</td></tr>
+      {{ empty_state('صف تحویل ناموفق خالی است.', 'card', colspan=7) }}
       {% endif %}
     {% endfor %}
     </tbody>

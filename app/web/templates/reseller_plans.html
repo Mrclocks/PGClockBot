@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label %}
+{% from "macros.html" import switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label, empty_state %}
 {% from "_ds.html" import ds_modal_head, ds_foot %}
 {% block title %}پلن‌های نمایندگی{% endblock %}
 {% block content %}
@@ -46,7 +46,7 @@
         <td class="li-only-cell li-sub"><span dir="auto">{{ p.description or '—' }}</span></td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">پلنی نیست — تا پلن نسازید دکمه درخواست در بات برای کاربر بی‌فایده است</td></tr>
+      {{ empty_state('پلنی نیست — تا پلن نسازید دکمه درخواست در بات برای کاربر بی‌فایده است', 'plans', colspan=5) }}
     {% endfor %}
     </tbody>
   </table>

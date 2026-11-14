@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_header %}
+{% from "macros.html" import page_header, empty_state %}
 {% from "_my_account_tabs.html" import my_account_tabs %}
 {% block title %}اشتراک من{% endblock %}
 {% set charge_events = {'create': 'ساخت', 'renew': 'تمدید', 'add_volume': 'افزایش حجم', 'add_days': 'افزایش روز', 'reset': 'ریست ترافیک', 'reactivate': 'فعال‌سازی دوباره'} %}
@@ -95,7 +95,7 @@
         <td class="li-title"><bdi dir="ltr">#{{ r.id }}</bdi></td>
         <td class="cell-tight li-value"><bdi dir="ltr">{{ r.amount | money }}</bdi></td>
         <td class="cell-tight li-badge"><span class="badge {{ topup_tones.get(r.status, 'neutral') }}">{{ r.status_fa }}</span></td>
-      </tr>{% else %}<tr><td colspan="3" class="muted">هنوز شارژی ثبت نشده است</td></tr>{% endfor %}</tbody>
+      </tr>{% else %}{{ empty_state('هنوز شارژی ثبت نشده است', 'wallet', colspan=3) }}{% endfor %}</tbody>
     </table></div>
   </div>
 
@@ -126,7 +126,7 @@
         <td class="cell-tight li-value"><bdi dir="ltr">{{ st.amount_due | money }}</bdi></td>
         <td class="col-hide-sm li-sub"><bdi dir="ltr">{{ st.due_at.strftime('%Y-%m-%d') }}</bdi></td>
         <td class="cell-tight li-badge"><span class="badge {{ statement_tones.get(st.status, 'neutral') }}">{{ statement_labels.get(st.status, st.status) }}</span></td>
-      </tr>{% else %}<tr><td colspan="5" class="muted">هنوز صورت‌حسابی صادر نشده است</td></tr>{% endfor %}</tbody>
+      </tr>{% else %}{{ empty_state('هنوز صورت‌حسابی صادر نشده است', 'wallet', colspan=5) }}{% endfor %}</tbody>
     </table></div>
   </div>
 
@@ -143,7 +143,7 @@
         <td class="col-hide-sm mono" dir="ltr">{{ c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '—' }}</td>
         <td class="cell-tight li-value"><bdi dir="ltr">{{ c.amount | money }}</bdi></td>
         <td class="cell-tight li-badge"><span class="badge {{ charge_tones.get(c.status, 'neutral') }}">{{ charge_labels.get(c.status, c.status) }}</span></td>
-      </tr>{% else %}<tr><td colspan="5" class="muted">هزینه‌ای ثبت نشده است</td></tr>{% endfor %}</tbody>
+      </tr>{% else %}{{ empty_state('هزینه‌ای ثبت نشده است', 'wallet', colspan=5) }}{% endfor %}</tbody>
     </table></div>
     {% if next_before %}<div class="actions"><a class="btn btn-ghost" href="/my-subscription/charges?before={{ next_before }}">قدیمی‌تر</a></div>{% endif %}
   </div>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, modal_title, page_header, act_label %}
+{% from "macros.html" import row_actions, modal_title, page_header, act_label, empty_state %}
 {% block title %}نمایندگان من{% endblock %}
 {% block content %}
 {% call(slot) page_header('users', 'نمایندگان من', help='resellers') %}
@@ -98,7 +98,7 @@
       </tr>
       {% endfor %}
       {% else %}
-      <tr><td colspan="10" class="muted">نماینده‌ای ثبت نشده است</td></tr>
+      {{ empty_state('نماینده‌ای ثبت نشده است', 'resellers', colspan=10) }}
       {% endfor %}
     {% else %}
       {% for child in l2_rows %}
@@ -134,7 +134,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="10" class="muted">نماینده‌ای ثبت نشده است</td></tr>
+      {{ empty_state('نماینده‌ای ثبت نشده است', 'resellers', colspan=10) }}
       {% endfor %}
     {% endif %}
     </tbody>

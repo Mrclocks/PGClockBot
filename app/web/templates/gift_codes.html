@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, empty_state %}
 {% from "_gift_code_fields.html" import gift_code_fields %}
 {% block title %}کد هدیه{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
@@ -66,7 +66,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="8" class="muted">هنوز کدی ساخته نشده.</td></tr>
+        {{ empty_state('هنوز کدی ساخته نشده.', 'gift', colspan=8) }}
       {% endfor %}
       </tbody>
     </table>

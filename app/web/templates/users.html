@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
 {#- Declared at template top level (outside any block) so both {% block content %}
    and {% block page_scripts %} share the same values — {% set %} inside a block
@@ -303,7 +303,7 @@
         {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="{% if manage or ops or provision or edit_svc %}10{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
+      {{ empty_state('کاربری نیست', 'users', colspan=(10 if manage or ops or provision or edit_svc else 8)) }}
     {% endfor %}
     </tbody>
   </table>

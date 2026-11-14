@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_header, act_label %}
+{% from "macros.html" import row_actions, page_header, act_label, empty_state %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
 {% block title %}تخفیف تصادفی{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
@@ -47,7 +47,7 @@
               {% endif %}
             </td>
           </tr>
-        {% else %}<tr><td colspan="8" class="muted">هنوز تخفیف تصادفی تعریف نشده است. برای شروع، تخفیف تازه بسازید.</td></tr>{% endfor %}
+        {% else %}{{ empty_state('هنوز تخفیف تصادفی تعریف نشده است.', 'discounts', colspan=8, action_label='تخفیف تازه', action_modal='modal-random-discount') }}{% endfor %}
         </tbody>
       </table>
     </div>

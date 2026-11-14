@@ -125,6 +125,25 @@
         aria-label="حذف اعلان">حذف</button>
 {%- endmacro %}
 
+{# An empty list (DESIGN_SYSTEM.md §6-3): the icon of its subject in a tinted square, one sentence saying why it is
+   empty, and the page's own create action when the viewer may use it (``action_modal`` opens a modal,
+   ``action_href`` follows a link). With ``colspan`` it is the table's one row; a table whose only row is this one
+   hides its column headers and «انتخاب همه». #}
+{% macro empty_state(text, icon_name='inbox', colspan=None, action_label=None, action_modal=None, action_href=None) -%}
+{%- set body -%}
+<div class="empty-state">
+  <span class="empty-state-ico" aria-hidden="true">{{ icon(icon_name) }}</span>
+  <p class="empty-state-text">{{ text }}</p>
+  {%- if action_label and action_modal %}
+  <button type="button" class="btn" data-modal-open="{{ action_modal }}">{{ action_label }}</button>
+  {%- elif action_label and action_href %}
+  <a class="btn" href="{{ action_href }}">{{ action_label }}</a>
+  {%- endif %}
+</div>
+{%- endset -%}
+{%- if colspan %}<tr class="table-empty"><td colspan="{{ colspan }}">{{ body }}</td></tr>{% else %}{{ body }}{% endif -%}
+{%- endmacro %}
+
 {% macro table_select_head() -%}
 <th class="col-select" scope="col">
   <label class="table-select-all" title="انتخاب همه">
