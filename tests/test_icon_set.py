@@ -41,11 +41,22 @@ class IconSetTests(unittest.TestCase):
             with self.subTest(item=spec.key):
                 self.assertNotEqual(paths(render(f"icon('{spec.icon}')")), FALLBACK)
 
+    def test_settings_are_drawn_as_a_gear_everywhere(self) -> None:
+        gear = paths(render("icon('gear')"))
+        self.assertNotEqual(gear, FALLBACK)
+        self.assertNotEqual(gear, paths(render("icon('sliders')")))
+        for name in ("settings", "panel-settings"):
+            self.assertEqual(paths(render(f"icon('{name}')")), gear, name)
+        specs = [group for group in vars(panel_nav).values() if isinstance(group, (list, tuple))]
+        system = [item for group in specs for item in group
+                  if isinstance(item, panel_nav._ItemSpec) and item.key == "system_settings"]
+        self.assertEqual([item.icon for item in system], ["gear"])
+
     def test_one_concept_has_one_drawing_across_macros(self) -> None:
         same = [
             ("page_ico('overview')", "nav_icon('shield-check')"),
-            ("page_ico('panel-settings')", "nav_icon('sliders')"),
-            ("page_ico('settings')", "nav_icon('sliders')"),
+            ("page_ico('panel-settings')", "nav_icon('gear')"),
+            ("page_ico('settings')", "nav_icon('gear')"),
             ("card_title('orders', 'x')", "nav_icon('cart')"),
             ("card_title('nodes', 'x')", "nav_icon('nodes')"),
             ("action_center_icon('tickets')", "nav_icon('ticket')"),

@@ -223,7 +223,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         # Panel settings: sliders; bot settings: robot face (not identical gear).
         owner = build_sidebar(viewer_from_context({"role": "admin"}, {}, is_owner=True), path="/home")
         icons = {i.key: i.icon for s in owner for i in s.items}
-        self.assertEqual((icons["system_settings"], icons["bot_settings"]), ("sliders", "bot"))
+        self.assertEqual((icons["system_settings"], icons["bot_settings"]), ("gear", "bot"))
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("panel-settings", settings)
         self.assertIn("bot-settings", settings)

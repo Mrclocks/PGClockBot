@@ -45,7 +45,6 @@ from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.panel_nav import DOT_LABELS as NAV_DOT_LABELS
 from app.services.panel_nav import build_dock, sidebar_for_template
 from app.services.resellers import feature_perm_groups
-from app.services.marketing_nav import marketing_path
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
@@ -224,7 +223,6 @@ templates.env.globals["panel_sidebar"] = sidebar_for_template
 templates.env.globals["panel_dock"] = build_dock
 templates.env.globals["nav_dot_labels"] = NAV_DOT_LABELS
 templates.env.globals["feature_perm_groups"] = feature_perm_groups
-templates.env.globals["marketing_path"] = marketing_path
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
 templates.env.globals["format_bytes_ratio"] = format_bytes_ratio

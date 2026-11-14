@@ -193,7 +193,6 @@
       min-width: 0;
     }
     .page-head[data-page-head="capsule"] .page-back { width: var(--dock-inner); height: var(--dock-inner); }
-    .page-head[data-page-head="capsule"] .page-head-main:has(> .page-head-sub) > .page-back { grid-row: 1 / span 2; }
     .page-head[data-page-head="capsule"] .page-title { min-width: 0; gap: var(--space-1); }
     .page-head[data-page-head="capsule"] .page-title-ico {
       width: auto;
@@ -214,13 +213,6 @@
       animation: none;
     }
     .page-head[data-page-head="capsule"] .page-help-btn { display: none; }
-    .page-head[data-page-head="capsule"] .page-head-sub {
-      grid-column: 2;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      line-height: 1.3;
-    }
 
     .page-head[data-page-head="capsule"] > .page-head-actions {
       flex: 0 0 auto;

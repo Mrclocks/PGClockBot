@@ -92,7 +92,6 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ui-modal.ds .modal-title .page-title-ico { width: var(--ctl-h); height: var(--ctl-h); }
 .ui-modal.ds .modal-title-copy { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
 .ui-modal.ds .modal-title h2 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ui-modal.ds .modal-title-caption { margin: 0; font-size: 12px; line-height: 1.4; }
 .ui-modal.ds .ui-modal-head .icon-btn { margin: 0; }
 
 /* Body: sections 24 apart, the first 16 below the header. */
@@ -817,6 +816,8 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 /* A settings modal as list → section (DESIGN_SYSTEM.md §3): the same rows, one column, as buttons that open the
    section in place. While a section is open the back circle takes the place of the title icon. */
 .ds .modal-list { grid-template-columns: minmax(0, 1fr); }
+/* The list and each section keep the same air under the modal header as every other modal body. */
+.ui-modal.ds .settings-modal-panel :is(.modal-list, .modal-tab-panel) { padding-top: var(--g4); }
 .ds .modal-list[hidden] { display: none; }
 .ds button.hub-row { width: 100%; border: 0; background: none; font: inherit; text-align: start; cursor: pointer; }
 .ui-modal.ds .ds-head-row:has(> .modal-list-back:not([hidden])) .page-title-ico { display: none; }

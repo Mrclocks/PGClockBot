@@ -65,7 +65,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/settings?tab=backup",
         "roles": ["owner", "admin", "reseller", "pg_staff", "principal"],
         "nav_group": "سیستم",
-        "icon": "sliders",
+        "icon": "gear",
         "aliases": ["تنظیمات وب پنل", "بکاپ", "امنیت", "ssl", "pwa", "آپدیت", "رمز عبور", "توکن ربات"],
     },
     "bot-dashboard": {

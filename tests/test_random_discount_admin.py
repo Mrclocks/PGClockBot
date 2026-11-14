@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.api.random_discounts import register_random_discounts
 from app.db.models import Base, BotUser, RandomDiscount
 from app.services.formatting import format_money, format_number
-from app.services.marketing_nav import RANDOM_DISCOUNTS, marketing_path, marketing_sections
+from app.services.marketing_nav import RANDOM_DISCOUNTS, marketing_sections
 from app.services.resellers import DEFAULT_FEATURE_PERMS, feature_perm_groups
 
 TEMPLATES = Path(__file__).resolve().parents[1] / "app/web/templates"
@@ -62,7 +62,6 @@ class RandomDiscountAdminTests(unittest.IsolatedAsyncioTestCase):
             FileSystemLoader(str(TEMPLATES)),
         ]), autoescape=select_autoescape(["html"]))
         env.filters.update(num=format_number, money=format_money)
-        env.globals["marketing_path"] = marketing_path
 
         def render(request: Request, template: str, context: dict) -> HTMLResponse:
             return HTMLResponse(env.get_template(template).render(

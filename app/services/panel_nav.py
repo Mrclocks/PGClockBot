@@ -198,7 +198,7 @@ _INBOX = _ItemSpec("inbox", "مرکز اقدام", "/inbox", "inbox", lambda v: 
 _SYSTEM_OWNER: tuple[_ItemSpec, ...] = (
     _DASHBOARD,
     _INBOX,
-    _ItemSpec("system_settings", "تنظیمات سیستم", "/settings?tab=system", "sliders", _owner,
+    _ItemSpec("system_settings", "تنظیمات سیستم", "/settings?tab=system", "gear", _owner,
               lambda loc: loc.is_panel_settings() or loc.path.startswith("/security")),
 )
 

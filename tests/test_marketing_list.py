@@ -12,12 +12,9 @@ from fastapi import FastAPI, HTTPException
 
 from app.api.marketing_pages import register_marketing_pages
 from app.services.marketing_nav import (
-    CLUB_TRANSACTIONS,
-    DISCOUNTS,
     SECTION_DESCRIPTIONS,
     SECTION_ICONS,
     marketing_hub_sections,
-    marketing_path,
     marketing_sections,
 )
 from app.services.panel_nav import MARKETING_LIST_HREF, build_sidebar, viewer_from_context
@@ -51,12 +48,6 @@ class MarketingListServiceTests(unittest.TestCase):
         keys |= {section.key for section in nav._CLUB_SECTIONS}
         self.assertEqual(set(SECTION_DESCRIPTIONS), keys)
         self.assertEqual(set(SECTION_ICONS), keys)
-
-    def test_the_path_names_the_group_of_the_section(self) -> None:
-        sections = marketing_sections(OWNER)
-        self.assertEqual(marketing_path(sections, DISCOUNTS), "بازاریابی · تخفیف و کد هدیه")
-        self.assertEqual(marketing_path(sections, CLUB_TRANSACTIONS), "بازاریابی · باشگاه مشتریان")
-        self.assertEqual(marketing_path((), DISCOUNTS), "بازاریابی")
 
     def test_the_sidebar_entry_opens_the_list_and_stays_active_on_a_section(self) -> None:
         viewer = viewer_from_context(OWNER, {}, is_owner=True, marketing_sections=marketing_sections(OWNER))

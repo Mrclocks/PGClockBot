@@ -281,7 +281,6 @@ class MarketingNavRenderedPageTests(unittest.TestCase):
         html = _page("broadcast.html", "/broadcast", OWNER)
         self.assertIn('<a href="/marketing" class="nav-item', html)
         self.assertIn('href="/marketing" aria-label="بازگشت به بازاریابی"', html)
-        self.assertIn("بازاریابی · پیام و کمپین", html)
 
     def test_reseller_with_campaigns_only_gets_no_broadcast_or_club_links(self):
         staff = _reseller(["campaigns"])
@@ -327,5 +326,4 @@ class MarketingNavDiscountsPageTests(unittest.TestCase):
         )
         self.assertIn('<a href="/marketing" class="nav-item', html)
         self.assertIn('href="/marketing" aria-label="بازگشت به بازاریابی"', html)
-        self.assertIn("بازاریابی · تخفیف و کد هدیه", html)
         self.assertNotIn('href="/broadcast"', html)

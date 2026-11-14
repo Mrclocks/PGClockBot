@@ -77,7 +77,7 @@ SYSTEM_DESCRIPTIONS: dict[str, str] = {
     "security": "هویت ادمین وب و تلگرام، نام کاربری و رمز",
 }
 SYSTEM_ICONS: dict[str, str] = {
-    "general": "sliders",
+    "general": "gear",
     "backup": "download",
     "pwa": "palette",
     "ssl": "globe",
@@ -158,5 +158,5 @@ def system_settings_groups(active: str = "") -> tuple[SettingsTabGroup, ...]:
 
 def system_hub_sections() -> tuple[HubSection, ...]:
     return hub_sections(
-        system_settings_groups(), "/settings", area_icon="sliders", descriptions=SYSTEM_DESCRIPTIONS, icons=SYSTEM_ICONS
+        system_settings_groups(), "/settings", area_icon="gear", descriptions=SYSTEM_DESCRIPTIONS, icons=SYSTEM_ICONS
     )

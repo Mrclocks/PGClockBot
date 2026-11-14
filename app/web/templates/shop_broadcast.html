@@ -4,7 +4,7 @@
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-{{ page_header('shop_broadcast', 'پیام گروهی', help='broadcast', back='/marketing', back_label='بازاریابی', subtitle=(marketing_path(marketing_sections, 'shop_broadcast') if marketing_sections else 'بازاریابی')) }}
+{{ page_header('shop_broadcast', 'پیام گروهی', help='broadcast', back='/marketing', back_label='بازاریابی') }}
 
 
 <div class="card">
