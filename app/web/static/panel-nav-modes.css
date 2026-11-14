@@ -116,9 +116,10 @@
     width: auto;
     height: var(--dock-h);
     padding: var(--space-0);
-    border: 1px solid var(--modal-frost-line);
+    border: 1px solid var(--dock-glass-line);
     border-radius: var(--control-radius);
-    box-shadow: var(--dock-shadow);
+    background: var(--dock-glass-bg);
+    box-shadow: var(--dock-glass-highlight), var(--dock-shadow);
     transition: background-color var(--drawer-motion) var(--ease-standard);
   }
   .topbar-brand {
@@ -211,9 +212,10 @@
     grid-auto-columns: minmax(0, 1fr);
     height: var(--dock-h);
     padding: var(--space-0);
-    border: 1px solid var(--modal-frost-line);
+    border: 1px solid var(--dock-glass-line);
     border-radius: var(--control-radius);
-    background: var(--modal-frost-bg);
+    background: var(--dock-glass-bg);
+    box-shadow: var(--dock-glass-highlight);
     backdrop-filter: var(--modal-frost-blur);
     -webkit-backdrop-filter: var(--modal-frost-blur);
     clip-path: inset(0 0 0 0 round var(--dock-h));

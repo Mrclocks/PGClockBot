@@ -99,6 +99,14 @@
   --dock-label-fs: 11px;
   /* One soft shadow for the header and the bar: a faint contact line and a light lift. */
   --dock-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 6px 18px rgb(0 0 0 / 0.14);
+  /* Glass of the phone header, bar and menu ×. A dark shadow does not show on a dark page, so the dark theme
+     sets the capsules apart with glass a touch lighter than the page, a light edge and a faint top highlight;
+     the light theme keeps the shared frost (overridden below). */
+  --dock-glass-bg: color-mix(in srgb, color-mix(in srgb, #fff 5%, var(--bg-card)) 70%, transparent);
+  --dock-glass-line: rgb(255 255 255 / 0.12);
+  --dock-glass-highlight: inset 0 1px 0 rgb(255 255 255 / 0.07);
+  /* The header's search circle: a matte tint over the header glass (a nested blur would see only the header). */
+  --dock-tint: color-mix(in srgb, var(--foreground) 8%, transparent);
   /* Shared matte glass — modal sticky chrome + shell topbar/footers/mobile drawer.
      Keep the mix/blur numbers identical everywhere (see .ui-modal-head). */
   --modal-frost-bg: color-mix(in srgb, var(--bg-card) 52%, transparent);
@@ -8113,6 +8121,9 @@ html[data-theme="light"] {
   /* Light enough that the frosted menu over it still reads as glass, not a grey film. */
   --side-dim: rgba(0, 0, 0, 0.18);
   --sheet-dim-lift: brightness(1.22);
+  --dock-glass-bg: var(--modal-frost-bg);
+  --dock-glass-line: var(--modal-frost-line);
+  --dock-glass-highlight: inset 0 0 0 transparent;
   --table-head-bg: color-mix(in srgb, var(--muted) 72%, var(--bg-card));
 }
 html[data-theme="light"] * { scrollbar-color: #d4d4d8 transparent; }
