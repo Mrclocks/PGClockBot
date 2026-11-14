@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
+from scripts import design_check
 from scripts.design_check import css_findings, findings_for, template_findings
 
 
@@ -96,3 +100,24 @@ class ScopeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StrictRuleTests(unittest.TestCase):
+    """Rules the panel fully meets fail on any finding in any tracked file, not only on growth."""
+
+    def test_every_strict_rule_is_a_known_rule(self) -> None:
+        self.assertLessEqual(design_check.STRICT_RULES, set(design_check.RULE_HELP))
+
+    def test_one_finding_anywhere_is_reported_even_in_an_unchanged_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "app/web/templates").mkdir(parents=True)
+            (root / "app/web/templates/old.html").write_text('<p style="margin: 0">x</p>', encoding="utf-8")
+            (root / "app/web/templates/fine.html").write_text('<p class="muted">x</p>', encoding="utf-8")
+            files = "app/web/templates/old.html\napp/web/templates/fine.html\n"
+            with patch.object(design_check, "ROOT", root), patch.object(design_check, "_git", return_value=files):
+                found = design_check.strict_findings()
+        self.assertEqual([(path, f.rule) for path, f in found], [("app/web/templates/old.html", "inline-style")])
+
+    def test_the_panel_meets_every_strict_rule_today(self) -> None:
+        self.assertEqual(design_check.strict_findings(), [])
