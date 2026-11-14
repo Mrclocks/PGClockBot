@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, empty_state %}
 {% block title %}پیام گروهی{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
@@ -88,7 +88,7 @@
         <td class="li-only-cell li-badge">{% if row.status in ['queued', 'running'] %}<span class="badge pending">{{ status_labels.get(row.status, row.status) }}</span>{% elif row.fail_count %}<span class="badge rejected">{{ row.fail_count }} ناموفق</span>{% else %}<span class="badge ok">موفق</span>{% endif %}</td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">هنوز پیامی ارسال نشده</td></tr>
+      {{ empty_state('هنوز پیامی ارسال نشده', 'megaphone', colspan=8) }}
     {% endfor %}
     </tbody>
   </table>

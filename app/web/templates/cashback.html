@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_header, act_label %}
+{% from "macros.html" import row_actions, page_header, act_label, empty_state %}
 {% from "_ds.html" import ds_switch, ds_sec, ds_head_switch, ds_modal_head, ds_foot %}
 {% set event_labels = {'new': 'تازه', 'renew': 'تمدید', 'addon': 'اضافه'} %}
 
@@ -145,7 +145,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">هنوز قانونی ساخته نشده است</td></tr>
+      {{ empty_state('هنوز قانونی ساخته نشده است.', 'gift', colspan=6, action_label='قانون تازه', action_modal='modal-cb-rule-new') }}
     {% endfor %}
     </tbody>
   </table></div>

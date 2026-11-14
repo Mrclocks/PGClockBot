@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label, empty_state %}
 {% block title %}کاربران تست{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
@@ -163,7 +163,7 @@
         {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="12" class="muted">{% if q or active_filter != 'all' %}موردی با این فیلتر پیدا نشد.{% else %}هنوز کسی تست رایگان نگرفته است.{% endif %}</td></tr>
+      {{ empty_state('موردی با این فیلتر پیدا نشد.' if (q or active_filter != 'all') else 'هنوز کسی تست رایگان نگرفته است.', 'trial', colspan=12) }}
     {% endfor %}
     </tbody>
   </table>

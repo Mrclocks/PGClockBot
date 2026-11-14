@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import modal_title, page_header, act_label %}
+{% from "macros.html" import modal_title, page_header, act_label, empty_state %}
 {% block title %}باشگاه مشتریان{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
@@ -102,7 +102,7 @@
         <td class="mono col-count" data-sort-value="{{ r.count }}">{{ r.count | num }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="2" class="muted">هنوز دعوتی ثبت نشده</td></tr>
+      {{ empty_state('هنوز دعوتی ثبت نشده', 'loyalty', colspan=2) }}
     {% endfor %}
     </tbody>
   </table>
@@ -163,7 +163,7 @@
           <td class="muted mono" data-sort-value="{{ t.created_at }}">{{ t.created_at }}</td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="muted">تراکنشی نیست</td></tr>
+        {{ empty_state('تراکنشی نیست', 'loyalty', colspan=6) }}
       {% endfor %}
       </tbody>
     </table>

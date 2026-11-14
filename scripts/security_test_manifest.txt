@@ -502,3 +502,4 @@ tests/test_mobile_bar.py
 tests/test_settings_hub.py
 tests/test_marketing_list.py
 tests/test_settings_modal_list.py
+tests/test_empty_state.py

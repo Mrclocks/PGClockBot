@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import tkt_status, page_header, act_label, panel_tkt_status, panel_tkt_priority, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import tkt_status, page_header, act_label, panel_tkt_status, panel_tkt_priority, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state %}
 {% block title %}پشتیبانی{% endblock %}
 {% block content %}
 {% call(slot) page_header('tickets', 'پشتیبانی', help='tickets') %}
@@ -12,6 +12,8 @@
   {%- endif %}
 {% endcall %}
 
+{# Two lists on one page each carry their own heading (DESIGN_SYSTEM.md §6-3). #}
+{% if show_tg %}<h2 class="section-title">تیکت‌های پنل</h2>{% endif %}
 <div class="card card-flush">
   {{ table_bulk_bar('/tickets/panel/bulk-action', [
     {'key': 'close', 'label': 'بستن', 'confirm': '{n} تیکت پنلی بسته شوند؟', 'confirm_title': 'بستن گروهی', 'confirm_label': 'بستن', 'warn': true},
@@ -74,7 +76,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="{% if is_owner %}8{% else %}7{% endif %}" class="muted">هنوز تیکت پنلی ثبت نشده</td></tr>
+      {{ empty_state('هنوز تیکت پنلی ثبت نشده است.', 'ticket', colspan=(8 if is_owner else 7), action_label=('تیکت جدید' if can_create else None), action_modal='modal-ticket-new') }}
     {% endfor %}
     </tbody>
   </table>
@@ -123,7 +125,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="7" class="muted">تیکت کاربری نیست</td></tr>
+        {{ empty_state('تیکت کاربری نیست', 'ticket', colspan=7) }}
       {% endfor %}
       </tbody>
     </table>
