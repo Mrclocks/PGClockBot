@@ -1,25 +1,15 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, oversell_create_switch, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import switch, oversell_create_switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
 {% from "_ds.html" import ds_perm_groups %}
 {% block title %}{% if owner_view %}نمایندگان{% else %}نمایندگان من{% endif %}{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {% if owner_view %}
-    {{ page_title('resellers', 'نمایندگان', help='resellers') }}
-    {% else %}
-    {{ page_title('users', 'نمایندگان من', help='resellers') }}
-    {% endif %}
-  </div>
-  {% if owner_view %}
-  <button type="button" class="btn" data-modal-open="modal-reseller-create">افزودن نماینده</button>
-  {% elif can_create_l2 %}
-  <div class="actions">
-    <a class="btn btn-ghost" href="/resellers/children-pricing">قیمت و اعتبار زیرمجموعه</a>
-    <button type="button" class="btn" data-modal-open="modal-reseller-create-child">افزودن نماینده</button>
-  </div>
-  {% endif %}
-</div>
+{% call(slot) page_header('resellers' if owner_view else 'users', 'نمایندگان' if owner_view else 'نمایندگان من', help='resellers') %}
+  {%- if slot == 'primary' and owner_view or can_create_l2 %}
+  <button type="button" class="btn" data-modal-open="{{ 'modal-reseller-create' if owner_view else 'modal-reseller-create-child' }}">{{ act_label('افزودن نماینده', 'نماینده') }}</button>
+  {%- elif slot == 'more' and not owner_view and can_create_l2 %}
+  <a class="btn btn-ghost" href="/resellers/children-pricing">قیمت و اعتبار زیرمجموعه</a>
+  {%- endif %}
+{% endcall %}
 
 {% if owner_view %}
 <div class="section-tabs">

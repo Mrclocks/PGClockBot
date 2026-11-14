@@ -1,18 +1,14 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title, modal_title %}
+{% from "macros.html" import row_actions, modal_title, page_header, act_label %}
 {% block title %}نمایندگان من{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('users', 'نمایندگان من', help='resellers') }}
-  </div>
-  {% if can_create %}
-  <button type="button" class="btn" data-modal-open="modal-principal-create">افزودن نماینده</button>
-  {% endif %}
-  {% if can_create_l2 %}
-  <button type="button" class="btn" data-modal-open="modal-principal-create-l2">افزودن نماینده</button>
-  {% endif %}
-</div>
+{% call(slot) page_header('users', 'نمایندگان من', help='resellers') %}
+  {%- if slot == 'primary' and (can_create or can_create_l2) %}
+  <button type="button" class="btn" data-modal-open="{{ 'modal-principal-create' if can_create else 'modal-principal-create-l2' }}">{{ act_label('افزودن نماینده', 'نماینده') }}</button>
+  {%- elif slot == 'more' and can_create and can_create_l2 %}
+  <button type="button" class="btn btn-ghost" data-modal-open="modal-principal-create-l2">افزودن نماینده</button>
+  {%- endif %}
+{% endcall %}
 
 <div class="card card-flush">
   <h2>فهرست نمایندگان</h2>

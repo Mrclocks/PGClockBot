@@ -316,12 +316,18 @@
 ### صفحه
 ```jinja
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_header, act_label %}
 {% block content %}
-<div class="page-head">
-  <div>{{ page_title('icon-name', 'عنوان صفحه', help='topic') }}</div>
-  <div class="page-head-actions"><button type="button" class="btn" data-modal-open="modal-x">افزودن</button></div>
-</div>
+{% call(slot) page_header('icon-name', 'عنوان صفحه', help='topic') %}
+  {%- if slot == 'primary' %}
+  <button type="button" class="btn" data-modal-open="modal-x">{{ act_label('افزودن مورد', 'مورد') }}</button>
+  {%- elif slot == 'more' %}
+  <button type="button" class="btn btn-ghost" data-modal-open="modal-y">کار فرعی</button>
+  {%- endif %}
+{% endcall %}
+{# صفحهٔ جزئیات: page_header(..., back='/list', back_label='فهرست', subtitle='مسیر'). صفحهٔ بدون اکشن: {{ page_header(...) }}.
+   اکشن پرکاربردی که «ساختن» نیست: class="btn btn-ghost page-act-icon" و act_label('برچسب', icon_name='settings').
+   توضیح یک‌پاراگرافی صفحه زیر هدر: <p class="muted page-intro">…</p>، نه داخل آن. #}
 <nav class="section-tabs">…</nav>            {# اختیاری؛ ۱۶ بالا و پایین خودکار #}
 <div class="card">…</div>                    {# هر بخش یک کارت؛ کارت‌ها ۲۴ از هم #}
 <div class="card card-flush">…جدول…</div>    {# جدول لبه‌به‌لبه؛ عنوان h2 و توضیح p.muted داخل همان کارت #}

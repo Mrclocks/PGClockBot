@@ -1,16 +1,13 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
 {% from "_list_input.html" import list_input %}
 {% block title %}هاست‌های پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('hosts', 'هاست‌ها', 'pg', help='pg-hosts') }}
-  </div>
-  {% if can_create %}
-  <button type="button" class="btn" data-modal-open="modal-pg-host-create">ساخت هاست</button>
-  {% endif %}
-</div>
+{% call(slot) page_header('hosts', 'هاست‌ها', 'pg', help='pg-hosts') %}
+  {%- if slot == 'primary' and can_create %}
+  <button type="button" class="btn" data-modal-open="modal-pg-host-create">{{ act_label('ساخت هاست', 'هاست') }}</button>
+  {%- endif %}
+{% endcall %}
 <div class="card card-flush">
   <h2>لیست هاست‌ها</h2>
   {% if not hosts %}

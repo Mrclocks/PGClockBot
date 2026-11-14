@@ -1,13 +1,9 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header %}
 {% block title %}درخواست‌های نمایندگی{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('applications', 'درخواست‌های نمایندگی', help='reseller-applications') }}
-  </div>
-</div>
+{{ page_header('applications', 'درخواست‌های نمایندگی', help='reseller-applications') }}
 
 <div class="section-tabs">
   {% for t in tabs %}

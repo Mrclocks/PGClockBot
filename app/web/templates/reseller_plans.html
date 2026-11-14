@@ -1,14 +1,13 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
 {% block title %}پلن‌های نمایندگی{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('plans', 'پلن‌های نمایندگی', help='plans') }}
-  </div>
-  <button type="button" class="btn" data-modal-open="modal-plan-create">پلن جدید</button>
-</div>
+{% call(slot) page_header('plans', 'پلن‌های نمایندگی', help='plans') %}
+  {%- if slot == 'primary' %}
+  <button type="button" class="btn" data-modal-open="modal-plan-create">{{ act_label('پلن جدید', 'پلن') }}</button>
+  {%- endif %}
+{% endcall %}
 
 <div class="section-tabs">
   {% for t in tabs %}

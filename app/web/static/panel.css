@@ -2585,6 +2585,12 @@ a.btn.btn-ghost:hover {
   font-size: var(--fs-2);
   line-height: 1.4;
 }
+/* A page's one-paragraph description: below the header, not inside it (the phone capsule has no room for it). */
+.page-intro {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-3);
+  line-height: 1.7;
+}
 .page-more { display: contents; }
 .page-more > .btn,
 .page-more > a.btn,

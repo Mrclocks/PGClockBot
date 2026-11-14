@@ -1,14 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, row_actions %}
+{% from "macros.html" import row_actions, page_header %}
 {% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}پیام گروهی{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('shop_broadcast', 'پیام گروهی', help='broadcast') }}
-  </div>
-</div>
+{{ page_header('shop_broadcast', 'پیام گروهی', help='broadcast') }}
 
 {{ marketing_tabs(marketing_sections|default(()), 'shop_broadcast') }}
 

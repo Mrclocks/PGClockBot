@@ -1,14 +1,15 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, row_actions %}
+{% from "macros.html" import row_actions, page_header, act_label %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
 {% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}تخفیف تصادفی{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-  <div class="page-head">
-    <div>{{ page_title('discounts', 'تخفیف تصادفی') }}</div>
-    <div class="page-head-actions"><button type="button" class="btn" data-modal-open="modal-random-discount">تخفیف تازه</button></div>
-  </div>
+  {% call(slot) page_header('discounts', 'تخفیف تصادفی') %}
+  {%- if slot == 'primary' %}
+  <button type="button" class="btn" data-modal-open="modal-random-discount">{{ act_label('تخفیف تازه', 'تخفیف') }}</button>
+  {%- endif %}
+{% endcall %}
   {{ marketing_tabs(marketing_sections|default(()), 'random_discounts') }}
   {% if request.query_params.get('error') %}<div class="flash warn" role="alert">{{ request.query_params.get('error') }}</div>{% endif %}
   <div class="card">
