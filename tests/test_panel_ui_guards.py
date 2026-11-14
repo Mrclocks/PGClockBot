@@ -292,7 +292,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         panel = re.search(r"(?ms)^\.ui-modal-panel\s*\{([^}]+)\}", css)
         self.assertIsNotNone(panel)
         body = panel.group(1)
-        self.assertIn("font-size: 14px", body)
+        self.assertIn("font-size: var(--fs-3)", body)
         self.assertIn("text-size-adjust: 100%", body)
         self.assertIn("-webkit-text-size-adjust: 100%", body)
         self.assertIn(".ui-modal-panel p", css)
@@ -334,7 +334,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("backdrop-filter: var(--modal-frost-blur);", side_body)
         logout = re.search(r"(?ms)^\.logout-link\s*\{([^}]+)\}", css)
         self.assertIsNotNone(logout)
-        self.assertIn("font-size: 13px", logout.group(1))
+        self.assertIn("font-size: var(--fs-3)", logout.group(1))
         self.assertIn("height: var(--ctl-sm-h)", logout.group(1))
         self.assertIn("padding: 0 var(--space-1)", logout.group(1))
 
