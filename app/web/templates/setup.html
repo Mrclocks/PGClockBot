@@ -387,7 +387,7 @@
       li.classList.toggle('is-on', i === n);
     });
     const bar = document.getElementById('setup-probe-fill');
-    if (bar) bar.style.width = Math.max(8, Math.min(100, fill)) + '%';
+    if (bar) bar.style.setProperty('--p', String(Math.max(8, Math.min(100, fill))));
   }
 
   function runPgAccessProbe(form){

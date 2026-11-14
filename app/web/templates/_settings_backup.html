@@ -405,7 +405,7 @@
     setFormBusy(createForm, true);
     if (stepLabel) stepLabel.textContent = 'راه‌اندازی مجدد سرویس';
     if (stateEl) stateEl.textContent = extra || RESTART_MSG;
-    if (fill) fill.style.width = '98%';
+    if (fill) fill.style.setProperty('--p', '98');
     if (percentEl) percentEl.textContent = '۹۸٪';
     markSteps('restart');
   }
@@ -493,7 +493,7 @@
     if (d.state === 'running' || d.state === 'error' || d.restart_required) showRestoreOps(true);
 
     const pct = Number(d.percent || 0);
-    if (fill) fill.style.width = pct + '%';
+    if (fill) fill.style.setProperty('--p', String(pct));
     if (percentEl) percentEl.textContent = pct + '٪';
     const stepKey = d.step_key || '';
     if (stepLabel) {
