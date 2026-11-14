@@ -490,9 +490,11 @@
     width: var(--dock-h);
     height: var(--dock-h);
     padding: 0;
-    border: 1px solid color-mix(in srgb, var(--destructive) 40%, var(--modal-frost-line));
+    /* Red glass: the folded bar's frosted circle shows through a red tint lighter than the red edge,
+       like the brand-tinted action buttons in the page header. */
+    border: var(--dock-line) solid color-mix(in srgb, var(--destructive) 55%, transparent);
     border-radius: 50%;
-    background: transparent;
+    background: color-mix(in srgb, var(--destructive) 14%, transparent);
     color: var(--destructive);
     box-shadow: none;
     cursor: pointer;
