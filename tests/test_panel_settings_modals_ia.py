@@ -65,7 +65,6 @@ class DomainModalTemplateTests(unittest.TestCase):
     def test_loyalty_settings_modal_not_page_tab(self):
         html = (TEMPLATES / "loyalty.html").read_text(encoding="utf-8")
         self.assertIn('data-modal-open="modal-loyalty-settings"', html)
-        self.assertIn("marketing_tabs(", html)
         self.assertIn("باشگاه مشتریان", html)
         self.assertIn("home-panel-grid", html)
         self.assertIn("home-panel-neutral", html)

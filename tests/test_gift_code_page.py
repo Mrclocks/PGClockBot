@@ -184,9 +184,10 @@ class GiftCodePageTests(GiftCodeHarness):
         entry = response.text.split("بازاریابی و وفاداری</span>", 1)[0].rsplit("<a ", 1)[1]
         self.assertIn("active", entry)
 
-    async def test_tab_strip_marks_gift_codes_active(self):
+    async def test_gift_codes_lead_back_to_the_marketing_list(self):
         response = await self._get(_reseller(["gift_codes", "loyalty"], shop_id=5))
-        self.assertIn('href="/gift-codes" class="active" aria-current="page"', response.text)
+        self.assertIn('href="/marketing" aria-label="بازگشت به بازاریابی"', response.text)
+        self.assertIn("بازاریابی · تخفیف و کد هدیه", response.text)
 
 
 class GiftCodeRedirectTests(GiftCodeHarness):
