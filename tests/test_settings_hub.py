@@ -8,9 +8,18 @@ import unittest
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.services.resellers import RESELLER_SETTINGS_TABS
-from app.services.settings_hub import TAB_DESCRIPTIONS, TAB_ICONS, hub_sections, settings_place
+from app.services.settings_hub import (
+    SYSTEM_DESCRIPTIONS,
+    SYSTEM_ICONS,
+    TAB_DESCRIPTIONS,
+    TAB_ICONS,
+    hub_sections,
+    settings_place,
+    system_hub_sections,
+    system_settings_groups,
+)
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
-from app.services.users import SETTINGS_TABS
+from app.services.users import PANEL_SETTINGS_TABS, SETTINGS_TABS
 from tests.test_message_variables_entry import OWNER, SHOP_STAFF, _page
 
 SHOP_WITHOUT_SETTINGS = {"role": "reseller", "permissions": [], "bot_user_id": 5}
@@ -92,11 +101,39 @@ class SettingsPageTests(unittest.TestCase):
         self.assertIn('href="/shop-settings?tab=bot"', hub)
         self.assertNotIn('href="/settings?tab=', hub)
 
-    def test_system_settings_keep_their_page_until_their_own_list(self) -> None:
-        html = _page("settings.html", "/settings", OWNER, query=b"tab=general", tabs=[], tab="general",
-                     is_panel_settings=True, env_values={})
-        self.assertNotIn('class="settings-hub', html)
+    def system_page(self, query: bytes, tab: str) -> str:
+        return _page("settings.html", "/settings", OWNER, query=query, tabs=[], tab=tab, is_panel_settings=True, env_values={})
 
+    def test_system_settings_list_offers_every_system_page_and_security(self) -> None:
+        html = self.system_page(b"tab=system", "general")
+        hub = html.split('class="settings-hub', 1)[1].split("</main>", 1)[0]
+        for key, _label in PANEL_SETTINGS_TABS:
+            self.assertIn(f'href="/settings?tab={key}"', hub)
+        self.assertIn('href="/security"', hub)
+        self.assertNotIn('id="settings-layout"', html)
+
+    def test_a_system_page_leads_back_to_the_system_list(self) -> None:
+        html = self.system_page(b"tab=backup", "backup")
+        self.assertNotIn('class="settings-hub', html)
+        self.assertIn('href="/settings?tab=system" aria-label="بازگشت به تنظیمات سیستم"', html)
+        self.assertNotIn('href="/settings?tab=general"', html.split("settings-layout", 1)[0])
+
+
+class SystemSettingsListTests(unittest.TestCase):
+    def test_rows_follow_the_system_tabs_then_security(self) -> None:
+        hrefs = [href for _label, href in rows(system_hub_sections())]
+        self.assertEqual(hrefs, [f"/settings?tab={key}" for key, _ in PANEL_SETTINGS_TABS] + ["/security"])
+        for section in system_hub_sections():
+            for row in section.rows:
+                self.assertTrue(row.description and row.icon, row.label)
+
+    def test_every_system_description_belongs_to_a_system_page(self) -> None:
+        keys = {k for k, _ in PANEL_SETTINGS_TABS} | {"security"}
+        self.assertLessEqual(set(SYSTEM_DESCRIPTIONS) | set(SYSTEM_ICONS), keys)
+
+    def test_security_is_placed_in_the_system_area(self) -> None:
+        place = settings_place(system_settings_groups("security"), "security")
+        self.assertEqual(place.tab.href, "/security")
 
 if __name__ == "__main__":
     unittest.main()

@@ -105,7 +105,13 @@ from app.services.notifications import SYSTEM_NOTIFY_KEYS
 from app.services.receipt_review import DEFAULT_REJECT_TEXT
 from app.services.support_button import support_markup
 from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
-from app.services.settings_hub import hub_sections, settings_place
+from app.services.settings_hub import (
+    SYSTEM_LIST_TAB,
+    hub_sections,
+    settings_place,
+    system_hub_sections,
+    system_settings_groups,
+)
 from app.services.users import (
     SETTING_VISIBILITY,
     SETTINGS_DOMAIN_REDIRECTS,
@@ -189,6 +195,8 @@ templates.env.globals["system_notify_keys"] = SYSTEM_NOTIFY_KEYS
 # Settings areas open on a list and show their place on detail pages (DESIGN_SYSTEM.md §6-2).
 templates.env.globals["hub_sections"] = hub_sections
 templates.env.globals["settings_place"] = settings_place
+templates.env.globals["system_settings_groups"] = system_settings_groups
+templates.env.globals["system_hub_sections"] = system_hub_sections
 # Request context overrides these; they keep templates that render without a signed-in person working.
 templates.env.globals["panel_brand"] = DEFAULT_BRAND
 templates.env.globals["panel_brand_css"] = BRAND_PRESET_CSS
@@ -4405,6 +4413,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.updates import clear_update_cache, local_version
 
         tab = resolve_merged_tab((request.query_params.get("tab") or "welcome").strip())
+        if tab == SYSTEM_LIST_TAB:
+            # The system settings list renders over the first system page's context (settings.html).
+            tab = PANEL_SETTINGS_TABS[0][0]
         valid = {t[0] for t in SETTINGS_TABS} | PANEL_SETTINGS_KEYS
         if tab in SETTINGS_DOMAIN_REDIRECTS:
             dest = SETTINGS_DOMAIN_REDIRECTS[tab]

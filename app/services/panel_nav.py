@@ -112,7 +112,8 @@ class NavLocation:
     tab: str
 
     def is_panel_settings(self) -> bool:
-        return self.path.startswith("/settings") and self.tab in PANEL_SETTINGS_KEYS
+        # ``system`` is the list of the system settings area (settings_hub.SYSTEM_LIST_TAB).
+        return self.path.startswith("/settings") and (self.tab in PANEL_SETTINGS_KEYS or self.tab == "system")
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,7 +196,7 @@ _INBOX = _ItemSpec("inbox", "مرکز اقدام", "/inbox", "inbox", lambda v: 
 _SYSTEM_OWNER: tuple[_ItemSpec, ...] = (
     _DASHBOARD,
     _INBOX,
-    _ItemSpec("system_settings", "تنظیمات سیستم", "/settings?tab=general", "sliders", _owner,
+    _ItemSpec("system_settings", "تنظیمات سیستم", "/settings?tab=system", "sliders", _owner,
               lambda loc: loc.is_panel_settings() or loc.path.startswith("/security")),
 )
 
