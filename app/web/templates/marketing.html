@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_header %}
+{% from "_settings_hub.html" import settings_hub %}
+{% block title %}بازاریابی{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
+{% block content %}
+<div class="ds">
+{{ page_header('megaphone', 'بازاریابی') }}
+{{ settings_hub(hub) }}
+</div>
+{% endblock %}
