@@ -1,15 +1,12 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch_chip, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import switch_chip, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
 {% block title %}تمپلیت‌های پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('templates', 'تمپلیت‌های کاربر', 'pg', help='pg-templates') }}
-  </div>
-  {% if can_create %}
-  <button type="button" class="btn" data-modal-open="modal-pg-template-create">ساخت تمپلیت</button>
-  {% endif %}
-</div>
+{% call(slot) page_header('templates', 'تمپلیت‌های کاربر', 'pg', help='pg-templates') %}
+  {%- if slot == 'primary' and can_create %}
+  <button type="button" class="btn" data-modal-open="modal-pg-template-create">{{ act_label('ساخت تمپلیت', 'تمپلیت') }}</button>
+  {%- endif %}
+{% endcall %}
 <div class="card card-flush">
   <h2>تمپلیت‌های موجود</h2>
   {% if not templates %}

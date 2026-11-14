@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch_chip, page_title %}
+{% from "macros.html" import switch_chip, page_header %}
 {% from "_ds.html" import ds_sec, ds_switch, ds_unlimited, ds_perm_groups %}
 {% from "_payg_pricing_fields.html" import payg_pricing_fields %}
 {% block title %}ویرایش پلن نمایندگی{% endblock %}
@@ -8,12 +8,7 @@
 {% set kind = plan.plan_kind or 'subscription' %}
 {% set is_addon = kind in ['addon_volume', 'addon_users'] %}
 {% set is_system_plan = plan.is_system or kind == 'current_capacity' %}
-<div class="page-head">
-  <div>
-    {{ page_title('plan-edit', 'ویرایش پلن', help='plans') }}
-  </div>
-  <a class="btn btn-ghost" href="/plans#reseller-plans">بازگشت</a>
-</div>
+{{ page_header('plan-edit', 'ویرایش پلن', help='plans', back='/plans#reseller-plans', back_label='پلن‌ها') }}
 
 {% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}
 {{ pg_snapshot_limit_board(pg_limit_cards, heading='سقف ادمین اصلی', caption='ظرفیت این پلن از سقف زنده ادمین اصلی بیشتر نمی‌شود') }}

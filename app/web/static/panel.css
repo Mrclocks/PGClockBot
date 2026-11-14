@@ -66,7 +66,9 @@
      items are control-height (--btn-h) inside it. --dock-room is what the page footer leaves free under it. */
   --dock-h: calc(var(--btn-h) + 2 * var(--space-1));
   /* Items, logo and search circle inside the capsules: 4px clear of its edge. */
-  --dock-inner: calc(var(--dock-h) - 2 * var(--space-0));
+  /* Controls inside both capsules sit in the control tier (44) with 8 to the capsule edge (DESIGN_SYSTEM.md §7). */
+  --dock-pad: var(--space-1);
+  --dock-inner: calc(var(--dock-h) - 2 * var(--dock-pad));
   --dock-edge: var(--space-1_5);
   /* Distance from the screen bottom: the mirror of the header's distance from the top (--hdr-top): the bottom
      safe area plus the same air (--safe-top-extra: 16px in a phone browser, 24px in the installed web app),
@@ -104,7 +106,8 @@
   /* Glass of the phone header, bar and menu ×. A dark shadow does not show on a dark page, so the dark theme
      sets the capsules apart with glass a touch lighter than the page, a light edge and a faint top highlight;
      the light theme keeps the shared frost (overridden below). */
-  --dock-glass-bg: color-mix(in srgb, color-mix(in srgb, #fff 5%, var(--bg-card)) 70%, transparent);
+  /* 80% opaque: text behind the header and the bar never reads through the text on them. */
+  --dock-glass-bg: color-mix(in srgb, color-mix(in srgb, #fff 5%, var(--bg-card)) 80%, transparent);
   --dock-glass-line: rgb(255 255 255 / 0.12);
   --dock-glass-highlight: inset 0 1px 0 rgb(255 255 255 / 0.07);
   /* The header's search circle: a matte tint over the header glass (a nested blur would see only the header). */
@@ -147,7 +150,16 @@
   --foot-gap: var(--space-2);
   --control-gap: var(--space-1);
   --stack-gap: var(--space-2);
-  --title-size: 14px;
+  /* Type scale (DESIGN_SYSTEM.md §2): every text size is one of these five steps; fields use --control-fs. */
+  --fs-1: 11px;
+  --fs-2: 12px;
+  --fs-3: 14px;
+  --fs-4: 17px;
+  --fs-5: 24px;
+  --title-size: var(--fs-3);
+  /* Icon sizes: inside a button or row, beside the phone header title. */
+  --ico-sm: 20px;
+  --ico-md: 22px;
   /* Form controls MUST stay ≥16px forever — iOS Safari zooms any focused field under 16px.
      Do not set input/select/textarea font-size to --title-size or any value < 16px. */
   --control-fs: 16px;
@@ -2557,6 +2569,81 @@ a.btn.btn-ghost:hover {
 .page-head > div:has(> .page-title) {
   flex: 1 1 0%;
   min-width: 0;
+}
+/* page_header(): on desktop the «more» actions sit inline beside the primary one, exactly like before; the «⋯»
+   toggle and the help row exist only for the phone capsule (panel-nav-modes.css). */
+.page-head-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+.page-head-sub {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted-fg);
+  font-size: var(--fs-2);
+  line-height: 1.4;
+}
+/* A page's one-paragraph description: below the header, not inside it (the phone capsule has no room for it). */
+.page-intro {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-3);
+  line-height: 1.7;
+}
+.page-more { display: contents; }
+.page-more > .btn,
+.page-more > a.btn,
+.page-more > form > .btn {
+  width: auto;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding-inline: var(--space-2);
+}
+.page-more > form {
+  display: flex;
+  flex: 0 0 auto;
+  margin: 0;
+}
+.page-more-btn,
+.page-more-help { display: none; }
+.page-back {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: var(--btn-h);
+  height: var(--btn-h);
+  border-radius: var(--control-radius);
+  background: var(--dock-tint);
+  color: var(--foreground);
+  text-decoration: none;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+.page-back svg {
+  width: var(--ico-sm);
+  height: var(--ico-sm);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.page-back:active { transform: scale(0.96); }
+.page-back:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+/* act_label(): desktop shows the full label only. */
+.act-short,
+.btn > .act-ico { display: none; }
+.page-act-icon > .act-ico { display: inline-block; }
+/* A frequent action that is not «create» (e.g. finance settings): icon and label on desktop, a round icon button
+   in the phone capsule. */
+.page-act-icon svg {
+  width: var(--ico-sm);
+  height: var(--ico-sm);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .quick-links {
   display: grid;
@@ -8123,7 +8210,7 @@ html[data-theme="light"] {
   /* Light enough that the frosted menu over it still reads as glass, not a grey film. */
   --side-dim: rgba(0, 0, 0, 0.18);
   --sheet-dim-lift: brightness(1.22);
-  --dock-glass-bg: var(--modal-frost-bg);
+  --dock-glass-bg: color-mix(in srgb, var(--bg-card) 80%, transparent);
   --dock-glass-line: var(--modal-frost-line);
   --dock-glass-highlight: inset 0 0 0 transparent;
   --table-head-bg: color-mix(in srgb, var(--muted) 72%, var(--bg-card));
@@ -12305,9 +12392,6 @@ html[data-theme="light"] .sc-tip { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
 .upload-box--compact .upload-box-hint { flex-basis: 100%; }
 
 /* ---- Bot and PasarGuard overviews: server meters, live traffic, users share, nodes ---- */
-.ov-page-head { flex-wrap: nowrap; }
-.ov-head-btn { flex: 0 0 auto; margin-inline-start: auto; white-space: nowrap; }
-.ov-head-btn .ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ov-head { display: flex; align-items: center; gap: var(--space-1); margin-bottom: 12px; }
 .ov-head > :first-child { flex: 1 1 auto; min-width: 0; }
 .ov-live { display: inline-flex; align-items: center; gap: 6px; color: var(--muted-fg); font-size: 12px; white-space: nowrap; }

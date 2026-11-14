@@ -1,25 +1,9 @@
 {# Design-language building blocks (styles: panel-ds.css, behavior: panel-ds.js). #}
 {% from "macros.html" import modal_title %}
+{% from "_icons.html" import icon %}
 
 {% macro ico(name) -%}
-<svg viewBox="0 0 24 24" aria-hidden="true">
-{%- if name == 'plus' -%}<path d="M12 5v14M5 12h14"/>
-{%- elif name == 'check' -%}<path d="M5 12.5l4.5 4.5L19 7.5"/>
-{%- elif name == 'info' -%}<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>
-{%- elif name == 'trash' -%}<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>
-{%- elif name == 'shield' -%}<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M12 8v4M12 15h.01"/>
-{%- elif name == 'fixed' -%}<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/>
-{%- elif name == 'payg' -%}<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>
-{%- elif name == 'pack' -%}<path d="M12 5v14M5 12h14"/>
-{%- elif name == 'custom' -%}<path d="M4 7h9M17 5v4M19 7h1M4 12h3M11 10v4M13 12h7M4 17h11M19 15v4M21 17h-1"/>
-{%- elif name == 'trial' -%}<circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 1.5M9 3h6"/>
-{%- elif name == 'wholesale' -%}<path d="M4 8l8-4 8 4-8 4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/>
-{%- elif name == 'time' -%}<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>
-{%- elif name == 'users' -%}<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/>
-{%- elif name == 'chev' -%}<path d="M15 6l-6 6 6 6"/>
-{%- elif name == 'warn' -%}<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/>
-{%- endif -%}
-</svg>
+{{ icon('shield-alert' if name == 'shield' else name) }}
 {%- endmacro %}
 
 {# Section: small grey title outside, dashboard-style card inside. #}

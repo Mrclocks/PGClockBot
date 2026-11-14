@@ -1,16 +1,14 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch, switch_chip, page_title, modal_title, row_actions, table_select_head, table_select_cell, table_bulk_bar %}
+{% from "macros.html" import switch, switch_chip, page_header, act_label, modal_title, row_actions, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}پلن‌ها{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('plans', 'پلن‌ها', help='plans') }}
-  </div>
-  <div class="page-head-actions">
-    <button type="button" class="btn btn-ghost" data-modal-open="modal-plan-categories">برچسب دسته</button>
-    <button type="button" class="btn" id="btn-add-plan" data-modal-open="modal-plan-unified">افزودن پلن</button>
-  </div>
-</div>
+{% call(slot) page_header('plans', 'پلن‌ها', help='plans') %}
+  {%- if slot == 'primary' %}
+  <button type="button" class="btn" id="btn-add-plan" data-modal-open="modal-plan-unified">{{ act_label('افزودن پلن', 'پلن') }}</button>
+  {%- elif slot == 'more' %}
+  <button type="button" class="btn btn-ghost" data-modal-open="modal-plan-categories">برچسب دسته</button>
+  {%- endif %}
+{% endcall %}
 
 {% set plans_tab = 'resellers' if (is_platform_admin and request.query_params.get('tab') == 'resellers') else 'users' %}
 {% if is_platform_admin %}

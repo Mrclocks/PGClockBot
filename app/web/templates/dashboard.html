@@ -1,17 +1,13 @@
 {% extends "base.html" %}
-{% from "macros.html" import pay_status, page_title, card_title %}
+{% from "macros.html" import pay_status, page_header, act_label, card_title %}
 {% from "_home_widgets.html" import delta, status_tiles %}
 {% block title %}نمای کلی فروشگاه{% endblock %}
 {% block content %}
-<div class="page-head ov-page-head">
-  {{ page_title('overview', 'نمای کلی فروشگاه', 'brand', help='bot-dashboard') }}
-  {% if viewer.can_settings %}
-  <a class="btn btn-sm btn-ghost ov-head-btn" href="{{ '/settings?tab=bot' if viewer.shop_id is none else '/shop-settings' }}">
-    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>
-    <span>تنظیمات ربات</span>
-  </a>
-  {% endif %}
-</div>
+{% call(slot) page_header('overview', 'نمای کلی فروشگاه', 'brand', help='bot-dashboard') %}
+  {%- if slot == 'primary' and viewer.can_settings %}
+  <a class="btn btn-ghost page-act-icon" href="{{ '/settings?tab=bot' if viewer.shop_id is none else '/shop-settings' }}">{{ act_label('تنظیمات ربات', icon_name='bot-settings') }}</a>
+  {%- endif %}
+{% endcall %}
 
 {% if bot_setup_needed %}
 <div class="flash err dash-bot-setup">

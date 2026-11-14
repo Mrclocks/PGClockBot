@@ -1,15 +1,12 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch, switch_chip, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import switch, switch_chip, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
 {% block title %}گروه‌های پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('groups', 'گروه‌ها', 'pg', help='pg-groups') }}
-  </div>
-  {% if can_create %}
-  <button type="button" class="btn" data-modal-open="modal-pg-group-create">ساخت گروه</button>
-  {% endif %}
-</div>
+{% call(slot) page_header('groups', 'گروه‌ها', 'pg', help='pg-groups') %}
+  {%- if slot == 'primary' and can_create %}
+  <button type="button" class="btn" data-modal-open="modal-pg-group-create">{{ act_label('ساخت گروه', 'گروه') }}</button>
+  {%- endif %}
+{% endcall %}
 
 <div class="card card-flush">
   <h2>گروه‌های موجود</h2>

@@ -1,15 +1,12 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, switch_chip, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import row_actions, switch_chip, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
 {% block title %}کاربران پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('user', 'کاربران پاسارگارد', 'pg', help='pg-users') }}
-  </div>
-  {% if can_create %}
-  <button type="button" class="btn" data-modal-open="modal-pg-user-create">ساخت کاربر</button>
-  {% endif %}
-</div>
+{% call(slot) page_header('user', 'کاربران پاسارگارد', 'pg', help='pg-users') %}
+  {%- if slot == 'primary' and can_create %}
+  <button type="button" class="btn" data-modal-open="modal-pg-user-create">{{ act_label('ساخت کاربر', 'کاربر') }}</button>
+  {%- endif %}
+{% endcall %}
 <div class="card card-flush">
   <form method="get" action="/pg/users" class="search-bar">
     <label class="search-bar-field">
@@ -327,7 +324,7 @@
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-user-link-title">
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
-        {{ modal_title('settings', 'لینک اشتراک', tone='brand', heading_id='pg-user-link-title') }}
+        {{ modal_title('device', 'لینک اشتراک', tone='brand', heading_id='pg-user-link-title') }}
         <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
     </div>

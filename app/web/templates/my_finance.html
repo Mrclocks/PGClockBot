@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_header %}
 {% from "_my_account_tabs.html" import my_account_tabs %}
 {% block title %}اشتراک من{% endblock %}
 {% set charge_events = {'create': 'ساخت', 'renew': 'تمدید', 'add_volume': 'افزایش حجم', 'add_days': 'افزایش روز', 'reset': 'ریست ترافیک', 'reactivate': 'فعال‌سازی دوباره'} %}
@@ -10,7 +10,7 @@
 {% set topup_tones = {'pending': 'info', 'approved': 'ok', 'rejected': 'danger'} %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head"><div>{{ page_title('payments', 'اشتراک من') }}</div></div>
+{{ page_header('payments', 'اشتراک من') }}
 {{ my_account_tabs(tab) }}
 
 {% set balance = owner.wallet_balance or 0 %}
