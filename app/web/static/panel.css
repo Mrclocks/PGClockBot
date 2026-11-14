@@ -147,7 +147,16 @@
   --foot-gap: var(--space-2);
   --control-gap: var(--space-1);
   --stack-gap: var(--space-2);
-  --title-size: 14px;
+  /* Type scale (DESIGN_SYSTEM.md §2): every text size is one of these five steps; fields use --control-fs. */
+  --fs-1: 11px;
+  --fs-2: 12px;
+  --fs-3: 14px;
+  --fs-4: 17px;
+  --fs-5: 24px;
+  --title-size: var(--fs-3);
+  /* Icon sizes: inside a button or row, beside the phone header title. */
+  --ico-sm: 20px;
+  --ico-md: 22px;
   /* Form controls MUST stay ≥16px forever — iOS Safari zooms any focused field under 16px.
      Do not set input/select/textarea font-size to --title-size or any value < 16px. */
   --control-fs: 16px;
