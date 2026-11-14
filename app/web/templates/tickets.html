@@ -1,20 +1,16 @@
 {% extends "base.html" %}
-{% from "macros.html" import tkt_status, page_title, panel_tkt_status, panel_tkt_priority, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import tkt_status, page_header, act_label, panel_tkt_status, panel_tkt_priority, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
 {% block title %}پشتیبانی{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('tickets', 'پشتیبانی', help='tickets') }}
-  </div>
-  <div class="page-head-actions">
-    {% if can_manage_supports %}
-    <button type="button" class="btn btn-ghost" data-modal-open="modal-supports-settings">پشتیبان‌ها</button>
-    {% endif %}
-    {% if can_create %}
-    <button type="button" class="btn" data-modal-open="modal-ticket-new">تیکت جدید</button>
-    {% endif %}
-  </div>
-</div>
+{% call(slot) page_header('tickets', 'پشتیبانی', help='tickets') %}
+  {%- if slot == 'primary' and can_create %}
+  <button type="button" class="btn" data-modal-open="modal-ticket-new">{{ act_label('تیکت جدید', 'تیکت') }}</button>
+  {%- elif slot == 'primary' and can_manage_supports %}
+  <button type="button" class="btn btn-ghost page-act-icon" data-modal-open="modal-supports-settings">{{ act_label('پشتیبان‌ها', icon_name='users') }}</button>
+  {%- elif slot == 'more' and can_create and can_manage_supports %}
+  <button type="button" class="btn btn-ghost" data-modal-open="modal-supports-settings">پشتیبان‌ها</button>
+  {%- endif %}
+{% endcall %}
 
 <div class="card card-flush">
   {{ table_bulk_bar('/tickets/panel/bulk-action', [
