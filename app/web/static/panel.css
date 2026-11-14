@@ -2924,6 +2924,8 @@ a.btn.btn-ghost:hover {
     gap: 2px;
     box-sizing: border-box;
     height: 20px;
+    /* The general .badge min-height (--tag-h, 28) would outgrow this 22px row and be cut by its overflow. */
+    min-height: 0;
     margin: 0;
     padding: 0 var(--space-1);
     border-width: 1px;
@@ -2972,7 +2974,7 @@ a.btn.btn-ghost:hover {
   .table-list-sm .li-child > .li-sub { grid-area: sub; font-size: var(--fs-2); line-height: 22px; color: var(--muted-fg); }
   .table-list-sm .li-child > .li-badge { grid-area: badge; }
   .table-list-sm .li-child > .li-badge { display: flex; align-items: center; justify-content: flex-end; height: 22px; }
-  .table-list-sm .li-child > .li-badge .badge { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 20px; padding: 0 var(--space-1); font-size: var(--fs-1); font-weight: 600; line-height: 1; }
+  .table-list-sm .li-child > .li-badge .badge { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 20px; min-height: 0; padding: 0 var(--space-1); font-size: var(--fs-1); font-weight: 600; line-height: 1; }
 }
 
 /* User card (modal): account facts as label / value lines, then one block per service. */
