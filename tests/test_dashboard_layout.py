@@ -120,3 +120,19 @@ class DashboardOrderTests(unittest.TestCase):
         html = self.dashboard(bot_ok=False)
         self.assertLess(html.index('role="alert"'), html.index("kpi-strip"))
         self.assertIn("ربات تلگرام: عدم اتصال به تلگرام", html)
+
+
+class UsersPageTests(unittest.TestCase):
+    """The users page has no counters above its list: the filter row already offers each of them."""
+
+    def test_no_counters_and_every_filter_stays_in_the_filter_row(self) -> None:
+        from tests.test_marketing_nav import OWNER, _page
+
+        html = _page("users.html", "/users", OWNER, rows=[], c={"total": 0, "expiring": 2, "alerts": 1}, flt="all",
+                     q="", filter_href=lambda filter_key="all", q="", color=None: f"/users?filter={filter_key}")
+        self.assertNotIn("stat-strip", html)
+        tabs = html.split('aria-label="فیلتر کاربران"', 1)[1].split("</nav>", 1)[0]
+        for key in ("expiring", "low_volume", "alerts"):
+            self.assertIn(f"filter={key}", tabs)
+        self.assertIn('class="search-submit"', html)
+        self.assertNotIn(">جستجو</button>", html)

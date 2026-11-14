@@ -212,7 +212,17 @@
       white-space: nowrap;
       animation: none;
     }
-    .page-head[data-page-head="capsule"] .page-help-btn { display: none; }
+    /* Help is a small «؟» right after the title; its touch area reaches the capsule height. */
+    .page-head[data-page-head="capsule"] .page-help-btn {
+      position: relative;
+      width: 24px;
+      height: 24px;
+      margin-inline-start: var(--space-0);
+      border: 0;
+      background: var(--dock-tint);
+      font-size: var(--fs-2);
+    }
+    .page-head[data-page-head="capsule"] .page-help-btn::before { content: ""; position: absolute; inset: -10px; }
 
     .page-head[data-page-head="capsule"] > .page-head-actions {
       flex: 0 0 auto;
@@ -306,8 +316,7 @@
     }
     .page-head[data-page-head="capsule"] .page-more > .btn,
     .page-head[data-page-head="capsule"] .page-more > a.btn,
-    .page-head[data-page-head="capsule"] .page-more > form > .btn,
-    .page-head[data-page-head="capsule"] .page-more-help {
+    .page-head[data-page-head="capsule"] .page-more > form > .btn {
       display: flex;
       align-items: center;
       justify-content: flex-start;
@@ -329,14 +338,7 @@
     .page-more > form { display: block; }
     .page-head[data-page-head="capsule"] .page-more > .btn:active,
     .page-head[data-page-head="capsule"] .page-more > a.btn:active,
-    .page-head[data-page-head="capsule"] .page-more > form > .btn:active,
-    .page-head[data-page-head="capsule"] .page-more-help:active { background: color-mix(in srgb, var(--foreground) 7%, transparent); }
-    .page-more-help svg { width: var(--ico-sm); height: var(--ico-sm); fill: none; stroke: var(--muted-fg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-    .page-head[data-page-head="capsule"] .page-more-help:not(:first-child) {
-      margin-top: var(--space-0);
-      border-top: 1px solid var(--border);
-      border-radius: 0 0 var(--r-sm) var(--r-sm);
-    }
+    .page-head[data-page-head="capsule"] .page-more > form > .btn:active { background: color-mix(in srgb, var(--foreground) 7%, transparent); }
   }
   @media (max-width: 359px) and (min-height: 501px) {
     .page-head[data-page-head="capsule"] .page-title-ico { display: none; }

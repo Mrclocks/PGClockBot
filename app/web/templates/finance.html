@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import ord_status, pay_status, row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state %}
+{% from "macros.html" import ord_status, pay_status, row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state, search_submit %}
 {% from "_stuck_order_actions.html" import stuck_close_actions %}
 {% from "_finance_tabs.html" import finance_tabs %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot, ds_switch, ico %}
@@ -31,7 +31,7 @@
     <label class="search-bar-field">
       <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، پلن، وضعیت…" autocomplete="off" />
     </label>
-    <button class="btn btn-ghost" type="submit">جستجو</button>
+    {{ search_submit() }}
   </form>
   {{ table_bulk_bar('/finance/orders/bulk-action', [
     {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': '{n} سفارش تأیید شوند؟', 'confirm_title': 'تأیید گروهی', 'confirm_label': 'تأیید'},
@@ -205,7 +205,7 @@
     <label class="search-bar-field">
       <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، مبلغ، وضعیت…" autocomplete="off" />
     </label>
-    <button class="btn btn-ghost" type="submit">جستجو</button>
+    {{ search_submit() }}
   </form>
   {{ table_bulk_bar('/finance/payments/bulk-action', [
     {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': '{n} پرداخت تأیید شوند؟', 'confirm_title': 'تأیید گروهی', 'confirm_label': 'تأیید'},

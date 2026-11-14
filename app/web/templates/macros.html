@@ -241,6 +241,7 @@
        {% if slot == 'more' %}<button type="button" class="btn btn-ghost" data-modal-open="c">برچسب دسته</button>{% endif %}
      {% endcall %}
    «primary» holds at most one action; everything in «more» sits beside it on desktop and in the «⋯» menu on phones.
+   Help is the small «؟» right after the title, never a menu item, so a page with no extra actions has no «⋯».
    ``back`` turns the page into a detail page: a round back button replaces the icon. A header has no caption line
    under its title (DESIGN_SYSTEM.md §7); a page's place is shown by the back button.
    ``capsule=false`` keeps the title row out of the phone header (the dashboard keeps the brand there). #}
@@ -249,7 +250,6 @@
 {%- set more = caller('more') if caller is defined else '' -%}
 {%- set has_primary = primary|trim|length > 0 -%}
 {%- set has_more = more|trim|length > 0 -%}
-{%- set topic = (guide_topics or {}).get(help) if help else none -%}
 <div class="page-head{% if back %} page-head--detail{% endif %}" data-page-head="{{ 'capsule' if capsule else 'flow' }}">
   <div class="page-head-main">
     {%- if back %}
@@ -257,24 +257,26 @@
     {%- endif %}
     {{ page_title(icon_name, title, tone, help) }}
   </div>
-  {%- if has_primary or has_more or topic %}
+  {%- if has_primary or has_more %}
   <div class="page-head-actions">
-    {%- if has_more or topic %}
+    {%- if has_more %}
     <div class="page-more" id="page-more" data-page-more>
       {{ more }}
-      {%- if topic %}
-      <a class="page-more-help" href="{{ topic.href }}">{{ icon('help') }}<span>راهنمای این صفحه</span></a>
-      {%- endif %}
     </div>
     {%- endif %}
     {{ primary }}
-    {%- if has_more or topic %}
+    {%- if has_more %}
     <button type="button" class="page-more-btn" aria-label="گزینه‌های بیشتر" aria-expanded="false"
             aria-controls="page-more" data-page-more-toggle>{{ icon('dots') }}</button>
     {%- endif %}
   </div>
   {%- endif %}
 </div>
+{%- endmacro %}
+
+{# The submit button of a list search: the same round magnifier as the search in the header. #}
+{% macro search_submit(label='جستجو') -%}
+<button class="search-submit" type="submit" aria-label="{{ label }}" title="{{ label }}">{{ icon('search') }}</button>
 {%- endmacro %}
 
 {# Label of a page's primary action: the full label on desktop and for screen readers; «+» and a short label in the
