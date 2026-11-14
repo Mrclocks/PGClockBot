@@ -25,11 +25,11 @@
 </div>
 {%- endmacro %}
 
-{# The header of a settings area: the area itself on its list, or the page with a way back and its path. #}
+{# The header of a settings area: the area itself on its list, or the page with a way back to the list. #}
 {% macro settings_area_header(groups, active, base, area_title, area_icon, tone='brand', help=None, is_hub=false) -%}
 {%- set place = none if is_hub else settings_place(groups, active) -%}
 {%- if place -%}
-{{ page_header(area_icon, place.tab.label, tone, help=help, back=base, back_label=area_title, subtitle=(area_title ~ ' · ' ~ place.group.label) if place.group.label else area_title) }}
+{{ page_header(area_icon, place.tab.label, tone, help=help, back=base, back_label=area_title) }}
 {%- else -%}
 {{ page_header(area_icon, area_title, tone, help=help) }}
 {%- endif -%}

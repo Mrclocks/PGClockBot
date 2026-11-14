@@ -175,8 +175,6 @@ def marketing_groups(sections: tuple[MarketingSection, ...]) -> tuple[MarketingG
 
 # The marketing area as a list (DESIGN_SYSTEM.md §6-2): one card per group, one row per section the staff member may
 # open. The sidebar entry opens this list (panel_nav.MARKETING_LIST_HREF); every section page leads back to it.
-MARKETING_TITLE = "بازاریابی"
-
 SECTION_DESCRIPTIONS: dict[str, str] = {
     CLUB: "امتیاز، سطح‌ها، جوایز و دعوت دوستان",
     CLUB_TRANSACTIONS: "تعدیل دستی و آخرین تراکنش‌های امتیاز",
@@ -222,11 +220,3 @@ def marketing_hub_sections(sections: tuple[MarketingSection, ...]) -> tuple[HubS
         )
         for group in marketing_groups(sections)
     )
-
-
-def marketing_path(sections: tuple[MarketingSection, ...], active: str) -> str:
-    """«بازاریابی · group» for a section page; the area name alone when the section is not in a group."""
-    for group in marketing_groups(sections):
-        if any(section.key == active for section in group.sections):
-            return f"{MARKETING_TITLE} · {group.label}"
-    return MARKETING_TITLE

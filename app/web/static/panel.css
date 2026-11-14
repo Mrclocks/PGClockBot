@@ -2578,13 +2578,6 @@ a.btn.btn-ghost:hover {
   align-items: center;
   gap: var(--space-1);
 }
-.page-head-sub {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--muted-fg);
-  font-size: var(--fs-2);
-  line-height: 1.4;
-}
 /* A page's one-paragraph description: below the header, not inside it (the phone capsule has no room for it). */
 .page-intro {
   margin: 0 0 var(--space-3);
@@ -7392,13 +7385,6 @@ td.byte-size {
   min-width: 0;
   flex: 1 1 auto;
 }
-.modal-title-caption {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.45;
-  color: var(--muted-fg);
-}
 /* Modal chrome title matches page titles (not the tiny section --title-size) */
 .ui-modal-head h1,
 .ui-modal-head h2,
@@ -9995,6 +9981,14 @@ tr.is-unread td { background: rgba(234, 179, 8, 0.06); }
 .ticket-view-sub {
   margin: var(--space-1) 0 0;
   font-size: 13px;
+}
+/* The ticket subject opens the body: a header carries only its title. */
+.ticket-subject {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: var(--fs-3);
+  font-weight: 600;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 .ticket-meta {
   display: flex;

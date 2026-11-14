@@ -183,11 +183,12 @@
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="ticket-view-title">
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
-        {{ modal_title('tickets', 'تیکت #' ~ t.id, caption=t.subject, tone='brand', heading_id='ticket-view-title') }}
+        {{ modal_title('tickets', 'تیکت #' ~ t.id, tone='brand', heading_id='ticket-view-title') }}
         <a class="icon-btn" href="/tickets" aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
       </div>
     </div>
 
+    <p class="ticket-subject">{{ t.subject }}</p>
     <div class="ticket-meta">
       <span class="badge {{ priority_badge.get(t.priority, 'neutral') }}">اولویت: {{ panel_tkt_priority(t.priority) }}</span>
       <span class="badge {{ status_badge.get(t.status, 'neutral') }}">{{ panel_tkt_status(t.status) }}</span>
@@ -271,11 +272,12 @@
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="tg-ticket-view-title">
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
-        {{ modal_title('tickets', 'تیکت ربات #' ~ t.id, caption=t.subject, tone='brand', heading_id='tg-ticket-view-title') }}
+        {{ modal_title('tickets', 'تیکت ربات #' ~ t.id, tone='brand', heading_id='tg-ticket-view-title') }}
         <a class="icon-btn" href="/tickets" aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
       </div>
     </div>
 
+    <p class="ticket-subject">{{ t.subject }}</p>
     <div class="ticket-meta">
       <span class="badge {% if t.status=='open' %}open{% elif t.status=='closed' %}neutral{% else %}answered{% endif %}">{{ tkt_status(t.status) }}</span>
       <span class="muted">کاربر:

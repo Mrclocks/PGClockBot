@@ -207,9 +207,10 @@
        {% if slot == 'more' %}<button type="button" class="btn btn-ghost" data-modal-open="c">برچسب دسته</button>{% endif %}
      {% endcall %}
    «primary» holds at most one action; everything in «more» sits beside it on desktop and in the «⋯» menu on phones.
-   ``back`` turns the page into a detail page: a round back button replaces the icon and ``subtitle`` shows the path.
+   ``back`` turns the page into a detail page: a round back button replaces the icon. A header has no caption line
+   under its title (DESIGN_SYSTEM.md §7); a page's place is shown by the back button.
    ``capsule=false`` keeps the title row out of the phone header (the dashboard keeps the brand there). #}
-{% macro page_header(icon_name, title, tone='brand', help=None, back=None, back_label=None, subtitle=None, capsule=true) -%}
+{% macro page_header(icon_name, title, tone='brand', help=None, back=None, back_label=None, capsule=true) -%}
 {%- set primary = caller('primary') if caller is defined else '' -%}
 {%- set more = caller('more') if caller is defined else '' -%}
 {%- set has_primary = primary|trim|length > 0 -%}
@@ -221,9 +222,6 @@
     <a class="page-back" href="{{ back }}" aria-label="بازگشت به {{ back_label or 'صفحهٔ قبل' }}">{{ icon('back') }}</a>
     {%- endif %}
     {{ page_title(icon_name, title, tone, help) }}
-    {%- if subtitle %}
-    <p class="page-head-sub">{{ subtitle }}</p>
-    {%- endif %}
   </div>
   {%- if has_primary or has_more or topic %}
   <div class="page-head-actions">
@@ -266,12 +264,11 @@
 {%- endmacro %}
 
 {# Modal chrome title — same icon-box language as page_title, plus a short caption #}
-{% macro modal_title(name, text, caption=None, tone='brand', heading='h2', heading_id=None) -%}
+{% macro modal_title(name, text, tone='brand', heading='h2', heading_id=None) -%}
 <div class="modal-title">
   {{ page_ico(name, tone) }}
   <div class="modal-title-copy">
     <{{ heading }}{% if heading_id %} id="{{ heading_id }}"{% endif %}>{{ text }}</{{ heading }}>
-    {% if caption %}<p class="muted modal-title-caption">{{ caption }}</p>{% endif %}
   </div>
 </div>
 {%- endmacro %}

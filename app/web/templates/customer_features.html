@@ -4,7 +4,7 @@
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-{{ page_header('broadcast', self.title(), back='/marketing', back_label='بازاریابی', subtitle=(marketing_path(marketing_sections, 'campaigns') if marketing_sections else 'بازاریابی')) }}
+{{ page_header('broadcast', self.title(), back='/marketing', back_label='بازاریابی') }}
 {% if request.query_params.get('error') %}<div class="flash warn">{{ request.query_params.get('error') }}</div>{% endif %}
 <div class="card"><h2>انتخاب مخاطبان</h2><form method="get" action="/campaigns" class="form-stack">
 <label class="form-field">گروه<select name="audience">{% for key, label in audiences.items() %}<option value="{{ key }}" {% if key == audience %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
