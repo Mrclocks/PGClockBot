@@ -3939,14 +3939,15 @@ code.env-fname {
   gap: var(--space-1);
 }
 .footer-actions { display: flex; align-items: center; gap: var(--space-1); }
+/* The GitHub star is a quiet footer link, not a call to action: neutral outline, muted text. */
 .btn-star,
 a.btn.btn-star {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  color: var(--brand-fg) !important;
-  border: 1px solid color-mix(in srgb, var(--brand-base) 42%, transparent);
-  background: color-mix(in srgb, var(--brand-base) 12%, transparent);
+  color: var(--muted-fg) !important;
+  border: 1px solid var(--border);
+  background: transparent;
   border-radius: var(--control-radius);
   padding: 0 var(--space-1);
   height: var(--ctl-sm-h);
@@ -3958,8 +3959,8 @@ a.btn.btn-star {
 }
 .btn-star:hover,
 a.btn.btn-star:hover {
-  background: color-mix(in srgb, var(--brand-base) 20%, transparent);
-  color: var(--brand-fg) !important;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: var(--foreground) !important;
   opacity: 1;
   filter: none;
 }
@@ -8420,15 +8421,6 @@ html[data-theme="light"] .section-tabs a.active:hover,
 html[data-theme="light"] .section-tabs .tab-btn.active:hover {
   background: color-mix(in srgb, var(--brand-base) 18%, transparent);
   color: var(--brand-fg);
-}
-html[data-theme="light"] .btn-star {
-  color: var(--brand-fg) !important;
-  border-color: color-mix(in srgb, var(--brand-base) 42%, transparent);
-  background: color-mix(in srgb, var(--brand-base) 10%, transparent);
-}
-html[data-theme="light"] .btn-star:hover {
-  background: color-mix(in srgb, var(--brand-base) 16%, transparent);
-  color: var(--brand-fg) !important;
 }
 html[data-theme="light"] .upload-box {
   background: var(--background);
