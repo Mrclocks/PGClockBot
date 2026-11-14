@@ -77,6 +77,12 @@ class IconSetTests(unittest.TestCase):
         for spec in reseller_items:
             self.assertEqual(paths(render(f"icon('{spec.icon}')")), reseller, spec.key)
 
+    def test_the_guide_draws_the_users_icon_like_the_panel(self) -> None:
+        from scripts.build_guide import icon_svg  # the guide builder is a script, imported only for this check
+
+        self.assertEqual(paths(str(icon_svg("users"))), paths(render("icon('users')")))
+        self.assertNotEqual(paths(render("icon('users')")), paths(render("icon('resellers')")))
+
     def test_an_icon_draws_as_an_outline_even_without_a_stylesheet(self) -> None:
         svg = render("icon('close')")
         for attribute in ('fill="none"', 'stroke="currentColor"', 'stroke-linecap="round"'):
