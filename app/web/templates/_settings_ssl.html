@@ -275,7 +275,7 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
       .then(d => {
         if (!box) return;
         box.hidden = false;
-        if (bar) bar.style.width = (d.pct || 0) + '%';
+        if (bar) bar.style.setProperty('--p', String((d.pct || 0)));
         if (msg) msg.textContent = d.message || '';
         if (pctEl) pctEl.textContent = (d.pct || 0) + '%';
         if (d.done && !finished) {
@@ -311,7 +311,7 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
         setBusy(true);
         if (box) box.hidden = false;
         if (msg) msg.textContent = action === 'renew' ? 'در حال تمدید…' : 'در حال دریافت گواهی…';
-        if (bar) bar.style.width = '6%';
+        if (bar) bar.style.setProperty('--p', '6');
         if (pctEl) pctEl.textContent = '6%';
         timer = setInterval(function () { if (!document.hidden) poll(); }, 800);
       }

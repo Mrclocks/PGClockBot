@@ -453,7 +453,7 @@
       });
     }
     const pct = STEP_PCT[activeKey] || 0;
-    if (fillEl) fillEl.style.width = pct + '%';
+    if (fillEl) fillEl.style.setProperty('--p', String(pct));
     if (pctEl) pctEl.textContent = pct + '٪';
     if (stepLabel) stepLabel.textContent = STEP_LABEL[activeKey] || '…';
   }
@@ -547,7 +547,7 @@
       return;
     }
     setStep('bot', 'bot');
-    if (fillEl) fillEl.style.width = '100%';
+    if (fillEl) fillEl.style.setProperty('--p', '100');
     if (pctEl) pctEl.textContent = '۱۰۰٪';
     await new Promise((r) => setTimeout(r, 500));
     const url = new URL(location.href);

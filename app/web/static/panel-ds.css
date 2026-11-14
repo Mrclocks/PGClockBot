@@ -132,14 +132,14 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 @keyframes ds-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ds-fade-out { from { opacity: 1; } to { opacity: 0; } }
 .ui-modal.ds { --ds-slide: 48px; --ds-slide-opacity: 0; }
-.ui-modal.ds.open:not(.is-closing) .ui-modal-backdrop { animation: ds-fade-in 240ms ease-out both; }
-.ui-modal.ds.open:not(.is-closing) .ui-modal-panel { animation: ds-slide-up 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-.ui-modal.ds.open.is-closing .ui-modal-backdrop { animation: ds-fade-out 220ms ease-in forwards; }
-.ui-modal.ds.open.is-closing .ui-modal-panel { animation: ds-slide-down 220ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+.ui-modal.ds.open:not(.is-closing) .ui-modal-backdrop { animation: ds-fade-in var(--motion-fast) ease-out both; }
+.ui-modal.ds.open:not(.is-closing) .ui-modal-panel { animation: ds-slide-up var(--motion-med) cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.ui-modal.ds.open.is-closing .ui-modal-backdrop { animation: ds-fade-out var(--motion-fast) ease-in forwards; }
+.ui-modal.ds.open.is-closing .ui-modal-panel { animation: ds-slide-down var(--motion-fast) cubic-bezier(0.4, 0, 1, 1) forwards; }
 @media (max-width: 640px) {
   /* A phone sheet slides in whole, without fading. */
   .ui-modal.ds { --ds-slide: 100%; --ds-slide-opacity: 1; }
-  .ui-modal.ds.open:not(.is-closing) .ui-modal-panel { animation-duration: 340ms; }
+  .ui-modal.ds.open:not(.is-closing) .ui-modal-panel { animation-duration: var(--motion-slow); }
 }
 @media (prefers-reduced-motion: reduce) {
   .ui-modal.ds.open .ui-modal-panel, .ui-modal.ds.open .ui-modal-backdrop { animation: none !important; }

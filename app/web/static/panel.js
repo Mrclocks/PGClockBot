@@ -1908,14 +1908,14 @@
         const wrap = ensureProgress(box);
         const bar = wrap.querySelector('.upload-box-progress-bar');
         wrap.hidden = false;
-        if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+        if (bar) bar.style.setProperty('--p', String(Math.max(0, Math.min(100, pct))));
         box.classList.add('is-uploading');
       }
       function clearProgress(box){
         const wrap = box.querySelector('.upload-box-progress');
         const bar = wrap && wrap.querySelector('.upload-box-progress-bar');
         if (wrap) wrap.hidden = true;
-        if (bar) bar.style.width = '0%';
+        if (bar) bar.style.setProperty('--p', '0');
         box.classList.remove('is-uploading');
       }
       function showToast(msg){
@@ -4133,7 +4133,7 @@ const root = document.getElementById('upd-root');
     setBusy(true, 'در حال راه‌اندازی مجدد…');
     if (stateEl) stateEl.textContent = (extra || RESTART_MSG);
     if (stepEl) stepEl.textContent = 'راه‌اندازی مجدد سرویس';
-    if (fill) fill.style.width = '98%';
+    if (fill) fill.style.setProperty('--p', '98');
     if (percentEl) percentEl.textContent = '۹۸٪';
   }
 
@@ -4236,7 +4236,7 @@ const root = document.getElementById('upd-root');
     }
     if (st.state === 'running' || st.state === 'error' || st.restart_required) showOps(true);
     const pct = Number(st.percent || 0);
-    fill.style.width = pct + '%';
+    fill.style.setProperty('--p', String(pct));
     if (percentEl) percentEl.textContent = pct + '٪';
     if (stepEl) {
       stepEl.textContent = (st.state === 'error' || st.restart_required)
