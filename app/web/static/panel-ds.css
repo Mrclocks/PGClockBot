@@ -816,6 +816,8 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 /* A settings modal as list → section (DESIGN_SYSTEM.md §3): the same rows, one column, as buttons that open the
    section in place. While a section is open the back circle takes the place of the title icon. */
 .ds .modal-list { grid-template-columns: minmax(0, 1fr); }
+/* The list and each section keep the same air under the modal header as every other modal body. */
+.ui-modal.ds .settings-modal-panel :is(.modal-list, .modal-tab-panel) { padding-top: var(--g4); }
 .ds .modal-list[hidden] { display: none; }
 .ds button.hub-row { width: 100%; border: 0; background: none; font: inherit; text-align: start; cursor: pointer; }
 .ui-modal.ds .ds-head-row:has(> .modal-list-back:not([hidden])) .page-title-ico { display: none; }
