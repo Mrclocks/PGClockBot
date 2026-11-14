@@ -37,6 +37,7 @@ LENGTH = re.compile(r"(?<![\w.-])(\d*\.?\d+)(?:px|rem|em)\b")
 IMPORTANT = re.compile(r"!\s*important")
 # An icon is drawn on the 24 or 16 unit grid; a gauge, chart or sparkline has its own viewBox and is data, not an icon.
 # A transition of a layout property re-lays the page out every frame; motion uses transform, opacity or clip-path.
+TOKEN_DEF = re.compile(r"(--[\w-]+)\s*:([^;}]*)")
 LAYOUT_MOTION = re.compile(
     r"\btransition(?:-property)?\s*:[^;}]*?(?<![\w-])(width|height|max-height|min-height|top|right|bottom|left|margin(?:-[a-z]+)?|padding(?:-[a-z]+)?|inset)\b"
 )
@@ -44,7 +45,7 @@ SVG_TAG = re.compile(r'<svg\b(?=[^>]*viewBox="0 0 (?:24 24|16 16)")')
 ICON_SET = "app/web/templates/_icons.html"
 
 # Rules with no finding left anywhere: one finding in any tracked file fails the check.
-STRICT_RULES = frozenset({"modal-not-ds", "form-modal-cancel", "inline-style"})
+STRICT_RULES = frozenset({"modal-not-ds", "form-modal-cancel", "inline-style", "bom", "token-loop"})
 
 RULE_HELP = {
     "modal-not-ds": "every .ui-modal also carries .ds (DESIGN_SYSTEM.md §3)",
@@ -54,6 +55,8 @@ RULE_HELP = {
     "raw-font-size": "text sizes come from the type scale var(--fs-1…5) or var(--control-fs) (§2)",
     "raw-radius": "corner radii come from var(--r-sm), var(--inner-radius), var(--radius) or var(--control-radius) (§2)",
     "important": "no new !important; raise specificity or fix the cascade instead (§9)",
+    "token-loop": "a custom property that refers to itself is invalid and makes every use of it fall back to nothing (§1)",
+    "bom": "no byte order mark in a template: inside the page it prints an invisible character that takes a line (§1)",
     "inline-svg": "icons come from icon() in _icons.html, not hand-written <svg> in templates (§2)",
     "layout-motion": "only transform, opacity and clip-path animate; a width, height or position transition lays out every frame (§7-1)",
 }
@@ -128,10 +131,11 @@ def _only_custom_properties(style: str) -> bool:
 
 
 def template_findings(source: str) -> list[Finding]:
+    boms = [Finding("bom", number, "U+FEFF") for number, line in enumerate(source.splitlines(), start=1) if "\ufeff" in line]
     scanner = _TemplateScanner()
     scanner.feed(source)
     scanner.close()
-    findings = list(scanner.findings)
+    findings = list(scanner.findings) + boms
     for number, line in enumerate(source.splitlines(), start=1):
         if JINJA_CANCEL.search(line) and not _inside_dialog(source, number):
             findings.append(Finding("form-modal-cancel", number, line.strip()[:60]))
@@ -155,6 +159,11 @@ def css_findings(source: str) -> list[Finding]:
     findings: list[Finding] = []
     for number, line in enumerate(source.splitlines(), start=1):
         code = line.split("/*", 1)[0]
+        findings.extend(
+            Finding("token-loop", number, match.group(0).strip()[:60])
+            for match in TOKEN_DEF.finditer(code)
+            if re.search(r"var\(\s*" + re.escape(match.group(1)) + r"\s*[,)]", match.group(2))
+        )
         # Token definitions (--name: #hex) are where colours are allowed to live.
         if re.match(r"\s*--[\w-]+\s*:", code):
             continue
