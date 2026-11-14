@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state %}
+{% from "macros.html" import row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state, stat_strip %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
 {#- Declared at template top level (outside any block) so both {% block content %}
    and {% block page_scripts %} share the same values — {% set %} inside a block
@@ -26,39 +26,11 @@
 {% endcall %}
 {# flash_ok / flash_err rendered once in base.html (above title) #}
 
-<div class="home-panels users-ops-overview">
-  <section class="home-panel home-panel-neutral">
-    <div class="home-panel-grid users-ops-stats">
-      <a class="stat{% if flt=='expiring' %} is-active{% endif %}" href="{{ filter_href(filter_key='expiring', q=q) }}">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 1.5"/></svg>
-          </span>
-          <span>نزدیک انقضا</span>
-        </div>
-        <strong>{{ c.expiring | default(0) | num }}</strong>
-      </a>
-      <a class="stat{% if flt=='low_volume' %} is-active{% endif %}" href="{{ filter_href(filter_key='low_volume', q=q) }}">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 18h16M6 14l3-6 3 4 3-5 3 7"/></svg>
-          </span>
-          <span>حجم کم</span>
-        </div>
-        <strong>{{ c.low_volume | default(0) | num }}</strong>
-      </a>
-      <a class="stat{% if flt=='alerts' %} is-active{% endif %}" href="{{ filter_href(filter_key='alerts', q=q) }}">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 4a5 5 0 0 1 5 5v2.2l1.8 3.3H5.2L7 11.2V9a5 5 0 0 1 5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>
-          </span>
-          <span>دارای اعلان</span>
-        </div>
-        <strong>{{ c.alerts | default(0) | num }}</strong>
-      </a>
-    </div>
-  </section>
-</div>
+{{ stat_strip([
+  {'label': 'نزدیک انقضا', 'value': c.expiring | default(0) | num, 'icon': 'expiring', 'href': filter_href(filter_key='expiring', q=q), 'active': flt == 'expiring'},
+  {'label': 'حجم کم', 'value': c.low_volume | default(0) | num, 'icon': 'low_volume', 'href': filter_href(filter_key='low_volume', q=q), 'active': flt == 'low_volume'},
+  {'label': 'دارای اعلان', 'value': c.alerts | default(0) | num, 'icon': 'inbox', 'href': filter_href(filter_key='alerts', q=q), 'active': flt == 'alerts'},
+], 'فیلتر کاربران') }}
 
 <nav class="section-tabs" role="tablist" aria-label="فیلتر کاربران">
   <a class="{% if flt=='all' %}active{% endif %}" href="{{ filter_href(filter_key='all', q=q) }}">همه{% if c.total is defined %} ({{ c.total | num }}){% endif %}</a>

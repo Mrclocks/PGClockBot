@@ -823,26 +823,60 @@ html[data-theme="light"] .badge.badge-risk-tag {
   line-height: 1.35;
   flex: 0 0 auto;
 }
-.users-ops-overview {
+/* Page counters (DESIGN_SYSTEM.md §6): one compact row, three cells across even on phones. Each cell is a filter link:
+   the figure and the icon square on the first line, the label across the whole cell below (two lines at most, never
+   cut), so a 320px phone still reads every label. */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-1);
   margin-bottom: var(--section-gap);
 }
-.users-ops-overview .home-panel {
-  height: auto;
-}
-.users-ops-stats {
-  flex: 0 0 auto;
-}
-.users-ops-stats > .stat {
-  text-decoration: none;
+.stat-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: var(--space-0) var(--space-1);
+  align-items: center;
+  min-height: 56px;
+  padding: var(--space-1) var(--space-1_5);
+  border: 1px solid var(--border);
+  border-radius: var(--inner-radius, var(--radius));
+  background: var(--bg-card);
   color: inherit;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
 }
-.users-ops-stats > .stat:hover {
-  background: rgba(255, 255, 255, 0.06);
+.stat-cell:hover { background: color-mix(in srgb, var(--foreground) 4%, var(--bg-card)); }
+.stat-cell:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.stat-cell.is-active {
+  border-color: color-mix(in srgb, var(--brand-base) 45%, var(--border));
+  background: color-mix(in srgb, var(--brand-base) 8%, var(--bg-card));
 }
-.users-ops-stats > .stat.is-active {
-  border-color: color-mix(in srgb, var(--accent, #38bdf8) 45%, var(--border));
-  background: color-mix(in srgb, var(--accent, #38bdf8) 10%, transparent);
+.stat-cell-ico {
+  display: grid;
+  grid-row: 1;
+  grid-column: 2;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--muted-fg) 12%, transparent);
+  color: var(--muted-fg);
+}
+.stat-cell.is-active .stat-cell-ico { background: color-mix(in srgb, var(--brand-base) 14%, transparent); color: var(--brand-fg); }
+.stat-cell-ico svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.stat-cell-value { grid-row: 1; grid-column: 1; font-size: var(--fs-4); font-weight: 700; line-height: 1.2; }
+.stat-cell-label {
+  display: -webkit-box;
+  grid-row: 2;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--muted-fg);
+  font-size: var(--fs-2);
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 /* Users table — service / volume / expiry always-visible separate columns */
 .users-ops-table .col-svc {
@@ -3905,14 +3939,15 @@ code.env-fname {
   gap: var(--space-1);
 }
 .footer-actions { display: flex; align-items: center; gap: var(--space-1); }
+/* The GitHub star is a quiet footer link, not a call to action: neutral outline, muted text. */
 .btn-star,
 a.btn.btn-star {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  color: var(--brand-fg) !important;
-  border: 1px solid color-mix(in srgb, var(--brand-base) 42%, transparent);
-  background: color-mix(in srgb, var(--brand-base) 12%, transparent);
+  color: var(--muted-fg) !important;
+  border: 1px solid var(--border);
+  background: transparent;
   border-radius: var(--control-radius);
   padding: 0 var(--space-1);
   height: var(--ctl-sm-h);
@@ -3924,8 +3959,8 @@ a.btn.btn-star {
 }
 .btn-star:hover,
 a.btn.btn-star:hover {
-  background: color-mix(in srgb, var(--brand-base) 20%, transparent);
-  color: var(--brand-fg) !important;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: var(--foreground) !important;
   opacity: 1;
   filter: none;
 }
@@ -8386,15 +8421,6 @@ html[data-theme="light"] .section-tabs a.active:hover,
 html[data-theme="light"] .section-tabs .tab-btn.active:hover {
   background: color-mix(in srgb, var(--brand-base) 18%, transparent);
   color: var(--brand-fg);
-}
-html[data-theme="light"] .btn-star {
-  color: var(--brand-fg) !important;
-  border-color: color-mix(in srgb, var(--brand-base) 42%, transparent);
-  background: color-mix(in srgb, var(--brand-base) 10%, transparent);
-}
-html[data-theme="light"] .btn-star:hover {
-  background: color-mix(in srgb, var(--brand-base) 16%, transparent);
-  color: var(--brand-fg) !important;
 }
 html[data-theme="light"] .upload-box {
   background: var(--background);
