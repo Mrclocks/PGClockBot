@@ -1,5 +1,5 @@
 {# Reseller dash body — single root #home-dash for /home/body swap. #}
-{% from "macros.html" import page_title, card_title %}
+{% from "macros.html" import page_header, card_title %}
 <div class="home-dash" id="home-dash">
 {% if request is defined and request.url.path == '/home/body' %}{% include "_pg_connection_notice.html" %}{% endif %}
 {% if dashboard_degraded %}
@@ -12,11 +12,7 @@
 </div>
 {% endif %}
 
-<div class="page-head">
-  <div>
-    {{ page_title('home', 'داشبورد', 'neutral', help='home') }}
-  </div>
-</div>
+{{ page_header('home', 'داشبورد', 'neutral', help='home', capsule=false) }}
 
 {% if bot_setup_needed %}
 <div class="flash err dash-bot-setup">

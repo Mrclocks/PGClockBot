@@ -138,6 +138,24 @@ Exit: full suite green and required; PostgreSQL migration job present.
 
 Exit: no file over 1,500 lines in `app/web/static`; zero inline scripts without a nonce; no unescaped dynamic `innerHTML`.
 
+### Design unification track
+
+One design language for every page and modal, on phone and desktop, as written in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md). Each step is its own pull request; the rules land first so every later step has one reference.
+
+| Step | Scope |
+|---|---|
+| D1 | Rules: type and radius scales, shape-means-role, capsule header, «⋯» menu, settings list → detail, empty/loading/error states, Persian digits, motion, pull request checklist |
+| D2 | Tokens (`--fs-*`, icon sizes), one icon macro, `page_header`, `empty_state`, settings list macro; new `design_check.py` rules as a ratchet |
+| D3 | Capsule header, «⋯» menu, 44 controls inside both capsules, content clearance and layering under the bars, on every page |
+| D4 | Settings list → detail for bot settings, system settings, marketing, shop settings and my account, with permission and shop-isolation tests |
+| D5 | All modals to §3, settings modals to the list pattern |
+| D6 | Page content: dashboard order and connection banner, compact stat rows, empty states, list counts, ticket list headings, usage bar from the quota cache, footer, menu tile labels |
+| D7 | Persian digits in `num`/`money` and the JS formatters |
+| D8 | Mechanical: font sizes and radii to the scales, inline styles, button variants, `!important` |
+| D9 | Lock: strict `design_check.py` for every rule at zero, components page, pull request template |
+
+Baseline (`dev` at `d8fde6c`): 49 pages, 218 modals in 30 templates; `design_check.py --report` 390 findings (raw colour 329, inline style 58, cancel in form modal 2, modal outside `.ds` 1); 18 distinct `font-size` values (13px used 92 times), 16 distinct pixel radii, 33 button class combinations, 328 `!important`.
+
 ## Phase 7. Dependencies and operations
 
 1. Pin and document why each dependency has its bounds; add `pip-audit` (or equivalent) to CI.

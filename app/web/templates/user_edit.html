@@ -1,14 +1,9 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_header %}
 {% block title %}ویرایش کاربر{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('user-edit', 'ویرایش کاربر بات', help='users') }}
-  </div>
-  <a class="btn btn-ghost" href="/users">بازگشت به لیست</a>
-</div>
+{{ page_header('user-edit', 'ویرایش کاربر بات', help='users', back='/users', back_label='کاربران ربات') }}
 <div class="user-edit-page">
   {% include "_user_edit_body.html" %}
 </div>

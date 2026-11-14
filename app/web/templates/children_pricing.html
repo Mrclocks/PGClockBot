@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, row_actions %}
+{% from "macros.html" import row_actions, page_header, act_label %}
 {% from "_ds.html" import ds_switch, ds_sec, ds_modal_head, ds_foot %}
 {% set basis_labels = {'traffic': 'حجم', 'user': 'کاربر', 'user_traffic': 'کاربر + حجم'} %}
 {% set page_path = '/resellers/children-pricing' %}
@@ -80,12 +80,11 @@
 {% block content %}
 {% set plan_names = {} %}{% for p in plans %}{% set _ = plan_names.update({p.id: p.name}) %}{% endfor %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>{{ page_title('users', 'قیمت و اعتبار زیرمجموعه') }}</div>
-  <div class="page-head-actions">
-    <button type="button" class="btn" data-modal-open="modal-cp-plan-new">پلن قیمت تازه</button>
-  </div>
-</div>
+{% call(slot) page_header('users', 'قیمت و اعتبار زیرمجموعه') %}
+  {%- if slot == 'primary' %}
+  <button type="button" class="btn" data-modal-open="modal-cp-plan-new">{{ act_label('پلن قیمت تازه', 'پلن') }}</button>
+  {%- endif %}
+{% endcall %}
 
 <div class="home-panels">
   <section class="home-panel home-panel-neutral">

@@ -1,13 +1,14 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_header, act_label %}
 {% block title %}تست اتصال سرویس{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/connection-status.css?v={{ asset_v('connection-status.css') if asset_v is defined else app_version }}">{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>{{ page_title('activity', 'تست اتصال سرویس', help='connection-status') }}</div>
-  <div class="actions"><a class="btn btn-ghost" href="/connection-status">تازه‌سازی</a></div>
-</div>
+{% call(slot) page_header('activity', 'تست اتصال سرویس', help='connection-status') %}
+  {%- if slot == 'primary' %}
+  <a class="btn btn-ghost page-act-icon" href="/connection-status">{{ act_label('تازه‌سازی', icon_name='refresh') }}</a>
+  {%- endif %}
+{% endcall %}
 
 <div class="flash warn" role="note"><div class="flash-copy"><strong>⚠️ این قابلیت در حال توسعه است و هنوز کامل نشده است.</strong> بعضی بخش‌ها ممکن است تغییر کنند یا درست کار نکنند؛ برای تصمیم مهم به نتیجه‌هایش تکیه نکنید.</div></div>
 <div class="flash info" role="note"><div class="flash-copy">این نتیجه فقط اتصال از سرور ربات را نشان می‌دهد و دسترسی کاربران داخل ایران را تأیید نمی‌کند.</div></div>

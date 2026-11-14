@@ -115,7 +115,7 @@
     right: var(--dock-inline);
     width: auto;
     height: var(--dock-h);
-    padding: var(--space-0);
+    padding: var(--dock-pad);
     border: 1px solid var(--dock-glass-line);
     border-radius: var(--control-radius);
     background: var(--dock-glass-bg);
@@ -148,6 +148,216 @@
   /* The release channel stays in the desktop sidebar; the header keeps the dot and the version. */
   .topbar .channel-badge { display: none; }
 }
+/* —— The page header inside the capsule (DESIGN_SYSTEM.md §7). page_header() renders once; on phones it lies on the
+   capsule (fixed, same box as .topbar, above it) instead of in the page: icon and title beside the search, «⋯» and
+   the primary action at the far end. The brand gives way while a page header is there. Without :has() (old browsers)
+   and on phones turned sideways the title row simply stays in the page and the brand stays in the capsule. —— */
+@supports selector(:has(*)) {
+  @media (max-width: 900px) and (min-height: 501px) {
+    .shell:has(.page-head[data-page-head="capsule"]) .topbar-brand { display: none; }
+    .page-head[data-page-head="flow"] { display: none; }
+    .page-head[data-page-head="capsule"] {
+      position: fixed;
+      z-index: 56;
+      top: var(--hdr-top);
+      left: var(--dock-inline);
+      right: var(--dock-inline);
+      box-sizing: border-box;
+      height: var(--dock-h);
+      margin: 0;
+      padding: var(--dock-pad);
+      padding-right: calc(var(--dock-pad) + var(--dock-inner) + var(--space-1));
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: var(--space-1);
+      pointer-events: none;
+      transition: opacity var(--motion-fast) var(--ease-out), visibility 0s linear 0s;
+    }
+    .page-head[data-page-head="capsule"] > * { pointer-events: auto; }
+    body.nav-open .page-head[data-page-head="capsule"] { z-index: 5301; }
+    /* The search field opens across the whole capsule: the title and actions step aside meanwhile. */
+    .shell:has(.topbar-search:focus-within) .page-head[data-page-head="capsule"],
+    .shell:has(.topbar-search input:not(:placeholder-shown)) .page-head[data-page-head="capsule"] {
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity var(--motion-fast) var(--ease-in), visibility 0s linear var(--motion-fast);
+    }
+
+    .page-head[data-page-head="capsule"] .page-head-main {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      column-gap: var(--space-1);
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .page-head[data-page-head="capsule"] .page-back { width: var(--dock-inner); height: var(--dock-inner); }
+    .page-head[data-page-head="capsule"] .page-head-main:has(> .page-head-sub) > .page-back { grid-row: 1 / span 2; }
+    .page-head[data-page-head="capsule"] .page-title { min-width: 0; gap: var(--space-1); }
+    .page-head[data-page-head="capsule"] .page-title-ico {
+      width: auto;
+      height: auto;
+      background: none;
+      animation: none;
+    }
+    .page-head[data-page-head="capsule"] .page-title-ico svg { width: var(--ico-md); height: var(--ico-md); stroke-width: 1.8; }
+    .page-head--detail[data-page-head="capsule"] .page-title-ico { display: none; }
+    .page-head[data-page-head="capsule"] h1 {
+      overflow: hidden;
+      font-size: var(--fs-4);
+      font-weight: 700;
+      letter-spacing: 0;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      animation: none;
+    }
+    .page-head[data-page-head="capsule"] .page-help-btn { display: none; }
+    .page-head[data-page-head="capsule"] .page-head-sub {
+      grid-column: 2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      line-height: 1.3;
+    }
+
+    .page-head[data-page-head="capsule"] > .page-head-actions {
+      flex: 0 0 auto;
+      max-width: none;
+      gap: var(--space-1);
+      overflow: visible;
+    }
+    .page-head[data-page-head="capsule"] > .page-head-actions > .btn,
+    .page-head[data-page-head="capsule"] > .page-head-actions > a.btn,
+    .page-head[data-page-head="capsule"] > .page-head-actions > form > .btn {
+      height: var(--dock-inner);
+      min-height: var(--dock-inner);
+      padding-inline: var(--space-2);
+    }
+    .page-head[data-page-head="capsule"] .btn > .act-ico { display: inline-block; flex: 0 0 auto; width: var(--ico-sm); height: var(--ico-sm); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .page-head[data-page-head="capsule"] .btn > .act-short { display: inline; }
+    .page-head[data-page-head="capsule"] .btn:has(> .act-short) > .act-long,
+    .page-head[data-page-head="capsule"] .page-act-icon > .act-long {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .page-head[data-page-head="capsule"] > .page-head-actions > .btn:has(> .act-short) { gap: var(--space-0); padding-inline: var(--space-1_5) var(--space-2); }
+    /* A frequent non-create action: a round neutral button like search and «⋯». */
+    .page-head[data-page-head="capsule"] > .page-head-actions > .page-act-icon {
+      width: var(--dock-inner);
+      padding: 0;
+      border: 0;
+      background: var(--dock-tint);
+      color: var(--foreground);
+      justify-content: center;
+    }
+    .page-more-btn {
+      display: grid;
+      place-items: center;
+      order: 2;
+      width: var(--dock-inner);
+      height: var(--dock-inner);
+      padding: 0;
+      border: 0;
+      border-radius: var(--control-radius);
+      background: var(--dock-tint);
+      color: var(--foreground);
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform var(--motion-fast) var(--ease-standard);
+    }
+    .page-more-btn svg { width: var(--ico-sm); height: var(--ico-sm); fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
+    .page-more-btn:active { transform: scale(0.96); }
+    .page-more-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    .page-more-btn[aria-expanded="true"] { background: color-mix(in srgb, var(--foreground) 12%, transparent); }
+
+    /* «⋯» menu: a small sheet from the corner of its button, in the capsule's glass. */
+    .page-more {
+      position: fixed;
+      z-index: 5400;
+      top: calc(var(--hdr-top) + var(--dock-h) + var(--space-1));
+      left: var(--dock-inline);
+      display: flex;
+      flex-direction: column;
+      min-width: 224px;
+      max-width: calc(100vw - 2 * var(--dock-inline));
+      box-sizing: border-box;
+      padding: var(--space-0);
+      border: 1px solid var(--dock-glass-line);
+      border-radius: var(--inner-radius);
+      background: var(--modal-frost-bg-fallback);
+      box-shadow: var(--dock-glass-highlight), var(--dock-shadow);
+      direction: rtl;
+      transform-origin: top left;
+      opacity: 0;
+      visibility: hidden;
+      transform: scale(0.96) translateY(-4px);
+      transition:
+        opacity var(--motion-fast) var(--ease-in),
+        transform var(--motion-fast) var(--ease-in),
+        visibility 0s linear var(--motion-fast);
+    }
+    .page-more.is-open {
+      opacity: 1;
+      visibility: visible;
+      transform: none;
+      transition:
+        opacity var(--motion-fast) var(--ease-out),
+        transform var(--motion-fast) var(--ease-out),
+        visibility 0s linear 0s;
+    }
+    .page-head[data-page-head="capsule"] .page-more > .btn,
+    .page-head[data-page-head="capsule"] .page-more > a.btn,
+    .page-head[data-page-head="capsule"] .page-more > form > .btn,
+    .page-head[data-page-head="capsule"] .page-more-help {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: var(--space-1_5);
+      width: 100%;
+      height: var(--btn-h);
+      min-height: var(--btn-h);
+      padding: 0 var(--space-1_5);
+      border: 0;
+      border-radius: var(--r-sm);
+      background: transparent;
+      box-shadow: none;
+      color: var(--foreground);
+      font-size: var(--fs-3);
+      font-weight: 600;
+      text-align: start;
+      text-decoration: none;
+    }
+    .page-more > form { display: block; }
+    .page-head[data-page-head="capsule"] .page-more > .btn:active,
+    .page-head[data-page-head="capsule"] .page-more > a.btn:active,
+    .page-head[data-page-head="capsule"] .page-more > form > .btn:active,
+    .page-head[data-page-head="capsule"] .page-more-help:active { background: color-mix(in srgb, var(--foreground) 7%, transparent); }
+    .page-more-help svg { width: var(--ico-sm); height: var(--ico-sm); fill: none; stroke: var(--muted-fg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .page-head[data-page-head="capsule"] .page-more-help:not(:first-child) {
+      margin-top: var(--space-0);
+      border-top: 1px solid var(--border);
+      border-radius: 0 0 var(--r-sm) var(--r-sm);
+    }
+  }
+  @media (max-width: 359px) and (min-height: 501px) {
+    .page-head[data-page-head="capsule"] .page-title-ico { display: none; }
+    .page-head[data-page-head="capsule"] .btn > .act-short { display: none; }
+    .page-head[data-page-head="capsule"] > .page-head-actions > .btn:has(> .act-short) { width: var(--dock-inner); padding: 0; justify-content: center; }
+  }
+  @media (max-width: 900px) and (min-height: 501px) and (prefers-reduced-motion: reduce) {
+    .page-head[data-page-head="capsule"],
+    .page-more,
+    .page-more.is-open { transition: none; }
+  }
+}
+
 /* Phones turned sideways: a fixed header and bar would leave a strip of page between them, so the header
    scrolls away with the page there; the bar stays. */
 @media (max-width: 900px) and (max-height: 500px) {
@@ -211,7 +421,7 @@
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
     height: var(--dock-h);
-    padding: var(--space-0);
+    padding: var(--dock-pad);
     border: 1px solid var(--dock-glass-line);
     border-radius: var(--control-radius);
     background: var(--dock-glass-bg);
@@ -267,7 +477,7 @@
     top: var(--space-0);
     inset-inline-start: calc(50% + var(--space-1));
   }
-  .bottom-dock-item:active { transform: scale(0.94); }
+  .bottom-dock-item:active { transform: scale(0.96); }
   .bottom-dock-item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
   /* The close button sits where the folded capsule ends up; hidden until the drawer opens. */

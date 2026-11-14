@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "_settings_hub.html" import settings_hub, settings_area_header %}
 {% from "_shop_settings_tabs.html" import shop_settings_tabs %}
 {% block title %}تنظیمات فروشگاه{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('bot-settings', 'تنظیمات فروشگاه', help='settings-bot') }}
-  </div>
-</div>
-
+{% set is_hub = not request.query_params.get('tab') %}
+{{ settings_area_header(tab_nav|default(()), tab, '/shop-settings', 'تنظیمات فروشگاه', 'bot-settings', help='settings-bot', is_hub=is_hub) }}
+{% if is_hub %}
+{{ settings_hub(hub_sections(tab_nav, '/shop-settings', area_icon='bot')) }}
+{% else %}
 {{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path, tab_nav|default(none)) }}
 
 <div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','daily_report'] %}can-preview{% endif %}" id="settings-layout">
@@ -258,6 +258,7 @@
   sync();
 })();
 </script>
+{% endif %}
 {% endif %}
 </div>
 {% endblock %}

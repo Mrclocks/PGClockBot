@@ -1,22 +1,16 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
 {% block title %}نودهای پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('nodes', 'نودها', 'pg', help='pg-nodes') }}
-  </div>
-  <div class="page-head-actions">
-    {% if can_reconnect %}
-    <form method="post" action="/pg/nodes/reconnect-all" class="js-busy-form" data-busy-label="در حال اتصال…">
-      <button class="btn btn-ghost" type="submit">اتصال مجدد همه</button>
-    </form>
-    {% endif %}
-    {% if can_create %}
-    <button type="button" class="btn" data-modal-open="modal-node-create">ساخت نود</button>
-    {% endif %}
-  </div>
-</div>
+{% call(slot) page_header('nodes', 'نودها', 'pg', help='pg-nodes') %}
+  {%- if slot == 'primary' and can_create %}
+  <button type="button" class="btn" data-modal-open="modal-node-create">{{ act_label('ساخت نود', 'نود') }}</button>
+  {%- elif slot == 'more' and can_reconnect %}
+  <form method="post" action="/pg/nodes/reconnect-all" class="js-busy-form" data-busy-label="در حال اتصال…">
+    <button class="btn btn-ghost" type="submit">اتصال مجدد همه</button>
+  </form>
+  {%- endif %}
+{% endcall %}
 <div class="card card-flush">
   {% if not nodes %}
   <p class="muted">نودی یافت نشد.</p>

@@ -1,26 +1,13 @@
-{# Two-level tabs for bot settings: groups on top, the active group's tabs below, and the sections
-   of a merged tab under it. `groups` comes from settings_tab_groups.group_settings_tabs and only
-   holds tabs the role already has. #}
+{# The one row of a settings page: the sections of a merged tab («خوش‌آمد · پروفایل تلگرام»). Groups and tabs
+   are reached from the area's list (_settings_hub.html), never as rows of tabs (DESIGN_SYSTEM.md §6-2).
+   `groups` comes from settings_tab_groups.group_settings_tabs and only holds tabs the role already has. #}
 {% macro grouped_settings_tabs(groups, active, base, aria_label) -%}
-<nav class="section-tabs settings-tabs settings-tabs-groups" aria-label="{{ aria_label }}">
-  {% for group in groups %}
-  <a href="{{ group.tabs[0].href or (base ~ '?tab=' ~ group.tabs[0].key) }}" class="{% if group.is_active %}active{% endif %}"{% if group.is_active %} aria-current="true"{% endif %}>{{ group.label }}</a>
-  {% endfor %}
-</nav>
-{% for group in groups if group.is_active and group.tabs|length > 1 %}
-<nav class="section-tabs settings-tabs settings-subtabs" aria-label="{{ group.label }}">
-  {% for tab in group.tabs %}
-  <a href="{{ tab.href or (base ~ '?tab=' ~ tab.key) }}" class="{% if tab.shows(active) %}active{% endif %}">{{ tab.label }}</a>
-  {% endfor %}
-</nav>
-{% endfor %}
-{% for group in groups if group.is_active %}
-{% for tab in group.tabs if tab.sections and tab.shows(active) %}
-<nav class="section-tabs settings-tabs settings-subtabs settings-sections" aria-label="{{ tab.label }}">
-  {% for section in tab.sections %}
+{%- set place = settings_place(groups, active) -%}
+{%- if place and place.tab.sections %}
+<nav class="section-tabs settings-tabs settings-sections" aria-label="{{ place.tab.label }}">
+  {%- for section in place.tab.sections %}
   <a href="{{ section.href or (base ~ '?tab=' ~ section.key) }}" class="{% if section.key == active %}active{% endif %}"{% if section.key == active %} aria-current="page"{% endif %}>{{ section.label }}</a>
-  {% endfor %}
+  {%- endfor %}
 </nav>
-{% endfor %}
-{% endfor %}
+{%- endif %}
 {%- endmacro %}

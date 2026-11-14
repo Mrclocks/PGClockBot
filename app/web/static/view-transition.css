@@ -1,0 +1,14 @@
+/* List → detail inside a settings area (DESIGN_SYSTEM.md §7-1): browsers with cross-document View Transitions fade
+   the page content in 180ms with a 12px rise; the header and the bottom bar stay still. Loaded only by settings
+   pages, so other navigations are untouched. Off under reduced motion; other browsers navigate without motion. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  .topbar { view-transition-name: panel-topbar; }
+  .bottom-dock { view-transition-name: panel-dock; }
+  ::view-transition-group(panel-topbar),
+  ::view-transition-group(panel-dock) { animation: none; }
+  ::view-transition-old(root) { animation: vt-out var(--motion-fast) var(--ease-in) both; }
+  ::view-transition-new(root) { animation: vt-in var(--motion-fast) var(--ease-out) both; }
+}
+@keyframes vt-out { to { opacity: 0; } }
+@keyframes vt-in { from { opacity: 0; transform: translateY(12px); } }
