@@ -55,6 +55,14 @@ class TemplateRuleTests(unittest.TestCase):
     def test_inline_styles_are_found(self) -> None:
         self.assertEqual(rules(template_findings('<p style="margin-top: 7px">x</p>')), ["inline-style"])
 
+    def test_a_hand_drawn_icon_is_found_but_a_data_graphic_is_not(self) -> None:
+        icon = '<svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12"/></svg>'
+        small = '<svg viewBox="0 0 16 16"><path d="M4 4l8 8"/></svg>'
+        gauge = '<svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52"/></svg>'
+        self.assertEqual(rules(template_findings(icon)), ["inline-svg"])
+        self.assertEqual(rules(template_findings(small)), ["inline-svg"])
+        self.assertEqual(template_findings(gauge), [])
+
     def test_a_style_that_only_passes_data_to_css_is_allowed(self) -> None:
         self.assertEqual(template_findings('<span style="--tag-color: {{ tag.hex }}">x</span>'), [])
         self.assertEqual(template_findings('<i style="--p: {{ pct }}; --w: 4">x</i>'), [])
