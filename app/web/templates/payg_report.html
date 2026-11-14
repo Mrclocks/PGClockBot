@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_header, act_label %}
 {% from "_finance_tabs.html" import finance_tabs %}
 {% block title %}نمایندگان PAYG{% endblock %}
 {% set credit_labels = {'frozen': 'منجمد', 'overdue': 'سررسید گذشته', 'blocked': 'مسدود'} %}
@@ -11,13 +11,13 @@
 </div>
 {% endmacro %}
 {% block content %}
-<div class="page-head">
-  <div>{{ page_title('orders', 'مالی', help='finance') }}</div>
-  <div class="page-head-actions">
-    <a class="btn btn-ghost" href="/payg/charges/review">بازبینی هزینه‌ها</a>
-    <a class="btn" href="/finance/payg.csv">خروجی CSV</a>
-  </div>
-</div>
+{% call(slot) page_header('orders', 'مالی', help='finance') %}
+  {%- if slot == 'primary' %}
+  <a class="btn" href="/finance/payg.csv">{{ act_label('خروجی CSV', 'CSV', icon_name='download') }}</a>
+  {%- elif slot == 'more' %}
+  <a class="btn btn-ghost" href="/payg/charges/review">بازبینی هزینه‌ها</a>
+  {%- endif %}
+{% endcall %}
 
 {{ finance_tabs('payg', can_orders=can_orders, can_payments=can_payments, staff=staff) }}
 

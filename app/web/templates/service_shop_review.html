@@ -1,13 +1,9 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, row_actions %}
+{% from "macros.html" import row_actions, page_header %}
 {% block title %}سرویس‌های در انتظار تعیین فروشگاه{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('users', 'سرویس‌های در انتظار تعیین فروشگاه', help='shop-isolation') }}
-  </div>
-</div>
+{{ page_header('users', 'سرویس‌های در انتظار تعیین فروشگاه', help='shop-isolation') }}
 
 <div class="card">
   <p class="muted">فروشندهٔ این سرویس‌ها از روی سفارش معلوم نشد: مشتری به یک فروشگاه منتسب است ولی از جای دیگر هم خرید کرده. تا فروشگاه تعیین نشود، سرویس به هیچ‌کس نشان داده نمی‌شود و عملی روی آن انجام نمی‌شود.</p>

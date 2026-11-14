@@ -1,13 +1,12 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, oversell_create_switch, row_actions, page_title, modal_title %}
+{% from "macros.html" import switch, oversell_create_switch, row_actions, modal_title, page_header, act_label %}
 {% block title %}ادمین‌های پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('admins', 'ادمین‌های پاسارگارد', 'pg', help='pg-admins') }}
-  </div>
-  <button type="button" class="btn" data-modal-open="modal-pg-admin-create">ساخت ادمین</button>
-</div>
+{% call(slot) page_header('admins', 'ادمین‌های پاسارگارد', 'pg', help='pg-admins') %}
+  {%- if slot == 'primary' %}
+  <button type="button" class="btn" data-modal-open="modal-pg-admin-create">{{ act_label('ساخت ادمین', 'ادمین') }}</button>
+  {%- endif %}
+{% endcall %}
 <div class="card card-flush">
   <h2>لیست ادمین‌ها</h2>
   {% if not admins %}

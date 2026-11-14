@@ -1,16 +1,12 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, action_center_icon, inbox_dismiss_btn %}
+{% from "macros.html" import action_center_icon, inbox_dismiss_btn, page_header %}
 {% block title %}مرکز اقدام{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
 {% set ac = action_center or {} %}
 {% set pr = payg_risk or {} %}
 
-<div class="page-head">
-  <div>
-    {{ page_title('inbox', 'مرکز اقدام', 'neutral', help='inbox') }}
-  </div>
-</div>
+{{ page_header('inbox', 'مرکز اقدام', 'neutral', help='inbox') }}
 
 <div class="card inbox-tools-card">
   <div class="inbox-tools-copy">

@@ -1,14 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_header %}
 {% from "_shop_settings_tabs.html" import shop_settings_tabs %}
 {% block title %}تنظیمات فروشگاه{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('bot-settings', 'تنظیمات فروشگاه', help='settings-bot') }}
-  </div>
-</div>
+{{ page_header('bot-settings', 'تنظیمات فروشگاه', help='settings-bot') }}
 
 {{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path, tab_nav|default(none)) }}
 

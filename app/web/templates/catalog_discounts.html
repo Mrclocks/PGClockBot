@@ -1,16 +1,12 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, row_actions %}
+{% from "macros.html" import row_actions, page_header %}
 {% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}تخفیف‌ها{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
 {% set announcement_labels = {'running': 'در صف ارسال', 'paused': 'متوقف', 'completed': 'تکمیل‌شده', 'review': 'نیازمند بررسی'} %}
 {% set announcement_tones = {'running': 'info', 'paused': 'warn', 'completed': 'ok', 'review': 'danger'} %}
-<div class="page-head">
-  <div>
-    {{ page_title('discounts', 'تخفیف‌ها', help='discounts') }}
-  </div>
-</div>
+{{ page_header('discounts', 'تخفیف‌ها', help='discounts') }}
 
 {{ marketing_tabs(marketing_sections|default(()), 'discounts') }}
 

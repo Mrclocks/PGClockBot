@@ -192,7 +192,8 @@
       flex: 1 1 auto;
       min-width: 0;
     }
-    .page-head[data-page-head="capsule"] .page-back { grid-row: 1 / span 2; width: var(--dock-inner); height: var(--dock-inner); }
+    .page-head[data-page-head="capsule"] .page-back { width: var(--dock-inner); height: var(--dock-inner); }
+    .page-head[data-page-head="capsule"] .page-head-main:has(> .page-head-sub) > .page-back { grid-row: 1 / span 2; }
     .page-head[data-page-head="capsule"] .page-title { min-width: 0; gap: var(--space-1); }
     .page-head[data-page-head="capsule"] .page-title-ico {
       width: auto;

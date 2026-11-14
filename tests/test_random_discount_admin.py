@@ -86,7 +86,7 @@ class RandomDiscountAdminTests(unittest.IsolatedAsyncioTestCase):
 
     def form(self, **changes: str) -> dict[str, str]:
         return {
-            "title": "تخفیف تازه", "mode": "automatic", "reduction_kind": "amount", "minimum": "10",
+            "title": "تخفیف ویژهٔ آزمون", "mode": "automatic", "reduction_kind": "amount", "minimum": "10",
             "maximum": "100", "step": "1", "window_minutes": "60", "request_key": secrets.token_hex(16),
             **changes,
         }
@@ -152,7 +152,7 @@ class RandomDiscountAdminTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(rows), 1)
             policy_id = rows[0].id
         self.staff = {**SHOP, "bot_user_id": 3}
-        self.assertNotIn("تخفیف تازه</span>", (await self.client.get("/random-discounts")).text)
+        self.assertNotIn("تخفیف ویژهٔ آزمون</span>", (await self.client.get("/random-discounts")).text)
         response = await self.client.post(f"/random-discounts/{policy_id}/stop")
         self.assertIn("error", parse_qs(urlsplit(response.headers["location"]).query))
         async with self.Session() as session:

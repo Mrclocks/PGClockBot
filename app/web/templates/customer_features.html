@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "macros.html" import page_header %}
 {% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}کمپین هدفمند{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head"><h1>{{ self.title() }}</h1></div>
+{{ page_header('broadcast', self.title()) }}
 {{ marketing_tabs(marketing_sections|default(()), 'campaigns') }}
 {% if request.query_params.get('error') %}<div class="flash warn">{{ request.query_params.get('error') }}</div>{% endif %}
 <div class="card"><h2>انتخاب مخاطبان</h2><form method="get" action="/campaigns" class="form-stack">

@@ -1,15 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch_chip, page_title %}
+{% from "macros.html" import switch_chip, page_header %}
 {% from "_ds.html" import ds_sec, ds_switch %}
 {% block title %}ویرایش پلن{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('plan-edit', 'ویرایش پلن #' ~ plan.id, help='plans') }}
-  </div>
-  <a class="btn btn-ghost" href="/plans">بازگشت</a>
-</div>
+{{ page_header('plan-edit', 'ویرایش پلن #' ~ plan.id, help='plans', back='/plans', back_label='پلن‌ها') }}
 
 {% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }}</div>{% endif %}
 {% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}

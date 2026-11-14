@@ -1,12 +1,8 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_header %}
 {% block title %}اینباندهای پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('inbounds', 'اینباندها', 'pg', help='pg-inbounds') }}
-  </div>
-</div>
+{{ page_header('inbounds', 'اینباندها', 'pg', help='pg-inbounds') }}
 <div class="card card-flush">
   <h2>تگ‌های اینباند</h2>
   {% if not inbounds %}

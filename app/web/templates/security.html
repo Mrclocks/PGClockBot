@@ -1,14 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_header %}
 {% from "_panel_settings_tabs.html" import panel_settings_tabs %}
 {% block title %}{% if is_owner %}تنظیمات سیستم{% else %}حساب و امنیت{% endif %}{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('panel-settings', 'تنظیمات سیستم' if is_owner else 'حساب و امنیت', 'neutral', help='settings-panel') }}
-  </div>
-</div>
+{{ page_header('panel-settings', 'تنظیمات سیستم' if is_owner else 'حساب و امنیت', 'neutral', help='settings-panel') }}
 
 {% if staff.role == 'admin' %}
 {{ panel_settings_tabs('security') }}

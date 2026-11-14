@@ -1,11 +1,9 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, row_actions %}
+{% from "macros.html" import row_actions, page_header %}
 {% block title %}بازبینی هزینه‌های PAYG{% endblock %}
 {% set events = {'create': 'ساخت', 'renew': 'تمدید', 'add_volume': 'افزایش حجم', 'add_days': 'افزایش روز', 'reset': 'ریست ترافیک', 'reactivate': 'فعال‌سازی دوباره'} %}
 {% block content %}
-<div class="page-head">
-  <div>{{ page_title('receipt', 'بازبینی هزینه‌های PAYG', 'neutral') }}</div>
-</div>
+{{ page_header('receipt', 'بازبینی هزینه‌های PAYG', 'neutral') }}
 
 <div class="card card-flush">
   <div class="card-flush-head">

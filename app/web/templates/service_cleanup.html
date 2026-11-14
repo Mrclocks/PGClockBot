@@ -1,14 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, setting_help, row_actions %}
+{% from "macros.html" import setting_help, row_actions, page_header %}
 {% block title %}پاکسازی سرویس‌ها{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('trash', 'پاکسازی سرویس‌ها') }}
-    <p class="muted">سرویس‌هایی که منقضی یا بی‌حجم شده‌اند و تمدید نشدند، بعد از مهلتی که تعیین می‌کنید حذف می‌شوند. قبل از حذف به مشتری هشدار می‌رسد.</p>
-  </div>
-</div>
+{{ page_header('trash', 'پاکسازی سرویس‌ها') }}
+<p class="muted page-intro">سرویس‌هایی که منقضی یا بی‌حجم شده‌اند و تمدید نشدند، بعد از مهلتی که تعیین می‌کنید حذف می‌شوند. قبل از حذف به مشتری هشدار می‌رسد.</p>
 
 <div class="settings-domain-stack">
 <div class="card settings-card">

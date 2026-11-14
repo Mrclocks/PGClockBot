@@ -1,14 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, card_title, row_actions %}
+{% from "macros.html" import card_title, row_actions, page_header %}
 {% from "_my_account_tabs.html" import my_account_tabs %}
 {% block title %}اشتراک من{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('payments', 'اشتراک من') }}
-  </div>
-</div>
+{{ page_header('payments', 'اشتراک من') }}
 
 {{ my_account_tabs('subscription') }}
 

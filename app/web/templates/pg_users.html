@@ -1,15 +1,12 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, switch_chip, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import row_actions, switch_chip, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
 {% block title %}کاربران پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('user', 'کاربران پاسارگارد', 'pg', help='pg-users') }}
-  </div>
-  {% if can_create %}
-  <button type="button" class="btn" data-modal-open="modal-pg-user-create">ساخت کاربر</button>
-  {% endif %}
-</div>
+{% call(slot) page_header('user', 'کاربران پاسارگارد', 'pg', help='pg-users') %}
+  {%- if slot == 'primary' and can_create %}
+  <button type="button" class="btn" data-modal-open="modal-pg-user-create">{{ act_label('ساخت کاربر', 'کاربر') }}</button>
+  {%- endif %}
+{% endcall %}
 <div class="card card-flush">
   <form method="get" action="/pg/users" class="search-bar">
     <label class="search-bar-field">

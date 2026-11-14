@@ -1,17 +1,14 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, row_actions, table_select_head, table_select_cell, table_bulk_bar %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label %}
 {% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}کاربران تست{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('users', 'کاربران تست') }}
-  </div>
-  {% if settings_href %}
-  <a class="btn btn-ghost" href="{{ settings_href }}" aria-label="تنظیمات و محدودیت اکانت تست">تنظیمات</a>
-  {% endif %}
-</div>
+{% call(slot) page_header('users', 'کاربران تست') %}
+  {%- if slot == 'primary' and settings_href %}
+  <a class="btn btn-ghost page-act-icon" href="{{ settings_href }}" aria-label="تنظیمات و محدودیت اکانت تست">{{ act_label('تنظیمات', icon_name='settings') }}</a>
+  {%- endif %}
+{% endcall %}
 
 {{ marketing_tabs(marketing_sections|default(()), 'trial_users') }}
 
