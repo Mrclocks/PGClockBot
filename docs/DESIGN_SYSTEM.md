@@ -374,6 +374,7 @@
 | لیست قابل‌ویرایش (ردیف + افزودن) | `ds-list` با `ds-list-head` و `ds-list-row`، دکمهٔ `ds-add` |
 | یادداشت داخل فرم | `<div class="ds-note">` (اطلاع) یا `data-tone="danger"` (کار برگشت‌ناپذیر) |
 | بخش روشن/خاموش‌شونده | سوییچ در سربرگ کارت (بند ۶)، بدنه با `hidden` تا وقتی خاموش است |
+| بخش تنظیماتی (فهرست ← جزئیات) | `settings_hub(hub_sections(tab_nav, base, area_icon=...))` برای فهرست و `settings_area_header(...)` برای هدر صفحه (`_settings_hub.html`)؛ توضیح و آیکون هر صفحه در `settings_hub.py` |
 
 ### ممنوع
 - `style="…"` در قالب‌ها، رنگ یا عدد ثابت در CSS اجزا (توکن‌های `var(--g1…g8)`، `var(--ctl-h)`، `var(--sel-fg)` و … را به کار ببرید).

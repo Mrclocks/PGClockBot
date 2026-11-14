@@ -1,0 +1,36 @@
+{# A settings area as list → detail (DESIGN_SYSTEM.md §6-2). The rows come from the grouped tabs the role already
+   holds, so the list never offers a page the role may not open. #}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import page_header %}
+
+{% macro settings_hub(sections, tone='brand') -%}
+<div class="settings-hub settings-hub--{{ tone }}">
+  {%- for section in sections %}
+  <section class="hub-group" aria-labelledby="hub-group-{{ loop.index }}">
+    <h2 class="hub-group-title" id="hub-group-{{ loop.index }}">{{ section.label }}</h2>
+    <div class="hub-list">
+      {%- for row in section.rows %}
+      <a class="hub-row" href="{{ row.href }}">
+        <span class="hub-ico" aria-hidden="true">{{ icon(row.icon) }}</span>
+        <span class="hub-text">
+          <span class="hub-label">{{ row.label }}</span>
+          {%- if row.description %}<span class="hub-desc">{{ row.description }}</span>{% endif %}
+        </span>
+        <span class="hub-chev" aria-hidden="true">{{ icon('chev') }}</span>
+      </a>
+      {%- endfor %}
+    </div>
+  </section>
+  {%- endfor %}
+</div>
+{%- endmacro %}
+
+{# The header of a settings area: the area itself on its list, or the page with a way back and its path. #}
+{% macro settings_area_header(groups, active, base, area_title, area_icon, tone='brand', help=None, is_hub=false) -%}
+{%- set place = none if is_hub else settings_place(groups, active) -%}
+{%- if place -%}
+{{ page_header(area_icon, place.tab.label, tone, help=help, back=base, back_label=area_title, subtitle=area_title ~ ' · ' ~ place.group.label) }}
+{%- else -%}
+{{ page_header(area_icon, area_title, tone, help=help) }}
+{%- endif -%}
+{%- endmacro %}

@@ -2,17 +2,23 @@
 {% from "macros.html" import modal_title, page_header %}
 {% from "_settings_tabs.html" import settings_tabs %}
 {% from "_panel_settings_tabs.html" import panel_settings_tabs %}
+{% from "_settings_hub.html" import settings_hub, settings_area_header %}
 {% block title %}{% if is_panel_settings %}تنظیمات سیستم{% else %}تنظیمات ربات{% endif %}{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-{{ page_header('panel-settings' if is_panel_settings else 'bot-settings', 'تنظیمات سیستم' if is_panel_settings else 'تنظیمات ربات', 'neutral' if is_panel_settings else 'brand', help='settings-panel' if is_panel_settings else 'settings-bot') }}
-
+{% set is_hub = not is_panel_settings and tabs and not request.query_params.get('tab') %}
 {% if is_panel_settings %}
+{{ page_header('panel-settings', 'تنظیمات سیستم', 'neutral', help='settings-panel') }}
 {{ panel_settings_tabs(tab) }}
-{% elif tabs %}
-{{ settings_tabs(tab, tabs, tab_nav|default(none)) }}
+{% else %}
+{{ settings_area_header(tab_nav|default(()), tab, '/settings', 'تنظیمات ربات', 'bot-settings', help='settings-bot', is_hub=is_hub) }}
+{% if not is_hub and tabs %}{{ settings_tabs(tab, tabs, tab_nav|default(none)) }}{% endif %}
 {% endif %}
 
+{% if is_hub %}
+{{ settings_hub(hub_sections(tab_nav, '/settings', area_icon='bot')) }}
+{% else %}
 <div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','daily_report'] %}can-preview{% endif %}" id="settings-layout">
   <div class="settings-main">
 
@@ -211,6 +217,7 @@
   render();
 })();
 </script>
+{% endif %}
 {% endif %}
 </div>
 {% endblock %}
