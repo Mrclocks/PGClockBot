@@ -130,7 +130,7 @@ class WiringTests(unittest.TestCase):
     def test_base_nav_web_panel_for_all(self):
         from tests.sidebar_view import owner_sidebar, sidebar
 
-        self.assertIn(("تنظیمات سیستم", "/settings?tab=general"), owner_sidebar()["system"])
+        self.assertIn(("تنظیمات سیستم", "/settings?tab=system"), owner_sidebar()["system"])
         for role in ("reseller", "pg_staff", "principal"):
             account = sidebar(role, perms=("dashboard",))["system"]
             self.assertIn(("داشبورد", "/home"), account, role)
