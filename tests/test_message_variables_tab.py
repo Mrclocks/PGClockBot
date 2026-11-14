@@ -36,7 +36,7 @@ SHOP_WITHOUT_RIGHT = {"role": "reseller", "permissions": ["plans", "orders"], "b
 SHOP_NO_PERMISSIONS = {"role": "reseller", "permissions": [], "bot_user_id": 5}
 
 
-def _request(path: str) -> Request:
+def _request(path: str, query: bytes = b"") -> Request:
     return Request(
         {
             "type": "http",
@@ -46,7 +46,7 @@ def _request(path: str) -> Request:
             "scheme": "https",
             "path": path,
             "raw_path": path.encode(),
-            "query_string": b"",
+            "query_string": query,
             "headers": [(b"host", b"example.test")],
             "client": ("127.0.0.1", 123),
             "server": ("example.test", 443),
@@ -55,11 +55,16 @@ def _request(path: str) -> Request:
     )
 
 
-def _settings_page(name: str, path: str, staff: dict, **ctx) -> str:
+def _settings_page(name: str, path: str, staff: dict, *, query: bytes = b"", **ctx) -> str:
     from app.api.app import render
 
     base = {"staff": staff, "values": dict(DEFAULT_SETTINGS), "groups": {}, "tab_groups": [], **ctx}
-    return render(_request(path), name, base).body.decode("utf-8")
+    return render(_request(path, query), name, base).body.decode("utf-8")
+
+
+def _settings_list(html: str) -> str:
+    """The list of a settings area (its page opened without ``?tab=``)."""
+    return html.split('class="settings-hub', 1)[1].split("</main>", 1)[0]
 
 
 def _tab_strip(html: str) -> str:
@@ -111,36 +116,32 @@ class GroupingTests(unittest.TestCase):
 
 
 class SettingsPagesTests(unittest.TestCase):
-    def _owner_page(self, tab: str) -> str:
-        nav = group_settings_tabs(tabs_with_message_variables(SETTINGS_TABS, OWNER), tab)
+    def _owner_page(self, tab: str | None) -> str:
+        nav = group_settings_tabs(tabs_with_message_variables(SETTINGS_TABS, OWNER), tab or "welcome")
         return _settings_page(
-            "settings.html", "/settings", OWNER,
-            tabs=SETTINGS_TABS, tab=tab, is_panel_settings=False, tab_nav=nav,
+            "settings.html", "/settings", OWNER, query=f"tab={tab}".encode() if tab else b"",
+            tabs=SETTINGS_TABS, tab=tab or "welcome", is_panel_settings=False, tab_nav=nav,
         )
 
-    def test_the_header_button_is_gone_and_the_tab_is_in_the_texts_group(self):
-        html = self._owner_page("messages")
-        head = html.split("settings-layout", 1)[0]
-        # The page header holds no button to the variables page (only the help, in «⋯»).
-        actions = head.split("page-head-actions", 1)[-1].split("data-page-more-toggle", 1)[0]
-        self.assertNotIn('href="/message-variables"', actions)
-        self.assertEqual(head.count('href="/message-variables"'), 1)
-        self.assertIn('href="/message-variables" class="">متغیرهای پیام</a>', head)
+    def test_the_variables_page_is_one_row_of_the_texts_group_in_the_list(self):
+        rows = _settings_list(self._owner_page(None))
+        self.assertEqual(rows.count('href="/message-variables"'), 1)
+        texts = rows.split("متن‌ها", 1)[1].split("hub-group-title", 1)[0]
+        self.assertIn('href="/message-variables"', texts)
 
-    def test_the_subtab_is_only_shown_inside_its_own_group(self):
-        head = self._owner_page("welcome").split("settings-layout", 1)[0]
-        self.assertNotIn('href="/message-variables"', head)
+    def test_no_settings_page_links_to_it_from_its_header(self):
+        for tab in ("messages", "welcome"):
+            head = self._owner_page(tab).split("settings-layout", 1)[0]
+            self.assertNotIn('href="/message-variables"', head, tab)
 
-    def test_shop_page_has_the_tab_for_a_shop_with_the_right_and_not_without(self):
+    def test_shop_list_has_the_row_for_a_shop_with_the_right_and_not_without(self):
         for staff, expected in ((SHOP_WITH_RIGHT, 1), (SHOP_WITHOUT_RIGHT, 0)):
-            nav = group_settings_tabs(tabs_with_message_variables(RESELLER_SETTINGS_TABS, staff), "messages")
+            nav = group_settings_tabs(tabs_with_message_variables(RESELLER_SETTINGS_TABS, staff), "welcome")
             html = _settings_page(
                 "shop_settings.html", "/shop-settings", staff,
-                tabs=RESELLER_SETTINGS_TABS, tab="messages", shop_mode=True, settings_base="/shop-settings", tab_nav=nav,
+                tabs=RESELLER_SETTINGS_TABS, tab="welcome", shop_mode=True, settings_base="/shop-settings", tab_nav=nav,
             )
-            head = html.split("settings-layout", 1)[0]
-            self.assertEqual(head.count('href="/message-variables"'), expected, staff)
-            self.assertNotIn('class="btn', head.split("page-head-actions", 1)[-1].split("data-page-more-toggle", 1)[0])
+            self.assertEqual(_settings_list(html).count('href="/message-variables"'), expected, staff)
 
     def test_panel_settings_have_no_bot_tabs_at_all(self):
         html = _settings_page(
@@ -181,22 +182,21 @@ class VariablesPageTests(unittest.IsolatedAsyncioTestCase):
         self.staff.update(staff)
         return await self.client.get("/message-variables")
 
-    async def test_owner_gets_the_platform_tab_strip_with_the_variables_tab_active(self):
+    async def test_owner_page_leads_back_to_the_bot_settings_list(self):
         response = await self._get(OWNER)
         self.assertEqual(response.status_code, 200)
-        strip = _tab_strip(response.text)
-        self.assertIn('href="/settings?tab=identity"', strip)
-        self.assertIn('href="/message-variables" class="active">متغیرهای پیام</a>', strip)
-        self.assertIn('href="/settings?tab=delivery" class=""', strip)
-        self.assertNotIn("/shop-settings", strip)
+        head = _tab_strip(response.text)
+        self.assertIn('href="/settings" aria-label="بازگشت به تنظیمات ربات"', head)
+        self.assertIn("تنظیمات ربات · متن‌ها", head)
+        self.assertNotIn("/shop-settings", head)
 
-    async def test_shop_owner_gets_the_shop_tab_strip(self):
+    async def test_shop_owner_page_leads_back_to_the_shop_settings_list(self):
         response = await self._get(SHOP_WITH_RIGHT)
         self.assertEqual(response.status_code, 200)
-        strip = _tab_strip(response.text)
-        self.assertIn('href="/shop-settings?tab=identity"', strip)
-        self.assertIn('href="/message-variables" class="active">متغیرهای پیام</a>', strip)
-        self.assertNotIn('href="/settings?tab=', strip)
+        head = _tab_strip(response.text)
+        self.assertIn('href="/shop-settings" aria-label="بازگشت به تنظیمات فروشگاه"', head)
+        self.assertIn("تنظیمات فروشگاه · متن‌ها", head)
+        self.assertNotIn('href="/settings', head)
 
     async def test_a_role_without_the_right_cannot_open_the_page_the_tab_would_point_to(self):
         for staff in (SHOP_WITHOUT_RIGHT, SHOP_NO_PERMISSIONS):
