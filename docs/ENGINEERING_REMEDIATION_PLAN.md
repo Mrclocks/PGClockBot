@@ -156,7 +156,7 @@ One design language for every page and modal, on phone and desktop, as written i
 
 Baseline (`dev` at `d8fde6c`): 49 pages, 218 modals in 30 templates; `design_check.py --report` 390 findings (raw colour 329, inline style 58, cancel in form modal 2, modal outside `.ds` 1); 18 distinct `font-size` values (13px used 92 times), 16 distinct pixel radii, 33 button class combinations, 328 `!important`.
 
-After D1–D9 (counted with the D2 rules): inline style 0, cancel in form modal 0, modal outside `.ds` 0 (all three strict now); raw font size 69 (mini app 54, the rest em, clamp() or font shorthands); raw radius 22 (hairlines, nested calc() corners, compound shapes); raw colour 327; inline `<svg>` 141; `!important` 328. Still open in this track, each its own pull request: literal colours to tokens, the remaining hand-written icons to `icon()`, `!important` and button variants, motion on width/height to transforms, the usage bar from the quota cache in the user list, and an owner-only components page. The mini app follows as a separate track.
+After D1–D9 (counted with the D2 rules): inline style 0, cancel in form modal 0, modal outside `.ds` 0 (all three strict now); raw font size 69 (mini app 54, the rest em, clamp() or font shorthands); raw radius 22 (hairlines, nested calc() corners, compound shapes); raw colour 327; inline `<svg>` 141; `!important` 328. Still open in this track, each its own pull request: literal colours to tokens, the remaining hand-written icons to `icon()`, `!important` and button variants, motion on width/height to transforms, and an owner-only components page. The mini app follows as a separate track.
 
 ## Phase 7. Dependencies and operations
 
