@@ -495,13 +495,14 @@
       const toggle = document.getElementById('theme-toggle');
       const menu = document.getElementById('theme-menu');
       const label = document.getElementById('theme-label');
-      const ico = document.getElementById('theme-ico');
+      const ico = document.querySelector('#theme-ico svg');
       const labels = { system: 'تم · سیستم', light: 'تم · روشن', dark: 'تم · تیره' };
-      const icons = {
-        system: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
-        light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-        dark: '<path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/>'
-      };
+      /* The drawing of each choice comes from its own row in the menu (icon() in base.html), not a second copy here. */
+      const icons = {};
+      if (menu) menu.querySelectorAll('[data-theme-pref]').forEach((opt) => {
+        const svg = opt.querySelector('svg');
+        if (svg) icons[opt.getAttribute('data-theme-pref')] = svg.innerHTML;
+      });
       function resolve(pref){
         if (pref === 'light' || pref === 'dark') return pref;
         return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';

@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {# Support contacts + support_text modal on /tickets #}
 {% from "macros.html" import modal_title %}
 {% from "_settings_hub.html" import modal_settings_list, modal_shown_section, modal_list_heading, modal_list_back %}
@@ -19,7 +20,7 @@
       {{ modal_list_back(rows, shown) }}
       {{ modal_title('tickets', modal_list_heading(rows, shown, 'پشتیبان‌ها'), tone='neutral', heading_id='supports-settings-title') }}
       <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        {{ icon('close', 'ico') }}
       </button>
       </div>
     </div>

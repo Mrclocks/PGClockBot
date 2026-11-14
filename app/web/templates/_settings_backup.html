@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% from "macros.html" import flash_warn_icon, modal_title %}
 {% set st = restore_status or {} %}
 {% set restore_ops = st.state == 'running' or st.awaiting_restart or st.state == 'error' or st.restart_required %}
@@ -254,7 +255,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('overview', 'تأیید ریستور بکاپ', tone='neutral', heading_id='backup-restore-title') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/backup/restore/0" class="form-stack ds-body" id="backup-restore-form">

@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {# دامنه‌ها — دامنهٔ پنل وب، دامنهٔ مینی‌اپ و گواهی SSL مشترک آن‌ها #}
 {% from "macros.html" import modal_title %}
 
@@ -171,7 +172,7 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('security', 'گواهی SSL فعال شد', tone='neutral', heading_id='ssl-done-title') }}
-        <button type="button" class="icon-btn" data-ssl-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-ssl-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <div class="form-stack">
