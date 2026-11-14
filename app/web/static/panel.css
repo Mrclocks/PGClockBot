@@ -143,7 +143,7 @@
   --space-5: 48px;
   --space-6: 64px;
   --card-pad: var(--space-2);
-  --section-gap: var(--space-3);
+  --section-gap: var(--space-2);   /* the one gap between two boxes, stacked or side by side (DESIGN_SYSTEM.md §1) */
   /* Equal space above & below page title+icon (bot and PasarGuard identical) */
   --page-title-gap: var(--space-3);
   /* Header chrome — keep in sync with .brand / .topbar padding + logo size.
@@ -12909,3 +12909,29 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
   .ov-fill,
   .pg-node-meter-fill { transition: none; }
 }
+
+/* Page spacing (DESIGN_SYSTEM.md §1). The page body and every wrapper that only stacks the page's blocks space their
+   children with one gap, --section-gap (16), and no child adds a vertical margin of its own: a margin would add to
+   the gap or, inside a scope that clears margins, leave two boxes touching. The #main scope outranks the older
+   per-component margins, so a new component cannot bring its own spacing back. */
+#main :is(.main-body, .ds-settings, .home-dash, .ov-section, [data-plans-panel], .ticket-tg-section, .ds-page-stack) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+}
+#main :is(.main-body, .ds-settings, .home-dash, .ov-section, [data-plans-panel], .ticket-tg-section, .ds-page-stack) > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+/* A wrapper that only groups blocks (the .ds scope around a page) passes the same gap through. */
+#main .main-body > .ds:not(.ui-modal):not(.ds-settings) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+}
+#main .main-body > .ds:not(.ui-modal):not(.ds-settings) > * { margin-top: 0; margin-bottom: 0; }
+/* Grids of boxes use the same gap across and down. */
+#main :is(.kpi-strip, .home-main-grid, .home-bottom-grid, .home-panel-grid, .stat-strip, .status, .home-panels, .settings-hub, .hub-list-grid, .dash-cols, .ov-facts, .ov-tables, .fin-charts) {
+  gap: var(--section-gap);
+}
+#main :is(.kpi-strip, .home-main-grid, .home-bottom-grid, .home-panels, .dash-cols, .ov-tables, .fin-charts) > * { margin-top: 0; margin-bottom: 0; }

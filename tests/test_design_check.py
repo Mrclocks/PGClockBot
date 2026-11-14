@@ -62,6 +62,12 @@ class TemplateRuleTests(unittest.TestCase):
         self.assertEqual(css_findings(smooth), [])
         self.assertEqual(css_findings(".x { transition: border-color var(--motion-fast); }"), [])
 
+    def test_a_raw_gap_is_found_and_a_token_gap_is_not(self) -> None:
+        self.assertEqual(rules(css_findings(".grid { gap: 12px; }")), ["raw-gap"])
+        self.assertEqual(rules(css_findings(".grid { row-gap: 10px; column-gap: var(--g4); }")), ["raw-gap"])
+        self.assertEqual(css_findings(".grid { gap: var(--section-gap); }"), [])
+        self.assertEqual(css_findings(".grid { gap: var(--space-1, 0.25rem) 0; }"), [])
+
     def test_a_custom_property_that_refers_to_itself_is_found(self) -> None:
         self.assertEqual(rules(css_findings(":root {\n  --ok-solid: var(--ok-solid);\n}")), ["token-loop"])
         self.assertEqual(rules(css_findings(":root {\n  --a: var(--a, #fff);\n}")), ["token-loop"])
