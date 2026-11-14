@@ -4866,9 +4866,10 @@ form.settings-form > .actions.sticky-actions,
   border: 1px solid var(--border);
   overflow: hidden;
 }
+/* A fill takes its share from --p (0–100); a live update may still set its width directly. */
 .progress-fill {
   height: 100%;
-  width: 0;
+  width: calc(var(--p, 0) * 1%);
   border-radius: inherit;
   background: var(--brand);
   transition: width .3s ease;
@@ -5093,7 +5094,7 @@ form.settings-form > .actions.sticky-actions,
 .ssl-progress-track i {
   display: block;
   height: 100%;
-  width: 0;
+  width: calc(var(--p, 0) * 1%);
   border-radius: inherit;
   background: var(--brand);
   transition: width 0.35s ease;
@@ -6356,6 +6357,8 @@ form.settings-form > .actions.sticky-actions,
   object-fit: cover;
   border: 1px solid var(--border);
 }
+/* An app icon preview keeps the rounded square of an installed icon. */
+.ap-photo-thumb[data-shape="icon"] { border-radius: var(--inner-radius); background: var(--muted); }
 
 @keyframes tg-in {
   from { opacity: 0; transform: translateY(6px); }
@@ -12838,3 +12841,24 @@ input[dir="ltr"], input[inputmode="numeric"], input[inputmode="decimal"], input[
 table:has(> tbody > tr.table-empty:only-child) > thead { display: none; }
 /* Built-in rows beside an empty list (plans) cannot be selected, so there is nothing for «انتخاب همه» to pick. */
 table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
+
+/* Small layout helpers named for what they do, replacing inline style="" in templates (DESIGN_SYSTEM.md §1). */
+.text-pre-wrap { white-space: pre-wrap; }
+.text-block { display: block; }
+.text-flush { margin: 0; }
+.form-inline { display: inline; }
+.form-stack[hidden] { display: none; }
+.cell-wrap { max-width: 480px; overflow-wrap: anywhere; }
+.pre-flush { margin: 0; padding: var(--space-2); }
+.btn.btn-block { width: 100%; }
+.receipt-matches { margin-top: var(--space-0); }
+.card-flush-note { margin: 0; padding: var(--space-2) var(--space-3) 0; }
+.progress-note { margin: var(--space-2) 0 0; }
+.update-log.is-shown { display: block; }
+.renew-form { margin-top: var(--space-2); }
+.backup-actions { flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-2); }
+.backup-auto-toggle { margin-top: var(--space-2); }
+.snap-row-wrap { flex-wrap: wrap; gap: var(--space-1); }
+.snap-main { flex: 1 1 220px; min-width: 0; }
+.snap-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.color-tag-select option[style] { color: var(--opt-color); font-weight: 600; }

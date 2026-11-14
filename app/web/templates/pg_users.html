@@ -209,7 +209,7 @@
         {% endif %}
       </label>
 
-      <div id="pg-user-mode-custom" class="form-stack" {% if default_mode != 'custom' %}style="display:none"{% endif %}>
+      <div id="pg-user-mode-custom" class="form-stack"{% if default_mode != 'custom' %} hidden{% endif %}>
         <div class="form-row">
           <label class="form-field">حجم (گیگابایت)
             <input name="data_limit_gb" type="number" min="0" step="0.1" placeholder="مثلاً 50" inputmode="decimal" />
@@ -236,7 +236,7 @@
         {% endif %}
       </div>
 
-      <div id="pg-user-mode-template" class="form-stack" {% if default_mode != 'template' %}style="display:none"{% endif %}>
+      <div id="pg-user-mode-template" class="form-stack"{% if default_mode != 'template' %} hidden{% endif %}>
         <label class="form-field">تمپلیت پاسارگارد
           <select name="template_id" id="pg-user-template">
             <option value="">— انتخاب —</option>
@@ -372,8 +372,8 @@
   if (mode && custom && tpl) {
     function sync(){
       const isTpl = mode.value === 'template';
-      custom.style.display = isTpl ? 'none' : '';
-      tpl.style.display = isTpl ? '' : 'none';
+      custom.hidden = isTpl;
+      tpl.hidden = !isTpl;
       if (tplSelect) tplSelect.required = isTpl;
     }
     mode.addEventListener('change', sync);

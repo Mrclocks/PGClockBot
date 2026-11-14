@@ -285,7 +285,7 @@
             {% endif %}
           {% endcall %}
           {% if p.status == 'pending' and (receipt_matches or {}).get(p.id) %}
-          <small class="muted li-hide" style="display:block;margin-top:var(--space-0)">هم‌مبلغ: {% for m in receipt_matches[p.id][:3] %}#{{ m.id }}{% if not loop.last %}، {% endif %}{% endfor %}</small>
+          <small class="muted li-hide text-block receipt-matches">هم‌مبلغ: {% for m in receipt_matches[p.id][:3] %}#{{ m.id }}{% if not loop.last %}، {% endif %}{% endfor %}</small>
           {% endif %}
           {% else %}
           <span class="muted li-hide">—</span>
@@ -327,7 +327,7 @@
 
 {% elif finance_tab == 'delivery' and can_orders %}
 <div class="card card-flush">
-  <p class="muted" style="padding:var(--space-2) var(--space-3) 0;margin:0">
+  <p class="muted card-flush-note">
     اکشن هر ردیف مطابق تشخیص است: <strong>ادامه تحویل</strong> (سرویس ناقص) یا <strong>ارسال مجدد پیام</strong> (سرویس آماده، تلگرام ناموفق). تأیید دوباره انجام نمی‌شود. اگر تحویل دیگر لازم یا ممکن نیست (مثلاً سرویس حذف شده)، <strong>حذف از لیست</strong> فقط ردیف خطا را برمی‌دارد و چیزی ارسال نمی‌کند. سفارش پرداخت‌شده بدون سرویس («گیرکرده») فقط با <strong>لغو و بازگشت وجه</strong> یا <strong>تحویل دستی انجام شد</strong> بسته می‌شود.
   </p>
   {{ table_bulk_bar('/finance/delivery/bulk-action', [
@@ -367,7 +367,7 @@
           {% set why = (stuck_reasons or {}).get(oid) %}
           <span class="badge warn badge-inline" title="{{ diag.detail_fa if diag else '' }}">{{ why.kind if why else (diag.label_fa if diag else 'تحویل ناقص') }}</span>
           {% if diag and diag.payment_status %}
-          <small class="muted" style="display:block">پرداخت: {{ pay_status(diag.payment_status) }}{% if diag.order_status %} · سفارش: {{ ord_status(diag.order_status) }}{% endif %}</small>
+          <small class="muted text-block">پرداخت: {{ pay_status(diag.payment_status) }}{% if diag.order_status %} · سفارش: {{ ord_status(diag.order_status) }}{% endif %}</small>
           {% endif %}
         </td>
         <td class="col-hide-sm muted" data-sort-value="stuck">{{ why.reason if why else 'پرداخت شده ولی سرویسی ساخته نشد' }}</td>
@@ -407,7 +407,7 @@
           <span class="badge warn badge-inline">تحویل ناموفق</span>
           {% endif %}
           {% if diag and diag.payment_status %}
-          <small class="muted" style="display:block">پرداخت: {{ pay_status(diag.payment_status) }}{% if diag.order_status %} · سفارش: {{ ord_status(diag.order_status) }}{% endif %}</small>
+          <small class="muted text-block">پرداخت: {{ pay_status(diag.payment_status) }}{% if diag.order_status %} · سفارش: {{ ord_status(diag.order_status) }}{% endif %}</small>
           {% endif %}
         </td>
         <td class="col-hide-sm muted" data-sort-value="{{ f.error or '' }}">{{ (f.error or '—')[:120] }}</td>

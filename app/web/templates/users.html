@@ -63,7 +63,7 @@
         {% for t in color_tags %}
         <option value="{{ filter_href(filter_key=flt, q=q, color=t.key) }}"
                 data-tag-color="{{ t.hex }}"
-                style="color: {{ t.hex }}; --opt-color: {{ t.hex }}; font-weight: 600"
+                style="--opt-color: {{ t.hex }}"
                 {% if color_filter == t.key %} selected{% endif %}>{{ t.title_fa }}</option>
         {% endfor %}
       </select>

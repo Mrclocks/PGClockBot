@@ -79,7 +79,7 @@ class _TemplateScanner(HTMLParser):
         line = self.getpos()[0]
         if "ui-modal" in classes and "ds" not in classes:
             self.findings.append(Finding("modal-not-ds", line, values.get("id", "")))
-        if "style" in values:
+        if "style" in values and not _only_custom_properties(values["style"]):
             self.findings.append(Finding("inline-style", line, values["style"][:60]))
         if tag in ("button", "a") and "data-modal-close" in values and "btn" in classes:
             self._cancel_candidate = (line, classes)
@@ -109,6 +109,12 @@ class _TemplateScanner(HTMLParser):
             if self._stack[index][0] == tag:
                 del self._stack[index:]
                 break
+
+
+def _only_custom_properties(style: str) -> bool:
+    """A style that only hands data to CSS (``--tag-color: {{ hex }}``, ``--p: 40``) is the way to pass it; layout is not."""
+    declarations = [part.strip() for part in JINJA_TAG.sub("x", style).split(";") if part.strip()]
+    return bool(declarations) and all(part.startswith("--") for part in declarations)
 
 
 def template_findings(source: str) -> list[Finding]:

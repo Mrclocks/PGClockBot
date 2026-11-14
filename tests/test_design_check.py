@@ -51,6 +51,12 @@ class TemplateRuleTests(unittest.TestCase):
     def test_inline_styles_are_found(self) -> None:
         self.assertEqual(rules(template_findings('<p style="margin-top: 7px">x</p>')), ["inline-style"])
 
+    def test_a_style_that_only_passes_data_to_css_is_allowed(self) -> None:
+        self.assertEqual(template_findings('<span style="--tag-color: {{ tag.hex }}">x</span>'), [])
+        self.assertEqual(template_findings('<i style="--p: {{ pct }}; --w: 4">x</i>'), [])
+        mixed = '<i style="--p: {{ pct }}; width: 40%">x</i>'
+        self.assertEqual(rules(template_findings(mixed)), ["inline-style"])
+
     def test_hand_written_svg_is_found_outside_the_icon_set(self) -> None:
         svg = '<span><svg viewBox="0 0 24 24"><path d="M0 0"/></svg></span>'
         self.assertEqual(rules(findings_for("app/web/templates/page.html", svg)), ["inline-svg"])
