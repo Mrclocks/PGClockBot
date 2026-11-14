@@ -58,6 +58,13 @@ class IconSetTests(unittest.TestCase):
             with self.subTest(icon=name):
                 self.assertNotEqual(paths(render(f"icon('{name}')")), FALLBACK)
 
+    def test_dot_menus_draw_filled_dots_under_any_stylesheet(self) -> None:
+        # Row actions style their icon as a filled shape without a stroke; zero-length stroked dots vanished there.
+        for name in ("dots", "dots-v"):
+            svg = render(f"icon('{name}')")
+            self.assertEqual(svg.count('fill="currentColor" stroke="none"'), 3, name)
+            self.assertNotIn("h.01", svg)
+
     def test_an_icon_draws_as_an_outline_even_without_a_stylesheet(self) -> None:
         svg = render("icon('close')")
         for attribute in ('fill="none"', 'stroke="currentColor"', 'stroke-linecap="round"'):
