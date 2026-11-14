@@ -110,7 +110,7 @@ class CleanupTabRenderTests(unittest.TestCase):
 
     def test_cleanup_tab_is_tags_age_auto_and_run_now(self) -> None:
         html = self._render()
-        self.assertIn('data-modal-tab="cleanup"', html)
+        self.assertIn('data-modal-list-open="cleanup"', html)
         self.assertIn("تگ‌های حذف", html)
         self.assertIn("حذف از پایگاه الان", html)
         self.assertIn("/finance/cleanup/purge-run", html)
@@ -126,7 +126,7 @@ class CleanupTabRenderTests(unittest.TestCase):
         self.assertIn("/finance/cleanup/ack-retired", html)
         self.assertIn("متوجه شدم", html)
 
-    def test_cleanup_is_the_last_tab_after_payg(self) -> None:
+    def test_cleanup_is_the_last_row_after_payg(self) -> None:
         from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS
 
         html = self._render(
@@ -135,7 +135,7 @@ class CleanupTabRenderTests(unittest.TestCase):
             billing_groups={n: SETTING_GROUPS[n] for n in TAB_SETTING_GROUPS["billing"]},
             billing_settings_action="/settings?tab=billing",
         )
-        tabs = [html.index(f'data-modal-tab="{name}"') for name in ("payment", "billing", "cleanup")]
+        tabs = [html.index(f'data-modal-list-open="{name}"') for name in ("payment", "billing", "cleanup")]
         self.assertEqual(tabs, sorted(tabs))
 
 

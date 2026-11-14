@@ -75,12 +75,6 @@ class DomainModalTemplateTests(unittest.TestCase):
         self.assertNotIn('href="/loyalty?tab=rewards"', html)
         self.assertNotIn('href="/loyalty?tab=tiers"', html)
         self.assertIn("_modal_loyalty_settings.html", html)
-        modal = (TEMPLATES / "_modal_loyalty_settings.html").read_text(encoding="utf-8")
-        self.assertIn('data-modal-tab="club"', modal)
-        self.assertIn('data-modal-tab="referral"', modal)
-        self.assertIn('data-modal-tab="rules"', modal)
-        self.assertIn('data-modal-tab="rewards"', modal)
-        self.assertIn('data-modal-tab="tiers"', modal)
 
     def test_search_bars_have_no_title_label(self):
         for name in ("users.html", "finance.html", "resellers.html", "pg_users.html"):
@@ -119,8 +113,6 @@ class DomainModalTemplateTests(unittest.TestCase):
     def test_modal_tab_js_and_css(self):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn("data-modal-tabs", js)
-        self.assertIn("data-modal-tab-panel", js)
         self.assertIn("data-modal-close-strip", js)
         self.assertIn("data-modal-strip-keys", js)
         self.assertIn("settings-modal-panel", css)
