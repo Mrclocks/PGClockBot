@@ -543,7 +543,7 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
     margin: 0;
     padding: 0;
     border-color: transparent;
-    background: color-mix(in srgb, var(--foreground) 6%, var(--bg-card));
+    background: var(--dock-tint);
     /* The header is laid out LTR: the circle is the field's right end, the logo stays clear on the left. */
     clip-path: inset(0 0 0 calc(100% - var(--dock-inner)) round calc(var(--dock-inner) / 2));
     /* Folding back: starts at once and slows into the circle (--motion-med, --ease-standard); the fill and edge
