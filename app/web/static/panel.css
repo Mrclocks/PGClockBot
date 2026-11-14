@@ -14,7 +14,7 @@
   --danger-text: #fca5a5;
   --warn-text: #fde047;
   /* Solid success fill: a switch that is on, a credited amount. */
-  --ok-solid: var(--ok-solid);
+  --ok-solid: #16a34a;
   /* Placeholder / example text inside inputs — muted in both themes */
   --placeholder: #71717a;
   --border: #27272a;
