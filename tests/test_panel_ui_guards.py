@@ -267,7 +267,10 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
     def test_update_warns_stay_on_page(self):
         from jinja2 import Environment, FileSystemLoader
 
+        from app.services.numbers import to_fa_digits
+
         env = Environment(loader=FileSystemLoader(str(ROOT / "app/web/templates")), autoescape=True)
+        env.filters["fa"] = to_fa_digits
         html = env.get_template("_settings_update.html").render(
             update_info={"update_available": True, "remote_version": "9.9.9", "checked": True, "label": ""},
             status={"state": "running"},

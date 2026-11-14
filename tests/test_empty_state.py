@@ -84,7 +84,7 @@ class PlansCountTests(unittest.TestCase):
 
     def test_no_fixed_plan_reads_zero_and_offers_to_add_one(self) -> None:
         html = self.plans_page([])
-        self.assertIn('<span class="li-count">0 پلن ثابت</span>', html)
+        self.assertIn('<span class="li-count">۰ پلن ثابت</span>', html)
         row = empty_rows(html)[0]
         self.assertIn("هنوز پلن ثابتی نساخته‌اید.", row)
         self.assertIn('data-modal-open="modal-plan-unified"', row)
