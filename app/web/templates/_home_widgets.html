@@ -21,7 +21,7 @@
   <div class="kpi">
     <small>کاربران جدید</small>
     <strong>{{ (day.new_users or 0) | num }}</strong>
-    <span class="kpi-d flat">7 روز اخیر: {{ (week.new_users or 0) | num }}</span>
+    <span class="kpi-d flat">۷ روز اخیر: {{ (week.new_users or 0) | num }}</span>
   </div>
   {{ kpi_count('رسید منتظر تأیید', (ac or {}).pending, 'تأیید یا رد پرداخت‌ها', '/finance?tab=payments' if (links or {}).payments else none) }}
   {{ kpi_count('تیکت باز', (ac or {}).tickets, 'پشتیبانی کاربران', '/tickets' if (links or {}).tickets else none) }}

@@ -197,7 +197,7 @@
     }
     this.card.classList.toggle('is-empty', !data.has_data);
     if (this.empty) this.empty.hidden = !!data.has_data;
-    this.plot.setAttribute('aria-label', this.title + ' ' + (this.days === 7 ? '7' : '30') + ' روز اخیر؛ جمع ' + this.amount(data.total));
+    this.plot.setAttribute('aria-label', this.title + ' ' + (this.days === 7 ? '۷' : '۳۰') + ' روز اخیر؛ جمع ' + this.amount(data.total));
     this.active = null;
     this.draw();
   };

@@ -177,7 +177,7 @@
       {% if pager.pages and pager.total is not none %}
       صفحه {{ pager.page }} از {{ pager.pages }}
       <span aria-hidden="true">·</span>
-      {{ pager.total }} سفارش
+      {{ (pager.total) | fa }} سفارش
       {% else %}
       صفحه {{ pager.page }}
       {% endif %}
@@ -304,7 +304,7 @@
       {% if pager.pages and pager.total is not none %}
       صفحه {{ pager.page }} از {{ pager.pages }}
       <span aria-hidden="true">·</span>
-      {{ pager.total }} پرداخت
+      {{ (pager.total) | fa }} پرداخت
       {% else %}
       صفحه {{ pager.page }}
       {% endif %}

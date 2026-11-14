@@ -80,7 +80,7 @@
           </span>
         </td>
         <td class="mono muted col-hide-sm li-value" dir="ltr" data-sort-value="{{ days_left if days_left is not none else 9999 }}">
-          <span class="li-only">{% if days_left is not none %}{{ days_left }} روز{% else %}—{% endif %}</span><span class="li-hide">
+          <span class="li-only">{% if days_left is not none %}{{ (days_left) | fa }} روز{% else %}—{% endif %}</span><span class="li-hide">
           {% if u.get('_expire_text') %}{{ u.get('_expire_text') }}{% elif u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}</span>
         </td>
         {% if is_admin %}
@@ -139,7 +139,7 @@
       {% if pager.pages and pager.total is not none %}
       صفحه {{ pager.page }} از {{ pager.pages }}
       <span aria-hidden="true">·</span>
-      {{ pager.total }} کاربر
+      {{ (pager.total) | fa }} کاربر
       {% else %}
       صفحه {{ pager.page }}
       {% endif %}

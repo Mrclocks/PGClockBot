@@ -45,7 +45,7 @@
         <tr data-bulk-ops="toggle">
           {{ table_select_cell(c.id) }}
           <td class="li-title"><span class="mono" dir="ltr">{{ c.code }}</span>{% if c.note %}<div class="muted li-hide">{{ c.note }}</div>{% endif %}</td>
-          <td class="li-value">{% if c.kind == 'discount' %}<span class="mono">{{ c.percent }}٪</span>{% if c.max_discount_toman is not none %}<div class="muted li-hide">تا <span dir="ltr">{{ c.max_discount_toman | money }}</span> تومان</div>{% endif %}{% else %}<span class="mono" dir="ltr">{{ c.amount | money }}</span><div class="muted li-hide">شارژ کیف پول</div>{% endif %}</td>
+          <td class="li-value">{% if c.kind == 'discount' %}<span class="mono">{{ (c.percent) | fa }}٪</span>{% if c.max_discount_toman is not none %}<div class="muted li-hide">تا <span dir="ltr">{{ c.max_discount_toman | money }}</span> تومان</div>{% endif %}{% else %}<span class="mono" dir="ltr">{{ c.amount | money }}</span><div class="muted li-hide">شارژ کیف پول</div>{% endif %}</td>
           <td class="col-hide-sm">{{ c.used_count }}{% if c.max_uses is not none %}/{{ c.max_uses }}{% endif %}</td>
           <td class="li-sub">
             {#- On phones line two: kind · uses · per user · purchases · expiry · note. -#}

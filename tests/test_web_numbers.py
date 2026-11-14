@@ -45,3 +45,17 @@ class WebNumberFilterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TemplateFigureTests(unittest.TestCase):
+    """Figures written into the page text, not only the filtered ones, read in Persian."""
+
+    def test_the_sales_card_names_its_ranges_in_persian(self) -> None:
+        html = templates.env.get_template("_home_sales_chart.html").render(sales_trend={}, periods={})
+        self.assertIn(">۷ روز<", html)
+        self.assertIn(">۳۰ روز<", html)
+        self.assertNotRegex(html, r"[0-9] روز")
+
+    def test_a_raw_figure_before_a_unit_is_shown_in_persian(self) -> None:
+        self.assertEqual(show("(p.duration_days or '∞') | fa", p={"duration_days": 30}), "۳۰")
+        self.assertEqual(show("(p.duration_days or '∞') | fa", p={"duration_days": 0}), "∞")

@@ -76,7 +76,7 @@
       {{ ds_unlimited('کاربر پایه', 'included_users', 'edit-included-users', 'نفر', plan.included_users or 0) }}
     </div>
     {% if pg_limit_snapshot and pg_limit_snapshot.restricted and (pg_limit_snapshot.account_data_limit or pg_limit_snapshot.max_users) %}
-    <small class="muted">سقف ادمین اصلی:{% if pg_limit_snapshot.account_data_limit %} {{ pg_limit_snapshot.account_data_limit | bytes }}{% endif %}{% if pg_limit_snapshot.max_users %} · {{ pg_limit_snapshot.max_users }} کاربر{% endif %}</small>
+    <small class="muted">سقف ادمین اصلی:{% if pg_limit_snapshot.account_data_limit %} {{ pg_limit_snapshot.account_data_limit | bytes }}{% endif %}{% if pg_limit_snapshot.max_users %} · {{ (pg_limit_snapshot.max_users) | fa }} کاربر{% endif %}</small>
     {% endif %}
     {% if is_system_plan %}
     <p class="muted">حجم/کاربر پایه همیشه ۰ است — هنگام اعطا، سقف زنده ادمین پاسارگارد در اشتراک محلی ثبت می‌شود.</p>
