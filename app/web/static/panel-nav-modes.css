@@ -559,12 +559,14 @@
   /* Fixed notices at the bottom (upload progress) sit above the bar instead of covering it. */
   html:has(.bottom-dock) .upload-toast { bottom: calc(var(--dock-bottom) + var(--dock-h) + var(--space-1_5)); }
 
-  /* The footer is the one bottom-inset owner (panel.css mobile geometry, rule C): it grows by the bar's room
-     so its text is never under the bar. */
+  /* The footer is the one bottom-inset owner (panel.css mobile geometry, rule C). Under the bar it keeps the
+     same air between its content and the bar as between the separator line and its content (--page-title-gap),
+     plus the bar itself and the bar's distance from the screen edge (safe area included in --dock-bottom). */
   html:has(.bottom-dock) .site-footer {
-    padding-bottom: calc(var(--bottom-inset) + var(--dock-room));
-    min-height: calc(var(--footer-bar-h) + var(--bottom-inset) + var(--dock-room));
-    max-height: calc(var(--footer-bar-h) + var(--bottom-inset) + var(--dock-room));
+    --footer-under-bar: calc(var(--page-title-gap) + var(--dock-h) + var(--dock-bottom));
+    padding-bottom: var(--footer-under-bar);
+    min-height: calc(var(--footer-bar-h) + var(--footer-under-bar));
+    max-height: calc(var(--footer-bar-h) + var(--footer-under-bar));
   }
 }
 /* —— Phone menu: a launcher sheet that rises above the bottom bar while the bar folds into its ×.
