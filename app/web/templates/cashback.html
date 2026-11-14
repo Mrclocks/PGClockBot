@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import row_actions, page_header, act_label %}
 {% from "_ds.html" import ds_switch, ds_sec, ds_head_switch, ds_modal_head, ds_foot %}
-{% from "_marketing_tabs.html" import marketing_tabs %}
 {% set event_labels = {'new': 'تازه', 'renew': 'تمدید', 'addon': 'اضافه'} %}
 
 {# Rule form body; key makes the ids unique when several rule modals share the page. #}
@@ -76,15 +75,15 @@
 {% endmacro %}
 
 {% block title %}کش‌بک{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-{% call(slot) page_header('gift', 'کش‌بک') %}
+{% call(slot) page_header('gift', 'کش‌بک', back='/marketing', back_label='بازاریابی', subtitle=marketing_path(marketing_sections|default(()), 'cashback')) %}
   {%- if slot == 'primary' %}
   <button type="button" class="btn" data-modal-open="modal-cb-rule-new">{{ act_label('قانون تازه', 'قانون') }}</button>
   {%- endif %}
 {% endcall %}
 
-{{ marketing_tabs(marketing_sections|default(()), 'cashback') }}
 
 <form method="post" action="/cashback/settings" class="form-stack ds-page-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

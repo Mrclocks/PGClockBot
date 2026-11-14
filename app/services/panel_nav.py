@@ -30,6 +30,8 @@ DOT_LABELS: dict[str, str] = {
 }
 
 MARKETING_KEY = "marketing"
+# The marketing entry opens the list of the marketing area (app/api/marketing_pages.py).
+MARKETING_LIST_HREF = "/marketing"
 
 # Phone bottom bar: dashboard and action center, then the most used pages the viewer may open.
 # The owner can put other pages first (app/services/mobile_bar.py); these fill whatever is left.
@@ -260,11 +262,12 @@ def _items(specs: Iterable[_ItemSpec], viewer: NavViewer, loc: NavLocation) -> l
 
 
 def _marketing_item(spec: _ItemSpec, viewer: NavViewer, loc: NavLocation) -> NavItem | None:
-    """One entry for every marketing section the viewer may open; it opens the first of them."""
+    """One entry for every marketing section the viewer may open; it opens the list of those sections."""
     if not viewer.marketing_hrefs:
         return None
-    active = any(loc.path.startswith(href.split("?")[0]) for href in viewer.marketing_hrefs)
-    return NavItem(spec.key, spec.label, viewer.marketing_hrefs[0], spec.icon, active)
+    paths = (MARKETING_LIST_HREF, *(href.split("?")[0] for href in viewer.marketing_hrefs))
+    active = any(loc.path.startswith(path) for path in paths)
+    return NavItem(spec.key, spec.label, MARKETING_LIST_HREF, spec.icon, active)
 
 
 def build_sidebar(viewer: NavViewer, *, path: str, tab: str = "") -> tuple[NavSection, ...]:
