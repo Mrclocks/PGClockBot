@@ -121,7 +121,9 @@ class SettingsPagesTests(unittest.TestCase):
     def test_the_header_button_is_gone_and_the_tab_is_in_the_texts_group(self):
         html = self._owner_page("messages")
         head = html.split("settings-layout", 1)[0]
-        self.assertNotIn("page-head-actions", head)
+        # The page header holds no button to the variables page (only the help, in «⋯»).
+        actions = head.split("page-head-actions", 1)[-1].split("data-page-more-toggle", 1)[0]
+        self.assertNotIn('href="/message-variables"', actions)
         self.assertEqual(head.count('href="/message-variables"'), 1)
         self.assertIn('href="/message-variables" class="">متغیرهای پیام</a>', head)
 
@@ -138,7 +140,7 @@ class SettingsPagesTests(unittest.TestCase):
             )
             head = html.split("settings-layout", 1)[0]
             self.assertEqual(head.count('href="/message-variables"'), expected, staff)
-            self.assertNotIn("page-head-actions", head)
+            self.assertNotIn('class="btn', head.split("page-head-actions", 1)[-1].split("data-page-more-toggle", 1)[0])
 
     def test_panel_settings_have_no_bot_tabs_at_all(self):
         html = _settings_page(
