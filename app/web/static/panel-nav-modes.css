@@ -342,6 +342,11 @@
   }
   @media (max-width: 359px) and (min-height: 501px) {
     .page-head[data-page-head="capsule"] .page-title-ico { display: none; }
+    /* The narrowest phones keep the whole title: one type step down and 4px gaps before it is ever cut. */
+    .page-head[data-page-head="capsule"] .page-head-main { column-gap: var(--space-0); }
+    .page-head[data-page-head="capsule"] .page-title { gap: var(--space-0); }
+    .page-head[data-page-head="capsule"] h1 { font-size: var(--fs-3); }
+    .page-head[data-page-head="capsule"] .page-help-btn { margin-inline-start: 0; }
     .page-head[data-page-head="capsule"] .btn > .act-short { display: none; }
     .page-head[data-page-head="capsule"] > .page-head-actions > .btn:has(> .act-short) { width: var(--dock-inner); padding: 0; justify-content: center; }
   }
