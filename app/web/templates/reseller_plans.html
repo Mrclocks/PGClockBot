@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
+{% from "macros.html" import switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label %}
+{% from "_ds.html" import ds_modal_head, ds_foot %}
 {% block title %}پلن‌های نمایندگی{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
@@ -52,14 +53,11 @@
   </div>
 </div>
 
-<div class="ui-modal" id="modal-plan-create" hidden>
+<div class="ui-modal ds" id="modal-plan-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
-  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('plans', 'پلن جدید', caption='پلن نمایندگی جدید بسازید', tone='brand') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-    <form method="post" action="/resellers/plans" class="form-stack">
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="modal-plan-create-title">
+    {{ ds_modal_head('plans', 'پلن نمایندگی جدید', 'modal-plan-create-title') }}
+    <form method="post" action="/resellers/plans" class="form-stack ds-body">
       <div class="form-row">
         <div>
           <label class="form-field">نام
@@ -107,10 +105,7 @@
           {% endfor %}
         </select>
       </label>
-      <div class="actions">
-        <button class="btn" type="submit">ذخیره پلن</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      {{ ds_foot('ذخیره پلن') }}
     </form>
   </div>
 </div>
