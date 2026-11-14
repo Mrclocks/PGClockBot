@@ -68,10 +68,11 @@
   /* Items, logo and search circle inside the capsules: 4px clear of its edge. */
   --dock-inner: calc(var(--dock-h) - 2 * var(--space-0));
   --dock-edge: var(--space-1_5);
-  /* Distance from the screen bottom: 12px, or the home-indicator safe area where that is larger, so the bar
-     never sits in the system gesture strip and never floats needlessly high above it. */
-  --dock-bottom: max(var(--dock-edge), var(--safe-bottom));
-  --dock-room: calc(var(--dock-h) + var(--dock-edge));
+  /* Distance from the screen bottom: the mirror of the header's distance from the top (--hdr-top): the bottom
+     safe area plus the same air (--safe-top-extra: 16px in a phone browser, 24px in the installed web app),
+     never less than 12px. --dock-room keeps the page footer's text clear of the bar by the same air. */
+  --dock-bottom: max(var(--dock-edge), calc(var(--safe-bottom) + var(--safe-top-extra)));
+  --dock-room: calc(var(--dock-h) + max(var(--dock-edge), var(--safe-top-extra)));
   /* Hide is quicker than show: it gets out of the way, then settles back in with a soft deceleration. */
   --dock-show: 360ms;
   --dock-hide: 240ms;
