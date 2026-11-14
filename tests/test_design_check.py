@@ -62,6 +62,15 @@ class TemplateRuleTests(unittest.TestCase):
         self.assertEqual(css_findings(smooth), [])
         self.assertEqual(css_findings(".x { transition: border-color var(--motion-fast); }"), [])
 
+    def test_a_custom_property_that_refers_to_itself_is_found(self) -> None:
+        self.assertEqual(rules(css_findings(":root {\n  --ok-solid: var(--ok-solid);\n}")), ["token-loop"])
+        self.assertEqual(rules(css_findings(":root {\n  --a: var(--a, #fff);\n}")), ["token-loop"])
+        self.assertEqual(css_findings(":root {\n  --ok-solid: #16a34a;\n  --tone: var(--ok-solid);\n}"), [])
+
+    def test_a_byte_order_mark_in_a_template_is_found(self) -> None:
+        self.assertEqual(rules(template_findings('{% from "x.html" import y %}\n\ufeff{% extends "base.html" %}')), ["bom"])
+        self.assertEqual(template_findings('{% extends "base.html" %}'), [])
+
     def test_a_hand_drawn_icon_is_found_but_a_data_graphic_is_not(self) -> None:
         icon = '<svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12"/></svg>'
         small = '<svg viewBox="0 0 16 16"><path d="M4 4l8 8"/></svg>'
