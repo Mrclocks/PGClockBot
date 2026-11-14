@@ -10,12 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ResellerProfile
+from app.services.payg_charges import count_review_charges
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 
 logger = logging.getLogger(__name__)
 
 _EMPTY_ACTION = {"entries": [], "has_items": False}
-_EMPTY_PAYG = {"suspended": [], "low": [], "threshold": 0, "has_items": False}
+_EMPTY_PAYG = {"suspended": [], "low": [], "threshold": 0, "review": 0, "has_items": False}
 
 # Soft cache for sidebar dot — avoid rebuilding action center on every navigation.
 _SIDEBAR_CACHE: dict[str, tuple[float, bool]] = {}
@@ -52,6 +53,8 @@ def inbox_alert_count(ctx: dict[str, Any]) -> int:
         n += 1
     if pr.get("low"):
         n += 1
+    if pr.get("review"):
+        n += 1
     ac = ctx.get("action_center") or {}
     if ac.get("has_items"):
         n += len(ac.get("entries") or [])
@@ -71,6 +74,7 @@ async def _payg_risk_strip(session: AsyncSession) -> dict:
         "suspended": [],
         "low": [],
         "threshold": 0,
+        "review": 0,
         "has_items": False,
     }
     try:
@@ -136,7 +140,8 @@ async def _payg_risk_strip(session: AsyncSession) -> dict:
 
     out["suspended"].sort(key=lambda x: x["balance"])
     out["low"].sort(key=lambda x: x["balance"])
-    out["has_items"] = bool(out["suspended"] or out["low"])
+    out["review"] = await count_review_charges(session)
+    out["has_items"] = bool(out["suspended"] or out["low"] or out["review"])
     return out
 
 

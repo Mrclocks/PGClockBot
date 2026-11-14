@@ -15,7 +15,7 @@ class VpnDeleteSimpleConfirmTests(unittest.TestCase):
         self.assertNotIn("'phrase': 'حذف'", html)
         self.assertIn("/pg/users/{{ uid }}/delete", html)
         self.assertIn("data-confirm=", html)
-        self.assertNotIn("data-confirm-reason", html)
+        self.assertIn("data-confirm-reason", html)
 
     def test_service_delete_is_simple_confirm(self):
         html = (ROOT / "app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")

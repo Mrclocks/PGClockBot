@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.services.formatting import format_bytes, format_bytes_ratio
 from app.services.numbers import normalize_number_text, parse_float, parse_int
+from tests.template_source import template_with_includes
 
 ROOT = Path(__file__).resolve().parents[1]
 GB = 1024**3
@@ -42,7 +43,8 @@ class GroupEditModalTests(unittest.TestCase):
         self.assertIn('data-modal-open="modal-pg-group-edit"', src)
         self.assertNotIn('href="/pg/groups?edit=', src)
         self.assertNotIn("{% if edit_group and can_write %}\n<div class=\"card\">", src)
-        self.assertIn('data-modal-close>انصراف</button>', src)
+        edit = src.split('id="modal-pg-group-edit"', 1)[1]
+        self.assertNotIn('data-modal-close>انصراف</button>', edit)
 
 
 class HostsTemplatesEditTests(unittest.TestCase):
@@ -77,12 +79,13 @@ class SwitchHoverThemeTests(unittest.TestCase):
 class CancelButtonUnityTests(unittest.TestCase):
     def test_ghost_link_matches_button(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        # One rule serves both themes: the neutral edge and fill are mixed from --foreground.
         self.assertIn("a.btn.btn-ghost:hover", css)
-        self.assertIn('html[data-theme="light"] a.btn.btn-ghost:hover', css)
+        self.assertNotIn('html[data-theme="light"] a.btn.btn-ghost', css)
 
-    def test_plan_modal_cancel_pattern(self):
-        plans = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
-        self.assertIn('class="btn btn-ghost" data-modal-close>انصراف</button>', plans)
+    def test_plan_form_modals_have_no_cancel_button(self):
+        plans = template_with_includes("plans.html")
+        self.assertNotIn('data-modal-close>انصراف</button>', plans)
 
 
 class DigitNormalizeTests(unittest.TestCase):

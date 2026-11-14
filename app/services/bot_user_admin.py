@@ -8,6 +8,7 @@ VPN quota/links are live from PasarGuard through ``UserService.pg_user_id``.
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import time
 from dataclasses import dataclass
@@ -16,16 +17,23 @@ from typing import Any
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, BotUserShop, Plan, Role, UserService, WalletTransaction
+from app.db.models import BotUser, BotUserShop, Plan, ResellerCharge, Role, UserService, WalletTransaction
+from app.services.authz import authz_from_staff, can_shop
+from app.services.db_safe import rollback_quiet
 from app.services.formatting import (
+    copyable,
     expire_remaining_days,
     format_bytes,
     format_bytes_ratio,
     format_expire_short,
+    format_message,
+    info_block,
     is_on_hold_status,
+    kv_line,
     on_hold_expire_duration_seconds,
     status_label_plain,
     time_remaining_label,
@@ -39,8 +47,9 @@ from app.services.pasarguard import (
     get_pg,
     user_subscription_url,
 )
+from app.services.pg_access import staff_user_actions
 from app.services.redact import user_safe_error
-from app.services.wallet import credit_wallet, debit_wallet, list_transactions
+from app.services.wallet import credit_wallet, debit_wallet, get_wallet_balance, list_transactions
 from app.services.service_scope import assert_service_in_shop, service_shop_id, shop_services_clause
 from app.services.shop_membership import ensure_member
 from app.services.provision_gate import (
@@ -51,6 +60,19 @@ from app.services.provision_gate import (
     settle_failed_hold,
 )
 from app.services.volume_allocation import HeldVolume, is_hard_panel_rejection, release_volume_hold
+from app.services.payg_charges import new_request_key
+from app.services.payg_gate import (
+    charge_shop_change,
+    charge_shop_changes,
+    finish_charge,
+    finish_charges,
+    read_template_volume,
+    service_edit_changes,
+    settle_failed_charge,
+    settle_failed_charges,
+    shop_charges_at_creation,
+)
+from app.services.payg_pricing import ChargeEvent, ServiceChange
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +88,32 @@ SNAPSHOT_TIMEOUT_SECONDS = 3.0
 SNAPSHOT_CONCURRENCY = 4
 # A customer screen lists at most this many services with live status.
 SNAPSHOT_LIMIT = 30
+# PasarGuard status of a user whose data limit is used up.
+VOLUME_FINISHED_STATUS = "limited"
 # Panel read failures that only mean «status unknown»: the stored row is shown instead.
 PANEL_READ_ERRORS = (asyncio.TimeoutError, PasarGuardError, httpx.HTTPError, ValueError)
 MAX_TELEGRAM_ID = 9_007_199_254_740_991  # signed int64 safe upper bound
+# Shop feature key for viewing and changing a customer's services (bot and web).
+CUSTOMER_SERVICES_PERMISSION = "customer_services"
+
+
+def may_manage_customer_services(staff: dict | None) -> bool:
+    """Whether web or bot staff may open and change customer services in their scope."""
+    return can_shop(authz_from_staff(staff), CUSTOMER_SERVICES_PERMISSION)
+
+
+def customer_service_actions(staff: dict) -> dict[str, bool]:
+    """PasarGuard users.* actions offered on the customer screens.
+
+    The panel role decides which actions exist. Reading or changing an existing
+    service also needs ``customer_services``; assigning a new plan does not.
+    """
+    actions = staff_user_actions(staff)
+    if may_manage_customer_services(staff):
+        return actions
+    limited = dict.fromkeys(actions, False)
+    limited["create"] = bool(actions.get("create"))
+    return limited
 
 
 def parse_admin_wallet_amount(text: str | None) -> int:
@@ -515,6 +560,7 @@ async def admin_provision_service(
     )
 
     hold = await _hold_assign_volume(session, shop_rid, pg, plan, data_limit)
+    assign_charge = await _charge_assign(session, shop_rid, pg, plan, data_limit, hold, username)
     pg_uid: int | None = None
     try:
         if plan.pg_template_id:
@@ -575,6 +621,7 @@ async def admin_provision_service(
         session.add(service)
         await ensure_member(session, int(user.id), shop_rid)
         await release_volume_hold(session, hold)
+        await finish_charge(session, assign_charge, commit=False)
         await session.commit()
         await session.refresh(service)
         return service
@@ -588,6 +635,7 @@ async def admin_provision_service(
                 )
         await session.rollback()
         await settle_failed_hold(session, hold, exc, panel_touched=True)
+        await settle_failed_charge(session, assign_charge, exc, panel_touched=True)
         from app.services.pasarguard import PasarGuardError
 
         if isinstance(exc, PasarGuardError):
@@ -613,6 +661,7 @@ async def admin_credit_user_wallet(
     actor: str,
     note: str | None = None,
     shop_id: int | None = None,
+    idempotency_key: str | None = None,
 ) -> BotUser:
     """Increase platform or shop wallet (admin). Positive amounts only."""
     amt = _require_admin_wallet_amount(amount)
@@ -623,7 +672,9 @@ async def admin_credit_user_wallet(
     reason = f"شارژ ادمین ({(actor or 'admin')[:64]})"
     if note:
         reason = f"{reason}: {note.strip()[:120]}"
-    return await credit_wallet(session, user, amt, reason, shop_id=shop_id)
+    return await credit_wallet(
+        session, user, amt, reason, shop_id=shop_id, idempotency_key=idempotency_key
+    )
 
 
 async def admin_debit_user_wallet(
@@ -634,6 +685,7 @@ async def admin_debit_user_wallet(
     actor: str,
     note: str | None = None,
     shop_id: int | None = None,
+    idempotency_key: str | None = None,
 ) -> BotUser:
     """Decrease platform or shop wallet (admin). Fail-closed on shortfall."""
     amt = _require_admin_wallet_amount(amount)
@@ -644,7 +696,30 @@ async def admin_debit_user_wallet(
     reason = f"کسر ادمین ({(actor or 'admin')[:64]})"
     if note:
         reason = f"{reason}: {note.strip()[:120]}"
-    return await debit_wallet(session, user, amt, reason, shop_id=shop_id)
+    return await debit_wallet(
+        session, user, amt, reason, shop_id=shop_id, idempotency_key=idempotency_key
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class AdminWalletChange:
+    user: BotUser
+    amount: int
+    mode: str
+    balance_after: int
+    replayed: bool
+
+
+def build_admin_wallet_idempotency_key(
+    *,
+    request_key: str,
+    user_id: int,
+    mode: str,
+    shop_id: int | None,
+) -> str:
+    """Ledger key scoped so the same nonce cannot collide across users, shops, or directions."""
+    shop = "p" if shop_id is None else str(int(shop_id))
+    return f"admin_wallet:{shop}:{int(user_id)}:{mode}:{request_key}"
 
 
 async def admin_adjust_user_wallet(
@@ -657,8 +732,13 @@ async def admin_adjust_user_wallet(
     note: str | None = None,
     shop_id: int | None = None,
     min_abs: int = MIN_ADMIN_WALLET_ADJUST,
-) -> BotUser:
-    """Admin adjust: positive ``amount`` + ``mode`` credit|debit (atomic shortfall)."""
+    request_key: str | None = None,
+) -> AdminWalletChange:
+    """Admin adjust: positive ``amount`` + ``mode`` credit|debit (atomic shortfall).
+
+    When ``request_key`` is set, a repeated submit with the same key returns the first
+    result (``replayed=True``) without moving money again.
+    """
     direction = parse_admin_wallet_mode(mode)
     amt = _require_admin_wallet_amount(amount)
     if amt <= 0:
@@ -666,12 +746,84 @@ async def admin_adjust_user_wallet(
     floor = int(min_abs)
     if floor > 0 and amt < floor:
         raise ValueError(f"حداقل مبلغ {floor:,} تومان است")
-    if direction == "credit":
-        return await admin_credit_user_wallet(
-            session, user, amt, actor=actor, note=note, shop_id=shop_id
+    key = (
+        build_admin_wallet_idempotency_key(
+            request_key=request_key,
+            user_id=int(user.id),
+            mode=direction,
+            shop_id=shop_id,
         )
-    return await admin_debit_user_wallet(
-        session, user, amt, actor=actor, note=note, shop_id=shop_id
+        if request_key
+        else None
+    )
+    if key:
+        existing = (
+            await session.execute(
+                select(WalletTransaction).where(WalletTransaction.idempotency_key == key)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            if int(existing.user_id) != int(user.id) or existing.reseller_id != shop_id:
+                raise ValueError("کلید یکتای عملیات نامعتبر است")
+            expected_sign = 1 if direction == "credit" else -1
+            if int(existing.amount) * expected_sign <= 0:
+                raise ValueError("کلید یکتای عملیات نامعتبر است")
+            balance = await get_wallet_balance(session, int(user.id), shop_id=shop_id)
+            return AdminWalletChange(
+                user=user,
+                amount=amt,
+                mode=direction,
+                balance_after=int(balance),
+                replayed=True,
+            )
+
+    balance_before = await get_wallet_balance(session, int(user.id), shop_id=shop_id)
+    try:
+        if direction == "credit":
+            await admin_credit_user_wallet(
+                session,
+                user,
+                amt,
+                actor=actor,
+                note=note,
+                shop_id=shop_id,
+                idempotency_key=key,
+            )
+        else:
+            await admin_debit_user_wallet(
+                session,
+                user,
+                amt,
+                actor=actor,
+                note=note,
+                shop_id=shop_id,
+                idempotency_key=key,
+            )
+    except IntegrityError:
+        await rollback_quiet(session)
+        if key is None:
+            raise
+        existing = (
+            await session.execute(
+                select(WalletTransaction).where(WalletTransaction.idempotency_key == key)
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            raise
+        if int(existing.user_id) != int(user.id) or existing.reseller_id != shop_id:
+            raise ValueError("کلید یکتای عملیات نامعتبر است") from None
+    balance_after = await get_wallet_balance(session, int(user.id), shop_id=shop_id)
+    refreshed = await session.get(BotUser, int(user.id))
+    # Concurrent loser: credit_wallet rolled back our update so the purse did not move
+    # in this attempt (peer already applied the same key).
+    expected = balance_before + amt if direction == "credit" else balance_before - amt
+    replayed = key is not None and int(balance_after) != int(expected)
+    return AdminWalletChange(
+        user=refreshed or user,
+        amount=amt,
+        mode=direction,
+        balance_after=int(balance_after),
+        replayed=replayed,
     )
 
 
@@ -714,6 +866,13 @@ def _cache_quota_status(service: UserService, info: dict[str, Any]) -> None:
     status = info.get("status")
     if isinstance(status, str):
         service.quota_status = status.strip().lower()[:32]
+        # The cleanup counts days from the moment the panel first reported the volume as finished.
+        if service.quota_status == VOLUME_FINISHED_STATUS:
+            if service.volume_exhausted_at is None:
+                service.volume_exhausted_at = datetime.now(timezone.utc)
+        else:
+            service.volume_exhausted_at = None
+            service.cleanup_volume_warn_stage = 0
 
 
 def sync_service_quota_cache(
@@ -740,6 +899,8 @@ def sync_service_quota_cache(
     from app.services.formatting import parse_expire
 
     touched = False
+    # Tests and lightweight fixtures may pass a SimpleNamespace without quota columns.
+    previous_expire = getattr(service, "quota_expire_at", None)
     if isinstance(info, dict):
         _cache_quota_status(service, info)
         has_expire = "expire" in info or "expire_date" in info
@@ -803,6 +964,24 @@ def sync_service_quota_cache(
             touched = True
     if touched:
         service.quota_synced_at = datetime.now(timezone.utc)
+        _reset_cleanup_stage_after_renewal(service, previous_expire)
+
+
+def _reset_cleanup_stage_after_renewal(service: UserService, previous_expire: datetime | None) -> None:
+    """A service that is no longer expired starts its cleanup warnings over at the next expiry.
+
+    Only a real renewal counts: the new expiry is later and in the future. A service that is still
+    expired after a small extension keeps its stage, so its warnings are not sent twice.
+    """
+    new_expire = getattr(service, "quota_expire_at", None)
+    if previous_expire is None or new_expire is None:
+        return
+    if not hasattr(service, "cleanup_warn_stage"):
+        return
+    old = previous_expire if previous_expire.tzinfo else previous_expire.replace(tzinfo=timezone.utc)
+    new = new_expire if new_expire.tzinfo else new_expire.replace(tzinfo=timezone.utc)
+    if new > old and new > datetime.now(timezone.utc):
+        service.cleanup_warn_stage = 0
 
 
 async def _hold_assign_volume(
@@ -816,6 +995,73 @@ async def _hold_assign_volume(
         )
     except ProvisionError as e:
         raise ValueError(e.message) from e
+
+
+async def _charge_assign(
+    session: AsyncSession, shop_rid: int | None, pg: Any, plan: Plan, data_limit: int | None,
+    hold: HeldVolume | None, username: str,
+) -> ResellerCharge | None:
+    """Take the shop's PAYG charge for a manual assignment; frees the hold when refused."""
+    if not shop_rid or not await shop_charges_at_creation(session, int(shop_rid)):
+        return None
+    try:
+        limit, days = int(data_limit or 0), int(plan.duration_days or 0)
+        if plan.pg_template_id:
+            limit, days = await read_template_volume(pg, int(plan.pg_template_id))
+        return await charge_shop_change(
+            session, shop_id=int(shop_rid),
+            change=ServiceChange(ChargeEvent.CREATE, data_limit_bytes=limit, days=days),
+            request_key=f"assign:{new_request_key()}", pg_username=username,
+            panel_target={"plan_id": int(plan.id), "username": username}, created_by="assign",
+        )
+    except ProvisionError as e:
+        await release_volume_hold(session, hold)
+        await session.commit()
+        raise ValueError(e.message) from e
+
+
+async def _charge_quota_edit(
+    session: AsyncSession, pg: Any, service: UserService, hold: HeldVolume | None,
+    *, renew: bool, data_limit_bytes: int | None, expire_ts: int | None, reset: bool,
+) -> list[ResellerCharge]:
+    """Charge a staff edit of a shop user from its live panel values; frees the hold when refused."""
+    shop_rid = service.shop_id
+    if not shop_rid or not await shop_charges_at_creation(session, int(shop_rid)):
+        return []
+    from app.services.formatting import parse_expire
+
+    info = await pg.get_user_by_id(int(service.pg_user_id))
+    if not isinstance(info, dict):
+        raise ValueError("کاربر پاسارگارد یافت نشد")
+    current_expire = parse_expire(info.get("expire") or info.get("expire_date"))
+    changes = service_edit_changes(
+        renew=renew,
+        current_limit=int(info.get("data_limit") or 0),
+        new_limit=data_limit_bytes,
+        current_expire=int(current_expire.timestamp()) if current_expire else None,
+        new_expire=expire_ts,
+        reset=reset,
+        now_ts=int(time.time()),
+    )
+    try:
+        return await charge_shop_changes(
+            session, shop_id=int(shop_rid), changes=changes, request_key=f"svc-edit:{new_request_key()}",
+            pg_username=str(service.pg_username or ""), panel_target={"service_id": int(service.id)},
+            created_by="staff-edit",
+        )
+    except ProvisionError as e:
+        await release_volume_hold(session, hold)
+        await session.commit()
+        raise ValueError(e.message) from e
+
+
+async def _settle_failed_reset(
+    session: AsyncSession, charges: list[ResellerCharge], exc: BaseException
+) -> list[ResellerCharge]:
+    """A failed reset is not sold: settle its charge as failed and keep the others."""
+    resets = [c for c in charges if c.event == ChargeEvent.RESET]
+    await settle_failed_charges(session, resets, exc, panel_touched=True)
+    return [c for c in charges if c.event != ChargeEvent.RESET]
 
 
 async def _hold_quota_change(
@@ -855,8 +1101,12 @@ async def admin_set_service_quota(
     reset_traffic: bool = False,
     activate: bool = True,
     staff: dict | None = None,
+    renew: bool = False,
 ) -> ServiceSnapshot:
-    """Set absolute quota on the linked PG user and refresh local link + list cache."""
+    """Set absolute quota on the linked PG user and refresh local link + list cache.
+
+    ``renew`` prices a PAYG shop's edit as a new period instead of as its parts.
+    """
     if not service.pg_user_id:
         raise ValueError("سرویس به پاسارگارد وصل نیست")
     assert_staff_pg_user_action(staff, "update")
@@ -870,11 +1120,16 @@ async def admin_set_service_quota(
 
         if not staff_user_actions(staff).get("reset_usage"):
             do_reset = False
+    charges = await _charge_quota_edit(
+        session, pg, service, hold, renew=renew, data_limit_bytes=data_limit_bytes, expire_ts=expire_ts,
+        reset=do_reset,
+    )
     if do_reset:
         try:
             await pg.reset_user_by_id(int(service.pg_user_id))
-        except Exception:
+        except Exception as exc:
             logger.debug("reset traffic failed uid=%s", service.pg_user_id, exc_info=True)
+            charges = await _settle_failed_reset(session, charges, exc)
     payload = build_user_modify_payload(
         data_limit=data_limit_bytes,
         expire_ts=expire_ts,
@@ -884,7 +1139,11 @@ async def admin_set_service_quota(
         raise ValueError("تغییری برای اعمال نیست")
     info: dict | None = None
     if payload:
-        info = await _modify_with_hold(session, pg, service, payload, hold)
+        try:
+            info = await _modify_with_hold(session, pg, service, payload, hold)
+        except Exception as exc:
+            await settle_failed_charges(session, charges, exc, panel_touched=True)
+            raise
         if isinstance(info, dict):
             live = user_subscription_url(info)
             if live:
@@ -913,6 +1172,7 @@ async def admin_set_service_quota(
     service.notified_expire = False
     service.notified_traffic = False
     await release_volume_hold(session, hold)
+    await finish_charges(session, charges, commit=False)
     await session.commit()
     snap = await service_snapshot(session, service)
     # Persist any cache refresh from the live snapshot read
@@ -930,14 +1190,20 @@ async def admin_renew_service(
     reset_traffic: bool = True,
     staff: dict | None = None,
 ) -> ServiceSnapshot:
-    """Admin renew: set expire from now + days and optional data limit (from plan or args)."""
+    """Admin renew: always a fresh period from now (does not follow plan carry).
+
+    Customer paid renewals, Mini App and automation use ``Plan.carry_remaining_quota``.
+    Staff renew from the users page stays the historical start-from-now + optional
+    traffic reset so operators are not surprised after an upgrade.
+    """
+    next_plan_id: int | None = None
     if plan is not None:
         if plan.is_trial:
             raise ValueError("پلن تست برای تمدید مجاز نیست")
         days = int(plan.duration_days or 0) or days
         if plan.data_limit_gb is not None:
             data_limit_gb = float(plan.data_limit_gb)
-        service.plan_id = int(plan.id)
+        next_plan_id = int(plan.id)
 
     if days is not None:
         days_n = int(days)
@@ -955,7 +1221,10 @@ async def admin_renew_service(
     else:
         data_limit_bytes = None
 
-    return await admin_set_service_quota(
+    # Apply plan_id only after the panel write succeeds. ``_modify_with_hold`` may
+    # commit on a hard rejection; mutating beforehand could persist a plan change
+    # without the renew.
+    snap = await admin_set_service_quota(
         session,
         service,
         data_limit_bytes=data_limit_bytes,
@@ -963,7 +1232,13 @@ async def admin_renew_service(
         reset_traffic=reset_traffic,
         activate=True,
         staff=staff,
+        renew=True,
     )
+    if next_plan_id is not None and service.plan_id != next_plan_id:
+        service.plan_id = next_plan_id
+        await session.commit()
+        snap = await service_snapshot(session, service)
+    return snap
 
 
 async def admin_extend_service(
@@ -1054,6 +1329,44 @@ async def _pg_user_presence(pg: Any, pg_uid: int) -> str:
     return "unknown"
 
 
+async def panel_client_for_service(session: AsyncSession, service: UserService) -> Any | None:
+    """The shop's own panel client for ``service``; ``None`` when it has no panel user or none can be built."""
+    if not service.pg_user_id:
+        return None
+    try:
+        return await _pg_client_for_bot_service(session, service)
+    except PANEL_READ_ERRORS:
+        logger.warning("panel client unavailable service=%s", service.id, exc_info=True)
+        return None
+
+
+async def _panel_login_is_valid(pg: Any) -> bool:
+    """True when the panel answers for the client's own admin, so its 404 on a user really means «gone»."""
+    try:
+        admin = await asyncio.wait_for(pg.get_current_admin(), timeout=SNAPSHOT_TIMEOUT_SECONDS)
+    except PANEL_READ_ERRORS:
+        return False
+    return isinstance(admin, dict)
+
+
+async def probe_panel_presence(pg: Any | None, pg_user_id: int | None) -> str:
+    """``present``, ``absent`` or ``unknown`` (no client, outage, timeout, refusal, unverified login).
+
+    A 404 only counts as ``absent`` when the same client can still read its own admin account: a
+    panel role that cannot see a user may answer 404 instead of 403, and an expired login must not
+    mark services as removed.
+    """
+    if pg is None or not pg_user_id:
+        return "unknown"
+    try:
+        presence = await asyncio.wait_for(_pg_user_presence(pg, int(pg_user_id)), timeout=SNAPSHOT_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        return "unknown"
+    if presence == "absent" and not await _panel_login_is_valid(pg):
+        return "unknown"
+    return presence
+
+
 def _raise_pg_not_removed(presence: str, *, cause: BaseException) -> None:
     """Fail closed; message distinguishes confirmed-present vs uncertain."""
     if presence == "present":
@@ -1141,8 +1454,12 @@ async def admin_delete_service(
     *,
     delete_pg: bool = True,
     staff: dict | None = None,
+    allow_disable_fallback: bool = True,
 ) -> dict[str, Any]:
     """Hard-delete one shop service and optionally its linked PasarGuard user.
+
+    ``allow_disable_fallback=False`` makes a panel user that can only be disabled, not deleted, a
+    failure that keeps the local row (the automatic cleanup uses it).
 
     Caller must verify ownership / shop scope before invoking. Nulls FK refs on
     orders / loyalty / wheel spins, then removes the ``UserService`` row.
@@ -1171,7 +1488,7 @@ async def admin_delete_service(
     if delete_pg and pg_uid:
         pg = await _pg_client_for_bot_service(session, service)
         outcome = await ensure_pg_user_removed_or_absent(
-            pg, pg_uid, staff=staff, allow_disable_fallback=True
+            pg, pg_uid, staff=staff, allow_disable_fallback=allow_disable_fallback
         )
         if outcome == "deleted":
             pg_deleted = True
@@ -1251,17 +1568,45 @@ async def detach_local_services_for_pg_user(
     return len(svc_ids)
 
 
-def snapshot_telegram_lines(snap: ServiceSnapshot) -> str:
+def _snapshot_plan(service: Any) -> Any:
+    """Plan already on the instance — never sync-lazy-load in async (MissingGreenlet)."""
+    data = getattr(service, "__dict__", None)
+    if isinstance(data, dict) and "plan" in data:
+        return data.get("plan")
+    # Non-ORM stubs (e.g. SimpleNamespace) expose plan as a normal attribute.
+    if not hasattr(service, "_sa_instance_state"):
+        return getattr(service, "plan", None)
+    return None
+
+
+def snapshot_telegram_lines(snap: ServiceSnapshot, *, with_link: bool = True) -> str:
+    """Pretty Telegram HTML for one live service snapshot (staff screens).
+
+    List screens pass ``with_link=False``: the link is long and one tap away on the
+    service's own screen.
+    """
     svc = snap.service
-    plan_name = svc.plan.name if svc.plan else "—"
-    lines = [
-        f"📦 سرویس #{svc.id} · {plan_name}",
-        f"وضعیت: {snap.status_fa}",
-        f"حجم: {snap.volume_text} (مانده {snap.remain_gb_text})",
-        f"زمان: {snap.expire_text} · مانده {snap.time_label}",
+    plan = _snapshot_plan(svc)
+    plan_name = html.escape(plan.name) if plan is not None and getattr(plan, "name", None) else "—"
+    username_raw = getattr(svc, "pg_username", None)
+    username = copyable(username_raw) if username_raw else "—"
+    rows = [
+        kv_line("👤", "نام‌کاربری", username),
+        kv_line("📋", "پلن", plan_name),
+        kv_line("📶", "وضعیت", html.escape(str(snap.status_fa))),
+        kv_line(
+            "📦",
+            "حجم",
+            f"{html.escape(str(snap.volume_text))} · مانده {html.escape(str(snap.remain_gb_text))}",
+        ),
+        kv_line(
+            "📅",
+            "انقضا",
+            f"{html.escape(str(snap.expire_text))} · مانده {html.escape(str(snap.time_label))}",
+        ),
     ]
-    if snap.subscription_url:
-        lines.append(f"لینک: {snap.subscription_url}")
+    if with_link and snap.subscription_url:
+        rows.append(kv_line("🔗", "لینک", copyable(snap.subscription_url)))
     if snap.error:
-        lines.append(f"⚠️ {snap.error}")
-    return "\n".join(lines)
+        rows.append(f"⚠️ {html.escape(str(snap.error))}")
+    return format_message(f"📦 سرویس #{svc.id}", info_block(rows))

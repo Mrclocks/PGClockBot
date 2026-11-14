@@ -16,6 +16,10 @@ DASHBOARD_COUNT_MAX_AGE_SEC = 120.0
 SYSTEM_SUMMARY_MAX_AGE_SEC = 60.0
 OWNED_USER_STATS_MAX_AGE_SEC = 60.0
 NODE_LIST_MAX_AGE_SEC = 15.0
+# Capability probe (GET /api/admin + role map). Bounded; never shared across identities.
+CAPABILITY_PROBE_MAX_AGE_SEC = 180.0
+CAPABILITY_PROBE_PATH = "__pg_capability_probe__"
+ROLE_FEATURES_PATH = "__pg_role_features__"
 # Display-only fallback while PasarGuard is unreachable; never for access checks.
 LAST_GOOD_MAX_AGE_SEC = 900.0
 _MAX = 256
@@ -105,3 +109,20 @@ def invalidate_ident(ident: str) -> None:
     prefix = str(ident or "")
     for k in [k for k in _STORE if k[0] == prefix]:
         _STORE.pop(k, None)
+
+
+def invalidate_capability_cache(*, ident: str | None = None) -> None:
+    """Drop capability / role-feature entries (all identities, or one)."""
+    paths = {CAPABILITY_PROBE_PATH, ROLE_FEATURES_PATH}
+    if ident is None:
+        for key in [key for key in _STORE if key[1] in paths]:
+            _STORE.pop(key, None)
+        return
+    prefix = str(ident or "")
+    for key in [key for key in _STORE if key[0] == prefix and key[1] in paths]:
+        _STORE.pop(key, None)
+
+
+def clear_store() -> None:
+    """Tests only."""
+    _STORE.clear()

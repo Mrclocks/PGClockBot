@@ -192,3 +192,13 @@ def is_shop_owner_on_main_bot(
 ) -> bool:
     """True when a reseller opens the platform bot (credentials-only surface)."""
     return (not is_reseller_bot) and db_user.role == Role.RESELLER.value
+
+
+def is_shop_profile_owner(db_user: BotUser, owner_id: int | None) -> bool:
+    """True when ``db_user`` is the shop owner row (not a ``bot_admin_ids`` assistant)."""
+    if owner_id is None:
+        return False
+    try:
+        return int(db_user.id) == int(owner_id)
+    except (TypeError, ValueError):
+        return False

@@ -24,6 +24,7 @@ from app.services.campaigns import audience_query, campaign_progress, change_cam
 from app.services.service_cancellations import approve_cancellation, cancellation_status, reject_cancellation, request_cancellation
 from app.services.service_renewals import assert_service_quota_available
 from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_shop_reseller_id
+from app.services.numbers import to_fa_digits
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
@@ -427,6 +428,7 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
         async def auth():
             return staff
         env = Environment(loader=FileSystemLoader(str(ROOT / "app/web/templates")), autoescape=select_autoescape())
+        env.filters["fa"] = to_fa_digits
         def render(request, template, data):
             # The standalone route harness verifies content and escaping without panel globals.
             source = (ROOT / "app/web/templates/customer_features.html").read_text().replace('{% extends "base.html" %}', '')
@@ -457,6 +459,7 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(r.id == row["id"] for r, _ in rows))
         self.assertTrue(all(uname != "mine" for _, uname in rows) or any(uname == "shop-mine" for _, uname in rows))
         env = Environment(loader=FileSystemLoader(str(ROOT / "app/web/templates")), autoescape=select_autoescape())
+        env.filters["fa"] = to_fa_digits
         html = env.get_template("_finance_cancellations.html").render(
             cancel_requests=rows,
             cancel_labels={"pending": "در انتظار بررسی", "processing": "…", "review": "…", "approved": "…", "rejected": "…", "withdrawn": "…"},

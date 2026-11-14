@@ -545,15 +545,15 @@ class UserMiddleware(BaseMiddleware):
         token = getattr(bot, "token", None) if bot else None
         main_token = (get_settings().bot_token or "").strip()
         # Fail closed: a non-main token must NEVER use platform settings/ACL.
+        # Always re-resolve via DB (active shops only) — do not trust bot._pgclock_reseller
+        # alone, or a soft-deactivated shop keeps handling updates until the process restarts.
         if token and main_token and token != main_token:
-            info = getattr(bot, "_pgclock_reseller", None)
-            if not isinstance(info, dict):
-                info = await lookup_reseller_by_bot_token(session, token)
+            info = await lookup_reseller_by_bot_token(session, token)
             if info:
                 reseller_owner_id = int(info["user_id"])
                 reseller_profile_id = int(info["profile_id"])
                 is_reseller_bot = True
-                if bot is not None and not getattr(bot, "_pgclock_reseller", None):
+                if bot is not None:
                     try:
                         setattr(bot, "_pgclock_reseller", {
                             "profile_id": reseller_profile_id,
@@ -562,8 +562,13 @@ class UserMiddleware(BaseMiddleware):
                     except Exception:
                         logger.debug("__call__: ignored failure", exc_info=True)
             else:
+                if bot is not None and getattr(bot, "_pgclock_reseller", None) is not None:
+                    try:
+                        setattr(bot, "_pgclock_reseller", None)
+                    except Exception:
+                        logger.debug("__call__: ignored failure", exc_info=True)
                 logger.error(
-                    "Rejecting update: bot token is not main and not a known reseller shop"
+                    "Rejecting update: bot token is not main and not an active reseller shop"
                 )
                 msg = _reply_message(event)
                 if msg:

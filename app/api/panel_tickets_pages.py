@@ -28,6 +28,7 @@ from app.services.panel_tickets import (
     sidebar_unread_count,
     unread_from_tickets,
 )
+from app.services.redact import user_safe_error
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 import logging
 
@@ -54,9 +55,15 @@ async def _bot_ticket_in_scope(session: AsyncSession, staff: dict, ticket: Ticke
 
 
 def _bot_user_label(user: BotUser | None, user_id: int) -> str:
-    from app.services.formatting import bot_user_panel_label
+    from app.services.formatting import bot_user_ticket_who
 
-    return bot_user_panel_label(user, fallback_id=user_id)
+    return bot_user_ticket_who(user, fallback_id=user_id)
+
+
+def _bot_user_telegram_id(user: BotUser | None) -> int | None:
+    from app.services.formatting import bot_user_telegram_id
+
+    return bot_user_telegram_id(user)
 
 
 async def _staff_sender_tg(session: AsyncSession, staff: dict) -> int:
@@ -202,6 +209,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                 "ticket": t,
                 "user_id": int(t.user_id),
                 "user_label": _bot_user_label(tg_users.get(int(t.user_id)), int(t.user_id)),
+                "telegram_id": _bot_user_telegram_id(tg_users.get(int(t.user_id))),
             }
             for t in tg_tickets
         ]
@@ -218,6 +226,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             "active_tg_user_label": _bot_user_label(
                 active_tg_user, int(active_tg_ticket.user_id) if active_tg_ticket else 0
             ),
+            "active_tg_telegram_id": _bot_user_telegram_id(active_tg_user),
             "open_new": bool(new),
             "status_labels": STATUS_LABELS,
             "priority_labels": PRIORITY_LABELS,
@@ -314,8 +323,9 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             )
             return RedirectResponse(f"/tickets?ok=created&view={ticket.id}", status_code=303)
         except Exception as exc:
+            logger.warning("Ticket action failed", exc_info=True)
             return RedirectResponse(
-                f"/tickets?err={quote(str(exc))}&new=1",
+                f"/tickets?err={quote(user_safe_error(exc))}&new=1",
                 status_code=303,
             )
 
@@ -368,6 +378,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             await reply_ticket(session, staff, ticket_id, body=body, attachment=att)
             return RedirectResponse(f"/tickets?ok=replied&view={ticket_id}", status_code=303)
         except Exception as exc:
+            logger.warning("Ticket action failed", exc_info=True)
             if att and att[0]:
                 path = resolve_ticket_attachment_path(att[0])
                 if path:
@@ -376,7 +387,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                     except OSError:
                         pass
             return RedirectResponse(
-                f"/tickets?err={quote(str(exc))}&view={ticket_id}",
+                f"/tickets?err={quote(user_safe_error(exc))}&view={ticket_id}",
                 status_code=303,
             )
 
@@ -393,8 +404,9 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             await set_status(session, staff, ticket_id, status=status)
             return RedirectResponse(f"/tickets?ok=status&view={ticket_id}", status_code=303)
         except Exception as exc:
+            logger.warning("Ticket action failed", exc_info=True)
             return RedirectResponse(
-                f"/tickets?err={quote(str(exc))}&view={ticket_id}",
+                f"/tickets?err={quote(user_safe_error(exc))}&view={ticket_id}",
                 status_code=303,
             )
 
@@ -424,8 +436,9 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                 session, ticket, text, sender_tg, is_staff=True
             )
         except Exception as exc:
+            logger.warning("Ticket action failed", exc_info=True)
             return RedirectResponse(
-                f"/tickets?err={quote(str(exc))}&tg={ticket_id}",
+                f"/tickets?err={quote(user_safe_error(exc))}&tg={ticket_id}",
                 status_code=303,
             )
         try:
@@ -461,8 +474,9 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                 f"/tickets?ok=tg_closed&tg={ticket_id}", status_code=303
             )
         except Exception as exc:
+            logger.warning("Ticket action failed", exc_info=True)
             return RedirectResponse(
-                f"/tickets?err={quote(str(exc))}&tg={ticket_id}",
+                f"/tickets?err={quote(user_safe_error(exc))}&tg={ticket_id}",
                 status_code=303,
             )
 

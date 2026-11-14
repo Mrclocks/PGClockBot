@@ -19,7 +19,7 @@ from app.db.models import BotUser, Order, Payment, Plan, ResellerProfile, Role, 
 from app.bot.handlers.payment_voids import ID as VOID_ID
 from app.services import notifications
 from app.services.payment_voids import load_void_candidate
-from app.services.notifications import _customer_markup, _receipt_photo, notify_auto_approve
+from app.services.notifications import customer_markup, _receipt_photo, notify_auto_approve
 
 FILE_ID = "AgACAgQAAxkBAAIBQ2Z-receiptphotofileid"
 CALLBACK_LIMIT = 64
@@ -71,25 +71,25 @@ class ReceiptPhotoTests(unittest.TestCase):
 
 class CustomerMarkupTests(unittest.TestCase):
     def test_the_platform_bot_gets_the_customer_and_the_service_card(self) -> None:
-        markup = _customer_markup(user_id=7, service_id=9, shop_id=None)
+        markup = customer_markup(user_id=7, service_id=9, shop_id=None)
         self.assertEqual(_callbacks(markup), ["adm:users:view:7", "adm:users:svc:7:9"])
 
     def test_a_shop_bot_only_gets_the_shop_customer_card(self) -> None:
-        markup = _customer_markup(user_id=7, service_id=9, shop_id=3)
+        markup = customer_markup(user_id=7, service_id=9, shop_id=3)
         self.assertEqual(_callbacks(markup), ["res:user:7"])
 
     def test_the_void_button_opens_the_existing_void_card_of_that_payment(self) -> None:
-        markup = _customer_markup(user_id=7, service_id=9, shop_id=None, void_payment_id=31)
+        markup = customer_markup(user_id=7, service_id=9, shop_id=None, void_payment_id=31)
         self.assertEqual(_callbacks(markup), ["adm:users:view:7", "adm:users:svc:7:9", "payvoid:v:31"])
-        self.assertEqual(_callbacks(_customer_markup(user_id=7, service_id=9, shop_id=3, void_payment_id=31)), ["res:user:7", "payvoid:v:31"])
-        self.assertEqual(_callbacks(_customer_markup(user_id=None, service_id=None, shop_id=None, void_payment_id=31)), ["payvoid:v:31"])
+        self.assertEqual(_callbacks(customer_markup(user_id=7, service_id=9, shop_id=3, void_payment_id=31)), ["res:user:7", "payvoid:v:31"])
+        self.assertEqual(_callbacks(customer_markup(user_id=None, service_id=None, shop_id=None, void_payment_id=31)), ["payvoid:v:31"])
 
     def test_no_service_button_without_a_service_and_nothing_without_a_user(self) -> None:
-        self.assertEqual(_callbacks(_customer_markup(user_id=7, service_id=None, shop_id=None)), ["adm:users:view:7"])
-        self.assertIsNone(_customer_markup(user_id=None, service_id=9, shop_id=None))
+        self.assertEqual(_callbacks(customer_markup(user_id=7, service_id=None, shop_id=None)), ["adm:users:view:7"])
+        self.assertIsNone(customer_markup(user_id=None, service_id=9, shop_id=None))
 
     def test_callback_data_fits_telegrams_limit_for_large_ids(self) -> None:
-        markup = _customer_markup(user_id=2**31 - 1, service_id=2**31 - 1, shop_id=None, void_payment_id=2**31 - 1)
+        markup = customer_markup(user_id=2**31 - 1, service_id=2**31 - 1, shop_id=None, void_payment_id=2**31 - 1)
         for data in _callbacks(markup):
             self.assertLessEqual(len(data.encode()), CALLBACK_LIMIT)
 
@@ -237,14 +237,14 @@ class DeliveryToStaffTests(NoticeTestCase):
         kwargs = bot.send_photo.await_args.kwargs
         self.assertEqual((bot.send_photo.await_args.args[0], kwargs["photo"]), (self.ADMIN_CHAT, FILE_ID))
         self.assertIn("خودکار تأیید شد", kwargs["caption"])
-        self.assertEqual(_callbacks(kwargs["reply_markup"]), [f"adm:users:view:{self.user_id}", f"payvoid:v:{self.payment_id}"])
+        self.assertEqual(_callbacks(kwargs["reply_markup"]), [f"nto:adm:users:view:{self.user_id}", f"nto:payvoid:v:{self.payment_id}"])
         bot.send_message.assert_not_awaited()
 
     async def test_when_telegram_rejects_the_photo_the_text_notice_still_arrives_with_buttons(self) -> None:
         bot = self._bot(photo_works=False)
         await self._deliver(bot)
         bot.send_message.assert_awaited_once()
-        self.assertEqual(_callbacks(bot.send_message.await_args.kwargs["reply_markup"]), [f"adm:users:view:{self.user_id}", f"payvoid:v:{self.payment_id}"])
+        self.assertEqual(_callbacks(bot.send_message.await_args.kwargs["reply_markup"]), [f"nto:adm:users:view:{self.user_id}", f"nto:payvoid:v:{self.payment_id}"])
 
 
 if __name__ == "__main__":

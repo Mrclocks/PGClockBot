@@ -27,6 +27,7 @@ class ServiceLinesTests(unittest.TestCase):
         self.assertIn("۳۰ روزه", lines[0])
         self.assertIn("فعال", lines[0])
         self.assertIn("حجم", lines[0])
+        self.assertIn("روز", lines[0])  # remaining days from stored datetime expire
         self.assertIn("old", lines[1])
         self.assertIn("منقضی", lines[1])
 

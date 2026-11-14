@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {# «Back to defaults» for one settings tab. Expects: tab, reset_action, reset_tabs; optional reset_confirm. #}
 {% if reset_tabs and tab in reset_tabs %}
 <form method="post" action="{{ reset_action }}" class="settings-reset-form"
@@ -6,7 +7,7 @@
   {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
   <input type="hidden" name="reset_defaults" value="1">
   <button class="btn btn-ghost settings-reset-btn" type="submit">
-    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+    {{ icon('refresh', 'ico') }}
     <span>بازگردانی همه به پیش‌فرض</span>
   </button>
 </form>

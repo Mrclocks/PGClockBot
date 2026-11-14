@@ -105,8 +105,8 @@ class EditRowTests(unittest.TestCase):
 
     def test_every_inline_screen_offers_its_own_editor_to_allowed_people(self) -> None:
         for screen_id, spec in SCREENS.items():
-            if screen_id == "c.main":
-                continue  # reply keyboard; reached from «✏️ ویرایش منوی اصلی»
+            if screen_id in {"c.main", "a.main"}:
+                continue  # reply keyboards; reached from «✏️ ویرایش منوی اصلی»
             for actor, code in ((OWNER, "a"), (SHOP_OWNER, "r")):
                 row = self._last_row(screen_id, actor)
                 allowed = spec.audience.value in actor.audiences
@@ -350,6 +350,19 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("💳 شارژ", [b.text.split(" ", 1)[1] for row in markup.inline_keyboard for b in row])
         self.assertEqual(markup.inline_keyboard[-1][0].callback_data, "nv:w:home")
 
+    async def test_owner_renames_the_admin_panel_button_from_the_admin_main_menu(self) -> None:
+        await self._start_editing()
+        texts = [b.text for b in screen_buttons("a.main", ScreenContext(ui=dict(DEFAULT_SETTINGS)))]
+        self.assertIn(DEFAULT_SETTINGS["btn_admin"], texts)
+        self.assertNotIn(DEFAULT_SETTINGS["btn_reseller_apply"], texts)
+        panel = await self._owner("ed:a:o:a.main")
+        self.assertFalse(self._alerted(panel))
+        index = self._index("a.main", "btn_admin")
+        await self._owner(f"ed:a:t:a.main:{index}")
+        async with self.Session() as session:
+            await ui_module.owner_label_text(_message("🧰 مدیریت"), self.state, session, MagicMock(id=OWNER.user_id))
+        self.assertEqual(await self._platform("btn_admin"), "🧰 مدیریت")
+
     async def test_tapping_a_menu_button_leaves_the_editor_and_lets_the_menu_open(self) -> None:
         await self._start_editing()
         await self._owner(f"ed:a:t:c.wallet:{self._index('c.wallet', 'btn_wallet_topup')}")
@@ -424,6 +437,7 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_shop_owner_cannot_open_admin_menus_or_work_from_the_main_bot(self) -> None:
         await self._start_editing()
         self.assertTrue(self._alerted(await self._shop("ed:r:o:a.home")))
+        self.assertTrue(self._alerted(await self._shop("ed:r:o:a.main")))
         self.assertTrue(self._alerted(await self._shop("ed:r:h", on_shop_bot=False)))
         self.assertTrue(self._alerted(await self._shop("ed:r:h", has_access=False)))
         self.assertTrue(self._alerted(await self._shop("ed:r:f1")))
@@ -572,6 +586,16 @@ class EntryPointTests(unittest.IsolatedAsyncioTestCase):
             await reseller_settings._render_section(callback, MagicMock(), "menu", SHOP_A)
         markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
         return [b.callback_data for row in markup.inline_keyboard for b in row]
+
+    async def test_owner_edits_the_main_menu_as_an_admin_and_as_a_customer(self) -> None:
+        _text, markup = ui_module.switches_view(OWNER, feature_on=True, minutes_left=10)
+        data = [b.callback_data for row in markup.inline_keyboard for b in row]
+        self.assertIn("ed:a:o:a.main", data)
+        self.assertIn("ed:a:o:c.main", data)
+        _text, markup = ui_module.switches_view(SHOP_OWNER, feature_on=True, minutes_left=10)
+        data = [b.callback_data for row in markup.inline_keyboard for b in row]
+        self.assertIn("ed:r:o:c.main", data)
+        self.assertNotIn("ed:r:o:a.main", data)
 
     async def test_shop_owner_sees_the_entry_only_while_the_feature_is_on(self) -> None:
         self.assertIn("ed:r:h", await self._shop_menu_section_data(feature_on=True))

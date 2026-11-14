@@ -9,14 +9,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DailyReportCatalogTests(unittest.TestCase):
-    def test_tab_is_second_to_last(self):
+    def test_tab_is_the_last_bot_settings_tab(self):
         from app.services.resellers import RESELLER_SETTINGS_TABS
         from app.services.users import SETTINGS_TABS
 
-        for tabs in (SETTINGS_TABS, RESELLER_SETTINGS_TABS):
-            keys = [k for k, _ in tabs]
-            self.assertEqual(keys[-1], "bot")
-            self.assertEqual(keys[-2], "daily_report")
+        # The Owner's bot connection moved to system settings; a reseller keeps their own bot tab last.
+        self.assertEqual([k for k, _ in SETTINGS_TABS][-1], "daily_report")
+        keys = [k for k, _ in RESELLER_SETTINGS_TABS]
+        self.assertEqual(keys[-1], "bot")
+        self.assertEqual(keys[-2], "daily_report")
 
     def test_notifications_no_longer_owns_daily_keys(self):
         from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, keys_for_tab

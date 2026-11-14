@@ -1,52 +1,22 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, row_actions, table_select_head, table_select_cell, table_bulk_bar %}
-{% from "_marketing_tabs.html" import marketing_tabs %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label, empty_state, stat_strip, search_submit %}
 {% block title %}کاربران تست{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('users', 'کاربران تست') }}
-  </div>
-  {% if settings_href %}
-  <a class="btn btn-ghost" href="{{ settings_href }}" aria-label="تنظیمات و محدودیت اکانت تست">تنظیمات</a>
-  {% endif %}
-</div>
+<div class="ds ds-settings">
+{% call(slot) page_header('users', 'کاربران تست', back='/marketing', back_label='بازاریابی') %}
+  {%- if slot == 'primary' and settings_href %}
+  <a class="btn btn-ghost page-act-icon" href="{{ settings_href }}" aria-label="تنظیمات و محدودیت اکانت تست">{{ act_label('تنظیمات', icon_name='settings') }}</a>
+  {%- endif %}
+{% endcall %}
 
-{{ marketing_tabs(marketing_sections|default(()), 'trial_users') }}
 
-<div class="home-panels users-ops-overview">
-  <section class="home-panel home-panel-neutral">
-    <div class="home-panel-grid users-ops-stats">
-      <a class="stat{% if active_filter=='all' %} is-active{% endif %}" href="/trial-users{% if q %}?q={{ q|urlencode }}{% endif %}">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
-          </span>
-          <span>تست گرفته‌اند</span>
-        </div>
-        <strong>{{ summary.trials | num }}</strong>
-      </a>
-      <a class="stat{% if active_filter=='non_buyers' %} is-active{% endif %}" href="/trial-users?filter=non_buyers{% if q %}&amp;q={{ q|urlencode }}{% endif %}">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 1.5"/></svg>
-          </span>
-          <span>بدون خرید</span>
-        </div>
-        <strong>{{ (summary.trials - summary.buyers) | num }}</strong>
-      </a>
-      <a class="stat{% if active_filter=='buyers' %} is-active{% endif %}" href="/trial-users?filter=buyers{% if q %}&amp;q={{ q|urlencode }}{% endif %}">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
-          </span>
-          <span>خریدار ({{ summary.conversion_percent | num }}٪)</span>
-        </div>
-        <strong>{{ summary.buyers | num }}</strong>
-      </a>
-    </div>
-  </section>
-</div>
+{% set q_suffix = ('q=' ~ (q | urlencode)) if q else '' %}
+{{ stat_strip([
+  {'label': 'تست گرفته‌اند', 'value': summary.trials | num, 'icon': 'trial', 'href': '/trial-users' ~ (('?' ~ q_suffix) if q else ''), 'active': active_filter == 'all'},
+  {'label': 'بدون خرید', 'value': (summary.trials - summary.buyers) | num, 'icon': 'time', 'href': '/trial-users?filter=non_buyers' ~ (('&' ~ q_suffix) if q else ''), 'active': active_filter == 'non_buyers'},
+  {'label': 'خریدار (' ~ (summary.conversion_percent | num) ~ '٪)', 'value': summary.buyers | num, 'icon': 'check', 'href': '/trial-users?filter=buyers' ~ (('&' ~ q_suffix) if q else ''), 'active': active_filter == 'buyers'},
+], 'فیلتر کاربران تست') }}
 
 <nav class="section-tabs" role="tablist" aria-label="فیلتر کاربران تست">
   {% for key, label in filters.items() %}
@@ -61,7 +31,7 @@
     <label class="search-bar-field">
       <input name="q" value="{{ q or '' }}" placeholder="نام، یوزرنیم یا شناسهٔ تلگرام…" maxlength="64" autocomplete="off" aria-label="جستجوی کاربران تست" />
     </label>
-    <button class="btn btn-ghost" type="submit">جستجو</button>
+    {{ search_submit() }}
   </form>
   {% if can_block %}
   {{ table_bulk_bar('/trial-users/bulk-action', [
@@ -166,7 +136,7 @@
         {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="12" class="muted">{% if q or active_filter != 'all' %}موردی با این فیلتر پیدا نشد.{% else %}هنوز کسی تست رایگان نگرفته است.{% endif %}</td></tr>
+      {{ empty_state('موردی با این فیلتر پیدا نشد.' if (q or active_filter != 'all') else 'هنوز کسی تست رایگان نگرفته است.', 'trial', colspan=12) }}
     {% endfor %}
     </tbody>
   </table>
@@ -185,5 +155,6 @@
     </div>
   </nav>
   {% endif %}
+</div>
 </div>
 {% endblock %}

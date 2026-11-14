@@ -250,8 +250,34 @@
     }
 
     const side = document.getElementById('sidebar');
-    const btn = document.getElementById('menu-toggle');
     const back = document.getElementById('side-backdrop');
+    /* Safari 26 colours its bottom toolbar from the fixed element at the bottom edge of the screen and looks
+       again only when a fixed element is added or removed: a dim that is merely faded out keeps the toolbar
+       dark after the menu closes. Once the fade has ended the dim leaves the layout (display:none); before it
+       is shown again it comes back with a reflow, so the fade still runs on the compositor. */
+    var backGoneTimer = 0;
+    function backdropFadeMs() {
+      var raw = getComputedStyle(document.documentElement).getPropertyValue('--drawer-motion');
+      return (parseFloat(raw) || 240) + 60;
+    }
+    function setBackdrop(open, instant) {
+      if (!back) return;
+      clearTimeout(backGoneTimer);
+      if (open) {
+        if (back.classList.contains('is-gone')) {
+          back.classList.remove('is-gone');
+          void back.offsetWidth;
+        }
+        back.classList.add('show');
+      } else {
+        back.classList.remove('show');
+        if (instant) back.classList.add('is-gone');
+        else backGoneTimer = setTimeout(function () {
+          if (!back.classList.contains('show')) back.classList.add('is-gone');
+        }, backdropFadeMs());
+      }
+      back.setAttribute('aria-hidden', open ? 'false' : 'true');
+    }
     function setOpen(v, instant){
       if (!side) return;
       var open = !!v;
@@ -260,13 +286,12 @@
         void side.offsetWidth;
       }
       side.classList.toggle('open', open);
-      if (back) {
-        /* Class-only (no hidden/display flip) so opacity can fade on the compositor. */
-        back.classList.toggle('show', open);
-        back.setAttribute('aria-hidden', open ? 'false' : 'true');
-      }
+      setBackdrop(open, instant);
       document.body.classList.toggle('nav-open', open);
-      if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      document.querySelectorAll('[data-drawer-open]').forEach(function (el) {
+        el.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      moveMenuFocus(open);
       /* Ported ui-select / kebab menus sit at z-index 5000; drawer is ~50.
          Close them when opening so they cannot paint over the sidebar. */
       if (open) {
@@ -282,32 +307,70 @@
         });
       }
     }
+    /* Keyboard use moves focus into the menu (onto its ×) and back to «منو» on close. A touch moves no focus:
+       iOS paints a ring on a programmatically focused button, which would stay on × or «منو». Either way a
+       field left focused in the closed menu is released, which drops the phone keyboard. */
+    var keyboardUse = false;
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Tab' || e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') keyboardUse = true;
+    }, true);
+    document.addEventListener('pointerdown', function () { keyboardUse = false; }, true);
+    function moveMenuFocus(open) {
+      var opener = document.querySelector('.bottom-dock [data-drawer-open]');
+      var closer = document.querySelector('.bottom-dock [data-drawer-close]');
+      var current = document.activeElement;
+      var inMenu = current && (side.contains(current) || current === closer || current === opener);
+      var canMove = keyboardUse && opener && closer && opener.getClientRects().length;
+      if (open && canMove) {
+        closer.focus({ preventScroll: true });
+      } else if (!open && inMenu) {
+        if (canMove) opener.focus({ preventScroll: true });
+        else current.blur();
+      }
+    }
     setOpen(false);
-    if (btn) {
-      /* click alone waits for iOS momentum scroll to settle on a fixed topbar.
-         pointerup opens immediately; click still covers mouse / keyboard. */
+    /* click alone waits for iOS momentum scroll to settle on fixed chrome (bottom bar, drawer head).
+       pointerup acts immediately; click still covers mouse / keyboard. */
+    function bindTap(el, action) {
       var ignoreClick = false;
-      function toggleMenu(e) {
+      function run(e) {
         e.preventDefault();
         e.stopPropagation();
-        setOpen(!side.classList.contains('open'));
+        action();
       }
-      btn.addEventListener('pointerup', function (e) {
+      /* A touch acts on pointerup, which may open or close the drawer over this spot. The tap's follow-up
+         mouse events and click would then land on whatever is there now (the drawer, its backdrop or the
+         page) and act a second time. */
+      el.addEventListener('pointerdown', function (e) {
+        if (e.pointerType !== 'mouse') e.preventDefault();
+      });
+      el.addEventListener('touchend', function (e) {
+        if (e.cancelable) e.preventDefault();
+      }, { passive: false });
+      el.addEventListener('pointerup', function (e) {
         if (e.pointerType === 'mouse') return;
         if (e.button != null && e.button !== 0) return;
         ignoreClick = true;
-        toggleMenu(e);
+        run(e);
         setTimeout(function () { ignoreClick = false; }, 400);
       });
-      btn.addEventListener('click', function (e) {
+      el.addEventListener('click', function (e) {
         if (ignoreClick) {
           e.preventDefault();
           e.stopPropagation();
           return;
         }
-        toggleMenu(e);
+        run(e);
       });
     }
+    window.PanelTap = { bind: bindTap };
+    /* Bottom bar «منو» opens the drawer; the × in the drawer head closes it. */
+    document.querySelectorAll('[data-drawer-open]').forEach(function (el) {
+      bindTap(el, function () { setOpen(!side.classList.contains('open')); });
+    });
+    document.querySelectorAll('[data-drawer-close]').forEach(function (el) {
+      bindTap(el, function () { setOpen(false); });
+    });
     if (back) back.addEventListener('click', function () { setOpen(false); });
     window.addEventListener('pageshow', function () {
       setOpen(false, true);
@@ -432,13 +495,14 @@
       const toggle = document.getElementById('theme-toggle');
       const menu = document.getElementById('theme-menu');
       const label = document.getElementById('theme-label');
-      const ico = document.getElementById('theme-ico');
+      const ico = document.querySelector('#theme-ico svg');
       const labels = { system: 'تم · سیستم', light: 'تم · روشن', dark: 'تم · تیره' };
-      const icons = {
-        system: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
-        light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-        dark: '<path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/>'
-      };
+      /* The drawing of each choice comes from its own row in the menu (icon() in base.html), not a second copy here. */
+      const icons = {};
+      if (menu) menu.querySelectorAll('[data-theme-pref]').forEach((opt) => {
+        const svg = opt.querySelector('svg');
+        if (svg) icons[opt.getAttribute('data-theme-pref')] = svg.innerHTML;
+      });
       function resolve(pref){
         if (pref === 'light' || pref === 'dark') return pref;
         return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -773,13 +837,16 @@
       set('overflow-y', 'auto');
       set('-webkit-overflow-scrolling', 'touch');
 
-      let width = Math.max(rect.width, 120);
+      /* Compact toggles (e.g. a colour dot) ask for a wider menu than themselves. */
+      const minHost = wrap.closest('[data-menu-min-width]');
+      const minW = minHost ? Number(minHost.getAttribute('data-menu-min-width')) || 0 : 0;
+      let width = Math.max(rect.width, 120, minW);
       let leftVis = rect.left;
       const maxW = Math.max(120, vvW - pad * 2);
       if (width > maxW) width = maxW;
       if (leftVis < pad) leftVis = pad;
       if (leftVis + width > vvW - pad) leftVis = Math.max(pad, vvW - pad - width);
-      if (rect.width <= maxW && rect.left >= pad - 0.5 && rect.right <= vvW - pad + 0.5) {
+      if (rect.width >= minW && rect.width <= maxW && rect.left >= pad - 0.5 && rect.right <= vvW - pad + 0.5) {
         leftVis = rect.left;
         width = rect.width;
       }
@@ -854,7 +921,13 @@
       sel.dataset.uiSelect = '1';
 
       const wrap = document.createElement('div');
-      wrap.className = 'ui-select' + (sel.classList.contains('select-sm') || (sel.closest('.actions') && !sel.classList.contains('select-block')) ? ' ui-select-sm' : '');
+      /* color-tag filter sits next to a full-height search .btn — never compact. */
+      const forceFullHeight = sel.classList.contains('color-tag-select');
+      const useSm = !forceFullHeight && (
+        sel.classList.contains('select-sm')
+        || (sel.closest('.actions') && !sel.classList.contains('select-block'))
+      );
+      wrap.className = 'ui-select' + (useSm ? ' ui-select-sm' : '');
       if (sel.classList.contains('users-svc-select')) wrap.classList.add('users-svc-ui');
       if (sel.disabled) wrap.classList.add('is-disabled');
 
@@ -1274,6 +1347,22 @@
       active.setAttribute('data-save-home', slot.id);
       active.setAttribute('data-save-form', form.id);
       panel.appendChild(active);
+      reserveModalFooterRoom(panel, active);
+    }
+
+    /* The scroll area keeps room for the pinned footer's real height (it grows when a
+       warning line shows), so the last field never sits under the buttons. */
+    function reserveModalFooterRoom(panel, footer){
+      const apply = () => {
+        const h = footer.isConnected ? footer.getBoundingClientRect().height : 0;
+        panel.style.setProperty('--modal-save-footer-h', Math.ceil(h) + 'px');
+      };
+      apply();
+      if (typeof ResizeObserver === 'function') {
+        if (panel._footerObserver) panel._footerObserver.disconnect();
+        panel._footerObserver = new ResizeObserver(apply);
+        panel._footerObserver.observe(footer);
+      }
     }
 
     function ensureModalScrollShell(modal){
@@ -1314,25 +1403,6 @@
     function isModalInteriorScroller(modal, scroller){
       if (!modal || !scroller) return false;
       return modal.contains(scroller);
-    }
-
-    function tryScrollModalTabs(e, modal){
-      /* Vertical-only wheel guard was killing horizontal tab scroll (loyalty etc.). */
-      const t = e.target;
-      const tabs = t && t.closest ? t.closest('.modal-section-tabs') : null;
-      if (!tabs || !modal.contains(tabs)) return false;
-      if (tabs.scrollWidth <= tabs.clientWidth + 1) return false;
-      const dxRaw = e.deltaX || 0;
-      const dyRaw = e.deltaY || 0;
-      const dx = Math.abs(dxRaw) > Math.abs(dyRaw) ? dxRaw : dyRaw;
-      if (!dx) return false;
-      const before = tabs.scrollLeft;
-      const max = tabs.scrollWidth - tabs.clientWidth;
-      const next = Math.max(0, Math.min(max, before + dx));
-      if (next === before) return false;
-      tabs.scrollLeft = next;
-      e.preventDefault();
-      return true;
     }
 
     function findScrollableAncestor(start, modal){
@@ -1380,7 +1450,6 @@
           e.preventDefault();
           return;
         }
-        if (tryScrollModalTabs(e, modal)) return;
         const scroller = findScrollableAncestor(e.target, modal);
         if (canScrollInside(scroller, e.deltaY)) return;
         /* Interior edge: overscroll-behavior:contain on .ui-modal-scroll blocks chain */
@@ -1408,11 +1477,6 @@
             || e.target === modal
             || (e.target.classList && e.target.classList.contains('ui-modal-backdrop'))) {
           e.preventDefault();
-          return;
-        }
-        /* Let native horizontal pan work on overflowing modal tab strips. */
-        const tabs = e.target.closest && e.target.closest('.modal-section-tabs');
-        if (tabs && modal.contains(tabs) && tabs.scrollWidth > tabs.clientWidth + 1) {
           return;
         }
         if (!e.touches || !e.touches.length) return;
@@ -1534,6 +1598,8 @@
       el.classList.add('is-front');
     }
     window.bringModalToFront = bringModalToFront;
+    /* Forms that swap their visible panel (plan modal) re-pin the matching save bar. */
+    window.pinModalStickySave = pinModalStickySave;
     window.topOpenModal = topOpenModal;
     function prefersReducedMotion(){
       try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
@@ -1768,53 +1834,6 @@
       closeModal(open);
     });
 
-    /* Domain settings modals: inner tab buttons */
-    document.addEventListener('click', (e) => {
-      const tabBtn = e.target.closest('[data-modal-tabs] [data-modal-tab]');
-      if (!tabBtn) return;
-      const nav = tabBtn.closest('[data-modal-tabs]');
-      const root = tabBtn.closest('.ui-modal-panel') || tabBtn.closest('.ui-modal');
-      if (!nav || !root) return;
-      e.preventDefault();
-      const id = tabBtn.getAttribute('data-modal-tab');
-      nav.querySelectorAll('[data-modal-tab]').forEach((btn) => {
-        btn.classList.toggle('active', btn === tabBtn);
-      });
-      root.querySelectorAll('[data-modal-tab-panel]').forEach((panel) => {
-        const match = panel.getAttribute('data-modal-tab-panel') === id;
-        panel.hidden = !match;
-      });
-      const modalRoot = tabBtn.closest('.ui-modal');
-      if (modalRoot) pinModalStickySave(modalRoot);
-      try {
-        const u = new URL(window.location.href);
-        const inDomainModal = !!(
-          tabBtn.closest('#modal-loyalty-settings')
-          || tabBtn.closest('#modal-finance-settings')
-          || tabBtn.closest('#modal-supports-settings')
-          || u.searchParams.has('settings')
-          || u.searchParams.has('supports')
-          || u.searchParams.has('stab')
-        );
-        if (inDomainModal) {
-          if (id === 'payment' || id === 'billing') u.searchParams.set('settings', id);
-          else if (id === 'club') u.searchParams.set('settings', '1');
-          else if (id === 'referral' || id === 'rules' || id === 'rewards' || id === 'tiers') {
-            u.searchParams.set('settings', id);
-          }
-          else if (id === 'contacts') {
-            u.searchParams.set('supports', '1');
-            u.searchParams.set('stab', 'contacts');
-          } else if (id === 'text') {
-            u.searchParams.set('supports', '1');
-            u.searchParams.set('stab', 'text');
-          }
-          const next = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '') + u.hash;
-          window.history.replaceState({}, '', next);
-        }
-      } catch (err) {}
-    });
-
     /* Copy helpers (subscription links, etc.) — data-copy holds the text to copy */
     function markCopied(btn) {
       if (!btn) return;
@@ -1889,14 +1908,14 @@
         const wrap = ensureProgress(box);
         const bar = wrap.querySelector('.upload-box-progress-bar');
         wrap.hidden = false;
-        if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+        if (bar) bar.style.setProperty('--p', String(Math.max(0, Math.min(100, pct))));
         box.classList.add('is-uploading');
       }
       function clearProgress(box){
         const wrap = box.querySelector('.upload-box-progress');
         const bar = wrap && wrap.querySelector('.upload-box-progress-bar');
         if (wrap) wrap.hidden = true;
-        if (bar) bar.style.width = '0%';
+        if (bar) bar.style.setProperty('--p', '0');
         box.classList.remove('is-uploading');
       }
       function showToast(msg){
@@ -1906,7 +1925,9 @@
         toast.setAttribute('role', 'status');
         toast.textContent = msg;
         document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 2800);
+        /* Same lifetime as page-level .flash.ok (panel_ok_flash.js). */
+        const dismissMs = (window.PGClockPanelOkFlash && window.PGClockPanelOkFlash.DISMISS_MS) || 2800;
+        setTimeout(() => toast.remove(), dismissMs);
       }
       document.addEventListener('submit', (e) => {
         const form = e.target;
@@ -2041,7 +2062,7 @@
                 '</span>' +
               '</label>' +
               '<div class="force-channel-actions">' +
-                '<button type="button" class="btn btn-danger btn-sm force-channel-remove" aria-label="حذف کانال">حذف</button>' +
+                '<button type="button" class="ds-del force-channel-remove" aria-label="حذف کانال"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
               '</div>' +
             '</div>' +
           '</div>'
@@ -2838,11 +2859,9 @@
         if (e.target.hasAttribute('data-money')) applyNormalize(e.target);
       }, true);
       document.addEventListener('formdata', (e) => {
-        e.target.querySelectorAll('input[data-money]').forEach((el) => {
-          if (!el.disabled && el.name && e.formData.has(el.name)) {
-            e.formData.set(el.name, normalizeNumberText(el.value));
-          }
-        });
+        if (window.PanelMoney && window.PanelMoney.normalizeMoneyFormData) {
+          window.PanelMoney.normalizeMoneyFormData(e.formData, Array.from(e.target.elements || []), normalizeNumberText);
+        }
       });
       document.addEventListener('reset', (e) => {
         setTimeout(() => unlockNumberInputs(e.target), 0);
@@ -3082,7 +3101,7 @@
               '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-sandbox"' + (item.sandbox ? ' checked' : '') + ' /> سندباکس زرین‌پال</label>' +
               '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-enabled"' + (item.enabled === false ? '' : ' checked') + ' /> فعال</label>' +
             '</div>' +
-            '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
           '</div>'
         );
       }
@@ -3110,7 +3129,7 @@
                 '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + attrEsc(item.holder) + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
-              '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+              '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
             '</div>'
           );
         }
@@ -3122,7 +3141,7 @@
                 '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + attrEsc(item.link) + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
-              '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+              '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
             '</div>'
           );
         }
@@ -3134,7 +3153,7 @@
               '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + attrEsc(item.address) + '" autocomplete="off" /></label>' +
               styleHtml +
             '</div>' +
-            '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
           '</div>'
         );
       }
@@ -3295,7 +3314,7 @@
               '</label>' +
               styleSelectHtml(storedStyleValue(item)) +
             '</div>' +
-            '<button type="button" class="btn btn-danger btn-sm supports-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="ds-del supports-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
           '</div>'
         );
       }
@@ -3479,7 +3498,7 @@
               linksHtml(item && item.links) +
               '<div class="full guides-media" data-guides-media-slot></div>' +
             '</div>' +
-            '<button type="button" class="btn btn-danger btn-sm guides-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="ds-del guides-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
           '</div>'
         );
       }
@@ -4114,7 +4133,7 @@ const root = document.getElementById('upd-root');
     setBusy(true, 'در حال راه‌اندازی مجدد…');
     if (stateEl) stateEl.textContent = (extra || RESTART_MSG);
     if (stepEl) stepEl.textContent = 'راه‌اندازی مجدد سرویس';
-    if (fill) fill.style.width = '98%';
+    if (fill) fill.style.setProperty('--p', '98');
     if (percentEl) percentEl.textContent = '۹۸٪';
   }
 
@@ -4217,7 +4236,7 @@ const root = document.getElementById('upd-root');
     }
     if (st.state === 'running' || st.state === 'error' || st.restart_required) showOps(true);
     const pct = Number(st.percent || 0);
-    fill.style.width = pct + '%';
+    fill.style.setProperty('--p', String(pct));
     if (percentEl) percentEl.textContent = pct + '٪';
     if (stepEl) {
       stepEl.textContent = (st.state === 'error' || st.restart_required)

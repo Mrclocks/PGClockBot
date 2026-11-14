@@ -186,6 +186,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_orders", "label": "سفارش‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_payments", "label": "رسیدها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_tickets", "label": "تیکت‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_payg_review", "label": "بازبینی هزینه‌های PAYG", "group": "منوی ادمین", "default": "danger"},
     {"id": "adm_plans", "label": "پلن‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_users", "label": "کاربران (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_resellers", "label": "نمایندگان (ادمین)", "group": "منوی ادمین", "default": "success"},
@@ -195,7 +196,15 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_broadcast", "label": "پیام همگانی (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_gift_codes", "label": "کدهای هدیه (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_campaigns", "label": "کمپین‌ها (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_cashback", "label": "کش‌بک (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_trial_users", "label": "کاربران تست (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_broadcast_history", "label": "تاریخچهٔ ارسال‌ها (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_staff_audit", "label": "گزارش کارکنان (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_service_shop_review", "label": "تعیین فروشگاه سرویس", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_discounts", "label": "تخفیف‌ها (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_funnel", "label": "رفتار کاربر (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_backup", "label": "بکاپ / ریستور (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_service_cleanup", "label": "پاکسازی سرویس‌ها (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_preview", "label": "پیش‌نمایش منوی کاربر (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_users_list", "label": "لیست کاربران", "group": "منوی ادمین", "default": ""},
     {"id": "adm_users_search", "label": "جستجوی کاربر", "group": "منوی ادمین", "default": ""},
@@ -226,6 +235,9 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "pg_nodes", "label": "نودهای پاسارگارد", "group": "پاسارگارد", "default": ""},
     {"id": "pg_group", "label": "ساخت گروه پاسارگارد", "group": "پاسارگارد", "default": "primary"},
     {"id": "pg_template", "label": "ساخت تمپلیت پاسارگارد", "group": "پاسارگارد", "default": "primary"},
+    {"id": "pg_hosts", "label": "هاست‌های پاسارگارد", "group": "پاسارگارد", "default": ""},
+    {"id": "pg_inbounds", "label": "اینباندهای پاسارگارد", "group": "پاسارگارد", "default": ""},
+    {"id": "pg_admins", "label": "ادمین‌های پاسارگارد", "group": "پاسارگارد", "default": ""},
     # Admin settings sub (reply hub — ids must match adm_st_* / adm_st_panel actions)
     {"id": "adm_st_shop", "label": "تنظیمات: نام و متن‌ها", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_menu", "label": "تنظیمات: ظاهر منو", "group": "تنظیمات ادمین", "default": ""},
@@ -273,7 +285,16 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "res_addon_packs", "label": "بسته‌های حجم/کاربر", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_tickets", "label": "تیکت‌های مشتریان", "group": "منوی نماینده", "default": "success"},
     {"id": "res_loyalty", "label": "باشگاه مشتریان (نماینده)", "group": "منوی نماینده", "default": "success"},
+    {"id": "res_cashback", "label": "کش‌بک (نماینده)", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_child_pricing", "label": "قیمت زیرمجموعه", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_trial_users", "label": "کاربران تست (نماینده)", "group": "منوی نماینده", "default": ""},
+    {"id": "res_staff_audit", "label": "گزارش کارکنان (نماینده)", "group": "منوی نماینده", "default": ""},
+    {"id": "res_gift_codes", "label": "کد هدیه (نماینده)", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_campaigns", "label": "کمپین‌ها (نماینده)", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_discounts", "label": "تخفیف‌ها (نماینده)", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_funnel", "label": "رفتار کاربر (نماینده)", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_settings", "label": "تنظیمات فروشگاه", "group": "منوی نماینده", "default": ""},
+    {"id": "res_service_cleanup", "label": "پاکسازی سرویس‌ها (نماینده)", "group": "منوی نماینده", "default": ""},
     {"id": "res_preview", "label": "پیش‌نمایش منوی کاربر", "group": "منوی نماینده", "default": ""},
     # Reseller settings sub (reply hub — ids must match res_st_* / res_st_panel)
     {"id": "res_st_shop", "label": "تنظیمات نماینده: نام و متن‌ها", "group": "تنظیمات نماینده", "default": ""},
@@ -643,12 +664,15 @@ def resolve_category_button_style(ui: dict | None, category: object | None) -> s
     return style_or_none(ui, "shop_kind_fixed", fallback="primary")
 
 
+def has_custom_plan_style_override(ui: dict | None) -> bool:
+    """Whether the custom plan's own color setting replaces the «دلخواه» catalog color."""
+    raw = (ui or {}).get("custom_plan_button_style")
+    return raw is not None and bool(str(raw).strip()) and str(raw).strip().lower() not in {"inherit", "none"}
+
+
 def resolve_custom_plan_button_style(ui: dict | None) -> str | None:
     raw = (ui or {}).get("custom_plan_button_style")
-    if raw is not None and str(raw).strip() and str(raw).strip().lower() not in {
-        "inherit",
-        "none",
-    }:
+    if has_custom_plan_style_override(ui):
         explicit = normalize_style(str(raw))
         if explicit:
             return explicit

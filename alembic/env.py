@@ -14,7 +14,9 @@ from app.db.engine_url import to_sync_url
 import app.db.models  # noqa: F401
 
 config = context.config
-if config.config_file_name is not None:
+# Only the alembic CLI configures logging. Run from the app (alembic_runner), fileConfig
+# would disable every logger already created and replace the app's own log setup.
+if config.config_file_name is not None and config.attributes.get("configure_logging", True):
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

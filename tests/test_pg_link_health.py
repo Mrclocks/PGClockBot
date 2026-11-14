@@ -32,6 +32,10 @@ class FailureKindTests(unittest.TestCase):
         self.assertEqual(health.failure_kind(TimeoutError()), "timeout")
         self.assertEqual(health.failure_kind(status_code=503), "gateway")
         self.assertEqual(health.failure_kind(status_code=500), "server_error")
+        self.assertEqual(health.failure_kind(status_code=401), "auth")
+        self.assertEqual(health.failure_kind(status_code=403), "auth")
+        self.assertEqual(health.failure_kind(status_code=404), "client_error")
+        self.assertEqual(health.failure_kind(status_code=422), "client_error")
 
 
 class ReadPathTests(unittest.IsolatedAsyncioTestCase):

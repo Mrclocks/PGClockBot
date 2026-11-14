@@ -66,6 +66,8 @@ from app.services.orders import (
 from app.services.users import get_all_settings, on
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 from app.services import bot_feedback_texts as feedback
+from app.services.notice_links import notice_markup
+from app.services.staff_notice_buttons import reseller_card_markup
 
 DISCOUNT_APPLIED = "✅ تخفیف اعمال شد"
 
@@ -969,7 +971,7 @@ async def wholesale_pick_plan(callback: CallbackQuery, session: AsyncSession, st
     await callback.answer()
     text = format_message(
         "📦 فروش عمده — تعداد",
-        f"پلن: <b>{plan.name}</b>\n"
+        f"پلن: <b>{html.escape(plan.name)}</b>\n"
         f"قیمت واحد: <b>{format_toman(sale_price(plan), get_settings().currency)}</b>\n\n"
         f"{wholesale_description(ui)}\n\n"
         f"تعداد درخواستی را انتخاب کنید ({mn} تا {mx}):\n"
@@ -998,7 +1000,7 @@ async def wholesale_qty_back(callback: CallbackQuery, session: AsyncSession, sta
     await callback.answer()
     text = format_message(
         "📦 فروش عمده — تعداد",
-        f"پلن: <b>{plan.name}</b>\n"
+        f"پلن: <b>{html.escape(plan.name)}</b>\n"
         f"قیمت واحد: <b>{format_toman(sale_price(plan), get_settings().currency)}</b>\n\n"
         f"{wholesale_description(ui)}\n\n"
         f"تعداد درخواستی را انتخاب کنید ({mn} تا {mx}):\n"
@@ -1039,7 +1041,7 @@ async def wholesale_qty_step(callback: CallbackQuery, session: AsyncSession, sta
     disc_line = f"\nتخفیف فعلی: <b>{pct}٪</b> (−{format_toman(discount, get_settings().currency)})" if pct else ""
     text = format_message(
         "📦 فروش عمده — تعداد",
-        f"پلن: <b>{plan.name}</b>\n"
+        f"پلن: <b>{html.escape(plan.name)}</b>\n"
         f"قیمت واحد: <b>{format_toman(sale_price(plan), get_settings().currency)}</b>\n\n"
         f"{wholesale_description(ui)}\n\n"
         f"فعلی: <b>{qty}</b> عدد{disc_line}\n"
@@ -1132,7 +1134,7 @@ async def wholesale_qty_entered(
     disc_line = f"\nتخفیف: <b>{pct}٪</b> (−{format_toman(discount, get_settings().currency)})" if pct else ""
     text = format_message(
         "📦 فروش عمده — تعداد",
-        f"پلن: <b>{plan.name}</b>\n"
+        f"پلن: <b>{html.escape(plan.name)}</b>\n"
         f"فعلی: <b>{qty}</b> عدد{disc_line}\n"
         f"جمع: <b>{format_toman(payable, get_settings().currency)}</b>",
     )
@@ -1581,6 +1583,30 @@ async def navigate_order_pay_back(
             )
             return
 
+    if note.startswith("res_cap:"):
+        from app.bot.handlers.reseller import res_addons
+
+        await res_addons(
+            _PayBackCallback(message, "res:addons"),
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+
+    if note.startswith("res_pkg:"):
+        from app.bot.handlers.reseller import res_renew
+
+        await res_renew(
+            _PayBackCallback(message, "res:renew"),
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+
     if note.startswith("reseller_app:"):
         from app.bot.handlers.reseller import resapply_home
 
@@ -1907,6 +1933,7 @@ async def pay_wallet_cb(
                             f"✅ نمایندگی فعال شد — سفارش #{order.id}\n"
                             f"کاربر: {db_user.full_name or db_user.telegram_id}\n"
                             f"(تأیید خودکار پس از پرداخت)",
+                            reply_markup=reseller_card_markup(db_user.id),
                         )
                 else:
                     with keep_sent():  # a notice or review item, never a temporary panel
@@ -1914,7 +1941,11 @@ async def pay_wallet_cb(
                             aid,
                             f"🤝 درخواست نمایندگی پرداخت‌شده — سفارش #{order.id}\n"
                             f"کاربر: {db_user.full_name or db_user.telegram_id}",
-                            reply_markup=kb.reseller_app_review(app_id) if app_id else None,
+                            reply_markup=(
+                                notice_markup(kb.reseller_app_review(app_id, user_id=db_user.id))
+                                if app_id
+                                else None
+                            ),
                         )
             except Exception:
                 logger.debug("pay_wallet_cb: ignored failure", exc_info=True)
@@ -2579,7 +2610,7 @@ def _register_shop_cancel_codes() -> None:
         )
         text = format_message(
             "📦 فروش عمده — تعداد",
-            f"پلن: <b>{plan.name}</b>\n"
+            f"پلن: <b>{html.escape(plan.name)}</b>\n"
             f"قیمت واحد: <b>{format_toman(sale_price(plan), get_settings().currency)}</b>\n\n"
             f"{wholesale_description(ui)}\n\n"
             f"فعلی: <b>{qty}</b> عدد{disc_line}\n"

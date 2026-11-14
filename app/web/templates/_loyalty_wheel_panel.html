@@ -1,5 +1,6 @@
+{% from "_icons.html" import icon %}
 {# Lucky wheel editor — used inside loyalty settings modal #}
-{% from "macros.html" import switch %}
+{% from "macros.html" import switch, empty_state %}
 {% set submenu_labels = {
   'loy_referral': 'دعوت دوستان',
   'loy_points': 'امتیاز من',
@@ -49,9 +50,9 @@
                 <div class="muted">{{ key }}</div>
               </div>
               <div class="dnd-actions">
-                <button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>
-                <button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
-                <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+                <button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا">{{ icon('chev-up', 'ico') }}</button>
+                <button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین">{{ icon('chev-down', 'ico') }}</button>
+                <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف">{{ icon('close', 'ico') }}</button>
               </div>
             </li>
             {% endfor %}
@@ -67,7 +68,7 @@
                 <div class="muted">{{ key }}</div>
               </div>
               <div class="dnd-actions">
-                <button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+                <button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن">{{ icon('plus', 'ico') }}</button>
               </div>
             </li>
             {% endfor %}
@@ -180,7 +181,7 @@
             <td class="li-badge"><span class="badge neutral">{{ row.status }}</span></td>
           </tr>
           {% else %}
-          <tr><td colspan="5" class="muted">هنوز چرخشی ثبت نشده</td></tr>
+          {{ empty_state('هنوز چرخشی ثبت نشده', 'loyalty', colspan=5) }}
           {% endfor %}
         </tbody>
       </table>
@@ -203,9 +204,9 @@
     const actions = document.createElement('div');
     actions.className = 'dnd-actions';
     actions.innerHTML =
-      '<button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>' +
-      '<button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>' +
-      '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>';
+      '<button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا">{{ icon('chev-up', 'ico') }}</button>' +
+      '<button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین">{{ icon('chev-down', 'ico') }}</button>' +
+      '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف">{{ icon('close', 'ico') }}</button>';
     li.appendChild(actions);
   }
   function setPoolActions(li) {
@@ -213,7 +214,7 @@
     const actions = document.createElement('div');
     actions.className = 'dnd-actions';
     actions.innerHTML =
-      '<button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>';
+      '<button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن">{{ icon('plus', 'ico') }}</button>';
     li.appendChild(actions);
   }
   function onClick(e) {

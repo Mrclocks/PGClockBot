@@ -24,7 +24,7 @@ class NumStepperUiTests(unittest.TestCase):
         self.assertIn(".num-stepper-input", css)
         # Circular ± buttons inset inside the outer capsule
         btn = css.split(".num-stepper-btn {", 1)[1].split("}", 1)[0]
-        self.assertIn("border-radius: 999px", btn)
+        self.assertIn("border-radius: var(--control-radius)", btn)
         # Value centered — must be excluded from global input text-align:right
         self.assertIn(":not(.num-stepper-input)", css)
         self.assertIn(

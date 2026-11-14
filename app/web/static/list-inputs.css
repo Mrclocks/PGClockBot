@@ -59,7 +59,7 @@
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--control-radius);
-  font-size: 13px;
+  font-size: var(--fs-3);
 }
 /* Same up/down chevron as the panel's select, drawn as an image so it centres exactly. */
 .list-editor-caret {
@@ -136,7 +136,7 @@
   flex: 1 1 80px;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 14px;
+  font-size: var(--fs-3);
 }
 .list-editor-actions {
   display: flex;
@@ -146,15 +146,15 @@
 .list-editor-confirm {
   flex-basis: 100%;
   color: var(--destructive-fg);
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 .list-editor-empty {
   margin: var(--space-1) 0;
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 .list-editor-panel > small.muted {
   display: block;
-  font-size: 11px;
+  font-size: var(--fs-1);
 }
 @media (prefers-reduced-motion: reduce) {
   .list-editor-caret { transition: none; }

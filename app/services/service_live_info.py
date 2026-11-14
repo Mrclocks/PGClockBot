@@ -20,15 +20,15 @@ from app.services.pasarguard import PasarGuardError, extract_sub_token, get_pg
 log = logging.getLogger(__name__)
 
 ERROR_MESSAGES = {
-    "missing_subscription_token": "لینک یا توکن اشتراک این سرویس ثبت نشده است.",
+    "missing_subscription_token": "لینک اشتراک این سرویس ثبت نشده است. به پشتیبانی خبر دهید.",
     "timeout": "پنل در زمان مقرر پاسخ نداد؛ دوباره تلاش کنید.",
-    "subscription_not_found": "اطلاعات اشتراک پیدا نشد (HTTP 404)؛ مسیر سابسکریپشن یا اعتبار لینک را بررسی کنید.",
-    "access_denied": "پنل اجازه دریافت اطلاعات اشتراک را نداد؛ اعتبار لینک را بررسی کنید.",
-    "invalid_response": "پاسخ اطلاعات سرویس معتبر نیست؛ مسیر سابسکریپشن را در تنظیمات اتصال پاسارگارد بررسی کنید.",
-    "incomplete_response": "پاسخ پنل ناقص است؛ بعضی اطلاعات سرویس دریافت نشد.",
-    "service_mismatch": "اطلاعات دریافتی با سرویس ثبت‌شده مطابقت ندارد؛ لینک اشتراک را بررسی کنید.",
+    "subscription_not_found": "اطلاعات این سرویس روی سرور پیدا نشد. ممکن است سرویس حذف شده یا لینک آن تغییر کرده باشد؛ به پشتیبانی خبر دهید.",
+    "access_denied": "سرور اجازه نمایش اطلاعات این سرویس را نداد. به پشتیبانی خبر دهید.",
+    "invalid_response": "پاسخ سرور برای این سرویس معتبر نبود. کمی بعد دوباره تلاش کنید یا به پشتیبانی خبر دهید.",
+    "incomplete_response": "پاسخ سرور ناقص بود و بعضی اطلاعات سرویس دریافت نشد.",
+    "service_mismatch": "اطلاعات دریافتی با این سرویس مطابقت ندارد. به پشتیبانی خبر دهید.",
     "not_loaded": "اطلاعات این سرویس هنوز دریافت نشده؛ دکمه به‌روزرسانی را بزنید.",
-    "upstream_unavailable": "دریافت اطلاعات سرویس از پنل ناموفق بود؛ دوباره تلاش کنید.",
+    "upstream_unavailable": "دریافت اطلاعات سرویس ممکن نشد. کمی بعد دوباره تلاش کنید.",
 }
 # Only when the panel did not answer; a 404, a denial or a mismatch means the
 # saved values may describe a service that no longer exists as shown.

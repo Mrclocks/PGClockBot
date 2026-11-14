@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import tempfile
 import unittest
+from app.services.numbers import to_fa_digits
 from pathlib import Path
 from unittest import mock
 
@@ -37,7 +38,7 @@ class PwaTests(unittest.TestCase):
         from app.services.pwa import service_worker_js
 
         sw = service_worker_js()
-        self.assertIn("pgclock-shell-v52", sw)
+        self.assertIn("pgclock-shell-v54", sw)
         self.assertIn("isVersionedPanelAsset", sw)
         self.assertIn("matchExact", sw)
         self.assertIn("/static/fonts.css", sw)
@@ -75,6 +76,7 @@ class UpdateWiringTests(unittest.TestCase):
         self.assertIn("/health/detail", paths)
 
         env = Environment(loader=FileSystemLoader("app/web/templates"), autoescape=True)
+        env.filters["fa"] = to_fa_digits
         html = env.get_template("_settings_update.html").render(
             update_info={"update_available": True, "remote_version": "9.9.9", "checked": True, "label": ""},
             status={"state": "idle"},

@@ -145,3 +145,18 @@ class EncryptFailClosedTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PanelUsernameCaseTests(unittest.TestCase):
+    def test_uppercase_and_panel_symbols_are_accepted_and_case_is_kept(self) -> None:
+        from app.services.credential_policy import validate_pg_username
+
+        cleaned, error = validate_pg_username("Ali.Reza-01@Shop")
+        self.assertIsNone(error)
+        self.assertEqual(cleaned, "Ali.Reza-01@Shop")
+
+    def test_username_up_to_128_chars_is_accepted_and_longer_is_rejected(self) -> None:
+        from app.services.credential_policy import validate_pg_username
+
+        self.assertIsNone(validate_pg_username("A" * 128)[1])
+        self.assertIsNotNone(validate_pg_username("A" * 129)[1])

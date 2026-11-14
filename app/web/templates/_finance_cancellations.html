@@ -20,9 +20,9 @@
   <p class="muted">نتیجهٔ ارسال اعلان قطعی نیست؛ پیام خودکار دوباره ارسال نمی‌شود. درخواست را از همین صفحه بررسی کنید.</p>
   {% endif %}
   <p>{{ cancel_labels[row.status] }}</p>
-  <p style="white-space:pre-wrap">دلیل: {{ row.reason }}</p>
+  <p class="text-pre-wrap">دلیل: {{ row.reason }}</p>
   {% if row.operator_note %}
-  <p style="white-space:pre-wrap">توضیح اپراتور: {{ row.operator_note }}</p>
+  <p class="text-pre-wrap">توضیح اپراتور: {{ row.operator_note }}</p>
   {% endif %}
   {% if row.status == 'approved' %}
   <p>اعتبار برگشتی: <span dir="ltr">{{ row.refund_amount | money }}</span> تومان</p>

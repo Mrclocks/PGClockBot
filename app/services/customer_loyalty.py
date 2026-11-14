@@ -105,8 +105,8 @@ async def points_history_page(
     return [history_entry(tx) for tx in rows[:limit]], len(rows) > limit
 
 
-async def _referral(session: AsyncSession, user: BotUser, bot_username: str) -> dict:
-    stats = await referral_stats(session, int(user.id))
+async def _referral(session: AsyncSession, user: BotUser, bot_username: str, shop_id: int | None) -> dict:
+    stats = await referral_stats(session, int(user.id), shop_id=shop_id)
     code = user.referral_code or ""
     return {
         "code": code,
@@ -141,7 +141,7 @@ async def club_summary(session: AsyncSession, user: BotUser, *, shop_id: int | N
 
     ``bot_username`` is the club's own bot, so an invite link brings people to that bot.
     """
-    referral = await _referral(session, user, bot_username)
+    referral = await _referral(session, user, bot_username, shop_id)
     if not await loyalty_enabled(session, reseller_id=shop_id):
         return {"enabled": False, "referral": referral}
     points = await points_balance(session, user, shop_id)

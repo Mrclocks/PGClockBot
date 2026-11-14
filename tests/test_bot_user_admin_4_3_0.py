@@ -60,11 +60,15 @@ class BotUserAdminServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("selectinload(UserService.plan)", fn)
         self.assertNotIn("session.get(UserService", fn)
         self.assertIn("snapshot_telegram_lines", src)
-        # Card reads plan.name — must stay compatible with eager-loaded plan
+        # Card reads plan without sync lazy-load (MissingGreenlet after commit).
         lines_fn = src.split("def snapshot_telegram_lines", 1)[1].split(
             "\ndef ", 1
         )[0]
-        self.assertIn("svc.plan", lines_fn)
+        self.assertIn("_snapshot_plan", lines_fn)
+        self.assertIn("_snapshot_plan", src)
+        helper = src.split("def _snapshot_plan", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn('"plan"', helper)
+        self.assertIn("_sa_instance_state", helper)
 
 
 class UserEditUiTests(unittest.TestCase):
@@ -123,10 +127,10 @@ class UserEditUiTests(unittest.TestCase):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".badge.badge-risk-tag", css)
         risk = css.split(".badge.badge-risk-tag {", 1)[1].split("}", 1)[0]
-        self.assertIn("border-radius: 999px;", risk)
+        self.assertIn("border-radius: var(--control-radius);", risk)
         self.assertIn("color: var(--tag-color", risk)
         opt = css.split(".color-tag-option {", 1)[1].split("}", 1)[0]
-        self.assertIn("border-radius: 999px;", opt)
+        self.assertIn("border-radius: var(--control-radius);", opt)
         self.assertIn('html[data-theme="light"] .badge.badge-risk-tag', css)
         light_risk = css.split('html[data-theme="light"] .badge.badge-risk-tag {', 1)[1].split("}", 1)[0]
         self.assertIn("color-mix(in srgb, var(--tag-color", light_risk)
@@ -149,7 +153,8 @@ class UserEditUiTests(unittest.TestCase):
         self.assertIn("admin_user_service_actions", kb)
 
         admin = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        self.assertIn("adm_users_wallet_credit", admin)
+        wallet = Path("app/bot/handlers/admin_wallet_adjust.py").read_text(encoding="utf-8")
+        self.assertIn("adm_users_wallet_credit", wallet)
         self.assertIn("adm_users_services", admin)
         self.assertIn("admin_renew_service", admin)
         self.assertIn("admin_extend_service", admin)

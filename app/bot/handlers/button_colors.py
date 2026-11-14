@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
+from app.services.user_errors import domain_error_text
 from app.services import bot_feedback_texts as feedback
 from app.services.button_color_editor import (
     COLOR_NAMES,
@@ -234,7 +235,7 @@ async def _handle(callback: CallbackQuery, session: AsyncSession, actor: _Actor,
         else:
             await callback.answer()
     except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        await callback.answer(domain_error_text(exc), show_alert=True)
         return
     page = position // ITEMS_PER_PAGE
     await _show(callback, picker_view(item, request.audience, request.group_index, page))

@@ -1,5 +1,5 @@
 {# Reseller dash body — single root #home-dash for /home/body swap. #}
-{% from "macros.html" import page_title, card_title %}
+{% from "macros.html" import page_header, card_title %}
 <div class="home-dash" id="home-dash">
 {% if request is defined and request.url.path == '/home/body' %}{% include "_pg_connection_notice.html" %}{% endif %}
 {% if dashboard_degraded %}
@@ -12,11 +12,7 @@
 </div>
 {% endif %}
 
-<div class="page-head">
-  <div>
-    {{ page_title('home', 'داشبورد', 'neutral', help='home') }}
-  </div>
-</div>
+{{ page_header('home', 'داشبورد', 'neutral', help='home', capsule=false) }}
 
 {% if bot_setup_needed %}
 <div class="flash err dash-bot-setup">
@@ -39,8 +35,7 @@
 </div>
 {% endif %}
 
-{% from "_home_widgets.html" import kpi_strip, status_tiles %}
-{{ kpi_strip(periods, action_center, trend if trend is defined else none, kpi_links if kpi_links is defined else none) }}
+{% from "_home_widgets.html" import kpi_strip, status_tiles, connection_banner %}
 
 {% set tiles = [] %}
 {% set bot_state = 'neutral' if bot.unchecked else ('ok' if bot.ok else 'err') %}
@@ -49,13 +44,10 @@
 {% set pg_state = 'neutral' if (pg_health and pg_health.unchecked) else ('ok' if (pg_health and pg_health.ok) else 'err') %}
 {% set pg_detail = 'بررسی نشده' if (pg_health and pg_health.unchecked) else (('نسخه ' ~ pg_health.version) if (pg_health and pg_health.ok and pg_health.version) else ('آنلاین' if (pg_health and pg_health.ok) else ((pg_health.error if pg_health else none) or 'قطع'))) %}
 {% set _ = tiles.append({'name': 'پاسارگارد', 'detail': pg_detail, 'state': pg_state, 'icon': 'pg', 'href': '/pg'}) %}
-{{ status_tiles(tiles) }}
-
-{% set portal_bot_show = ('dashboard' in (staff.get('permissions') or []) or staff.role == 'reseller') %}
-{% set portal_pg_show = ('pg_overview' in (staff.get('pg_permissions') or []) or staff.role == 'reseller' or staff.get('pg_admin_username')) %}
-{% set portal_bot_href = '/dashboard' %}
-{% set portal_pg_href = '/pg' %}
+{{ connection_banner(tiles) }}
+{{ kpi_strip(periods, action_center, trend if trend is defined else none, kpi_links if kpi_links is defined else none) }}
 {% include "_home_ops.html" %}
+{{ status_tiles(tiles) }}
 
 {% if pg_limits and pg_limits.ready %}
 {% from "_pg_limit_cards.html" import pg_overview_limit_board %}

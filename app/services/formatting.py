@@ -54,6 +54,28 @@ def bot_user_panel_label(user: Any = None, *, fallback_id: int | None = None) ->
     return str(uid or fallback_id or "—")
 
 
+def bot_user_ticket_who(user: Any = None, *, fallback_id: int | None = None) -> str:
+    """Ticket list/detail who-line: name/@username plus copyable Telegram id when known."""
+    from app.services.platform_identity import deliverable_telegram_id
+
+    label = bot_user_panel_label(user, fallback_id=fallback_id)
+    tid = deliverable_telegram_id(getattr(user, "telegram_id", None)) if user is not None else None
+    if tid is None:
+        return label
+    if str(tid) == label:
+        return f"آیدی {tid}"
+    return f"{label} · آیدی {tid}"
+
+
+def bot_user_telegram_id(user: Any = None) -> int | None:
+    """Deliverable Telegram id for templates, or None when synthetic/missing."""
+    from app.services.platform_identity import deliverable_telegram_id
+
+    if user is None:
+        return None
+    return deliverable_telegram_id(getattr(user, "telegram_id", None))
+
+
 def _byte_unit_table() -> tuple[tuple[float, str], ...]:
     """(divisor, Persian label) from smallest to largest."""
     return (
@@ -522,6 +544,11 @@ def progress_bar(used: float, total: float | None, width: int = 10) -> str:
 def parse_expire(value: Any) -> Optional[datetime]:
     if value is None:
         return None
+    if isinstance(value, datetime):
+        # Stored quota_expire_at / panel timestamps already as datetime.
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
     if isinstance(value, (int, float)):
         ts = int(value)
         if ts <= 0:

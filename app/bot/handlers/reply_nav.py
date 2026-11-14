@@ -20,12 +20,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
+from app.bot.handlers.shop_marketing_bot import SHOP_LEAF_OPENERS
 from app.bot.menu_nav import restore_main_reply
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.reply_keyboards import _reply_admin_marketing_entries
 from app.db.models import BotUser, Order, ResellerProfile, Role
+from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_message
 from app.services.home_overview import admin_customer_counts
+from app.services.numbers import to_fa_digits
+from app.services.payg_charges import count_review_charges
 from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
@@ -42,12 +46,14 @@ logger = logging.getLogger(__name__)
 router = Router(name="reply_nav")
 
 _RESELLER_HUB_BACK = "nv:res:home"
+PAYG_REVIEW_LINE = "🧾 هزینهٔ PAYG در انتظار بازبینی: {count}"
 
 # Prompts whose answer is a free-form message: only labels of the visible main keyboard
 # (plus home / back) may interrupt them; hidden submenu labels are delivered as text.
 FREE_TEXT_INPUT_STATES: frozenset[str] = frozenset(
     {
         "AdminStates:user_message",
+        "AdminStates:user_wallet_reason",
         "AdminStates:ticket_reply",
         "AdminStates:broadcast_text",
         "AdminStates:revoke_reseller_reason",
@@ -488,32 +494,13 @@ async def open_wallet_home(
     *,
     push: bool = True,
 ) -> None:
-    from app.bot.nav_inline import present_inline_only, wallet_hub_keyboard
-    from app.config import get_settings
-    from app.services.formatting import format_toman, kv_line
-    from app.services.wallet import wallet_balance_for_context
+    from app.bot.handlers.wallet import load_wallet_home
+    from app.bot.nav_inline import present_inline_only
 
-    ui = await get_all_settings(session)
-    bal = await wallet_balance_for_context(session, db_user)
-    text = format_message(
-        screen_title_html(ui, "c.wallet"),
-        "\n".join(
-            [
-                kv_line(
-                    "💵",
-                    "موجودی",
-                    f"<b>{format_toman(bal, get_settings().currency)}</b>",
-                ),
-                "",
-                screen_caption(ui, "c.wallet"),
-            ]
-        ),
-    )
+    text, markup = await load_wallet_home(session, db_user)
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_WALLET, push=push)
-    await present_inline_only(
-        message, text=text, inline=wallet_hub_keyboard(ui)
-    )
+    await present_inline_only(message, text=text, inline=markup)
     return
 
 async def open_wallet_topup(
@@ -858,6 +845,7 @@ async def open_reseller_home(
             hub.profile,
             ui,
             can_add_representative=hub.can_add_representative,
+            show_owner_creds=hub.show_owner_creds,
             pending_payments=queue.payments,
             pending_tickets=queue.tickets,
             pending_cancellations=queue.cancellations,
@@ -1507,11 +1495,13 @@ async def open_admin_ops_hub(
     except Exception:
         logger.warning("admin ops pending_counts failed", exc_info=True)
         queue = PendingCounts()
+    payg_review = await _payg_review_count(session)
     body = with_caption(screen_heading(ui, "a.ops"), screen_caption(ui, "a.ops"))
     queue_line = format_queue_summary(queue)
     if queue_line:
-        # Cancel count is summary-only (no bot cancel inbox yet).
         body = f"{body}\n\n{queue_line}"
+    if payg_review:
+        body = f"{body}\n{PAYG_REVIEW_LINE.format(count=to_fa_digits(payg_review))}"
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_OPS, push=push)
     await present_nav_panel(
@@ -1522,10 +1512,22 @@ async def open_admin_ops_hub(
             pending_payments=queue.payments,
             pending_tickets=queue.tickets,
             pending_deliveries=queue.deliveries,
+            pending_payg_review=payg_review,
         ),
         state=state,
     )
     return
+
+
+async def _payg_review_count(session: AsyncSession) -> int:
+    """PAYG charges waiting for the owner; the hub still opens if the count fails."""
+    try:
+        return await count_review_charges(session)
+    except SQLAlchemyError:
+        await rollback_quiet(session)
+        logger.warning("admin ops payg review count failed", exc_info=True)
+        return 0
+
 
 async def open_admin_people_hub(
     message: Message,
@@ -1968,7 +1970,7 @@ async def handle_back(
             message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
         )
         return
-    if level in {nav.NAV_ADMIN_GIFTS, nav.NAV_ADMIN_CAMPAIGNS}:
+    if level in {nav.NAV_ADMIN_GIFTS, nav.NAV_ADMIN_CAMPAIGNS, nav.NAV_ADMIN_CASHBACK}:
         from app.bot.handlers.marketing_tools import open_admin_marketing_panel
 
         await open_admin_marketing_panel(
@@ -2328,6 +2330,23 @@ async def _soft_reseller(
             await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
             return
 
+    if action == kb.REPLY_ACTION_CREDS:
+        from app.services.reseller_access import is_shop_profile_owner
+
+        # Login card is the shop owner's only — never bot_admin assistants.
+        if is_reseller_bot and not is_shop_profile_owner(db_user, owner_id):
+            await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
+            return
+        await open_reseller_creds(
+            message,
+            session,
+            db_user,
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+
     if action == kb.REPLY_ACTION_RES_ADD_REP:
         from app.bot.handlers.reseller_reps import start_add_representative
 
@@ -2353,6 +2372,50 @@ async def _soft_reseller(
         return
     if action == "res_loyalty":
         await open_admin_loyalty_hub(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    shop_marketing_opener = SHOP_LEAF_OPENERS.get(action)
+    if shop_marketing_opener is not None:
+        await shop_marketing_opener(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+        )
+        return
+    if action == "res_cashback":
+        from app.bot.handlers.cashback_tools import open_shop_cashback_panel
+
+        await open_shop_cashback_panel(
+            message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    if action == "res_child_pricing":
+        from app.bot.handlers.child_pricing_bot import open_child_pricing_panel
+
+        await open_child_pricing_panel(
+            message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    if action == "res_broadcast":
+        from app.bot.handlers.shop_broadcast import open_shop_broadcast_hub
+
+        await open_shop_broadcast_hub(
             message,
             session,
             db_user,
@@ -2560,6 +2623,10 @@ async def reply_main_nav(
         "res_payments",
         "res_tickets",
         "res_loyalty",
+        "res_cashback",
+        "res_child_pricing",
+        *SHOP_LEAF_OPENERS,
+        "res_broadcast",
         "res_renew",
         "res_buy_gb",
         "res_buy_users",

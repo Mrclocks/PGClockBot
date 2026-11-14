@@ -28,11 +28,35 @@ class NamingContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.name(), "vip_ali_user_30GB_a1b2c3d4")
 
     async def test_fractional_volume(self):
-        self.assertEqual(await self.name(volume=1.5), "vip_ali_user_1.5GB_a1b2c3d4")
+        self.assertEqual(await self.name(volume=1.5), "vip_ali_user_1_5GB_a1b2c3d4")
+
+    async def pattern_name(self, pattern, **plan_fields):
+        plan = SimpleNamespace(data_limit_gb=30, pg_username_prefix=None, pg_username_suffix=None, pg_username_pattern=pattern, **plan_fields)
+        user = SimpleNamespace(username="ali_user", telegram_id=9001)
+        with patch("app.services.users.get_all_settings", AsyncMock(return_value={})), patch(
+            "app.services.orders._random_alnum", return_value="a1b2"
+        ):
+            return await generate_pg_username(AsyncMock(), user_id=7, plan=plan, user=user)
+
+    async def test_username_only_pattern_stays_unique_per_purchase(self):
+        self.assertEqual(await self.pattern_name("{username}"), "ali_user_a1b2")
+
+    async def test_short_username_is_padded_to_panel_minimum(self):
+        plan = SimpleNamespace(data_limit_gb=30, pg_username_prefix=None, pg_username_suffix=None, pg_username_pattern="{username}")
+        user = SimpleNamespace(username="a", telegram_id=9001)
+        with patch("app.services.users.get_all_settings", AsyncMock(return_value={})), patch(
+            "app.services.orders._random_alnum", return_value="a1b2"
+        ):
+            name = await generate_pg_username(AsyncMock(), user_id=7, plan=plan, user=user)
+        self.assertRegex(name, r"^[A-Za-z0-9_]{3,32}$")
+
+    async def test_pattern_with_dash_and_long_result_fit_panel_format(self):
+        name = await self.pattern_name("{prefix}-{username}-{random}-" + "x" * 40)
+        self.assertRegex(name, r"^[A-Za-z0-9_]{3,32}$")
 
     async def test_unlimited_and_zero(self):
         for volume in (None, 0):
-            self.assertEqual(await self.name(volume=volume), "vip_ali_user_unlimitedGB_a1b2c3d4")
+            self.assertEqual(await self.name(volume=volume, username="ali"), "vip_ali_unlimitedGB_a1b2c3d4")
 
     async def test_user_without_username_uses_telegram_id(self):
         self.assertEqual(await self.name(username=None), "vip_9001_30GB_a1b2c3d4")

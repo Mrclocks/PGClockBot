@@ -1,7 +1,8 @@
+{% from "_icons.html" import icon %}
 {# Telegram button colors — section tabs + tone-aware selects. #}
 <form method="post" action="{{ settings_action|default('/settings?tab=colors') }}" class="settings-form" id="settings-form">
   <div class="card settings-card">
-    <h2>رنگبندی دکمه‌ها</h2>
+    <h2>رنگ دکمه‌ها</h2>
     <p class="muted update-card-caption">
       تلگرام فقط سفید، آبی، سبز و قرمز را پشتیبانی می‌کند.
       رنگ دکمه‌های ثابت را اینجا تنظیم کنید؛
@@ -41,7 +42,7 @@
           <span class="colors-group-summary-inner">
             <h2>{{ group_name }}</h2>
             <span class="colors-group-chevron" aria-hidden="true">
-              <svg class="ico colors-chevron-ico" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+              {{ icon('chev-down', 'ico colors-chevron-ico') }}
             </span>
           </span>
         </summary>

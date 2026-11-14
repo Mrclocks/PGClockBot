@@ -103,9 +103,10 @@ async def allocation_view_for_shop(
 
 
 async def sync_reseller_capacity(session: AsyncSession, profile: ResellerProfile) -> tuple[int, int]:
-    """Set the recorded base capacity of a «ظرفیت فعلی» reseller to the admin's live limits.
+    """Set the recorded base capacity of a «ظرفیت فعلی» reseller from the admin's live limits.
 
-    Extras bought later are kept. Raises ``ValueError`` (safe Persian text) when there is nothing to
+    Live limits already include purchased extras, so base is stored as live minus extras and the
+    extras themselves are kept. Raises ``ValueError`` (safe Persian text) when there is nothing to
     sync or the panel cannot be read; nothing is written to the panel.
     """
     username = (profile.pg_admin_username or "").strip()
@@ -122,6 +123,10 @@ async def sync_reseller_capacity(session: AsyncSession, profile: ResellerProfile
     except PgCapacityUnreadable:
         await session.rollback()
         raise
-    sub.base_gb, sub.base_users = gb, users
+    # Live already includes purchased extras; keep extras and store only the residual as base.
+    extra_gb = max(0, int(sub.extra_gb_purchased or 0))
+    extra_users = max(0, int(sub.extra_users_purchased or 0))
+    sub.base_gb = max(0, int(gb) - extra_gb)
+    sub.base_users = max(0, int(users) - extra_users)
     await session.commit()
     return gb, users

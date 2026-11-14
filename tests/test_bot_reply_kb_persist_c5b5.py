@@ -97,20 +97,52 @@ class AdminFsmFinishShowsOutcomeInPlaceTests(unittest.IsolatedAsyncioTestCase):
         from contextlib import ExitStack
         from unittest.mock import patch
 
-        from app.bot.handlers.admin import adm_users_wallet_credit_save
+        from app.bot.handlers.admin_wallet_adjust import (
+            adm_users_wallet_credit_save,
+            adm_users_wallet_reason_save,
+        )
 
         message, state, db_user, session = self._handler_context("5000")
         state.get_data = AsyncMock(return_value={"admin_credit_user_id": 5, "admin_wallet_mode": "credit"})
         user = MagicMock()
         user.wallet_balance = 5000
         with ExitStack() as stack:
-            finish = self._patches(stack)
-            stack.enter_context(patch("app.bot.handlers.admin._platform_shop_user", AsyncMock(return_value=(user, None))))
-            stack.enter_context(patch("app.bot.handlers.admin.load_reseller_profile", AsyncMock(return_value=None)))
-            adjust = stack.enter_context(patch("app.services.bot_user_admin.admin_adjust_user_wallet", AsyncMock()))
+            stack.enter_context(patch("app.bot.auth.require_bot_owner", AsyncMock(return_value=True)))
+            stack.enter_context(patch("app.bot.handlers.admin_wallet_adjust._is_admin", MagicMock(return_value=True)))
+            stack.enter_context(patch("app.bot.handlers.admin_wallet_adjust._platform_shop_user", AsyncMock(return_value=(user, None))))
             await adm_users_wallet_credit_save(message, state, session=session, db_user=db_user)
+        state.set_state.assert_awaited()
+        message.answer.assert_awaited()
+        self.assertIn("علت", message.answer.await_args.args[0])
+
+        message2, state2, db_user2, session2 = self._handler_context("جبران قطعی")
+        state2.get_data = AsyncMock(
+            return_value={
+                "admin_credit_user_id": 5,
+                "admin_wallet_mode": "credit",
+                "admin_wallet_amount": 5000,
+                "admin_wallet_nonce": "abcd1234efgh5678",
+            }
+        )
+        from app.services.bot_user_admin import AdminWalletChange
+
+        change = AdminWalletChange(
+            user=user, amount=5000, mode="credit", balance_after=10_000, replayed=False
+        )
+        with ExitStack() as stack:
+            finish = self._patches(stack)
+            stack.enter_context(patch("app.bot.handlers.admin_wallet_adjust._is_admin", MagicMock(return_value=True)))
+            stack.enter_context(patch("app.bot.handlers.admin_wallet_adjust._platform_shop_user", AsyncMock(return_value=(user, None))))
+            stack.enter_context(patch("app.bot.handlers.admin_wallet_adjust.load_reseller_profile", AsyncMock(return_value=None)))
+            adjust = stack.enter_context(
+                patch("app.services.bot_user_admin.admin_adjust_user_wallet", AsyncMock(return_value=change))
+            )
+            stack.enter_context(patch("app.bot.handlers.admin_wallet_adjust.schedule_wallet_notice"))
+            await adm_users_wallet_reason_save(message2, state2, session=session2, db_user=db_user2)
         adjust.assert_awaited_once()
-        self.assert_one_in_place(message, finish, "کیف پول شارژ شد")
+        self.assertEqual(adjust.await_args.kwargs.get("note"), "جبران قطعی")
+        self.assertEqual(adjust.await_args.kwargs.get("request_key"), "abcd1234efgh5678")
+        self.assert_one_in_place(message2, finish, "کیف پول شارژ شد")
 
     async def test_block_reason_shows_the_outcome_on_the_card(self):
         from contextlib import ExitStack

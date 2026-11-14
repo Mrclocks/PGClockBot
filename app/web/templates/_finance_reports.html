@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {# Finance reports tab — expects: report (build_finance_report), report_period #}
 {% set report = report or {} %}
 {% set periods = report.periods or {} %}
@@ -52,7 +53,7 @@
   <section class="home-panel home-panel-neutral">
     <div class="home-panel-head">
       <div class="home-panel-title">
-        <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M6 14l3-6 3 4 3-5 3 7"/></svg>
+        {{ icon('volume-low', 'home-panel-ico') }}
         <h2 class="home-panel-h">فروش — {{ report.period_label or '۷ روز' }}</h2>
       </div>
       <p class="muted home-panel-sub">بازه انتخاب‌شده · میانگین روی فروش موفق</p>
@@ -80,7 +81,7 @@
   <section class="home-panel home-panel-neutral">
     <div class="home-panel-head">
       <div class="home-panel-title">
-        <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
+        {{ icon('users', 'home-panel-ico') }}
         <h2 class="home-panel-h">کاربران</h2>
       </div>
       <p class="muted home-panel-sub">موجودی فروشگاه · کاربر جدید در بازه</p>
@@ -108,7 +109,7 @@
   <section class="home-panel home-panel-neutral">
     <div class="home-panel-head">
       <div class="home-panel-title">
-        <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a5 5 0 0 1 5 5v2.2l1.8 3.3H5.2L7 11.2V9a5 5 0 0 1 5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>
+        {{ icon('inbox', 'home-panel-ico') }}
         <h2 class="home-panel-h">عملیات</h2>
       </div>
       <p class="muted home-panel-sub">اقدام فوری · لینک به صف‌های مرتبط</p>
@@ -145,8 +146,8 @@
     <p class="muted">فقط فروش موفق در بازه</p>
   </header>
   {% if method_segments %}
-  <div class="fin-share" role="img" aria-label="سهم روش‌های پرداخت از فروش: {% for seg in method_segments %}{{ seg.label }} {{ seg.share_pct }}٪{% if not loop.last %}، {% endif %}{% endfor %}">
-    {% for seg in method_segments %}<span class="fin-share-seg" data-tone="{{ seg.tone }}" style="--p: {{ seg.share_pct }}" title="{{ seg.label }}: {{ seg.share_pct }}٪"></span>{% endfor %}
+  <div class="fin-share" role="img" aria-label="سهم روش‌های پرداخت از فروش: {% for seg in method_segments %}{{ seg.label }} {{ (seg.share_pct) | fa }}٪{% if not loop.last %}، {% endif %}{% endfor %}">
+    {% for seg in method_segments %}<span class="fin-share-seg" data-tone="{{ seg.tone }}" style="--p: {{ seg.share_pct }}" title="{{ seg.label }}: {{ (seg.share_pct) | fa }}٪"></span>{% endfor %}
   </div>
   <ul class="fin-legend">
     {% for seg in method_segments %}<li><i class="fin-dot" data-tone="{{ seg.tone }}"></i>{{ seg.label }} <span dir="ltr">{{ seg.share_pct }}%</span></li>{% endfor %}
@@ -170,7 +171,7 @@
           <td class="mono li-sub"><span>{{ m.count | num }} پرداخت</span> <span class="li-only">· سهم <bdi dir="ltr">{{ m.share_pct }}%</bdi></span></td>
           <td class="mono li-value" dir="ltr">{{ m.amount | money }}</td>
           <td class="finance-method-share">
-            <div class="ov-meter" data-tone="neutral" role="img" aria-label="{{ m.label }}: {{ m.share_pct }}٪ از فروش">
+            <div class="ov-meter" data-tone="neutral" role="img" aria-label="{{ m.label }}: {{ (m.share_pct) | fa }}٪ از فروش">
               <div class="ov-meter-top"><small dir="ltr">{{ m.share_pct }}%</small></div>
               <div class="ov-track" aria-hidden="true"><i class="ov-fill" style="--p: {{ m.share_pct }}"></i></div>
             </div>

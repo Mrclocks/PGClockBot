@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 <!DOCTYPE html>
 <html lang="fa" dir="rtl" data-theme="dark">
 <head>
@@ -19,8 +20,8 @@
     } catch (e) {}
   })();
   </script>
-  <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
-  <link rel="stylesheet" href="/static/panel.css?v={{ app_version }}" />
+  <link rel="stylesheet" href="/static/fonts.css?v={{ asset_v('fonts.css') if asset_v is defined else app_version }}" />
+  <link rel="stylesheet" href="/static/panel.css?v={{ asset_v('panel.css') if asset_v is defined else app_version }}" />
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
 </head>
 <body class="panel-status-body">
@@ -44,43 +45,10 @@
         <div class="panel-status-card-accent" aria-hidden="true"></div>
         <p class="panel-status-watermark" dir="ltr" aria-hidden="true">{{ watermark|default(code) }}</p>
 
-        <div class="panel-status-badge" aria-hidden="true">
-          {% if code == 'ok' or code == '200' %}
-          <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/>
-            <path d="M8.2 12.2l2.4 2.4 5.2-5.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          {% elif code == 'warn' or code == 'pending' %}
-          <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/>
-            <path d="M12 8v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-            <circle cx="12" cy="16.2" r="1" fill="currentColor"/>
-          </svg>
-          {% elif code == 404 or code == '404' %}
-          <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
-            <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.6"/>
-            <path d="M16 16l4.2 4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-            <path d="M9 11h4M11 9v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-          </svg>
-          {% elif code == 500 or code == '500' or code == 'error' %}
-          <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
-            <path d="M12 8v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-            <circle cx="12" cy="16.2" r="1" fill="currentColor"/>
-            <path d="M10.2 4.8 3.6 17.1A2 2 0 0 0 5.4 20h13.2a2 2 0 0 0 1.8-2.9L13.8 4.8a2 2 0 0 0-3.6 0Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-          </svg>
-          {% elif code == 403 or code == '403' %}
-          <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
-            <rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/>
-            <path d="M8 10V7.5a4 4 0 0 1 8 0V10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-            <circle cx="12" cy="15" r="1.2" fill="currentColor"/>
-          </svg>
-          {% else %}
-          <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/>
-            <path d="M12 8v5M12 16.2h.01" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-          </svg>
-          {% endif %}
-        </div>
+        {# The badge is the icon of the status, from the shared set. #}
+        {% set code_s = code|string %}
+        {% set badge = 'check-circle' if code_s in ('ok', '200') else ('search' if code_s == '404' else ('warn' if code_s in ('500', 'error') else ('lock' if code_s == '403' else 'alert'))) %}
+        <div class="panel-status-badge" aria-hidden="true">{{ icon(badge, 'panel-status-badge-ico') }}</div>
 
         {% if kicker %}
         <p class="panel-status-kicker muted"{% if kicker_ltr %} dir="ltr"{% endif %}>{{ kicker }}</p>

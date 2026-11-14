@@ -266,8 +266,8 @@ def icon_svg(name: str) -> Markup:
 
 GROUP_ICONS: dict[str, str] = {
     "شروع": "rocket",
-    "وب پنل": "layout",
-    "پنل ربات": "bot",
+    "سیستم": "layout",
+    "فروشگاه": "bot",
     "پاسارگارد": "server",
     "کمک": "life-buoy",
     "سایر": "book",
@@ -275,7 +275,7 @@ GROUP_ICONS: dict[str, str] = {
 
 # Match web-panel chrome: bot = orange, Pasarguard = blue
 GROUP_TONES: dict[str, str] = {
-    "پنل ربات": "bot",
+    "فروشگاه": "bot",
     "پاسارگارد": "pg",
 }
 

@@ -17,16 +17,22 @@ from app.api.loyalty_pages import _shop_scope
 from app.services.funnel_access import funnel_shop_scope
 from app.services.gift_codes import gift_code_scope
 from app.services.authz import authz_from_staff, can_shop
+from app.api.shop_broadcast_pages import shop_broadcast_scope
 from app.services.marketing_nav import (
     BROADCAST,
     CAMPAIGNS,
+    CASHBACK,
     CLUB,
     CLUB_TRANSACTIONS,
     DISCOUNTS,
     FUNNEL,
     GIFT_CODES,
+    RANDOM_DISCOUNTS,
+    SHOP_BROADCAST,
     TRIAL_USERS,
     MarketingSection,
+    marketing_groups,
+    marketing_hub_sections,
     marketing_sections,
 )
 
@@ -117,7 +123,10 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         self.assertEqual(marketing_sections({}), ())
 
     def test_owner_sees_every_section_in_order(self):
-        self.assertEqual(_keys(OWNER), [CLUB, CLUB_TRANSACTIONS, DISCOUNTS, GIFT_CODES, CAMPAIGNS, TRIAL_USERS, FUNNEL, BROADCAST])
+        self.assertEqual(
+            _keys(OWNER),
+            [CLUB, CLUB_TRANSACTIONS, DISCOUNTS, RANDOM_DISCOUNTS, GIFT_CODES, CASHBACK, CAMPAIGNS, TRIAL_USERS, FUNNEL, BROADCAST],
+        )
 
     def test_legacy_admin_without_owner_principal_gets_no_tenant_sections(self):
         self.assertEqual(marketing_sections(LEGACY_ADMIN), ())
@@ -149,9 +158,18 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         self.assertEqual(_keys(_reseller(["gift_codes"], shop_id=None)), [])
         self.assertNotIn(GIFT_CODES, _keys(_reseller(["loyalty", "campaigns"])))
 
-    def test_reseller_never_sees_broadcast(self):
+    def test_reseller_never_sees_owner_broadcast(self):
         every_perm = ["loyalty", "campaigns", "broadcast", "shop_settings", "dashboard"]
         self.assertNotIn(BROADCAST, _keys(_reseller(every_perm)))
+
+    def test_reseller_sees_shop_broadcast_only_with_broadcast_permission(self):
+        self.assertEqual(_keys(_reseller(["broadcast"])), [SHOP_BROADCAST])
+        self.assertNotIn(SHOP_BROADCAST, _keys(_reseller(["campaigns"])))
+        self.assertNotIn(SHOP_BROADCAST, _keys(_reseller(["shop_settings"])))
+        self.assertEqual(_keys(_reseller(["broadcast"], shop_id=None)), [])
+
+    def test_owner_does_not_see_shop_broadcast_tab(self):
+        self.assertNotIn(SHOP_BROADCAST, _keys(OWNER))
 
     def test_reseller_without_feature_permission_sees_nothing(self):
         self.assertEqual(_keys(_reseller(["dashboard", "tickets"])), [])
@@ -171,7 +189,7 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         self.assertEqual(marketing_sections(staff), ())
 
     def test_visibility_matches_the_route_guards(self):
-        for staff in PROFILES:
+        for staff in PROFILES + [_reseller(["broadcast"]), _reseller(["broadcast"], shop_id=None)]:
             with self.subTest(staff=staff):
                 self.assertEqual(CAMPAIGNS in _keys(staff), _campaigns_route_allows(staff))
                 self.assertEqual(DISCOUNTS in _keys(staff), _discounts_route_allows(staff))
@@ -179,36 +197,47 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
                 self.assertEqual(FUNNEL in _keys(staff), _funnel_route_allows(staff))
                 self.assertEqual(CLUB in _keys(staff), _loyalty_route_allows(staff))
                 self.assertEqual(CLUB_TRANSACTIONS in _keys(staff), _loyalty_route_allows(staff))
+                self.assertEqual(SHOP_BROADCAST in _keys(staff), _shop_broadcast_route_allows(staff))
 
 
-def _render_tabs(sections, active: str) -> str:
+def _shop_broadcast_route_allows(staff: dict) -> bool:
+    try:
+        shop_broadcast_scope(staff)
+    except HTTPException:
+        return False
+    return True
+
+
+def _render_list(sections) -> str:
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES)),
         autoescape=select_autoescape(["html", "xml"]),
     )
-    template = env.from_string(
-        '{% from "_marketing_tabs.html" import marketing_tabs %}'
-        "{{ marketing_tabs(sections, active) }}"
-    )
-    return template.render(sections=sections, active=active)
+    template = env.from_string('{% from "_settings_hub.html" import settings_hub %}{{ settings_hub(rows) }}')
+    return template.render(rows=marketing_hub_sections(sections))
 
 
-class MarketingTabsTemplateTests(unittest.TestCase):
-    def test_marks_only_the_active_section(self):
-        html = _render_tabs(marketing_sections(OWNER), CAMPAIGNS)
-        self.assertEqual(html.count('class="active"'), 1)
-        self.assertIn('href="/campaigns" class="active" aria-current="page"', html)
-        self.assertIn('href="/broadcast" class=""', html)
+class MarketingGroupsTests(unittest.TestCase):
+    def test_eight_pages_become_five_topics(self):
+        groups = marketing_groups(marketing_sections(OWNER))
+        self.assertEqual([g.label for g in groups],
+                         ["باشگاه مشتریان", "تخفیف و کد هدیه", "پیام و کمپین", "کاربران تست", "رفتار کاربر"])
+        keys = [s.key for g in groups for s in g.sections]
+        self.assertEqual(sorted(keys), sorted(s.key for s in marketing_sections(OWNER)))
 
-    def test_single_section_renders_no_strip(self):
-        self.assertEqual(_render_tabs(marketing_sections(_reseller(["campaigns"])), CAMPAIGNS).strip(), "")
+    def test_a_topic_without_allowed_pages_is_left_out(self):
+        groups = marketing_groups(marketing_sections(_reseller(["campaigns", "loyalty"])))
+        self.assertNotIn("تخفیف و کد هدیه", [g.label for g in groups])
 
-    def test_missing_sections_render_no_strip(self):
-        self.assertEqual(_render_tabs((), CLUB).strip(), "")
+    def test_missing_sections_render_an_empty_list(self):
+        self.assertNotIn("hub-row", _render_list(()))
 
-    def test_labels_are_escaped(self):
-        hostile = (MarketingSection("x", "<script>alert(1)</script>", "/loyalty"),) * 2
-        html = _render_tabs(hostile, "x")
+    def test_list_labels_are_escaped(self):
+        hostile = (
+            MarketingSection(CLUB, "<script>alert(1)</script>", "/loyalty"),
+            MarketingSection(CLUB_TRANSACTIONS, "<script>alert(2)</script>", "/loyalty?tab=transactions"),
+        )
+        html = _render_list(hostile)
         self.assertNotIn("<script>", html)
         self.assertIn("&lt;script&gt;", html)
 
@@ -246,14 +275,12 @@ def _page(name: str, path: str, staff: dict, **extra) -> str:
 
 
 class MarketingNavRenderedPageTests(unittest.TestCase):
-    """The real ``render()`` path: sidebar entry and tab strip follow the role."""
+    """The real ``render()`` path: the sidebar entry and the way back to the list follow the role."""
 
-    def test_owner_gets_sidebar_entry_and_full_strip_on_broadcast(self):
+    def test_owner_gets_sidebar_entry_and_way_back_on_broadcast(self):
         html = _page("broadcast.html", "/broadcast", OWNER)
-        self.assertIn("بازاریابی و وفاداری", html)
-        self.assertIn('href="/loyalty?tab=overview"', html)
-        self.assertIn('href="/campaigns"', html)
-        self.assertIn('href="/broadcast" class="active" aria-current="page"', html)
+        self.assertIn('<a href="/marketing" class="nav-item', html)
+        self.assertIn('href="/marketing" aria-label="بازگشت به بازاریابی"', html)
 
     def test_reseller_with_campaigns_only_gets_no_broadcast_or_club_links(self):
         staff = _reseller(["campaigns"])
@@ -269,20 +296,19 @@ class MarketingNavRenderedPageTests(unittest.TestCase):
             campaigns=[],
             mode="campaigns",
         )
-        self.assertIn('href="/campaigns"', html)
+        self.assertIn('href="/marketing" aria-label="بازگشت به بازاریابی"', html)
         self.assertNotIn('href="/broadcast"', html)
         self.assertNotIn('href="/loyalty', html)
-        self.assertNotIn('aria-label="بازاریابی و وفاداری"', html)
 
     def test_reseller_without_marketing_permissions_gets_no_entry(self):
         html = _page("broadcast.html", "/broadcast", _reseller(["dashboard"]))
-        self.assertNotIn("بازاریابی و وفاداری", html)
+        self.assertNotIn('<a href="/marketing" class="nav-item', html)
         self.assertNotIn('href="/broadcast"', html)
         self.assertNotIn('href="/campaigns"', html)
 
 
 class MarketingNavDiscountsPageTests(unittest.TestCase):
-    def test_discounts_page_keeps_its_sidebar_entry_and_joins_the_strip(self):
+    def test_discounts_page_keeps_its_sidebar_entry_and_way_back(self):
         staff = _reseller(["catalog_discounts", "loyalty"])
         html = _page(
             "catalog_discounts.html",
@@ -298,6 +324,6 @@ class MarketingNavDiscountsPageTests(unittest.TestCase):
             modes={},
             request_key="k",
         )
-        self.assertIn("بازاریابی و وفاداری", html)
-        self.assertIn('href="/catalog-discounts" class="active" aria-current="page"', html)
+        self.assertIn('<a href="/marketing" class="nav-item', html)
+        self.assertIn('href="/marketing" aria-label="بازگشت به بازاریابی"', html)
         self.assertNotIn('href="/broadcast"', html)

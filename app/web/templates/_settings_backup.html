@@ -1,10 +1,11 @@
+{% from "_icons.html" import icon %}
 {% from "macros.html" import flash_warn_icon, modal_title %}
 {% set st = restore_status or {} %}
 {% set restore_ops = st.state == 'running' or st.awaiting_restart or st.state == 'error' or st.restart_required %}
 <div class="card settings-card">
   <h2>خروجی / ورودی تنظیمات فروشگاه</h2>
   <p class="muted update-card-caption">پلن‌ها و متن‌ها/سوییچ‌ها را به‌صورت JSON جابه‌جا کنید (جدا از بکاپ کامل ZIP).</p>
-  <div class="actions" style="gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-2)">
+  <div class="actions backup-actions">
     <a class="btn btn-ghost" href="/settings/shop-export">دانلود خروجی JSON</a>
   </div>
   <form method="post" action="/settings/shop-import" enctype="multipart/form-data" class="form-stack">
@@ -80,7 +81,7 @@
 
     <div id="backup-op-status" class="flash warn" {% if not st.state or st.state == 'idle' or st.state == 'done' %}hidden{% endif %}>
       <strong id="backup-op-title">{% if st.state == 'running' %}عملیات در حال اجرا{% elif st.state == 'error' %}خطا{% else %}وضعیت{% endif %}</strong>
-      <span class="muted" id="backup-op-msg" style="display:block">{{ st.message or st.state or '' }}</span>
+      <span class="muted text-block" id="backup-op-msg">{{ st.message or st.state or '' }}</span>
       {% if st.safety_id %}<small id="backup-op-safety">بکاپ ایمنی: <code>{{ st.safety_id }}</code></small>{% endif %}
     </div>
 
@@ -105,7 +106,7 @@
           با روشن کردن این گزینه، توکن ربات تلگرام، رمزها و اسرار سرور داخل ZIP می‌روند.
           حتی بدون .env، فایل <code dir="ltr">web_admin.json</code> (ورود وب‌پنل) همچنان در بکاپ هست — فایل را جای امن نگه دارید.
         </div>
-        <label class="support-enabled" style="margin-top:var(--space-2)">
+        <label class="support-enabled backup-auto-toggle">
           <span>تأیید می‌کنم که .env (اسرار) داخل بکاپ برود</span>
           <span class="ui-switch">
             <input type="checkbox" name="confirm_include_env" value="1" id="backup-confirm-include-env" />
@@ -168,14 +169,14 @@
     </div>
     <div class="progress-wrap" aria-label="نوار پیشرفت ریستور">
       <div class="progress-bar">
-        <div class="progress-fill" id="backup-restore-fill" style="width: {{ (st.percent or 0) if restore_ops else 0 }}%"></div>
+        <div class="progress-fill" id="backup-restore-fill" style="--p: {{ (st.percent or 0) if restore_ops else 0 }}"></div>
       </div>
       <div class="progress-meta">
         <span id="backup-restore-step-label">{% if restore_ops %}{{ st.step or st.message or 'در حال ریستور…' }}{% else %}آماده{% endif %}</span>
-        <strong id="backup-restore-percent">{{ (st.percent or 0) if restore_ops else 0 }}٪</strong>
+        <strong id="backup-restore-percent">{{ ((st.percent or 0) if restore_ops else 0) | fa }}٪</strong>
       </div>
     </div>
-    <p class="muted" id="backup-restore-state" style="margin:var(--space-2) 0 0">
+    <p class="muted progress-note" id="backup-restore-state">
       {% if restore_ops %}{{ st.message or '' }}{% endif %}
     </p>
     {% if st.safety_id %}<small class="muted" id="backup-restore-safety">بکاپ ایمنی: <code>{{ st.safety_id }}</code></small>{% else %}
@@ -199,8 +200,8 @@
   {% else %}
   <div class="snap-list">
     {% for b in backups %}
-    <div class="snap-row" style="flex-wrap:wrap;gap: var(--space-1)">
-      <div style="flex:1;min-width:220px">
+    <div class="snap-row snap-row-wrap">
+      <div class="snap-main">
         <strong>{{ b.filename }}</strong>
         {% if loop.first %}
           {% if values.get('backup_last_verify_ok') == '1' %}
@@ -211,7 +212,7 @@
           <span class="badge neutral backup-health-tag" title="هنوز بررسی نشده">بررسی‌نشده</span>
           {% endif %}
         {% endif %}
-        <small class="muted" style="display:block">
+        <small class="muted text-block">
           {{ b.created_at }} · {{ b.size_human }} · v{{ b.app_version }}
           {% if b.note %} · {{ b.note }}{% endif %}
         </small>
@@ -222,9 +223,9 @@
         {% endif %}
         {% if b.sha256 %}<small class="mono muted" dir="ltr">sha256: {{ b.sha256[:16] }}…</small>{% endif %}
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap: var(--space-1);align-items:center">
+      <div class="snap-actions">
         {% if loop.first %}
-        <form method="post" action="/backup/verify-last" style="display:inline">
+        <form method="post" action="/backup/verify-last" class="form-inline">
           <button class="btn btn-ghost btn-sm" type="submit" title="بررسی ZIP و manifest آخرین بکاپ">بررسی سلامت</button>
         </form>
         {% endif %}
@@ -248,15 +249,18 @@
   {% endif %}
 </div>
 
-<div class="ui-modal" id="modal-backup-restore" hidden>
+<div class="ui-modal ds ds-dialog" id="modal-backup-restore" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="backup-restore-title">
-    <div class="ui-modal-head">
-      {{ modal_title('overview', 'تأیید ریستور بکاپ', caption='این عمل را تأیید کنید', tone='neutral', heading_id='backup-restore-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('overview', 'تأیید ریستور بکاپ', tone='neutral', heading_id='backup-restore-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
+      </div>
     </div>
-    <form method="post" action="/backup/restore/0" class="form-stack" id="backup-restore-form">
+    <form method="post" action="/backup/restore/0" class="form-stack ds-body" id="backup-restore-form">
       <input type="hidden" name="confirm" value="1" />
+      <section class="ds-sec ds-sec-first"><div class="ds-card">
       <p class="muted">
         همه داده‌های فعلی با بکاپ
         <strong id="backup-restore-name">—</strong>
@@ -269,10 +273,11 @@
           <span class="ui-switch-track" aria-hidden="true"></span>
         </span>
       </label>
-      <div class="actions">
+      </div></section>
+      <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
         <button class="btn btn-danger" type="submit" id="backup-restore-btn">تأیید ریستور</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      </div></div>
     </form>
   </div>
 </div>
@@ -400,7 +405,7 @@
     setFormBusy(createForm, true);
     if (stepLabel) stepLabel.textContent = 'راه‌اندازی مجدد سرویس';
     if (stateEl) stateEl.textContent = extra || RESTART_MSG;
-    if (fill) fill.style.width = '98%';
+    if (fill) fill.style.setProperty('--p', '98');
     if (percentEl) percentEl.textContent = '۹۸٪';
     markSteps('restart');
   }
@@ -488,7 +493,7 @@
     if (d.state === 'running' || d.state === 'error' || d.restart_required) showRestoreOps(true);
 
     const pct = Number(d.percent || 0);
-    if (fill) fill.style.width = pct + '%';
+    if (fill) fill.style.setProperty('--p', String(pct));
     if (percentEl) percentEl.textContent = pct + '٪';
     const stepKey = d.step_key || '';
     if (stepLabel) {

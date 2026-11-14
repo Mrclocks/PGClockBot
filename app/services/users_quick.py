@@ -27,16 +27,19 @@ _BULK_SEND_DELAY = 0.05
 _TAG_RE = re.compile(r"<[^>]+>")
 
 
-def sanitize_staff_message(raw: str) -> str:
-    """Plain staff text → safe Telegram HTML (escaped, newlines preserved)."""
+def normalize_staff_message(raw: str) -> str:
+    """Validate staff text and strip pasted tags (plain text, not HTML-escaped)."""
     text = (raw or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not text:
         raise ValueError("متن پیام خالی است")
     if len(text) > MAX_STAFF_MESSAGE_LEN:
         raise ValueError(f"متن پیام حداکثر {MAX_STAFF_MESSAGE_LEN} کاراکتر باشد")
-    # Strip any tags the staff pasted, then escape.
-    text = _TAG_RE.sub("", text)
-    return html.escape(text)
+    return _TAG_RE.sub("", text)
+
+
+def sanitize_staff_message(raw: str) -> str:
+    """Plain staff text → safe Telegram HTML (escaped, newlines preserved)."""
+    return html.escape(normalize_staff_message(raw))
 
 
 def wrap_staff_dm(body_html: str, *, actor: str | None = None) -> str:
@@ -55,20 +58,40 @@ async def send_staff_dm(
     *,
     shop_id: int | None,
     actor: str | None = None,
+    sender_tg: int | None = None,
 ) -> None:
-    """Send a scoped staff DM through the acting shop's bot (None = platform bot)."""
+    """Send a scoped staff DM through the acting shop's bot (None = platform bot).
+
+    Opens a ticket so the delivered message carries پاسخ / بستن like ticket notices.
+    """
     if user.is_blocked:
         raise ValueError("کاربر مسدود است — ابتدا مسدودی را بردارید")
     if not user.telegram_id:
         raise ValueError("شناسه تلگرام کاربر مشخص نیست")
-    body = sanitize_staff_message(text)
-    payload = wrap_staff_dm(body, actor=actor)
+    plain = normalize_staff_message(text)
+    payload = wrap_staff_dm(html.escape(plain), actor=actor)
 
+    from app.services.notifications import ticket_action_markup
     from app.services.reseller_bots import open_notify_bot_for_user
+    from app.services.tickets import create_staff_outbound_ticket
+
+    ticket = await create_staff_outbound_ticket(
+        session,
+        user_id=int(user.id),
+        body=plain,
+        sender_tg=int(sender_tg or 0),
+        reseller_id=shop_id,
+    )
+    markup = ticket_action_markup(int(ticket.id))
 
     bot, should_close = await open_notify_bot_for_user(session, user, shop_id=shop_id)
     try:
-        await bot.send_message(int(user.telegram_id), payload, parse_mode="HTML")
+        await bot.send_message(
+            int(user.telegram_id),
+            payload,
+            parse_mode="HTML",
+            reply_markup=markup,
+        )
     finally:
         if should_close:
             await bot.session.close()
@@ -141,6 +164,7 @@ async def bulk_staff_dm(
     *,
     shop_id: int | None,
     actor: str | None = None,
+    sender_tg: int | None = None,
 ) -> dict[str, int]:
     """Send the same staff DM to many users (hard-capped)."""
     targets = [u for u in users if u and not u.is_blocked and u.telegram_id]
@@ -149,17 +173,32 @@ async def bulk_staff_dm(
     if len(targets) > MAX_BULK_RECIPIENTS:
         raise ValueError(f"حداکثر {MAX_BULK_RECIPIENTS} گیرنده در هر ارسال")
 
-    body = sanitize_staff_message(text)
-    payload = wrap_staff_dm(body, actor=actor)
+    plain = normalize_staff_message(text)
+    payload = wrap_staff_dm(html.escape(plain), actor=actor)
+    from app.services.notifications import ticket_action_markup
+    from app.services.reseller_bots import open_notify_bot_for_user
+    from app.services.tickets import create_staff_outbound_ticket
+
     ok = 0
     fail = 0
     for u in targets:
         try:
-            from app.services.reseller_bots import open_notify_bot_for_user
-
+            ticket = await create_staff_outbound_ticket(
+                session,
+                user_id=int(u.id),
+                body=plain,
+                sender_tg=int(sender_tg or 0),
+                reseller_id=shop_id,
+            )
+            markup = ticket_action_markup(int(ticket.id))
             bot, should_close = await open_notify_bot_for_user(session, u, shop_id=shop_id)
             try:
-                await bot.send_message(int(u.telegram_id), payload, parse_mode="HTML")
+                await bot.send_message(
+                    int(u.telegram_id),
+                    payload,
+                    parse_mode="HTML",
+                    reply_markup=markup,
+                )
                 ok += 1
             finally:
                 if should_close:

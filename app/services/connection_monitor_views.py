@@ -14,7 +14,13 @@ from app.services.connection_monitor_settings import LOCAL_PROBE_ID, MonitorSett
 from app.services.connection_monitor_snapshots import snapshot_health, stored_utc
 from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorIssue
 from app.services.connection_status_policy import aggregate_host, is_fresh
-from app.services.connection_status_types import SLOW_DELAY_MS, ConnectionStatus, EndpointIdentity, HostHealth, MonitorReason
+from app.services.connection_status_types import (
+    SLOW_DELAY_MS,
+    ConnectionStatus,
+    EndpointIdentity,
+    HostHealth,
+    MonitorReason,
+)
 
 
 PAGE_SIZE = 10
@@ -40,6 +46,7 @@ class MonitorAdminPage:
     settings: MonitorSettings
     targets: tuple[MonitorTargetView, ...]
     next_id: int | None
+    stop_reason: str | None = None
 
 
 def target_health(target: ConnectionMonitorTarget, snapshots: tuple[ConnectionMonitorSnapshot, ...], *,
@@ -117,8 +124,16 @@ async def monitor_admin_page(session: AsyncSession, access: MonitorAccess, *, no
     ).limit(1))
     ready = state is not None and settings.enabled and is_fresh(stored_utc(state.catalog_synced_at), now=now)
     views = await target_views(session, targets[:PAGE_SIZE], runtime_ready=ready, now=now, runtime_enabled=settings.enabled)
+    stop_reason = None
+    if not settings.enabled:
+        stop_reason = await session.scalar(select(ConnectionMonitorSnapshot.reason).where(
+            ConnectionMonitorSnapshot.reseller_id.is_(None),
+            ConnectionMonitorSnapshot.reason == MonitorReason.USER_MISSING.value,
+        ).limit(1))
     await session.commit()
-    return MonitorAdminPage(settings, views, views[-1].id if len(targets) > PAGE_SIZE else None)
+    return MonitorAdminPage(
+        settings, views, views[-1].id if len(targets) > PAGE_SIZE else None, stop_reason,
+    )
 
 
 async def monitor_target_view(session: AsyncSession, access: MonitorAccess, *, target_id: int, now: datetime) -> MonitorTargetView:

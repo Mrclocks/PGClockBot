@@ -234,7 +234,10 @@ async def bulk_renew_users(
     session: AsyncSession,
     staff: dict,
     user_ids: list[int],
+    *,
+    renewed: list[tuple[BotUser, str]] | None = None,
 ) -> tuple[int, int]:
+    """Renew each user's critical service; ``renewed``, when given, receives (user, panel username) of each success."""
     from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope, resolve_shop_scope_id
     from app.services.users_quick import quick_renew_user
 
@@ -251,10 +254,12 @@ async def bulk_renew_users(
             fail += 1
             continue
         try:
-            await quick_renew_user(
+            service, _label = await quick_renew_user(
                 session, user, service_id=None, staff=staff, shop_id=resolve_shop_scope_id(staff)
             )
             ok += 1
+            if renewed is not None:
+                renewed.append((user, service.pg_username or ""))
         except Exception:
             logger.debug("bulk renew failed uid=%s", uid, exc_info=True)
             fail += 1

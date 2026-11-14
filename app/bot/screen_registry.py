@@ -18,11 +18,13 @@ from typing import Any
 
 from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 
+from app.bot import keyboards as kb
 from app.bot import nav_inline as hubs
 from app.bot import reply_keyboards as rk
 from app.bot.button_sources import recording_button_sources
 from app.bot.edit_mode import without_editor
 from app.bot.reseller_hub_groups import RESELLER_GROUPS
+from app.db.models import Role
 from app.py_compat import StrEnum
 from app.services.button_styles import CATALOG_IDS, setting_key
 from app.services.screen_titles import SCREEN_TITLE_DEFAULTS
@@ -104,6 +106,16 @@ def _customer_screens() -> list[ScreenSpec]:
         # The card belongs to one service; the editor returns to the service list.
         customer("c.service", "کارت سرویس", lambda ctx: hubs.service_card_keyboard(0, ctx.ui), "svc:list"),
         customer("c.service_more", "بیشتر سرویس", lambda ctx: hubs.service_more_keyboard(0, ctx.ui, wireguard=True), "svc:list"),
+        # The shop's first step with every entry on, so each one can be renamed and recolored.
+        customer(
+            "c.shop",
+            "فروشگاه",
+            lambda ctx: kb.shop_kind_keyboard(ctx.ui, fixed_on=True, trial_on=True, custom_on=True, wholesale_on=True),
+            "shop:list",
+        ),
+        # Plan lists belong to a category or kind; the editor returns to the shop's first step.
+        customer("c.shop.plans", "لیست پلن‌ها", lambda ctx: kb.plans_keyboard([], ctx.ui), "shop:list"),
+        customer("c.shop.wholesale", "پلن‌های عمده", lambda ctx: kb.wholesale_plans_keyboard([], ctx.ui), "shop:list"),
     ]
 
 
@@ -114,6 +126,13 @@ def _admin_screens() -> list[ScreenSpec]:
         return ScreenSpec(screen_id, title, Audience.ADMIN, build, reopen_callback=reopen)
 
     return [
+        # The owner's own main menu: the customer buttons plus «پنل ادمین», built as the admin sees it.
+        admin(
+            "a.main",
+            "منوی اصلی ادمین",
+            lambda ctx: rk.main_reply_keyboard(Role.ADMIN.value, has_services=True, ui=ctx.ui),
+            "menu:home",
+        ),
         admin("a.home", "پنل ادمین", lambda ctx: hubs.admin_groups_hub_keyboard(ctx.ui), "nv:adm:home"),
         admin("a.ops", "عملیات روزانه", lambda ctx: hubs.admin_ops_hub_keyboard(ctx.ui), "nv:adm:ops"),
         admin(
@@ -165,6 +184,12 @@ def _reseller_screens() -> list[ScreenSpec]:
             "r.settings", "تنظیمات فروشگاه", lambda ctx: hubs.reseller_settings_hub_keyboard(ctx.ui), "res:st:hub"
         ),
         reseller("r.plans", "پلن‌های فروش", lambda ctx: hubs.reseller_plans_hub_keyboard(ctx.ui), "res:plans"),
+        reseller(
+            "r.broadcast",
+            "پیام گروهی",
+            lambda ctx: hubs.shop_broadcast_hub_keyboard(ctx.ui),
+            "shp:bc:hub",
+        ),
         *(
             reseller(
                 group.screen_id,

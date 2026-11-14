@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 
+from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser
+from app.services.notice_links import notice_markup
 from app.services.reseller_bots import ATTRIBUTED_SHOP
 from app.services.chat_records import keeps_sent
 
@@ -22,12 +24,14 @@ async def notify_payer(
     body: str,
     send_kw: dict | None = None,
     shop_id: int | None | object = ATTRIBUTED_SHOP,
+    reply_markup: InlineKeyboardMarkup | None = None,
 ) -> bool:
     """Send a status message to the payer. Returns True on success.
 
     ``shop_id`` is the shop the message is about (an order's or payment's shop; None =
     platform); without it the customer's attributed shop's bot is used. ``body`` may be
-    a packed rich-text setting value (premium emoji). Callers
+    a packed rich-text setting value (premium emoji). ``reply_markup`` adds inline buttons under the
+    message (for example the support button). Callers
     may also pass prebuilt ``send_kw`` (entities / parse_mode) with a final
     plain ``body`` string.
     """
@@ -55,6 +59,8 @@ async def notify_payer(
         bot, should_close = await open_notify_bot_for_user(session, user, shop_id=shop_id)
         try:
             msg_kw = {"parse_mode": "HTML", **kw}
+            if reply_markup is not None:
+                msg_kw["reply_markup"] = notice_markup(reply_markup)
             await bot.send_message(user.telegram_id, text, **msg_kw)
         finally:
             if should_close:

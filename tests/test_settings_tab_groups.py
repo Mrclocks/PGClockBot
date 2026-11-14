@@ -15,13 +15,15 @@ from app.services.settings_tab_groups import (
     FALLBACK_GROUP_KEY,
     group_settings_tabs,
 )
+from app.services.settings_hub import hub_sections, settings_place
 from app.services.users import SETTINGS_TABS
 
 TEMPLATES = Path(__file__).resolve().parents[1] / "app/web/templates"
 
 
 def _flat_keys(groups) -> list[str]:
-    return [tab.key for group in groups for tab in group.tabs]
+    """Every tab key a page can open: plain tabs and the sections of merged tabs."""
+    return [s.key for group in groups for tab in group.tabs for s in (tab.sections or (tab,))]
 
 
 class GroupSettingsTabsTests(unittest.TestCase):
@@ -79,6 +81,7 @@ def _render(template: str, macro: str, *args) -> str:
         loader=FileSystemLoader(str(TEMPLATES)),
         autoescape=select_autoescape(["html", "xml"]),
     )
+    env.globals.update(settings_place=settings_place, hub_sections=hub_sections)
     source = (
         "{% from \"" + template + "\" import " + macro + " %}"
         "{{ " + macro + "(" + ", ".join(f"a{i}" for i in range(len(args))) + ") }}"
@@ -87,14 +90,20 @@ def _render(template: str, macro: str, *args) -> str:
 
 
 class SettingsTabsTemplateTests(unittest.TestCase):
-    def test_owner_page_renders_groups_and_only_the_active_groups_tabs(self):
+    def test_a_settings_page_shows_only_the_sections_of_its_own_entry(self):
+        # Groups and tabs are reached from the area's list; the page keeps one row: its own sections.
         groups = group_settings_tabs(SETTINGS_TABS, "colors")
         html = _render("_settings_tabs.html", "settings_tabs", "colors", SETTINGS_TABS, groups)
-        self.assertEqual(html.count("settings-tabs-groups"), 1)
-        self.assertEqual(html.count('class="active"'), 2)
-        self.assertIn('href="/settings?tab=welcome" class="active"', html)
+        self.assertNotIn("settings-tabs-groups", html)
+        self.assertEqual(html.count("<nav"), 1)
+        self.assertIn('href="/settings?tab=buttons" class=""', html)
         self.assertIn('href="/settings?tab=colors" class="active"', html)
-        self.assertNotIn('href="/settings?tab=naming" class="active"', html)
+        self.assertNotIn('href="/settings?tab=messages"', html)
+        self.assertNotIn('href="/settings?tab=naming"', html)
+
+    def test_a_page_without_sections_has_no_row(self):
+        groups = group_settings_tabs(SETTINGS_TABS, "limits")
+        self.assertNotIn("<nav", _render("_settings_tabs.html", "settings_tabs", "limits", SETTINGS_TABS, groups))
 
     def test_shop_page_links_stay_on_the_shop_settings_base(self):
         groups = group_settings_tabs(RESELLER_SETTINGS_TABS, "welcome")
@@ -107,8 +116,11 @@ class SettingsTabsTemplateTests(unittest.TestCase):
             "/shop-settings",
             groups,
         )
-        self.assertIn('href="/shop-settings?tab=messages"', html)
+        self.assertIn('href="/shop-settings?tab=appearance"', html)
         self.assertNotIn('href="/settings?tab=', html)
+        rows = _render("_settings_hub.html", "settings_hub", hub_sections(groups, "/shop-settings", area_icon="bot"))
+        self.assertIn('href="/shop-settings?tab=messages"', rows)
+        self.assertNotIn('href="/settings?tab=', rows)
 
     def test_flat_strip_still_renders_without_groups(self):
         html = _render("_settings_tabs.html", "settings_tabs", "menu", SETTINGS_TABS)
@@ -116,11 +128,32 @@ class SettingsTabsTemplateTests(unittest.TestCase):
         self.assertEqual(html.count("<a "), len(SETTINGS_TABS))
 
     def test_hostile_labels_are_escaped(self):
-        tabs = [("welcome", "<script>alert(1)</script>"), ("menu", "x")]
-        groups = group_settings_tabs(tabs, "welcome")
-        html = _render("_settings_tabs.html", "settings_tabs", "welcome", tabs, groups)
-        self.assertNotIn("<script>", html)
+        tabs = [("welcome", "x"), ("menu", "<script>alert(1)</script>"), ("appearance", "y")]
+        groups = group_settings_tabs(tabs, "menu")
+        rows = _render("_settings_hub.html", "settings_hub", hub_sections(groups, "/settings", area_icon="bot"))
+        self.assertIn("&lt;script&gt;", rows)
+        self.assertNotIn("<script>", rows)
+        self.assertNotIn("<script>", _render("_settings_tabs.html", "settings_tabs", "welcome", tabs, groups))
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RegroupedLayoutTests(unittest.TestCase):
+    def test_owner_tabs_are_grouped_by_what_they_change(self):
+        groups = group_settings_tabs(SETTINGS_TABS, "welcome")
+        layout = {g.label: [t.key for t in g.tabs] for g in groups}
+        self.assertEqual(list(layout), ["ظاهر ربات", "متن‌ها", "فروش و سرویس", "هشدار و گزارش"])
+        self.assertEqual(layout["متن‌ها"], ["messages", "buttons", "screens"])
+        self.assertIn("links", layout["ظاهر ربات"])
+        self.assertNotIn("bot", [k for keys in layout.values() for k in keys])
+
+    def test_a_reseller_keeps_their_own_bot_in_its_own_group(self):
+        groups = group_settings_tabs(RESELLER_SETTINGS_TABS, "bot")
+        own = [g for g in groups if [t.key for t in g.tabs] == ["bot"]]
+        self.assertEqual([(g.label, g.is_active) for g in own], [("ربات اختصاصی", True)])
+
+    def test_no_label_is_shared_with_the_sidebar_action_centre(self):
+        labels = {g.label for g in group_settings_tabs(SETTINGS_TABS, "welcome")}
+        self.assertNotIn("اعلان‌ها", labels)

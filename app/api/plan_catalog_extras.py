@@ -12,8 +12,24 @@ from fastapi import Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.numbers import to_fa_digits
+from app.services.service_addons import PackRow
 from app.services.shop_scope import ShopScopeError
 
+
+
+def pack_rows_from_form(amounts: list[float], prices: list[int], styles: list[str]) -> list[PackRow]:
+    """Pair the repeated amount/price/colour fields of the pack form into rows."""
+    if len(prices) != len(amounts) or len(styles) not in (0, len(amounts)):
+        raise ValueError("ردیف‌های بسته کامل نیست")
+    colours = styles or ["inherit"] * len(amounts)
+    return [PackRow(amount=a, price=p, button_style=c) for a, p, c in zip(amounts, prices, colours, strict=True)]
+
+
+def packs_saved_message(count: int) -> str:
+    if count == 1:
+        return "بسته افزونه ذخیره شد"
+    return f"{to_fa_digits(str(count))} بسته افزونه ذخیره شد"
 
 def register_plan_catalog_extras(app, *, require_perm, get_db):
     # —— Plan categories ——
@@ -140,36 +156,40 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
     @app.post("/plans/addons")
     async def plans_addon_create(
         request: Request,
-        name: str = Form(...),
         kind: str = Form(...),
-        amount: float = Form(...),
-        price: int = Form(...),
+        amount: list[float] = Form(...),
+        price: list[int] = Form(...),
+        button_style: list[str] = Form([]),
+        name: str = Form(""),
         description: str = Form(""),
         sort_order: int = Form(0),
         category_id: str = Form(""),
+        plan_id: str = Form(""),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.service_addons import create_pack
+        from app.services.service_addons import create_packs
 
+        plan_raw = str(plan_id or "").strip()
+        resolved_plan = int(plan_raw) if plan_raw.isdigit() else None
         try:
-            await create_pack(
+            packs = await create_packs(
                 session,
                 staff,
-                name=name,
                 kind=kind,
-                amount=amount,
-                price=price,
+                rows=pack_rows_from_form(amount, price, button_style),
+                name=name,
                 description=description,
                 sort_order=sort_order,
-                category_id=category_id,
+                category_id=category_id if resolved_plan is None else ...,
+                plan_id=resolved_plan,
             )
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(
                 f"/plans?err={quote(str(e))}#user-service-addons", status_code=303
             )
         return RedirectResponse(
-            f"/plans?ok={quote('بسته افزونه ذخیره شد')}#user-service-addons",
+            f"/plans?ok={quote(packs_saved_message(len(packs)))}#user-service-addons",
             status_code=303,
         )
 

@@ -1,20 +1,36 @@
+{% from "_icons.html" import icon %}
 {# Loyalty club settings modal #}
 {% from "macros.html" import modal_title %}
+{% from "_settings_hub.html" import modal_settings_list, modal_shown_section, modal_list_heading, modal_list_back %}
 
 {% set open_loy = open_loyalty_settings %}
 {% set strip_keys = 'settings,supports,stab,saved,ok,err,msg,_' %}
 {% set show_referral_tab = referral_tab_groups and referral_tab_groups|length > 0 %}
 {% set loy_tab = loyalty_settings_tab or 'club' %}
-<div class="ui-modal{% if open_loy %} open{% endif %}" id="modal-loyalty-settings"
+{% set rows = [{'key': 'club', 'label': 'باشگاه', 'desc': 'روشن بودن باشگاه و امتیاز هر خرید', 'icon': 'loyalty', 'url': 'settings=club'}] %}
+{% if show_referral_tab %}{% set rows = rows + [{'key': 'referral', 'label': 'معرف و دعوت', 'desc': 'پاداش دعوت و متن پیام معرفی', 'icon': 'users-pair', 'url': 'settings=referral'}] %}{% endif %}
+{% set rows = rows + [
+  {'key': 'rules', 'label': 'قوانین امتیاز', 'desc': 'کارهایی که امتیاز می‌دهند', 'icon': 'queue', 'url': 'settings=rules'},
+  {'key': 'rewards', 'label': 'جوایز', 'desc': 'جوایزی که با امتیاز گرفته می‌شوند', 'icon': 'gift', 'url': 'settings=rewards'},
+  {'key': 'wheel', 'label': 'چرخ شانس', 'desc': 'جایزه‌ها و شانس هر خانهٔ چرخ', 'icon': 'refresh', 'url': 'settings=wheel'},
+  {'key': 'tiers', 'label': 'سطوح', 'desc': 'سطح‌های مشتری و امتیاز لازم برای هر سطح', 'icon': 'sales', 'url': 'settings=tiers'},
+] %}
+{# ?settings=1 opens the list; a named section opens that section. #}
+{% set requested = request.query_params.get('settings', '') if request is defined else '' %}
+{% set shown = modal_shown_section(rows, loy_tab if requested == loy_tab else '') %}
+<div class="ui-modal ds ds-settings{% if open_loy %} open{% endif %}" id="modal-loyalty-settings"
      {% if not open_loy %}hidden{% endif %}
-     data-modal-strip-keys="{{ strip_keys }}">
+     data-modal-strip-keys="{{ strip_keys }}" data-modal-list data-modal-list-title="تنظیمات باشگاه مشتریان" data-modal-list-url="settings=1">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl settings-modal-panel" role="dialog" aria-modal="true" aria-labelledby="loyalty-settings-title">
-    <div class="ui-modal-head">
-      {{ modal_title('loyalty', 'تنظیمات باشگاه مشتریان', caption='امتیاز، دعوت، جوایز و چرخ شانس', tone='brand', heading_id='loyalty-settings-title') }}
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+      {{ modal_list_back(rows, shown) }}
+      {{ modal_title('loyalty', modal_list_heading(rows, shown, 'تنظیمات باشگاه مشتریان'), tone='brand', heading_id='loyalty-settings-title') }}
       <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        {{ icon('close', 'ico') }}
       </button>
+      </div>
     </div>
     {% if open_loy and (flash_ok or flash_err) %}
     <div class="settings-modal-flash">
@@ -22,18 +38,9 @@
       {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
     </div>
     {% endif %}
-    <nav class="section-tabs settings-tabs modal-section-tabs" role="tablist" aria-label="تب‌های تنظیمات باشگاه" data-modal-tabs>
-      <button type="button" class="tab-btn {% if loy_tab == 'club' %}active{% endif %}" data-modal-tab="club" role="tab">باشگاه</button>
-      {% if show_referral_tab %}
-      <button type="button" class="tab-btn {% if loy_tab == 'referral' %}active{% endif %}" data-modal-tab="referral" role="tab">معرف و دعوت</button>
-      {% endif %}
-      <button type="button" class="tab-btn {% if loy_tab == 'rules' %}active{% endif %}" data-modal-tab="rules" role="tab">قوانین امتیاز</button>
-      <button type="button" class="tab-btn {% if loy_tab == 'rewards' %}active{% endif %}" data-modal-tab="rewards" role="tab">جوایز</button>
-      <button type="button" class="tab-btn {% if loy_tab == 'wheel' %}active{% endif %}" data-modal-tab="wheel" role="tab">چرخ شانس</button>
-      <button type="button" class="tab-btn {% if loy_tab == 'tiers' %}active{% endif %}" data-modal-tab="tiers" role="tab">سطوح</button>
-    </nav>
+    {{ modal_settings_list(rows, shown) }}
     <div class="settings-modal-body">
-      <div class="modal-tab-panel" data-modal-tab-panel="club" {% if loy_tab != 'club' %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="club" {% if shown != 'club' %}hidden{% endif %}>
         <form method="post" action="/loyalty/settings" class="settings-form">
           <input type="hidden" name="next_tab" value="{{ tab or 'overview' }}" />
           <div class="card settings-card">
@@ -54,7 +61,7 @@
               <div class="setting-item full">
                 <label>نرخ تبدیل امتیاز به کیف پول (تومان به‌ازای هر امتیاز)
                   <input name="points_to_wallet_rate" type="number" data-money min="0" value="{{ wallet_rate }}" dir="ltr" />
-                  <small class="muted">مرجع جوایز نوع کیف‌پول. پاداش کیف‌پولی دعوت (`referral_bonus`) در تنظیمات مالی جداست.</small>
+                  <small class="muted">مرجع جوایز نوع کیف‌پول. پاداش کیف‌پولی دعوت در زبانهٔ «معرف و دعوت» همین تنظیمات است.</small>
                 </label>
               </div>
             </div>
@@ -65,24 +72,23 @@
         </form>
       </div>
       {% if show_referral_tab %}
-      <div class="modal-tab-panel" data-modal-tab-panel="referral" {% if loy_tab != 'referral' %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="referral" {% if shown != 'referral' %}hidden{% endif %}>
         {% set settings_form_action = referral_text_action %}
         {% set tab_groups = referral_tab_groups %}
         {% set groups = referral_groups %}
-        {% set show_pending_orders = false %}
         {% include "_domain_settings_form.html" %}
       </div>
       {% endif %}
-      <div class="modal-tab-panel" data-modal-tab-panel="rules" {% if loy_tab != 'rules' %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="rules" {% if shown != 'rules' %}hidden{% endif %}>
         {% include "_loyalty_rules_panel.html" %}
       </div>
-      <div class="modal-tab-panel" data-modal-tab-panel="rewards" {% if loy_tab != 'rewards' %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="rewards" {% if shown != 'rewards' %}hidden{% endif %}>
         {% include "_loyalty_rewards_panel.html" %}
       </div>
-      <div class="modal-tab-panel" data-modal-tab-panel="wheel" {% if loy_tab != 'wheel' %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="wheel" {% if shown != 'wheel' %}hidden{% endif %}>
         {% include "_loyalty_wheel_panel.html" %}
       </div>
-      <div class="modal-tab-panel" data-modal-tab-panel="tiers" {% if loy_tab != 'tiers' %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="tiers" {% if shown != 'tiers' %}hidden{% endif %}>
         {% include "_loyalty_tiers_panel.html" %}
       </div>
     </div>

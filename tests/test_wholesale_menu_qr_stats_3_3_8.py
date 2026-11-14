@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+from tests.template_source import template_with_includes
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -158,7 +159,7 @@ class WholesaleLogicTests(unittest.TestCase):
         self.assertNotIn("فروش عمده", sflat)
 
     def test_web_modal_and_route_exist(self):
-        html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        html = template_with_includes("plans.html")
         self.assertIn("panel-user-wholesale", html)
         self.assertIn("modal-plan-unified", html)
         self.assertIn("/plans/wholesale", html)

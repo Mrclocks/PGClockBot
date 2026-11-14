@@ -13,6 +13,7 @@ from app.bot.nav_input import delete_user_message, finish_text_step
 from app.bot.secret_fields import SECRET, is_secret, secret_prompt, secret_state
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
+from app.services.user_errors import domain_error_text
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 from app.services.resellers import get_reseller_profile, has_bot_perm
 from app.services.support_contacts import (
@@ -1143,7 +1144,7 @@ async def bot_token_save(message: Message, state: FSMContext, session: AsyncSess
         )
         await start_reseller_bot_for_profile(profile.id)
     except ValueError as e:
-        await message.answer(f"❌ {e}")
+        await message.answer(f"❌ {domain_error_text(e)}")
         return
     except Exception:
         await message.answer("❌ توکن نامعتبر است")

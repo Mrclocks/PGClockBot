@@ -1,0 +1,39 @@
+{# Phone bottom bar settings (System settings → «ظاهر و برند»). Expects: mobile_bar (slots, groups).
+   Each slot is a page from the sidebar or «خودکار»; «منو» always closes the bar. #}
+{% set bar = mobile_bar %}
+{% set slot_names = ['جایگاه اول (راست)', 'جایگاه دوم', 'جایگاه سوم', 'جایگاه چهارم'] %}
+<form method="post" action="/settings/mobile-bar" class="settings-form" id="mobile-bar">
+  {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
+  <div class="card settings-card">
+    <h2>نوار موبایل</h2>
+    <p class="muted update-card-caption">
+      صفحه‌های نوار پایین گوشی، از راست به چپ؛ «منو» همیشه آخر است. جایگاه «خودکار»، و صفحه‌ای که کسی اجازه‌اش را
+      ندارد، با ترتیب پیش‌فرض پر می‌شود: داشبورد، مرکز اقدام، مالی، کاربران.
+    </p>
+    <div class="settings-grid">
+      {% for current in bar.slots %}
+      <div class="setting-item">
+        <label>{{ slot_names[loop.index0] }}
+          <select name="bar_slot_{{ loop.index }}">
+            <option value=""{% if not current %} selected{% endif %}>خودکار</option>
+            {% for section, choices in bar.groups %}
+            <optgroup label="{{ section }}">
+              {% for choice in choices %}
+              <option value="{{ choice.key }}"{% if choice.key == current %} selected{% endif %}>{{ choice.label }}</option>
+              {% endfor %}
+            </optgroup>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="actions sticky-actions">
+    <button class="btn" type="submit">ذخیره نوار موبایل</button>
+    <button class="btn btn-ghost" type="submit" name="bar_reset" value="1"
+            data-confirm="ترتیب پیش‌فرض نوار موبایل برگردد؟" data-confirm-title="بازگشت به پیش‌فرض" data-confirm-label="بازگشت">
+      ترتیب پیش‌فرض
+    </button>
+  </div>
+</form>

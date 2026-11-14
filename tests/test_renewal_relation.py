@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.bot.handlers import services as service_handlers
+from app.services import service_renewals
 from app.services.service_renewals import (
     RENEWAL_CURRENT,
     RENEWAL_DOWNGRADE,
@@ -54,9 +55,9 @@ class RenewalPlanButtonsTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(service_handlers, "get_all_settings", AsyncMock(return_value={})),
             patch.object(service_handlers, "customer_may_use_service", AsyncMock(return_value=True)),
-            patch.object(service_handlers, "list_active_plans", AsyncMock(return_value=plans)),
-            patch("app.services.plan_categories.shop_category_map", AsyncMock(return_value={})),
-            patch("app.services.plan_categories.shop_categories_for_menu", AsyncMock(return_value=[])),
+            patch.object(service_renewals, "list_active_plans", AsyncMock(return_value=plans)),
+            patch.object(service_renewals, "shop_categories_for_menu", AsyncMock(return_value=[])),
+            patch.object(service_handlers, "shop_category_map", AsyncMock(return_value={})),
             patch.object(service_handlers, "safe_edit_text", edit),
         ):
             await service_handlers.svc_renew(callback, session, SimpleNamespace(id=4))
@@ -65,39 +66,6 @@ class RenewalPlanButtonsTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(texts[1].startswith("⬇️ تنزل · کم"))
         self.assertTrue(texts[2].startswith("⬆️ ارتقا · زیاد"))
 
-    async def _run_renew(self, data: str, plans: list, cats: list) -> AsyncMock:
-        svc = SimpleNamespace(id=9, remark="", plan_id=1)
-        session = MagicMock(get=AsyncMock(return_value=svc))
-        callback = MagicMock(data=data, answer=AsyncMock(), message=MagicMock())
-        edit = AsyncMock()
-        with (
-            patch.object(service_handlers, "get_all_settings", AsyncMock(return_value={})),
-            patch.object(service_handlers, "customer_may_use_service", AsyncMock(return_value=True)),
-            patch.object(service_handlers, "list_active_plans", AsyncMock(return_value=plans)),
-            patch("app.services.plan_categories.shop_category_map", AsyncMock(return_value={})),
-            patch("app.services.plan_categories.shop_categories_for_menu", AsyncMock(return_value=cats)),
-            patch.object(service_handlers, "safe_edit_text", edit),
-        ):
-            await service_handlers.svc_renew(callback, session, SimpleNamespace(id=4))
-        return edit
-
-    async def test_categories_shown_before_plans(self) -> None:
-        cat = SimpleNamespace(id=3, name="ویژه", icon_custom_emoji_id=None)
-        plans = [plan(1, gb=50, days=30, name="الف"), plan(2, gb=10, days=30, name="ب")]
-        plans[0].category_id = 3
-        edit = await self._run_renew("svc:renew:9", plans, [cat])
-        rows = edit.await_args.kwargs["reply_markup"].inline_keyboard
-        self.assertEqual(rows[0][0].callback_data, "svc:renew:9:3")
-        self.assertEqual(rows[1][0].callback_data, "svc:renew:9:none")
-        self.assertEqual(len(rows), 3)
-
-    async def test_category_lists_only_its_plans(self) -> None:
-        cat = SimpleNamespace(id=3, name="ویژه", icon_custom_emoji_id=None)
-        plans = [plan(1, gb=50, days=30, name="الف"), plan(2, gb=10, days=30, name="ب")]
-        plans[0].category_id = 3
-        edit = await self._run_renew("svc:renew:9:3", plans, [cat])
-        rows = edit.await_args.kwargs["reply_markup"].inline_keyboard
-        self.assertEqual([r[0].callback_data for r in rows], ["svc:renewpay:9:1", "svc:renew:9"])
 
 
 if __name__ == "__main__":

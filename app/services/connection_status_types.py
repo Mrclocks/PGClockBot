@@ -31,6 +31,7 @@ class ObservationKind(StrEnum):
 class MonitorReason(StrEnum):
     CORE_UNAVAILABLE = "core_unavailable"
     ACCOUNT_UNAVAILABLE = "account_unavailable"
+    USER_MISSING = "user_missing"
     CATALOG_UNAVAILABLE = "catalog_unavailable"
     CONTROL_UNAVAILABLE = "control_unavailable"
     PROXY_FAILED = "proxy_failed"

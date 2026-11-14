@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const {groupMoneyDigits, formatMoneyInput, syncMoneyMode} = require("../app/web/static/money-inputs.js");
+const {groupMoneyDigits, formatMoneyInput, syncMoneyMode, normalizeMoneyFormData} = require("../app/web/static/money-inputs.js");
 
 for (const [raw, expected] of [
   ["", ""], ["0", "0"], ["999", "999"], ["1000", "1,000"],
@@ -103,3 +103,23 @@ assert.ok(render.planOptionsHtml([{id: 1, price: 1250000}]).includes("&lt;img&gt
 assert.ok(!render.planOptionsHtml([{id: 1, price: 1250000}]).includes("<img>"));
 assert.ok(!render.activityHtml([{amount: 5}]).includes("<img>"));
 console.log("Web monetary inputs and Mini App price formatting passed");
+
+{
+  // Rows of one list share a field name: every row keeps its own normalized price.
+  const control = (name, money, disabled = false) => ({name, disabled, hasAttribute: (attr) => attr === "data-money" && money});
+  const form = new FormData();
+  [["amount", "5"], ["price", "50,000"], ["amount", "10"], ["price", "۹۰,۰۰۰"], ["note", "1,000"]].forEach(([k, v]) => form.append(k, v));
+  const controls = [control("amount", false), control("price", true), control("amount", false), control("price", true), control("note", false)];
+  normalizeMoneyFormData(form, controls, normalize);
+  assert.deepEqual(form.getAll("price"), ["50000", "90000"]);
+  assert.deepEqual(form.getAll("amount"), ["5", "10"]);
+  assert.deepEqual(form.getAll("note"), ["1,000"]);
+}
+{
+  // A disabled money field is not submitted and does not shift the other values.
+  const control = (name, money, disabled = false) => ({name, disabled, hasAttribute: (attr) => attr === "data-money" && money});
+  const form = new FormData();
+  form.append("price", "1,200");
+  normalizeMoneyFormData(form, [control("price", true, true), control("price", true)], normalize);
+  assert.deepEqual(form.getAll("price"), ["1200"]);
+}

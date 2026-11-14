@@ -542,12 +542,16 @@ async def spin(
     if not key:
         raise ValueError("کلید یکتایی نامعتبر است")
 
+    scope = shop_prize_scope(user)
     existing = (
         await session.execute(
             select(LuckyWheelSpin).where(LuckyWheelSpin.idempotency_key == key)
         )
     ).scalar_one_or_none()
     if existing:
+        # The slot key counts spins in every bot; a replay never shows another customer's or club's spin.
+        if int(existing.user_id) != int(user.id) or (existing.reseller_id or None) != (scope or None):
+            raise ValueError("چند لحظه بعد دوباره تلاش کنید")
         return SpinResult(
             spin=existing,
             prize_type=existing.prize_type,
@@ -559,7 +563,6 @@ async def spin(
             discount_code=existing.discount_code,
         )
 
-    scope = shop_prize_scope(user)
     if not await wheel_feature_enabled(session, reseller_id=scope):
         raise ValueError("چرخ شانس غیرفعال است")
 

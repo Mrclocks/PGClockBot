@@ -1,0 +1,33 @@
+name: Design rules
+
+# Keeps every web panel change on the design system (docs/DESIGN_SYSTEM.md): a pull request may not add
+# design-rule findings to the templates or stylesheets it touches. Existing findings are tolerated, so the
+# panel can only become more consistent. Run locally with: python scripts/design_check.py --details
+
+on:
+  pull_request:
+    paths:
+      - "app/web/templates/**"
+      - "app/web/static/**"
+      - "scripts/design_check.py"
+      - "tests/test_design_check.py"
+
+jobs:
+  design-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check the rules themselves
+        run: |
+          pip install pytest
+          python -m pytest tests/test_design_check.py -q -p no:cacheprovider
+
+      - name: Changed templates and stylesheets gain no design findings
+        run: python scripts/design_check.py "origin/${{ github.base_ref }}" --details

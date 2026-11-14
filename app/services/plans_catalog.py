@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -188,6 +189,36 @@ def filter_groups_for_staff(
     if not allowed:
         return []
     return [g for g in items if int(g.get("id") or 0) in allowed]
+
+
+def staff_must_select_groups(visible_groups: Sequence[Any] | None) -> bool:
+    """True when custom create/edit must require at least one selected group.
+
+    Call only after a successful groups fetch, with the staff-filtered list.
+    A non-empty visible list keeps the legacy mandatory picker; an empty list
+    means this admin cannot see groups (panel may still bind defaults), so
+    selection is optional and ``group_ids`` should be omitted when unset.
+    """
+    return bool(visible_groups)
+
+
+def resolve_user_write_group_ids(
+    selected: Sequence[int] | None,
+    *,
+    visible_groups: Sequence[Any] | None,
+) -> list[int] | None:
+    """Validate selection against visibility; return payload ``group_ids`` or omit.
+
+    Returns ``None`` when the key must be omitted (empty selection and
+    selection is optional). Raises ``ValueError`` with a safe Persian message
+    when selection is required but empty. Callers still run
+    ``groups_allowed_for_staff`` / ``catalog_groups_allowed`` on a non-empty
+    result.
+    """
+    ids = [int(x) for x in (selected or []) if int(x) > 0]
+    if staff_must_select_groups(visible_groups) and not ids:
+        raise ValueError("حداقل یک گروه انتخاب کنید")
+    return ids or None
 
 
 def template_allowed_for_staff(staff: dict | None, template_id: int | None) -> bool:

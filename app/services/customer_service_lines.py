@@ -31,15 +31,15 @@ def _is_active(service: UserService) -> bool:
 
 def _line(service: UserService) -> str:
     plan = getattr(service, "plan", None)
-    parts = [f"<code>{html.escape(service.pg_username)}</code>"]
+    head = f"📦 <code>{html.escape(service.pg_username)}</code>"
     if plan is not None and plan.name:
-        parts.append(html.escape(plan.name))
-    parts.append(_status_label(service))
+        head += f" · {html.escape(plan.name)}"
+    rows = [head, f"📶 {_status_label(service)}"]
     if service.quota_synced_at is not None:
         limit = int(service.quota_data_limit_bytes or 0)
-        parts.append(f"انقضا {format_expire_short(service.quota_expire_at)}")
-        parts.append(f"حجم {format_bytes(limit) if limit > 0 else 'نامحدود'}")
-    return "• " + " · ".join(parts)
+        rows.append(f"📅 انقضا: {format_expire_short(service.quota_expire_at)}")
+        rows.append(f"📦 حجم: {format_bytes(limit) if limit > 0 else 'نامحدود'}")
+    return "\n".join(rows)
 
 
 def service_lines(services: Sequence[UserService], *, limit: int = SERVICE_LINE_LIMIT) -> list[str]:
@@ -47,5 +47,5 @@ def service_lines(services: Sequence[UserService], *, limit: int = SERVICE_LINE_
     ordered = sorted(services, key=lambda s: (not _is_active(s), -int(s.id)))
     lines = [_line(service) for service in ordered[:limit]]
     if len(ordered) > limit:
-        lines.append(f"و {len(ordered) - limit} سرویس دیگر — جزئیات در وب‌پنل")
+        lines.append(f"… و {len(ordered) - limit} سرویس دیگر")
     return lines

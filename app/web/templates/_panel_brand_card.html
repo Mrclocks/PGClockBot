@@ -85,4 +85,4 @@
     <button class="btn" type="submit">ذخیره برند</button>
   </div>
 </form>
-<script src="/static/panel-brand-form.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
+<script src="/static/panel-brand-form.js?v={{ asset_v('panel-brand-form.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>

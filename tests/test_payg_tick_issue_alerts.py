@@ -48,9 +48,11 @@ class TickIssueTests(unittest.IsolatedAsyncioTestCase):
             self.engine, expire_on_commit=False, class_=AsyncSession
         )
         self.sent: list[tuple[list[int], str]] = []
+        self.markups: list[object] = []
 
-        async def fake_send(_session, _shop_user_id, chat_ids, text) -> None:
+        async def fake_send(_session, _shop_user_id, chat_ids, text, *, markup=None) -> None:
             self.sent.append((list(chat_ids), text))
+            self.markups.append(markup)
 
         settings = SimpleNamespace(admin_ids=[PLATFORM_ADMIN_ID])
         patches = [
@@ -108,6 +110,10 @@ class TickIssueTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(await report_tick_issue(session, profile, TickIssue.RATE_ZERO))
         self.assertEqual(len(self.sent), 3)
         self.assertTrue(all(chat_ids == [PLATFORM_ADMIN_ID] for chat_ids, _ in self.sent))
+        self.assertEqual(
+            [b.callback_data for b in self.markups[0].inline_keyboard[0]],
+            [f"adm:resellers:view:{profile.user_id}"],
+        )
 
     async def test_tick_without_pg_admin_tells_owner_once(self) -> None:
         async with self.Session() as session:
