@@ -8225,8 +8225,8 @@ html[data-theme="light"] * { scrollbar-color: #d4d4d8 transparent; }
 html[data-theme="light"] *::-webkit-scrollbar-thumb { background: #d4d4d8; }
 
 html[data-theme="light"] .topbar {
-  /* Keep shared frost tokens (denser light mix is on html[data-theme=light]) */
-  background: var(--modal-frost-bg);
+  /* The header capsule wears the same glass as the bottom bar in both themes (DESIGN_SYSTEM.md §7). */
+  background: var(--dock-glass-bg);
 }
 /* Do NOT set background on .side here. Desktop already paints via
    `.side { background: var(--bg-card) }` (--bg-card is #fff in light).
