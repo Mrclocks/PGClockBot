@@ -191,10 +191,8 @@ class ModalLayoutPolishTests(unittest.TestCase):
         macros = (ROOT / "app/web/templates/macros.html").read_text(encoding="utf-8")
         self.assertIn("{% macro modal_title(", macros)
         self.assertIn('class="modal-title"', macros)
-        self.assertIn("modal-title-caption", macros)
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(".modal-title {", css)
-        self.assertIn(".modal-title-caption {", css)
 
     def test_desktop_modal_grids_cap_at_two_columns(self):
         css = CSS.read_text(encoding="utf-8")

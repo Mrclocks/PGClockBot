@@ -84,11 +84,11 @@ class SettingsPageTests(unittest.TestCase):
         self.assertIn('href="/settings?tab=identity"', html)
         self.assertNotIn('id="settings-layout"', html)
 
-    def test_a_bot_settings_page_shows_its_way_back_and_path_and_no_tab_rows(self) -> None:
+    def test_a_bot_settings_page_shows_its_way_back_and_no_tab_rows(self) -> None:
         html = self.bot_page(b"tab=welcome")
         self.assertNotIn('class="settings-hub', html)
         self.assertIn('href="/settings" aria-label="بازگشت به تنظیمات ربات"', html)
-        self.assertIn("تنظیمات ربات · ظاهر ربات", html)
+        self.assertNotIn("تنظیمات ربات · ظاهر ربات", html)
         self.assertNotIn("settings-tabs-groups", html)
         self.assertNotIn("settings-subtabs", html)
         self.assertIn('class="section-tabs settings-tabs settings-sections"', html)

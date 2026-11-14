@@ -187,7 +187,7 @@ class VariablesPageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         head = _tab_strip(response.text)
         self.assertIn('href="/settings" aria-label="بازگشت به تنظیمات ربات"', head)
-        self.assertIn("تنظیمات ربات · متن‌ها", head)
+        self.assertNotIn("تنظیمات ربات · متن‌ها", head)
         self.assertNotIn("/shop-settings", head)
 
     async def test_shop_owner_page_leads_back_to_the_shop_settings_list(self):
@@ -195,7 +195,7 @@ class VariablesPageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         head = _tab_strip(response.text)
         self.assertIn('href="/shop-settings" aria-label="بازگشت به تنظیمات فروشگاه"', head)
-        self.assertIn("تنظیمات فروشگاه · متن‌ها", head)
+        self.assertNotIn("تنظیمات فروشگاه · متن‌ها", head)
         self.assertNotIn('href="/settings', head)
 
     async def test_a_role_without_the_right_cannot_open_the_page_the_tab_would_point_to(self):

@@ -187,7 +187,6 @@ class GiftCodePageTests(GiftCodeHarness):
     async def test_gift_codes_lead_back_to_the_marketing_list(self):
         response = await self._get(_reseller(["gift_codes", "loyalty"], shop_id=5))
         self.assertIn('href="/marketing" aria-label="بازگشت به بازاریابی"', response.text)
-        self.assertIn("بازاریابی · تخفیف و کد هدیه", response.text)
 
 
 class GiftCodeRedirectTests(GiftCodeHarness):

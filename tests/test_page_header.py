@@ -47,20 +47,18 @@ class PageHeaderTests(unittest.TestCase):
         self.assertIn("data-page-more-toggle", html)
         self.assertIn("راهنمای این صفحه", html)
 
-    def test_a_detail_page_has_a_back_button_and_its_path(self) -> None:
-        html = render("{{ page_header('bot', 'هویت ربات', back='/settings', back_label='تنظیمات ربات', subtitle='تنظیمات ربات · ظاهر ربات') }}")
+    def test_a_detail_page_has_a_back_button(self) -> None:
+        html = render("{{ page_header('bot', 'هویت ربات', back='/settings', back_label='تنظیمات ربات') }}")
         self.assertIn("page-head--detail", html)
         self.assertIn('href="/settings"', html)
         self.assertIn('aria-label="بازگشت به تنظیمات ربات"', html)
-        self.assertIn("تنظیمات ربات · ظاهر ربات", html)
 
     def test_the_dashboard_keeps_its_title_out_of_the_capsule(self) -> None:
         self.assertIn('data-page-head="flow"', render("{{ page_header('home', 'داشبورد', capsule=false) }}"))
 
-    def test_titles_and_paths_are_escaped(self) -> None:
-        html = render("{{ page_header('users', '<b>x</b>', subtitle='<i>y</i>', back='/s', back_label='<u>z</u>') }}")
+    def test_titles_and_back_labels_are_escaped(self) -> None:
+        html = render("{{ page_header('users', '<b>x</b>', back='/s', back_label='<u>z</u>') }}")
         self.assertNotIn("<b>x</b>", html)
-        self.assertNotIn("<i>y</i>", html)
         self.assertNotIn("<u>z</u>", html)
 
     def test_the_short_label_is_hidden_from_screen_readers(self) -> None:

@@ -114,7 +114,6 @@ class FunnelPageTests(unittest.IsolatedAsyncioTestCase):
     async def test_funnel_leads_back_to_the_marketing_list_for_a_shop(self):
         response = await self._get(_reseller(["orders", "gift_codes"]), AsyncMock(return_value={}))
         self.assertIn('href="/marketing" aria-label="بازگشت به بازاریابی"', response.text)
-        self.assertIn("بازاریابی · رفتار کاربر", response.text)
 
 
 class FinanceBehaviorRedirectTests(unittest.IsolatedAsyncioTestCase):
