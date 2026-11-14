@@ -115,8 +115,8 @@
     right: var(--dock-inline);
     width: auto;
     height: var(--dock-h);
-    padding: var(--space-0);
-    border: 1px solid var(--dock-glass-line);
+    padding: var(--dock-pad);
+    border: var(--dock-line) solid var(--dock-glass-line);
     border-radius: var(--control-radius);
     background: var(--dock-glass-bg);
     box-shadow: var(--dock-glass-highlight), var(--dock-shadow);
@@ -211,8 +211,8 @@
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
     height: var(--dock-h);
-    padding: var(--space-0);
-    border: 1px solid var(--dock-glass-line);
+    padding: var(--dock-pad);
+    border: var(--dock-line) solid var(--dock-glass-line);
     border-radius: var(--control-radius);
     background: var(--dock-glass-bg);
     box-shadow: var(--dock-glass-highlight);
