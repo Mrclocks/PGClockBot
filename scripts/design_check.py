@@ -2,6 +2,7 @@
 
 The rules are the checkable part of docs/DESIGN_SYSTEM.md. Existing findings are tolerated; a file may
 only keep or lower its count, so every change leaves the panel at least as consistent as it found it.
+Rules the panel has fully met (STRICT_RULES) are checked in every tracked file on every run, so they stay at zero.
 
 Usage:
     python scripts/design_check.py              # compare changed files with the merge-base of dev
@@ -36,6 +37,9 @@ LENGTH = re.compile(r"(?<![\w.-])(\d*\.?\d+)(?:px|rem|em)\b")
 IMPORTANT = re.compile(r"!\s*important")
 SVG_TAG = re.compile(r"<svg\b")
 ICON_SET = "app/web/templates/_icons.html"
+
+# Rules with no finding left anywhere: one finding in any tracked file fails the check.
+STRICT_RULES = frozenset({"modal-not-ds", "form-modal-cancel", "inline-style"})
 
 RULE_HELP = {
     "modal-not-ds": "every .ui-modal also carries .ds (DESIGN_SYSTEM.md §3)",
@@ -217,6 +221,16 @@ def _report() -> int:
     return 0
 
 
+def strict_findings() -> list[tuple[str, Finding]]:
+    """Every finding of a rule the whole panel already meets, in every tracked template and stylesheet."""
+    found: list[tuple[str, Finding]] = []
+    for path in sorted(_git("ls-files", TEMPLATES, STYLES).splitlines()):
+        if (is_template(path) or is_stylesheet(path)) and (ROOT / path).is_file():
+            found += [(path, f) for f in findings_for(path, (ROOT / path).read_text(encoding="utf-8"))
+                      if f.rule in STRICT_RULES]
+    return found
+
+
 def main(argv: list[str]) -> int:
     if "--report" in argv:
         return _report()
@@ -243,6 +257,9 @@ def main(argv: list[str]) -> int:
             for finding in after:
                 if finding.rule in grown:
                     print(f"  {path}:{finding.line}: {finding.rule}: {finding.text}")
+    for path, finding in strict_findings():
+        failed = True
+        print(f"FAIL {path}:{finding.line}: {finding.rule} — {RULE_HELP[finding.rule]} (this rule is met everywhere)")
     if failed:
         print("Design ratchet failed: a changed file gained findings. See docs/DESIGN_SYSTEM.md.", file=sys.stderr)
         return 1
