@@ -35,7 +35,8 @@ FONT_SIZE = re.compile(r"\bfont-size\s*:\s*[^;}]*?\d(?:px|rem|em)\b|\bfont\s*:[^
 RADIUS = re.compile(r"\bborder(?:-[a-z]+)*-radius\s*:\s*([^;}]*)")
 LENGTH = re.compile(r"(?<![\w.-])(\d*\.?\d+)(?:px|rem|em)\b")
 IMPORTANT = re.compile(r"!\s*important")
-SVG_TAG = re.compile(r"<svg\b")
+# An icon is drawn on the 24 or 16 unit grid; a gauge, chart or sparkline has its own viewBox and is data, not an icon.
+SVG_TAG = re.compile(r'<svg\b(?=[^>]*viewBox="0 0 (?:24 24|16 16)")')
 ICON_SET = "app/web/templates/_icons.html"
 
 # Rules with no finding left anywhere: one finding in any tracked file fails the check.

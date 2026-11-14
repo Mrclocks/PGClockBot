@@ -52,6 +52,17 @@ class IconSetTests(unittest.TestCase):
                   if isinstance(item, panel_nav._ItemSpec) and item.key == "system_settings"]
         self.assertEqual([item.icon for item in system], ["gear"])
 
+    def test_icons_added_for_the_former_hand_drawn_ones_draw_something(self) -> None:
+        for name in ("eye", "chev-down", "chev-up", "minus", "dots-v", "money", "monitor", "sun", "moon", "updown",
+                     "logout", "check-circle", "plus-square", "github", "lock"):
+            with self.subTest(icon=name):
+                self.assertNotEqual(paths(render(f"icon('{name}')")), FALLBACK)
+
+    def test_an_icon_draws_as_an_outline_even_without_a_stylesheet(self) -> None:
+        svg = render("icon('close')")
+        for attribute in ('fill="none"', 'stroke="currentColor"', 'stroke-linecap="round"'):
+            self.assertIn(attribute, svg)
+
     def test_one_concept_has_one_drawing_across_macros(self) -> None:
         same = [
             ("page_ico('overview')", "nav_icon('shield-check')"),

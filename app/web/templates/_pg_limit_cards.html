@@ -1,10 +1,11 @@
+{% from "_icons.html" import icon %}
 {# Live PG account limits as panel stat boxes — never a top-of-page warning flash. #}
 {% from "macros.html" import card_title %}
 {% macro pg_limit_stat(label, value, caption='') -%}
 <div class="stat">
   <div class="stat-top">
     <span class="stat-ico" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
+      {{ icon('template') }}
     </span>
     <span>{{ label }}</span>
   </div>

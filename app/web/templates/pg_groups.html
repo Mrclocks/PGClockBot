@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 ﻿{% extends "base.html" %}
 {% from "macros.html" import switch, switch_chip, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
 {% block title %}گروه‌های پاسارگارد{% endblock %}
@@ -64,7 +65,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('groups', 'ساخت گروه', tone='pg') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/groups" class="form-stack ds-body">
@@ -99,7 +100,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('groups', 'ویرایش گروه', tone='pg', heading_id='pg-group-edit-title') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/groups/0/edit" class="form-stack ds-body" id="pg-group-edit-form">

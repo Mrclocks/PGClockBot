@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {# Shared home ops block: work queue and sales chart → period sales
    Expects: periods, action_center (optional)
 #}
@@ -33,7 +34,7 @@
   </div>
   {% else %}
   <div class="home-action-empty" role="status">
-    <svg class="home-action-empty-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/></svg>
+    {{ icon('check-circle', 'home-action-empty-ico') }}
     <strong>صف کار خالی است</strong>
     <span class="muted">الان کاری منتظر شما نیست؛ رسید، خطا یا سرویس رو به انقضا که بیاید، اینجا نشان داده می‌شود.</span>
   </div>

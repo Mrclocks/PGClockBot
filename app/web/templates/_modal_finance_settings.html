@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {# Finance settings modal: a list of پرداخت | PAYG | پاکسازی, each opening its section (DESIGN_SYSTEM.md §3). #}
 {% from "macros.html" import modal_title %}
 {% from "_settings_hub.html" import modal_settings_list, modal_shown_section, modal_list_heading, modal_list_back %}
@@ -18,7 +19,7 @@
       {{ modal_list_back(rows, shown) }}
       {{ modal_title('payments', modal_list_heading(rows, shown, 'تنظیمات مالی'), tone='brand', heading_id='finance-settings-title') }}
       <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        {{ icon('close', 'ico') }}
       </button>
       </div>
     </div>

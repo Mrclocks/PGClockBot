@@ -105,11 +105,11 @@
 {% macro row_actions() -%}
 <div class="row-actions">
   <button type="button" class="row-actions-toggle row-actions-toggle--icon" aria-label="عملیات" aria-expanded="false" aria-haspopup="true">
-    <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="3.2" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="8" cy="12.8" r="1.3"/></svg>
+    {{ icon('dots-v', 'ico') }}
   </button>
   <button type="button" class="row-actions-toggle row-actions-toggle--label" aria-label="عملیات" aria-expanded="false" aria-haspopup="true">
     <span>عملیات</span>
-    <svg class="ico-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    {{ icon('chev-down', 'ico-caret') }}
   </button>
   <div class="row-actions-menu">
     {{ caller() }}
@@ -348,5 +348,5 @@
 {# Warning icon drawn in the markup for alerts shown later by script: some mobile browsers
    do not paint the ::before icon of an element that was hidden when the page loaded. #}
 {% macro flash_warn_icon() -%}
-<span class="flash-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8L21 19.2H3L12 3.8z"/><path d="M12 9.2v5"/><circle cx="12" cy="16.6" r="0.9" fill="currentColor" stroke="none"/></svg></span>
+<span class="flash-ico" aria-hidden="true">{{ icon('warn') }}</span>
 {%- endmacro %}

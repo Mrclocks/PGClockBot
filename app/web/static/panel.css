@@ -12883,3 +12883,6 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
 .search-submit:active { transform: scale(0.94); }
 .search-submit:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .search-submit { transition: none; } .search-submit:active { transform: none; } }
+
+/* The theme button's icon sits in a wrapper the theme script fills; the wrapper adds no box. */
+.side-theme-ico-wrap { display: contents; }

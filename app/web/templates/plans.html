@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 ﻿{% extends "base.html" %}
 {% from "macros.html" import switch, switch_chip, page_header, act_label, modal_title, row_actions, table_select_head, table_select_cell, table_bulk_bar, empty_state %}
 {% block title %}پلن‌ها{% endblock %}
@@ -452,7 +453,7 @@
           <button type="button" role="radio" data-value="resellers">نماینده</button>
         </div>
         {% endif %}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
       {# Section shortcuts for the open form; dsSync shows the nav whose data-plan-steps lists the audience:kind. #}
       {% for form_id, kinds, links in [
@@ -535,7 +536,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('plans', 'برچسب دسته', tone='brand', heading_id='plan-categories-title') }}
-        <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     {% if open_categories and (flash_ok or flash_err) %}
@@ -676,7 +677,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('plans', 'بسته حجم / زمان', tone='brand', heading_id='service-addons-title') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
 {# One row of the general pack form; also rendered into a <template> so added rows start un-enhanced. #}

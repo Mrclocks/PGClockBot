@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% from "macros.html" import row_actions, page_header, act_label, empty_state %}
 {% from "_ds.html" import ds_switch, ds_sec, ds_modal_head, ds_foot %}
 {% set basis_labels = {'traffic': 'حجم', 'user': 'کاربر', 'user_traffic': 'کاربر + حجم'} %}
@@ -90,11 +91,11 @@
   <section class="home-panel home-panel-neutral">
     <div class="home-panel-grid">
       <div class="stat">
-        <div class="stat-top"><span class="stat-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v18M7 7.5h7a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h8"/></svg></span><span>اعتبار آزاد شما</span></div>
+        <div class="stat-top"><span class="stat-ico" aria-hidden="true">{{ icon('money') }}</span><span>اعتبار آزاد شما</span></div>
         <strong><bdi dir="ltr">{{ free_credit | money }}</bdi></strong>
       </div>
       <div class="stat">
-        <div class="stat-top"><span class="stat-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg></span><span>زیرمجموعه‌ها</span></div>
+        <div class="stat-top"><span class="stat-ico" aria-hidden="true">{{ icon('users') }}</span><span>زیرمجموعه‌ها</span></div>
         <strong>{{ children | length | num }}</strong>
       </div>
     </div>
@@ -146,7 +147,7 @@
       <td class="cell-tight li-value"><bdi dir="ltr">{{ c.credit_limit | money }}</bdi></td>
       <td class="col-actions">
         <button type="button" class="btn btn-sm btn-ghost li-hide" data-modal-open="modal-cp-child-{{ c.shop_id }}">ویرایش</button>
-        <button type="button" class="li-only li-open" data-modal-open="modal-cp-child-{{ c.shop_id }}" aria-label="ویرایش {{ c.label }}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
+        <button type="button" class="li-only li-open" data-modal-open="modal-cp-child-{{ c.shop_id }}" aria-label="ویرایش {{ c.label }}">{{ icon('chev', 'ico') }}</button>
       </td>
     </tr>{% else %}{{ empty_state('نمایندهٔ زیرمجموعه‌ای با فروشگاه ندارید', 'plans', colspan=4) }}{% endfor %}</tbody>
   </table></div>

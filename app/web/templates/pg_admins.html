@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% from "macros.html" import switch, oversell_create_switch, row_actions, modal_title, page_header, act_label %}
 {% block title %}ادمین‌های پاسارگارد{% endblock %}
 {% block content %}
@@ -184,7 +185,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('nodes', ('ویرایش ادمین فرعی' if src == 'pg_staff' else 'اعطای ادمین فرعی (فقط پاسارگارد)'), tone='pg') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/admins/{{ uname }}/web-access/staff" class="form-stack ds-body js-busy-form" data-busy-label="در حال ذخیره…">
@@ -277,7 +278,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('resellers', 'تبدیل به نماینده', tone='brand') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/admins/{{ uname }}/convert-to-reseller" class="form-stack ds-body js-busy-form" data-busy-label="در حال تبدیل…">
@@ -336,7 +337,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('resellers', 'اعطای دسترسی نماینده (فروشگاه)', tone='brand') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/admins/{{ uname }}/web-access/reseller" class="form-stack ds-body js-busy-form" data-busy-label="در حال ذخیره…">
@@ -397,7 +398,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('admins', 'ساخت ادمین پنل', tone='pg') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/admins" class="form-stack ds-body js-busy-form" data-busy-label="در حال ساخت…">

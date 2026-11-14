@@ -1,9 +1,10 @@
 {# Design-language building blocks (styles: panel-ds.css, behavior: panel-ds.js). #}
 {% from "macros.html" import modal_title %}
-{% from "_icons.html" import icon %}
+{# Imported as icon_svg: ds_modal_head takes a parameter named icon, which would hide the macro. #}
+{% from "_icons.html" import icon as icon_svg %}
 
 {% macro ico(name) -%}
-{{ icon('shield-alert' if name == 'shield' else name) }}
+{{ icon_svg('shield-alert' if name == 'shield' else name) }}
 {%- endmacro %}
 
 {# Section: small grey title outside, dashboard-style card inside. #}
@@ -50,7 +51,7 @@
 {% for g in groups %}
 <details class="ds-acc{% if g.risky %} is-risk{% endif %}" data-ds-group{% if open_first and loop.first %} open{% endif %}>
   <summary>{% if g.risky %}{{ ico('shield') }}{% endif %}<span class="ds-acc-title">{{ g.title }}</span>
-    <span class="ds-meta" data-ds-group-count></span><svg class="ds-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></summary>
+    <span class="ds-meta" data-ds-group-count></span>{{ icon_svg('chev', 'ds-chev') }}</summary>
   {% if g.risky %}<p class="ds-acc-note">هر کدام فقط برای نمایندهٔ مورد اعتماد روشن شود.</p>{% endif %}
   <div class="ds-acc-rows">
     {% for p in g.perms %}
@@ -72,7 +73,7 @@
 <div class="ui-modal-head ds-head">
   <div class="ds-head-row">
     {{ modal_title(icon, title, tone=tone, heading_id=heading_id) }}
-    <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon_svg('close', 'ico') }}</button>
   </div>
 </div>
 {%- endmacro %}
