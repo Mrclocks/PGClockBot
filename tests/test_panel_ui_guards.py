@@ -306,7 +306,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         ):
             src = (ROOT / rel).read_text(encoding="utf-8")
             self.assertIn('data-modal-close', src)
-            self.assertIn('class="ico"', src)
+            self.assertIn("icon('close', 'ico')", src)
             self.assertNotRegex(src, r'data-modal-close[^>]*>\s*×\s*<')
         js = JS.read_text(encoding="utf-8")
         self.assertIn("ui-modal-panel", js)
