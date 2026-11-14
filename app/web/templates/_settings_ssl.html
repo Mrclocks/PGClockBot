@@ -33,7 +33,7 @@
         <span class="muted" id="ssl-progress-pct" dir="ltr">{{ st.progress.pct if st.progress else 0 }}%</span>
       </div>
       <div class="ssl-progress-track" aria-hidden="true">
-        <i id="ssl-progress-bar" style="width:{{ st.progress.pct if st.progress else 0 }}%"></i>
+        <i id="ssl-progress-bar" style="--p: {{ st.progress.pct if st.progress else 0 }}"></i>
       </div>
     </div>
 
@@ -152,7 +152,7 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
 
   {% if st.last_error %}
   <h3 class="ssl-subhead">آخرین خطا</h3>
-  <pre class="update-log" style="display:block" dir="ltr">{{ st.last_error }}</pre>
+  <pre class="update-log is-shown" dir="ltr">{{ st.last_error }}</pre>
   {% endif %}
 
   <p class="muted ssl-status-line">

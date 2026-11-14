@@ -62,7 +62,7 @@
         <small class="muted">حداقل یک گروه</small>
       </div>
     </div>
-    <div id="mode-template" class="form-stack" style="display:none">
+    <div id="mode-template" class="form-stack" hidden>
       <label class="form-field">تمپلیت پاسارگارد
         <select name="pg_template_id">
           <option value="">انتخاب کنید…</option>
@@ -156,8 +156,8 @@
   syncUserExtras();
   function sync(){
     const isTpl = mode.value === 'template';
-    custom.style.display = isTpl ? 'none' : '';
-    tpl.style.display = isTpl ? '' : 'none';
+    custom.hidden = isTpl;
+    tpl.hidden = !isTpl;
   }
   mode.addEventListener('change', sync);
   sync();
