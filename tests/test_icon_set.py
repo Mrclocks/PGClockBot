@@ -65,6 +65,18 @@ class IconSetTests(unittest.TestCase):
             self.assertEqual(svg.count('fill="currentColor" stroke="none"'), 3, name)
             self.assertNotIn("h.01", svg)
 
+    def test_resellers_have_their_own_icon_apart_from_users_and_referrals(self) -> None:
+        reseller = paths(render("icon('resellers')"))
+        self.assertNotEqual(reseller, FALLBACK)
+        for other in ("users", "users-pair"):
+            self.assertNotEqual(reseller, paths(render(f"icon('{other}')")), other)
+        specs = [item for group in vars(panel_nav).values() if isinstance(group, (list, tuple))
+                 for item in group if isinstance(item, panel_nav._ItemSpec)]
+        reseller_items = [spec for spec in specs if spec.href == "/resellers"]
+        self.assertTrue(reseller_items)
+        for spec in reseller_items:
+            self.assertEqual(paths(render(f"icon('{spec.icon}')")), reseller, spec.key)
+
     def test_an_icon_draws_as_an_outline_even_without_a_stylesheet(self) -> None:
         svg = render("icon('close')")
         for attribute in ('fill="none"', 'stroke="currentColor"', 'stroke-linecap="round"'):
