@@ -65,8 +65,12 @@
   /* Phone bottom bar (panel-nav-modes.css): the capsule and the search circle share one height,
      items are control-height (--btn-h) inside it. --dock-room is what the page footer leaves free under it. */
   --dock-h: calc(var(--btn-h) + 2 * var(--space-1));
-  /* Items, logo and search circle inside the capsules: 4px clear of its edge. */
+  /* Items, logo and search circle inside the capsules: exactly 4px clear of the capsule's outer edge on every side.
+     The capsule's 1px edge (--dock-line) is part of those 4px, so its padding is --dock-pad; anything placed
+     absolutely inside it (the search) is measured from inside the edge and uses --dock-pad too. */
+  --dock-line: 1px;
   --dock-inner: calc(var(--dock-h) - 2 * var(--space-0));
+  --dock-pad: calc(var(--space-0) - var(--dock-line));
   --dock-edge: var(--space-1_5);
   /* Distance from the screen bottom: the mirror of the header's distance from the top (--hdr-top): the bottom
      safe area plus the same air (--safe-top-extra: 16px in a phone browser, 24px in the installed web app),
