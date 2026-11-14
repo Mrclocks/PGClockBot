@@ -91,6 +91,9 @@
   --sheet-out: 260ms;
   --tile-ico: 48px;
   --sheet-shadow: 0 24px 64px rgb(0 0 0 / 0.28);
+  /* The phone menu's glass sits over the menu dim: it brightens what it blurs by as much as the dim darkened it
+     (1 / (1 - dim alpha)), so the glass reads like the undimmed header and bar instead of a grey film. */
+  --sheet-dim-lift: brightness(1);
   --dock-ico: 20px;
   --dock-label-fs: 11px;
   /* One soft shadow for the header and the bar: a faint contact line and a light lift. */
@@ -8102,6 +8105,7 @@ html[data-theme="light"] {
   --danger: var(--destructive);
   /* Light enough that the frosted menu over it still reads as glass, not a grey film. */
   --side-dim: rgba(0, 0, 0, 0.18);
+  --sheet-dim-lift: brightness(1.22);
   --table-head-bg: color-mix(in srgb, var(--muted) 72%, var(--bg-card));
 }
 html[data-theme="light"] * { scrollbar-color: #d4d4d8 transparent; }
