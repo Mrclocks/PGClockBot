@@ -3,13 +3,15 @@
 (function (root) {
   'use strict';
 
-  // The panel shows figures with Latin digits, so the chart does too; only the words are Persian.
+  // Shared figure formatting (fa-number.js): a page global in the browser, a module in Node tests.
+  var numbers = root.PanelNumbers || (typeof require === "function" ? require("./fa-number.js") : null);
+
   function fa(value) {
-    return String(value);
+    return numbers.faNumber(value);
   }
 
   function fullToman(value) {
-    return Math.round(Number(value) || 0).toLocaleString('en-US');
+    return numbers.formatInt(value);
   }
 
   function trimNumber(value, digits) {

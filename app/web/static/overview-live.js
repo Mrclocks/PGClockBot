@@ -14,18 +14,20 @@
     if (typeof value !== 'number' || !isFinite(value)) return null;
     return Math.max(0, Math.min(100, value));
   }
+  // Shared figure formatting (fa-number.js): a page global in the browser, a module in Node tests.
+  var numbers = root.PanelNumbers || (typeof require === 'function' ? require('./fa-number.js') : null);
   function fmtPct(value) {
     var p = clampPct(value);
-    return p === null ? '—' : Math.round(p) + '٪';
+    return p === null ? '—' : numbers.faNumber(Math.round(p)) + '٪';
   }
   function memHint(d) {
-    if (d.memory_ratio_text) return d.memory_ratio_text;
-    if (d.memory_used_text && d.memory_total_text) return d.memory_used_text + ' / ' + d.memory_total_text;
+    if (d.memory_ratio_text) return numbers.faNumber(d.memory_ratio_text);
+    if (d.memory_used_text && d.memory_total_text) return numbers.faNumber(d.memory_used_text + ' / ' + d.memory_total_text);
     return null;
   }
   function partsText(parts) {
     var p = parts || {};
-    var num = p.num != null && p.num !== '' ? String(p.num) : '—';
+    var num = p.num != null && p.num !== '' ? numbers.faNumber(p.num) : '—';
     return p.unit ? num + ' ' + p.unit : num;
   }
   function pushSample(buffer, value, size) {
@@ -63,7 +65,7 @@
     var n = bytes / unit[0];
     var text = unit[0] === 1 ? String(Math.round(n))
       : n >= 100 ? n.toFixed(0) : n >= 10 ? String(Number(n.toFixed(1))) : String(Number(n.toFixed(2)));
-    return text + ' ' + unit[1] + '/ثانیه';
+    return numbers.faNumber(text) + ' ' + unit[1] + '/ثانیه';
   }
   function badgeClass(kind) {
     if (kind === 'ok') return 'badge connected';
