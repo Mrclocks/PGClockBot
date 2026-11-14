@@ -78,7 +78,7 @@
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-{% call(slot) page_header('gift', 'کش‌بک', back='/marketing', back_label='بازاریابی', subtitle=marketing_path(marketing_sections|default(()), 'cashback')) %}
+{% call(slot) page_header('gift', 'کش‌بک', back='/marketing', back_label='بازاریابی', subtitle=(marketing_path(marketing_sections, 'cashback') if marketing_sections else 'بازاریابی')) %}
   {%- if slot == 'primary' %}
   <button type="button" class="btn" data-modal-open="modal-cb-rule-new">{{ act_label('قانون تازه', 'قانون') }}</button>
   {%- endif %}

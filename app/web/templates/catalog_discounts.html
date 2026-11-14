@@ -6,7 +6,7 @@
 <div class="ds ds-settings">
 {% set announcement_labels = {'running': 'در صف ارسال', 'paused': 'متوقف', 'completed': 'تکمیل‌شده', 'review': 'نیازمند بررسی'} %}
 {% set announcement_tones = {'running': 'info', 'paused': 'warn', 'completed': 'ok', 'review': 'danger'} %}
-{{ page_header('discounts', 'تخفیف‌ها', help='discounts', back='/marketing', back_label='بازاریابی', subtitle=marketing_path(marketing_sections|default(()), 'discounts')) }}
+{{ page_header('discounts', 'تخفیف‌ها', help='discounts', back='/marketing', back_label='بازاریابی', subtitle=(marketing_path(marketing_sections, 'discounts') if marketing_sections else 'بازاریابی')) }}
 
 
 {% if request.query_params.get('error') %}<div class="flash warn" role="alert">{{ request.query_params.get('error') }}</div>{% endif %}

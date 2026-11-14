@@ -4,7 +4,7 @@
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-{% call(slot) page_header('users', 'کاربران تست', back='/marketing', back_label='بازاریابی', subtitle=marketing_path(marketing_sections|default(()), 'trial_users')) %}
+{% call(slot) page_header('users', 'کاربران تست', back='/marketing', back_label='بازاریابی', subtitle=(marketing_path(marketing_sections, 'trial_users') if marketing_sections else 'بازاریابی')) %}
   {%- if slot == 'primary' and settings_href %}
   <a class="btn btn-ghost page-act-icon" href="{{ settings_href }}" aria-label="تنظیمات و محدودیت اکانت تست">{{ act_label('تنظیمات', icon_name='settings') }}</a>
   {%- endif %}
