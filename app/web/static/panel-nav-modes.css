@@ -386,8 +386,8 @@
     border: 1px solid var(--modal-frost-line);
     border-radius: var(--radius);
     background: var(--modal-frost-bg);
-    backdrop-filter: var(--modal-frost-blur);
-    -webkit-backdrop-filter: var(--modal-frost-blur);
+    backdrop-filter: var(--modal-frost-blur) var(--sheet-dim-lift);
+    -webkit-backdrop-filter: var(--modal-frost-blur) var(--sheet-dim-lift);
     box-shadow: var(--sheet-shadow);
     overscroll-behavior: contain;
     transform: translate3d(0, calc(100% + var(--dock-h) + var(--dock-bottom) + var(--space-3)), 0);
@@ -408,6 +408,11 @@
   }
   .side-backdrop::before,
   .side-backdrop.show::before { top: 0; left: 0; right: 0; transform: none; transition: none; }
+  /* The header stays above the dim but blurs it: the same lift keeps its glass from greying while the menu is open. */
+  body.nav-open .topbar {
+    backdrop-filter: var(--modal-frost-blur) var(--sheet-dim-lift);
+    -webkit-backdrop-filter: var(--modal-frost-blur) var(--sheet-dim-lift);
+  }
 
   .side-panel > .side-theme { grid-area: theme; margin: 0; padding: 0; border: 0; }
   .side-panel > .side-help-btn {
