@@ -84,7 +84,9 @@
   /* Phone header and menu sheet (panel-nav-modes.css): the header capsule mirrors the bottom bar; on tablets
      header, bar and sheet stop at --dock-max-w and centre. */
   --dock-max-w: 560px;
-  --dock-inline: max(var(--dock-edge), calc((100vw - var(--dock-max-w)) / 2));
+  /* Side inset of the header, bar and menu: the page gutter on phones (.main's var(--space-2)), so the capsules
+     line up with the cards below; centred at --dock-max-w on tablets. */
+  --dock-inline: max(var(--space-2), calc((100vw - var(--dock-max-w)) / 2));
   /* Below the status bar and Dynamic Island with the panel's own top air (--safe-top: the inset plus 16px in a
      phone browser, plus 24px in the installed web app), never closer than 12px to the screen edge. */
   --hdr-top: max(var(--dock-edge), var(--safe-top));
