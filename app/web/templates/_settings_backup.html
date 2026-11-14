@@ -172,7 +172,7 @@
       </div>
       <div class="progress-meta">
         <span id="backup-restore-step-label">{% if restore_ops %}{{ st.step or st.message or 'در حال ریستور…' }}{% else %}آماده{% endif %}</span>
-        <strong id="backup-restore-percent">{{ (st.percent or 0) if restore_ops else 0 }}٪</strong>
+        <strong id="backup-restore-percent">{{ ((st.percent or 0) if restore_ops else 0) | fa }}٪</strong>
       </div>
     </div>
     <p class="muted" id="backup-restore-state" style="margin:var(--space-2) 0 0">

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from jinja2 import ChoiceLoader, DictLoader, Environment, FileSystemLoader, select_autoescape
 
 from app.services.formatting import format_number
+from app.services.numbers import to_fa_digits
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -24,6 +25,7 @@ def _render() -> str:
         autoescape=select_autoescape(),
     )
     env.filters["num"] = format_number
+    env.filters["fa"] = to_fa_digits
     preview = SimpleNamespace(
         cache_note="",
         expired_total=0,

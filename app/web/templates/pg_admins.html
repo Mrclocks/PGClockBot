@@ -245,7 +245,7 @@
           <option value="">— بدون محدودیت زمان —</option>
           {% for p in sub_plans %}
           {% if (p.plan_kind or 'subscription') == 'subscription' %}
-          <option value="{{ p.id }}">{{ p.name }}{% if p.duration_days %} — {{ p.duration_days }} روز{% endif %}</option>
+          <option value="{{ p.id }}">{{ p.name }}{% if p.duration_days %} — {{ (p.duration_days) | fa }} روز{% endif %}</option>
           {% endif %}
           {% endfor %}
         </select>
@@ -300,7 +300,7 @@
         <select name="plan_id" required {% if not grant_plans %}disabled{% endif %}>
           <option value="">— انتخاب پلن —</option>
           {% for p in grant_plans %}
-          <option value="{{ p.id }}" {% if default_plan_id and p.id == default_plan_id %}selected{% endif %}>{% if (p.plan_kind or '') == 'current_capacity' %}[ظرفیت فعلی] {% elif (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ p.price_per_gb | money }} / گیگ{% elif p.duration_days %} — {{ p.duration_days }} روز{% endif %}</option>
+          <option value="{{ p.id }}" {% if default_plan_id and p.id == default_plan_id %}selected{% endif %}>{% if (p.plan_kind or '') == 'current_capacity' %}[ظرفیت فعلی] {% elif (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ p.price_per_gb | money }} / گیگ{% elif p.duration_days %} — {{ (p.duration_days) | fa }} روز{% endif %}</option>
           {% endfor %}
         </select>
         <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن می‌آید</small>
@@ -359,7 +359,7 @@
         <select name="plan_id" required {% if not grant_plans %}disabled{% endif %}>
           <option value="">— انتخاب پلن —</option>
           {% for p in grant_plans %}
-          <option value="{{ p.id }}" {% if default_plan_id and p.id == default_plan_id %}selected{% endif %}>{% if (p.plan_kind or '') == 'current_capacity' %}[ظرفیت فعلی] {% elif (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ p.price_per_gb | money }} / گیگ{% elif p.duration_days %} — {{ p.duration_days }} روز{% endif %}</option>
+          <option value="{{ p.id }}" {% if default_plan_id and p.id == default_plan_id %}selected{% endif %}>{% if (p.plan_kind or '') == 'current_capacity' %}[ظرفیت فعلی] {% elif (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ p.price_per_gb | money }} / گیگ{% elif p.duration_days %} — {{ (p.duration_days) | fa }} روز{% endif %}</option>
           {% endfor %}
         </select>
         <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن کپی می‌شود</small>

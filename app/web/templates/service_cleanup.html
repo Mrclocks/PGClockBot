@@ -124,11 +124,11 @@
               <a class="btn btn-ghost btn-sm" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}">مشاهده کاربر</a>
               {% for extra in (7, 30) %}
               <form method="post" action="/service-cleanup/{{ r.service_id }}/hold"
-                    data-confirm="{{ extra }} روز به مهلت حذف سرویس {{ r.username }} اضافه شود؟" data-confirm-title="تمدید مهلت حذف" data-confirm-label="تمدید"
+                    data-confirm="{{ (extra) | fa }} روز به مهلت حذف سرویس {{ r.username }} اضافه شود؟" data-confirm-title="تمدید مهلت حذف" data-confirm-label="تمدید"
                     data-confirm-reason="1" data-confirm-reason-label="علت تمدید مهلت" data-confirm-reason-name="reason">
                 <input type="hidden" name="reason" value="" />
                 <input type="hidden" name="days" value="{{ extra }}" />
-                <button class="btn btn-ghost btn-sm" type="submit">{{ extra }} روز مهلت</button>
+                <button class="btn btn-ghost btn-sm" type="submit">{{ (extra) | fa }} روز مهلت</button>
               </form>
               {% endfor %}
               <form method="post" action="/service-cleanup/{{ r.service_id }}/exempt"

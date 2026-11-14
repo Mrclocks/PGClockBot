@@ -53,13 +53,13 @@
         </td>
         <td class="col-hide-sm muted">{% if p.category_id and plan_category_map and plan_category_map.get(p.category_id) %}{{ plan_category_map.get(p.category_id).name }}{% else %}—{% endif %}</td>
         <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
-        <td class="col-hide-sm">{% if p.duration_days %}{{ p.duration_days }} روز{% else %}نامحدود{% endif %}</td>
+        <td class="col-hide-sm">{% if p.duration_days %}{{ (p.duration_days) | fa }} روز{% else %}نامحدود{% endif %}</td>
         <td class="li-sub">
           {#- On phones line two: the warnings, then volume · duration · category. -#}
           {% if plan_limit_issues and plan_limit_issues.get(p.id) %}<span class="li-only badge warn">خارج از سقف</span>{% endif %}
           {% if tpl_missing or pg_empty %}<span class="li-only badge warn">منبع ناقص</span>{% endif %}
           <span>{% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}</span>
-          <span class="li-only">· {% if p.duration_days %}{{ p.duration_days }} روز{% else %}نامحدود{% endif %}{% if p.category_id and plan_category_map and plan_category_map.get(p.category_id) %} · {{ plan_category_map.get(p.category_id).name }}{% endif %}</span>
+          <span class="li-only">· {% if p.duration_days %}{{ (p.duration_days) | fa }} روز{% else %}نامحدود{% endif %}{% if p.category_id and plan_category_map and plan_category_map.get(p.category_id) %} · {{ plan_category_map.get(p.category_id).name }}{% endif %}</span>
         </td>
         <td class="mono col-hide-sm">
           {% if p.pg_template_id %}
@@ -106,11 +106,11 @@
         <td class="li-title">پلن تست{% if trial %} — <span dir="auto">{{ trial.name }}</span>{% endif %}</td>
         <td class="col-hide-sm muted">—</td>
         <td class="mono li-value">رایگان</td>
-        <td class="col-hide-sm">{% if trial %}{{ trial.duration_days }} روز{% else %}—{% endif %}</td>
+        <td class="col-hide-sm">{% if trial %}{{ (trial.duration_days) | fa }} روز{% else %}—{% endif %}</td>
         <td class="li-sub">
           {% if trial_limit_issue %}<span class="li-only badge warn">خارج از سقف</span>{% endif %}
           <span>{% if trial and trial.data_limit_gb is not none %}{{ trial.data_limit_gb | gb }}{% elif trial %}نامحدود{% else %}—{% endif %}</span>
-          {% if trial %}<span class="li-only">· {{ trial.duration_days }} روز</span>{% endif %}
+          {% if trial %}<span class="li-only">· {{ (trial.duration_days) | fa }} روز</span>{% endif %}
         </td>
         <td class="mono col-hide-sm">
           {% if trial and trial.pg_template_id %}تمپلیت #{{ trial.pg_template_id }}
@@ -137,11 +137,11 @@
         <td class="li-title">پلن دلخواه</td>
         <td class="col-hide-sm muted">—</td>
         <td class="mono li-value">هر گیگ / روز</td>
-        <td class="col-hide-sm">{{ values.get('custom_plan_min_days','1') }}–{{ values.get('custom_plan_max_days','365') }} روز</td>
+        <td class="col-hide-sm">{{ (values.get('custom_plan_min_days','1')) | fa }}–{{ (values.get('custom_plan_max_days','365')) | fa }} روز</td>
         <td class="li-sub">
           {% if custom_limit_issue %}<span class="li-only badge warn">خارج از سقف</span>{% endif %}
-          <span>{{ values.get('custom_plan_min_gb','1') }}–{{ values.get('custom_plan_max_gb','500') }} گیگ</span>
-          <span class="li-only">· {{ values.get('custom_plan_min_days','1') }}–{{ values.get('custom_plan_max_days','365') }} روز</span>
+          <span>{{ (values.get('custom_plan_min_gb','1')) | fa }}–{{ (values.get('custom_plan_max_gb','500')) | fa }} گیگ</span>
+          <span class="li-only">· {{ (values.get('custom_plan_min_days','1')) | fa }}–{{ (values.get('custom_plan_max_days','365')) | fa }} روز</span>
         </td>
         <td class="mono col-hide-sm">
           {% if values.get('custom_plan_template_id') %}تمپلیت #{{ values.get('custom_plan_template_id') }}
@@ -169,7 +169,7 @@
         <td class="col-hide-sm muted">—</td>
         <td class="mono li-value">تخفیف پلکانی</td>
         <td class="col-hide-sm">—</td>
-        <td class="li-sub"><span>{{ values.get('wholesale_min_qty','5') }}–{{ values.get('wholesale_max_qty','20') }} عدد</span></td>
+        <td class="li-sub"><span>{{ (values.get('wholesale_min_qty','5')) | fa }}–{{ values.get('wholesale_max_qty','20') }} عدد</span></td>
         <td class="mono col-hide-sm">—</td>
         <td class="li-badge">{% if wholesale_on %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
@@ -397,9 +397,9 @@
         <td class="col-hide-sm muted">{% if p.category_id and reseller_plan_category_map and reseller_plan_category_map.get(p.category_id) %}{{ reseller_plan_category_map.get(p.category_id).name }}{% else %}—{% endif %}</td>
         <td class="li-sub">
           <span>{% if p.plan_kind == 'addon_users' %}کاربر{% else %}حجم{% endif %}</span>
-          <span class="li-only">· {% if p.plan_kind == 'addon_users' %}+{{ p.addon_users or 0 }} کاربر{% else %}+{{ p.addon_gb or 0 }} گیگ{% endif %}{% if p.category_id and reseller_plan_category_map and reseller_plan_category_map.get(p.category_id) %} · {{ reseller_plan_category_map.get(p.category_id).name }}{% endif %}</span>
+          <span class="li-only">· {% if p.plan_kind == 'addon_users' %}+{{ (p.addon_users or 0) | fa }} کاربر{% else %}+{{ (p.addon_gb or 0) | fa }} گیگ{% endif %}{% if p.category_id and reseller_plan_category_map and reseller_plan_category_map.get(p.category_id) %} · {{ reseller_plan_category_map.get(p.category_id).name }}{% endif %}</span>
         </td>
-        <td class="mono">{% if p.plan_kind == 'addon_users' %}+{{ p.addon_users or 0 }} کاربر{% else %}+{{ p.addon_gb or 0 }} گیگ{% endif %}</td>
+        <td class="mono">{% if p.plan_kind == 'addon_users' %}+{{ (p.addon_users or 0) | fa }} کاربر{% else %}+{{ (p.addon_gb or 0) | fa }} گیگ{% endif %}</td>
         <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
         <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
