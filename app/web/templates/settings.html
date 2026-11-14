@@ -18,7 +18,7 @@
 {% elif is_hub %}
 {{ settings_hub(hub_sections(tab_nav, '/settings', area_icon='bot')) }}
 {% else %}
-<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','daily_report'] %}can-preview{% endif %}" id="settings-layout">
+<div class="settings-layout">
   <div class="settings-main">
 
   {% if tab == 'general' %}
@@ -171,20 +171,8 @@
   {% endif %}
 
   </div>
-
-  {% if tab == 'appearance' %}
-  {% include "_tg_preview_appearance.html" %}
-  {% elif tab in ['menu','welcome','messages','buttons','qr','daily_report'] %}
-  {% include "_tg_preview_chat.html" %}
-  {% endif %}
 </div>
 
-{% if tab == 'appearance' %}
-{% include "_tg_preview_appearance_js.html" %}
-{% endif %}
-{% if tab in ['menu','welcome','messages','buttons','qr','daily_report'] %}
-{% include "_tg_preview_chat_js.html" %}
-{% endif %}
 {% if tab == 'naming' %}
 <script>
 (function(){

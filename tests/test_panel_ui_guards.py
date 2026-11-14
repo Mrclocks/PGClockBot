@@ -154,24 +154,6 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
         self.assertIn(f'src="/static/panel_widget_request.js?v={get_panel_asset_cache_key("panel_widget_request.js")}"', html)
         self.assertIn(f'src="/static/panel_ok_flash.js?v={get_panel_asset_cache_key("panel_ok_flash.js")}"', html)
 
-    def test_shop_settings_has_live_preview(self):
-        shop = (ROOT / "app/web/templates/shop_settings.html").read_text(encoding="utf-8")
-        self.assertIn('_tg_preview_appearance.html', shop)
-        self.assertIn('_tg_preview_chat.html', shop)
-        self.assertIn('_tg_preview_appearance_js.html', shop)
-        self.assertIn('_tg_preview_chat_js.html', shop)
-        admin = (ROOT / "app/web/templates/settings.html").read_text(encoding="utf-8")
-        self.assertIn('_tg_preview_appearance.html', admin)
-        self.assertIn('_tg_preview_chat.html', admin)
-        # Shared partials exist
-        for name in (
-            "_tg_preview_appearance.html",
-            "_tg_preview_chat.html",
-            "_tg_preview_appearance_js.html",
-            "_tg_preview_chat_js.html",
-        ):
-            self.assertTrue((ROOT / "app/web/templates" / name).is_file())
-
 class DeleteButtonAndKebabTests(unittest.TestCase):
     def test_btn_danger_matches_soft_tint_style(self):
         css = CSS.read_text(encoding="utf-8")

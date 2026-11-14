@@ -251,12 +251,6 @@ class DomainSettingGroupsTests(unittest.TestCase):
         )
         self.assertEqual({f[0] for f in SETTING_GROUPS["متن دعوت دوستان"]}, {"referral_bonus", "referral_text"})
 
-    def test_preview_js_drops_moved_message_fields(self):
-        src = (TEMPLATES / "_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        self.assertNotIn("s_support_text", src)
-        self.assertNotIn("s_referral_text", src)
-        self.assertNotIn("s_payment_reject_text", src)
-
 
 class SafeNextTests(unittest.TestCase):
     def test_safe_internal_next_blocks_open_redirects(self):

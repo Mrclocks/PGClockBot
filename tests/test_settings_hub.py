@@ -82,7 +82,7 @@ class SettingsPageTests(unittest.TestCase):
         html = self.bot_page()
         self.assertIn('class="settings-hub', html)
         self.assertIn('href="/settings?tab=identity"', html)
-        self.assertNotIn('id="settings-layout"', html)
+        self.assertNotIn('class="settings-layout"', html)
 
     def test_a_bot_settings_page_shows_its_way_back_and_no_tab_rows(self) -> None:
         html = self.bot_page(b"tab=welcome")
@@ -92,6 +92,14 @@ class SettingsPageTests(unittest.TestCase):
         self.assertNotIn("settings-tabs-groups", html)
         self.assertNotIn("settings-subtabs", html)
         self.assertIn('class="section-tabs settings-tabs settings-sections"', html)
+
+    def test_bot_settings_pages_have_no_telegram_preview(self) -> None:
+        for tab in ("menu", "welcome", "messages", "buttons", "qr", "daily_report", "appearance"):
+            html = self.bot_page(f"tab={tab}".encode(), tab=tab)
+            self.assertIn('class="settings-layout"', html, tab)
+            self.assertNotIn("پیش‌نمایش تلگرام", html, tab)
+            self.assertNotIn("data-tg-preview", html, tab)
+            self.assertNotIn("tg-preview", html, tab)
 
     def test_shop_settings_list_offers_only_the_shop_pages(self) -> None:
         tabs = tabs_with_message_variables(RESELLER_SETTINGS_TABS, SHOP_STAFF)
@@ -110,7 +118,7 @@ class SettingsPageTests(unittest.TestCase):
         for key, _label in PANEL_SETTINGS_TABS:
             self.assertIn(f'href="/settings?tab={key}"', hub)
         self.assertIn('href="/security"', hub)
-        self.assertNotIn('id="settings-layout"', html)
+        self.assertNotIn('class="settings-layout"', html)
 
     def test_a_system_page_leads_back_to_the_system_list(self) -> None:
         html = self.system_page(b"tab=backup", "backup")
