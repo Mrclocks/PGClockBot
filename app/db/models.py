@@ -300,6 +300,8 @@ class Order(Base):
     # When staff were told about a sale made outside the bot; claimed once, so a retry or
     # a second tap on the same order does not repeat the notice.
     staff_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The panel quota a renewal or add-on replaced, saved before the write so a void can put it back.
+    service_restore: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     service_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("user_services.id"), nullable=True, index=True
     )

@@ -33,6 +33,7 @@ from app.services.formatting import (
 )
 from app.services.numbers import to_fa_digits
 from app.services.plans_catalog import require_catalog_owner_id
+from app.services.service_restore import encode_change
 from app.services.cashback import grant_after_delivery
 from app.services.payg_charges import new_request_key
 from app.services.payg_gate import (
@@ -1459,6 +1460,24 @@ def _pack_change(kind: str, *, current_limit: int | None, new_limit: int | None,
     return ServiceChange(ChargeEvent.ADD_DAYS, days=days)
 
 
+async def _save_restore_record(
+    session: AsyncSession, order_id: int, service: UserService, info: dict[str, Any], payload: dict[str, Any]
+) -> None:
+    """Commit the quota this pack replaces before the panel write, so a void can put it back."""
+    try:
+        record = encode_change(service_id=int(service.id), plan_id=service.plan_id, before=info, payload=payload)
+    except ValueError:
+        log.warning("addon restore record skipped order=%s", order_id, exc_info=True)
+        return
+    await session.execute(
+        update(Order)
+        .where(Order.id == order_id)
+        .values(service_restore=record)
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+
+
 async def _write_pack(
     session: AsyncSession, pg: Any, service: UserService, payload: dict[str, Any], hold: HeldVolume | None
 ) -> None:
@@ -1583,6 +1602,8 @@ async def _apply_pack_to_service(
         session, service, shop_id=order_reseller_id, order_id=order_id, hold=hold,
         change=_pack_change(kind, current_limit=current_limit, new_limit=data_limit_bytes, days=pack_days),
     )
+    if order_id:
+        await _save_restore_record(session, int(order_id), service, info, payload)
     await _write_charged_pack(session, pg, service, payload, hold, charge)
     # Cache sync is best-effort — PG already mutated. Never fail the delivery
     # claim here or a retry would double-apply the same addon.
