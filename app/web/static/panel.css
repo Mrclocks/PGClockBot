@@ -2633,8 +2633,7 @@ a.btn.btn-ghost:hover {
   flex: 0 0 auto;
   margin: 0;
 }
-.page-more-btn,
-.page-more-help { display: none; }
+.page-more-btn { display: none; }
 .page-back {
   display: grid;
   place-items: center;
@@ -12862,3 +12861,4 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
 .snap-main { flex: 1 1 220px; min-width: 0; }
 .snap-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
 .color-tag-select option[style] { color: var(--opt-color); font-weight: 600; }
+
