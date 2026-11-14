@@ -212,9 +212,12 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertNotIn("abandoned_plans", ux)
 
     def test_settings_icons_distinct(self):
-        macros = Path("app/web/templates/macros.html").read_text(encoding="utf-8")
-        self.assertIn("panel-settings", macros)
-        self.assertIn("bot-settings", macros)
+        from jinja2 import Environment, FileSystemLoader
+
+        # The two settings areas draw different icons (sliders vs. robot), wherever the title icon comes from.
+        env = Environment(loader=FileSystemLoader("app/web/templates"), autoescape=True)
+        draw = env.from_string('{% from "macros.html" import page_ico %}{{ page_ico(name) }}').render
+        self.assertNotEqual(draw(name="panel-settings"), draw(name="bot-settings"))
         from app.services.panel_nav import build_sidebar, viewer_from_context
 
         # Panel settings: sliders; bot settings: robot face (not identical gear).

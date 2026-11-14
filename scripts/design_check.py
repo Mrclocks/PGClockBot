@@ -30,12 +30,22 @@ VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
 HEX_COLOUR = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 JINJA_TAG = re.compile(r"\{[%{#].*?[%}#]\}")
 JINJA_CANCEL = re.compile(r"ds_foot\([^)]*cancel\s*=\s*true", re.IGNORECASE)
+FONT_SIZE = re.compile(r"\bfont-size\s*:\s*[^;}]*?\d(?:px|rem|em)\b|\bfont\s*:[^;}]*?\d(?:px|rem|em)\b")
+RADIUS = re.compile(r"\bborder(?:-[a-z]+)*-radius\s*:\s*([^;}]*)")
+LENGTH = re.compile(r"(?<![\w.-])(\d*\.?\d+)(?:px|rem|em)\b")
+IMPORTANT = re.compile(r"!\s*important")
+SVG_TAG = re.compile(r"<svg\b")
+ICON_SET = "app/web/templates/_icons.html"
 
 RULE_HELP = {
     "modal-not-ds": "every .ui-modal also carries .ds (DESIGN_SYSTEM.md §3)",
     "form-modal-cancel": "only a .ds-dialog has «انصراف»; a form modal closes with the header × (§3)",
     "inline-style": "no style=\"…\" in templates; use panel-ds.css classes and tokens (§1, AGENTS.md §9)",
     "raw-colour": "no literal colours in component CSS; use a token such as var(--sel-fg) (§4)",
+    "raw-font-size": "text sizes come from the type scale var(--fs-1…5) or var(--control-fs) (§2)",
+    "raw-radius": "corner radii come from var(--r-sm), var(--inner-radius), var(--radius) or var(--control-radius) (§2)",
+    "important": "no new !important; raise specificity or fix the cascade instead (§9)",
+    "inline-svg": "icons come from icon() in _icons.html, not hand-written <svg> in templates (§2)",
 }
 
 
@@ -109,6 +119,7 @@ def template_findings(source: str) -> list[Finding]:
     for number, line in enumerate(source.splitlines(), start=1):
         if JINJA_CANCEL.search(line) and not _inside_dialog(source, number):
             findings.append(Finding("form-modal-cancel", number, line.strip()[:60]))
+        findings.extend(Finding("inline-svg", number, line.strip()[:60]) for _ in SVG_TAG.finditer(line))
     return findings
 
 
@@ -127,6 +138,13 @@ def css_findings(source: str) -> list[Finding]:
         if re.match(r"\s*--[\w-]+\s*:", code):
             continue
         findings.extend(Finding("raw-colour", number, match.group(0)) for match in HEX_COLOUR.finditer(code))
+        findings.extend(Finding("raw-font-size", number, match.group(0)[:60]) for match in FONT_SIZE.finditer(code))
+        findings.extend(Finding("important", number, code.strip()[:60]) for _ in IMPORTANT.finditer(code))
+        findings.extend(
+            Finding("raw-radius", number, match.group(0)[:60])
+            for match in RADIUS.finditer(code)
+            if any(float(length.group(1)) > 0 for length in LENGTH.finditer(match.group(1)))
+        )
     return findings
 
 
@@ -140,7 +158,8 @@ def is_stylesheet(path: str) -> bool:
 
 def findings_for(path: str, source: str) -> list[Finding]:
     if is_template(path):
-        return template_findings(source)
+        found = template_findings(source)
+        return [f for f in found if f.rule != "inline-svg"] if path == ICON_SET else found
     if is_stylesheet(path):
         return css_findings(source)
     return []
