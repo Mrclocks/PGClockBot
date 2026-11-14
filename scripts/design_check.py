@@ -36,6 +36,10 @@ RADIUS = re.compile(r"\bborder(?:-[a-z]+)*-radius\s*:\s*([^;}]*)")
 LENGTH = re.compile(r"(?<![\w.-])(\d*\.?\d+)(?:px|rem|em)\b")
 IMPORTANT = re.compile(r"!\s*important")
 # An icon is drawn on the 24 or 16 unit grid; a gauge, chart or sparkline has its own viewBox and is data, not an icon.
+# A transition of a layout property re-lays the page out every frame; motion uses transform, opacity or clip-path.
+LAYOUT_MOTION = re.compile(
+    r"\btransition(?:-property)?\s*:[^;}]*?(?<![\w-])(width|height|max-height|min-height|top|right|bottom|left|margin(?:-[a-z]+)?|padding(?:-[a-z]+)?|inset)\b"
+)
 SVG_TAG = re.compile(r'<svg\b(?=[^>]*viewBox="0 0 (?:24 24|16 16)")')
 ICON_SET = "app/web/templates/_icons.html"
 
@@ -51,6 +55,7 @@ RULE_HELP = {
     "raw-radius": "corner radii come from var(--r-sm), var(--inner-radius), var(--radius) or var(--control-radius) (§2)",
     "important": "no new !important; raise specificity or fix the cascade instead (§9)",
     "inline-svg": "icons come from icon() in _icons.html, not hand-written <svg> in templates (§2)",
+    "layout-motion": "only transform, opacity and clip-path animate; a width, height or position transition lays out every frame (§7-1)",
 }
 
 
@@ -156,6 +161,7 @@ def css_findings(source: str) -> list[Finding]:
         findings.extend(Finding("raw-colour", number, match.group(0)) for match in HEX_COLOUR.finditer(code))
         findings.extend(Finding("raw-font-size", number, match.group(0)[:60]) for match in FONT_SIZE.finditer(code))
         findings.extend(Finding("important", number, code.strip()[:60]) for _ in IMPORTANT.finditer(code))
+        findings.extend(Finding("layout-motion", number, match.group(0)[:60]) for match in LAYOUT_MOTION.finditer(code))
         findings.extend(
             Finding("raw-radius", number, match.group(0)[:60])
             for match in RADIUS.finditer(code)
