@@ -93,7 +93,7 @@ class UsersOpsUnitTests(unittest.TestCase):
 class UsersOpsUiTests(unittest.TestCase):
     def test_template_has_ops_chrome(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn("stat_strip(", users)
+        self.assertNotIn("stat_strip(", users)
         self.assertIn("alert-dot", users)
         self.assertIn("badge-risk", users)
         self.assertIn("cell-name-tags", users)
