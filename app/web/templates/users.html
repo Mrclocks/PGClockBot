@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
 {#- Declared at template top level (outside any block) so both {% block content %}
    and {% block page_scripts %} share the same values — {% set %} inside a block
@@ -15,21 +15,15 @@
 {% set bulk_count = rows|length if flt != 'all' else 0 %}
 {% block title %}کاربران ربات{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('users', 'کاربران ربات', help='users') }}
-  </div>
-  <div class="page-head-actions">
-    {% if provision %}
-    <button type="button" class="btn" data-modal-open="modal-user-create">کاربر جدید</button>
-    {% endif %}
-    {% if ops and flt != 'all' and bulk_count > 0 %}
-    <button type="button" class="btn btn-ghost"
-            data-modal-open="modal-users-bulk"
-            data-bulk-count="{{ bulk_count }}">پیام گروهی ({{ bulk_count | num }})</button>
-    {% endif %}
-  </div>
-</div>
+{% call(slot) page_header('users', 'کاربران ربات', help='users') %}
+  {%- if slot == 'primary' and provision %}
+  <button type="button" class="btn" data-modal-open="modal-user-create">{{ act_label('کاربر جدید', 'کاربر') }}</button>
+  {%- elif slot == 'more' and ops and flt != 'all' and bulk_count > 0 %}
+  <button type="button" class="btn btn-ghost"
+          data-modal-open="modal-users-bulk"
+          data-bulk-count="{{ bulk_count }}">پیام گروهی ({{ bulk_count | num }})</button>
+  {%- endif %}
+{% endcall %}
 {# flash_ok / flash_err rendered once in base.html (above title) #}
 
 <div class="home-panels users-ops-overview">

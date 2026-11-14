@@ -1,4 +1,5 @@
 {# Shared Persian labels — works even if Python filters are not registered yet #}
+{% from "_icons.html" import icon %}
 
 {# Capsule numeric stepper: [ − ] [ input ] [ + ] (dir=ltr). Negatives allowed unless min set. #}
 {% macro num_stepper(name, value=0, step=1, min=None, max=None, inputmode='numeric', aria_label='', class_name='') -%}
@@ -171,88 +172,14 @@
 {# Page title icon — stroke SVGs matching sidebar language; tone: brand | pg | neutral #}
 {% macro page_ico(name, tone='brand') -%}
 <span class="page-title-ico{% if tone == 'pg' %} page-title-ico--pg{% elif tone == 'neutral' %} page-title-ico--neutral{% endif %}" aria-hidden="true">
-{%- if name == 'home' -%}
-<svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
-{%- elif name == 'overview' -%}
-<svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-{%- elif name == 'users' -%}
-<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
-{%- elif name == 'user' -%}
-<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
-{%- elif name == 'orders' -%}
-<svg viewBox="0 0 24 24"><path d="M7 7h13l-1.2 9.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.7L6 4H3"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>
-{%- elif name == 'payments' -%}
-<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h4"/></svg>
-{%- elif name == 'plans' -%}
-<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/><path d="M18 15v4M16 17h4"/></svg>
-{%- elif name == 'plan-edit' -%}
-<svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>
-{%- elif name == 'tickets' -%}
-<svg viewBox="0 0 24 24"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
-{%- elif name == 'inbox' -%}
-<svg viewBox="0 0 24 24"><path d="M12 4a5 5 0 0 1 5 5v2.2l1.8 3.3H5.2L7 11.2V9a5 5 0 0 1 5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>
-{%- elif name == 'broadcast' -%}
-<svg viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M18.8 6.2a8.5 8.5 0 0 1 0 11.6"/></svg>
-{%- elif name == 'settings' -%}
-<svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><path d="M2 14h2M20 14h2M12 4v2"/></svg>
-{%- elif name == 'panel-settings' -%}
-<svg viewBox="0 0 24 24"><path d="M4 7h9M17 5v4M19 7h1"/><path d="M4 12h3M11 10v4M13 12h7"/><path d="M4 17h11M19 15v4M21 17h-1"/></svg>
-{%- elif name == 'bot-settings' -%}
-<svg viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V5H9"/><path d="M2 14h2M20 14h2"/><circle cx="9.5" cy="13.5" r="1.1"/><circle cx="14.5" cy="13.5" r="1.1"/><path d="M9.5 17h5"/></svg>
-{%- elif name == 'shop' -%}
-<svg viewBox="0 0 24 24"><path d="M4 9h16l-1.2 10.2A2 2 0 0 1 16.8 21H7.2a2 2 0 0 1-2-1.8L4 9z"/><path d="M8 9V7a4 4 0 0 1 8 0v2"/></svg>
-{%- elif name == 'security' -%}
-<svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M12 11v3.2M12 16.2h.01"/></svg>
-{%- elif name == 'resellers' -%}
-<svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
-{%- elif name == 'reseller-edit' -%}
-<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M15 14.5l5 5M20 14.5l-5 5"/></svg>
-{%- elif name == 'applications' -%}
-<svg viewBox="0 0 24 24"><path d="M7 3.5h10a2 2 0 0 1 2 2V20l-3.2-2H7a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2z"/><path d="M9 9h6M9 13h4"/></svg>
-{%- elif name == 'nodes' -%}
-<svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
-{%- elif name == 'groups' -%}
-<svg viewBox="0 0 24 24"><path d="M4 7h16v10H4z"/><path d="M8 7V5h8v2"/></svg>
-{%- elif name == 'hosts' -%}
-<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg>
-{%- elif name == 'templates' -%}
-<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
-{%- elif name == 'inbounds' -%}
-<svg viewBox="0 0 24 24"><path d="M4 12h16M12 4v16"/><circle cx="12" cy="12" r="3"/></svg>
-{%- elif name == 'admins' -%}
-<svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.2 2.8 7.2 7 8.5 4.2-1.3 7-4.3 7-8.5V6l-7-3z"/></svg>
-{%- elif name == 'discounts' -%}
-<svg viewBox="0 0 24 24"><path d="M19 5 5 19"/><circle cx="7.5" cy="7.5" r="2.2"/><circle cx="16.5" cy="16.5" r="2.2"/></svg>
-{%- elif name == 'gift' -%}
-<svg viewBox="0 0 24 24"><rect x="3.5" y="8.5" width="17" height="4" rx="1"/><path d="M5 12.5V20h14v-7.5"/><path d="M12 8.5V20"/><path d="M12 8.5C10.5 5.5 7 5.5 7 7.3c0 1.4 3 1.2 5 1.2zM12 8.5c1.5-3 5-3 5-1.2 0 1.4-3 1.2-5 1.2z"/></svg>
-{%- elif name == 'loyalty' -%}
-<svg viewBox="0 0 24 24"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7L12 3z"/></svg>
-{%- elif name == 'trash' -%}
-<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>
-{%- else -%}
-<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2.5"/></svg>
-{%- endif -%}
+{{- icon(name) -}}
 </span>
 {%- endmacro %}
 
 {# Card title with a line icon, same icon language as page_title. tone: neutral (web panel) | bot (bot panel, orange) #}
 {% macro card_title(name, text, tone='neutral') -%}
 <h2 class="card-title card-title--{{ tone }}">
-  <svg class="card-title-ico" viewBox="0 0 24 24" aria-hidden="true">
-  {%- if name == 'payments' -%}<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18M7 15h3"/>
-  {%- elif name == 'orders' -%}<path d="M6 8h12l-1 11H7L6 8z"/><path d="M9 8a3 3 0 0 1 6 0"/>
-  {%- elif name == 'connection' -%}<path d="M5 12.5a10 10 0 0 1 14 0M8 15.5a6 6 0 0 1 8 0"/><circle cx="12" cy="19" r="1"/>
-  {%- elif name == 'wallet' -%}<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M16 12.5h5"/>
-  {%- elif name == 'queue' -%}<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/>
-  {%- elif name == 'sales' -%}<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>
-  {%- elif name == 'account' -%}<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>
-  {%- elif name == 'limits' -%}<path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/>
-  {%- elif name == 'server' -%}<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>
-  {%- elif name == 'traffic' -%}<path d="M4 19V5M4 19h16"/><path d="M7 15l4-4 3 3 5-6"/>
-  {%- elif name == 'users' -%}<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/>
-  {%- elif name == 'nodes' -%}<rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/>
-  {%- endif -%}
-  </svg>
+  {{ icon(name, 'card-title-ico') }}
   <span>{{ text }}</span>
 </h2>
 {%- endmacro %}
@@ -270,6 +197,58 @@
   {% endif %}
   {% endif %}
 </div>
+{%- endmacro %}
+
+{# The page header (DESIGN_SYSTEM.md §7). One markup for both layouts: a title row on desktop and, on phones, the
+   content of the capsule header (title next to search, «⋯» and the primary action at the far end).
+   Actions come from a call block so permission checks, forms and CSRF stay in the page:
+     {% call(slot) page_header('plans', 'پلن‌ها', help='plans') %}
+       {% if slot == 'primary' %}<button type="button" class="btn" data-modal-open="m">افزودن پلن</button>{% endif %}
+       {% if slot == 'more' %}<button type="button" class="btn btn-ghost" data-modal-open="c">برچسب دسته</button>{% endif %}
+     {% endcall %}
+   «primary» holds at most one action; everything in «more» sits beside it on desktop and in the «⋯» menu on phones.
+   ``back`` turns the page into a detail page: a round back button replaces the icon and ``subtitle`` shows the path.
+   ``capsule=false`` keeps the title row out of the phone header (the dashboard keeps the brand there). #}
+{% macro page_header(icon_name, title, tone='brand', help=None, back=None, back_label=None, subtitle=None, capsule=true) -%}
+{%- set primary = caller('primary') if caller is defined else '' -%}
+{%- set more = caller('more') if caller is defined else '' -%}
+{%- set has_primary = primary|trim|length > 0 -%}
+{%- set has_more = more|trim|length > 0 -%}
+{%- set topic = (guide_topics or {}).get(help) if help else none -%}
+<div class="page-head{% if back %} page-head--detail{% endif %}" data-page-head="{{ 'capsule' if capsule else 'flow' }}">
+  <div class="page-head-main">
+    {%- if back %}
+    <a class="page-back" href="{{ back }}" aria-label="بازگشت به {{ back_label or 'صفحهٔ قبل' }}">{{ icon('back') }}</a>
+    {%- endif %}
+    {{ page_title(icon_name, title, tone, help) }}
+    {%- if subtitle %}
+    <p class="page-head-sub">{{ subtitle }}</p>
+    {%- endif %}
+  </div>
+  {%- if has_primary or has_more or topic %}
+  <div class="page-head-actions">
+    {%- if has_more or topic %}
+    <div class="page-more" id="page-more" data-page-more>
+      {{ more }}
+      {%- if topic %}
+      <a class="page-more-help" href="{{ topic.href }}">{{ icon('help') }}<span>راهنمای این صفحه</span></a>
+      {%- endif %}
+    </div>
+    {%- endif %}
+    {{ primary }}
+    {%- if has_more or topic %}
+    <button type="button" class="page-more-btn" aria-label="گزینه‌های بیشتر" aria-expanded="false"
+            aria-controls="page-more" data-page-more-toggle>{{ icon('dots') }}</button>
+    {%- endif %}
+  </div>
+  {%- endif %}
+</div>
+{%- endmacro %}
+
+{# Label of a page's primary action: the full label on desktop and for screen readers; «+» and a short label in the
+   phone capsule, «+» alone under 360 pixels. ``icon_name`` other than «plus» marks a frequent non-create action. #}
+{% macro act_label(label, short=None, icon_name='plus') -%}
+{{ icon(icon_name, 'act-ico') }}<span class="act-long">{{ label }}</span>{% if short %}<span class="act-short" aria-hidden="true">{{ short }}</span>{% endif %}
 {%- endmacro %}
 
 {# Long field helps collapse behind «راهنما»; short ones stay inline. #}
@@ -299,21 +278,7 @@
 
 {# Action center row icons — keyed by ux20 build_action_center entry key #}
 {% macro action_center_icon(key) -%}
-<span class="home-action-ico" aria-hidden="true">
-{%- if key == 'pending' -%}
-<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h4"/></svg>
-{%- elif key == 'delivery' -%}
-<svg viewBox="0 0 24 24"><path d="M12 9v4M12 16h.01"/><circle cx="12" cy="12" r="9"/></svg>
-{%- elif key == 'tickets' -%}
-<svg viewBox="0 0 24 24"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
-{%- elif key == 'expiring' -%}
-<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-{%- elif key == 'low_volume' -%}
-<svg viewBox="0 0 24 24"><path d="M4 18h16M6 14l3-6 3 4 3-5 3 7"/></svg>
-{%- else -%}
-<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2.5"/></svg>
-{%- endif -%}
-</span>
+<span class="home-action-ico" aria-hidden="true">{{ icon(key) }}</span>
 {%- endmacro %}
 
 {# PasarGuard sub-nav — live pg_permissions only (never web is_admin) #}
