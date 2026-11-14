@@ -251,6 +251,33 @@
 
     const side = document.getElementById('sidebar');
     const back = document.getElementById('side-backdrop');
+    /* Safari 26 colours its bottom toolbar from the fixed element at the bottom edge of the screen and looks
+       again only when a fixed element is added or removed: a dim that is merely faded out keeps the toolbar
+       dark after the menu closes. Once the fade has ended the dim leaves the layout (display:none); before it
+       is shown again it comes back with a reflow, so the fade still runs on the compositor. */
+    var backGoneTimer = 0;
+    function backdropFadeMs() {
+      var raw = getComputedStyle(document.documentElement).getPropertyValue('--drawer-motion');
+      return (parseFloat(raw) || 240) + 60;
+    }
+    function setBackdrop(open, instant) {
+      if (!back) return;
+      clearTimeout(backGoneTimer);
+      if (open) {
+        if (back.classList.contains('is-gone')) {
+          back.classList.remove('is-gone');
+          void back.offsetWidth;
+        }
+        back.classList.add('show');
+      } else {
+        back.classList.remove('show');
+        if (instant) back.classList.add('is-gone');
+        else backGoneTimer = setTimeout(function () {
+          if (!back.classList.contains('show')) back.classList.add('is-gone');
+        }, backdropFadeMs());
+      }
+      back.setAttribute('aria-hidden', open ? 'false' : 'true');
+    }
     function setOpen(v, instant){
       if (!side) return;
       var open = !!v;
@@ -259,11 +286,7 @@
         void side.offsetWidth;
       }
       side.classList.toggle('open', open);
-      if (back) {
-        /* Class-only (no hidden/display flip) so opacity can fade on the compositor. */
-        back.classList.toggle('show', open);
-        back.setAttribute('aria-hidden', open ? 'false' : 'true');
-      }
+      setBackdrop(open, instant);
       document.body.classList.toggle('nav-open', open);
       document.querySelectorAll('[data-drawer-open]').forEach(function (el) {
         el.setAttribute('aria-expanded', open ? 'true' : 'false');

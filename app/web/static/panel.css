@@ -5227,6 +5227,9 @@ form.settings-form > .actions.sticky-actions,
   inset: 0;
   background: var(--side-dim);
 }
+/* Out of the layout once its fade has ended (panel.js setBackdrop): Safari 26 re-reads its toolbar colour only
+   when a fixed element is added or removed. */
+.side-backdrop.is-gone { display: none; }
 .side-backdrop.show {
   visibility: visible;
   opacity: 1;
@@ -5278,6 +5281,9 @@ form.settings-form > .actions.sticky-actions,
 
       E) Fixed overlays that touch a viewport edge keep their own background
          transparent and paint on an absolute child (tint freeze on Safari 26).
+         Safari re-reads its toolbar colour only when a fixed element is added
+         or removed, so a full-width overlay that has faded out also leaves the
+         layout (display:none; .side-backdrop.is-gone, set by panel.js).
   */
   html:has(.shell) {
     height: auto;
