@@ -4730,27 +4730,6 @@ form.settings-form > .actions.sticky-actions,
 .settings-modal-panel:not([data-scroll-shell="1"]) > .settings-modal-flash {
   margin-bottom: var(--space-2);
 }
-.settings-modal-panel .ui-modal-scroll > .modal-section-tabs,
-.settings-modal-panel > .modal-section-tabs {
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
-  touch-action: pan-x;
-  max-width: 100%;
-  /* Vertical rhythm owned by .ui-modal-scroll gap when shell is present */
-  margin-bottom: 0;
-  padding-bottom: var(--space-0);
-}
-.settings-modal-panel .ui-modal-scroll > .modal-section-tabs .tab-btn,
-.settings-modal-panel > .modal-section-tabs .tab-btn {
-  flex: 0 0 auto;
-}
-/* Fallback when scroll shell not yet wrapped: keep a little air under tabs */
-.settings-modal-panel:not([data-scroll-shell="1"]) > .modal-section-tabs {
-  margin-bottom: var(--space-2);
-}
 .settings-modal-body {
   flex: 0 0 auto;
   min-height: 0;

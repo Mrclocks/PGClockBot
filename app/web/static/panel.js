@@ -1404,25 +1404,6 @@
       return modal.contains(scroller);
     }
 
-    function tryScrollModalTabs(e, modal){
-      /* Vertical-only wheel guard was killing horizontal tab scroll (loyalty etc.). */
-      const t = e.target;
-      const tabs = t && t.closest ? t.closest('.modal-section-tabs') : null;
-      if (!tabs || !modal.contains(tabs)) return false;
-      if (tabs.scrollWidth <= tabs.clientWidth + 1) return false;
-      const dxRaw = e.deltaX || 0;
-      const dyRaw = e.deltaY || 0;
-      const dx = Math.abs(dxRaw) > Math.abs(dyRaw) ? dxRaw : dyRaw;
-      if (!dx) return false;
-      const before = tabs.scrollLeft;
-      const max = tabs.scrollWidth - tabs.clientWidth;
-      const next = Math.max(0, Math.min(max, before + dx));
-      if (next === before) return false;
-      tabs.scrollLeft = next;
-      e.preventDefault();
-      return true;
-    }
-
     function findScrollableAncestor(start, modal){
       let node = start;
       while (node && node !== modal && node !== document.body) {
@@ -1468,7 +1449,6 @@
           e.preventDefault();
           return;
         }
-        if (tryScrollModalTabs(e, modal)) return;
         const scroller = findScrollableAncestor(e.target, modal);
         if (canScrollInside(scroller, e.deltaY)) return;
         /* Interior edge: overscroll-behavior:contain on .ui-modal-scroll blocks chain */
@@ -1496,11 +1476,6 @@
             || e.target === modal
             || (e.target.classList && e.target.classList.contains('ui-modal-backdrop'))) {
           e.preventDefault();
-          return;
-        }
-        /* Let native horizontal pan work on overflowing modal tab strips. */
-        const tabs = e.target.closest && e.target.closest('.modal-section-tabs');
-        if (tabs && modal.contains(tabs) && tabs.scrollWidth > tabs.clientWidth + 1) {
           return;
         }
         if (!e.touches || !e.touches.length) return;
@@ -1856,53 +1831,6 @@
         return;
       }
       closeModal(open);
-    });
-
-    /* Domain settings modals: inner tab buttons */
-    document.addEventListener('click', (e) => {
-      const tabBtn = e.target.closest('[data-modal-tabs] [data-modal-tab]');
-      if (!tabBtn) return;
-      const nav = tabBtn.closest('[data-modal-tabs]');
-      const root = tabBtn.closest('.ui-modal-panel') || tabBtn.closest('.ui-modal');
-      if (!nav || !root) return;
-      e.preventDefault();
-      const id = tabBtn.getAttribute('data-modal-tab');
-      nav.querySelectorAll('[data-modal-tab]').forEach((btn) => {
-        btn.classList.toggle('active', btn === tabBtn);
-      });
-      root.querySelectorAll('[data-modal-tab-panel]').forEach((panel) => {
-        const match = panel.getAttribute('data-modal-tab-panel') === id;
-        panel.hidden = !match;
-      });
-      const modalRoot = tabBtn.closest('.ui-modal');
-      if (modalRoot) pinModalStickySave(modalRoot);
-      try {
-        const u = new URL(window.location.href);
-        const inDomainModal = !!(
-          tabBtn.closest('#modal-loyalty-settings')
-          || tabBtn.closest('#modal-finance-settings')
-          || tabBtn.closest('#modal-supports-settings')
-          || u.searchParams.has('settings')
-          || u.searchParams.has('supports')
-          || u.searchParams.has('stab')
-        );
-        if (inDomainModal) {
-          if (id === 'payment' || id === 'billing') u.searchParams.set('settings', id);
-          else if (id === 'club') u.searchParams.set('settings', '1');
-          else if (id === 'referral' || id === 'rules' || id === 'rewards' || id === 'tiers') {
-            u.searchParams.set('settings', id);
-          }
-          else if (id === 'contacts') {
-            u.searchParams.set('supports', '1');
-            u.searchParams.set('stab', 'contacts');
-          } else if (id === 'text') {
-            u.searchParams.set('supports', '1');
-            u.searchParams.set('stab', 'text');
-          }
-          const next = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '') + u.hash;
-          window.history.replaceState({}, '', next);
-        }
-      } catch (err) {}
     });
 
     /* Copy helpers (subscription links, etc.) — data-copy holds the text to copy */

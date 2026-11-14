@@ -100,7 +100,6 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
   display: flex; flex-direction: column; gap: var(--sec-gap); padding: var(--g4) 0 0; margin: 0;
 }
 .ui-modal.ds .ui-modal-scroll > .ds-sec:first-of-type,
-.ui-modal.ds .ui-modal-scroll > .modal-section-tabs { margin-top: var(--g4); }
 .ui-modal.ds .ds-body > .ds-sec, .ui-modal.ds .ds-sec { padding: 0; margin: 0; scroll-margin-top: 160px; }
 
 /* Footer: pinned, same padding for one or two buttons, safe area included. */
@@ -248,20 +247,20 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds .btn-color-label { font-size: 13px; font-weight: 500; }
 
 /* ===================================================================== 6. Tracks: one rule for every tab strip and switch */
-.ds .section-tabs:not(.settings-subtabs), .ds .ds-seg, .ds .ds-aud, .ds .sales-seg, .ds .modal-section-tabs {
+.ds .section-tabs:not(.settings-subtabs), .ds .ds-seg, .ds .ds-aud, .ds .sales-seg {
   display: flex; align-items: center; gap: var(--g1); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
   min-height: var(--ctl-h); height: var(--ctl-h); padding: var(--track-pad); margin: 0;
   border: 1px solid var(--line); border-radius: 999px; background: var(--muted); box-sizing: border-box;
 }
 .ds .section-tabs::-webkit-scrollbar, .ds .ds-seg::-webkit-scrollbar, .ds .sales-seg::-webkit-scrollbar { display: none; }
 .ds .section-tabs:not(.settings-subtabs) a, .ds .section-tabs:not(.settings-subtabs) .tab-btn,
-.ds .ds-seg button, .ds .ds-aud button, .ds .sales-seg button, .ds .sales-seg a, .ds .modal-section-tabs .tab-btn {
+.ds .ds-seg button, .ds .ds-aud button, .ds .sales-seg button, .ds .sales-seg a {
   flex: 1 0 auto; height: var(--cmp-h); min-height: var(--cmp-h); padding: 0 var(--g4); margin: 0; gap: 6px;
   border: 0; border-radius: 999px; background: transparent; color: var(--muted-fg);
   font: inherit; font-size: 13px; font-weight: 500; text-decoration: none; cursor: pointer; box-shadow: none;
 }
 .ds .section-tabs:not(.settings-subtabs) a.active, .ds .section-tabs:not(.settings-subtabs) .tab-btn.active,
-.ds .ds-seg button.on, .ds .ds-aud button.on, .ds .sales-seg button.on, .ds .sales-seg a.on, .ds .modal-section-tabs .tab-btn.active {
+.ds .ds-seg button.on, .ds .ds-aud button.on, .ds .sales-seg button.on, .ds .sales-seg a.on {
   /* The bottom bar's active pill: a soft brand fill, no outline. */
   background: var(--sel-bg); color: var(--sel-fg); box-shadow: none; font-weight: 600;
 }
@@ -648,7 +647,6 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .settings-card > h2, .ds .edit-section-head h3, .ds .ds-sec-title, .ds .form-field, .ds .setting-item > label,
 .ds .ui-switch-copy strong, .ds .ds-type-copy strong, .ui-modal.ds .modal-title h2 { line-height: 1.25; }
 /* Tab rows inside modals: 16 above and below, like every other row of tabs. */
-.ui-modal.ds .modal-section-tabs { margin: var(--g4) 0 !important; }
 .ui-modal.ds .settings-modal-body { display: flex; flex-direction: column; gap: var(--sec-gap); margin: 0; padding: 0; }
 /* A colour menu on the default tone looks like every other field; other tones keep their colour preview. */
 .ds .btn-color-card .ui-select[data-tone="default"] .ui-select-toggle,
@@ -815,6 +813,13 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .hub-label { font-size: var(--fs-3); font-weight: 600; line-height: 1.4; }
 .ds .hub-desc { overflow: hidden; color: var(--muted-fg); font-size: var(--fs-2); line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .ds .hub-chev { display: grid; flex: 0 0 auto; color: var(--muted-fg); }
+
+/* A settings modal as list → section (DESIGN_SYSTEM.md §3): the same rows, one column, as buttons that open the
+   section in place. While a section is open the back circle takes the place of the title icon. */
+.ds .modal-list { grid-template-columns: minmax(0, 1fr); }
+.ds .modal-list[hidden] { display: none; }
+.ds button.hub-row { width: 100%; border: 0; background: none; font: inherit; text-align: start; cursor: pointer; }
+.ui-modal.ds .ds-head-row:has(> .modal-list-back:not([hidden])) .page-title-ico { display: none; }
 /* The one row of a settings page: its sections share the bar equally. */
 .ds .settings-sections { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; }
 .ds .settings-sections a { justify-content: center; text-align: center; }

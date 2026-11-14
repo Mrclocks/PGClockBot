@@ -4280,11 +4280,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             contacts, err = contacts_from_form_json(str(raw))
             if err:
                 return RedirectResponse(
-                    f"/tickets?supports=1&err={quote(err)}",
+                    f"/tickets?supports=1&stab=contacts&err={quote(err)}",
                     status_code=303,
                 )
             await save_support_contacts(session, contacts or [])
-            return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+            return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
         # Legacy single-row upsert (bot / older clients)
         from app.services.button_styles import parse_item_button_style_form
@@ -4312,10 +4312,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
         if err:
             return RedirectResponse(
-                f"/tickets?supports=1&err={quote(err)}",
+                f"/tickets?supports=1&stab=contacts&err={quote(err)}",
                 status_code=303,
             )
-        return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+        return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
     @app.post("/supports/delete")
     async def supports_delete(
@@ -4329,7 +4329,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         contact_id = str(form.get("id") or "").strip()
         if contact_id:
             await delete_support_contact(session, contact_id)
-        return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+        return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
     def _menu_tab_context(values: dict) -> dict:
         from app.bot.keyboards import DEFAULT_ACTIVE_MENU_ORDER, DEFAULT_MENU_ORDER

@@ -126,8 +126,13 @@ def template_findings(source: str) -> list[Finding]:
 def _inside_dialog(source: str, line_number: int) -> bool:
     """Whether the nearest modal opened above this line is a confirmation dialog."""
     above = "\n".join(source.splitlines()[:line_number])
-    opens = re.findall(r'class="([^"]*\bui-modal\b[^"]*)"', above)
-    return bool(opens) and "ds-dialog" in JINJA_TAG.sub(" ", opens[-1]).split()
+    # Only the modal root counts: ``ui-modal-panel`` and ``ui-modal-head`` sit inside it.
+    opens = [
+        tokens
+        for value in re.findall(r'class="([^"]*)"', above)
+        if "ui-modal" in (tokens := JINJA_TAG.sub(" ", value).split())
+    ]
+    return bool(opens) and "ds-dialog" in opens[-1]
 
 
 def css_findings(source: str) -> list[Finding]:

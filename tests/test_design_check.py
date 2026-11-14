@@ -41,6 +41,13 @@ class TemplateRuleTests(unittest.TestCase):
         self.assertEqual(rules(template_findings(form_modal)), ["form-modal-cancel"])
         self.assertEqual(template_findings(dialog), [])
 
+    def test_the_panel_inside_a_dialog_does_not_hide_the_dialog(self) -> None:
+        dialog = ('<div class="ui-modal ds ds-dialog" id="d">\n<div class="ui-modal-panel" role="dialog">\n'
+                  '<form>\n{{ ds_foot(\'ابطال\', cancel=true) }}\n</form>\n</div>\n</div>')
+        self.assertEqual(template_findings(dialog), [])
+        form_modal = dialog.replace(" ds-dialog", "")
+        self.assertEqual(rules(template_findings(form_modal)), ["form-modal-cancel"])
+
     def test_inline_styles_are_found(self) -> None:
         self.assertEqual(rules(template_findings('<p style="margin-top: 7px">x</p>')), ["inline-style"])
 
