@@ -105,6 +105,7 @@ from app.services.notifications import SYSTEM_NOTIFY_KEYS
 from app.services.receipt_review import DEFAULT_REJECT_TEXT
 from app.services.support_button import support_markup
 from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
+from app.services.settings_hub import hub_sections, settings_place
 from app.services.users import (
     SETTING_VISIBILITY,
     SETTINGS_DOMAIN_REDIRECTS,
@@ -185,6 +186,9 @@ templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
 templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
 templates.env.globals["brand_presets"] = BRAND_PRESETS
 templates.env.globals["system_notify_keys"] = SYSTEM_NOTIFY_KEYS
+# Settings areas open on a list and show their place on detail pages (DESIGN_SYSTEM.md §6-2).
+templates.env.globals["hub_sections"] = hub_sections
+templates.env.globals["settings_place"] = settings_place
 # Request context overrides these; they keep templates that render without a signed-in person working.
 templates.env.globals["panel_brand"] = DEFAULT_BRAND
 templates.env.globals["panel_brand_css"] = BRAND_PRESET_CSS
