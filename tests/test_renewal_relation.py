@@ -67,5 +67,6 @@ class RenewalPlanButtonsTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(texts[2].startswith("⬆️ ارتقا · زیاد"))
 
 
+
 if __name__ == "__main__":
     unittest.main()
