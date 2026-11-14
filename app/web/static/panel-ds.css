@@ -552,7 +552,8 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   }
   .topbar .side-search.topbar-search > .nav-ico {
     position: absolute;
-    inset-inline-start: calc((var(--dock-inner) - 18px) / 2);
+    /* Offsets count from inside the field's 1px edge: take it back so the icon is centred on the circle. */
+    inset-inline-start: calc((var(--dock-inner) - 18px) / 2 - var(--dock-line));
     pointer-events: none;
     /* Turns back in while the field folds, as the × turns out. */
     transition:
@@ -562,8 +563,8 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   /* The × sits on the magnifier's spot: it turns in as the field opens and out as it folds. */
   .topbar .topbar-search-close {
     position: absolute;
-    inset-block-start: 0;
-    inset-inline-start: 0;
+    inset-block-start: calc(-1 * var(--dock-line));
+    inset-inline-start: calc(-1 * var(--dock-line));
     z-index: 1;
     display: grid;
     place-items: center;

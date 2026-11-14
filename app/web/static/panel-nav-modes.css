@@ -120,6 +120,8 @@
     border-radius: var(--control-radius);
     background: var(--dock-glass-bg);
     box-shadow: var(--dock-glass-highlight), var(--dock-shadow);
+    backdrop-filter: var(--dock-glass-blur);
+    -webkit-backdrop-filter: var(--dock-glass-blur);
     transition: background-color var(--drawer-motion) var(--ease-standard);
   }
   .topbar-brand {
@@ -425,8 +427,8 @@
     border-radius: var(--control-radius);
     background: var(--dock-glass-bg);
     box-shadow: var(--dock-glass-highlight);
-    backdrop-filter: var(--modal-frost-blur);
-    -webkit-backdrop-filter: var(--modal-frost-blur);
+    backdrop-filter: var(--dock-glass-blur);
+    -webkit-backdrop-filter: var(--dock-glass-blur);
     clip-path: inset(0 0 0 0 round var(--dock-h));
     /* Unfolding: starts just after the × has faded, then eases out to full width. */
     transition: clip-path var(--dock-morph) var(--ease-out) var(--dock-morph-lead);
