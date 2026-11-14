@@ -125,6 +125,21 @@
         aria-label="حذف اعلان">حذف</button>
 {%- endmacro %}
 
+{# A row of page counters (DESIGN_SYSTEM.md §6): one compact cell per figure, three across on phones. Each cell is a
+   filter link: ``cells`` holds dicts with label, value (already formatted, e.g. ``n | num``), icon, href and active.
+   This file uses no filters, so it renders in any environment that imports it. #}
+{% macro stat_strip(cells, label) -%}
+<nav class="stat-strip" aria-label="{{ label }}">
+  {%- for cell in cells %}
+  <a class="stat-cell{% if cell.active %} is-active{% endif %}" href="{{ cell.href }}"{% if cell.active %} aria-current="true"{% endif %}>
+    <span class="stat-cell-ico" aria-hidden="true">{{ icon(cell.icon) }}</span>
+    <span class="stat-cell-label">{{ cell.label }}</span>
+    <strong class="stat-cell-value">{{ cell.value }}</strong>
+  </a>
+  {%- endfor %}
+</nav>
+{%- endmacro %}
+
 {# An empty list (DESIGN_SYSTEM.md §6-3): the icon of its subject in a tinted square, one sentence saying why it is
    empty, and the page's own create action when the viewer may use it (``action_modal`` opens a modal,
    ``action_href`` follows a link). With ``colspan`` it is the table's one row; a table whose only row is this one

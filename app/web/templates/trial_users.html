@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label, empty_state %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label, empty_state, stat_strip %}
 {% block title %}کاربران تست{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
@@ -11,39 +11,12 @@
 {% endcall %}
 
 
-<div class="home-panels users-ops-overview">
-  <section class="home-panel home-panel-neutral">
-    <div class="home-panel-grid users-ops-stats">
-      <a class="stat{% if active_filter=='all' %} is-active{% endif %}" href="/trial-users{% if q %}?q={{ q|urlencode }}{% endif %}">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
-          </span>
-          <span>تست گرفته‌اند</span>
-        </div>
-        <strong>{{ summary.trials | num }}</strong>
-      </a>
-      <a class="stat{% if active_filter=='non_buyers' %} is-active{% endif %}" href="/trial-users?filter=non_buyers{% if q %}&amp;q={{ q|urlencode }}{% endif %}">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 1.5"/></svg>
-          </span>
-          <span>بدون خرید</span>
-        </div>
-        <strong>{{ (summary.trials - summary.buyers) | num }}</strong>
-      </a>
-      <a class="stat{% if active_filter=='buyers' %} is-active{% endif %}" href="/trial-users?filter=buyers{% if q %}&amp;q={{ q|urlencode }}{% endif %}">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
-          </span>
-          <span>خریدار ({{ summary.conversion_percent | num }}٪)</span>
-        </div>
-        <strong>{{ summary.buyers | num }}</strong>
-      </a>
-    </div>
-  </section>
-</div>
+{% set q_suffix = ('q=' ~ (q | urlencode)) if q else '' %}
+{{ stat_strip([
+  {'label': 'تست گرفته‌اند', 'value': summary.trials | num, 'icon': 'trial', 'href': '/trial-users' ~ (('?' ~ q_suffix) if q else ''), 'active': active_filter == 'all'},
+  {'label': 'بدون خرید', 'value': (summary.trials - summary.buyers) | num, 'icon': 'time', 'href': '/trial-users?filter=non_buyers' ~ (('&' ~ q_suffix) if q else ''), 'active': active_filter == 'non_buyers'},
+  {'label': 'خریدار (' ~ (summary.conversion_percent | num) ~ '٪)', 'value': summary.buyers | num, 'icon': 'check', 'href': '/trial-users?filter=buyers' ~ (('&' ~ q_suffix) if q else ''), 'active': active_filter == 'buyers'},
+], 'فیلتر کاربران تست') }}
 
 <nav class="section-tabs" role="tablist" aria-label="فیلتر کاربران تست">
   {% for key, label in filters.items() %}
