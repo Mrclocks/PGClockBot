@@ -211,34 +211,69 @@ async def svc_auto(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 @router.callback_query(F.data.startswith("svc:autopick:"))
 async def svc_auto_pick(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     from app.services.service_automation import ACTIONS, LABELS, automation_choices, owned_automation_service
+    from app.services.plan_categories import (
+        plans_in_category,
+        shop_categories_for_menu,
+        shop_category_map,
+        uncategorized_fixed_plans,
+    )
+    from app.services.service_addons import amount_label
+
     try:
-        _, _, service_id, action = callback.data.split(":")
-        service_id = int(service_id)
+        parts = callback.data.split(":")
+        service_id = int(parts[2])
+        action = parts[3]
+        category_raw = parts[4] if len(parts) > 4 else None
         if action not in ACTIONS:
             raise ValueError("تنظیم نامعتبر است")
         await owned_automation_service(session, db_user, service_id)
         choices = (await automation_choices(session))[action]
         if not choices:
             raise ValueError("پلن یا بسته فعالی موجود نیست")
-    except ValueError as exc:
-        await callback.answer(str(exc), show_alert=True)
+        category_id = None
+        if category_raw not in (None, "none"):
+            category_id = int(category_raw)
+    except (ValueError, IndexError) as exc:
+        await callback.answer(str(exc) or "تنظیم نامعتبر است", show_alert=True)
         return
-    from app.services.plan_categories import shop_category_map
-    from app.services.service_addons import amount_label
 
     categories = await shop_category_map(session)
+    back_callback = f"svc:auto:{service_id}"
+    title = f"⚙️ {LABELS[action]}"
+    body = "با انتخاب گزینه، این قابلیت روشن می‌شود و در هر بار پایان زمان یا حجم، هزینه از کیف پول پرداخت خواهد شد."
+    if action == "renew":
+        menu_categories = await shop_categories_for_menu(session, fixed_plans=choices)
+        if menu_categories and category_raw is None:
+            # Categories come first; plans are listed only after one is chosen.
+            buttons = [[InlineKeyboardButton(
+                text=kb._category_button_label(cat),
+                callback_data=f"svc:autopick:{service_id}:{action}:{cat.id}",
+                icon_custom_emoji_id=getattr(cat, "icon_custom_emoji_id", None) or None,
+            )] for cat in menu_categories]
+            if uncategorized_fixed_plans(choices):
+                buttons.append([InlineKeyboardButton(
+                    text="سایر", callback_data=f"svc:autopick:{service_id}:{action}:none"
+                )])
+            buttons.append([kb.back_button(None, back_callback)])
+            await callback.answer()
+            if callback.message:
+                await safe_edit_text(callback.message, format_message(title, "ابتدا دسته‌بندی پلن را انتخاب کنید."), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+            return
+        if menu_categories:
+            choices = plans_in_category(choices, category_id)
+            back_callback = f"svc:autopick:{service_id}:{action}"
+            if not choices:
+                await callback.answer(feedback.NO_PLANS_IN_CATEGORY, show_alert=True)
+                return
     buttons = [[InlineKeyboardButton(
         text=f"{p.name}{' — +' + amount_label(p) if action != 'renew' else ''} — {format_toman(sale_price(p))}",
         callback_data=f"svc:autoset:{service_id}:{action}:{p.id}",
         icon_custom_emoji_id=kb.category_icon_for(p, categories),
     )] for p in choices]
-    buttons.append([kb.back_button(None, f"svc:auto:{service_id}")])
+    buttons.append([kb.back_button(None, back_callback)])
     await callback.answer()
     if callback.message:
-        await safe_edit_text(callback.message, format_message(
-            f"⚙️ {LABELS[action]}",
-            "با انتخاب گزینه، این قابلیت روشن می‌شود و در هر بار پایان زمان یا حجم، هزینه از کیف پول پرداخت خواهد شد.",
-        ), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+        await safe_edit_text(callback.message, format_message(title, body), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
 
 @router.callback_query(F.data.startswith("svc:autotoggle:"))
 async def svc_auto_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -554,7 +589,14 @@ def _renewal_button_text(plan: Plan, relation: str | None) -> str:
 @router.callback_query(F.data.startswith("svc:renew:"))
 async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     ui = await get_all_settings(session)
-    svc_id = int(callback.data.split(":")[-1])
+    parts = callback.data.split(":")
+    try:
+        svc_id = int(parts[2])
+        category_raw = parts[3] if len(parts) > 3 else None
+        category_id = None if category_raw in (None, "none") else int(category_raw)
+    except (ValueError, IndexError):
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
     svc = await session.get(UserService, svc_id)
     if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
@@ -569,8 +611,40 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if not plans:
         await callback.answer(feedback.NO_PLANS, show_alert=True)
         return
+    from app.services.plan_categories import (
+        plans_in_category,
+        shop_categories_for_menu,
+        shop_category_map,
+        uncategorized_fixed_plans,
+    )
+
+    menu_categories = await shop_categories_for_menu(session, fixed_plans=plans)
+    back_callback = f"svc:view:{svc_id}"
+    if menu_categories and category_raw is None:
+        # Categories come first; plans are listed only after one is chosen.
+        category_rows = [[InlineKeyboardButton(
+            text=kb._category_button_label(cat),
+            callback_data=f"svc:renew:{svc_id}:{cat.id}",
+            icon_custom_emoji_id=getattr(cat, "icon_custom_emoji_id", None) or None,
+        )] for cat in menu_categories]
+        if uncategorized_fixed_plans(plans):
+            category_rows.append([InlineKeyboardButton(text="سایر", callback_data=f"svc:renew:{svc_id}:none")])
+        category_rows.append([kb.back_button(ui, back_callback)])
+        await callback.answer()
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                "ابتدا دسته‌بندی پلن تمدید را انتخاب کنید:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=category_rows),
+            )
+        return
+    if menu_categories:
+        plans = plans_in_category(plans, category_id)
+        back_callback = f"svc:renew:{svc_id}"
+        if not plans:
+            await callback.answer(feedback.NO_PLANS_IN_CATEGORY, show_alert=True)
+            return
     await callback.answer()
-    from app.services.plan_categories import shop_category_map
 
     categories = await shop_category_map(session)
     current_plan = next((p for p in plans if svc.plan_id is not None and int(p.id) == int(svc.plan_id)), None)
@@ -589,7 +663,7 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 
     rows.append(
         [
-            kb.back_button(ui, f"svc:view:{svc_id}")
+            kb.back_button(ui, back_callback)
         ]
     )
     hint = "پلن تمدید را انتخاب کنید:"
