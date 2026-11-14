@@ -165,7 +165,9 @@
      layer (the shadow, the capsule, the ×) is an absolute child, so the toolbar keeps showing the page as glass. */
   .bottom-dock {
     position: fixed;
-    z-index: 40;
+    /* Above the closed menu (.side, 50) so the sheet slides away behind the bar while the bar unfolds;
+       below the header (55), modals and ported menus. */
+    z-index: 52;
     inset-inline: var(--dock-inline);
     bottom: var(--dock-bottom);
     display: block;
@@ -181,21 +183,23 @@
   }
   /* The bar's shadow lives on this layer: the bar's own box-shadow would be cut off by the clip-path that folds
      it into the ×. An outer shadow is painted only outside its box, so it never darkens the glass above it.
-     It fades out while the bar folds (the × has its own) and back in once the bar has unfolded. */
+     It folds and unfolds with the bar (the same edge, time and curve as the bar's clip), so the shadow is
+     always the shape you see: the capsule, then the ×'s circle. */
   .bottom-dock::before {
     content: "";
     position: absolute;
-    inset-block: 0;
-    inset-inline: 0;
+    top: 0;
+    left: 0;
+    right: 0;
     height: var(--dock-h);
     border-radius: var(--control-radius);
     box-shadow: var(--dock-shadow);
     pointer-events: none;
-    transition: opacity var(--motion-med) var(--ease-out) calc(var(--dock-morph-lead) + var(--dock-morph));
+    transition: right var(--dock-morph) var(--ease-out) var(--dock-morph-lead);
   }
   body.nav-open .bottom-dock::before {
-    opacity: 0;
-    transition: opacity var(--motion-fast) var(--ease-in);
+    right: calc(100% - var(--dock-h));
+    transition: right var(--dock-morph) var(--ease-standard);
   }
   .bottom-dock-bar {
     position: absolute;
@@ -290,7 +294,6 @@
     transition:
       opacity var(--motion-fast) var(--ease-in),
       transform var(--motion-fast) var(--ease-in),
-      box-shadow var(--motion-fast) var(--ease-in),
       visibility 0s linear var(--motion-fast);
   }
   .bottom-dock-close .nav-ico { width: var(--dock-ico); height: var(--dock-ico); stroke-width: 2.4; }
@@ -316,11 +319,9 @@
     visibility: visible;
     pointer-events: auto;
     transform: none;
-    box-shadow: var(--dock-shadow);
     transition:
       opacity var(--motion-med) var(--ease-out) var(--dock-morph-items),
       transform var(--dock-morph) var(--ease-out) var(--dock-morph-items),
-      box-shadow var(--motion-med) var(--ease-out) var(--dock-morph-items),
       visibility 0s linear 0s;
   }
   body.nav-open .bottom-dock-close:active { transform: scale(0.94); }
