@@ -116,8 +116,9 @@
   /* Glass of the phone header, bar and menu ×. A dark shadow does not show on a dark page, so the dark theme
      sets the capsules apart with glass a touch lighter than the page, a light edge and a faint top highlight;
      the light theme keeps the shared frost (overridden below). */
-  /* 80% opaque: text behind the header and the bar never reads through the text on them. */
-  --dock-glass-bg: color-mix(in srgb, color-mix(in srgb, #fff 5%, var(--bg-card)) 80%, transparent);
+  /* 62% glass under a strong blur: the page shows through as colour and shape, never as readable text. */
+  --dock-glass-bg: color-mix(in srgb, color-mix(in srgb, #fff 5%, var(--bg-card)) 62%, transparent);
+  --dock-glass-blur: blur(16px) saturate(1.4);
   --dock-glass-line: rgb(255 255 255 / 0.12);
   --dock-glass-highlight: inset 0 1px 0 rgb(255 255 255 / 0.07);
   /* The header's search circle: a matte tint over the header glass (a nested blur would see only the header). */
@@ -6677,6 +6678,7 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-stic
   .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head,
   .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save,
   .topbar,
+  .bottom-dock-bar,
   .site-footer,
   .side-foot {
     background: var(--modal-frost-bg-fallback);
@@ -8219,7 +8221,7 @@ html[data-theme="light"] {
   /* Light enough that the frosted menu over it still reads as glass, not a grey film. */
   --side-dim: rgba(0, 0, 0, 0.18);
   --sheet-dim-lift: brightness(1.22);
-  --dock-glass-bg: color-mix(in srgb, var(--bg-card) 80%, transparent);
+  --dock-glass-bg: color-mix(in srgb, var(--bg-card) 62%, transparent);
   --dock-glass-line: var(--modal-frost-line);
   --dock-glass-highlight: inset 0 0 0 transparent;
   --table-head-bg: color-mix(in srgb, var(--muted) 72%, var(--bg-card));
