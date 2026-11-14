@@ -10307,7 +10307,8 @@ html[data-theme="light"] .home-panel-neutral .home-panel-h {
   width: 2.25rem;
   height: 2.25rem;
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--pg-line) 42%, var(--border));
+  /* The clock wears the panel's chosen colour (--brand follows the theme colour setting). */
+  border: 2px solid color-mix(in srgb, var(--brand) 55%, var(--border));
   background: color-mix(in srgb, var(--bg-card, var(--card, #18181b)) 88%, transparent);
   box-sizing: border-box;
 }
@@ -10319,7 +10320,7 @@ html[data-theme="light"] .home-panel-neutral .home-panel-h {
   margin-left: -1px;
   transform-origin: 50% 100%;
   border-radius: 1px;
-  background: var(--pg-line);
+  background: var(--brand);
 }
 .panel-load-clock-hour {
   height: 28%;
@@ -10327,7 +10328,7 @@ html[data-theme="light"] .home-panel-neutral .home-panel-h {
 }
 .panel-load-clock-minute {
   height: 40%;
-  background: color-mix(in srgb, var(--foreground) 78%, var(--pg-line));
+  background: color-mix(in srgb, var(--foreground) 70%, var(--brand));
   animation: panel-load-clock-minute 2s linear infinite;
 }
 .panel-load-clock-hub {
