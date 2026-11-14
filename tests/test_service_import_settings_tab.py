@@ -100,13 +100,16 @@ class TabPageTests(TabHarness):
         for needle in ("s_service_import_paths", "s_service_import_admins"):
             self.assertNotIn(needle, response.text)
 
-    async def test_the_tab_lives_in_the_service_and_sales_group_for_both(self):
+    async def test_the_page_opens_from_its_settings_list_for_both(self):
         owner = await self.call(OWNER_SESSION, "GET", "/settings?tab=service_import")
         shop = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_import")
         for response, base in ((owner, "/settings"), (shop, "/shop-settings")):
             head = response.text.split("settings-layout", 1)[0]
-            self.assertIn(f'href="{base}?tab=service_import" class="active"', head)
-            self.assertIn(f'href="{base}?tab=delivery"', head)
+            self.assertIn("<h1>افزودن سرویس قبلی</h1>", head)
+            self.assertIn(f'<a class="page-back" href="{base}"', head)
+        for base, session in (("/settings", OWNER_SESSION), ("/shop-settings", SHOP_SESSION)):
+            listing = await self.call(session, "GET", base)
+            self.assertIn(f'href="{base}?tab=service_import"', listing.text)
 
 
 class SavePlumbingTests(TabHarness):
