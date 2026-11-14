@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label, empty_state, stat_strip %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label, empty_state, stat_strip, search_submit %}
 {% block title %}کاربران تست{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
@@ -31,7 +31,7 @@
     <label class="search-bar-field">
       <input name="q" value="{{ q or '' }}" placeholder="نام، یوزرنیم یا شناسهٔ تلگرام…" maxlength="64" autocomplete="off" aria-label="جستجوی کاربران تست" />
     </label>
-    <button class="btn btn-ghost" type="submit">جستجو</button>
+    {{ search_submit() }}
   </form>
   {% if can_block %}
   {{ table_bulk_bar('/trial-users/bulk-action', [

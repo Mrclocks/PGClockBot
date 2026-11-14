@@ -12862,3 +12862,24 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
 .snap-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
 .color-tag-select option[style] { color: var(--opt-color); font-weight: 600; }
 
+/* A list search submits with the same round magnifier as the search in the header (DESIGN_SYSTEM.md §7). */
+.search-submit,
+.search-bar .search-submit {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: var(--btn-h);
+  height: var(--btn-h);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--dock-tint);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+.search-bar--with-tag > .search-submit { order: 2; align-self: center; }
+.search-submit svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.search-submit:active { transform: scale(0.94); }
+.search-submit:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .search-submit { transition: none; } .search-submit:active { transform: none; } }

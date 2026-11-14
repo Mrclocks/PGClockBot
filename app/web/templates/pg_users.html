@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, switch_chip, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
+{% from "macros.html" import row_actions, switch_chip, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label, search_submit %}
 {% block title %}کاربران پاسارگارد{% endblock %}
 {% block content %}
 {% call(slot) page_header('user', 'کاربران پاسارگارد', 'pg', help='pg-users') %}
@@ -12,7 +12,7 @@
     <label class="search-bar-field">
       <input name="q" value="{{ q or '' }}" placeholder="نام کاربری یا بخشی از آن…" autocomplete="off" />
     </label>
-    <button class="btn btn-ghost" type="submit">جستجو</button>
+    {{ search_submit() }}
   </form>
 
   {% if not users %}

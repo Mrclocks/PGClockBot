@@ -274,6 +274,11 @@
 </div>
 {%- endmacro %}
 
+{# The submit button of a list search: the same round magnifier as the search in the header. #}
+{% macro search_submit(label='جستجو') -%}
+<button class="search-submit" type="submit" aria-label="{{ label }}" title="{{ label }}">{{ icon('search') }}</button>
+{%- endmacro %}
+
 {# Label of a page's primary action: the full label on desktop and for screen readers; «+» and a short label in the
    phone capsule, «+» alone under 360 pixels. ``icon_name`` other than «plus» marks a frequent non-create action. #}
 {% macro act_label(label, short=None, icon_name='plus') -%}

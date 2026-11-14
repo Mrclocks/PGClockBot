@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, oversell_create_switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label, empty_state %}
+{% from "macros.html" import switch, oversell_create_switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label, empty_state, search_submit %}
 {% from "_ds.html" import ds_perm_groups %}
 {% block title %}{% if owner_view %}نمایندگان{% else %}نمایندگان من{% endif %}{% endblock %}
 {% block content %}
@@ -108,7 +108,7 @@
     <label class="search-bar-field">
       <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، وب، ربات…" autocomplete="off" />
     </label>
-    <button class="btn btn-ghost" type="submit">جستجو</button>
+    {{ search_submit() }}
     {% if color_tags is defined and color_tags %}
     {% set active_tag = (color_tags | selectattr('key', 'equalto', color_filter) | first) if color_filter else none %}
     <label class="color-tag-select-wrap{% if active_tag %} is-tagged{% endif %}"
