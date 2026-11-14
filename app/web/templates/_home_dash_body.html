@@ -1,5 +1,5 @@
 {# Single-root dash body for /home and /home/body fragment swap. #}
-{% from "macros.html" import page_title, card_title %}
+{% from "macros.html" import page_header, card_title %}
 {% set ov = overview %}
 {% set bot = ov.bot %}
 {% set nodes = ov.nodes %}
@@ -17,11 +17,7 @@
   </div>
   {% endif %}
 
-  <div class="page-head">
-    <div>
-      {{ page_title('home', 'داشبورد', 'neutral', help='home') }}
-    </div>
-  </div>
+  {{ page_header('home', 'داشبورد', 'neutral', help='home', capsule=false) }}
 
   {% from "_home_widgets.html" import kpi_strip, status_tiles, update_notice %}
   {{ update_notice(update if update is defined else none) }}

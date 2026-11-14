@@ -1,16 +1,12 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_header, act_label %}
 {% block title %}نمای کلی پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head ov-page-head">
-  {{ page_title('overview', 'نمای کلی پاسارگارد', 'pg', help='pg-overview') }}
-  {% if pg_external_url %}
-  <a class="btn btn-sm btn-ghost ov-head-btn" href="{{ pg_external_url }}" target="_blank" rel="noopener">
-    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
-    <span>ورود به پاسارگارد</span>
-  </a>
-  {% endif %}
-</div>
+{% call(slot) page_header('overview', 'نمای کلی پاسارگارد', 'pg', help='pg-overview') %}
+  {%- if slot == 'primary' and pg_external_url %}
+  <a class="btn btn-ghost page-act-icon" href="{{ pg_external_url }}" target="_blank" rel="noopener">{{ act_label('ورود به پاسارگارد', icon_name='external') }}</a>
+  {%- endif %}
+{% endcall %}
 
 {% if ticket_alert %}
 <div class="flash warn home-update-banner">

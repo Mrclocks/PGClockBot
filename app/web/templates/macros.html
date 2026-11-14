@@ -199,6 +199,58 @@
 </div>
 {%- endmacro %}
 
+{# The page header (DESIGN_SYSTEM.md §7). One markup for both layouts: a title row on desktop and, on phones, the
+   content of the capsule header (title next to search, «⋯» and the primary action at the far end).
+   Actions come from a call block so permission checks, forms and CSRF stay in the page:
+     {% call(slot) page_header('plans', 'پلن‌ها', help='plans') %}
+       {% if slot == 'primary' %}<button type="button" class="btn" data-modal-open="m">افزودن پلن</button>{% endif %}
+       {% if slot == 'more' %}<button type="button" class="btn btn-ghost" data-modal-open="c">برچسب دسته</button>{% endif %}
+     {% endcall %}
+   «primary» holds at most one action; everything in «more» sits beside it on desktop and in the «⋯» menu on phones.
+   ``back`` turns the page into a detail page: a round back button replaces the icon and ``subtitle`` shows the path.
+   ``capsule=false`` keeps the title row out of the phone header (the dashboard keeps the brand there). #}
+{% macro page_header(icon_name, title, tone='brand', help=None, back=None, back_label=None, subtitle=None, capsule=true) -%}
+{%- set primary = caller('primary') if caller is defined else '' -%}
+{%- set more = caller('more') if caller is defined else '' -%}
+{%- set has_primary = primary|trim|length > 0 -%}
+{%- set has_more = more|trim|length > 0 -%}
+{%- set topic = (guide_topics or {}).get(help) if help else none -%}
+<div class="page-head{% if back %} page-head--detail{% endif %}" data-page-head="{{ 'capsule' if capsule else 'flow' }}">
+  <div class="page-head-main">
+    {%- if back %}
+    <a class="page-back" href="{{ back }}" aria-label="بازگشت به {{ back_label or 'صفحهٔ قبل' }}">{{ icon('back') }}</a>
+    {%- endif %}
+    {{ page_title(icon_name, title, tone, help) }}
+    {%- if subtitle %}
+    <p class="page-head-sub">{{ subtitle }}</p>
+    {%- endif %}
+  </div>
+  {%- if has_primary or has_more or topic %}
+  <div class="page-head-actions">
+    {%- if has_more or topic %}
+    <div class="page-more" id="page-more" data-page-more>
+      {{ more }}
+      {%- if topic %}
+      <a class="page-more-help" href="{{ topic.href }}">{{ icon('help') }}<span>راهنمای این صفحه</span></a>
+      {%- endif %}
+    </div>
+    {%- endif %}
+    {{ primary }}
+    {%- if has_more or topic %}
+    <button type="button" class="page-more-btn" aria-label="گزینه‌های بیشتر" aria-expanded="false"
+            aria-controls="page-more" data-page-more-toggle>{{ icon('dots') }}</button>
+    {%- endif %}
+  </div>
+  {%- endif %}
+</div>
+{%- endmacro %}
+
+{# Label of a page's primary action: the full label on desktop and for screen readers; «+» and a short label in the
+   phone capsule, «+» alone under 360 pixels. ``icon_name`` other than «plus» marks a frequent non-create action. #}
+{% macro act_label(label, short=None, icon_name='plus') -%}
+{{ icon(icon_name, 'act-ico') }}<span class="act-long">{{ label }}</span>{% if short %}<span class="act-short" aria-hidden="true">{{ short }}</span>{% endif %}
+{%- endmacro %}
+
 {# Long field helps collapse behind «راهنما»; short ones stay inline. #}
 {% macro setting_help(help, class_name='') -%}
 {% if help %}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import ord_status, pay_status, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import ord_status, pay_status, row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
 {% from "_stuck_order_actions.html" import stuck_close_actions %}
 {% from "_finance_tabs.html" import finance_tabs %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot, ds_switch, ico %}
@@ -13,14 +13,11 @@
 {% endblock %}
 {% block content %}
 {% set finance_tab = finance_tab or 'reports' %}
-<div class="page-head">
-  <div>
-    {{ page_title('orders', 'مالی', help='finance') }}
-  </div>
-  {% if can_finance_settings %}
-  <button type="button" class="btn btn-ghost" data-modal-open="modal-finance-settings">تنظیمات</button>
-  {% endif %}
-</div>
+{% call(slot) page_header('orders', 'مالی', help='finance') %}
+  {%- if slot == 'primary' and can_finance_settings %}
+  <button type="button" class="btn btn-ghost page-act-icon" data-modal-open="modal-finance-settings">{{ act_label('تنظیمات', icon_name='settings') }}</button>
+  {%- endif %}
+{% endcall %}
 
 {{ finance_tabs(finance_tab, can_orders=can_orders, can_payments=can_payments, cancel_alert=cancel_alert, staff=staff) }}
 

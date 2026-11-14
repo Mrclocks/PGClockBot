@@ -535,8 +535,8 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   .side .side-search { display: none; }
   .topbar .side-search.topbar-search {
     position: absolute;
-    inset-block-start: var(--space-0);
-    inset-inline: var(--space-0);
+    inset-block-start: var(--dock-pad);
+    inset-inline: var(--dock-pad);
     z-index: 2;
     direction: rtl;
     height: var(--dock-inner);
