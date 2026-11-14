@@ -9,7 +9,7 @@
   margin: 0;
   padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
   border: 1px solid transparent;
-  border-radius: 999px; /* capsule hit/select chrome */
+  border-radius: var(--control-radius); /* capsule hit/select chrome */
   background: transparent;
   color: inherit;
   font: inherit;
