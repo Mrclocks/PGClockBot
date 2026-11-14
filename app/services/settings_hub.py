@@ -10,6 +10,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.services.settings_tab_groups import SettingsTab, SettingsTabGroup
+from app.services.users import PANEL_SETTINGS_TABS
+
+# ``/settings?tab=system`` is the list of the system settings area; the pages keep their own keys.
+SYSTEM_LIST_TAB = "system"
+SECURITY_TAB = SettingsTab("security", "امنیت", "/security")
 
 # One line per settings page: what you change there, in the words of its own fields.
 TAB_DESCRIPTIONS: dict[str, str] = {
@@ -62,6 +67,26 @@ TAB_ICONS: dict[str, str] = {
 }
 
 
+SYSTEM_DESCRIPTIONS: dict[str, str] = {
+    "general": "پورت و نشانی وب‌پنل و تنظیمات پایه",
+    "backup": "خروجی و ورودی تنظیمات و بکاپ زمان‌بندی‌شده",
+    "pwa": "نوار موبایل، نام و رنگ برند وب‌پنل",
+    "ssl": "دامنهٔ وب‌پنل و مینی‌اپ و وضعیت گواهی",
+    "bot": "توکن ربات، دریافت پیام و اتصال پاسارگارد",
+    "update": "نسخهٔ نصب‌شده و به‌روزرسانی پنل",
+    "security": "هویت ادمین وب و تلگرام، نام کاربری و رمز",
+}
+SYSTEM_ICONS: dict[str, str] = {
+    "general": "sliders",
+    "backup": "download",
+    "pwa": "palette",
+    "ssl": "globe",
+    "bot": "connection",
+    "update": "refresh",
+    "security": "shield",
+}
+
+
 @dataclass(frozen=True, slots=True)
 class HubRow:
     label: str
@@ -88,8 +113,17 @@ def tab_href(tab: SettingsTab, base: str) -> str:
     return tab.href or f"{base}?tab={tab.key}"
 
 
-def hub_sections(groups: tuple[SettingsTabGroup, ...], base: str, *, area_icon: str) -> tuple[HubSection, ...]:
+def hub_sections(
+    groups: tuple[SettingsTabGroup, ...],
+    base: str,
+    *,
+    area_icon: str,
+    descriptions: dict[str, str] | None = None,
+    icons: dict[str, str] | None = None,
+) -> tuple[HubSection, ...]:
     """One section per group, one row per tab, in the order the groups already have."""
+    descriptions = TAB_DESCRIPTIONS if descriptions is None else descriptions
+    icons = TAB_ICONS if icons is None else icons
     return tuple(
         HubSection(
             label=group.label,
@@ -97,8 +131,8 @@ def hub_sections(groups: tuple[SettingsTabGroup, ...], base: str, *, area_icon: 
                 HubRow(
                     label=tab.label,
                     href=tab_href(tab, base),
-                    description=TAB_DESCRIPTIONS.get(tab.key, ""),
-                    icon=TAB_ICONS.get(tab.key, area_icon),
+                    description=descriptions.get(tab.key, ""),
+                    icon=icons.get(tab.key, area_icon),
                 )
                 for tab in group.tabs
             ),
@@ -114,3 +148,15 @@ def settings_place(groups: tuple[SettingsTabGroup, ...], active: str) -> Setting
             if tab.shows(active):
                 return SettingsPlace(group=group, tab=tab)
     return None
+
+
+def system_settings_groups(active: str = "") -> tuple[SettingsTabGroup, ...]:
+    """The system settings area as one untitled group: the web panel's own pages and security."""
+    tabs = (*(SettingsTab(key, label) for key, label in PANEL_SETTINGS_TABS), SECURITY_TAB)
+    return (SettingsTabGroup(key="system", label="", tabs=tabs, is_active=any(tab.shows(active) for tab in tabs)),)
+
+
+def system_hub_sections() -> tuple[HubSection, ...]:
+    return hub_sections(
+        system_settings_groups(), "/settings", area_icon="sliders", descriptions=SYSTEM_DESCRIPTIONS, icons=SYSTEM_ICONS
+    )

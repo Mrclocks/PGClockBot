@@ -297,10 +297,12 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         panel_keys = [k for k, _ in PANEL_SETTINGS_TABS]
         self.assertEqual(panel_keys[0], "general")
         self.assertIn("general", panel_keys)
-        tabs = (TEMPLATES / "_panel_settings_tabs.html").read_text(encoding="utf-8")
-        self.assertIn('href="/settings?tab=general"', tabs)
-        # general link appears before backup
-        self.assertLess(tabs.index("tab=general"), tabs.index("tab=backup"))
+        from app.services.settings_hub import system_hub_sections
+
+        hrefs = [row.href for section in system_hub_sections() for row in section.rows]
+        self.assertIn("/settings?tab=general", hrefs)
+        # general comes before backup in the system settings list
+        self.assertLess(hrefs.index("/settings?tab=general"), hrefs.index("/settings?tab=backup"))
         bot = (TEMPLATES / "_settings_bot.html").read_text(encoding="utf-8")
         self.assertNotIn("وب و عمومی", bot)
         general = (TEMPLATES / "_settings_general.html").read_text(encoding="utf-8")
@@ -310,7 +312,7 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
 
         nav = owner_sidebar()
         every_href = [h for section in nav.values() for h in hrefs(section)]
-        self.assertIn("/settings?tab=general", hrefs(nav["system"]))
+        self.assertIn("/settings?tab=system", hrefs(nav["system"]))
         self.assertNotIn("/settings?tab=pasarguard", every_href)
         # The bot connection is reached from the system settings tabs, not the sidebar.
         self.assertNotIn("/settings?tab=bot", every_href)
@@ -386,5 +388,6 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         self.assertIn("bot", [k for k, _ in PANEL_SETTINGS_TABS])
         self.assertNotIn("bot", [k for k, _ in SETTINGS_TABS])
         self.assertNotIn("/settings?tab=bot", [h for _, h in owner_sidebar()["pg"]])
-        tabs = (TEMPLATES / "_panel_settings_tabs.html").read_text(encoding="utf-8")
-        self.assertIn('href="/settings?tab=bot"', tabs)
+        from app.services.settings_hub import system_hub_sections
+
+        self.assertIn("/settings?tab=bot", [row.href for section in system_hub_sections() for row in section.rows])

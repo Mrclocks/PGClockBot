@@ -53,10 +53,12 @@ class PgUserCreateUiTests(unittest.TestCase):
         from tests.sidebar_view import owner_sidebar
 
         self.assertEqual(set(owner_sidebar()), {"system", "shop", "pg"})
-        tabs = Path("app/web/templates/_panel_settings_tabs.html").read_text(encoding="utf-8")
-        self.assertIn("tab=backup", tabs)
-        self.assertIn("/security", tabs)
-        self.assertIn("آپدیت", tabs)
+        from app.services.settings_hub import system_hub_sections
+
+        rows = [(row.label, row.href) for section in system_hub_sections() for row in section.rows]
+        self.assertIn("/settings?tab=backup", [href for _l, href in rows])
+        self.assertIn("/security", [href for _l, href in rows])
+        self.assertIn("آپدیت", [label for label, _h in rows])
 
 
 class PgUserCreateLogicTests(unittest.TestCase):
