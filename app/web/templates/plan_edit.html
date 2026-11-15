@@ -1,15 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch_chip, page_title %}
+{% from "macros.html" import switch_chip, page_header %}
 {% from "_ds.html" import ds_sec, ds_switch %}
 {% block title %}ویرایش پلن{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('plan-edit', 'ویرایش پلن #' ~ plan.id, help='plans') }}
-  </div>
-  <a class="btn btn-ghost" href="/plans">بازگشت</a>
-</div>
+{{ page_header('plan-edit', 'ویرایش پلن #' ~ plan.id, help='plans', back='/plans', back_label='پلن‌ها') }}
 
 {% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }}</div>{% endif %}
 {% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}
@@ -34,7 +29,7 @@
         <span class="ds-label-row"><span class="ds-label-text">مدت</span>
           <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="#edit-plan-days" data-ds-empty-is-unlimited data-ds-default="30">نامحدود</button></span>
         <span class="ds-unit" data-unlimited-label="نامحدود"><input name="duration_days" id="edit-plan-days" type="number" min="0" value="{{ plan.duration_days if plan.duration_days else '' }}" inputmode="numeric" dir="ltr" aria-label="مدت (روز)" /><span class="ds-unit-label">روز</span></span>
-        {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_expire_max %}<small class="muted">سقف زنده: {{ (pg_limit_snapshot.per_user_expire_max // 86400) or 1 }} روز</small>{% endif %}
+        {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_expire_max %}<small class="muted">سقف زنده: {{ ((pg_limit_snapshot.per_user_expire_max // 86400) or 1) | fa }} روز</small>{% endif %}
       </div>
       <div class="form-field">
         <span class="ds-label-row"><span class="ds-label-text">حجم</span>
@@ -67,7 +62,7 @@
         <small class="muted">حداقل یک گروه</small>
       </div>
     </div>
-    <div id="mode-template" class="form-stack" style="display:none">
+    <div id="mode-template" class="form-stack" hidden>
       <label class="form-field">تمپلیت پاسارگارد
         <select name="pg_template_id">
           <option value="">انتخاب کنید…</option>
@@ -161,8 +156,8 @@
   syncUserExtras();
   function sync(){
     const isTpl = mode.value === 'template';
-    custom.style.display = isTpl ? 'none' : '';
-    tpl.style.display = isTpl ? '' : 'none';
+    custom.hidden = isTpl;
+    tpl.hidden = !isTpl;
   }
   mode.addEventListener('change', sync);
   sync();

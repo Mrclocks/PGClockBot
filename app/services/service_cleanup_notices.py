@@ -149,8 +149,10 @@ async def scan_notices(
             select(UserService, BotUser.telegram_id)
             .join(BotUser, BotUser.id == UserService.bot_user_id)
             # A service under a hold is scanned too: its deadline is the hold's end, so its warnings come before it.
+            # A service the panel already removed cannot be read or renewed: it is never warned, and leaving it
+            # in the batch would let enough of them fill every batch and stop the warnings for everyone else.
             .where(shop_services_clause(shop_id), *eligible_clauses(), BotUser.is_blocked.is_(False),
-                   _candidate_clause(kind, policy, now))
+                   UserService.panel_missing_at.is_(None), _candidate_clause(kind, policy, now))
             .order_by(UserService.id)
             .limit(limit)
         )

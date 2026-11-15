@@ -1,17 +1,12 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, row_actions, table_select_head, table_select_cell, table_bulk_bar %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, empty_state %}
 {% from "_gift_code_fields.html" import gift_code_fields %}
-{% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}کد هدیه{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('gift', 'کد هدیه', help='gift-codes') }}
-  </div>
-</div>
+{{ page_header('gift', 'کد هدیه', help='gift-codes', back='/marketing', back_label='بازاریابی') }}
 
-{{ marketing_tabs(marketing_sections|default(()), 'gift_codes') }}
 
 <div class="card">
   <h2>ساخت کد جدید</h2>
@@ -50,7 +45,7 @@
         <tr data-bulk-ops="toggle">
           {{ table_select_cell(c.id) }}
           <td class="li-title"><span class="mono" dir="ltr">{{ c.code }}</span>{% if c.note %}<div class="muted li-hide">{{ c.note }}</div>{% endif %}</td>
-          <td class="li-value">{% if c.kind == 'discount' %}<span class="mono">{{ c.percent }}٪</span>{% if c.max_discount_toman is not none %}<div class="muted li-hide">تا <span dir="ltr">{{ c.max_discount_toman | money }}</span> تومان</div>{% endif %}{% else %}<span class="mono" dir="ltr">{{ c.amount | money }}</span><div class="muted li-hide">شارژ کیف پول</div>{% endif %}</td>
+          <td class="li-value">{% if c.kind == 'discount' %}<span class="mono">{{ (c.percent) | fa }}٪</span>{% if c.max_discount_toman is not none %}<div class="muted li-hide">تا <span dir="ltr">{{ c.max_discount_toman | money }}</span> تومان</div>{% endif %}{% else %}<span class="mono" dir="ltr">{{ c.amount | money }}</span><div class="muted li-hide">شارژ کیف پول</div>{% endif %}</td>
           <td class="col-hide-sm">{{ c.used_count }}{% if c.max_uses is not none %}/{{ c.max_uses }}{% endif %}</td>
           <td class="li-sub">
             {#- On phones line two: kind · uses · per user · purchases · expiry · note. -#}
@@ -71,7 +66,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="8" class="muted">هنوز کدی ساخته نشده.</td></tr>
+        {{ empty_state('هنوز کدی ساخته نشده.', 'gift', colspan=8) }}
       {% endfor %}
       </tbody>
     </table>

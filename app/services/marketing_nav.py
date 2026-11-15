@@ -17,6 +17,7 @@ from app.services.cashback_rules import cashback_scope
 from app.services.funnel_access import funnel_shop_scope
 from app.services.gift_codes import gift_code_scope
 from app.services.platform_identity import is_explicit_owner_staff
+from app.services.settings_hub import HubRow, HubSection
 from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
 
 CLUB = "club"
@@ -170,3 +171,52 @@ def marketing_groups(sections: tuple[MarketingSection, ...]) -> tuple[MarketingG
         if allowed:
             groups.append(MarketingGroup(key, label, allowed))
     return tuple(groups)
+
+
+# The marketing area as a list (DESIGN_SYSTEM.md §6-2): one card per group, one row per section the staff member may
+# open. The sidebar entry opens this list (panel_nav.MARKETING_LIST_HREF); every section page leads back to it.
+SECTION_DESCRIPTIONS: dict[str, str] = {
+    CLUB: "امتیاز، سطح‌ها، جوایز و دعوت دوستان",
+    CLUB_TRANSACTIONS: "تعدیل دستی و آخرین تراکنش‌های امتیاز",
+    DISCOUNTS: "تخفیف درصدی یا مبلغی روی پلن‌ها",
+    RANDOM_DISCOUNTS: "مبلغ نهایی متفاوت برای هر سفارش",
+    GIFT_CODES: "کد شارژ کیف پول یا تخفیف برای کاربران",
+    CASHBACK: "برگشت بخشی از مبلغ خرید به کیف پول",
+    CAMPAIGNS: "پیام هدفمند به گروهی از کاربران",
+    BROADCAST: "پیام همگانی به کاربران ربات",
+    SHOP_BROADCAST: "پیام همگانی به کاربران فروشگاه",
+    TRIAL_USERS: "اکانت تست و محدودیت‌های آن",
+    FUNNEL: "از ورود به ربات تا خرید، مرحله به مرحله",
+}
+SECTION_ICONS: dict[str, str] = {
+    CLUB: "loyalty",
+    CLUB_TRANSACTIONS: "receipt",
+    DISCOUNTS: "discounts",
+    RANDOM_DISCOUNTS: "discounts",
+    GIFT_CODES: "gift",
+    CASHBACK: "wallet",
+    CAMPAIGNS: "megaphone",
+    BROADCAST: "megaphone",
+    SHOP_BROADCAST: "megaphone",
+    TRIAL_USERS: "users",
+    FUNNEL: "sales",
+}
+
+
+def marketing_hub_sections(sections: tuple[MarketingSection, ...]) -> tuple[HubSection, ...]:
+    """The list of the marketing area for the sections ``marketing_sections`` allowed."""
+    return tuple(
+        HubSection(
+            label=group.label,
+            rows=tuple(
+                HubRow(
+                    label=section.label,
+                    href=section.href,
+                    description=SECTION_DESCRIPTIONS.get(section.key, ""),
+                    icon=SECTION_ICONS.get(section.key, "megaphone"),
+                )
+                for section in group.sections
+            ),
+        )
+        for group in marketing_groups(sections)
+    )

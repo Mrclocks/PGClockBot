@@ -354,6 +354,68 @@ class LeftoverRowTests(DeleteCase):
         self.assertTrue(await self.exists(1))
 
 
+class PanelRemovedTests(DeleteCase):
+    """An expired service the panel deleted on its own is cleaned up although it could never be warned."""
+
+    async def add_removed(self, service_id: int, **fields) -> None:
+        fields.setdefault("panel_missing_at", NOW - timedelta(days=2))
+        await self.add(service_id, cleanup_warn_stage=0, cleanup_warned_at=None, **fields)
+
+    async def test_an_expired_service_removed_by_the_panel_is_deleted_after_its_deadline(self) -> None:
+        await self.add_removed(1)
+        result = await self.sweep(FakePanel({}))
+        self.assertEqual((result.deleted, result.failed), (1, 0))
+        self.assertFalse(await self.exists(1))
+        self.assertEqual((await self.table(CustomerNotice))[0].action, "cleanup_deleted")
+
+    async def test_it_waits_for_the_deadline_and_for_the_mark(self) -> None:
+        await self.add_removed(1, quota_expire_at=NOW - timedelta(days=2))                     # deadline not reached
+        await self.add(2, cleanup_warn_stage=0, cleanup_warned_at=None)                       # gone, but never marked
+        self.assertEqual((await self.sweep(FakePanel({}))).deleted, 0)
+        self.assertTrue(await self.exists(1))
+        self.assertTrue(await self.exists(2))
+
+    async def test_a_service_still_usable_when_removed_is_left_for_staff(self) -> None:
+        await self.add_removed(1, quota_expire_at=NOW + timedelta(days=20))
+        self.assertEqual((await self.sweep(FakePanel({}))).deleted, 0)
+        self.assertTrue(await self.exists(1))
+
+    async def test_an_unconfirmed_lookup_or_a_returned_panel_user_keeps_the_unwarned_row(self) -> None:
+        await self.add_removed(1)
+
+        class Down(FakePanel):
+            async def get_user_by_id(self, user_id):
+                raise PasarGuardError("bad gateway", 502)
+
+        self.assertEqual((await self.sweep(Down({}))).deleted, 0)
+        back = FakePanel({1001: expired()})
+        result = await self.sweep(back, at=NOW + timedelta(hours=2))
+        self.assertEqual((result.deleted, back.deleted), (0, []))
+        self.assertTrue(await self.exists(1))
+
+    async def test_a_panel_user_that_reappears_before_the_final_read_is_not_deleted(self) -> None:
+        await self.add_removed(1)
+
+        class Reappears(FakePanel):
+            async def get_user_by_id(self, user_id):
+                self.reads.append(user_id)
+                if len(self.reads) < 3:  # the first read and the gone check still see nothing
+                    raise PasarGuardError("not found", 404)
+                return expired()
+
+        panel = Reappears({})
+        result = await self.sweep(panel)
+        self.assertEqual((result.deleted, result.skipped, panel.deleted), (0, 1, []))
+        self.assertTrue(await self.exists(1))
+
+    async def test_exempt_and_other_shops_removed_services_are_never_deleted(self) -> None:
+        await self.add_removed(1, cleanup_exempt=True)
+        await self.add_removed(2, owner=21, shop=6)
+        self.assertEqual((await self.sweep(FakePanel({}))).deleted, 0)
+        self.assertTrue(await self.exists(1))
+        self.assertTrue(await self.exists(2))
+
+
 class FinalReadTests(DeleteCase):
     async def test_a_renewal_made_after_the_first_read_stops_the_deletion_and_frees_the_lease(self) -> None:
         await self.add(1)

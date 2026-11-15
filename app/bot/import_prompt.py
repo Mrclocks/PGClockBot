@@ -17,7 +17,7 @@ from aiogram.types import (
     RichMessageButton,
 )
 
-from app.bot.service_import_ui import import_enabled
+from app.bot.service_import_ui import add_existing_row, import_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +34,11 @@ def should_offer_import(ui: dict | None, *, has_services: bool, dismissed: bool)
     return import_enabled(ui) and not has_services and not dismissed
 
 
-def build_import_prompt() -> InputRichMessage:
+def build_import_prompt(ui: dict | None) -> InputRichMessage:
+    # The colour is the admin's «افزودن سرویس قبلی» button colour, like the same button elsewhere.
+    add_style = add_existing_row(ui)[0].style
     buttons = [
-        RichMessageButton(text=ADD_LABEL, style="primary", callback_data=HOME_ADD_CALLBACK),
+        RichMessageButton(text=ADD_LABEL, style=add_style, callback_data=HOME_ADD_CALLBACK),
         RichMessageButton(text=HIDE_LABEL, style="danger", callback_data=HOME_HIDE_CALLBACK),
     ]
     return InputRichMessage(
@@ -48,10 +50,10 @@ def build_import_prompt() -> InputRichMessage:
     )
 
 
-async def send_import_prompt(message: Message) -> Message | None:
+async def send_import_prompt(message: Message, ui: dict | None) -> Message | None:
     """Send the offer; a Telegram refusal only means the offer is skipped."""
     try:
-        return await message.bot.send_rich_message(chat_id=message.chat.id, rich_message=build_import_prompt())
+        return await message.bot.send_rich_message(chat_id=message.chat.id, rich_message=build_import_prompt(ui))
     except TelegramAPIError:
         logger.warning("could not send the add-existing-service offer", exc_info=True)
         return None

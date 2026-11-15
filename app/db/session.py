@@ -16,6 +16,11 @@ import app.db.models  # noqa: F401
 
 log = logging.getLogger(__name__)
 
+def postgres_pool_options(config) -> dict[str, object]:
+    """Pool settings for a PostgreSQL engine, sized from DB_POOL_SIZE / DB_MAX_OVERFLOW."""
+    return {"pool_pre_ping": True, "pool_size": config.db_pool_size, "max_overflow": config.db_max_overflow}
+
+
 settings = get_settings()
 _db_url = normalize_async_url(settings.database_url)
 _engine_info = parse_engine(_db_url)
@@ -26,9 +31,8 @@ elif _engine_info.is_postgresql:
     # Never hang forever on a dead/mis-authed Postgres — panel boot was
     # blocked on init_db() with no listener until this connect returned.
     _engine_kwargs["connect_args"] = {"timeout": 15}
-    _engine_kwargs.setdefault("pool_pre_ping", True)
-    _engine_kwargs.setdefault("pool_size", 5)
-    _engine_kwargs.setdefault("max_overflow", 10)
+    for _key, _value in postgres_pool_options(settings).items():
+        _engine_kwargs.setdefault(_key, _value)
 engine = create_async_engine(_db_url, **_engine_kwargs)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 

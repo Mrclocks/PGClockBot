@@ -39,7 +39,7 @@ class ResellerEditUsageTests(unittest.TestCase):
     def test_suspended_payg_reseller_gets_one_warning_with_the_minimum_top_up(self) -> None:
         html = _render(payg=True, suspended=True)
         self.assertEqual(html.count("نماینده به‌خاطر موجودی صفر مسدود است"), 1)
-        self.assertIn("40,000", html.split("نماینده به‌خاطر موجودی صفر مسدود است")[1].split("</div>")[0])
+        self.assertIn("۴۰٬۰۰۰", html.split("نماینده به‌خاطر موجودی صفر مسدود است")[1].split("</div>")[0])
         self.assertNotIn("آستانه هشدار", html)
         self.assertEqual(html.count('class="reseller-stat-grid"'), 1)
 
@@ -62,7 +62,7 @@ class ResellerEditUsageTests(unittest.TestCase):
     def test_delete_warning_keeps_the_balance_in_one_line_of_copy(self) -> None:
         html = _render(payg=False, balance=450_000)
         box = html.split("user-edit-wallet-delete-warn-amt")[1].split("</strong>")[0]
-        self.assertIn("450,000", box)
+        self.assertIn("۴۵۰٬۰۰۰", box)
         self.assertIn('<div class="flash-copy">', html.split("user-edit-wallet-delete-warn-amt")[0][-200:])
         self.assertNotIn("user-edit-wallet-delete-warn", _render(payg=False, balance=0))
 

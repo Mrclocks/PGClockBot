@@ -28,6 +28,7 @@ from app.services.panel_tickets import (
     sidebar_unread_count,
     unread_from_tickets,
 )
+from app.services.redact import user_safe_error
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 import logging
 
@@ -322,8 +323,9 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             )
             return RedirectResponse(f"/tickets?ok=created&view={ticket.id}", status_code=303)
         except Exception as exc:
+            logger.warning("Ticket action failed", exc_info=True)
             return RedirectResponse(
-                f"/tickets?err={quote(str(exc))}&new=1",
+                f"/tickets?err={quote(user_safe_error(exc))}&new=1",
                 status_code=303,
             )
 
@@ -376,6 +378,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             await reply_ticket(session, staff, ticket_id, body=body, attachment=att)
             return RedirectResponse(f"/tickets?ok=replied&view={ticket_id}", status_code=303)
         except Exception as exc:
+            logger.warning("Ticket action failed", exc_info=True)
             if att and att[0]:
                 path = resolve_ticket_attachment_path(att[0])
                 if path:
@@ -384,7 +387,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                     except OSError:
                         pass
             return RedirectResponse(
-                f"/tickets?err={quote(str(exc))}&view={ticket_id}",
+                f"/tickets?err={quote(user_safe_error(exc))}&view={ticket_id}",
                 status_code=303,
             )
 
@@ -401,8 +404,9 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             await set_status(session, staff, ticket_id, status=status)
             return RedirectResponse(f"/tickets?ok=status&view={ticket_id}", status_code=303)
         except Exception as exc:
+            logger.warning("Ticket action failed", exc_info=True)
             return RedirectResponse(
-                f"/tickets?err={quote(str(exc))}&view={ticket_id}",
+                f"/tickets?err={quote(user_safe_error(exc))}&view={ticket_id}",
                 status_code=303,
             )
 
@@ -432,8 +436,9 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                 session, ticket, text, sender_tg, is_staff=True
             )
         except Exception as exc:
+            logger.warning("Ticket action failed", exc_info=True)
             return RedirectResponse(
-                f"/tickets?err={quote(str(exc))}&tg={ticket_id}",
+                f"/tickets?err={quote(user_safe_error(exc))}&tg={ticket_id}",
                 status_code=303,
             )
         try:
@@ -469,8 +474,9 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                 f"/tickets?ok=tg_closed&tg={ticket_id}", status_code=303
             )
         except Exception as exc:
+            logger.warning("Ticket action failed", exc_info=True)
             return RedirectResponse(
-                f"/tickets?err={quote(str(exc))}&tg={ticket_id}",
+                f"/tickets?err={quote(user_safe_error(exc))}&tg={ticket_id}",
                 status_code=303,
             )
 

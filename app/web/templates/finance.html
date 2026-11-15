@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "macros.html" import ord_status, pay_status, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import ord_status, pay_status, row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state, search_submit %}
 {% from "_stuck_order_actions.html" import stuck_close_actions %}
 {% from "_finance_tabs.html" import finance_tabs %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot, ds_switch, ico %}
@@ -13,14 +14,11 @@
 {% endblock %}
 {% block content %}
 {% set finance_tab = finance_tab or 'reports' %}
-<div class="page-head">
-  <div>
-    {{ page_title('orders', 'مالی', help='finance') }}
-  </div>
-  {% if can_finance_settings %}
-  <button type="button" class="btn btn-ghost" data-modal-open="modal-finance-settings">تنظیمات</button>
-  {% endif %}
-</div>
+{% call(slot) page_header('orders', 'مالی', help='finance') %}
+  {%- if slot == 'primary' and can_finance_settings %}
+  <button type="button" class="btn btn-ghost page-act-icon" data-modal-open="modal-finance-settings">{{ act_label('تنظیمات', icon_name='settings') }}</button>
+  {%- endif %}
+{% endcall %}
 
 {{ finance_tabs(finance_tab, can_orders=can_orders, can_payments=can_payments, cancel_alert=cancel_alert, staff=staff) }}
 
@@ -34,7 +32,7 @@
     <label class="search-bar-field">
       <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، پلن، وضعیت…" autocomplete="off" />
     </label>
-    <button class="btn btn-ghost" type="submit">جستجو</button>
+    {{ search_submit() }}
   </form>
   {{ table_bulk_bar('/finance/orders/bulk-action', [
     {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': '{n} سفارش تأیید شوند؟', 'confirm_title': 'تأیید گروهی', 'confirm_label': 'تأیید'},
@@ -169,7 +167,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="9" class="muted">سفارشی نیست</td></tr>
+      {{ empty_state('سفارشی نیست', 'card', colspan=9) }}
     {% endfor %}
     </tbody>
   </table>
@@ -180,7 +178,7 @@
       {% if pager.pages and pager.total is not none %}
       صفحه {{ pager.page }} از {{ pager.pages }}
       <span aria-hidden="true">·</span>
-      {{ pager.total }} سفارش
+      {{ (pager.total) | fa }} سفارش
       {% else %}
       صفحه {{ pager.page }}
       {% endif %}
@@ -208,7 +206,7 @@
     <label class="search-bar-field">
       <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، مبلغ، وضعیت…" autocomplete="off" />
     </label>
-    <button class="btn btn-ghost" type="submit">جستجو</button>
+    {{ search_submit() }}
   </form>
   {{ table_bulk_bar('/finance/payments/bulk-action', [
     {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': '{n} پرداخت تأیید شوند؟', 'confirm_title': 'تأیید گروهی', 'confirm_label': 'تأیید'},
@@ -288,7 +286,7 @@
             {% endif %}
           {% endcall %}
           {% if p.status == 'pending' and (receipt_matches or {}).get(p.id) %}
-          <small class="muted li-hide" style="display:block;margin-top:var(--space-0)">هم‌مبلغ: {% for m in receipt_matches[p.id][:3] %}#{{ m.id }}{% if not loop.last %}، {% endif %}{% endfor %}</small>
+          <small class="muted li-hide text-block receipt-matches">هم‌مبلغ: {% for m in receipt_matches[p.id][:3] %}#{{ m.id }}{% if not loop.last %}، {% endif %}{% endfor %}</small>
           {% endif %}
           {% else %}
           <span class="muted li-hide">—</span>
@@ -296,7 +294,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">پرداختی نیست</td></tr>
+      {{ empty_state('پرداختی نیست', 'card', colspan=8) }}
     {% endfor %}
     </tbody>
   </table>
@@ -307,7 +305,7 @@
       {% if pager.pages and pager.total is not none %}
       صفحه {{ pager.page }} از {{ pager.pages }}
       <span aria-hidden="true">·</span>
-      {{ pager.total }} پرداخت
+      {{ (pager.total) | fa }} پرداخت
       {% else %}
       صفحه {{ pager.page }}
       {% endif %}
@@ -330,7 +328,7 @@
 
 {% elif finance_tab == 'delivery' and can_orders %}
 <div class="card card-flush">
-  <p class="muted" style="padding:var(--space-2) var(--space-3) 0;margin:0">
+  <p class="muted card-flush-note">
     اکشن هر ردیف مطابق تشخیص است: <strong>ادامه تحویل</strong> (سرویس ناقص) یا <strong>ارسال مجدد پیام</strong> (سرویس آماده، تلگرام ناموفق). تأیید دوباره انجام نمی‌شود. اگر تحویل دیگر لازم یا ممکن نیست (مثلاً سرویس حذف شده)، <strong>حذف از لیست</strong> فقط ردیف خطا را برمی‌دارد و چیزی ارسال نمی‌کند. سفارش پرداخت‌شده بدون سرویس («گیرکرده») فقط با <strong>لغو و بازگشت وجه</strong> یا <strong>تحویل دستی انجام شد</strong> بسته می‌شود.
   </p>
   {{ table_bulk_bar('/finance/delivery/bulk-action', [
@@ -370,7 +368,7 @@
           {% set why = (stuck_reasons or {}).get(oid) %}
           <span class="badge warn badge-inline" title="{{ diag.detail_fa if diag else '' }}">{{ why.kind if why else (diag.label_fa if diag else 'تحویل ناقص') }}</span>
           {% if diag and diag.payment_status %}
-          <small class="muted" style="display:block">پرداخت: {{ pay_status(diag.payment_status) }}{% if diag.order_status %} · سفارش: {{ ord_status(diag.order_status) }}{% endif %}</small>
+          <small class="muted text-block">پرداخت: {{ pay_status(diag.payment_status) }}{% if diag.order_status %} · سفارش: {{ ord_status(diag.order_status) }}{% endif %}</small>
           {% endif %}
         </td>
         <td class="col-hide-sm muted" data-sort-value="stuck">{{ why.reason if why else 'پرداخت شده ولی سرویسی ساخته نشد' }}</td>
@@ -410,7 +408,7 @@
           <span class="badge warn badge-inline">تحویل ناموفق</span>
           {% endif %}
           {% if diag and diag.payment_status %}
-          <small class="muted" style="display:block">پرداخت: {{ pay_status(diag.payment_status) }}{% if diag.order_status %} · سفارش: {{ ord_status(diag.order_status) }}{% endif %}</small>
+          <small class="muted text-block">پرداخت: {{ pay_status(diag.payment_status) }}{% if diag.order_status %} · سفارش: {{ ord_status(diag.order_status) }}{% endif %}</small>
           {% endif %}
         </td>
         <td class="col-hide-sm muted" data-sort-value="{{ f.error or '' }}">{{ (f.error or '—')[:120] }}</td>
@@ -437,7 +435,7 @@
       </tr>
     {% else %}
       {% if not (stuck_only_order_ids or []) %}
-      <tr><td colspan="7" class="muted">صف تحویل ناموفق خالی است.</td></tr>
+      {{ empty_state('صف تحویل ناموفق خالی است.', 'card', colspan=7) }}
       {% endif %}
     {% endfor %}
     </tbody>
@@ -464,7 +462,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('payments', 'رسید پرداخت', tone='brand', heading_id='receipt-modal-title') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <div class="receipt-modal-body">

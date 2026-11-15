@@ -1,21 +1,19 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, switch_chip, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import row_actions, switch_chip, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label, search_submit %}
 {% block title %}کاربران پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('user', 'کاربران پاسارگارد', 'pg', help='pg-users') }}
-  </div>
-  {% if can_create %}
-  <button type="button" class="btn" data-modal-open="modal-pg-user-create">ساخت کاربر</button>
-  {% endif %}
-</div>
+{% call(slot) page_header('user', 'کاربران پاسارگارد', 'pg', help='pg-users') %}
+  {%- if slot == 'primary' and can_create %}
+  <button type="button" class="btn" data-modal-open="modal-pg-user-create">{{ act_label('ساخت کاربر', 'کاربر') }}</button>
+  {%- endif %}
+{% endcall %}
 <div class="card card-flush">
   <form method="get" action="/pg/users" class="search-bar">
     <label class="search-bar-field">
       <input name="q" value="{{ q or '' }}" placeholder="نام کاربری یا بخشی از آن…" autocomplete="off" />
     </label>
-    <button class="btn btn-ghost" type="submit">جستجو</button>
+    {{ search_submit() }}
   </form>
 
   {% if not users %}
@@ -83,7 +81,7 @@
           </span>
         </td>
         <td class="mono muted col-hide-sm li-value" dir="ltr" data-sort-value="{{ days_left if days_left is not none else 9999 }}">
-          <span class="li-only">{% if days_left is not none %}{{ days_left }} روز{% else %}—{% endif %}</span><span class="li-hide">
+          <span class="li-only">{% if days_left is not none %}{{ (days_left) | fa }} روز{% else %}—{% endif %}</span><span class="li-hide">
           {% if u.get('_expire_text') %}{{ u.get('_expire_text') }}{% elif u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}</span>
         </td>
         {% if is_admin %}
@@ -142,7 +140,7 @@
       {% if pager.pages and pager.total is not none %}
       صفحه {{ pager.page }} از {{ pager.pages }}
       <span aria-hidden="true">·</span>
-      {{ pager.total }} کاربر
+      {{ (pager.total) | fa }} کاربر
       {% else %}
       صفحه {{ pager.page }}
       {% endif %}
@@ -172,7 +170,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('users', 'ساخت کاربر پاسارگارد', tone='pg', heading_id='pg-user-create-title') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/users" class="form-stack ds-body" id="pg-user-create-form">
@@ -189,9 +187,9 @@
       {% endif %}
       <label class="form-field">نام کاربری
         <input name="username" id="pg-create-username" required autocomplete="off" placeholder="user_01"
-               pattern="[A-Za-z0-9_]{3,32}" maxlength="32" dir="ltr"
-               title="فقط حروف انگلیسی، عدد و _ — بدون فاصله و فارسی" />
-        <small class="muted">۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ — بدون فاصله و فارسی</small>
+               maxlength="128" dir="ltr"
+               title="حروف انگلیسی (بزرگ و کوچک)، عدد و - _ @ ." />
+        <small class="muted">۳ تا ۱۲۸ کاراکتر: حروف انگلیسی (بزرگ و کوچک)، عدد و - _ @ . — نمادها پشت‌سرهم نباشند</small>
       </label>
 
       <label class="form-field">حالت ساخت
@@ -212,7 +210,7 @@
         {% endif %}
       </label>
 
-      <div id="pg-user-mode-custom" class="form-stack" {% if default_mode != 'custom' %}style="display:none"{% endif %}>
+      <div id="pg-user-mode-custom" class="form-stack"{% if default_mode != 'custom' %} hidden{% endif %}>
         <div class="form-row">
           <label class="form-field">حجم (گیگابایت)
             <input name="data_limit_gb" type="number" min="0" step="0.1" placeholder="مثلاً 50" inputmode="decimal" />
@@ -239,7 +237,7 @@
         {% endif %}
       </div>
 
-      <div id="pg-user-mode-template" class="form-stack" {% if default_mode != 'template' %}style="display:none"{% endif %}>
+      <div id="pg-user-mode-template" class="form-stack"{% if default_mode != 'template' %} hidden{% endif %}>
         <label class="form-field">تمپلیت پاسارگارد
           <select name="template_id" id="pg-user-template">
             <option value="">— انتخاب —</option>
@@ -270,7 +268,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('users', 'ویرایش کاربر', tone='brand', heading_id='pg-user-edit-title') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/users/0/edit" class="form-stack ds-body" id="pg-user-edit-form">
@@ -327,8 +325,8 @@
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-user-link-title">
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
-        {{ modal_title('settings', 'لینک اشتراک', tone='brand', heading_id='pg-user-link-title') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        {{ modal_title('device', 'لینک اشتراک', tone='brand', heading_id='pg-user-link-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <div class="form-stack">
@@ -349,7 +347,7 @@
 
 <script>
 (function(){
-  const USERNAME_RE = /^[A-Za-z0-9_]{3,32}$/;
+  const USERNAME_RE = /^(?!.*[-_@.]{2})[A-Za-z0-9_@.-]{3,128}$/;
   function showFormErr(el, msg) {
     if (!el) return;
     el.hidden = !msg;
@@ -375,8 +373,8 @@
   if (mode && custom && tpl) {
     function sync(){
       const isTpl = mode.value === 'template';
-      custom.style.display = isTpl ? 'none' : '';
-      tpl.style.display = isTpl ? '' : 'none';
+      custom.hidden = isTpl;
+      tpl.hidden = !isTpl;
       if (tplSelect) tplSelect.required = isTpl;
     }
     mode.addEventListener('change', sync);
@@ -389,7 +387,7 @@
       const uname = ((unameEl && unameEl.value) || '').trim();
       if (!USERNAME_RE.test(uname)) {
         e.preventDefault();
-        showFormErr(createErr, 'نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ باشد (بدون فاصله و فارسی)');
+        showFormErr(createErr, 'نام کاربری باید ۳ تا ۱۲۸ کاراکتر، فقط حروف انگلیسی، عدد و - _ @ . باشد (نمادها پشت‌سرهم نباشند)');
         if (unameEl) unameEl.focus();
         return;
       }

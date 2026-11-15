@@ -232,7 +232,7 @@
           <option value="" disabled selected>انتخاب پلن…</option>
           {% for p in plans %}
           <option value="{{ p.id }}">
-            {{ p.name }} · {{ p.duration_days or '∞' }}روز · {% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}
+            {{ p.name }} · {{ (p.duration_days or '∞') | fa }}روز · {% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}
           </option>
           {% endfor %}
         </select>
@@ -299,7 +299,7 @@
               <select name="plan_id" required class="select-block">
                 {% for p in plans %}
                 <option value="{{ p.id }}" {% if s.service.plan_id == p.id %}selected{% endif %}>
-                  {{ p.name }} · {{ p.duration_days or '∞' }}روز · {% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}
+                  {{ p.name }} · {{ (p.duration_days or '∞') | fa }}روز · {% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}
                 </option>
                 {% endfor %}
               </select>

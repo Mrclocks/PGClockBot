@@ -1,18 +1,15 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title, modal_title %}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import row_actions, modal_title, page_header, act_label, empty_state %}
 {% block title %}نمایندگان من{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('users', 'نمایندگان من', help='resellers') }}
-  </div>
-  {% if can_create %}
-  <button type="button" class="btn" data-modal-open="modal-principal-create">افزودن نماینده</button>
-  {% endif %}
-  {% if can_create_l2 %}
-  <button type="button" class="btn" data-modal-open="modal-principal-create-l2">افزودن نماینده</button>
-  {% endif %}
-</div>
+{% call(slot) page_header('users', 'نمایندگان من', help='resellers') %}
+  {%- if slot == 'primary' and (can_create or can_create_l2) %}
+  <button type="button" class="btn" data-modal-open="{{ 'modal-principal-create' if can_create else 'modal-principal-create-l2' }}">{{ act_label('افزودن نماینده', 'نماینده') }}</button>
+  {%- elif slot == 'more' and can_create and can_create_l2 %}
+  <button type="button" class="btn btn-ghost" data-modal-open="modal-principal-create-l2">افزودن نماینده</button>
+  {%- endif %}
+{% endcall %}
 
 <div class="card card-flush">
   <h2>فهرست نمایندگان</h2>
@@ -102,7 +99,7 @@
       </tr>
       {% endfor %}
       {% else %}
-      <tr><td colspan="10" class="muted">نماینده‌ای ثبت نشده است</td></tr>
+      {{ empty_state('نماینده‌ای ثبت نشده است', 'resellers', colspan=10) }}
       {% endfor %}
     {% else %}
       {% for child in l2_rows %}
@@ -138,7 +135,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="10" class="muted">نماینده‌ای ثبت نشده است</td></tr>
+      {{ empty_state('نماینده‌ای ثبت نشده است', 'resellers', colspan=10) }}
       {% endfor %}
     {% endif %}
     </tbody>
@@ -153,7 +150,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('resellers', 'افزودن نماینده', tone='brand') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/principals/create" class="form-stack ds-body" autocomplete="off">
@@ -194,7 +191,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('resellers', 'افزودن نماینده', tone='brand') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/principals/create-l2" class="form-stack ds-body" autocomplete="off">
@@ -234,7 +231,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('resellers', 'جزئیات نماینده', tone='brand', heading_id='principal-detail-title') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     {% if detail %}
@@ -313,8 +310,8 @@
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
-        {{ modal_title('settings', 'فعال‌سازی ورود وب', tone='brand') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        {{ modal_title('device', 'فعال‌سازی ورود وب', tone='brand') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/principals/{{ detail.principal_id }}/web-identity" class="form-stack ds-body" autocomplete="off">
@@ -342,8 +339,8 @@
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
-        {{ modal_title('settings', 'اتصال تلگرام', tone='brand') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        {{ modal_title('device', 'اتصال تلگرام', tone='brand') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/principals/{{ detail.principal_id }}/telegram-bind" class="form-stack ds-body" autocomplete="off">

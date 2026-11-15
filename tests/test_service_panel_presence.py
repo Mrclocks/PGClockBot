@@ -6,6 +6,7 @@ import importlib.util
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.db import Base
 from app.db.models import BotUser, UserService
 from app.services import service_panel_presence as presence
+from app.services.panel_alert_notifications import claim_signal, clear_signal
 from app.services.pasarguard import PasarGuardError
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,7 +47,7 @@ class FakePanel:
         return answer  # type: ignore[return-value]
 
 
-class PresenceCase(unittest.IsolatedAsyncioTestCase):
+class PresenceFixture(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'a.db'}")
@@ -92,6 +94,8 @@ class PresenceCase(unittest.IsolatedAsyncioTestCase):
             async with self.Session() as session:
                 await presence.scan_panel_presence(session)
 
+
+class PresenceCase(PresenceFixture):
     async def test_only_a_clean_404_marks_the_service_missing(self) -> None:
         await self.scan(self.panel())
         flags = await self.flags()
@@ -153,6 +157,84 @@ class PresenceCase(unittest.IsolatedAsyncioTestCase):
         await self.scan(panel)
         self.assertNotIn(10, panel.calls)
         self.assertFalse((await self.flags())["gone"])
+
+
+class MissingAlertCadenceTests(PresenceFixture):
+    """Staff hear about services removed while usable: once, then only for new ones, at most daily."""
+
+    BASE = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
+
+    async def mark(self, name: str, at: datetime, **quota: object) -> None:
+        async with self.Session() as session:
+            await session.execute(
+                sa.update(UserService).where(UserService.pg_username == name).values(panel_missing_at=at, **quota)
+            )
+            await session.commit()
+
+    async def drop(self, name: str) -> None:
+        async with self.Session() as session:
+            await session.execute(sa.delete(UserService).where(UserService.pg_username == name))
+            await session.commit()
+
+    async def tick(self, now: datetime) -> list[int]:
+        """Run one alert round for the platform scope; returns the counts that would be sent."""
+        sent: list[int] = []
+        async with self.Session() as session:
+            for signal in await presence.missing_signals(session):
+                if signal.shop_id is not None:
+                    continue
+                if signal.count <= 0:
+                    await clear_signal(session, signal)
+                elif await claim_signal(session, signal, now=now):
+                    sent.append(signal.count)
+        return sent
+
+    async def test_services_the_panel_removed_after_they_ended_are_not_announced(self) -> None:
+        await self.mark("gone", self.BASE, quota_expire_at=self.BASE - timedelta(days=3))
+        await self.mark("alive", self.BASE, volume_exhausted_at=self.BASE - timedelta(days=1))
+        self.assertEqual(await self.tick(self.BASE), [])
+
+    async def test_a_service_removed_before_it_expired_is_announced(self) -> None:
+        await self.mark("gone", self.BASE, quota_expire_at=self.BASE + timedelta(days=10))
+        await self.mark("alive", self.BASE)
+        self.assertEqual(await self.tick(self.BASE), [2])
+
+    async def test_cleaning_up_announced_services_sends_nothing_new(self) -> None:
+        await self.mark("gone", self.BASE)
+        await self.mark("alive", self.BASE + timedelta(minutes=1))
+        self.assertEqual(await self.tick(self.BASE + timedelta(minutes=5)), [2])
+        await self.drop("alive")
+        for hours in (1, 7, 13, 30):
+            self.assertEqual(await self.tick(self.BASE + timedelta(hours=hours)), [], hours)
+        await self.drop("gone")
+        self.assertEqual(await self.tick(self.BASE + timedelta(hours=31)), [])
+        self.assertEqual(await self.tick(self.BASE + timedelta(hours=60)), [])
+
+    async def test_new_removals_are_announced_at_most_once_a_day(self) -> None:
+        await self.mark("gone", self.BASE)
+        self.assertEqual(await self.tick(self.BASE + timedelta(minutes=5)), [1])
+        await self.mark("alive", self.BASE + timedelta(hours=2))
+        await self.mark("outage", self.BASE + timedelta(hours=8))
+        for hours in (6, 12, 18, 23):
+            self.assertEqual(await self.tick(self.BASE + timedelta(hours=hours)), [], hours)
+        self.assertEqual(await self.tick(self.BASE + timedelta(hours=24, minutes=6)), [3])
+        self.assertEqual(await self.tick(self.BASE + timedelta(hours=60)), [])
+
+    async def test_a_new_removal_after_a_full_cleanup_waits_for_the_daily_interval(self) -> None:
+        await self.mark("gone", self.BASE)
+        self.assertEqual(await self.tick(self.BASE + timedelta(minutes=5)), [1])
+        await self.drop("gone")
+        self.assertEqual(await self.tick(self.BASE + timedelta(hours=1)), [])
+        await self.mark("alive", self.BASE + timedelta(hours=2))
+        self.assertEqual(await self.tick(self.BASE + timedelta(hours=3)), [])
+        self.assertEqual(await self.tick(self.BASE + timedelta(hours=25)), [1])
+
+    async def test_a_shop_alert_ignores_another_shops_removals(self) -> None:
+        await self.mark("shopsvc", self.BASE)
+        self.assertEqual(await self.tick(self.BASE), [])
+        async with self.Session() as session:
+            by_shop = {s.shop_id: s.count for s in await presence.missing_signals(session)}
+        self.assertEqual(by_shop, {self.other_id: 1})
 
 
 class PresenceMigrationTests(unittest.TestCase):

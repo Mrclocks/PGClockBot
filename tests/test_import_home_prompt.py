@@ -33,8 +33,17 @@ class OfferRuleTests(unittest.TestCase):
         self.assertFalse(prompt.should_offer_import(OFF, has_services=False, dismissed=False))
         self.assertFalse(prompt.should_offer_import(None, has_services=False, dismissed=False))
 
+    def test_the_add_button_takes_the_colour_set_for_it_and_keeps_its_fixed_label(self):
+        for colour in ("success", "primary", "danger"):
+            add, _ = prompt.build_import_prompt({**ON, "btn_style_svc_add_existing": colour}).blocks[1].buttons
+            self.assertEqual((add.text, add.style), ("اتصال اشتراک قبلی", colour))
+
+    def test_the_hide_button_stays_red_whatever_the_add_colour(self):
+        _, hide = prompt.build_import_prompt({**ON, "btn_style_svc_add_existing": "success"}).blocks[1].buttons
+        self.assertEqual(hide.style, "danger")
+
     def test_the_message_has_the_note_above_the_add_and_the_red_hide_button_side_by_side(self):
-        blocks = prompt.build_import_prompt().blocks
+        blocks = prompt.build_import_prompt(ON).blocks
         self.assertEqual(blocks[0].text, prompt.HOME_ADD_NOTE)
         self.assertIn("از بخش «سرویس‌های من»", prompt.HOME_ADD_NOTE)
         self.assertEqual(len(blocks), 2)
@@ -52,13 +61,13 @@ class SendTests(unittest.IsolatedAsyncioTestCase):
         message.bot.send_rich_message = AsyncMock(
             side_effect=TelegramBadRequest(method=MagicMock(), message="Bad Request: unsupported")
         )
-        self.assertIsNone(await prompt.send_import_prompt(message))
+        self.assertIsNone(await prompt.send_import_prompt(message, ON))
 
     async def test_it_is_sent_without_a_keyboard(self):
         message = MagicMock()
         message.chat.id = 5
         message.bot.send_rich_message = AsyncMock(return_value="sent")
-        self.assertEqual(await prompt.send_import_prompt(message), "sent")
+        self.assertEqual(await prompt.send_import_prompt(message, ON), "sent")
         self.assertNotIn("reply_markup", message.bot.send_rich_message.await_args.kwargs)
 
 
@@ -67,7 +76,7 @@ class ChatScreenTests(_Rules):
         sent = self.chat.message()
         sent.chat = SimpleNamespace(id=100, type="private")
         make_request = AsyncMock(return_value=sent)
-        method = SendRichMessage(chat_id=100, rich_message=prompt.build_import_prompt())
+        method = SendRichMessage(chat_id=100, rich_message=prompt.build_import_prompt(ON))
         with patch.object(chat_screen, "Message", MagicMock):
             with chat_screen.turn((int(self.chat.bot.id), 100)) as active:
                 await chat_screen.screen_requests(make_request, self.chat.bot, method)

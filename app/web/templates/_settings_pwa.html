@@ -1,3 +1,4 @@
+{% if mobile_bar %}{% include "_settings_mobile_bar.html" %}{% endif %}
 {% set shop_mode = false %}
 {% include "_panel_brand_card.html" %}
 
@@ -49,7 +50,7 @@
           <small class="muted">خالی = لوگوی پنل</small>
           <div class="ap-photo-row">
             <img src="{{ p.get('icon_preview') }}?v={{ app_version }}" alt="" class="ap-photo-thumb"
-                 width="64" height="64" style="border-radius:18px;object-fit:cover;background:#111" />
+                 width="64" height="64" data-shape="icon" />
             {% if p.get('has_custom_icon') %}
             <button type="submit" name="pwa_icon_clear" value="1" class="btn btn-danger btn-sm"
                     data-confirm="آیکن سفارشی حذف شود و لوگوی پنل برگردد؟" data-confirm-title="تأیید" data-confirm-danger="1" data-confirm-label="تأیید">

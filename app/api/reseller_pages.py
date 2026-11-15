@@ -60,6 +60,7 @@ from app.services.resellers import (
     revoke_reseller,
     with_shop_settings,
 )
+from app.services.redact import operator_error
 
 logger = logging.getLogger(__name__)
 
@@ -900,7 +901,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             except PasarGuardError as e:
                 return _redirect_reseller_edit(user_id, err=e.user_message(fallback=str(e)))
             except Exception as e:
-                return _redirect_reseller_edit(user_id, err=f'همگام‌سازی نقش پاسارگارد ناموفق: {e}')
+                logger.warning("PasarGuard admin role sync failed", exc_info=True)
+                return _redirect_reseller_edit(
+                    user_id, err=operator_error(e, prefix="همگام‌سازی نقش پاسارگارد ناموفق")
+                )
         from app.services.reseller_access import normalize_telegram_ids_csv
 
         profile.bot_admin_ids = normalize_telegram_ids_csv(
@@ -1041,7 +1045,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         except ValueError as e:
             return _redirect_reseller_edit(user_id, err=str(e))
         except Exception as e:
-            return _redirect_reseller_edit(user_id, err=f"تغییر ظرفیت ناموفق: {e}")
+            logger.warning("Reseller capacity adjustment failed", exc_info=True)
+            return _redirect_reseller_edit(user_id, err=operator_error(e, prefix="تغییر ظرفیت ناموفق"))
         return _redirect_reseller_edit(user_id, ok="ظرفیت اشتراک به‌روز شد")
 
     @app.post("/resellers/{user_id}/subscription/sync")

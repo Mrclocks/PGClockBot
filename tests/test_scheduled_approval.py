@@ -416,8 +416,10 @@ class SettingsLayoutTests(unittest.TestCase):
     def test_the_settings_tab_for_the_web_app_is_named_after_the_brand(self) -> None:
         from jinja2 import Environment, FileSystemLoader
 
+        from app.services.settings_hub import system_hub_sections
+
         env = Environment(loader=FileSystemLoader(ROOT / "app/web/templates"), autoescape=True)
-        html = env.from_string("{% from '_panel_settings_tabs.html' import panel_settings_tabs %}{{ panel_settings_tabs('pwa') }}").render()
+        html = env.from_string("{% from '_settings_hub.html' import settings_hub %}{{ settings_hub(s) }}").render(s=system_hub_sections())
         self.assertIn("ظاهر و برند", html)
         self.assertNotIn("وب‌اپ", html)
 

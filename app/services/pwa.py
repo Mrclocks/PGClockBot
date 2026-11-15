@@ -277,7 +277,7 @@ def build_manifest(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def service_worker_js() -> str:
     return """/* PGClockBot panel service worker — static shell only */
-const CACHE = 'pgclock-shell-v53';
+const CACHE = 'pgclock-shell-v54';
 const PRECACHE = [
   '/static/logo.png',
   '/static/logo-64.png',
@@ -313,6 +313,27 @@ function isVersionedPanelAsset(url) {
 function matchExact(req) {
   return caches.open(CACHE).then((cache) => cache.match(req));
 }
+/* /static files whose ?v= is the 16-hex content key (app/services/panel_assets.py): a changed file gets a new
+   URL, so the copy cached for one URL never goes stale and can be served without asking the network. */
+function isContentKeyed(url) {
+  return url.pathname.indexOf('/static/') === 0 && /^[0-9a-f]{16}$/.test(url.searchParams.get('v') || '');
+}
+/* Store a fresh copy and drop the copies cached for other versions of the same file. */
+function storeLatest(req, url, res) {
+  const copy = res.clone();
+  return caches.open(CACHE).then((c) =>
+    c.keys().then((keys) => {
+      const stale = keys.filter((k) => {
+        try {
+          return new URL(k.url).pathname === url.pathname && k.url !== req.url;
+        } catch (e) {
+          return false;
+        }
+      });
+      return Promise.all(stale.map((k) => c.delete(k))).then(() => c.put(req, copy));
+    })
+  );
+}
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
@@ -321,6 +342,19 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (!url.pathname.startsWith('/static/') && !url.pathname.startsWith('/pwa/')) return;
 
+  if (isContentKeyed(url)) {
+    event.respondWith(
+      matchExact(req).then((hit) =>
+        hit ||
+        fetch(req).then((res) => {
+          // waitUntil keeps the worker alive until the copy is stored, after the page has its response.
+          if (res && res.ok) event.waitUntil(storeLatest(req, url, res));
+          return res;
+        })
+      )
+    );
+    return;
+  }
   if (isVersionedPanelAsset(url)) {
     event.respondWith(
       fetch(req).then((res) => {

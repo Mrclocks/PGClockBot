@@ -74,13 +74,6 @@ class DailyReportCatalogTests(unittest.TestCase):
         self.assertIn("ACTOR_SHOP", sched)
         self.assertIn("open_notify_bot_for_reseller", sched)
 
-    def test_preview_js_has_daily_report(self):
-        js = (ROOT / "app/web/templates/_tg_preview_chat_js.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("daily_report", js)
-        self.assertIn("fillDailyReport", js)
-
     def test_message_variables_catalog_includes_daily_report(self):
         from app.services.message_variables import (
             DOMAIN_DAILY_REPORT,

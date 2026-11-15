@@ -179,19 +179,16 @@ test("renewal preview is escaped and a lost response retries with the same reque
   assert.equal(env.calls.filter((c) => c.method === "POST").length, 2, "a finished preview cannot be paid again");
 });
 
-test("renew sheet shares a plans request that is already loading", async () => {
-  let open;
-  const pending = new Promise((resolve) => { open = resolve; });
-  const env = await boot({ routes: router([[/GET \/api\/mini\/plans/, async () => { await pending; return { status: 200, body: PLANS }; }]]) });
-  env.mini.app.go("shop");
-  const sheet = env.mini.app.ACTIONS.renew(trigger({ "data-id": 7 }));
-  open();
-  await sheet;
+test("renew sheet asks for this service's renewal choices and never offers a trial", async () => {
+  const options = { wallet_pay_enabled: true, grouped: false, current: null, categories: [], other: [],
+    plans: [{ ...PLANS.plans[0], is_trial: true }, ...PLANS.plans.slice(1)] };
+  const env = await boot({ routes: router([[/GET \/api\/mini\/service\/7\/renewal-options$/, () => ({ status: 200, body: options })]]) });
+  await env.mini.app.ACTIONS.renew(trigger({ "data-id": 7 }));
   await settle();
-  assert.equal(env.calls.filter((c) => c.url === "/api/mini/plans").length, 1);
+  assert.equal(env.calls.filter((c) => c.url === "/api/mini/service/7/renewal-options").length, 1);
   const html = env.element("sheet-body").innerHTML;
   assert.ok(html.includes('data-action="preview-renew"'));
-  assert.ok(!html.includes('data-plan="1"'), "the trial plan is never offered for renewal");
+  assert.ok(!html.includes(`data-plan="${PLANS.plans[0].id}"`), "a trial plan is never offered for renewal");
 });
 
 test("a preview that arrives after its sheet closed is dropped", async () => {

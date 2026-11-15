@@ -1,16 +1,15 @@
-﻿{% extends "base.html" %}
-{% from "macros.html" import switch, switch_chip, page_title, modal_title, row_actions, table_select_head, table_select_cell, table_bulk_bar %}
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import switch, switch_chip, page_header, act_label, modal_title, row_actions, table_select_head, table_select_cell, table_bulk_bar, empty_state %}
 {% block title %}پلن‌ها{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('plans', 'پلن‌ها', help='plans') }}
-  </div>
-  <div class="page-head-actions">
-    <button type="button" class="btn btn-ghost" data-modal-open="modal-plan-categories">برچسب دسته</button>
-    <button type="button" class="btn" id="btn-add-plan" data-modal-open="modal-plan-unified">افزودن پلن</button>
-  </div>
-</div>
+{% call(slot) page_header('plans', 'پلن‌ها', help='plans') %}
+  {%- if slot == 'primary' %}
+  <button type="button" class="btn" id="btn-add-plan" data-modal-open="modal-plan-unified">{{ act_label('افزودن پلن', 'پلن') }}</button>
+  {%- elif slot == 'more' %}
+  <button type="button" class="btn btn-ghost" data-modal-open="modal-plan-categories">برچسب دسته</button>
+  {%- endif %}
+{% endcall %}
 
 {% set plans_tab = 'resellers' if (is_platform_admin and request.query_params.get('tab') == 'resellers') else 'users' %}
 {% if is_platform_admin %}
@@ -39,7 +38,7 @@
   <div class="table-wrap">
   <table class="table-compact table-list-sm" data-bulk-select>
     <thead>
-      <tr>{{ table_select_head() }}<th>نام</th><th class="col-hide-sm">برچسب</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ (plans | length + 3) | num }} پلن</span></th></tr>
+      <tr>{{ table_select_head() }}<th>نام</th><th class="col-hide-sm">برچسب</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ plans | length | num }} پلن ثابت</span></th></tr>
     </thead>
     <tbody>
     {% for p in plans %}
@@ -55,13 +54,13 @@
         </td>
         <td class="col-hide-sm muted">{% if p.category_id and plan_category_map and plan_category_map.get(p.category_id) %}{{ plan_category_map.get(p.category_id).name }}{% else %}—{% endif %}</td>
         <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
-        <td class="col-hide-sm">{% if p.duration_days %}{{ p.duration_days }} روز{% else %}نامحدود{% endif %}</td>
+        <td class="col-hide-sm">{% if p.duration_days %}{{ (p.duration_days) | fa }} روز{% else %}نامحدود{% endif %}</td>
         <td class="li-sub">
           {#- On phones line two: the warnings, then volume · duration · category. -#}
           {% if plan_limit_issues and plan_limit_issues.get(p.id) %}<span class="li-only badge warn">خارج از سقف</span>{% endif %}
           {% if tpl_missing or pg_empty %}<span class="li-only badge warn">منبع ناقص</span>{% endif %}
           <span>{% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}</span>
-          <span class="li-only">· {% if p.duration_days %}{{ p.duration_days }} روز{% else %}نامحدود{% endif %}{% if p.category_id and plan_category_map and plan_category_map.get(p.category_id) %} · {{ plan_category_map.get(p.category_id).name }}{% endif %}</span>
+          <span class="li-only">· {% if p.duration_days %}{{ (p.duration_days) | fa }} روز{% else %}نامحدود{% endif %}{% if p.category_id and plan_category_map and plan_category_map.get(p.category_id) %} · {{ plan_category_map.get(p.category_id).name }}{% endif %}</span>
         </td>
         <td class="mono col-hide-sm">
           {% if p.pg_template_id %}
@@ -101,18 +100,18 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="9" class="muted">پلن ثابتی نیست — از «افزودن پلن» بسازید.</td></tr>
+      {{ empty_state('هنوز پلن ثابتی نساخته‌اید.', 'plans', colspan=9, action_label='افزودن پلن', action_modal='modal-plan-unified') }}
     {% endfor %}
       <tr>
         <td class="col-select"></td>
         <td class="li-title">پلن تست{% if trial %} — <span dir="auto">{{ trial.name }}</span>{% endif %}</td>
         <td class="col-hide-sm muted">—</td>
         <td class="mono li-value">رایگان</td>
-        <td class="col-hide-sm">{% if trial %}{{ trial.duration_days }} روز{% else %}—{% endif %}</td>
+        <td class="col-hide-sm">{% if trial %}{{ (trial.duration_days) | fa }} روز{% else %}—{% endif %}</td>
         <td class="li-sub">
           {% if trial_limit_issue %}<span class="li-only badge warn">خارج از سقف</span>{% endif %}
           <span>{% if trial and trial.data_limit_gb is not none %}{{ trial.data_limit_gb | gb }}{% elif trial %}نامحدود{% else %}—{% endif %}</span>
-          {% if trial %}<span class="li-only">· {{ trial.duration_days }} روز</span>{% endif %}
+          {% if trial %}<span class="li-only">· {{ (trial.duration_days) | fa }} روز</span>{% endif %}
         </td>
         <td class="mono col-hide-sm">
           {% if trial and trial.pg_template_id %}تمپلیت #{{ trial.pg_template_id }}
@@ -139,11 +138,11 @@
         <td class="li-title">پلن دلخواه</td>
         <td class="col-hide-sm muted">—</td>
         <td class="mono li-value">هر گیگ / روز</td>
-        <td class="col-hide-sm">{{ values.get('custom_plan_min_days','1') }}–{{ values.get('custom_plan_max_days','365') }} روز</td>
+        <td class="col-hide-sm">{{ (values.get('custom_plan_min_days','1')) | fa }}–{{ (values.get('custom_plan_max_days','365')) | fa }} روز</td>
         <td class="li-sub">
           {% if custom_limit_issue %}<span class="li-only badge warn">خارج از سقف</span>{% endif %}
-          <span>{{ values.get('custom_plan_min_gb','1') }}–{{ values.get('custom_plan_max_gb','500') }} گیگ</span>
-          <span class="li-only">· {{ values.get('custom_plan_min_days','1') }}–{{ values.get('custom_plan_max_days','365') }} روز</span>
+          <span>{{ (values.get('custom_plan_min_gb','1')) | fa }}–{{ (values.get('custom_plan_max_gb','500')) | fa }} گیگ</span>
+          <span class="li-only">· {{ (values.get('custom_plan_min_days','1')) | fa }}–{{ (values.get('custom_plan_max_days','365')) | fa }} روز</span>
         </td>
         <td class="mono col-hide-sm">
           {% if values.get('custom_plan_template_id') %}تمپلیت #{{ values.get('custom_plan_template_id') }}
@@ -171,7 +170,7 @@
         <td class="col-hide-sm muted">—</td>
         <td class="mono li-value">تخفیف پلکانی</td>
         <td class="col-hide-sm">—</td>
-        <td class="li-sub"><span>{{ values.get('wholesale_min_qty','5') }}–{{ values.get('wholesale_max_qty','20') }} عدد</span></td>
+        <td class="li-sub"><span>{{ (values.get('wholesale_min_qty','5')) | fa }}–{{ values.get('wholesale_max_qty','20') }} عدد</span></td>
         <td class="mono col-hide-sm">—</td>
         <td class="li-badge">{% if wholesale_on %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
@@ -246,7 +245,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">هنوز بسته‌ای نیست — از «افزودن پلن» با نوع بسته حجم یا زمان بسازید.</td></tr>
+      {{ empty_state('هنوز بسته‌ای نیست — از «افزودن پلن» با نوع بسته حجم یا زمان بسازید.', 'plans', colspan=7) }}
     {% endfor %}
     </tbody>
   </table>
@@ -313,7 +312,7 @@
         <td class="li-only-cell li-sub">{% if is_system_plan %}<span class="badge neutral">سیستمی</span>{% endif %}<span dir="auto">{{ p.description or 'اشتراک ثابت' }}</span></td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">پلن اشتراک ثابت نیست — از «افزودن پلن» با مخاطب نمایندگان بسازید.</td></tr>
+      {{ empty_state('پلن اشتراک ثابت نیست — از «افزودن پلن» با مخاطب نمایندگان بسازید.', 'plans', colspan=5) }}
     {% endfor %}
     </tbody>
   </table>
@@ -364,7 +363,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">پلن PAYG نیست — از «افزودن پلن» با نوع PAYG بسازید.</td></tr>
+      {{ empty_state('پلن PAYG نیست — از «افزودن پلن» با نوع PAYG بسازید.', 'plans', colspan=7) }}
     {% endfor %}
     </tbody>
   </table>
@@ -399,9 +398,9 @@
         <td class="col-hide-sm muted">{% if p.category_id and reseller_plan_category_map and reseller_plan_category_map.get(p.category_id) %}{{ reseller_plan_category_map.get(p.category_id).name }}{% else %}—{% endif %}</td>
         <td class="li-sub">
           <span>{% if p.plan_kind == 'addon_users' %}کاربر{% else %}حجم{% endif %}</span>
-          <span class="li-only">· {% if p.plan_kind == 'addon_users' %}+{{ p.addon_users or 0 }} کاربر{% else %}+{{ p.addon_gb or 0 }} گیگ{% endif %}{% if p.category_id and reseller_plan_category_map and reseller_plan_category_map.get(p.category_id) %} · {{ reseller_plan_category_map.get(p.category_id).name }}{% endif %}</span>
+          <span class="li-only">· {% if p.plan_kind == 'addon_users' %}+{{ (p.addon_users or 0) | fa }} کاربر{% else %}+{{ (p.addon_gb or 0) | fa }} گیگ{% endif %}{% if p.category_id and reseller_plan_category_map and reseller_plan_category_map.get(p.category_id) %} · {{ reseller_plan_category_map.get(p.category_id).name }}{% endif %}</span>
         </td>
-        <td class="mono">{% if p.plan_kind == 'addon_users' %}+{{ p.addon_users or 0 }} کاربر{% else %}+{{ p.addon_gb or 0 }} گیگ{% endif %}</td>
+        <td class="mono">{% if p.plan_kind == 'addon_users' %}+{{ (p.addon_users or 0) | fa }} کاربر{% else %}+{{ (p.addon_gb or 0) | fa }} گیگ{% endif %}</td>
         <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
         <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
@@ -421,7 +420,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">بسته اضافه نیست — مخاطب پلن: نمایندگان → نوع: بسته حجم/کاربر.</td></tr>
+      {{ empty_state('بسته اضافه نیست — مخاطب پلن: نمایندگان → نوع: بسته حجم/کاربر.', 'plans', colspan=8) }}
     {% endfor %}
     </tbody>
   </table>
@@ -454,7 +453,7 @@
           <button type="button" role="radio" data-value="resellers">نماینده</button>
         </div>
         {% endif %}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
       {# Section shortcuts for the open form; dsSync shows the nav whose data-plan-steps lists the audience:kind. #}
       {% for form_id, kinds, links in [
@@ -537,7 +536,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('plans', 'برچسب دسته', tone='brand', heading_id='plan-categories-title') }}
-        <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     {% if open_categories and (flash_ok or flash_err) %}
@@ -662,7 +661,7 @@
               </td>
             </tr>
           {% else %}
-            <tr><td colspan="7" class="muted">هنوز برچسبی نیست — از فرم بالا بسازید.</td></tr>
+            {{ empty_state('هنوز برچسبی نیست — از فرم بالا بسازید.', 'plans', colspan=7) }}
           {% endfor %}
           </tbody>
         </table>
@@ -678,7 +677,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('plans', 'بسته حجم / زمان', tone='brand', heading_id='service-addons-title') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
 {# One row of the general pack form; also rendered into a <template> so added rows start un-enhanced. #}
@@ -818,7 +817,7 @@
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="7" class="muted">هنوز بسته‌ای نیست — از فرم بالا بسازید.</td></tr>
+          {{ empty_state('هنوز بسته‌ای نیست — از فرم بالا بسازید.', 'plans', colspan=7) }}
         {% endfor %}
         </tbody>
       </table>
@@ -1214,8 +1213,8 @@
     if (!mode || !custom || !tpl) return;
     function sync(){
       const isTpl = mode.value === 'template';
-      custom.style.display = isTpl ? 'none' : '';
-      tpl.style.display = isTpl ? '' : 'none';
+      custom.hidden = isTpl;
+      tpl.hidden = !isTpl;
     }
     mode.addEventListener('change', sync);
     sync();

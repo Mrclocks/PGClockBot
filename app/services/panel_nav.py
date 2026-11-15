@@ -2,6 +2,8 @@
 
 Each item carries the same visibility rule as the route it opens, so the menu never offers a
 link that ends in «دسترسی مجاز نیست». Labels follow the panel glossary (docs/NAV_SETTINGS.md).
+The phone bottom bar is a view over the built sidebar, so it shows exactly the items, names, active
+state and unread dots the sidebar shows.
 """
 
 from __future__ import annotations
@@ -28,6 +30,29 @@ DOT_LABELS: dict[str, str] = {
 }
 
 MARKETING_KEY = "marketing"
+# The marketing entry opens the list of the marketing area (app/api/marketing_pages.py).
+MARKETING_LIST_HREF = "/marketing"
+
+# Phone bottom bar: dashboard and action center, then the most used pages the viewer may open.
+# The owner can put other pages first (app/services/mobile_bar.py); these fill whatever is left.
+DOCK_SLOTS = 4
+DOCK_PRIORITY: tuple[str, ...] = (
+    "home", "inbox", "finance", "users", "customers", "tickets", "pg_tickets", "pg_users", "plans",
+)
+# Entries that open the same page for different roles are one choice in the bar settings: choosing the
+# first key also brings the others, so the setting works for the owner, shops and PasarGuard staff alike.
+DOCK_ALIASES: dict[str, tuple[str, ...]] = {
+    "users": ("users", "customers"),
+    "tickets": ("tickets", "pg_tickets"),
+    "resellers": ("resellers", "my_resellers"),
+    "bot_settings": ("bot_settings", "shop_settings"),
+}
+# Labels in the settings list, which is one flat list in the panel's dropdown: each must say which page it is.
+_DOCK_CHOICE_LABELS: dict[str, str] = {
+    "users": "کاربران ربات / مشتریان",
+    "bot_settings": "تنظیمات ربات / فروشگاه",
+    "pg_users": "کاربران پاسارگارد",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +114,8 @@ class NavLocation:
     tab: str
 
     def is_panel_settings(self) -> bool:
-        return self.path.startswith("/settings") and self.tab in PANEL_SETTINGS_KEYS
+        # ``system`` is the list of the system settings area (settings_hub.SYSTEM_LIST_TAB).
+        return self.path.startswith("/settings") and (self.tab in PANEL_SETTINGS_KEYS or self.tab == "system")
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +126,12 @@ class NavItem:
     icon: str
     active: bool = False
     dot: str = ""
+    short: str = ""
+
+    @property
+    def short_label(self) -> str:
+        """Label for the narrow phone bar; the glossary name unless a shorter one is registered."""
+        return self.short or self.label
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +147,14 @@ ActiveRule = Callable[[NavLocation], bool]
 
 
 @dataclass(frozen=True, slots=True)
+class NavDock:
+    """Phone bottom bar: up to ``DOCK_SLOTS`` items; «منو» is lit when the page lives elsewhere."""
+
+    items: tuple[NavItem, ...]
+    more_active: bool
+
+
+@dataclass(frozen=True, slots=True)
 class _ItemSpec:
     key: str
     label: str
@@ -123,6 +163,7 @@ class _ItemSpec:
     visible: Rule
     active: ActiveRule
     dot: str = ""
+    short: str = ""
 
 
 def _starts(*prefixes: str) -> ActiveRule:
@@ -157,7 +198,7 @@ _INBOX = _ItemSpec("inbox", "مرکز اقدام", "/inbox", "inbox", lambda v: 
 _SYSTEM_OWNER: tuple[_ItemSpec, ...] = (
     _DASHBOARD,
     _INBOX,
-    _ItemSpec("system_settings", "تنظیمات سیستم", "/settings?tab=general", "sliders", _owner,
+    _ItemSpec("system_settings", "تنظیمات سیستم", "/settings?tab=system", "gear", _owner,
               lambda loc: loc.is_panel_settings() or loc.path.startswith("/security")),
 )
 
@@ -173,12 +214,12 @@ _SHOP_ITEMS: tuple[_ItemSpec, ...] = (
     # A shop owner's own package belongs with the shop, not with the account section.
     _ItemSpec("my_subscription", "اشتراک من", "/my-subscription", "card",
               lambda v: v.is_reseller and not v.is_owner, _starts("/my-subscription")),
-    _ItemSpec("users", "کاربران ربات", "/users", "users", _owner, _starts("/users")),
+    _ItemSpec("users", "کاربران ربات", "/users", "users", _owner, _starts("/users"), short="کاربران"),
     _ItemSpec("customers", "مشتریان", "/users", "users",
               lambda v: not v.is_owner and "dashboard" in v.perms, _starts("/users")),
-    _ItemSpec("my_resellers", "نمایندگان من", "/resellers", "users",
+    _ItemSpec("my_resellers", "نمایندگان من", "/resellers", "resellers",
               lambda v: not v.is_owner and v.can_add_representative, _starts("/resellers")),
-    _ItemSpec("resellers", "نمایندگان", "/resellers", "users-pair",
+    _ItemSpec("resellers", "نمایندگان", "/resellers", "resellers",
               lambda v: v.is_owner and v.can_manage_representatives, _starts("/resellers")),
     _ItemSpec("finance", "مالی", "/finance", "cart", _perm("orders", "payments"),
               _starts("/finance", "/orders", "/payments", "/service-cancellations"), DOT_CANCEL),
@@ -216,16 +257,17 @@ def _items(specs: Iterable[_ItemSpec], viewer: NavViewer, loc: NavLocation) -> l
             if marketing is not None:
                 items.append(marketing)
         elif spec.visible(viewer):
-            items.append(NavItem(spec.key, spec.label, spec.href, spec.icon, bool(spec.active(loc)), spec.dot))
+            items.append(NavItem(spec.key, spec.label, spec.href, spec.icon, bool(spec.active(loc)), spec.dot, spec.short))
     return items
 
 
 def _marketing_item(spec: _ItemSpec, viewer: NavViewer, loc: NavLocation) -> NavItem | None:
-    """One entry for every marketing section the viewer may open; it opens the first of them."""
+    """One entry for every marketing section the viewer may open; it opens the list of those sections."""
     if not viewer.marketing_hrefs:
         return None
-    active = any(loc.path.startswith(href.split("?")[0]) for href in viewer.marketing_hrefs)
-    return NavItem(spec.key, spec.label, viewer.marketing_hrefs[0], spec.icon, active)
+    paths = (MARKETING_LIST_HREF, *(href.split("?")[0] for href in viewer.marketing_hrefs))
+    active = any(loc.path.startswith(path) for path in paths)
+    return NavItem(spec.key, spec.label, MARKETING_LIST_HREF, spec.icon, active)
 
 
 def build_sidebar(viewer: NavViewer, *, path: str, tab: str = "") -> tuple[NavSection, ...]:
@@ -240,6 +282,59 @@ def build_sidebar(viewer: NavViewer, *, path: str, tab: str = "") -> tuple[NavSe
     if viewer.has_pg or pg_items:
         sections.append(NavSection(PG, "پاسارگارد", "pg", pg_items))
     return tuple(sections)
+
+
+def dock_order(preferred: Iterable[str] = ()) -> tuple[str, ...]:
+    """Bar keys in order: the configured choices (with their role aliases), then ``DOCK_PRIORITY``."""
+    order: list[str] = []
+    for key in (*preferred, *DOCK_PRIORITY):
+        for alias in DOCK_ALIASES.get(key, (key,)):
+            if alias not in order:
+                order.append(alias)
+    return tuple(order)
+
+
+def build_dock(sections: Iterable[NavSection], preferred: Iterable[str] = ()) -> NavDock:
+    """Phone bottom bar for the sidebar ``sections`` the viewer was given.
+
+    Items come in ``dock_order(preferred)``: pages the viewer may not open are skipped and the default order
+    fills the rest. A second entry for a page already in the bar (PasarGuard staff who also hold the shop's
+    ticket right see «پشتیبانی» twice in the sidebar) is skipped."""
+    by_key = {item.key: item for section in sections for item in section.items}
+    items: list[NavItem] = []
+    hrefs: set[str] = set()
+    for key in dock_order(preferred):
+        item = by_key.get(key)
+        if item is None or item.href in hrefs:
+            continue
+        items.append(item)
+        hrefs.add(item.href)
+    items = tuple(items[:DOCK_SLOTS])
+    return NavDock(items=items, more_active=not any(item.active for item in items))
+
+
+@dataclass(frozen=True, slots=True)
+class DockChoice:
+    """A page the owner can put in the phone bar, with the sidebar section it belongs to."""
+
+    key: str
+    label: str
+    section: str
+
+
+def dock_choices() -> tuple[DockChoice, ...]:
+    """Every sidebar page once, in sidebar order, for the bar settings; role aliases fold into one choice."""
+    folded = {alias for keys in DOCK_ALIASES.values() for alias in keys[1:]}
+    groups = (("سیستم", (*_SYSTEM_OWNER, *_SYSTEM_STAFF)), ("فروشگاه", _SHOP_ITEMS), ("پاسارگارد", _PG_ITEMS))
+    choices: list[DockChoice] = []
+    seen: set[str] = set()
+    for section, specs in groups:
+        for spec in specs:
+            if spec.key in folded or spec.key in seen:
+                continue
+            seen.add(spec.key)
+            choices.append(DockChoice(spec.key, _DOCK_CHOICE_LABELS.get(spec.key, spec.label), section))
+    return tuple(choices)
 
 
 _ALL_SPECS: dict[str, _ItemSpec] = {

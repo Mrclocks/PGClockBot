@@ -438,6 +438,7 @@ tests/test_admin_pg_hosts_bot.py
 # Web panel sidebar: every entry follows the visibility rule of its route.
 tests/test_panel_nav.py
 tests/test_panel_search.py
+tests/test_panel_search_js.py
 tests/test_addon_pack_batches.py
 # «دسترسی به پاسارگارد»: closed shops get no PasarGuard pages, actions or panel password.
 tests/test_pg_panel_access.py
@@ -494,6 +495,15 @@ tests/test_random_discount_admin.py
 tests/test_random_discount_migration.py
 tests/test_random_discount_purge.py
 tests/test_random_discount_code_namespace.py
+tests/test_renewal_categories.py
+tests/test_miniapp_renewal_options.py
+tests/test_magic_links_bot_token.py
+tests/test_mobile_bar.py
+tests/test_settings_hub.py
+tests/test_marketing_list.py
+tests/test_settings_modal_list.py
+tests/test_empty_state.py
+tests/test_dashboard_layout.py
 
 # TG_PROXY: aiogram session proxy-awareness, scheme normalization and redaction.
 tests/test_bot_telegram_session.py

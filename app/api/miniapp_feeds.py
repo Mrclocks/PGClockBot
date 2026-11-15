@@ -65,17 +65,19 @@ async def catalog_plans_payload(session: AsyncSession, *, shop_id: int | None = 
     await annotate_prices(session, plans, shop_id=shop_id)
     return {
         "wallet_pay_enabled": on(ui.get("pay_wallet_enabled")),
-        "plans": [
-            {
-                "id": p.id,
-                "name": p.name,
-                **displayed_quote(p).payload(),
-                "days": p.duration_days,
-                "gb": p.data_limit_gb,
-                "is_trial": bool(p.is_trial),
-            }
-            for p in (([trial] if trial else []) + plans)
-        ],
+        "plans": [catalog_plan_row(p) for p in (([trial] if trial else []) + plans)],
+    }
+
+
+def catalog_plan_row(plan: Plan) -> dict:
+    """One plan as the Mini App lists it: name, displayed quote, length and volume."""
+    return {
+        "id": plan.id,
+        "name": plan.name,
+        **displayed_quote(plan).payload(),
+        "days": plan.duration_days,
+        "gb": plan.data_limit_gb,
+        "is_trial": bool(plan.is_trial),
     }
 
 

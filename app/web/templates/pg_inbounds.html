@@ -1,12 +1,8 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_header %}
 {% block title %}اینباندهای پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('inbounds', 'اینباندها', 'pg', help='pg-inbounds') }}
-  </div>
-</div>
+{{ page_header('inbounds', 'اینباندها', 'pg', help='pg-inbounds') }}
 <div class="card card-flush">
   <h2>تگ‌های اینباند</h2>
   {% if not inbounds %}
@@ -34,13 +30,13 @@
     {% for k, v in details.items() %}
       <tr>
         <td class="mono">{{ k }}</td>
-        <td class="mono muted" style="max-width:480px;word-break:break-word">{{ v }}</td>
+        <td class="mono muted cell-wrap">{{ v }}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
   {% else %}
-  <pre class="mono muted" style="white-space:pre-wrap;margin: 0;padding: var(--space-2)">{{ details }}</pre>
+  <pre class="mono muted text-pre-wrap pre-flush">{{ details }}</pre>
   {% endif %}
   </div>
 </div>

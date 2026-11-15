@@ -711,7 +711,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         session: AsyncSession = Depends(get_db),
     ):
         if _is_owner_settings_actor(staff):
-            return RedirectResponse("/tickets?supports=1", status_code=303)
+            return RedirectResponse("/tickets?supports=1&stab=contacts", status_code=303)
         from app.services.support_contacts import contacts_from_form_json, save_support_contacts
 
         rid = _rid(staff)
@@ -723,11 +723,11 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             contacts, err = contacts_from_form_json(str(raw))
             if err:
                 return RedirectResponse(
-                    f"/tickets?supports=1&err={quote(err)}",
+                    f"/tickets?supports=1&stab=contacts&err={quote(err)}",
                     status_code=303,
                 )
             await save_support_contacts(session, contacts or [], reseller_id=rid)
-            return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+            return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
         from app.services.button_styles import parse_item_button_style_form
         from app.services.support_contacts import upsert_support_contact
@@ -755,10 +755,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         )
         if err:
             return RedirectResponse(
-                f"/tickets?supports=1&err={quote(err)}",
+                f"/tickets?supports=1&stab=contacts&err={quote(err)}",
                 status_code=303,
             )
-        return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+        return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
     @app.post("/shop-supports/delete")
     async def shop_supports_delete(
@@ -767,7 +767,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         session: AsyncSession = Depends(get_db),
     ):
         if _is_owner_settings_actor(staff):
-            return RedirectResponse("/tickets?supports=1", status_code=303)
+            return RedirectResponse("/tickets?supports=1&stab=contacts", status_code=303)
         from app.services.support_contacts import delete_support_contact
 
         rid = _rid(staff)
@@ -777,4 +777,4 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         contact_id = str(form.get("id") or "").strip()
         if contact_id:
             await delete_support_contact(session, contact_id, reseller_id=rid)
-        return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+        return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)

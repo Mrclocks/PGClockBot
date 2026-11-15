@@ -42,7 +42,7 @@ def render(**overrides: object) -> str:
 class DashboardRenderTests(unittest.TestCase):
     def test_kpi_strip_shows_today_sales_users_receipts_and_tickets(self) -> None:
         html = render()
-        for expected in ("4,820", "37", "182", "12", "رسید منتظر تأیید", "تیکت باز"):
+        for expected in ("۴٬۸۲۰", "۳۷", "۱۸۲", "۱۲", "رسید منتظر تأیید", "تیکت باز"):
             self.assertIn(expected, html)
 
     def test_receipt_and_ticket_cards_link_only_for_staff_who_can_open_those_pages(self) -> None:
@@ -103,7 +103,7 @@ class DashboardRenderTests(unittest.TestCase):
         html = render(wallet_card=card)
         self.assertIn("حساب من", html)
         self.assertIn("/users/7/edit#user-wallet", html)
-        self.assertIn("9 روز", html)
+        self.assertIn("۹ روز", html)
 
     def test_chart_data_is_embedded_and_an_empty_trend_shows_the_empty_message(self) -> None:
         self.assertIn("data-sales-chart", render())

@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+from functools import partial
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
@@ -41,12 +42,16 @@ from app.services.orders import (
 from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
 from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
 from app.services.chat_cleanup_config import chat_cleanup_payload
+from app.services.panel_nav import DOT_LABELS as NAV_DOT_LABELS
+from app.services.panel_nav import build_dock, sidebar_for_template
+from app.services.resellers import feature_perm_groups
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.miniapp_branding import ACCENT_PRESETS
 from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 from app.services.payer_notify import notify_payer
+from app.services.pg_panel_access import apply_pg_panel_access, is_pg_panel_blocked, pg_panel_allowed
 from app.services.resellers import (
     setup_is_complete,
     DEFAULT_FEATURE_PERMS,
@@ -82,8 +87,10 @@ from app.services.security_policy import (
 from app.services.updates import local_version
 from app.services.message_variables import template_variable_specs
 from app.services.psp_gateways import psp_gateways_form_json
-from app.services.panel_assets import get_panel_asset_cache_key
+from app.services.panel_assets import asset_version, get_panel_asset_cache_key
+from app.services.redact import operator_error
 from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.mobile_bar import load_bar_form, load_bar_order
 from app.services.panel_brand import (
     BRAND_PRESET_CSS,
     DEFAULT_BRAND,
@@ -93,7 +100,17 @@ from app.services.panel_brand import (
     brand_for_staff,
     load_own_values,
 )
-from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
+from app.services.notifications import SYSTEM_NOTIFY_KEYS
+from app.services.receipt_review import DEFAULT_REJECT_TEXT
+from app.services.support_button import support_markup
+from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
+from app.services.settings_hub import (
+    SYSTEM_LIST_TAB,
+    hub_sections,
+    settings_place,
+    system_hub_sections,
+    system_settings_groups,
+)
 from app.services.users import (
     SETTING_VISIBILITY,
     SETTINGS_DOMAIN_REDIRECTS,
@@ -116,13 +133,26 @@ from app.services.web_auth import (
     verify_web_admin,
 )
 from app.api.catalog_discounts import register_catalog_discounts
+from app.api.random_discounts import register_random_discounts
 from app.api.connection_status_pages import register_connection_status_pages
 from app.api.funnel_pages import register_funnel_pages
+from app.api.marketing_pages import register_marketing_pages
+from app.api.panel_search_pages import register_panel_search_pages
 from app.api.order_purge_pages import register_order_purge_pages
+from app.api.cleanup_settings_pages import register_cleanup_settings_pages
+from app.api.service_cleanup_pages import register_service_cleanup_pages
 from app.api.staff_audit_pages import register_staff_audit_pages
 from app.api.shop_wallet_pages import register_shop_wallet_pages
+from app.api.pg_panel_access_pages import register_pg_panel_access_pages
+from app.api.payg_charge_pages import register_payg_charge_pages
+from app.api.shop_credit_pages import register_shop_credit_pages
+from app.api.cashback_pages import register_cashback_pages
+from app.api.reseller_finance_pages import register_reseller_finance_pages
+from app.api.billing_report_pages import register_billing_report_pages
+from app.api.child_pricing_pages import register_child_pricing_pages
 from app.api.shop_points_pages import register_shop_points_pages
 from app.api.shop_customer_block_pages import register_shop_customer_block_pages
+from app.api.mobile_bar_settings import register_mobile_bar_settings
 from app.api.panel_brand_pages import register_panel_brand_pages
 from app.api.trial_users_pages import register_trial_users_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
@@ -146,14 +176,10 @@ logger = logging.getLogger(__name__)
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
-from app.services.formatting import format_bytes, format_bytes_ratio, format_gb, format_money, format_number, format_expire_short, order_status_fa, ticket_status_fa
+from app.services.formatting import order_status_fa, ticket_status_fa
+from app.services.web_numbers import WEB_NUMBER_FILTERS
 
-templates.env.filters["bytes"] = format_bytes
-templates.env.filters["bytes_ratio"] = format_bytes_ratio
-templates.env.filters["gb"] = format_gb
-templates.env.filters["num"] = format_number
-templates.env.filters["money"] = format_money
-templates.env.filters["expire"] = format_expire_short
+templates.env.filters.update(WEB_NUMBER_FILTERS)
 templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
 templates.env.globals["app_version"] = local_version()
@@ -161,13 +187,21 @@ templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
 templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
 templates.env.globals["brand_presets"] = BRAND_PRESETS
+templates.env.globals["system_notify_keys"] = SYSTEM_NOTIFY_KEYS
+# Settings areas open on a list and show their place on detail pages (DESIGN_SYSTEM.md §6-2).
+templates.env.globals["hub_sections"] = hub_sections
+templates.env.globals["settings_place"] = settings_place
+templates.env.globals["system_settings_groups"] = system_settings_groups
+templates.env.globals["system_hub_sections"] = system_hub_sections
 # Request context overrides these; they keep templates that render without a signed-in person working.
 templates.env.globals["panel_brand"] = DEFAULT_BRAND
 templates.env.globals["panel_brand_css"] = BRAND_PRESET_CSS
 templates.env.globals["default_brand_color_hex"] = DEFAULT_COLOR_HEX
 templates.env.globals["default_brand_color_label"] = DEFAULT_COLOR_LABEL
 templates.env.globals["panel_script_cache_key"] = get_panel_asset_cache_key("panel.js")
+templates.env.globals["asset_v"] = partial(asset_version, fallback=local_version())
 templates.env.globals["panel_widget_cache_key"] = get_panel_asset_cache_key("panel_widget_request.js")
+templates.env.globals["panel_ok_flash_cache_key"] = get_panel_asset_cache_key("panel_ok_flash.js")
 templates.env.globals["money_inputs_cache_key"] = get_panel_asset_cache_key("money-inputs.js")
 templates.env.globals["list_inputs_cache_key"] = get_panel_asset_cache_key("list-inputs.js")
 templates.env.globals["sales_chart_cache_key"] = get_panel_asset_cache_key("sales-chart.js")
@@ -181,9 +215,11 @@ except Exception:
     templates.env.globals["deployed_channel"] = "main"
     templates.env.globals["deployed_channel_label"] = "پایدار"
 templates.env.globals["order_status_fa"] = order_status_fa
+templates.env.globals["panel_sidebar"] = sidebar_for_template
+templates.env.globals["panel_dock"] = build_dock
+templates.env.globals["nav_dot_labels"] = NAV_DOT_LABELS
+templates.env.globals["feature_perm_groups"] = feature_perm_groups
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
-templates.env.globals["format_bytes"] = format_bytes
-templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
 templates.env.globals["template_variable_specs"] = template_variable_specs
 
 
@@ -300,6 +336,7 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     ctx.setdefault("csp_nonce", nonce)
     ctx.setdefault("panel_brand", getattr(request.state, "panel_brand", None) or DEFAULT_BRAND)
     ctx.setdefault("panel_brand_css", BRAND_PRESET_CSS)
+    ctx.setdefault("mobile_bar_order", getattr(request.state, "mobile_bar_order", ()))
     if "pwa_name" not in ctx:
         try:
             from app.services.pwa import panel_display_name
@@ -631,6 +668,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         pass
             elif profile.pg_role_id:
                 user["pg_role_id"] = int(profile.pg_role_id)
+            user = apply_pg_panel_access(user, profile)
             # Principal from the server-loaded ResellerProfile only.
             # Cookie org_principal_id / parent / depth / scope are not selectors.
             from app.services.org_principals import (
@@ -804,6 +842,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         await recover_session(session)
         # Header brand of the shop this person works for (default on any failure).
         request.state.panel_brand = await brand_for_staff(session, user)
+        # The owner's page order for the phone bar (cached; the default order on any failure).
+        request.state.mobile_bar_order = await load_bar_order(session)
         finish_panel_authentication(request)
         return user
 
@@ -869,6 +909,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             )
 
             user = await require_staff(request, session)
+            if is_pg_panel_blocked(user):
+                raise NotAdmin(redirect="/home")
             ctx = authz_from_staff(user)
             if is_level1_principal_staff(user):
                 if not staff_may_pg_page(user, perm):
@@ -1418,6 +1460,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    from app.api.pg_link_pages import register_pg_link_pages
+
+    register_pg_link_pages(app, require_admin=require_admin)
     register_dashboard_trend_pages(app, require_staff=require_staff, get_db=get_db)
     register_bot_overview_pages(
         app, render=render, require_perm=require_perm, require_admin=require_admin, get_db=get_db
@@ -1486,6 +1531,8 @@ def create_api_app(lifespan=None) -> FastAPI:
     )
     from app.api.delivery_failure_pages import register_delivery_failure_pages
     register_delivery_failure_pages(app, require_orders=require_perm("orders"), get_db=get_db)
+    from app.api.user_link_search_pages import register_user_link_search_pages
+    register_user_link_search_pages(app, require_perm=require_perm, get_db=get_db)
     from app.api.service_shop_review_pages import register_service_shop_review_pages
     register_service_shop_review_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     from app.api.reseller_capacity_repair_pages import register_reseller_capacity_repair_pages
@@ -1547,17 +1594,21 @@ def create_api_app(lifespan=None) -> FastAPI:
     from app.api.miniapp_guides import register_miniapp_guides
     from app.api.miniapp_loyalty import register_miniapp_loyalty
     from app.api.miniapp_pages import register_miniapp_pages
+    from app.api.miniapp_renewal import register_miniapp_renewal
+    from app.api.miniapp_reseller import register_miniapp_reseller
     from app.api.miniapp_review import register_miniapp_review
     from app.api.miniapp_support import register_miniapp_support
     from app.api.miniapp_topup import register_miniapp_topup
 
     register_miniapp_pages(app, render=render, get_db=get_db)
     register_miniapp_feeds(app, get_db=get_db)
+    register_miniapp_renewal(app, get_db=get_db)
     register_miniapp_topup(app, get_db=get_db)
     register_miniapp_support(app, get_db=get_db)
     register_miniapp_codes(app, get_db=get_db)
     register_miniapp_guides(app, get_db=get_db)
     register_miniapp_loyalty(app, get_db=get_db)
+    register_miniapp_reseller(app, get_db=get_db)
     register_miniapp_review(app, get_db=get_db)
     from app.api.customer_features import register_customer_features
 
@@ -1569,15 +1620,32 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_automation_review_pages(app, require_staff=require_staff, get_db=get_db)
     register_payment_void_pages(app, require_staff=require_staff, get_db=get_db)
     register_broadcast_queue_pages(app, require_admin=require_admin, get_db=get_db)
+    from app.api.shop_broadcast_pages import register_shop_broadcast_pages
+
+    register_shop_broadcast_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_random_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_panel_search_pages(app, require_staff=require_staff)
+    register_marketing_pages(app, render=render, require_staff=require_staff)
     register_order_purge_pages(app, require_staff=require_staff, get_db=get_db)
+    register_cleanup_settings_pages(app, require_staff=require_staff, get_db=get_db)
     register_staff_audit_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_service_cleanup_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_shop_wallet_pages(app, require_staff=require_staff, get_db=get_db)
+    register_pg_panel_access_pages(app, require_admin=require_admin, get_db=get_db)
+    register_payg_charge_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    register_shop_credit_pages(app, require_admin=require_admin, get_db=get_db)
+    register_cashback_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_reseller_finance_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_billing_report_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    register_child_pricing_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_shop_points_pages(app, require_staff=require_staff, get_db=get_db)
     register_shop_customer_block_pages(app, require_staff=require_staff, get_db=get_db)
     register_trial_users_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_panel_brand_pages(app, require_staff=require_staff, get_db=get_db)
+    register_mobile_bar_settings(app, require_admin=require_admin, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
     register_connection_status_pages(app, render=render, require_staff=require_staff, get_db=get_db)
 
@@ -1936,7 +2004,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         mark_setup_complete()
         ensure_web_secret()
         from app.services.service_control import schedule_panel_restart
-        from app.services.setup_wizard import force_http_login_url
+        from app.services.setup_wizard import force_http_login_url, trusted_finish_next
 
         schedule_panel_restart(delay_sec=2.5, reason="setup wizard finished")
         # Prefer an explicit next from the wizard page (matches the displayed
@@ -1948,6 +2016,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             next_url = str(form.get("next") or "").strip()
         except Exception:
             next_url = ""
+        next_url = trusted_finish_next(next_url, request_host=request.url.hostname or "")
         return RedirectResponse(force_http_login_url(next_url), status_code=303)
 
     @app.get("/", response_class=HTMLResponse)
@@ -2168,6 +2237,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                             pg_role_id, client=pg_client
                         )
                     else:
+                        pg_permissions, pg_role = [], None
+                    if not pg_panel_allowed(profile):
                         pg_permissions, pg_role = [], None
                     pg_user_actions = role_user_actions(pg_role)
                     pg_access = role_access_limits(pg_role)
@@ -2661,6 +2732,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "plan_style_options": __import__(
                     "app.services.button_styles", fromlist=["PLAN_BUTTON_STYLE_OPTIONS"]
                 ).PLAN_BUTTON_STYLE_OPTIONS,
+                "pack_style_options": __import__(
+                    "app.services.button_styles", fromlist=["ITEM_BUTTON_STYLE_OPTIONS"]
+                ).ITEM_BUTTON_STYLE_OPTIONS,
                 "category_style_options": __import__(
                     "app.services.button_styles",
                     fromlist=["CATEGORY_BUTTON_STYLE_OPTIONS"],
@@ -2766,8 +2840,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                     if isinstance(created, dict) and created.get("id"):
                         tpl = int(created["id"])
                 except Exception as e:
+                    from app.services.credential_policy import template_create_error_message
+
+                    logger.warning("PasarGuard template creation failed", exc_info=True)
                     return RedirectResponse(
-                        f"/plans?err={quote(f'ساخت تمپلیت در پاسارگارد ناموفق: {e}')}",
+                        f"/plans?err={quote('ساخت تمپلیت در پاسارگارد ناموفق: ' + template_create_error_message(e))}",
                         status_code=303,
                     )
 
@@ -2784,24 +2861,41 @@ def create_api_app(lifespan=None) -> FastAPI:
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
 
-        session.add(
-            Plan(
-                name=name.strip(),
-                price=price,
-                duration_days=days,
-                data_limit_gb=gb,
-                pg_template_id=tpl,
-                pg_group_ids=group_csv,
-                pg_username_prefix=uname_prefix,
-                pg_username_suffix=uname_suffix,
-                pg_username_pattern=uname_pattern,
-                button_style=button_style,
-                category_id=category_id,
-                owner_reseller_id=owner_id,
-                description=description or None,
-                is_active=True,
-            )
+        plan = Plan(
+            name=name.strip(),
+            price=price,
+            duration_days=days,
+            data_limit_gb=gb,
+            pg_template_id=tpl,
+            pg_group_ids=group_csv,
+            pg_username_prefix=uname_prefix,
+            pg_username_suffix=uname_suffix,
+            pg_username_pattern=uname_pattern,
+            button_style=button_style,
+            category_id=category_id,
+            owner_reseller_id=owner_id,
+            description=description or None,
+            carry_remaining_quota=bool(form.get("carry_remaining_quota")),
+            is_active=True,
         )
+        from app.services.service_addons import (
+            apply_plan_extra_rates_from_form,
+            replace_plan_scoped_packs_from_form,
+        )
+
+        try:
+            apply_plan_extra_rates_from_form(plan, form)
+        except ValueError as e:
+            return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
+        session.add(plan)
+        await session.flush()
+        try:
+            await replace_plan_scoped_packs_from_form(
+                session, staff, plan_id=int(plan.id), form=form
+            )
+        except ValueError as e:
+            await session.rollback()
+            return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
         await session.commit()
         return RedirectResponse(
             f"/plans?ok={quote('پلن ذخیره شد')}",
@@ -3124,15 +3218,47 @@ def create_api_app(lifespan=None) -> FastAPI:
         cats = []
         if is_platform_admin(staff) or rid:
             cats = await list_categories(session, staff, active_only=False)
+        from app.services.button_styles import (
+            ITEM_BUTTON_STYLE_OPTIONS,
+            PLAN_BUTTON_STYLE_OPTIONS,
+        )
+        from app.services.service_addons import (
+            KIND_DURATION,
+            KIND_VOLUME,
+            list_packs_for_plan,
+            plan_duration_months_for_form,
+        )
+
+        plan_packs = await list_packs_for_plan(
+            session, plan_id=int(plan.id), reseller_id=rid, active_only=False
+        )
+        plan_vol_packs = [
+            {"amount": int(p.amount), "button_style": p.button_style}
+            for p in plan_packs
+            if p.kind == KIND_VOLUME
+        ]
+        plan_dur_packs = [
+            {
+                "amount": plan_duration_months_for_form(p),
+                "button_style": p.button_style,
+            }
+            for p in plan_packs
+            if p.kind == KIND_DURATION
+        ]
         ctx = await _plans_context(
             session,
             request,
             staff,
-            {"plan": plan, "values": values, "plan_categories": cats},
+            {
+                "plan": plan,
+                "values": values,
+                "plan_categories": cats,
+                "plan_vol_packs": plan_vol_packs,
+                "plan_dur_packs": plan_dur_packs,
+            },
         )
-        from app.services.button_styles import PLAN_BUTTON_STYLE_OPTIONS
-
         ctx["plan_style_options"] = PLAN_BUTTON_STYLE_OPTIONS
+        ctx["pack_style_options"] = ITEM_BUTTON_STYLE_OPTIONS
         return render(request, "plan_edit.html", ctx)
 
     @app.post("/plans/{plan_id}/edit")
@@ -3222,6 +3348,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         plan.sort_order = sort_order
         plan.pg_template_id = tpl
         plan.pg_group_ids = group_csv
+        plan.carry_remaining_quota = bool(form.get("carry_remaining_quota"))
         from app.services.orders import parse_naming_form
         from app.services.button_styles import parse_plan_button_style_form
         from app.services.plan_categories import resolve_category_for_plan_write
@@ -3240,6 +3367,22 @@ def create_api_app(lifespan=None) -> FastAPI:
                 allow_inactive_id=plan.category_id,
             )
         except (ShopScopeError, ValueError) as e:
+            return RedirectResponse(
+                f"/plans/{plan_id}/edit?err={quote(str(e))}",
+                status_code=303,
+            )
+        try:
+            from app.services.service_addons import (
+                apply_plan_extra_rates_from_form,
+                replace_plan_scoped_packs_from_form,
+            )
+
+            apply_plan_extra_rates_from_form(plan, form)
+            await replace_plan_scoped_packs_from_form(
+                session, staff, plan_id=int(plan.id), form=form
+            )
+        except ValueError as e:
+            await session.rollback()
             return RedirectResponse(
                 f"/plans/{plan_id}/edit?err={quote(str(e))}",
                 status_code=303,
@@ -3377,7 +3520,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             else:
                 return _redirect_msg("/finance?tab=orders", err="این سفارش هنوز قابل تأیید نیست (رسید لازم است)")
         except Exception as e:
-            return _redirect_msg("/finance?tab=orders", err=str(e))
+            return _redirect_msg("/finance?tab=orders", err=operator_error(e))
         return _redirect_msg("/finance?tab=orders", ok="سفارش تأیید و تحویل شد")
 
     @app.post("/orders/{order_id}/reject")
@@ -3423,13 +3566,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             else:
                 await reject_order(session, order, note="web order reject")
         except Exception as e:
-            return _redirect_msg("/finance?tab=orders", err=str(e))
+            return _redirect_msg("/finance?tab=orders", err=operator_error(e))
         await notify_payer(
             session,
             order.user_id,
             title="❌ سفارش رد شد",
             body=f"سفارش #{order_id} رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید.",
             shop_id=order.reseller_id,
+            reply_markup=support_markup(),
         )
         return _redirect_msg("/finance?tab=orders", ok="سفارش رد شد")
 
@@ -3457,13 +3601,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         try:
             await cancel_order(session, order, note="web order cancel")
         except Exception as e:
-            return _redirect_msg("/finance?tab=orders", err=str(e))
+            return _redirect_msg("/finance?tab=orders", err=operator_error(e))
         await notify_payer(
             session,
             order.user_id,
             title="⏹ سفارش لغو شد",
             body=f"سفارش #{order_id} لغو شد.",
             shop_id=order.reseller_id,
+            reply_markup=support_markup(),
         )
         return _redirect_msg("/finance?tab=orders", ok="سفارش لغو شد")
 
@@ -3482,19 +3627,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not payment:
             return _redirect_msg("/finance?tab=payments", err="پرداخت یافت نشد")
         if staff.get("role") != "admin":
-            from app.services.shop_scope import ShopScopeError, require_shop_owner_id
+            from app.services.shop_scope import ShopScopeError, require_shop_owner_id, shop_may_review_payment
 
-            # Wallet top-ups mint global balance — tenant reviewers cannot approve them.
-            if payment.is_wallet_topup:
-                return _redirect_msg("/finance?tab=payments", err="شارژ کیف پول فقط توسط مدیر اصلی تأیید می‌شود")
             try:
                 rid = require_shop_owner_id(staff)
             except ShopScopeError as e:
                 return _redirect_msg("/finance?tab=payments", err=e.message)
-            if not payment.order_id:
-                return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
-            order_row = await session.get(Order, payment.order_id)
-            if not order_row or order_row.reseller_id != rid:
+            order_row = await session.get(Order, payment.order_id) if payment.order_id else None
+            if not shop_may_review_payment(payment, order_row, rid):
                 return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
         else:
             # Platform admin must not approve shop-tenant payments or shop wallet top-ups.
@@ -3515,7 +3655,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         try:
             order = await approve_payment(session, payment, reviewer_tg=0)
         except Exception as e:
-            return _redirect_msg("/finance?tab=payments", err=str(e))
+            return _redirect_msg("/finance?tab=payments", err=operator_error(e))
         user = await session.get(BotUser, payment.user_id)
         if user:
             try:
@@ -3569,18 +3709,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not payment:
             return _redirect_msg("/finance?tab=payments", err="پرداخت یافت نشد")
         if staff.get("role") != "admin":
-            from app.services.shop_scope import ShopScopeError, require_shop_owner_id
+            from app.services.shop_scope import ShopScopeError, require_shop_owner_id, shop_may_review_payment
 
-            if payment.is_wallet_topup:
-                return _redirect_msg("/finance?tab=payments", err="شارژ کیف پول فقط توسط مدیر اصلی رد می‌شود")
             try:
                 rid = require_shop_owner_id(staff)
             except ShopScopeError as e:
                 return _redirect_msg("/finance?tab=payments", err=e.message)
-            if not payment.order_id:
-                return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
-            order_row = await session.get(Order, payment.order_id)
-            if not order_row or order_row.reseller_id != rid:
+            order_row = await session.get(Order, payment.order_id) if payment.order_id else None
+            if not shop_may_review_payment(payment, order_row, rid):
                 return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
         else:
             from app.services.shop_scope import platform_may_review_payment
@@ -3598,27 +3734,19 @@ def create_api_app(lifespan=None) -> FastAPI:
         try:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
         except Exception as e:
-            return _redirect_msg("/finance?tab=payments", err=str(e))
-        body = "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
-        user = await session.get(BotUser, payment.user_id)
-        if user:
-            try:
-                shop_rid = payment_shop_id(
-                    payment, await session.get(Order, payment.order_id) if payment.order_id else None
-                )
-                ui = await get_all_settings(session, reseller_id=shop_rid)
-                body = ui.get("payment_reject_text") or body
-            except Exception:
-                logger.debug("payment_reject: ignored failure", exc_info=True)
-        # Packed reject text keeps premium emoji via notify_payer unpack.
+            return _redirect_msg("/finance?tab=payments", err=operator_error(e))
+        reject_order = await session.get(Order, payment.order_id) if payment.order_id else None
+        shop_rid = payment_shop_id(payment, reject_order)
+        ui = await get_all_settings(session, reseller_id=shop_rid)
+        # The shop's own (possibly rich-text) rejection text, built the same way as the bot's reject handler.
+        from app.services.rich_text import outbound_setting_text
+
+        text, send_kw = outbound_setting_text(
+            ui.get("payment_reject_text") or DEFAULT_REJECT_TEXT, title="❌ پرداخت رد شد"
+        )
         await notify_payer(
-            session,
-            payment.user_id,
-            title="❌ پرداخت رد شد",
-            body=body,
-            shop_id=payment_shop_id(
-                payment, await session.get(Order, payment.order_id) if payment.order_id else None
-            ),
+            session, payment.user_id, title="❌ پرداخت رد شد", body=text, send_kw=send_kw, shop_id=shop_rid,
+            reply_markup=support_markup(),
         )
         return _redirect_msg("/finance?tab=payments", ok="پرداخت رد شد")
 
@@ -3630,7 +3758,9 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         from app.services.platform_identity import is_explicit_owner_staff
         from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
-        from app.services.pg_access import staff_user_actions
+        from app.api.user_link_search_pages import link_search_redirect
+        from app.services.bot_user_admin import customer_service_actions
+        from app.services.subscription_lookup import link_token
         from app.services.color_tags import (
             color_tag_meta,
             color_tags_for_ui,
@@ -3651,6 +3781,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/home", status_code=303)
 
         search_q = normalize_search_q(request.query_params.get("q"))
+        if search_q and link_token(search_q):
+            # A link typed without the page script: answer it, but never echo the secret into the page.
+            return await link_search_redirect(session, search_q, shop_id=scope)
         filter_raw = request.query_params.get("filter")
         focus_uid = parse_focus_uid(request.query_params.get("uid"))
         color_filter = normalize_color_filter(request.query_params.get("color"))
@@ -3705,7 +3838,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             in_fetched = any(int(u.id) == int(focus_uid) for u in users)
             if not in_fetched:
                 focus_uid = None
-        pg_acts = staff_user_actions(staff)
+        pg_acts = customer_service_actions(staff)
         in_shop = is_explicit_owner_staff(staff) or scope is not None
 
         def _users_href(**kwargs):
@@ -4139,11 +4272,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             contacts, err = contacts_from_form_json(str(raw))
             if err:
                 return RedirectResponse(
-                    f"/tickets?supports=1&err={quote(err)}",
+                    f"/tickets?supports=1&stab=contacts&err={quote(err)}",
                     status_code=303,
                 )
             await save_support_contacts(session, contacts or [])
-            return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+            return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
         # Legacy single-row upsert (bot / older clients)
         from app.services.button_styles import parse_item_button_style_form
@@ -4171,10 +4304,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
         if err:
             return RedirectResponse(
-                f"/tickets?supports=1&err={quote(err)}",
+                f"/tickets?supports=1&stab=contacts&err={quote(err)}",
                 status_code=303,
             )
-        return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+        return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
     @app.post("/supports/delete")
     async def supports_delete(
@@ -4188,7 +4321,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         contact_id = str(form.get("id") or "").strip()
         if contact_id:
             await delete_support_contact(session, contact_id)
-        return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+        return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
     def _menu_tab_context(values: dict) -> dict:
         from app.bot.keyboards import DEFAULT_ACTIVE_MENU_ORDER, DEFAULT_MENU_ORDER
@@ -4273,7 +4406,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.notifications import PLATFORM_NOTIFY_PREFS, get_notify_prefs
         from app.services.updates import clear_update_cache, local_version
 
-        tab = (request.query_params.get("tab") or "welcome").strip()
+        tab = resolve_merged_tab((request.query_params.get("tab") or "welcome").strip())
+        if tab == SYSTEM_LIST_TAB:
+            # The system settings list renders over the first system page's context (settings.html).
+            tab = PANEL_SETTINGS_TABS[0][0]
         valid = {t[0] for t in SETTINGS_TABS} | PANEL_SETTINGS_KEYS
         if tab in SETTINGS_DOMAIN_REDIRECTS:
             dest = SETTINGS_DOMAIN_REDIRECTS[tab]
@@ -4414,6 +4550,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             from app.services.pwa import load_pwa_settings
 
             ctx["pwa"] = await load_pwa_settings(session)
+            ctx["mobile_bar"] = await load_bar_form(session)
             ctx["brand_values"] = await load_own_values(session, None)
             ctx["brand_form_action"] = "/panel-brand"
         elif tab == "backup":
@@ -4492,34 +4629,12 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         return render(request, "settings.html", ctx)
 
-    @app.post("/settings/cancel-pending-orders")
-    async def settings_cancel_pending_orders(
-        request: Request,
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ):
-        """Manual cancel of stale pending/unapproved orders (platform shop)."""
-        from app.services.orders import cancel_stale_pending_for_settings
-
-        try:
-            n = await cancel_stale_pending_for_settings(
-                session, reseller_id=None, force=True
-            )
-        except Exception:
-            logging.getLogger(__name__).exception("manual pending order cancel failed")
-            dest = _settings_next(request, "/finance?tab=orders&settings=cleanup")
-            return _redirect_msg(dest, err="لغو سفارش‌ها ناموفق بود. لاگ سرور را بررسی کنید.")
-        dest = _settings_next(request, "/finance?tab=orders&settings=cleanup")
-        return _redirect_msg(
-            dest,
-            ok=f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود",
-        )
-
     async def _bot_token_status(token: str) -> dict:
         token = (token or "").strip()
         if not token:
             return {"ok": False, "error": "توکن تنظیم نشده"}
         try:
+            # tg_client() honors TG_PROXY; a raw httpx client would bypass the proxy and hang behind firewalls.
             from app.services.tg_http import tg_client
 
             async with tg_client(timeout=8.0) as client:
@@ -5223,5 +5338,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     from starlette.middleware.gzip import GZipMiddleware
 
     app.add_middleware(PanelConnectionMiddleware)
-    app.add_middleware(GZipMiddleware, minimum_size=400)
+    # Level 6, not the default 9: measured on panel.css (367 KB) 7 ms instead of 14 ms of CPU per
+    # response for 71.0 KB instead of 70.3 KB; panel.js 4 ms instead of 12.5 ms for the same size.
+    app.add_middleware(GZipMiddleware, minimum_size=400, compresslevel=6)
     return app

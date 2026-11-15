@@ -1,14 +1,9 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, page_title %}
+{% from "macros.html" import switch, page_header %}
 {% block title %}ویرایش نماینده{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('reseller-edit', 'ویرایش نماینده', help='resellers') }}
-  </div>
-  <a class="btn btn-ghost" href="/resellers">بازگشت</a>
-</div>
+{{ page_header('reseller-edit', 'ویرایش نماینده', help='resellers', back='/resellers', back_label='نمایندگان') }}
 <div class="reseller-edit-page">
   {% include "_reseller_edit_body.html" %}
 </div>

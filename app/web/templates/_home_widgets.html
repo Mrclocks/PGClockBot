@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {# Dashboard building blocks shared by the owner and shop home: KPI strip, status tiles, account card. #}
 
 {% macro delta(pct, suffix, none_text) -%}
@@ -21,7 +22,7 @@
   <div class="kpi">
     <small>کاربران جدید</small>
     <strong>{{ (day.new_users or 0) | num }}</strong>
-    <span class="kpi-d flat">7 روز اخیر: {{ (week.new_users or 0) | num }}</span>
+    <span class="kpi-d flat">۷ روز اخیر: {{ (week.new_users or 0) | num }}</span>
   </div>
   {{ kpi_count('رسید منتظر تأیید', (ac or {}).pending, 'تأیید یا رد پرداخت‌ها', '/finance?tab=payments' if (links or {}).payments else none) }}
   {{ kpi_count('تیکت باز', (ac or {}).tickets, 'پشتیبانی کاربران', '/tickets' if (links or {}).tickets else none) }}
@@ -38,22 +39,15 @@
 {%- endmacro %}
 
 {# tiles: list of {name, detail, state (ok|warn|err|neutral), icon, href?, id?}; a tile without href is not a link. #}
+{# Status tile names in the shared icon set; an unknown one falls back to the bell. #}
+{% set TILE_ICONS = {'pg': 'nodes', 'nodes': 'server', 'delivery': 'cart', 'users': 'user'} %}
 {% macro status_tiles(tiles, label='وضعیت اتصال') -%}
 <div class="status-box card">
   <div class="status" style="--plain: {{ tiles | length }}" role="list" aria-label="{{ label }}">
     {% for t in tiles %}
     {% set tag = 'a' if t.href else 'div' %}
     <{{ tag }} class="st" role="listitem" data-state="{{ t.state }}"{% if t.href %} href="{{ t.href }}"{% endif %}{% if t.id %} id="{{ t.id }}"{% endif %}>
-      <svg class="st-ico" viewBox="0 0 24 24" aria-hidden="true">
-        {%- if t.icon == 'bot' -%}<rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V5H9M2 14h2M20 14h2"/><circle cx="9.5" cy="13.5" r="1.1"/><circle cx="14.5" cy="13.5" r="1.1"/>
-        {%- elif t.icon == 'pg' -%}<rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/>
-        {%- elif t.icon == 'nodes' -%}<rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/>
-        {%- elif t.icon == 'receipt' -%}<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>
-        {%- elif t.icon == 'ticket' -%}<path d="M4 5h16v11H8l-4 4z"/>
-        {%- elif t.icon == 'delivery' -%}<path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/>
-        {%- elif t.icon == 'users' -%}<circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/>
-        {%- else -%}<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 19a2 2 0 0 0 4 0"/>{%- endif -%}
-      </svg>
+      {{ icon(TILE_ICONS.get(t.icon, t.icon), 'st-ico') }}
       <b>{{ t.name }}</b>
       <span>{{ t.detail }}</span>
     </{{ tag }}>
@@ -62,11 +56,28 @@
 </div>
 {%- endmacro %}
 
+{# A broken connection is one banner at the top with every failing link and its reason, and a way to the first one;
+   the tiles below keep the detail. Nothing is drawn while every link is up or unchecked (DESIGN_SYSTEM.md §6-3). #}
+{% macro connection_banner(tiles) -%}
+{%- set failing = tiles | selectattr('state', 'equalto', 'err') | list -%}
+{%- if failing %}
+<div class="flash err home-update-banner" role="alert">
+  <div class="home-update-copy">
+    <strong>اتصال برقرار نیست</strong>
+    <span>{% for t in failing %}{{ t.name }}: {{ t.detail }}{% if not loop.last %} · {% endif %}{% endfor %}</span>
+  </div>
+  {%- if failing[0].href %}
+  <a class="btn btn-sm btn-ghost" href="{{ failing[0].href }}">بررسی</a>
+  {%- endif %}
+</div>
+{%- endif %}
+{%- endmacro %}
+
 {# A new panel version is news, not connection health: one slim bar above the figures. #}
 {% macro update_notice(update) -%}
 {% if update and update.update_available %}
 <a class="st home-update-note" data-state="warn" href="/settings?tab=update">
-  <svg class="st-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+  {{ icon('inbox', 'st-ico') }}
   <b>نسخهٔ جدید</b>
   <span>نسخه <span dir="ltr">{{ update.remote_version }}</span> آمادهٔ نصب است</span>
   <em class="home-update-go">مشاهده و نصب</em>

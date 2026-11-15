@@ -441,14 +441,55 @@
     </form>`;
   }
 
+  // How a plan compares to the service's own plan, as the bot labels it.
+  const RENEWAL_RELATIONS = { current: ["پلن فعلی", "ok"], upgrade: ["ارتقا", ""], downgrade: ["تنزل", "warn"] };
+  const OTHER_CATEGORY = "none";
+
+  function renewPlanButton(p, serviceId) {
+    const relation = RENEWAL_RELATIONS[p.relation];
+    return `<button type="button" class="plan-option" data-action="preview-renew" data-id="${Number(serviceId) || 0}" data-plan="${Number(p.id) || 0}">
+        <span class="plan-meta"><strong>${relation ? badge(relation[0], relation[1]) + " " : ""}${esc(p.name)}</strong><span class="muted sm">${esc(planMetaText(p))}</span></span>
+        <span class="plan-price">${priceHtml(p)}</span>
+      </button>`;
+  }
+
   function renewPlansHtml(plans, serviceId) {
     const list = (plans || []).filter((p) => !p.is_trial);
     if (!list.length) return emptyHtml("پلنی برای تمدید فعال نیست.");
     return `<p class="muted sm">پلن تمدید را انتخاب کنید؛ پیش از پرداخت، نتیجه را می‌بینید.</p>
-      <div class="plan-list">${list.map((p) => `<button type="button" class="plan-option" data-action="preview-renew" data-id="${Number(serviceId) || 0}" data-plan="${Number(p.id) || 0}">
-        <span class="plan-meta"><strong>${esc(p.name)}</strong><span class="muted sm">${esc(planMetaText(p))}</span></span>
-        <span class="plan-price">${priceHtml(p)}</span>
-      </button>`).join("")}</div>`;
+      <div class="plan-list">${list.map((p) => renewPlanButton(p, serviceId)).join("")}</div>`;
+  }
+
+  function renewCategoryButton(serviceId, key, name, count) {
+    return `<button type="button" class="plan-option" data-action="renew-category" data-id="${Number(serviceId) || 0}" data-cat="${esc(key)}">
+        <span class="plan-meta"><strong>${esc(name)}</strong><span class="muted sm">${esc(num(count))} پلن</span></span>
+      </button>`;
+  }
+
+  /** The service's own plan first, then the shop's categories (and «سایر»), like the bot. */
+  function renewChoicesHtml(data, serviceId) {
+    const d = data || {};
+    if (!d.grouped) return renewPlansHtml(d.plans, serviceId);
+    const categories = (d.categories || []).filter((c) => (c.plans || []).length);
+    const other = d.other || [];
+    if (!d.current && !categories.length && !other.length) return emptyHtml("پلنی برای تمدید فعال نیست.");
+    const buttons = categories.map((c) => renewCategoryButton(serviceId, String(Number(c.id) || 0), c.name, c.plans.length));
+    if (other.length) buttons.push(renewCategoryButton(serviceId, OTHER_CATEGORY, "سایر", other.length));
+    return `<p class="muted sm">پلن فعلی را تمدید کنید یا از دسته‌ها پلن دیگری انتخاب کنید؛ پیش از پرداخت، نتیجه را می‌بینید.</p>
+      ${d.current ? `<div class="plan-list">${renewPlanButton(d.current, serviceId)}</div>` : ""}
+      <div class="plan-list">${buttons.join("")}</div>`;
+  }
+
+  /** One category's plans; «سایر» is the plans without a category. Null when the key is unknown. */
+  function renewCategoryHtml(data, serviceId, key) {
+    const d = data || {};
+    const category = key === OTHER_CATEGORY
+      ? { name: "سایر", plans: d.other || [] }
+      : (d.categories || []).find((c) => String(Number(c.id) || 0) === String(key));
+    if (!category || !(category.plans || []).length) return null;
+    return `<p><strong>${esc(category.name)}</strong></p>
+      <div class="plan-list">${category.plans.map((p) => renewPlanButton(p, serviceId)).join("")}</div>
+      <button type="button" class="btn ghost block" data-action="renew-groups" data-id="${Number(serviceId) || 0}">بازگشت به دسته‌ها</button>`;
   }
 
   function renewPreviewHtml(preview, serviceId, planId) {
@@ -1031,7 +1072,7 @@
     icon, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
     brandHeaderHtml, noticeBannerHtml, shortcutsHtml, panelShortcutsHtml, heroHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, buyConfirmHtml, discountedCheckoutHtml,
-    validServiceName, randomServiceName, giftFormHtml, renewPlansHtml,
+    validServiceName, randomServiceName, giftFormHtml, renewPlansHtml, renewChoicesHtml, renewCategoryHtml,
     renewPreviewHtml, addonPacksHtml, addonPreviewHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
     backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, reviewQueueHtml, reviewSheetHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml, resellerSubscriptionHtml,

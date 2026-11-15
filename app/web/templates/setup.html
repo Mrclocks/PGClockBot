@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% from "_list_input.html" import list_input %}
 {% from "macros.html" import switch %}
 {% block title %}راه‌اندازی اولیه{% endblock %}
@@ -177,7 +178,7 @@
           <div class="stat">
             <div class="stat-top">
               <span class="stat-ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
+                {{ icon('template') }}
               </span>
               <span>{{ row.label }}</span>
             </div>
@@ -216,7 +217,7 @@
       </div>
       <form method="post" action="/setup/finish" id="setup-finish-form">
         <input type="hidden" name="next" id="setup-finish-next" value="{{ finish_login_url }}" />
-        <button class="btn" type="submit" style="width:100%" id="setup-enter-panel">ورود به پنل</button>
+        <button class="btn btn-block" type="submit" id="setup-enter-panel">ورود به پنل</button>
       </form>
     </div>
 
@@ -386,7 +387,7 @@
       li.classList.toggle('is-on', i === n);
     });
     const bar = document.getElementById('setup-probe-fill');
-    if (bar) bar.style.width = Math.max(8, Math.min(100, fill)) + '%';
+    if (bar) bar.style.setProperty('--p', String(Math.max(8, Math.min(100, fill))));
   }
 
   function runPgAccessProbe(form){
