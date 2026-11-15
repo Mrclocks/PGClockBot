@@ -4075,7 +4075,7 @@ a.btn.btn-star:hover {
 .settings-main {
   display: flex;
   flex-direction: column;
-  /* Same card→card rhythm as .settings-layout (preview ↔ first card = --stack-gap) */
+  /* One card→card rhythm: the parent gap, no child margins. */
   gap: var(--stack-gap);
 }
 /* Parent gap owns vertical rhythm — zero child margins to avoid gap+margin stacking */
@@ -5716,7 +5716,7 @@ form.settings-form > .actions.sticky-actions,
   .dash-cols { grid-template-columns: 1fr; gap: var(--section-gap); }
   .card { padding: var(--card-pad); margin-bottom: var(--section-gap); }
   /* Gap-owned stacks: parent gap only — kill mobile .card margin so active↔pool
-     and layout↔menu match preview↔layout (--stack-gap), not gap+margin. */
+     and layout↔menu share one --stack-gap, not gap+margin. */
   .settings-main > .card,
   .settings-main > .settings-card,
   .settings-form > .card,
@@ -5727,10 +5727,7 @@ form.settings-form > .actions.sticky-actions,
   .menu-layout-form > .dnd-card,
   .dnd-cols > .card,
   .dnd-cols > .dnd-card,
-  .dash-cols > .card,
-  .settings-layout > .tg-preview-slot > .card,
-  .settings-layout > .tg-preview-slot > .settings-card,
-  .settings-layout > .tg-preview-slot > .tg-preview-card {
+  .dash-cols > .card {
     margin-bottom: 0;
   }
   .settings-grid, .dnd-cols { grid-template-columns: 1fr; }
@@ -5810,9 +5807,7 @@ form.settings-form > .actions.sticky-actions,
   .edit-section > .actions,
   .ui-modal-panel > .actions,
   .ui-modal-panel .form-stack > .actions,
-  .update-actions,
-  .tg-preview-gate > .actions,
-  .tg-preview-toolbar {
+  .update-actions {
     width: 100%;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5841,10 +5836,7 @@ form.settings-form > .actions.sticky-actions,
   .ui-modal-panel .form-stack > .actions > a.btn,
   .update-actions > .btn,
   .update-actions > a.btn,
-  .update-actions > button,
-  .tg-preview-gate > .actions > .btn,
-  .tg-preview-toolbar > .btn,
-  .tg-preview-toolbar > .tg-preview-close-btn {
+  .update-actions > button {
     width: 100%;
     max-width: 100%;
     min-width: 0;
@@ -5859,9 +5851,7 @@ form.settings-form > .actions.sticky-actions,
   .edit-section > .actions > :last-child:nth-child(odd),
   .ui-modal-panel > .actions > :last-child:nth-child(odd),
   .ui-modal-panel .form-stack > .actions > :last-child:nth-child(odd),
-  .update-actions > :last-child:nth-child(odd),
-  .tg-preview-gate > .actions > :last-child:nth-child(odd),
-  .tg-preview-toolbar > :last-child:nth-child(odd) {
+  .update-actions > :last-child:nth-child(odd) {
     grid-column: 1 / -1;
   }
   .sticky-actions > form,
@@ -5976,18 +5966,12 @@ form.settings-form > .actions.sticky-actions,
   .quick-links { grid-template-columns: 1fr 1fr; }
 }
 
-/* —— Settings hub + Telegram live preview —— */
+/* —— Settings hub —— */
 .settings-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  /* stack-gap matches card→card rhythm; section-gap was stacking with card margin */
   gap: var(--stack-gap);
   align-items: start;
-}
-/* Two-column only while preview is open (lazy mount) */
-.settings-layout.has-preview {
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
-  gap: var(--section-gap);
 }
 .settings-main { min-width: 0; }
 .settings-tabs { margin-bottom: var(--page-title-gap); }
@@ -5999,353 +5983,7 @@ form.settings-form > .actions.sticky-actions,
   font-size: var(--fs-2);
 }
 
-.tg-preview-slot { min-width: 0; }
-.settings-layout > .tg-preview-slot > .card,
-.settings-layout > .tg-preview-slot > .settings-card,
-.settings-layout > .tg-preview-slot > .tg-preview-card {
-  margin-bottom: 0;
-}
-.tg-preview-gate {
-  margin-bottom: 0;
-}
-.tg-preview-gate .actions {
-  margin-top: var(--space-1);
-  justify-content: flex-start;
-}
-.tg-preview-toolbar {
-  display: flex;
-  justify-content: flex-start;
-  margin-top: var(--space-1);
-  width: 100%;
-}
-.tg-preview-toolbar .btn,
-.tg-preview-toolbar .tg-preview-close-btn {
-  width: 100%;
-  justify-content: center;
-}
-/* Sticky phone mock only when the live panel is open */
-.settings-layout.has-preview .tg-preview-wrap {
-  position: sticky;
-  top: var(--space-1);
-  align-self: start;
-}
-.tg-preview-wrap {
-  position: relative;
-  top: auto;
-  align-self: start;
-}
-.tg-preview {
-  --tg-bg: #0e1621;
-  --tg-panel: #17212b;
-  --tg-bubble: #182533;
-  --tg-key: #2b5278;
-  --tg-key-hover: #3a6a9a;
-  --tg-text: #e4ecf2;
-  --tg-muted: #7f91a4;
-  direction: rtl;
-  background:
-    radial-gradient(120% 80% at 100% 0%, rgba(43, 82, 120, 0.35), transparent 55%),
-    linear-gradient(165deg, #0b121a 0%, var(--tg-bg) 48%, #0a1018 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
-  color: var(--tg-text);
-  font-family: var(--font);
-  min-height: 400px;
-  display: flex;
-  flex-direction: column;
-}
-.tg-top {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2);
-  background: rgba(23, 33, 43, 0.92);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(8px);
-}
-.tg-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(145deg, #5b9bd5, #2b5278);
-  font-weight: 700;
-  font-size: var(--fs-3);
-  flex: 0 0 auto;
-}
-.tg-top strong { display: block; font-size: var(--fs-3); line-height: 1.25; }
-.tg-top small { color: var(--tg-muted); font-size: var(--fs-1); }
-.tg-chat {
-  flex: 1 1 auto;
-  padding: var(--space-2) var(--space-2) var(--space-2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  background-image:
-    radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 18px 18px;
-  overflow: auto;
-  min-height: 260px;
-}
-.tg-bubble {
-  max-width: 92%;
-  padding: var(--space-1) var(--space-2);
-  border-radius: 18px 18px 6px 18px;
-  background: var(--tg-bubble);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  font-size: var(--fs-3);
-  line-height: 1.5;
-  white-space: normal;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
-  animation: tg-in var(--motion-med) ease both;
-}
-.tg-bubble.bot { align-self: flex-start; }
-.tg-qr-card {
-  align-self: flex-start;
-  max-width: 220px;
-  background: var(--tg-bubble);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: var(--inner-radius);
-  overflow: hidden;
-  animation: tg-in var(--motion-med) ease both;
-}
-.tg-qr-box {
-  aspect-ratio: 1;
-  display: grid;
-  place-items: center;
-  background:
-    repeating-linear-gradient(0deg, #111 0 8px, #1a1a1a 8px 16px),
-    repeating-linear-gradient(90deg, #111 0 8px, #1a1a1a 8px 16px);
-  color: #9ec5e8;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  font-size: var(--fs-4);
-  position: relative;
-  overflow: hidden;
-}
-.tg-qr-bg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  z-index: 0;
-}
-.tg-qr-box.has-bg {
-  background: #0e1621;
-}
-.tg-qr-box.has-bg::after {
-  inset: 22%;
-  border-radius: var(--inner-radius);
-  z-index: 1;
-  background:
-    #fff
-    linear-gradient(#111, #111) center/38% 3px no-repeat,
-    linear-gradient(#111, #111) center/3px 38% no-repeat;
-  border: 3px solid #fff;
-  box-shadow: 0 2px 10px rgba(0,0,0,.35);
-}
-.tg-qr-fake {
-  position: relative;
-  z-index: 1;
-}
-.tg-qr-box::after {
-  content: "";
-  position: absolute;
-  inset: 18%;
-  border: 3px solid #d7e7f5;
-  box-shadow: inset 0 0 0 8px #0e1621;
-  background:
-    linear-gradient(#d7e7f5, #d7e7f5) center/40% 3px no-repeat,
-    linear-gradient(#d7e7f5, #d7e7f5) center/3px 40% no-repeat;
-  z-index: 1;
-}
-.tg-qr-box.has-bg .tg-qr-fake { display: none; }
-.tg-qr-cap {
-  padding: var(--space-1);
-  font-size: var(--fs-1);
-  line-height: 1.5;
-  color: var(--tg-text);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.tg-keys,
-.tg-reply-kb {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-1_5) var(--space-1);
-  background: rgba(23, 33, 43, 0.96);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  flex: 0 0 auto;
-  animation: tg-in var(--motion-slow) ease both;
-}
-.tg-key-row {
-  display: flex;
-  gap: var(--space-1);
-}
-.tg-key-home .tg-key:not([data-tone]),
-.tg-key-home .tg-key[data-tone=""] {
-  background: linear-gradient(180deg, #3d6f9a, #2a4f72);
-}
-.tg-key {
-  flex: 1 1 0;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: linear-gradient(180deg, #356891, var(--tg-key));
-  color: #f2f7fb;
-  font: inherit;
-  font-size: var(--fs-2);
-  font-weight: 600;
-  padding: var(--space-1) var(--space-0);
-  min-height: 34px;
-  cursor: default;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-.tg-composer {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  background: rgba(23, 33, 43, 0.98);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  color: var(--tg-muted);
-  font-size: var(--fs-2);
-  flex: 0 0 auto;
-}
-.tg-composer-ph { flex: 1 1 auto; }
-.tg-kb-icon {
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  display: grid;
-  place-items: center;
-  cursor: default;
-  padding: 0;
-}
-.tg-kb-grid {
-  width: 16px;
-  height: 16px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  gap: var(--space-0);
-}
-.tg-kb-grid::before,
-.tg-kb-grid::after {
-  content: "";
-  background: var(--tg-muted);
-  border-radius: 1px;
-  grid-column: 1;
-}
-.tg-kb-grid::before { grid-row: 1; box-shadow: 9px 0 0 var(--tg-muted); }
-.tg-kb-grid::after { grid-row: 2; box-shadow: 9px 0 0 var(--tg-muted); }
-.tg-preview-hint { margin: var(--space-1) var(--space-1) 0; font-size: var(--fs-2); }
-
-/* —— Bot appearance / profile live preview —— */
-.tg-preview-profile {
-  min-height: 560px;
-}
-.tg-profile-hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-2) var(--space-2);
-  background:
-    radial-gradient(90% 120% at 50% 0%, rgba(91, 155, 213, 0.28), transparent 60%),
-    rgba(23, 33, 43, 0.95);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  text-align: center;
-}
-.tg-profile-avatar {
-  width: 88px;
-  height: 88px;
-  border-radius: 50%;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(145deg, #5b9bd5, #2b5278);
-  font-size: 34px;
-  font-weight: 700;
-  margin-bottom: var(--space-1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-}
-.tg-profile-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.tg-profile-hero strong {
-  font-size: var(--fs-4);
-  line-height: 1.25;
-}
-.tg-profile-hero small {
-  color: var(--tg-muted);
-  font-size: var(--fs-2);
-}
-.tg-profile-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 20px;
-  margin-top: var(--space-1);
-  padding: 0 var(--space-1);
-  border-radius: var(--control-radius);
-  border: 1px solid rgba(142, 182, 216, 0.22);
-  font-size: var(--fs-1);
-  font-weight: 500;
-  line-height: 1.25;
-  color: #8eb6d8;
-  background: rgba(43, 82, 120, 0.35);
-}
-.tg-profile-about {
-  padding: var(--space-2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(23, 33, 43, 0.55);
-}
-.tg-profile-about-label {
-  font-size: var(--fs-1);
-  color: var(--tg-muted);
-  margin-bottom: var(--space-1);
-}
-.tg-profile-about-text {
-  font-size: var(--fs-2);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--tg-text);
-}
-.tg-chat-empty {
-  min-height: 160px;
-  justify-content: center;
-  align-items: center;
-}
-.tg-empty-center {
-  text-align: center;
-  max-width: 86%;
-  animation: tg-in var(--motion-med) ease both;
-}
-.tg-empty-center strong {
-  display: block;
-  font-size: var(--fs-3);
-  margin-bottom: var(--space-1);
-}
-.tg-empty-center p {
-  margin: 0;
-  font-size: var(--fs-2);
-  line-height: 1.5;
-  color: var(--tg-muted);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
+/* —— Bot appearance form —— */
 .ap-photo-row {
   display: flex;
   align-items: center;
@@ -6368,34 +6006,7 @@ form.settings-form > .actions.sticky-actions,
   to { opacity: 1; transform: none; }
 }
 
-@media (max-width: 1100px) {
-  .settings-layout.has-preview {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .settings-layout.has-preview .tg-preview-wrap {
-    position: relative;
-    top: 0;
-  }
-  .tg-preview-slot {
-    order: -1;
-  }
-  .tg-preview { min-height: 360px; }
-}
 
-@media (max-width: 900px) {
-  .tg-preview { min-height: 320px; border-radius: var(--inner-radius); }
-  .tg-preview-gate .actions,
-  .tg-preview-toolbar {
-    display: flex;
-    width: 100%;
-  }
-  .tg-preview-gate .actions .btn,
-  .tg-preview-toolbar .btn,
-  .tg-preview-close-btn {
-    width: 100%;
-    justify-content: center;
-  }
-}
 
 /* ── Sidebar sections: web panel / shop / PasarGuard, in the phone launcher's language (panel-nav-modes.css)
    at list size: no boxes, a hairline between sections, the title in the section colour, every icon in a small
@@ -7977,10 +7588,6 @@ td.col-address {
   justify-content: center;
 }
 
-@media (max-width: 560px) {
-}
-@media (max-width: 420px) {
-}
 
 
 .role-tag { font-size: var(--fs-1); }
@@ -10735,79 +10342,6 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   background: var(--background);
   border-radius: var(--inner-radius);
 }
-
-/* —— Telegram preview button tones (Bot API colors) —— */
-.tg-key[data-tone="default"] {
-  background: linear-gradient(180deg, #5a6570, #3d4650);
-  color: #f4f6f8;
-}
-.tg-key[data-tone="primary"] {
-  background: linear-gradient(180deg, #3d8fd4, #2472b8);
-  color: #f2f7fb;
-}
-.tg-key[data-tone="success"] {
-  background: linear-gradient(180deg, #3fad6e, #2a8f55);
-  color: #f2fbf5;
-}
-.tg-key[data-tone="danger"] {
-  background: linear-gradient(180deg, #e05a5a, #c43d3d);
-  color: #fff6f6;
-}
-.tg-key-home .tg-key[data-tone="default"] {
-  background: linear-gradient(180deg, #5a6570, #3d4650);
-}
-
-.tg-scene-label {
-  font-size: var(--fs-1);
-  margin-bottom: 6px;
-  opacity: 0.85;
-}
-.tg-inline-kb {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 4px 10px 8px;
-  max-width: min(100%, 320px);
-  align-self: flex-start;
-}
-.tg-inline-row {
-  display: flex;
-  gap: 4px;
-}
-.tg-inline-key {
-  flex: 1 1 auto;
-  width: 100%;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: linear-gradient(180deg, #356891, var(--tg-key));
-  color: #f2f7fb;
-  font: inherit;
-  font-size: var(--fs-2);
-  font-weight: 600;
-  padding: 7px 10px;
-  min-height: 32px;
-  cursor: default;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-.tg-inline-key[data-tone="default"] {
-  background: linear-gradient(180deg, #5a6570, #3d4650);
-  color: #f4f6f8;
-}
-.tg-inline-key[data-tone="primary"] {
-  background: linear-gradient(180deg, #3d8fd4, #2472b8);
-}
-.tg-inline-key[data-tone="success"] {
-  background: linear-gradient(180deg, #3fad6e, #2a8f55);
-}
-.tg-inline-key[data-tone="danger"] {
-  background: linear-gradient(180deg, #e05a5a, #c43d3d);
-}
-.tg-key.is-focus,
-.tg-inline-key.is-focus {
-  outline: 2px solid color-mix(in srgb, var(--primary) 70%, white);
-  outline-offset: 1px;
-}
-
 
 /* —— Receipt image modal —— */
 .ui-modal-panel-receipt {

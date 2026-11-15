@@ -95,20 +95,6 @@ class CompactAdminMenuTests(unittest.TestCase):
         self.assertIn("📊 داشبورد", flat)
 
 
-class QrPreviewBackgroundTests(unittest.TestCase):
-    def test_preview_markup_has_bg_img(self):
-        html = (ROOT / "app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8")
-        self.assertIn('id="pv-qr-bg"', html)
-        self.assertIn("tg-qr-bg", html)
-
-    def test_preview_js_applies_background(self):
-        js = (ROOT / "app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        self.assertIn("applyQrBackground", js)
-        self.assertIn("qr_background", js)
-        self.assertIn("createObjectURL", js)
-        self.assertIn("s_qr_background", js)
-
-
 class WholesaleLogicTests(unittest.TestCase):
     def test_parse_tiers_and_price(self):
         from app.services.orders import (

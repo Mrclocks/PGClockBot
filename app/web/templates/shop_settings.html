@@ -13,7 +13,7 @@
 {% else %}
 {{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path, tab_nav|default(none)) }}
 
-<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','daily_report'] %}can-preview{% endif %}" id="settings-layout">
+<div class="settings-layout">
   <div class="settings-main">
 
   {% if tab == 'notifications' %}
@@ -169,20 +169,8 @@
   {% endif %}
 
   </div>
-
-  {% if tab == 'appearance' %}
-  {% include "_tg_preview_appearance.html" %}
-  {% elif tab in ['menu','welcome','messages','buttons','qr','daily_report'] %}
-  {% include "_tg_preview_chat.html" %}
-  {% endif %}
 </div>
 
-{% if tab == 'appearance' %}
-{% include "_tg_preview_appearance_js.html" %}
-{% endif %}
-{% if tab in ['menu','welcome','messages','buttons','qr','daily_report'] %}
-{% include "_tg_preview_chat_js.html" %}
-{% endif %}
 {% if tab == 'menu' %}
 <script>
 (function(){
