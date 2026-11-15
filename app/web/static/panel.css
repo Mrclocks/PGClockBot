@@ -74,6 +74,8 @@
   --dock-h: calc(var(--btn-h) + 2 * var(--space-1));
   /* Items, logo and search circle inside the capsules: 4px clear of its edge. */
   /* Controls inside both capsules sit in the control tier (44) with 8 to the capsule edge (DESIGN_SYSTEM.md §7). */
+  /* One weight for every button, primary or not (DESIGN_SYSTEM.md §2: 600 for labels and buttons). */
+  --btn-fw: 600;
   --dock-pad: var(--space-1);
   --dock-inner: calc(var(--dock-h) - 2 * var(--dock-pad));
   /* The bars draw a hairline border inside their height: padding gives it back so the controls sit dead centre. */
@@ -1677,6 +1679,8 @@ textarea,
 [contenteditable="true"] {
   font-size: var(--control-fs) !important;
 }
+/* Every button speaks the panel font: without this a bare <button> falls back to the browser's (Arial 13.3px). */
+button { font-family: inherit; }
 input, select, textarea {
   width: 100%;
   margin-top: var(--space-1);
@@ -2418,7 +2422,7 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
   border-radius: var(--control-radius);
   font: inherit;
   font-size: var(--fs-3);
-  font-weight: 550;
+  font-weight: var(--btn-fw);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -2457,7 +2461,7 @@ a.btn.btn-ghost {
   color: var(--foreground) !important;
   border: 1.5px solid color-mix(in srgb, var(--foreground) 24%, transparent);
   background: color-mix(in srgb, var(--foreground) 3%, transparent);
-  font-weight: 500;
+  font-weight: var(--btn-fw);
 }
 .btn-ghost:hover,
 a.btn.btn-ghost:hover {
@@ -2470,7 +2474,7 @@ a.btn.btn-ghost:hover {
   color: var(--destructive-fg) !important;
   border: 1.5px solid color-mix(in srgb, var(--destructive) 72%, transparent);
   background: color-mix(in srgb, var(--destructive) 7%, transparent);
-  font-weight: 550;
+  font-weight: var(--btn-fw);
 }
 .btn-danger:hover {
   background: color-mix(in srgb, var(--destructive) 14%, transparent);
@@ -2481,7 +2485,7 @@ a.btn.btn-ghost:hover {
   color: var(--brand-fg) !important;
   border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
   background: color-mix(in srgb, var(--brand) 8%, transparent);
-  font-weight: 550;
+  font-weight: var(--btn-fw);
 }
 .btn-ok:hover {
   background: color-mix(in srgb, var(--brand) 15%, transparent);
@@ -2492,7 +2496,7 @@ a.btn.btn-ghost:hover {
   color: var(--warn-fg) !important;
   border: 1.5px solid color-mix(in srgb, var(--warn) 72%, transparent);
   background: color-mix(in srgb, var(--warn) 7%, transparent);
-  font-weight: 550;
+  font-weight: var(--btn-fw);
 }
 .btn-warn:hover {
   background: rgba(234, 179, 8, 0.2);
@@ -3977,7 +3981,7 @@ a.btn.btn-star {
   height: var(--ctl-sm-h);
   min-height: var(--ctl-sm-h);
   font-size: var(--fs-2);
-  font-weight: 600;
+  font-weight: var(--btn-fw);
   text-decoration: none !important;
   box-sizing: border-box;
 }
@@ -6609,7 +6613,7 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-stic
   color: var(--foreground);
   font: inherit;
   font-size: var(--fs-3);
-  font-weight: 600;
+  font-weight: var(--btn-fw);
   cursor: pointer;
   box-sizing: border-box;
   appearance: none;
@@ -7403,7 +7407,7 @@ td.col-address {
   color: var(--foreground) !important;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
-  font-weight: 500;
+  font-weight: var(--btn-fw);
 }
 .row-actions-menu .btn:not(.btn-danger):not(.btn-warn):hover,
 .row-actions-menu a.btn:not(.btn-danger):not(.btn-warn):hover,

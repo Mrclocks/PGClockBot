@@ -226,7 +226,7 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds .ds-mini[aria-pressed="true"] { background: var(--sel-bg); border-color: var(--sel-line); color: var(--sel-fg); }
 .ds .ds-link-btn {
   align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: var(--lbl-h);
-  border: 0; background: none; padding: 0; font: inherit; font-size: var(--fs-3); font-weight: 500; color: var(--sel-fg); cursor: pointer;
+  border: 0; background: none; padding: 0; font: inherit; font-size: var(--fs-3); font-weight: var(--btn-fw); color: var(--sel-fg); cursor: pointer;
 }
 .ds .ds-link-btn svg, .ds .ds-add svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .ds .ds-note {
@@ -425,11 +425,11 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-del.force-channel-remove { flex: 0 0 var(--ctl-h); }
 .ds .ds-add {
   gap: 6px; min-height: var(--ctl-h); width: 100%; border: 0; border-top: 1px dashed var(--dash); background: none;
-  font: inherit; font-size: var(--fs-3); font-weight: 500; color: var(--sel-fg); cursor: pointer;
+  font: inherit; font-size: var(--fs-3); font-weight: var(--btn-fw); color: var(--sel-fg); cursor: pointer;
 }
 .ds .pay-dest-add-row {
   min-height: var(--ctl-h); border-radius: var(--control-radius); border: 1px dashed var(--line) !important; background: none;
-  color: var(--sel-fg); font-weight: 500;
+  color: var(--sel-fg); font-size: var(--fs-3); font-weight: var(--btn-fw);
 }
 .ds.extra-packs-editor, .ds .extra-packs-editor { display: flex; flex-direction: column; gap: var(--g3); }
 .ds.extra-packs-editor[hidden], .ds .extra-packs-editor[hidden] { display: none; }
