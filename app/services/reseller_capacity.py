@@ -531,27 +531,6 @@ async def buy_extra_users(
     return {"users": offer.users, "amount": offer.price, "max_users": new_max}
 
 
-CAPACITY_CHANGE_MODES = ("credit", "debit")
-
-
-def capacity_change(mode: str | None, *, days: int, gb: int) -> tuple[int, int]:
-    """Signed day and GB change from the admin form.
-
-    The form asks for amounts and «کاهش» (``debit``) or «افزایش» (``credit``), like the wallet. Without a mode
-    the amounts are already signed (older form).
-    """
-    if not mode:
-        return days, gb
-    if mode not in CAPACITY_CHANGE_MODES:
-        raise ValueError("نوع تغییر ظرفیت نامعتبر است")
-    if days < 0 or gb < 0:
-        raise ValueError("روز و گیگ را مثبت وارد کنید و کاهش یا افزایش را بزنید")
-    if days == 0 and gb == 0:
-        raise ValueError("روز یا گیگ را وارد کنید")
-    sign = -1 if mode == "debit" else 1
-    return sign * days, sign * gb
-
-
 async def admin_adjust_reseller_subscription(
     session: AsyncSession,
     profile: ResellerProfile,

@@ -1036,12 +1036,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             extra_gb = parse_int(gb_raw)
         except ValueError:
             return _redirect_reseller_edit(user_id, err="مقادیر تغییر ظرفیت نامعتبر است")
-        from app.services.reseller_capacity import admin_adjust_reseller_subscription, capacity_change
+        from app.services.adjust_mode import signed_adjustment
+        from app.services.reseller_capacity import admin_adjust_reseller_subscription
 
         try:
-            extra_days, extra_gb = capacity_change(
+            extra_days, extra_gb_signed = signed_adjustment(
                 str(form.get("mode") or "").strip() or None, days=extra_days, gb=extra_gb
             )
+            extra_gb = int(extra_gb_signed)
         except ValueError as e:
             return _redirect_reseller_edit(user_id, err=str(e))
 

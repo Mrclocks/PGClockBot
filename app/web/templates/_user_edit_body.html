@@ -310,8 +310,7 @@
 {% endif %}
 {% if can_pg_update %}
         <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/extend" class="form-stack"
-              id="svc-{{ s.service.id }}-extend"
-              data-confirm="روز/حجم سرویس فعلی تغییر کند؟ (مثبت = افزایش، منفی = کاهش)"
+              data-confirm="روز و حجم سرویس مطابق مقدار و نوع انتخاب‌شده تغییر کند؟"
               data-confirm-title="تغییر مانده سرویس"
               data-confirm-reason="1"
               data-confirm-reason-label="علت تغییر مانده"
@@ -320,11 +319,22 @@
           <input type="hidden" name="reason" value="" />
           <div class="user-edit-fields user-edit-fields--2">
             <label class="form-field">روز
-              {{ num_stepper('extra_days', value=0, step=1, min=-3650, max=3650, inputmode='numeric', aria_label='روز') }}
+              {{ num_stepper('extra_days', value=0, step=1, min=0, max=3650, inputmode='numeric', aria_label='روز') }}
             </label>
             <label class="form-field">گیگ
-              {{ num_stepper('extra_gb', value=0, step=0.1, min=-10000, max=10000, inputmode='decimal', aria_label='گیگ') }}
+              {{ num_stepper('extra_gb', value=0, step=0.1, min=0, max=10000, inputmode='decimal', aria_label='گیگ') }}
             </label>
+          </div>
+          {#- Same «کاهش» / «افزایش» pair as the wallet, points and reseller capacity forms. -#}
+          <div class="wallet-adjust-modes" role="group" aria-label="نوع تغییر مانده">
+            <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">
+              <span class="wallet-mode-swatch" aria-hidden="true"></span>
+              <span class="wallet-mode-label">کاهش</span>
+            </button>
+            <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">
+              <span class="wallet-mode-swatch" aria-hidden="true"></span>
+              <span class="wallet-mode-label">افزایش</span>
+            </button>
           </div>
         </form>
 {% endif %}
@@ -367,17 +377,14 @@
         </form>
         {% endif %}
 {% endif %}
-        {#- One row of equal, full-width buttons; each submits its own form above through the form attribute. -#}
-        {% if can_pg_update or can_pg_delete %}
+        {#- The delete actions: one row of equal, full-width buttons, each submitting its own form above (form attribute). -#}
+        {% if can_pg_delete %}
         <div class="svc-item-actions">
-          {% if can_pg_update %}<button class="btn" type="submit" form="svc-{{ s.service.id }}-extend">تغییر مانده</button>{% endif %}
-          {% if can_pg_delete %}
           {% if s.service.remark in ['linked', 'imported'] %}
           <button class="btn btn-ghost" type="submit" form="svc-{{ s.service.id }}-detach">جدا کردن از مشتری</button>
           <button class="btn btn-danger" type="submit" form="svc-{{ s.service.id }}-delete-pg">حذف همراه حساب پاسارگارد</button>
           {% else %}
           <button class="btn btn-danger" type="submit" form="svc-{{ s.service.id }}-delete">حذف سرویس</button>
-          {% endif %}
           {% endif %}
         </div>
         {% endif %}

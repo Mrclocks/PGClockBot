@@ -6749,7 +6749,7 @@ html[data-theme="light"] .user-edit-wallet-pill.is-negative {
 .svc-item-ops .user-edit-actions {
   margin-top: 0;
 }
-/* «تغییر مانده» and the delete actions: equal columns across the full width (forms without fields are hidden). */
+/* A service's delete actions: equal columns across the full width (their forms hold no fields and are hidden). */
 .svc-item-actions {
   display: grid;
   grid-auto-flow: column;
