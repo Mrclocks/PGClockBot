@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -24,9 +24,14 @@ from app.db.models import (
     UserService,
 )
 from app.services.custom_plans import exclude_custom_order_plans
-from app.services.pasarguard import as_list, get_pg
+from app.services.pasarguard import as_list, get_pg, is_pg_permission_denied
 from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
-from app.services.pg_read import staff_pg_credentials_ready
+from app.services.pg_read import (
+    PgReadDenied,
+    staff_pg_credentials_ready,
+    staff_pg_read_client,
+    trust_pg_list_scope,
+)
 from app.services.shop_scope import ShopScopeError, is_platform_admin, shop_owner_id
 
 log = logging.getLogger(__name__)
@@ -286,6 +291,41 @@ def staff_can_create_pg_template(staff: dict | None) -> bool:
     return staff_pg_action(staff, "templates", "create")
 
 
+PG_UNREACHABLE_MESSAGE = "اتصال به پاسارگارد برقرار نشد"
+
+
+async def _fetch_plan_catalog(
+    fetch: Callable[[], Awaitable[Any]], key: str
+) -> tuple[list[dict] | None, bool]:
+    """Run one catalog read; return ``(rows or None on failure, panel_unreachable)``.
+
+    A refusal for this role (403/404/405) only hides that list. Any other
+    failure (rejected credentials, outage) is reported as a connection problem
+    instead of looking like an empty catalog.
+    """
+    try:
+        data = await fetch()
+    except Exception as exc:
+        log.warning("load_pg_plan_options %s unavailable: %s", key, exc)
+        return None, not is_pg_permission_denied(exc)
+    return as_list(data, key), False
+
+
+async def _load_plan_templates(pg: Any) -> tuple[list[dict], bool]:
+    """Full template rows when the role may read them, else the simple list.
+
+    A role with only ``templates.read_simple`` gets 403 on the full list;
+    the simple list must still be offered instead of an empty one.
+    """
+    full, full_down = await _fetch_plan_catalog(pg.get_user_templates, "templates")
+    if full:
+        return full, False
+    simple, simple_down = await _fetch_plan_catalog(pg.get_user_templates_simple, "templates")
+    if simple is not None:
+        return simple, False
+    return full or [], full_down or simple_down
+
+
 async def load_pg_plan_options(
     staff: dict | None = None,
     *,
@@ -300,8 +340,6 @@ async def load_pg_plan_options(
     groups: list[dict] = []
     pg_error = None
     try:
-        from app.services.pg_read import PgReadDenied, staff_pg_read_client, trust_pg_list_scope
-
         if staff and staff.get("role") != "admin":
             try:
                 pg = await staff_pg_read_client(session, staff)
@@ -313,28 +351,17 @@ async def load_pg_plan_options(
             await pg.ensure_token()
         except Exception as e:
             log.warning("load_pg_plan_options token failed: %s", e)
-            return [], [], "اتصال به پاسارگارد برقرار نشد"
-        try:
-            templates = await pg.get_user_templates_simple()
-            full = await pg.get_user_templates()
-            if isinstance(full, list) and full:
-                templates = full
-            else:
-                templates = as_list(full, "templates") or templates
-        except Exception as e:
-            log.warning("load_pg_plan_options templates unavailable: %s", e)
-            templates = []
-        try:
-            groups = await pg.get_groups_simple()
-        except Exception as e:
-            log.warning("load_pg_plan_options groups unavailable: %s", e)
-            groups = []
+            return [], [], PG_UNREACHABLE_MESSAGE
+        templates, templates_down = await _load_plan_templates(pg)
+        groups, groups_down = await _fetch_plan_catalog(pg.get_groups_simple, "groups")
+        if templates_down or groups_down:
+            pg_error = PG_UNREACHABLE_MESSAGE
     except Exception as e:
         # Never surface raw PG/HTTP exception text to the panel (info leak).
         log.warning("load_pg_plan_options failed: %s", e)
-        pg_error = "اتصال به پاسارگارد برقرار نشد"
-    templates = [t for t in templates if isinstance(t, dict)]
-    groups = [g for g in groups if isinstance(g, dict)]
+        pg_error = PG_UNREACHABLE_MESSAGE
+    templates = templates or []
+    groups = groups or []
     trust = trust_pg_list_scope(staff) if staff else True
     templates = filter_templates_for_staff(templates, staff, trust_client_scope=trust)
     groups = filter_groups_for_staff(groups, staff, trust_client_scope=trust)
