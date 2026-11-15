@@ -8,6 +8,7 @@ Hybrid Owner ACL: platform web Owner keeps full *shop* power, but PasarGuard
 menus/actions are clamped to the env ``PG_USERNAME`` role (fail-closed).
 """
 
+import asyncio
 from typing import Any, Mapping
 
 from app.services.pasarguard import PasarGuardError, is_panel_outage
@@ -210,8 +211,12 @@ class _CredentialsRejected(Exception):
     """The panel answered that the probed credentials cannot be used."""
 
 
-def _says_account_disabled(body: Any) -> bool:
-    return "disabled" in str(body or "").lower()
+# PasarGuard's exact answer for a disabled admin; any other 403 is a role refusal.
+PG_ACCOUNT_DISABLED_DETAIL = "your account has been disabled"
+
+
+def _says_account_disabled(exc: PasarGuardError) -> bool:
+    return (exc.detail() or "").strip().lower() == PG_ACCOUNT_DISABLED_DETAIL
 
 
 def _rejected_credentials_reason(exc: Exception, *, uses_api_key: bool) -> str | None:
@@ -224,7 +229,7 @@ def _rejected_credentials_reason(exc: Exception, *, uses_api_key: bool) -> str |
         return None
     if exc.status_code == 401:
         return PG_API_KEY_REJECTED_MSG if uses_api_key else exc.user_message()
-    if exc.status_code == 403 and _says_account_disabled(exc.body):
+    if exc.status_code == 403 and _says_account_disabled(exc):
         return PG_ADMIN_DISABLED_MSG
     return None
 
@@ -473,6 +478,37 @@ async def resolve_platform_pg_capabilities(
                 await client.close()
             except Exception:
                 logger.debug("resolve_platform_pg_capabilities: ignored failure", exc_info=True)
+
+
+PG_CHECK_TIMEOUT_SEC = 8.0
+PG_CHECK_TIMEOUT_MSG = "پنل در زمان مقرر پاسخ نداد؛ آدرس و اتصال پنل را بررسی کنید"
+
+
+async def check_pg_credentials(
+    *, username: str, password: str, api_key: str, base_url: str
+) -> str | None:
+    """Sign in with these PasarGuard credentials; a safe Persian reason on failure, else ``None``.
+
+    Used before credentials are saved from settings, so a wrong password or a
+    refused API key is reported instead of being written to ``.env``.
+    """
+    try:
+        caps = await asyncio.wait_for(
+            resolve_platform_pg_capabilities(
+                username=username,
+                password=password or None,
+                api_key=api_key or None,
+                base_url=base_url,
+                use_cache=False,
+            ),
+            timeout=PG_CHECK_TIMEOUT_SEC,
+        )
+    except TimeoutError:
+        return PG_CHECK_TIMEOUT_MSG
+    if caps.get("ok"):
+        return None
+    detail = caps.get("error") or "اعتبارنامه پذیرفته نشد"
+    return f"اتصال پاسارگارد ناموفق بود: {detail}"
 
 
 async def enrich_platform_admin_staff(user: dict) -> dict:

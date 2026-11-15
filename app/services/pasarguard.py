@@ -160,6 +160,10 @@ class PasarGuardError(Exception):
         self.status_code = status_code
         self.body = body
 
+    def detail(self) -> str | None:
+        """The panel's own error text (``detail``/``message``) from the response body."""
+        return _pg_error_detail(self.body)
+
     def user_message(self, *, fallback: str | None = None) -> str:
         """Short Persian-friendly message extracted from API error body."""
         from app.services.credential_policy import friendly_pg_error

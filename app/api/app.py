@@ -4683,7 +4683,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             from fastapi.responses import JSONResponse
 
             from app.services.pasarguard import reset_pg
-            from app.services.pg_access import clear_platform_pg_capability_cache, resolve_platform_pg_capabilities
+            from app.services.pg_access import check_pg_credentials, clear_platform_pg_capability_cache
             from app.services.setup_wizard import current_setup_values
 
             ajax = str(form.get("ajax") or "") == "1"
@@ -4726,24 +4726,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                     "نام کاربری و (رمز یا کلید API) الزامی است؛ فیلد خالی مقدار فعلی را حفظ می‌کند",
                     code=400,
                 )
+            # Save runs the same check as Test: a refused login is never written to .env.
+            connection_error = await check_pg_credentials(
+                username=username, password=password, api_key=api_key, base_url=base
+            )
+            if connection_error:
+                return pg_result(False, connection_error, code=400)
             if action == "test":
-
-                try:
-                    caps = await asyncio.wait_for(resolve_platform_pg_capabilities(
-                        username=username,
-                        password=password or None,
-                        api_key=api_key or None,
-                        base_url=base,
-                        use_cache=False,
-                    ), timeout=8.0)
-                except Exception:
-                    return pg_result(False, "پنل در زمان مقرر پاسخ نداد؛ آدرس و اتصال پنل را بررسی کنید", code=502)
-                if not caps.get("ok"):
-                    return pg_result(
-                        False,
-                        "اتصال پاسارگارد ناموفق بود؛ آدرس، نام کاربری، رمز یا کلید API را بررسی کنید",
-                        code=400,
-                    )
                 return pg_result(True, f"اتصال پاسارگارد موفق است؛ مسیر سابسکریپشن: {sub_path}/")
             update_env_keys({
                 "PG_BASE_URL": base, "PG_SUBSCRIPTION_PATH": sub_path,

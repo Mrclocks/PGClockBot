@@ -7,6 +7,7 @@ refusal and accept a wrong key with an empty role.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import unittest
 from collections.abc import Callable
@@ -21,6 +22,8 @@ from app.services.pg_access import (
     AUDIT_NOTE_CUSTOM_KEY_ON_OWNER,
     PG_ADMIN_DISABLED_MSG,
     PG_API_KEY_REJECTED_MSG,
+    PG_CHECK_TIMEOUT_MSG,
+    check_pg_credentials,
     public_pg_access_audit,
     resolve_platform_pg_capabilities,
 )
@@ -108,6 +111,13 @@ class CapabilityProbeCredentialTests(_ProbeHarness):
         )
         self.assertFalse(caps["ok"])
         self.assertEqual(caps["error"], PG_ADMIN_DISABLED_MSG)
+
+    async def test_other_403_wording_is_not_read_as_a_disabled_account(self) -> None:
+        caps = await self._probe(
+            lambda _req: _json(403, {"detail": "Permission disabled for this role"}), api_key=API_KEY
+        )
+        self.assertTrue(caps["ok"])
+        self.assertNotEqual(caps.get("error"), PG_ADMIN_DISABLED_MSG)
 
     async def test_unreachable_panel_fails_closed_for_an_api_key(self) -> None:
         def refuse(_req: httpx.Request) -> httpx.Response:
@@ -216,6 +226,40 @@ class ApiKeyReportTests(_ProbeHarness):
         self.assertTrue(caps["pg_is_owner"])
         self.assertNotIn(("GET", "/api/admin-roles/simple"), self.requests)
         self.assertEqual(public_pg_access_audit(caps)["notes"], [])
+
+
+class SettingsCredentialCheckTests(_ProbeHarness):
+    """Settings «ذخیره» runs this before writing credentials to .env."""
+
+    async def _check(self, handler: Handler, **credentials: str) -> str | None:
+        caps_probe = self._probe
+
+        async def probe_for(**kwargs: object) -> dict:
+            creds = {k: v for k, v in kwargs.items() if k in {"password", "api_key"} and v}
+            return await caps_probe(handler, **creds)
+
+        with patch("app.services.pg_access.resolve_platform_pg_capabilities", side_effect=probe_for):
+            return await check_pg_credentials(
+                username="seller", password=credentials.get("password", ""),
+                api_key=credentials.get("api_key", ""), base_url=BASE,
+            )
+
+    async def test_working_credentials_pass(self) -> None:
+        self.assertIsNone(await self._check(lambda _req: _json(200, LIMITED_ADMIN), api_key=API_KEY))
+
+    async def test_refused_key_is_reported_with_the_reason(self) -> None:
+        error = await self._check(lambda _req: _json(401, {"detail": "Could not validate credentials"}), api_key=API_KEY)
+        self.assertIn(PG_API_KEY_REJECTED_MSG, error)
+
+    async def test_slow_panel_reports_a_timeout(self) -> None:
+        async def never_answers(**_kwargs: object) -> dict:
+            await asyncio.sleep(1)
+            return {"ok": True}
+
+        with patch("app.services.pg_access.resolve_platform_pg_capabilities", side_effect=never_answers), \
+             patch("app.services.pg_access.PG_CHECK_TIMEOUT_SEC", 0.01):
+            error = await check_pg_credentials(username="seller", password="x", api_key="", base_url=BASE)
+        self.assertEqual(error, PG_CHECK_TIMEOUT_MSG)
 
 
 if __name__ == "__main__":
