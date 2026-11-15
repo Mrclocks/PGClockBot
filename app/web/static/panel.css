@@ -3789,6 +3789,8 @@ html[data-theme="light"] .auth-form--card {
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.02);
 }
+/* Notes sit in the audit's flex column; its gap already spaces them. */
+.setup-audit > .flash { margin: 0; }
 .setup-audit-head {
   display: flex;
   flex-wrap: wrap;
