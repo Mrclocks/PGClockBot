@@ -194,6 +194,8 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]), .ds select {
   height: var(--ctl-h); min-height: var(--ctl-h); margin: 0; line-height: normal; box-sizing: border-box;
 }
+/* A password field's wrapper starts where a plain field does, so «نام کاربری» and «رمز» side by side line up. */
+.ds .pw-field { margin-top: 0; }
 .ds .ui-select-toggle { height: var(--ctl-h); min-height: var(--ctl-h); box-sizing: border-box; }
 .ds textarea { margin: 0; }
 .ds .ds-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); }
@@ -226,7 +228,7 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds .ds-mini[aria-pressed="true"] { background: var(--sel-bg); border-color: var(--sel-line); color: var(--sel-fg); }
 .ds .ds-link-btn {
   align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: var(--lbl-h);
-  border: 0; background: none; padding: 0; font: inherit; font-size: var(--fs-3); font-weight: 500; color: var(--sel-fg); cursor: pointer;
+  border: 0; background: none; padding: 0; font: inherit; font-size: var(--fs-3); font-weight: var(--btn-fw); color: var(--sel-fg); cursor: pointer;
 }
 .ds .ds-link-btn svg, .ds .ds-add svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .ds .ds-note {
@@ -425,11 +427,11 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-del.force-channel-remove { flex: 0 0 var(--ctl-h); }
 .ds .ds-add {
   gap: 6px; min-height: var(--ctl-h); width: 100%; border: 0; border-top: 1px dashed var(--dash); background: none;
-  font: inherit; font-size: var(--fs-3); font-weight: 500; color: var(--sel-fg); cursor: pointer;
+  font: inherit; font-size: var(--fs-3); font-weight: var(--btn-fw); color: var(--sel-fg); cursor: pointer;
 }
 .ds .pay-dest-add-row {
   min-height: var(--ctl-h); border-radius: var(--control-radius); border: 1px dashed var(--line) !important; background: none;
-  color: var(--sel-fg); font-weight: 500;
+  color: var(--sel-fg); font-size: var(--fs-3); font-weight: var(--btn-fw);
 }
 .ds.extra-packs-editor, .ds .extra-packs-editor { display: flex; flex-direction: column; gap: var(--g3); }
 .ds.extra-packs-editor[hidden], .ds .extra-packs-editor[hidden] { display: none; }

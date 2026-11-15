@@ -44,10 +44,13 @@
   {% call ds_sec('اتصال پاسارگارد') %}
     <label class="form-field">حالت ساخت در پاسارگارد
       <select name="mode" id="plan-mode">
-        <option value="custom" {% if not plan.pg_template_id %}selected{% endif %}>سفارشی (گروه + حجم + مدت)</option>
-        <option value="template" {% if plan.pg_template_id %}selected{% endif %}>از تمپلیت آماده پاسارگارد</option>
+        {% if not pg_template_only %}<option value="custom" {% if not plan.pg_template_id %}selected{% endif %}>سفارشی (گروه + حجم + مدت)</option>{% endif %}
+        <option value="template" {% if plan.pg_template_id or pg_template_only %}selected{% endif %}>از تمپلیت آماده پاسارگارد</option>
       </select>
     </label>
+    {% if pg_template_only %}
+    <small class="muted">نقش پاسارگارد این حساب فقط ساخت سرویس با تمپلیت را مجاز می‌داند؛ برای ذخیره، تمپلیت انتخاب کنید.</small>
+    {% endif %}
     {% set selected_groups = (plan.pg_group_ids or '').split(',') %}
     <div id="mode-custom" class="form-stack">
       <div class="form-field"><span class="ds-label-text">گروه‌ها</span>

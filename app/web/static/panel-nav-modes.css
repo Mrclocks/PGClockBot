@@ -335,7 +335,7 @@
       box-shadow: none;
       color: var(--foreground);
       font-size: var(--fs-3);
-      font-weight: 600;
+      font-weight: var(--btn-fw);
       text-align: start;
       text-decoration: none;
     }

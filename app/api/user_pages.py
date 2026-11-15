@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, Plan
 from app.services.customer_action_notices import NoticeTarget, notify_customers
 from app.services.action_reasons import ReasonRequired, log_reasoned_action, reason_from_form
+from app.services.adjust_mode import signed_adjustment
 from app.services.authz import authz_from_staff, can_shop
 from app.services.bot_user_admin import (
     CUSTOMER_SERVICES_PERMISSION,
@@ -798,6 +799,12 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             extra_gb = parse_float(gb_raw)
         except ValueError:
             return _redirect_user(user_id, err="مقادیر تغییر مانده نامعتبر است")
+        try:
+            extra_days, extra_gb = signed_adjustment(
+                str(form.get("mode") or "").strip() or None, days=extra_days, gb=extra_gb
+            )
+        except ValueError as e:
+            return _redirect_user(user_id, err=str(e))
         target = NoticeTarget(int(user_id), int(loaded.telegram_id or 0), svc.shop_id, svc.pg_username or "")
         try:
             await admin_extend_service(
