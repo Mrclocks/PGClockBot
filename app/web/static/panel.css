@@ -74,6 +74,8 @@
   --dock-h: calc(var(--btn-h) + 2 * var(--space-1));
   /* Items, logo and search circle inside the capsules: 4px clear of its edge. */
   /* Controls inside both capsules sit in the control tier (44) with 8 to the capsule edge (DESIGN_SYSTEM.md §7). */
+  /* One weight for every button, primary or not (DESIGN_SYSTEM.md §2: 600 for labels and buttons). */
+  --btn-fw: 600;
   --dock-pad: var(--space-1);
   --dock-inner: calc(var(--dock-h) - 2 * var(--dock-pad));
   /* The bars draw a hairline border inside their height: padding gives it back so the controls sit dead centre. */
@@ -1677,6 +1679,8 @@ textarea,
 [contenteditable="true"] {
   font-size: var(--control-fs) !important;
 }
+/* Every button speaks the panel font: without this a bare <button> falls back to the browser's (Arial 13.3px). */
+button { font-family: inherit; }
 input, select, textarea {
   width: 100%;
   margin-top: var(--space-1);
@@ -2418,7 +2422,7 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
   border-radius: var(--control-radius);
   font: inherit;
   font-size: var(--fs-3);
-  font-weight: 550;
+  font-weight: var(--btn-fw);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -2457,7 +2461,7 @@ a.btn.btn-ghost {
   color: var(--foreground) !important;
   border: 1.5px solid color-mix(in srgb, var(--foreground) 24%, transparent);
   background: color-mix(in srgb, var(--foreground) 3%, transparent);
-  font-weight: 500;
+  font-weight: var(--btn-fw);
 }
 .btn-ghost:hover,
 a.btn.btn-ghost:hover {
@@ -2470,7 +2474,7 @@ a.btn.btn-ghost:hover {
   color: var(--destructive-fg) !important;
   border: 1.5px solid color-mix(in srgb, var(--destructive) 72%, transparent);
   background: color-mix(in srgb, var(--destructive) 7%, transparent);
-  font-weight: 550;
+  font-weight: var(--btn-fw);
 }
 .btn-danger:hover {
   background: color-mix(in srgb, var(--destructive) 14%, transparent);
@@ -2481,7 +2485,7 @@ a.btn.btn-ghost:hover {
   color: var(--brand-fg) !important;
   border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
   background: color-mix(in srgb, var(--brand) 8%, transparent);
-  font-weight: 550;
+  font-weight: var(--btn-fw);
 }
 .btn-ok:hover {
   background: color-mix(in srgb, var(--brand) 15%, transparent);
@@ -2492,7 +2496,7 @@ a.btn.btn-ghost:hover {
   color: var(--warn-fg) !important;
   border: 1.5px solid color-mix(in srgb, var(--warn) 72%, transparent);
   background: color-mix(in srgb, var(--warn) 7%, transparent);
-  font-weight: 550;
+  font-weight: var(--btn-fw);
 }
 .btn-warn:hover {
   background: rgba(234, 179, 8, 0.2);
@@ -3977,7 +3981,7 @@ a.btn.btn-star {
   height: var(--ctl-sm-h);
   min-height: var(--ctl-sm-h);
   font-size: var(--fs-2);
-  font-weight: 600;
+  font-weight: var(--btn-fw);
   text-decoration: none !important;
   box-sizing: border-box;
 }
@@ -6562,6 +6566,7 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-stic
   opacity: 0.92;
 }
 .user-edit-fields {
+  /* An adjust form (amount or points, «کاهش» / «افزایش», reason) is one full-width column at every width. */
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-2);
@@ -6590,9 +6595,6 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-stic
   min-width: 0;
   grid-column: 1 / -1;
 }
-.user-edit-fields > .form-field:has(input[name="amount"]) {
-  grid-column: 1 / -1;
-}
 /* Tag-like mode chips (same language as .color-tag-option), full control height */
 .wallet-mode-btn {
   --mode-color: var(--border);
@@ -6611,7 +6613,7 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-stic
   color: var(--foreground);
   font: inherit;
   font-size: var(--fs-3);
-  font-weight: 600;
+  font-weight: var(--btn-fw);
   cursor: pointer;
   box-sizing: border-box;
   appearance: none;
@@ -6747,6 +6749,14 @@ html[data-theme="light"] .user-edit-wallet-pill.is-negative {
 .svc-item-ops .user-edit-actions {
   margin-top: 0;
 }
+/* A service's delete actions: equal columns across the full width (their forms hold no fields and are hidden). */
+.svc-item-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+}
+.svc-item-actions > .btn { width: 100%; min-width: 0; }
 /* Byte / ratio amounts (حجم، رم، …):
    Logical string stays «1.12 / 10 گیگ» (unit once, after numbers).
    Presentation is RTL so the Persian unit sits on the visual LEFT of the
@@ -6974,6 +6984,14 @@ td.byte-size {
   font-weight: 700;
   font-size: var(--fs-3);
 }
+/* A number written left to right (dir="ltr") in the RTL panel still lines up on the right edge with the text
+   around it: table cells and transaction amounts. The phone list keeps its own placement for value cells. */
+td[dir="ltr"],
+th[dir="ltr"],
+.wallet-tx-amount { text-align: right; }
+@media (max-width: 880px) {
+  .table-list-sm td[dir="ltr"] { text-align: left; }
+}
 .wallet-tx-amount.is-credit { color: var(--ok-solid); }
 .wallet-tx-amount.is-debit { color: #dc2626; }
 .wallet-tx-reason {
@@ -6988,11 +7006,6 @@ td.byte-size {
   flex: 0 0 auto;
   font-size: var(--fs-2);
   text-align: end;
-}
-@media (min-width: 560px) {
-  .user-edit-fields:not(.user-edit-fields--2) {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 /* legacy helpers kept for reseller edit body if reused */
 .svc-ops {
@@ -7394,7 +7407,7 @@ td.col-address {
   color: var(--foreground) !important;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
-  font-weight: 500;
+  font-weight: var(--btn-fw);
 }
 .row-actions-menu .btn:not(.btn-danger):not(.btn-warn):hover,
 .row-actions-menu a.btn:not(.btn-danger):not(.btn-warn):hover,
@@ -9480,6 +9493,17 @@ html[data-theme="light"] .home-gauge.is-exhausted {
 
 @media (max-width: 1100px) {
   .home-panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Stat boxes always fill their row: one or two boxes share it, four sit in a row on wide screens (2 × 2 below),
+   and a single box left over in the last row takes the full width instead of leaving a hole beside it. */
+.home-panel-grid:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+.home-panel-grid:has(> :nth-child(2):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 1101px) {
+  .home-panel-grid:has(> :nth-child(4):last-child) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .home-panel-grid:not(:has(> :nth-child(4):last-child)) > :last-child:nth-child(3n + 1):not(:first-child) { grid-column: 1 / -1; }
+}
+@media (max-width: 1100px) {
+  .home-panel-grid > :last-child:nth-child(odd):not(:first-child) { grid-column: 1 / -1; }
 }
 @media (max-width: 720px) {
   .home-gauges { gap: var(--space-1); }
@@ -12114,8 +12138,9 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   gap: var(--space-1);
 }
 .order-purge-options {
+  /* The auto-delete switch and the grace period: one full-width column, like every switch list. */
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-1);
   margin-top: var(--space-1);
   align-items: end;
@@ -12134,10 +12159,7 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   line-height: 1.35;
 }
 @media (max-width: 640px) {
-  .order-purge-tags,
-  .order-purge-options {
-    grid-template-columns: 1fr;
-  }
+  .order-purge-tags { grid-template-columns: 1fr; }
 }
 .cleanup-run-actions {
   display: flex;

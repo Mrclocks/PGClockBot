@@ -116,14 +116,14 @@
   {% if can_adjust_platform_points|default(false) %}
   <div class="card settings-card">
     <h2>تعدیل دستی امتیاز</h2>
-    <p class="muted update-card-caption">فقط ادمین — دلیل الزامی است و در دفترکل ثبت می‌شود.</p>
+    <p class="muted update-card-caption">فقط ادمین — علت الزامی است و در دفترکل ثبت می‌شود.</p>
     <form method="post" action="/loyalty/adjust" class="form-stack">
       <input type="hidden" name="nonce" value="{{ owner_points_nonce }}" />
       <div class="form-row">
         <label class="form-field">شناسه کاربر<input name="user_id" type="number" min="1" required dir="ltr" /></label>
         <label class="form-field">تغییر امتیاز (+/-)<input name="delta" type="number" required dir="ltr" /></label>
       </div>
-      <label class="form-field">دلیل<textarea name="reason" rows="2" required maxlength="255"></textarea></label>
+      <label class="form-field">علت<textarea name="reason" rows="2" required maxlength="255"></textarea></label>
       <div class="actions"><button class="btn" type="submit">ثبت تعدیل</button></div>
     </form>
   </div>
