@@ -17,8 +17,11 @@ import httpx
 from app.services import pg_read_cache
 from app.services.pasarguard import PasarGuardClient
 from app.services.pg_access import (
+    AUDIT_NOTE_API_KEY_LIMITED,
+    AUDIT_NOTE_CUSTOM_KEY_ON_OWNER,
     PG_ADMIN_DISABLED_MSG,
     PG_API_KEY_REJECTED_MSG,
+    public_pg_access_audit,
     resolve_platform_pg_capabilities,
 )
 
@@ -44,7 +47,9 @@ def _json(status: int, body: dict) -> httpx.Response:
     return httpx.Response(status, content=json.dumps(body), headers={"content-type": "application/json"})
 
 
-class CapabilityProbeCredentialTests(unittest.IsolatedAsyncioTestCase):
+class _ProbeHarness(unittest.IsolatedAsyncioTestCase):
+    """Runs the real probe and client against a fake panel; holds no tests."""
+
     def setUp(self) -> None:
         pg_read_cache.clear_store()
         self.requests: list[tuple[str, str]] = []
@@ -70,6 +75,8 @@ class CapabilityProbeCredentialTests(unittest.IsolatedAsyncioTestCase):
                 username="seller", base_url=BASE, use_cache=False, **credentials
             )
 
+
+class CapabilityProbeCredentialTests(_ProbeHarness):
     async def test_rejected_api_key_fails_with_an_api_key_message(self) -> None:
         caps = await self._probe(
             lambda _req: _json(401, {"detail": "Could not validate credentials"}), api_key=API_KEY
@@ -137,6 +144,78 @@ class CapabilityProbeCredentialTests(unittest.IsolatedAsyncioTestCase):
         caps = await self._probe(lambda _req: _json(401, {"detail": "Incorrect username or password"}), password="x")
         self.assertFalse(caps["ok"])
         self.assertIn("نام کاربری یا رمز", caps["error"])
+
+
+def _custom_key_admin(role_id: int, permissions: dict) -> dict:
+    """``GET /api/admin`` for a key created without "inherit permissions"."""
+    return {
+        "id": 1,
+        "username": "seller",
+        "role": {"id": role_id, "name": "Owner", "is_owner": False, "permissions": permissions},
+    }
+
+
+def _roles_panel(admin: dict, roles: list[dict] | None) -> Handler:
+    def panel(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/admin":
+            return _json(200, admin)
+        if request.url.path.startswith("/api/admin-roles"):
+            if roles is None:
+                return _json(403, {"detail": "Permission denied"})
+            return _json(200, {"roles": roles, "total": len(roles)})
+        return _json(404, {"detail": "Not Found"})
+
+    return panel
+
+
+class ApiKeyReportTests(_ProbeHarness):
+    """The setup report explains a key that hides the owner role."""
+
+    async def test_custom_key_on_the_owner_role_is_explained(self) -> None:
+        perms = {"users": {"create": True}, "templates": {"read": True}, "groups": {"read": True}}
+        roles = [{"id": 1, "name": "Owner", "is_owner": True}]
+        caps = await self._probe(_roles_panel(_custom_key_admin(1, perms), roles), api_key=API_KEY)
+        self.assertTrue(caps["ok"])
+        self.assertFalse(caps["pg_is_owner"])
+        self.assertIs(caps["api_key_overrides_owner_role"], True)
+        self.assertEqual(public_pg_access_audit(caps)["notes"], [AUDIT_NOTE_CUSTOM_KEY_ON_OWNER])
+
+    async def test_unreadable_role_list_gives_the_general_api_key_hint(self) -> None:
+        perms = {"templates": {"read": True}, "groups": {"read": True}}
+        caps = await self._probe(_roles_panel(_custom_key_admin(1, perms), None), api_key=API_KEY)
+        self.assertTrue(caps["ok"])
+        self.assertIsNone(caps["api_key_overrides_owner_role"])
+        self.assertEqual(public_pg_access_audit(caps)["notes"], [AUDIT_NOTE_API_KEY_LIMITED])
+
+    async def test_limited_role_without_catalog_access_names_what_is_missing(self) -> None:
+        roles = [{"id": 3, "name": "Seller", "is_owner": False}]
+        admin = _custom_key_admin(3, {"users": {"create": True}})
+        caps = await self._probe(_roles_panel(admin, roles), api_key=API_KEY)
+        self.assertIs(caps["api_key_overrides_owner_role"], False)
+        notes = public_pg_access_audit(caps)["notes"]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("«تمپلیت» و «گروه»", notes[0])
+
+    async def test_password_login_has_no_api_key_note(self) -> None:
+        def panel(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/api/admin/token":
+                return _json(200, {"access_token": "header.payload.sig", "token_type": "bearer"})
+            return _json(200, LIMITED_ADMIN)
+
+        caps = await self._probe(panel, password="right-password")
+        self.assertEqual(caps["auth_method"], "password")
+        self.assertNotIn(("GET", "/api/admin-roles/simple"), self.requests)
+        notes = public_pg_access_audit(caps)["notes"]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("«گروه»", notes[0])
+        self.assertNotIn("«تمپلیت»", notes[0])
+
+    async def test_owner_report_has_no_notes(self) -> None:
+        owner = {"id": 1, "username": "seller", "role": {"id": 1, "is_owner": True}}
+        caps = await self._probe(_roles_panel(owner, []), api_key=API_KEY)
+        self.assertTrue(caps["pg_is_owner"])
+        self.assertNotIn(("GET", "/api/admin-roles/simple"), self.requests)
+        self.assertEqual(public_pg_access_audit(caps)["notes"], [])
 
 
 if __name__ == "__main__":

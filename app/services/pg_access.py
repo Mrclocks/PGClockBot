@@ -256,6 +256,43 @@ async def _read_probe_admin(client: Any, uname: str, *, uses_api_key: bool) -> d
     return {"username": uname}
 
 
+async def _role_is_owner_role(client: Any, role_id: int) -> bool | None:
+    """Whether the PasarGuard role with this id is the owner role; ``None`` if unreadable.
+
+    Report-only: a failure here must never turn a valid login into a failed setup.
+    """
+    try:
+        roles = await client.get_admin_roles()
+    except Exception:
+        logger.debug("admin role list unavailable for the setup report", exc_info=True)
+        return None
+    match = next(
+        (r for r in roles if isinstance(r, dict) and str(r.get("id")) == str(role_id)),
+        None,
+    )
+    if match is None or "is_owner" not in match:
+        return None
+    return bool(match.get("is_owner"))
+
+
+async def _auth_method_fields(
+    client: Any, *, uses_api_key: bool, inspect_key: bool, role_id: int | None
+) -> dict[str, Any]:
+    """How the probe signed in, for the setup report.
+
+    PasarGuard answers a key created without "inherit permissions" with
+    ``is_owner=False`` and only the key's own permissions, even when the
+    admin holds the owner role. ``api_key_overrides_owner_role`` is True when
+    the role list shows exactly that, and ``None`` when it cannot be read.
+    Only the setup and connection-test probes look, to keep the cached
+    request-path probe to one panel call.
+    """
+    fields: dict[str, Any] = {"auth_method": "api_key" if uses_api_key else "password"}
+    if uses_api_key and inspect_key and role_id is not None:
+        fields["api_key_overrides_owner_role"] = await _role_is_owner_role(client, role_id)
+    return fields
+
+
 async def resolve_platform_pg_capabilities(
     *,
     username: str | None = None,
@@ -407,6 +444,14 @@ async def resolve_platform_pg_capabilities(
             "role": role,
             "admin": admin,
         }
+        payload.update(
+            await _auth_method_fields(
+                client,
+                uses_api_key=bool(key),
+                inspect_key=own_client and not pg_is_owner,
+                role_id=role_id,
+            )
+        )
         # Cache only successful probes; failures stay fail-closed without a long TTL.
         if use_cache and not own_client and payload["ok"]:
             cache_put(cache_ident, CAPABILITY_PROBE_PATH, None, dict(payload))
@@ -699,6 +744,51 @@ def staff_from_platform_caps(caps: Mapping[str, Any] | None) -> dict[str, Any]:
     return staff
 
 
+PLAN_CATALOG_FEATURES = ("pg_templates", "pg_groups")
+
+AUDIT_NOTE_CUSTOM_KEY_ON_OWNER = (
+    "این کلید API با «دسترسی سفارشی» ساخته شده است. ادمین در پاسارگارد owner است، "
+    "ولی پاسارگارد چنین کلیدی را هیچ‌وقت owner حساب نمی‌کند و فقط دسترسی‌های خود کلید را می‌پذیرد. "
+    "راه حل: در پاسارگارد برای این کلید «ارث‌بری دسترسی‌ها» را روشن کنید یا با رمز وصل شوید."
+)
+AUDIT_NOTE_API_KEY_LIMITED = (
+    "اتصال با کلید API است. اگر این ادمین در پاسارگارد owner است ولی اینجا حساب محدود نشان داده می‌شود، "
+    "کلید با «دسترسی سفارشی» ساخته شده است؛ برای این کلید «ارث‌بری دسترسی‌ها» را روشن کنید یا با رمز وصل شوید."
+)
+
+
+def _missing_catalog_note(feature_keys: list[str]) -> str | None:
+    missing = [PG_FEATURE_LABELS[k] for k in PLAN_CATALOG_FEATURES if k not in feature_keys]
+    if not missing:
+        return None
+    names = " و ".join(f"«{label}»" for label in missing)
+    return (
+        f"این حساب به {names} پاسارگارد دسترسی ندارد، پس در ساخت پلن قابل انتخاب نیستند. "
+        f"راه حل: در نقش این ادمین (یا دسترسی کلید API) خواندن {names} را فعال کنید."
+    )
+
+
+def _audit_notes(
+    caps: Mapping[str, Any], *, feature_keys: list[str], pg_is_owner: bool
+) -> list[str]:
+    """Plain-language warnings for the setup report; an owner account needs none."""
+    if pg_is_owner:
+        return []
+    notes: list[str] = []
+    if caps.get("auth_method") == "api_key":
+        # True: confirmed owner role behind a custom key. None: role list unreadable,
+        # so explain the possibility. False: a genuinely limited role, nothing to add.
+        overrides_owner = caps.get("api_key_overrides_owner_role")
+        if overrides_owner is True:
+            notes.append(AUDIT_NOTE_CUSTOM_KEY_ON_OWNER)
+        elif overrides_owner is None:
+            notes.append(AUDIT_NOTE_API_KEY_LIMITED)
+    catalog_note = _missing_catalog_note(feature_keys)
+    if catalog_note:
+        notes.append(catalog_note)
+    return notes
+
+
 def public_pg_access_audit(caps: Mapping[str, Any] | None) -> dict[str, Any]:
     """Display-only snapshot of PG ACL. Never an authorization source."""
     from app.services.formatting import format_bytes
@@ -718,6 +808,7 @@ def public_pg_access_audit(caps: Mapping[str, Any] | None) -> dict[str, Any]:
         "can_manage_representatives": False,
         "shop_full": True,
         "limits": [],
+        "notes": [],
     }
     if not caps.get("ok"):
         return empty
@@ -794,6 +885,7 @@ def public_pg_access_audit(caps: Mapping[str, Any] | None) -> dict[str, Any]:
         "can_manage_representatives": can_create,
         "shop_full": True,
         "limits": limits_rows,
+        "notes": _audit_notes(caps, feature_keys=feature_keys, pg_is_owner=pg_is_owner),
     }
 
 
