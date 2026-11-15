@@ -205,7 +205,9 @@ async def assert_mini_force_join(session: AsyncSession, user: BotUser, *, scope:
     token = (scope.bot_token or get_settings().bot_token or "").strip()
     if not token:
         raise HTTPException(503, "bot token missing")
-    bot = Bot(token=token)
+    from app.bot import telegram_session
+
+    bot = Bot(token=token, session=telegram_session())
     try:
         missing, unverified = await check_force_join_all(
             bot,

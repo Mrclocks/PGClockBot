@@ -99,7 +99,9 @@ async def fetch_profile_photo(token: str, telegram_id: int) -> bytes:
     Raises ``TelegramAPIError``, ``aiohttp.ClientError`` or ``asyncio.TimeoutError`` when Telegram
     could not answer; ``TelegramBadRequest`` (an unknown user) counts as no photo.
     """
-    bot = Bot(token=token)
+    from app.bot import telegram_session
+
+    bot = Bot(token=token, session=telegram_session())
     try:
         try:
             photos = await bot.get_user_profile_photos(

@@ -66,7 +66,9 @@ async def resolve_destination(session: AsyncSession) -> Destination:
 
 
 def _open_bot(token: str) -> Bot:
-    return Bot(token=token, default=DefaultBotProperties(parse_mode=None))
+    from app.bot import telegram_session
+
+    return Bot(token=token, session=telegram_session(), default=DefaultBotProperties(parse_mode=None))
 
 
 async def _record(session: AsyncSession, status: str) -> None:

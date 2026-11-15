@@ -117,6 +117,13 @@ class Settings(BaseSettings):
 
     bot_token: str = Field(default="", alias="BOT_TOKEN")
     bot_username: str = Field(default="", alias="BOT_USERNAME")
+    # Optional outbound proxy for Telegram Bot API calls (aiogram AiohttpSession
+    # and the httpx clients in app/services/tg_http.py). Supported schemes:
+    # http://, socks4://, socks5:// and socks5h:// (normalized to socks5 — both
+    # resolve DNS through the proxy). An https:// proxy is NOT supported on the
+    # aiogram side. Use when the server cannot reach api.telegram.org directly.
+    # Empty = direct connection.
+    tg_proxy: str = Field(default="", alias="TG_PROXY")
     # NoDecode: prevent pydantic-settings from json.loads("") on empty ADMIN_IDS
     admin_ids: Annotated[List[int], NoDecode, BeforeValidator(_parse_admin_ids)] = Field(
         default_factory=list,

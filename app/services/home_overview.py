@@ -80,7 +80,10 @@ def _telegram_http() -> httpx.AsyncClient:
     """One client for every probe, so repeated dashboard loads reuse its connection to Telegram."""
     global _telegram_client
     if _telegram_client is None or _telegram_client.is_closed:
-        _telegram_client = httpx.AsyncClient(timeout=BOT_PROBE_TIMEOUT_SEC)
+        # tg_client() honors TG_PROXY; a raw client here would bypass the proxy and hang behind firewalls.
+        from app.services.tg_http import tg_client
+
+        _telegram_client = tg_client(timeout=BOT_PROBE_TIMEOUT_SEC)
     return _telegram_client
 
 

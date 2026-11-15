@@ -4634,9 +4634,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not token:
             return {"ok": False, "error": "توکن تنظیم نشده"}
         try:
-            import httpx
+            # tg_client() honors TG_PROXY; a raw httpx client would bypass the proxy and hang behind firewalls.
+            from app.services.tg_http import tg_client
 
-            async with httpx.AsyncClient(timeout=8.0) as client:
+            async with tg_client(timeout=8.0) as client:
                 resp = await client.get(f"https://api.telegram.org/bot{token}/getMe")
                 data = resp.json()
             if data.get("ok") and isinstance(data.get("result"), dict):
