@@ -2760,9 +2760,9 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
         from app.services.plans_catalog import (
-            groups_allowed_for_staff,
             parse_group_ids_from_form,
             parse_user_plan_duration_days,
+            plan_groups_denial,
             require_catalog_owner_id,
             staff_can_create_pg_template,
             template_allowed_for_staff,
@@ -2811,9 +2811,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     f"/plans?err={quote('حداقل یک گروه پاسارگارد انتخاب کنید')}",
                     status_code=303,
                 )
-            if not groups_allowed_for_staff(staff, ids):
+            groups_denial = plan_groups_denial(staff, ids)
+            if groups_denial:
                 return RedirectResponse(
-                    f"/plans?err={quote('به یکی از گروه‌های انتخاب‌شده دسترسی ندارید')}",
+                    f"/plans?err={quote(groups_denial)}",
                     status_code=303,
                 )
             group_csv = ",".join(str(i) for i in ids)
@@ -2912,8 +2913,8 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
         from app.services.plans_catalog import (
-            groups_allowed_for_staff,
             parse_group_ids_from_form,
+            plan_groups_denial,
             require_catalog_owner_id,
             template_allowed_for_staff,
         )
@@ -2966,9 +2967,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     f"/plans?err={quote('برای پلن تست حداقل یک گروه انتخاب کنید')}",
                     status_code=303,
                 )
-            if ids and not groups_allowed_for_staff(staff, ids):
+            groups_denial = plan_groups_denial(staff, ids) if ids else None
+            if groups_denial:
                 return RedirectResponse(
-                    f"/plans?err={quote('به یکی از گروه‌های انتخاب‌شده دسترسی ندارید')}",
+                    f"/plans?err={quote(groups_denial)}",
                     status_code=303,
                 )
             group_csv = ",".join(str(i) for i in ids) if ids else None
@@ -3032,8 +3034,8 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from app.services.pg_quota import PgQuotaError, assert_custom_plan_range_within_limits
         from app.services.plans_catalog import (
-            groups_allowed_for_staff,
             parse_group_ids_from_form,
+            plan_groups_denial,
             require_catalog_owner_id,
             template_allowed_for_staff,
         )
@@ -3085,9 +3087,10 @@ def create_api_app(lifespan=None) -> FastAPI:
             await set_setting(session, "custom_plan_group_ids", "", reseller_id=owner_id)
         else:
             ids = parse_group_ids_from_form(form)
-            if ids and not groups_allowed_for_staff(staff, ids):
+            groups_denial = plan_groups_denial(staff, ids) if ids else None
+            if groups_denial:
                 return RedirectResponse(
-                    f"/plans?err={quote('به یکی از گروه‌های انتخاب‌شده دسترسی ندارید')}",
+                    f"/plans?err={quote(groups_denial)}",
                     status_code=303,
                 )
             await set_setting(
@@ -3279,9 +3282,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
         from app.services.plans_catalog import (
             get_owned_plan,
-            groups_allowed_for_staff,
             parse_group_ids_from_form,
             parse_user_plan_duration_days,
+            plan_groups_denial,
             template_allowed_for_staff,
         )
 
@@ -3333,9 +3336,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     f"/plans/{plan_id}/edit?err={quote('حداقل یک گروه پاسارگارد انتخاب کنید')}",
                     status_code=303,
                 )
-            if not groups_allowed_for_staff(staff, ids):
+            groups_denial = plan_groups_denial(staff, ids)
+            if groups_denial:
                 return RedirectResponse(
-                    f"/plans/{plan_id}/edit?err={quote('به یکی از گروه‌های انتخاب‌شده دسترسی ندارید')}",
+                    f"/plans/{plan_id}/edit?err={quote(groups_denial)}",
                     status_code=303,
                 )
             group_csv = ",".join(str(i) for i in ids)

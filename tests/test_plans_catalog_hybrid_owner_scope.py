@@ -18,9 +18,12 @@ from __future__ import annotations
 import unittest
 
 from app.services.plans_catalog import (
+    PLAN_GROUPS_DENIED_MESSAGE,
+    ROLE_REQUIRES_TEMPLATE_MESSAGE,
     filter_groups_for_staff,
     filter_templates_for_staff,
     groups_allowed_for_staff,
+    plan_groups_denial,
     template_allowed_for_staff,
 )
 
@@ -188,6 +191,64 @@ class PlatformOwnerWithoutAllowListTests(unittest.TestCase):
         staff["pg_is_owner"] = is_owner
         self.assertTrue(template_allowed_for_staff(staff, 10))
         self.assertTrue(groups_allowed_for_staff(staff, [1, 2]))
+
+
+class RoleRequiresTemplateTests(unittest.IsolatedAsyncioTestCase):
+    """PasarGuard ``require_template`` refuses users created from groups alone.
+
+    A group plan saved for such a role would fail at delivery, after the
+    customer paid, so it must be refused when the plan is saved.
+    """
+
+    def _limited(self, *, require_template: bool, role: str = "admin") -> dict:
+        return {
+            "role": role,
+            "web_owner": role == "admin",
+            "org_principal_id": 1,
+            "org_depth": 0,
+            "org_parent_id": None,
+            "org_status": "active",
+            "pg_is_owner": False,
+            "pg_role": {"id": 3, "is_owner": False},
+            "pg_access": {
+                "require_template": require_template,
+                "allowed_template_ids": None,
+                "allowed_group_ids": None,
+            },
+        }
+
+    def test_group_plan_is_refused_when_the_role_requires_a_template(self):
+        staff = self._limited(require_template=True)
+        self.assertEqual(plan_groups_denial(staff, [1]), ROLE_REQUIRES_TEMPLATE_MESSAGE)
+        self.assertTrue(template_allowed_for_staff(staff, 10))
+
+    def test_group_plan_is_allowed_without_require_template(self):
+        self.assertIsNone(plan_groups_denial(self._limited(require_template=False), [1, 2]))
+
+    def test_owner_is_never_held_to_require_template(self):
+        staff = {"role": "admin", "pg_is_owner": True, "pg_access": {"require_template": True}}
+        self.assertIsNone(plan_groups_denial(staff, [1]))
+
+    def test_reseller_role_requiring_a_template_is_refused_too(self):
+        staff = {
+            "role": "reseller",
+            "reseller_id": 5,
+            "pg_access": {"require_template": True, "allowed_group_ids": [1]},
+        }
+        self.assertEqual(plan_groups_denial(staff, [1]), ROLE_REQUIRES_TEMPLATE_MESSAGE)
+
+    def test_disallowed_group_keeps_the_access_message(self):
+        staff = self._limited(require_template=False)
+        staff["pg_access"]["allowed_group_ids"] = [1]
+        self.assertEqual(plan_groups_denial(staff, [2]), PLAN_GROUPS_DENIED_MESSAGE)
+
+    async def test_plan_import_refuses_groups_for_a_template_only_role(self):
+        from app.services.ux20 import _validate_import_plan
+
+        staff = self._limited(require_template=True)
+        with self.assertRaises(ValueError) as ctx:
+            await _validate_import_plan(None, {"pg_group_ids": "1,2"}, staff=staff)
+        self.assertEqual(str(ctx.exception), ROLE_REQUIRES_TEMPLATE_MESSAGE)
 
 
 if __name__ == "__main__":

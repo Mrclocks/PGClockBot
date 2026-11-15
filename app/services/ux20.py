@@ -1139,7 +1139,7 @@ async def _validate_import_plan(
         return
     from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
     from app.services.plans_catalog import (
-        groups_allowed_for_staff,
+        plan_groups_denial,
         template_allowed_for_staff,
     )
 
@@ -1154,8 +1154,9 @@ async def _validate_import_plan(
             raise ValueError("تمپلیت انتخاب‌شده در دسترس این حساب نیست")
 
     gids = _parse_import_group_ids(raw.get("pg_group_ids"))
-    if gids and not groups_allowed_for_staff(staff, gids):
-        raise ValueError("یکی از گروه‌های پلن در دسترس این حساب نیست")
+    groups_denial = plan_groups_denial(staff, gids) if gids else None
+    if groups_denial:
+        raise ValueError(groups_denial)
 
     duration_days = _import_int(raw.get("duration_days"), "مدت", default=30, maximum=MAX_IMPORT_DURATION_DAYS)
     gb = _import_gb(raw.get("data_limit_gb"))

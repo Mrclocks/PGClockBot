@@ -281,6 +281,33 @@ def groups_allowed_for_staff(staff: dict | None, group_ids: list[int]) -> bool:
     return all(int(g) in allowed for g in group_ids)
 
 
+PLAN_GROUPS_DENIED_MESSAGE = "به یکی از گروه‌های انتخاب‌شده دسترسی ندارید"
+ROLE_REQUIRES_TEMPLATE_MESSAGE = (
+    "نقش پاسارگارد این حساب ساخت سرویس بدون تمپلیت را اجازه نمی‌دهد؛ پلن را با تمپلیت بسازید."
+)
+
+
+def role_requires_template(staff: dict | None) -> bool:
+    """True when PasarGuard rejects a user created without a template for this role.
+
+    PasarGuard's ``access.require_template`` refuses manual (group-based)
+    user creation for every non-owner admin, so a group plan would fail at
+    delivery, after the customer paid.
+    """
+    if not staff or _admin_pg_unrestricted(staff):
+        return False
+    return bool((staff.get("pg_access") or {}).get("require_template"))
+
+
+def plan_groups_denial(staff: dict | None, group_ids: list[int]) -> str | None:
+    """Why a plan cannot be delivered with these groups, or ``None`` when it can."""
+    if role_requires_template(staff):
+        return ROLE_REQUIRES_TEMPLATE_MESSAGE
+    if not groups_allowed_for_staff(staff, group_ids):
+        return PLAN_GROUPS_DENIED_MESSAGE
+    return None
+
+
 def staff_can_create_pg_template(staff: dict | None) -> bool:
     """True only when the principal may perform templates.create (exact ACL)."""
     if not staff:

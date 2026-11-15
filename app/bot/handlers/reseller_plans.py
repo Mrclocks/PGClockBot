@@ -16,8 +16,8 @@ from app.bot.list_pages import page_number
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan, ResellerProfile
 from app.services.plans_catalog import (
-    groups_allowed_for_staff,
     load_pg_plan_options,
+    plan_groups_denial,
     template_allowed_for_staff,
 )
 from app.services.resellers import has_bot_perm
@@ -771,8 +771,9 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
     data = await state.get_data()
     selected = [int(x) for x in (data.get("selected_groups") or [])]
     staff = await _staff_ctx(profile, session)
-    if not selected or not groups_allowed_for_staff(staff, selected):
-        await callback.answer("حداقل یک گروه مجاز انتخاب کنید", show_alert=True)
+    groups_denial = plan_groups_denial(staff, selected) if selected else "حداقل یک گروه مجاز انتخاب کنید"
+    if groups_denial:
+        await callback.answer(groups_denial, show_alert=True)
         return
     cat_raw = data.get("category_id")
     category_id = int(cat_raw) if cat_raw not in (None, "", 0, "0") else None
