@@ -6562,6 +6562,7 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-stic
   opacity: 0.92;
 }
 .user-edit-fields {
+  /* An adjust form (amount or points, «کاهش» / «افزایش», reason) is one full-width column at every width. */
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-2);
@@ -6588,9 +6589,6 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-stic
   grid-template-columns: 1fr 1fr;
   gap: var(--space-2);
   min-width: 0;
-  grid-column: 1 / -1;
-}
-.user-edit-fields > .form-field:has(input[name="amount"]) {
   grid-column: 1 / -1;
 }
 /* Tag-like mode chips (same language as .color-tag-option), full control height */
@@ -6747,6 +6745,14 @@ html[data-theme="light"] .user-edit-wallet-pill.is-negative {
 .svc-item-ops .user-edit-actions {
   margin-top: 0;
 }
+/* «تغییر مانده» and the delete actions: equal columns across the full width (forms without fields are hidden). */
+.svc-item-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+}
+.svc-item-actions > .btn { width: 100%; min-width: 0; }
 /* Byte / ratio amounts (حجم، رم، …):
    Logical string stays «1.12 / 10 گیگ» (unit once, after numbers).
    Presentation is RTL so the Persian unit sits on the visual LEFT of the
@@ -6988,11 +6994,6 @@ td.byte-size {
   flex: 0 0 auto;
   font-size: var(--fs-2);
   text-align: end;
-}
-@media (min-width: 560px) {
-  .user-edit-fields:not(.user-edit-fields--2) {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 /* legacy helpers kept for reseller edit body if reused */
 .svc-ops {
