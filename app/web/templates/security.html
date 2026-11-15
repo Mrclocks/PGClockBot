@@ -1,16 +1,14 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
-{% from "_panel_settings_tabs.html" import panel_settings_tabs %}
-{% block title %}امنیت{% endblock %}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import page_header %}
+{% from "_settings_hub.html" import settings_area_header %}
+{% block title %}{% if is_owner %}تنظیمات سیستم{% else %}حساب و امنیت{% endif %}{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('panel-settings', 'تنظیمات وب پنل', 'neutral', help='settings-panel') }}
-  </div>
-</div>
-
+<div class="ds ds-settings">
 {% if staff.role == 'admin' %}
-{{ panel_settings_tabs('security') }}
+{{ settings_area_header(system_settings_groups('security'), 'security', '/settings?tab=system', 'تنظیمات سیستم', 'panel-settings', 'neutral', help='settings-panel') }}
+{% else %}
+{{ page_header('panel-settings', 'حساب و امنیت', 'neutral', help='settings-panel') }}
 {% endif %}
 
 {% if identity_help %}
@@ -49,7 +47,7 @@
           <div class="pw-field">
             <input id="sec-old-pass" name="current_password" type="password" required autocomplete="current-password" dir="ltr" placeholder="••••••••" />
             <button type="button" class="pw-toggle" data-pw-for="sec-old-pass" aria-label="نمایش رمز" aria-pressed="false">
-              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              {{ icon('eye', 'pw-ico') }}
             </button>
           </div>
           <small class="muted">رمز فعلی پنل</small>
@@ -69,7 +67,7 @@
           <div class="pw-field">
             <input id="sec-new-pass" name="new_password" type="password" required minlength="12" autocomplete="new-password" dir="ltr" placeholder="••••••••" />
             <button type="button" class="pw-toggle" data-pw-for="sec-new-pass" aria-label="نمایش رمز" aria-pressed="false">
-              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              {{ icon('eye', 'pw-ico') }}
             </button>
           </div>
           <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
@@ -96,4 +94,5 @@
   });
 })();
 </script>
+</div>
 {% endblock %}

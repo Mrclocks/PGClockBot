@@ -35,6 +35,7 @@ from app.services.pasarguard import is_pg_permission_denied
 from app.services.pg_read_resilience import PG_READ_UNAVAILABLE_MESSAGE, PgReadUnavailable
 from app.services.service_scope import shop_services_clause
 from app.services.staff_audit import StaffActor
+from app.services.secret_box import reveal_bot_token
 from app.services.ticket_scope import ticket_shop_clause
 from app.services import bot_feedback_texts as feedback
 
@@ -103,8 +104,17 @@ async def resolve_pg_open_url(session: AsyncSession, *, is_admin: bool) -> str:
     return await get_reseller_pg_panel_base_url(session)
 
 
-async def check_pg_connection(*, reseller_user_id: int | None = None, session: AsyncSession | None = None) -> dict[str, Any]:
-    """Lightweight PasarGuard reachability probe."""
+async def check_pg_connection(
+    *,
+    reseller_user_id: int | None = None,
+    session: AsyncSession | None = None,
+    stats_max_age: float | None = None,
+) -> dict[str, Any]:
+    """Lightweight PasarGuard reachability probe.
+
+    ``stats_max_age`` lets a page reuse system stats it already read (the dashboard overview reads them
+    just before); the live ``/home/pg-health`` endpoint leaves it unset.
+    """
     try:
         if reseller_user_id and session is not None:
             from app.services.pasarguard import get_pg_for_reseller
@@ -117,7 +127,7 @@ async def check_pg_connection(*, reseller_user_id: int | None = None, session: A
         await pg.ensure_token()
         stats = None
         try:
-            stats = await pg.get_system_stats()
+            stats = await pg.get_system_stats(cache_max_age=stats_max_age)
         except Exception as exc:
             if not is_pg_permission_denied(exc):
                 raise
@@ -609,6 +619,7 @@ async def clone_plan(session: AsyncSession, plan_id: int, *, owner_reseller_id: 
         owner_reseller_id=src.owner_reseller_id,
         is_active=False,
         is_trial=bool(src.is_trial),
+        carry_remaining_quota=bool(getattr(src, "carry_remaining_quota", True)),
         sort_order=int(src.sort_order or 0),
     )
     session.add(copy)
@@ -698,6 +709,7 @@ async def create_charge_code(
     max_uses_per_user: int | None = None,
     first_purchase_only: bool = False,
     purchase_types: str | list[str] | None = None,
+    plan_ids: str | list[str] | None = None,
     audit: StaffActor | None = None,
 ) -> ChargeCode:
     from app.services.gift_codes import create_gift_code
@@ -707,7 +719,7 @@ async def create_charge_code(
         note=note, code=code, kind=kind, percent=percent,
         max_discount_toman=max_discount_toman, expires_at=expires_at,
         max_uses_per_user=max_uses_per_user, first_purchase_only=first_purchase_only,
-        purchase_types=purchase_types, audit=audit,
+        purchase_types=purchase_types, plan_ids=plan_ids, audit=audit,
     )
 
 
@@ -1011,8 +1023,10 @@ async def build_magic_links_context(session: AsyncSession, staff: dict) -> dict[
             )
         ).scalar_one_or_none()
         bot_username = (profile.bot_username if profile else None) or None
-        if not bot_username and profile and profile.bot_token:
-            st = await check_bot_connection(profile.bot_token)
+        token = reveal_bot_token(profile.bot_token) if profile else None
+        if not bot_username and token:
+            # Shop tokens are stored sealed; Telegram needs the plain token.
+            st = await check_bot_connection(token)
             bot_username = st.get("username")
     else:
         st = await check_bot_connection(get_settings().bot_token)
@@ -1084,14 +1098,14 @@ def shop_bundle_allowed_setting_keys() -> set[str]:
         RESELLER_SETTINGS_TABS,
         SHOP_SETTINGS_DOMAIN_POST_TABS,
     )
-    from app.services.users import keys_for_tab
+    from app.services.users import PLATFORM_ONLY_SETTING_KEYS, keys_for_tab
 
     keys: set[str] = {"menu_order"}
     for tab, _label in RESELLER_SETTINGS_TABS:
         keys |= keys_for_tab(tab)
     for tab in SHOP_SETTINGS_DOMAIN_POST_TABS:
         keys |= keys_for_tab(tab)
-    return keys
+    return keys - PLATFORM_ONLY_SETTING_KEYS
 
 
 def _parse_import_group_ids(raw: Any) -> list[int]:

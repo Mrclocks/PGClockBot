@@ -103,15 +103,23 @@ class VisibilityTests(AddonCase):
         self.assertEqual(await self.names(12, "volume", shop_id=5), ["SHOP10"])
         self.assertNotIn("SHOP10", await self.names(10, "volume"))
 
-    async def test_a_pack_without_scope_matches_nobody(self):
+    async def test_a_pack_without_a_category_is_offered_everywhere_even_without_the_flag(self):
         async with self.Session() as session:
-            session.add(ServiceAddonPack(id=8, name="ORPHAN", kind="volume", amount=3, price=1, is_general=False))
+            session.add(ServiceAddonPack(id=8, name="UNLABELED", kind="volume", amount=3, price=1, is_general=False))
             await session.commit()
         for service_id in (10, 11):
-            self.assertNotIn("ORPHAN", await self.names(service_id, "volume"))
+            self.assertIn("UNLABELED", await self.names(service_id, "volume"))
 
 
 class PurchaseTests(AddonCase):
+    async def test_an_unlabeled_pack_can_be_bought_for_a_categorized_service(self):
+        async with self.Session() as session:
+            session.add(ServiceAddonPack(id=8, name="UNLABELED", kind="volume", amount=3, price=77, is_general=False))
+            await session.commit()
+            service, pack = await session.get(UserService, 10), await session.get(ServiceAddonPack, 8)
+            order = await create_addon_order(session, user_id=1, service=service, pack=pack)
+            self.assertEqual(order.amount, 77)
+
     async def test_a_general_pack_can_be_bought_for_a_categorized_service(self):
         async with self.Session() as session:
             service, pack = await session.get(UserService, 10), await session.get(ServiceAddonPack, 2)
@@ -183,14 +191,15 @@ class CategoryDeleteTests(AddonCase):
             self.assertIsNone((await session.get(Plan, 1)).category_id)
             self.assertTrue((await session.get(ServiceAddonPack, 3)).is_general)
 
-    async def test_deleting_a_category_never_widens_its_pack_to_everyone(self):
-        # Even if the category disappears underneath a pack (database-level SET NULL),
-        # the pack stays category-scoped and matches nothing instead of becoming general.
+    async def test_a_pack_whose_category_vanished_underneath_it_is_shown_as_unlabeled(self):
+        # The app refuses to delete a category that still has packs, which is what keeps a
+        # category pack scoped. If the row disappears anyway (database-level SET NULL) the pack is
+        # an unlabeled pack: shown everywhere rather than hidden from every customer.
         async with self.Session() as session:
             await session.execute(text("UPDATE service_addon_packs SET category_id = NULL WHERE id = 3"))
             await session.commit()
         for service_id in (10, 11):
-            self.assertNotIn("VIP10", await self.names(service_id, "volume"))
+            self.assertIn("VIP10", await self.names(service_id, "volume"))
 
     async def test_another_shops_packs_do_not_block_a_category(self):
         async with self.Session() as session:

@@ -72,6 +72,8 @@ class SubScreenBackTests(unittest.IsolatedAsyncioTestCase):
     async def _run(self, handler, plan: MagicMock, **patches):
         callback = MagicMock(answer=AsyncMock(), message=MagicMock())
         edit = AsyncMock()
+        if getattr(plan, "id", None) is None or not isinstance(getattr(plan, "id", None), int):
+            plan.id = 1
         with (
             patch.object(reseller, "_capacity_context",
                          new=AsyncMock(return_value=(5, MagicMock(pg_admin_username="a"), plan, MagicMock()))),
@@ -91,6 +93,14 @@ class SubScreenBackTests(unittest.IsolatedAsyncioTestCase):
                   return_value="invoice"),
             patch("app.services.pg_admin_subscription.list_addon_plans",
                   new=AsyncMock(return_value=[])),
+            patch(
+                "app.services.reseller_plan_extra_packs.buyable_packs_for_plan",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch(
+                "app.services.reseller_plan_extra_packs.active_amounts_for_plan",
+                new=AsyncMock(return_value=frozenset({1, 5, 10, 50, 20})),
+            ),
         ):
             await handler(callback, MagicMock(), SimpleNamespace(id=5))
         return _callbacks(edit.await_args.kwargs["reply_markup"])

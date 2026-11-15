@@ -12,6 +12,7 @@ Never deleted, whatever the switches say:
 * anything with an open gateway checkout or a gateway payment waiting for staff review,
   or a void still being processed: money may still arrive or be owed;
 * payments of an order that is still open.
+* orders and payments whose random-discount amount is still protected.
 
 One order (with its payments) or one payment is one unit of work, committed alone and
 re-checked at the point of deletion, so a second run at the same moment deletes nothing twice.
@@ -35,6 +36,8 @@ from app.db.models import (
     PaymentSettlement,
     PaymentStatus,
     PaymentVoid,
+    RandomDiscountDraw,
+    RandomDiscountReservation,
     ResellerSetting,
     SettlementStatus,
 )
@@ -42,6 +45,7 @@ from app.services.authz import authz_from_staff, can_shop
 from app.services.db_safe import rollback_quiet
 from app.services.orders import release_unpaid_order_holds
 from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.stale_order_cleanup import disable_all_legacy_soft_cancel
 from app.services.user_purge import purge_row_references
 from app.services.users import get_all_settings, set_settings_bulk
 from app.services.ux20 import payment_shop_clause
@@ -58,7 +62,6 @@ KEY_LAST_KIND = "cleanup_purge_last_kind"
 DEFAULT_DAYS = 30
 MIN_DAYS = 1
 MAX_DAYS = 3650
-RULES_PATH = "/finance/cleanup/purge-rules"
 RUN_PATH = "/finance/cleanup/purge-run"
 # Rows deleted per run and shop; a larger backlog is finished by the next run.
 BATCH = 200
@@ -79,6 +82,7 @@ class PurgeTag:
     table: str
     status: str
     label: str
+    hint: str = ""
 
     @property
     def token(self) -> str:
@@ -86,18 +90,18 @@ class PurgeTag:
 
 
 ORDER_TAGS: tuple[PurgeTag, ...] = (
-    PurgeTag(ORDER, OrderStatus.PENDING.value, "در انتظار"),
-    PurgeTag(ORDER, OrderStatus.AWAITING_RECEIPT.value, "منتظر رسید"),
-    PurgeTag(ORDER, OrderStatus.AWAITING_APPROVAL.value, "منتظر تأیید"),
-    PurgeTag(ORDER, OrderStatus.DELIVERED.value, "تحویل‌شده"),
-    PurgeTag(ORDER, OrderStatus.REJECTED.value, "ردشده"),
-    PurgeTag(ORDER, OrderStatus.CANCELLED.value, "لغوشده"),
+    PurgeTag(ORDER, OrderStatus.PENDING.value, "در انتظار", "هنوز پرداخت شروع نشده"),
+    PurgeTag(ORDER, OrderStatus.AWAITING_RECEIPT.value, "منتظر رسید", "رسید هنوز ارسال نشده"),
+    PurgeTag(ORDER, OrderStatus.AWAITING_APPROVAL.value, "منتظر تأیید", "رسید آمده؛ تأیید نشده"),
+    PurgeTag(ORDER, OrderStatus.DELIVERED.value, "تحویل‌شده", "سرویس ساخته شده؛ فقط ردیف سفارش"),
+    PurgeTag(ORDER, OrderStatus.REJECTED.value, "ردشده", "پرداخت رد شده"),
+    PurgeTag(ORDER, OrderStatus.CANCELLED.value, "لغوشده", "سفارش لغو شده"),
 )
 PAYMENT_TAGS: tuple[PurgeTag, ...] = (
-    PurgeTag(PAYMENT, PaymentStatus.PENDING.value, "در انتظار"),
-    PurgeTag(PAYMENT, PaymentStatus.APPROVED.value, "تأییدشده"),
-    PurgeTag(PAYMENT, PaymentStatus.REJECTED.value, "ردشده"),
-    PurgeTag(PAYMENT, PaymentStatus.VOIDED.value, "باطل‌شده"),
+    PurgeTag(PAYMENT, PaymentStatus.PENDING.value, "در انتظار", "پرداخت باز روی سفارش بسته‌شده"),
+    PurgeTag(PAYMENT, PaymentStatus.APPROVED.value, "تأییدشده", "پرداخت تأییدشدهٔ سفارش بسته‌شده"),
+    PurgeTag(PAYMENT, PaymentStatus.REJECTED.value, "ردشده", "پرداخت ردشده"),
+    PurgeTag(PAYMENT, PaymentStatus.VOIDED.value, "باطل‌شده", "پرداخت باطل‌شده"),
 )
 TAGS: dict[str, PurgeTag] = {tag.token: tag for tag in (*ORDER_TAGS, *PAYMENT_TAGS)}
 
@@ -150,7 +154,10 @@ def rules_from_settings(settings: Mapping[str, str]) -> PurgeRules:
 
 
 def purge_scope(staff: dict) -> int | None:
-    """Shop whose rows ``staff`` may delete (``None`` = platform); raises ``PermissionError``."""
+    """Shop whose rows ``staff`` may delete (``None`` = platform); raises ``PermissionError``.
+
+    Permanent deletion stays on ``orders_purge`` only (deny by default).
+    """
     if is_platform_admin(staff):
         return None
     if not can_shop(authz_from_staff(staff), PURGE_PERMISSION):
@@ -198,14 +205,30 @@ def _order_shop(shop_id: int | None) -> ColumnElement[bool]:
     return Order.reseller_id.is_(None) if shop_id is None else Order.reseller_id == int(shop_id)
 
 
-def _order_query(shop_id: int | None, statuses: list[str], cutoff: datetime):
+def _random_amount_protected(shop_id: int | None, now: datetime) -> ColumnElement[bool]:
+    draw = exists(select(RandomDiscountDraw.id).where(
+        RandomDiscountDraw.order_id == Order.id,
+        RandomDiscountDraw.shop_key == (shop_id or 0), RandomDiscountDraw.reseller_id == shop_id,
+        RandomDiscountDraw.protected_until > now,
+    ))
+    reservation = exists(select(RandomDiscountReservation.id).where(
+        RandomDiscountReservation.order_id == Order.id,
+        RandomDiscountReservation.shop_key == (shop_id or 0),
+        RandomDiscountReservation.final_amount == Order.amount,
+        RandomDiscountReservation.protected_until > now,
+    ))
+    return or_(draw, reservation)
+
+
+def _order_query(shop_id: int | None, statuses: list[str], cutoff: datetime, *, now: datetime | None = None):
     busy = exists(select(Payment.id).where(Payment.order_id == Order.id, _money_may_still_move(Payment.id)))
     return select(Order.id).where(
-        _order_shop(shop_id), Order.status.in_(statuses), Order.created_at <= cutoff, ~busy
+        _order_shop(shop_id), Order.status.in_(statuses), Order.created_at <= cutoff, ~busy,
+        ~_random_amount_protected(shop_id, now or datetime.now(timezone.utc)),
     )
 
 
-def _payment_query(shop_id: int | None, statuses: list[str], cutoff: datetime):
+def _payment_query(shop_id: int | None, statuses: list[str], cutoff: datetime, *, now: datetime | None = None):
     order_closed = or_(Payment.order_id.is_(None), Order.status.in_(tuple(CLOSED_ORDER_STATUSES)))
     return (
         select(Payment.id)
@@ -213,6 +236,7 @@ def _payment_query(shop_id: int | None, statuses: list[str], cutoff: datetime):
         .where(
             payment_shop_clause(shop_id), Payment.status.in_(statuses), Payment.created_at <= cutoff,
             order_closed, ~_money_may_still_move(Payment.id),
+            ~_random_amount_protected(shop_id, now or datetime.now(timezone.utc)),
         )
     )
 
@@ -234,14 +258,14 @@ async def count_purgeable(
     order_statuses = _statuses(tags, ORDER)
     payment_statuses = _statuses(tags, PAYMENT)
     if order_statuses:
-        order_ids = _order_query(shop_id, order_statuses, cutoff)
+        order_ids = _order_query(shop_id, order_statuses, cutoff, now=now)
         orders = await _count(session, order_ids)
         payments += await _count(session, select(Payment.id).where(Payment.order_id.in_(order_ids)))
     if payment_statuses:
-        standalone = _payment_query(shop_id, payment_statuses, cutoff)
+        standalone = _payment_query(shop_id, payment_statuses, cutoff, now=now)
         if order_statuses:
             # Already counted with their order.
-            standalone = standalone.where(~Payment.order_id.in_(_order_query(shop_id, order_statuses, cutoff)) | Payment.order_id.is_(None))
+            standalone = standalone.where(~Payment.order_id.in_(_order_query(shop_id, order_statuses, cutoff, now=now)) | Payment.order_id.is_(None))
         payments += await _count(session, standalone)
     return PurgeCounts(orders=orders, payments=payments)
 
@@ -251,9 +275,19 @@ async def _delete_payments(session: AsyncSession, where: ColumnElement[bool]) ->
     return int((await session.execute(delete(Payment).where(where))).rowcount or 0)
 
 
-async def _purge_one_order(session: AsyncSession, order_id: int, *, shop_id: int | None, statuses: list[str]) -> int | None:
+async def _purge_one_order(
+    session: AsyncSession, order_id: int, *, shop_id: int | None, statuses: list[str], now: datetime | None = None,
+) -> int | None:
     """Delete one order with its payments; the number of payments deleted, or None when it was kept."""
-    still = and_(Order.id == order_id, _order_shop(shop_id), Order.status.in_(statuses))
+    still = and_(
+        Order.id == order_id, _order_shop(shop_id), Order.status.in_(statuses),
+        ~_random_amount_protected(shop_id, now or datetime.now(timezone.utc)),
+    )
+    # Lock the order before removing children, so a concurrent draw cannot lose its lease.
+    locked = await session.execute(update(Order).where(still).values(status=Order.status))
+    if locked.rowcount != 1:
+        await rollback_quiet(session)
+        return None
     order = (await session.execute(select(Order).where(still))).scalar_one_or_none()
     if order is None:
         return None
@@ -285,9 +319,12 @@ async def _purge_one_order(session: AsyncSession, order_id: int, *, shop_id: int
     return payments
 
 
-async def _purge_one_payment(session: AsyncSession, payment_id: int, *, shop_id: int | None, statuses: list[str], cutoff: datetime) -> bool:
+async def _purge_one_payment(
+    session: AsyncSession, payment_id: int, *, shop_id: int | None, statuses: list[str], cutoff: datetime,
+    now: datetime | None = None,
+) -> bool:
     """Delete one payment when it still matches the rules at this moment."""
-    still = Payment.id.in_(_payment_query(shop_id, statuses, cutoff).where(Payment.id == payment_id))
+    still = Payment.id.in_(_payment_query(shop_id, statuses, cutoff, now=now).where(Payment.id == payment_id))
     if await _delete_payments(session, still) != 1:
         await rollback_quiet(session)
         return False
@@ -304,10 +341,10 @@ async def run_purge(
     payment_statuses = _statuses(tags, PAYMENT)
     orders = payments = 0
     if order_statuses:
-        ids = list((await session.scalars(_order_query(shop_id, order_statuses, cutoff).order_by(Order.id).limit(BATCH))).all())
+        ids = list((await session.scalars(_order_query(shop_id, order_statuses, cutoff, now=now).order_by(Order.id).limit(BATCH))).all())
         for order_id in ids:
             try:
-                with_order = await _purge_one_order(session, int(order_id), shop_id=shop_id, statuses=order_statuses)
+                with_order = await _purge_one_order(session, int(order_id), shop_id=shop_id, statuses=order_statuses, now=now)
                 if with_order is not None:
                     orders += 1
                     payments += with_order
@@ -315,11 +352,11 @@ async def run_purge(
                 logger.exception("order purge failed order=%s shop=%s", order_id, shop_id)
                 await rollback_quiet(session)
     if payment_statuses:
-        ids = list((await session.scalars(_payment_query(shop_id, payment_statuses, cutoff).order_by(Payment.id).limit(BATCH))).all())
+        ids = list((await session.scalars(_payment_query(shop_id, payment_statuses, cutoff, now=now).order_by(Payment.id).limit(BATCH))).all())
         for payment_id in ids:
             try:
                 payments += int(
-                    await _purge_one_payment(session, int(payment_id), shop_id=shop_id, statuses=payment_statuses, cutoff=cutoff)
+                    await _purge_one_payment(session, int(payment_id), shop_id=shop_id, statuses=payment_statuses, cutoff=cutoff, now=now)
                 )
             except Exception:
                 logger.exception("payment purge failed payment=%s shop=%s", payment_id, shop_id)
@@ -377,7 +414,10 @@ def _last_run_view(settings: Mapping[str, str]) -> dict[str, object] | None:
 async def purge_panel_context(
     session: AsyncSession, staff: dict, settings: Mapping[str, str], *, return_to: str
 ) -> dict[str, object] | None:
-    """Template values for the cleanup tab, or None when ``staff`` may not delete rows."""
+    """Template values for the tag-based cleanup tab, or None when ``staff`` may not delete rows.
+
+    Read-only: does not write settings. Legacy soft-cancel is disabled by the hourly job.
+    """
     try:
         shop_id = purge_scope(staff)
     except PermissionError:
@@ -391,26 +431,45 @@ async def purge_panel_context(
         "ready": await count_purgeable(session, shop_id=shop_id, tags=rules.tags, days=rules.days),
         "auto_on": rules.auto,
         "last_run": _last_run_view(settings),
-        "rules_action": f"{RULES_PATH}?next={quote(return_to)}",
         "run_action": f"{RUN_PATH}?next={quote(return_to)}",
     }
 
 
-SHOP_SCAN_LIMIT = 2000
+SHOP_SCAN_PAGE = 2000
 
 
 async def _shops_with_auto_rules(session: AsyncSession) -> list[int]:
-    rows = await session.scalars(
-        select(ResellerSetting.reseller_user_id)
-        .where(ResellerSetting.key == KEY_AUTO, ResellerSetting.value == "1")
-        .order_by(ResellerSetting.reseller_user_id)
-        .limit(SHOP_SCAN_LIMIT)
-    )
-    return [int(shop_id) for shop_id in rows.all()]
+    """Every shop with automatic purge on, keyset-paged so the scan is not capped at one page."""
+    shops: list[int] = []
+    after_id = 0
+    while True:
+        rows = await session.scalars(
+            select(ResellerSetting.reseller_user_id)
+            .where(
+                ResellerSetting.key == KEY_AUTO,
+                ResellerSetting.value == "1",
+                ResellerSetting.reseller_user_id > after_id,
+            )
+            .order_by(ResellerSetting.reseller_user_id)
+            .limit(SHOP_SCAN_PAGE)
+        )
+        page = [int(shop_id) for shop_id in rows.all()]
+        if not page:
+            break
+        shops.extend(page)
+        after_id = page[-1]
+        if len(page) < SHOP_SCAN_PAGE:
+            break
+    return shops
 
 
 async def auto_purge_all_shops(session: AsyncSession) -> int:
-    """One automatic pass over the platform and every shop that switched it on; one failure does not stop the rest."""
+    """One automatic pass over the platform and every shop that switched purge on.
+
+    First turns off legacy soft-cancel everywhere (no tag/auto writes — operators must
+    opt into permanent deletion themselves). One shop failure does not stop the rest.
+    """
+    await disable_all_legacy_soft_cancel(session)
     total = 0
     for shop_id in [None, *await _shops_with_auto_rules(session)]:
         try:

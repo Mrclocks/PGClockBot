@@ -6,7 +6,10 @@ every refusal uses the same generic text, and the checks live in ``services.serv
 
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
@@ -22,6 +25,7 @@ from app.bot.nav_input import (
     register_cancel_code,
     try_legacy_cancel,
 )
+from app.bot.import_prompt import HIDE_DONE, HOME_ADD_CALLBACK, HOME_HIDE_CALLBACK
 from app.bot.service_import_ui import ADD_CALLBACK, announce_new_request, import_enabled
 from app.db.models import BotUser
 from app.services.formatting import format_message, service_card
@@ -33,9 +37,11 @@ from app.services.service_import import (
     ServiceImportError,
     import_existing_service,
 )
-from app.services.users import get_all_settings
+from app.services.service_import_offer import dismiss_offer
+from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services import bot_feedback_texts as feedback
 
+logger = logging.getLogger(__name__)
 router = Router(name="service_import")
 
 CANCEL_CODE = "svc_imp"
@@ -83,6 +89,37 @@ async def svc_add_existing(
         callback, state, prompt=PROMPT, cancel_code=CANCEL_CODE,
         fsm_state=ServiceImportStates.await_link, edit=True,
     )
+
+
+@router.callback_query(F.data == HOME_ADD_CALLBACK)
+async def svc_add_existing_from_home(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+) -> None:
+    """The home offer: the link prompt is a new message and the offer under the welcome goes away."""
+    ui = await get_all_settings(session)
+    if not import_enabled(ui):
+        await callback.answer(NOT_ENABLED, show_alert=True)
+        return
+    await callback.answer()
+    offer = callback.message
+    await ask_text(callback, state, prompt=PROMPT, cancel_code=CANCEL_CODE, fsm_state=ServiceImportStates.await_link)
+    if offer is not None:
+        try:
+            await offer.delete()
+        except TelegramAPIError:
+            logger.debug("home offer already gone", exc_info=True)
+
+
+@router.callback_query(F.data == HOME_HIDE_CALLBACK)
+async def svc_hide_home_offer(callback: CallbackQuery, session: AsyncSession, db_user: BotUser) -> None:
+    """«نمایش نده»: the home offer never comes back for this customer in this shop."""
+    await dismiss_offer(session, int(db_user.id), current_shop_reseller_id())
+    await callback.answer(HIDE_DONE)
+    if callback.message is not None:
+        try:
+            await callback.message.delete()
+        except TelegramAPIError:
+            logger.debug("home offer already gone", exc_info=True)
 
 
 @router.message(ServiceImportStates.await_link)

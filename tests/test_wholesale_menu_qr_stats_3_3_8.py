@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+from tests.template_source import template_with_includes
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -94,20 +95,6 @@ class CompactAdminMenuTests(unittest.TestCase):
         self.assertIn("📊 داشبورد", flat)
 
 
-class QrPreviewBackgroundTests(unittest.TestCase):
-    def test_preview_markup_has_bg_img(self):
-        html = (ROOT / "app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8")
-        self.assertIn('id="pv-qr-bg"', html)
-        self.assertIn("tg-qr-bg", html)
-
-    def test_preview_js_applies_background(self):
-        js = (ROOT / "app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        self.assertIn("applyQrBackground", js)
-        self.assertIn("qr_background", js)
-        self.assertIn("createObjectURL", js)
-        self.assertIn("s_qr_background", js)
-
-
 class WholesaleLogicTests(unittest.TestCase):
     def test_parse_tiers_and_price(self):
         from app.services.orders import (
@@ -158,7 +145,7 @@ class WholesaleLogicTests(unittest.TestCase):
         self.assertNotIn("فروش عمده", sflat)
 
     def test_web_modal_and_route_exist(self):
-        html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        html = template_with_includes("plans.html")
         self.assertIn("panel-user-wholesale", html)
         self.assertIn("modal-plan-unified", html)
         self.assertIn("/plans/wholesale", html)

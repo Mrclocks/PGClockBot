@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, CampaignRecipient, MarketingPreference, TargetedCampaign
@@ -54,14 +55,23 @@ async def block_trial_users(
     return BlockResult(changed=changed, refused=refused + len(wanted) - len(ids))
 
 
+async def _campaign_for_key(session: AsyncSession, shop_id: int | None, request_key: str) -> TargetedCampaign | None:
+    shop_clause = TargetedCampaign.reseller_id.is_(None) if shop_id is None else TargetedCampaign.reseller_id == int(shop_id)
+    return await session.scalar(select(TargetedCampaign).where(TargetedCampaign.request_key == request_key, shop_clause))
+
+
 async def message_trial_users(
-    session: AsyncSession, *, staff: dict, shop_id: int | None, user_ids: list[int], text: str
+    session: AsyncSession, *, staff: dict, shop_id: int | None, user_ids: list[int], text: str,
+    request_key: str | None = None,
 ) -> TargetedCampaign:
     """Queue one message to the chosen trial takers through the shop's own bot.
 
     Customers who blocked or opted out of marketing are left out of the snapshot; the
-    sender checks both again at send time.
+    sender checks both again at send time. A repeated ``request_key`` of the same shop returns
+    the campaign it already created instead of queuing a second one.
     """
+    if request_key and (existing := await _campaign_for_key(session, shop_id, request_key)):
+        return existing
     body = clean_campaign_text(text)
     wanted = parse_bulk_ids(user_ids)
     allowed = await trial_taker_ids(session, shop_id=shop_id, user_ids=wanted)
@@ -91,9 +101,17 @@ async def message_trial_users(
         text=body,
         status="running",
         created_by=_actor_label(staff),
+        request_key=request_key,
     )
     session.add(campaign)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError:
+        # A concurrent call with the same key won the unique index: hand back its campaign.
+        await session.rollback()
+        if request_key and (existing := await _campaign_for_key(session, shop_id, request_key)):
+            return existing
+        raise
     session.add_all([CampaignRecipient(campaign_id=campaign.id, user_id=uid) for uid in recipients])
     await session.commit()
     return campaign

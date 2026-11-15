@@ -152,24 +152,7 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
         self.assertRegex(html, r'href="/static/panel\.css\?v=[^" ]+"')
         self.assertIn(f'src="/static/panel.js?v={get_panel_asset_cache_key("panel.js")}"', html)
         self.assertIn(f'src="/static/panel_widget_request.js?v={get_panel_asset_cache_key("panel_widget_request.js")}"', html)
-
-    def test_shop_settings_has_live_preview(self):
-        shop = (ROOT / "app/web/templates/shop_settings.html").read_text(encoding="utf-8")
-        self.assertIn('_tg_preview_appearance.html', shop)
-        self.assertIn('_tg_preview_chat.html', shop)
-        self.assertIn('_tg_preview_appearance_js.html', shop)
-        self.assertIn('_tg_preview_chat_js.html', shop)
-        admin = (ROOT / "app/web/templates/settings.html").read_text(encoding="utf-8")
-        self.assertIn('_tg_preview_appearance.html', admin)
-        self.assertIn('_tg_preview_chat.html', admin)
-        # Shared partials exist
-        for name in (
-            "_tg_preview_appearance.html",
-            "_tg_preview_chat.html",
-            "_tg_preview_appearance_js.html",
-            "_tg_preview_chat_js.html",
-        ):
-            self.assertTrue((ROOT / "app/web/templates" / name).is_file())
+        self.assertIn(f'src="/static/panel_ok_flash.js?v={get_panel_asset_cache_key("panel_ok_flash.js")}"', html)
 
 class DeleteButtonAndKebabTests(unittest.TestCase):
     def test_btn_danger_matches_soft_tint_style(self):
@@ -177,7 +160,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         block = re.search(r"(?ms)^\.btn-danger\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
         body = block.group(1)
-        self.assertIn("background: rgba(239, 68, 68, 0.12)", body)
+        self.assertIn("background: color-mix(in srgb, var(--destructive) 7%, transparent)", body)
         self.assertIn("color: var(--destructive-fg)", body)
         self.assertNotIn("0.92", body)
 
@@ -186,15 +169,16 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         block = re.search(r"(?ms)^\.btn-ok\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
         body = block.group(1)
-        self.assertIn("background: rgba(34, 197, 94, 0.12)", body)
-        self.assertIn("color: var(--ok-fg)", body)
+        # Approve actions follow the panel brand colour like the other main actions.
+        self.assertIn("background: color-mix(in srgb, var(--brand) 8%, transparent)", body)
+        self.assertIn("color: var(--brand-fg)", body)
 
     def test_btn_warn_matches_soft_tint_style(self):
         css = CSS.read_text(encoding="utf-8")
         block = re.search(r"(?ms)^\.btn-warn\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
         body = block.group(1)
-        self.assertIn("background: rgba(234, 179, 8, 0.12)", body)
+        self.assertIn("background: color-mix(in srgb, var(--warn) 7%, transparent)", body)
         self.assertIn("color: var(--warn-fg)", body)
 
     def test_modal_above_chrome(self):
@@ -265,7 +249,10 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
     def test_update_warns_stay_on_page(self):
         from jinja2 import Environment, FileSystemLoader
 
+        from app.services.numbers import to_fa_digits
+
         env = Environment(loader=FileSystemLoader(str(ROOT / "app/web/templates")), autoescape=True)
+        env.filters["fa"] = to_fa_digits
         html = env.get_template("_settings_update.html").render(
             update_info={"update_available": True, "remote_version": "9.9.9", "checked": True, "label": ""},
             status={"state": "running"},
@@ -287,7 +274,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         panel = re.search(r"(?ms)^\.ui-modal-panel\s*\{([^}]+)\}", css)
         self.assertIsNotNone(panel)
         body = panel.group(1)
-        self.assertIn("font-size: 14px", body)
+        self.assertIn("font-size: var(--fs-3)", body)
         self.assertIn("text-size-adjust: 100%", body)
         self.assertIn("-webkit-text-size-adjust: 100%", body)
         self.assertIn(".ui-modal-panel p", css)
@@ -301,7 +288,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         ):
             src = (ROOT / rel).read_text(encoding="utf-8")
             self.assertIn('data-modal-close', src)
-            self.assertIn('class="ico"', src)
+            self.assertIn("icon('close', 'ico')", src)
             self.assertNotRegex(src, r'data-modal-close[^>]*>\s*×\s*<')
         js = JS.read_text(encoding="utf-8")
         self.assertIn("ui-modal-panel", js)
@@ -314,17 +301,46 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("margin-top: auto", body)
         # Align with .side-foot baseline
         self.assertIn("padding-top: var(--page-title-gap)", body)
-        # star button should be shorter than primary --btn-h
-        self.assertIn("min-height: 28px", css)
+        # Same matte glass as modal sticky chrome
+        self.assertIn("background: var(--modal-frost-bg);", body)
+        self.assertIn("backdrop-filter: var(--modal-frost-blur);", body)
+        self.assertIn("border-top: 1px solid var(--modal-frost-line);", body)
+        # star button uses the compact tier, shorter than the primary --btn-h
+        self.assertIn("min-height: var(--ctl-sm-h)", css)
         # sidebar footer must stay at the pre-compact sizing
         side = re.search(r"(?ms)^\.side-foot\s*\{([^}]+)\}", css)
         self.assertIsNotNone(side)
-        self.assertIn("padding-top: var(--page-title-gap)", side.group(1))
+        side_body = side.group(1)
+        self.assertIn("padding-top: var(--page-title-gap)", side_body)
+        self.assertIn("background: var(--modal-frost-bg);", side_body)
+        self.assertIn("backdrop-filter: var(--modal-frost-blur);", side_body)
         logout = re.search(r"(?ms)^\.logout-link\s*\{([^}]+)\}", css)
         self.assertIsNotNone(logout)
-        self.assertIn("font-size: 13px", logout.group(1))
-        self.assertIn("height: 28px", logout.group(1))
+        self.assertIn("font-size: var(--fs-3)", logout.group(1))
+        self.assertIn("height: var(--ctl-sm-h)", logout.group(1))
         self.assertIn("padding: 0 var(--space-1)", logout.group(1))
+
+    def test_shell_chrome_matches_modal_frost(self):
+        """Mobile topbar / drawer use the same frost tokens."""
+        css = CSS.read_text(encoding="utf-8")
+        # Prefer the fixed chrome block (not the short `.topbar { direction: ltr; }`)
+        top = re.search(
+            r"(?ms)^\.topbar\s*\{([^}]*background:\s*var\(--modal-frost-bg\);[^}]*)\}",
+            css,
+        )
+        self.assertIsNotNone(top)
+        top_body = top.group(1)
+        self.assertIn("backdrop-filter: var(--modal-frost-blur);", top_body)
+        self.assertIn("border-bottom: 1px solid var(--modal-frost-line);", top_body)
+        self.assertIn("var(--topbar-pad-bottom)", top_body)
+        self.assertIn("padding: var(--safe-top) var(--space-2) var(--topbar-pad-bottom);", top_body)
+        self.assertNotIn("topbar-pad-top", top_body)
+        self.assertIn("--topbar-pad-bottom: var(--space-1_5);", css)
+        self.assertIn("--topbar-content-h: 58px;", css)
+        self.assertRegex(
+            css,
+            r"(?ms)\.side-panel\s*\{[^}]*backdrop-filter:\s*var\(--modal-frost-blur\);",
+        )
 
     def test_block_button_is_warn_update_is_ok(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")

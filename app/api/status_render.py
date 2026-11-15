@@ -5,11 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from functools import partial
+
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
+from app.services.panel_assets import asset_version
+from app.services.updates import local_version
+
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
+templates.env.globals["asset_v"] = partial(asset_version, fallback=local_version())
 
 
 def render_status_page(

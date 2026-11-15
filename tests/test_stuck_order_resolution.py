@@ -249,7 +249,7 @@ class RouteTests(StuckCase):
         return await self.client.post(path, headers=headers, data={})
 
     async def test_the_refund_route_refunds_tells_the_customer_once_and_reports(self):
-        with patch("app.api.delivery_failure_pages.notify_payer", AsyncMock(return_value=True)) as notify:
+        with patch("app.services.stuck_order_resolution.notify_payer", AsyncMock(return_value=True)) as notify:
             response = await self.post(OWNER_SESSION, "/orders/10/refund-stuck-order")
             again = await self.post(OWNER_SESSION, "/orders/10/refund-stuck-order")
         self.assertIn("ok=", response.headers["location"])

@@ -73,6 +73,8 @@ class FinanceReportsNormalizeTests(unittest.TestCase):
 class FinanceReportsUiTests(unittest.TestCase):
     def test_finance_reports_first_tab(self):
         html = (ROOT / "app/web/templates/finance.html").read_text(encoding="utf-8")
+        # The tab strip lives in its own partial, shared with the PAYG report page.
+        html += (ROOT / "app/web/templates/_finance_tabs.html").read_text(encoding="utf-8")
         reports_at = html.find('tab=reports">گزارشات')
         orders_at = html.find('tab=orders">سفارشات')
         self.assertGreater(reports_at, -1)
@@ -111,7 +113,6 @@ class FinanceReportsUiTests(unittest.TestCase):
         self.assertIn(".ui-select-menu.users-svc-boxed", css)
         self.assertIn(".users-ops-table .col-svc", css)
         self.assertIn("bottom: 0", css)
-        self.assertIn("tg-preview-gate > .actions", css)
 
     def test_bot_hooks(self):
         kb = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")

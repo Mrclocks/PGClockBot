@@ -1,23 +1,25 @@
 {% extends "base.html" %}
-{% from "_marketing_tabs.html" import marketing_tabs %}
+{% from "macros.html" import page_header %}
 {% block title %}کمپین هدفمند{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
-<div class="page-head"><h1>{{ self.title() }}</h1></div>
-{{ marketing_tabs(marketing_sections|default(()), 'campaigns') }}
+<div class="ds ds-settings">
+{{ page_header('broadcast', self.title(), back='/marketing', back_label='بازاریابی') }}
 {% if request.query_params.get('error') %}<div class="flash warn">{{ request.query_params.get('error') }}</div>{% endif %}
 <div class="card"><h2>انتخاب مخاطبان</h2><form method="get" action="/campaigns" class="form-stack">
 <label class="form-field">گروه<select name="audience">{% for key, label in audiences.items() %}<option value="{{ key }}" {% if key == audience %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
 <label class="form-field">بازهٔ روز<input name="days" type="number" value="{{ days }}" min="1" max="365" required></label><button class="btn" type="submit">پیش‌نمایش مخاطبان</button></form>
-<p>{{ count }} مخاطب واجد شرایط؛ سقف هر کمپین {{ limit }} نفر.</p>
+<p>{{ (count) | fa }} مخاطب واجد شرایط؛ سقف هر کمپین {{ (limit) | fa }} نفر.</p>
 <p class="muted">گروه «نزدیک انقضا» از اطلاعات ۲۴ ساعت اخیر ساخته می‌شود و گروه «غیرفعال» از نداشتن خرید در این فروشگاه. کاربران مسدودشده یا لغوکننده حذف می‌شوند. فهرست مخاطبان نمایش داده نمی‌شود.</p>
 <form method="post" action="/campaigns" class="form-stack"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="audience" value="{{ audience }}"><input type="hidden" name="days" value="{{ days }}">
 <label class="form-field">متن سادهٔ پیام<textarea name="text" rows="6" required maxlength="3500"></textarea></label><button class="btn" type="submit">ساخت پیش‌نویس و تثبیت مخاطبان</button></form></div>
 {% set campaign_labels = {'draft':'پیش‌نویس', 'running':'در حال ارسال', 'paused':'متوقف', 'completed':'تکمیل‌شده', 'review':'تکمیل با موارد نیازمند بررسی'} %}
 {% set recipient_labels = {'pending':'در صف', 'sending':'در حال ارسال', 'sent':'ارسال‌شده', 'failed':'ناموفق', 'skipped':'حذف‌شده از ارسال', 'review':'نتیجه نامشخص'} %}
-{% for row, progress in campaigns %}<div class="card" id="campaign-{{ row.id }}"><h2>کمپین #{{ row.id }} — {{ "اطلاع‌رسانی تغییر قیمت" if row.audience == "catalog_discount" else ("پیام به کاربران تست" if row.audience == "selected" else audiences[row.audience]) }}</h2><p>{{ campaign_labels[row.status] }}</p><p style="white-space:pre-wrap">{{ row.text }}</p>
+{% for row, progress in campaigns %}<div class="card" id="campaign-{{ row.id }}"><h2>کمپین #{{ row.id }} — {{ "اطلاع‌رسانی تغییر قیمت" if row.audience == "catalog_discount" else ("پیام به کاربران تست" if row.audience == "selected" else audiences[row.audience]) }}</h2><p>{{ campaign_labels[row.status] }}</p><p class="text-pre-wrap">{{ row.text }}</p>
 <p>{% for status, count in progress.items() %}{{ recipient_labels[status] }}: {{ count }} {% endfor %}</p>
 {% if progress.get('review') %}<p class="muted">پیام‌هایی که نتیجهٔ ارسالشان نامشخص است خودکار دوباره ارسال نمی‌شوند.</p>{% endif %}
 {% if row.status in ['draft', 'paused', 'running'] %}<form method="post" action="/campaigns/{{ row.id }}/{% if row.status == 'running' %}pause{% else %}start{% endif %}" {% if row.status != 'running' %}data-confirm="ارسال این متن به مخاطبان پیش‌نمایش‌شده آغاز شود؟"{% endif %}>
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">{% if row.status == 'running' %}توقف ارسال{% elif row.status == 'paused' %}ادامهٔ ارسال{% else %}شروع ارسال{% endif %}</button></form>{% endif %}
 </div>{% endfor %}
+</div>
 {% endblock %}

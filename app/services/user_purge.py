@@ -21,7 +21,7 @@ from sqlalchemy import ColumnElement, Table, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Base
-from app.db.models import BotUser
+from app.db.models import BotUser, RandomDiscountReservation
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,8 @@ SHOP_OWNED_TABLES: frozenset[str] = frozenset(
         "plan_categories",
         "plans",
         "points_rules",
+        "random_discounts",
+        "random_discount_draws",
         "service_addon_packs",
         "service_automations",
         "targeted_campaigns",
@@ -88,8 +90,10 @@ async def purge_user_references(session: AsyncSession, user_id: int) -> None:
     """Remove or detach every row that still points at ``user_id``.
 
     The ``bot_users`` row itself is left for the caller to delete. The caller owns
-    the transaction; nothing is committed here.
+    the transaction; nothing is committed here. Intentional customer/shop deletion
+    removes surprise-discount history and leases; routine order cleanup preserves them.
     """
+    await session.execute(delete(RandomDiscountReservation).where(RandomDiscountReservation.shop_key == user_id))
     await _purge_children(
         session,
         BotUser.__table__,

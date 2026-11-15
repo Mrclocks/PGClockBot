@@ -272,11 +272,13 @@ class PrincipalPageSourceContracts(unittest.TestCase):
         self.assertNotIn('name="depth"', tpl)
 
     def test_nav_owner_only_and_not_reseller_label(self) -> None:
-        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("نمایندگان من", base)
-        self.assertIn('href="/resellers"', base)
-        self.assertNotIn('href="/principals"', base)
-        self.assertIn("ident.can_add_representative", base)
+        from tests.sidebar_view import owner_sidebar, sidebar
+
+        shop = sidebar("reseller", perms=("dashboard",), add_rep=True)["shop"]
+        self.assertIn(("نمایندگان من", "/resellers"), shop)
+        self.assertNotIn("نمایندگان من", [label for label, _ in sidebar("reseller", perms=("dashboard",))["shop"]])
+        every_href = [h for nav in (shop, *owner_sidebar().values()) for _, h in nav]
+        self.assertNotIn("/principals", every_href)
 
     def test_identity_chrome_labels_in_footer(self) -> None:
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")

@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from tests.reason_support import ReasonedState
 from app.db import Base
 import app.db.models  # noqa: F401
 from app.db.models import BotUser, ResellerProfile, Role
@@ -637,13 +638,13 @@ class Phase4CBotPgUsersTests(unittest.IsolatedAsyncioTestCase):
 
             cb_r = SimpleNamespace(data="adm:pg:reset:101", answer=AsyncMock(), message=None)
             with self._enter(patches):
-                await mod.pg_reset(cb_r, db_user=fx.ua, session=session)
+                await mod.pg_reset(cb_r, db_user=fx.ua, session=session, state=ReasonedState(cb_r.data))
             fake_pg.reset_user_by_id.assert_awaited_once_with(101)
 
             cb_f = SimpleNamespace(data="adm:pg:reset:102", answer=AsyncMock(), message=None)
             fake_pg.reset_user_by_id.reset_mock()
             with self._enter(patches):
-                await mod.pg_reset(cb_f, db_user=fx.ua, session=session)
+                await mod.pg_reset(cb_f, db_user=fx.ua, session=session, state=ReasonedState(cb_f.data))
             fake_pg.reset_user_by_id.assert_not_called()
 
 

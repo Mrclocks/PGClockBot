@@ -41,6 +41,7 @@ from aiogram.methods import (
     SendDocument,
     SendMessage,
     SendPhoto,
+    SendRichMessage,
     SendVideo,
     SendVoice,
     TelegramMethod,
@@ -61,7 +62,7 @@ from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
 
-SEND_METHODS = (SendMessage, SendPhoto, SendDocument, SendVideo, SendAnimation, SendAudio, SendVoice)
+SEND_METHODS = (SendMessage, SendRichMessage, SendPhoto, SendDocument, SendVideo, SendAnimation, SendAudio, SendVoice)
 EDIT_METHODS = (EditMessageText, EditMessageCaption, EditMessageMedia)
 # Chats whose shown keyboard this process remembers; older ones simply get it sent again.
 REMEMBERED_CHATS = 20_000

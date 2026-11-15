@@ -1,13 +1,14 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "macros.html" import switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label, empty_state %}
+{% from "_ds.html" import ds_modal_head, ds_foot %}
 {% block title %}پلن‌های نمایندگی{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('plans', 'پلن‌های نمایندگی', help='plans') }}
-  </div>
-  <button type="button" class="btn" data-modal-open="modal-plan-create">پلن جدید</button>
-</div>
+<div class="ds ds-settings">
+{% call(slot) page_header('plans', 'پلن‌های نمایندگی', help='plans') %}
+  {%- if slot == 'primary' %}
+  <button type="button" class="btn" data-modal-open="modal-plan-create">{{ act_label('پلن جدید', 'پلن') }}</button>
+  {%- endif %}
+{% endcall %}
 
 <div class="section-tabs">
   {% for t in tabs %}
@@ -45,21 +46,18 @@
         <td class="li-only-cell li-sub"><span dir="auto">{{ p.description or '—' }}</span></td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">پلنی نیست — تا پلن نسازید دکمه درخواست در بات برای کاربر بی‌فایده است</td></tr>
+      {{ empty_state('پلنی نیست — تا پلن نسازید دکمه درخواست در بات برای کاربر بی‌فایده است', 'plans', colspan=5) }}
     {% endfor %}
     </tbody>
   </table>
   </div>
 </div>
 
-<div class="ui-modal" id="modal-plan-create" hidden>
+<div class="ui-modal ds" id="modal-plan-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
-  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      {{ modal_title('plans', 'پلن جدید', caption='پلن نمایندگی جدید بسازید', tone='brand') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-    <form method="post" action="/resellers/plans" class="form-stack">
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="modal-plan-create-title">
+    {{ ds_modal_head('plans', 'پلن نمایندگی جدید', 'modal-plan-create-title') }}
+    <form method="post" action="/resellers/plans" class="form-stack ds-body">
       <div class="form-row">
         <div>
           <label class="form-field">نام
@@ -107,11 +105,9 @@
           {% endfor %}
         </select>
       </label>
-      <div class="actions">
-        <button class="btn" type="submit">ذخیره پلن</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
+      {{ ds_foot('ذخیره پلن') }}
     </form>
   </div>
+</div>
 </div>
 {% endblock %}

@@ -4,27 +4,28 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from tests.template_source import template_with_includes
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class PlansModalDynamicKindTests(unittest.TestCase):
     def test_kind_select_marked_dynamic(self):
-        html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        html = template_with_includes("plans.html")
         self.assertIn('id="plan-kind"', html)
         self.assertIn("data-plan-kind-dynamic", html)
-        self.assertIn("data-ui-select-watch", html)
+        # The kind cards drive a plain hidden select (no custom dropdown on top of it).
+        self.assertIn('id="plan-kind" data-plan-kind-dynamic="1" data-ui-select="1" hidden', html)
         # Static user-only kinds must NOT be hard-coded as permanent HTML options
         # (JS fills from USER_KINDS / RESELLER_KINDS). Placeholder may have fixed only.
-        kind_block = html[
-            html.find('id="plan-kind"') : html.find('id="plan-kind"') + 400
-        ]
+        start = html.find('id="plan-kind"')
+        kind_block = html[start : html.find("</select>", start)]
         self.assertNotIn('value="custom"', kind_block)
         self.assertNotIn('value="trial"', kind_block)
         self.assertNotIn('value="wholesale"', kind_block)
 
     def test_js_has_separate_kind_lists(self):
-        html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        html = template_with_includes("plans.html")
         self.assertIn("USER_KINDS", html)
         self.assertIn("RESELLER_KINDS", html)
         self.assertIn("function setKindOptions", html)
@@ -40,7 +41,7 @@ class PlansModalDynamicKindTests(unittest.TestCase):
         self.assertNotIn("trial", reseller_block)
 
     def test_audience_change_resets_kind(self):
-        html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        html = template_with_includes("plans.html")
         self.assertIn("Switching audience: reset to the first kind", html)
         self.assertIn("kindsFor(audience)[0].value", html)
         self.assertIn("syncResellerBilling", html)

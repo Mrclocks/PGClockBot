@@ -75,7 +75,11 @@ class ShopAdminPersonaTests(unittest.IsolatedAsyncioTestCase):
                 await set_setting(session, SHOP_SWITCH, "1", reseller_id=shop)
         clear_settings_cache()
         settings = SimpleNamespace(miniapp_enabled=True, bot_token=MAIN_TOKEN, currency="تومان")
-        self.patches = [patch("app.services.miniapp_auth.get_settings", return_value=settings)]
+        # A real platform admin is listed in ADMIN_IDS; anyone else loses the admin role on load.
+        self.patches = [
+            patch("app.services.miniapp_auth.get_settings", return_value=settings),
+            patch("app.services.users.get_settings", return_value=SimpleNamespace(admin_ids=[ADMIN_TG])),
+        ]
         for p in self.patches:
             p.start()
 

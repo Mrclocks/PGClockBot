@@ -28,6 +28,7 @@ from app.services.orders import (
     is_addon_order_note,
     is_mutation_order_note,
 )
+from tests.template_source import template_with_includes
 
 
 def _staff(*, role: str, bot_user_id: int | None = None) -> dict:
@@ -157,9 +158,9 @@ class ServiceAddonScopeTests(unittest.TestCase):
         # A general pack fits every category and uncategorized services.
         self.assertTrue(pack_matches_service_category(general, None))
         self.assertTrue(pack_matches_service_category(general, 7))
-        # A pack that lost its category without being general matches nothing.
-        self.assertFalse(pack_matches_service_category(orphan, None))
-        self.assertFalse(pack_matches_service_category(orphan, 7))
+        # A pack without a category is offered everywhere, whatever its general flag says.
+        self.assertTrue(pack_matches_service_category(orphan, None))
+        self.assertTrue(pack_matches_service_category(orphan, 7))
 
     def test_note_parse_snapshot_and_legacy(self):
         self.assertEqual(
@@ -196,7 +197,7 @@ class WiringTests(unittest.TestCase):
     def test_templates_and_routes(self):
         from pathlib import Path
 
-        plans = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
+        plans = template_with_includes("plans.html")
         self.assertIn("modal-plan-categories", plans)
         self.assertIn("modal-service-addons", plans)
         self.assertIn("برچسب دسته", plans)

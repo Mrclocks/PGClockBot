@@ -83,6 +83,8 @@ class NotifyDispatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["admins"])
         send_user.assert_awaited()
         send_admins.assert_awaited()
+        markup = send_admins.await_args.kwargs["markup"]
+        self.assertEqual([b.callback_data for row in markup.inline_keyboard for b in row], ["adm:users:view:1"])
 
 
 class UiWiringTests(unittest.TestCase):

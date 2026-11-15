@@ -76,7 +76,9 @@ class DashboardAndBulkTests(unittest.TestCase):
         js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn("pay-dest-remove-btn", js)
-        self.assertIn("btn-danger btn-sm pay-dest-remove", js)
+        # Delete is a labelled trash icon, not a text button
+        self.assertIn('class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"', js)
+        self.assertNotIn(">حذف</button>", js)
         self.assertNotIn("pay-dest-actions", js)
         self.assertIn(".pay-dest-remove-btn", css)
 

@@ -254,7 +254,9 @@ class CustomerFlowTests(_Flow):
         details = next((m for m in self.sim.telegram.visible() if "کارت به کارت" in m.text), None)
         self.assertIsNotNone(details, self.sim.screen())
         self.assertEqual(details.inline, [])  # its «انصراف» no longer applies
-        self.assertTrue(any("رسید دریافت شد" in t for t in texts), texts)
+        receipt = next((t for t in texts if "رسید دریافت شد" in t), None)
+        self.assertIsNotNone(receipt, texts)
+        self.assertNotIn("خوش آمدید", receipt or "", "receipt ack must not re-send the welcome")
         self.assertTrue(any("کیف پول" in t for t in texts), texts)
         self.assertEqual(len(self.sim.telegram.keyboard_carriers()), 1)
 

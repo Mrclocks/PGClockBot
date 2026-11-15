@@ -11,7 +11,9 @@ from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.cleanup_settings import ACK_RETIRED_PATH, SAVE_PATH as CLEANUP_SAVE_PATH
 from app.services.order_purge import purge_panel_context
+from app.services.stale_order_cleanup import soft_cancel_retired_notice_on
 from app.db.models import BotUser, Order, Payment, Plan
 from app.services.authz import authz_from_staff, can_shop
 from app.services.dashboard_trend import sales_trend_or_empty
@@ -27,7 +29,6 @@ from app.services.list_query import (
 from app.services.payment_voids import list_voids
 from app.services.receipt_files import fetch_telegram_file, payment_bot_token
 from app.services.shop_scope import is_platform_admin, payment_shop_id, shop_owner_id
-from app.services.stale_order_cleanup import cleanup_status
 from app.services.stuck_order_resolution import describe_stuck_orders
 from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
 
@@ -149,13 +150,15 @@ def register_finance_pages(app, *, render, require_staff, get_db):
 
         search_q = normalize_search_q(request.query_params.get("q"))
         open_settings = (request.query_params.get("settings") or "").strip()
-        if open_settings not in {"payment", "billing", "cleanup", "purge"}:
+        if open_settings == "purge":
+            open_settings = "cleanup"  # the deletion rules moved into the cleanup tab
+        if open_settings not in {"payment", "billing", "cleanup"}:
             open_settings = ""
         if open_settings == "billing" and not can_billing_settings:
             open_settings = "payment" if can_finance_settings else ""
         if open_settings and not can_finance_settings:
             open_settings = ""
-        if open_settings == "cleanup" and staff.get("role") != "admin" and not can_shop(authz, "shop_settings"):
+        if open_settings == "cleanup" and staff.get("role") != "admin" and not can_shop(authz, "orders_purge"):
             open_settings = ""
 
         ctx: dict = {
@@ -165,7 +168,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "can_payments": can_payments,
             "can_finance_settings": can_finance_settings,
             "can_billing_settings": can_billing_settings and can_finance_settings,
-            "can_pending_orders": staff.get("role") == "admin",
+            "can_pending_orders": False,
             "open_finance_settings": open_settings,
             "q": search_q,
             "orders": [],
@@ -191,11 +194,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "billing_groups": {},
             "payment_settings_action": "",
             "billing_settings_action": "",
-            "finance_pending_action": "",
-            "cleanup_tab_groups": [],
-            "cleanup_groups": {},
             "cleanup_settings_action": "",
-            "cleanup_status": None,
+            "soft_cancel_retired_notice": False,
+            "soft_cancel_retired_ack_action": "",
             "purge": None,
             "receipt_matches": {},
             "report": {},
@@ -224,9 +225,6 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             ctx["payment_groups"] = pay_groups
             ctx["billing_tab_groups"] = bill_groups_names
             ctx["billing_groups"] = bill_groups
-            clean_groups_names, clean_groups = _groups_for_tab("cleanup")
-            ctx["cleanup_tab_groups"] = clean_groups_names
-            ctx["cleanup_groups"] = clean_groups
             next_base = f"/finance?tab={tab}"
             if is_platform_admin(staff):
                 ctx["values"] = await get_all_settings(session)
@@ -236,16 +234,12 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 ctx["billing_settings_action"] = (
                     f"/settings?tab=billing&next={quote(next_base + '&settings=billing')}"
                 )
-                ctx["cleanup_settings_action"] = (
-                    f"/settings?tab=cleanup&next={quote(next_base + '&settings=cleanup')}"
+                ctx["cleanup_settings_action"] = f"{CLEANUP_SAVE_PATH}?next={quote(next_base + '&settings=cleanup')}"
+                ctx["soft_cancel_retired_ack_action"] = (
+                    f"{ACK_RETIRED_PATH}?next={quote(next_base + '&settings=payment')}"
                 )
-                ctx["finance_pending_action"] = (
-                    "/settings/cancel-pending-orders?next="
-                    + quote(next_base + "&settings=cleanup")
-                )
-                ctx["cleanup_status"] = await cleanup_status(session, ctx["values"], reseller_id=None)
                 ctx["purge"] = await purge_panel_context(
-                    session, staff, ctx["values"], return_to=next_base + "&settings=purge"
+                    session, staff, ctx["values"], return_to=next_base + "&settings=cleanup"
                 )
             else:
                 rid = shop_owner_id(staff)
@@ -255,21 +249,19 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                         f"/shop-settings?tab=payment&next={quote(next_base + '&settings=payment')}"
                     )
                     ctx["can_billing_settings"] = False
-                    ctx["can_pending_orders"] = True
-                    ctx["cleanup_settings_action"] = (
-                        f"/shop-settings?tab=cleanup&next={quote(next_base + '&settings=cleanup')}"
-                    )
-                    ctx["finance_pending_action"] = (
-                        "/shop-settings/cancel-pending-orders?next="
-                        + quote(next_base + "&settings=cleanup")
-                    )
-                    ctx["cleanup_status"] = await cleanup_status(
-                        session, ctx["values"], reseller_id=int(rid)
+                    ctx["cleanup_settings_action"] = f"{CLEANUP_SAVE_PATH}?next={quote(next_base + '&settings=cleanup')}"
+                    ctx["soft_cancel_retired_ack_action"] = (
+                        f"{ACK_RETIRED_PATH}?next={quote(next_base + '&settings=payment')}"
                     )
                     ctx["purge"] = await purge_panel_context(
-                        session, staff, ctx["values"], return_to=next_base + "&settings=purge"
+                        session, staff, ctx["values"], return_to=next_base + "&settings=cleanup"
                     )
                 # else: leave values={} — fail-closed / degraded, no Owner fallback
+            if ctx["values"]:
+                ctx["soft_cancel_retired_notice"] = soft_cancel_retired_notice_on(ctx["values"])
+            ctx["can_pending_orders"] = ctx["purge"] is not None
+            if open_settings == "cleanup" and not ctx["can_pending_orders"]:
+                ctx["open_finance_settings"] = "payment" if can_finance_settings else ""
 
         # Marker for scope tests: fetch_limit replaced by SQL pagination.
         fetch_limit = 0  # unused; kept as anchor for shop-settings scope tests

@@ -1,13 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_header %}
 {% block title %}گزارش کارکنان{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('users', 'گزارش کارکنان', 'neutral') }}
-    <p class="muted">کارهای مهم کارکنان همین فروشگاه، تازه‌ترین در بالا. این فهرست قابل ویرایش یا حذف نیست.</p>
-  </div>
-</div>
+<div class="ds ds-settings">
+{{ page_header('users', 'گزارش کارکنان', 'neutral') }}
+<p class="muted page-intro">کارهای مهم کارکنان همین فروشگاه، تازه‌ترین در بالا. این فهرست قابل ویرایش یا حذف نیست.</p>
 
 <div class="card card-flush">
   {% if not actions %}
@@ -46,4 +43,5 @@
   <a class="btn btn-ghost" href="/staff-actions?before={{ next_before }}">موارد قدیمی‌تر</a>
 </div>
 {% endif %}
+</div>
 {% endblock %}

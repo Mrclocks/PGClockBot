@@ -32,6 +32,7 @@ class ShopOrderAttributionTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("app.services.orders.get_catalog_plan", new=AsyncMock(return_value=plan)),
             patch("app.services.orders.apply_discount", new=AsyncMock(return_value=(0, None))),
+            patch("app.services.orders.apply_random_discount", new=AsyncMock(return_value=False)) as random_discount,
             patch("app.services.orders._shop_reseller_id", return_value=42),
             patch("app.services.orders.require_purchase_contact", new=AsyncMock()),
             # The shop's volume ceiling is covered elsewhere; this test is about attribution.
@@ -51,6 +52,7 @@ class ShopOrderAttributionTests(unittest.IsolatedAsyncioTestCase):
         order = captured["order"]
         self.assertEqual(order.reseller_id, 42)
         self.assertNotEqual(order.reseller_id, 99)
+        self.assertEqual(random_discount.call_args.args[1].reseller_id, 42)
 
     async def test_get_catalog_plan_hides_other_shop(self):
         from app.services.orders import get_catalog_plan

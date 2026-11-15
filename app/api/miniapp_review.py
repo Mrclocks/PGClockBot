@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.miniapp_pages import _no_store
 from app.services.db_safe import rollback_quiet
 from app.services.miniapp_auth import load_mini_user
+from app.services.miniapp_shop import SHOP_OWNER_ONLY, is_shop_miniapp_owner, mini_scope
 from app.services.receipt_review import (
     Reviewer,
     ReviewDenied,
@@ -50,7 +51,14 @@ def _valid_id(value: int) -> int:
 
 async def _reviewer(session: AsyncSession, request: Request) -> Reviewer:
     user = await load_mini_user(session, request)
+    scope = mini_scope(request)
     try:
+        if scope.is_shop:
+            # Defense in depth: allowlist opens the route for every shop caller;
+            # only the owner of *this* shop may review, and only that shop's queue.
+            if not is_shop_miniapp_owner(scope, user):
+                raise ReviewDenied(SHOP_OWNER_ONLY)
+            return await mini_reviewer(session, user, shop_scope_id=int(scope.shop_id))
         return await mini_reviewer(session, user)
     except ReviewError as exc:
         raise _review_http_error(exc) from None

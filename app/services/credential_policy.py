@@ -352,7 +352,7 @@ def friendly_pg_error(text: str, *, status_code: int | None = None) -> str:
     if status_code == 401:
         return "ورود به پاسارگارد ناموفق بود. نام کاربری یا رمز را بررسی کنید."
     if status_code == 404:
-        return "مورد درخواستی در پاسارگارد پیدا نشد."
+        return "این مورد در پاسارگارد وجود ندارد یا از پنل حذف شده است."
     if status_code in {500, 502, 503, 504}:
         return "پاسارگارد موقتاً در دسترس نیست. کمی بعد دوباره تلاش کنید."
     if status_code == 429:
@@ -386,6 +386,18 @@ def friendly_pg_error(text: str, *, status_code: int | None = None) -> str:
     if status_code == 422:
         return f"پاسارگارد داده را نامعتبر دانست: {raw[:300]}"
     return raw
+
+
+TEMPLATE_NAME_CONFLICT_MESSAGE = "این نام قبلاً استفاده شده است. یک نام دیگر انتخاب کنید."
+
+
+def template_create_error_message(exc: object) -> str:
+    """Persian message for a failed PasarGuard template creation."""
+    from app.services.redact import user_safe_error
+
+    if getattr(exc, "status_code", None) == 409:
+        return TEMPLATE_NAME_CONFLICT_MESSAGE
+    return user_safe_error(exc)
 
 
 def generate_compliant_password(length: int = 14) -> str:

@@ -139,7 +139,7 @@ class BreakerThresholdTests(unittest.IsolatedAsyncioTestCase):
             await self._page_read("/down")
         state = resilience._STATES[BASE + "/"]
         paused_until = state.blocked_until
-        budget = resilience.ReadBudget(self.clock.now + 4.0)
+        budget = resilience.ReadBudget(deadline=self.clock.now + 4.0, allowed_sec=4.0)
         resilience._record_outage(state, budget, "timeout")
         self.assertEqual(state.blocked_until, paused_until)
         self.assertEqual(state.pause_count, 1)

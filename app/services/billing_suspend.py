@@ -14,6 +14,7 @@ from app.services.billing import (
     get_low_balance_threshold,
     is_payg,
 )
+from app.services.staff_notice_buttons import shop_panel_markup
 
 logger = logging.getLogger(__name__)
 
@@ -358,7 +359,7 @@ async def _send_reseller_dm(
             bot = create_bot()
             close = True
         try:
-            await bot.send_message(int(telegram_id), text, parse_mode="HTML")
+            await bot.send_message(int(telegram_id), text, parse_mode="HTML", reply_markup=shop_panel_markup())
         finally:
             if close and bot is not None:
                 await bot.session.close()

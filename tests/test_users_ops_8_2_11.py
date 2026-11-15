@@ -93,7 +93,7 @@ class UsersOpsUnitTests(unittest.TestCase):
 class UsersOpsUiTests(unittest.TestCase):
     def test_template_has_ops_chrome(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn("users-ops-overview", users)
+        self.assertNotIn("stat_strip(", users)
         self.assertIn("alert-dot", users)
         self.assertIn("badge-risk", users)
         self.assertIn("cell-name-tags", users)
@@ -148,8 +148,9 @@ class UsersOpsUiTests(unittest.TestCase):
         self.assertIn(".badge.badge-risk", css)
         self.assertNotIn(".risk-dot {", css)
 
-        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("مشتریان", base)
+        from tests.sidebar_view import sidebar
+
+        self.assertIn(("مشتریان", "/users"), sidebar("reseller", perms=("dashboard",))["shop"])
 
     def test_action_center_deep_link(self):
         ux = (ROOT / "app/services/ux20.py").read_text(encoding="utf-8")

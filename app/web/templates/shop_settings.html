@@ -1,17 +1,19 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "_icons.html" import icon %}
+{% from "_settings_hub.html" import settings_hub, settings_area_header %}
 {% from "_shop_settings_tabs.html" import shop_settings_tabs %}
 {% block title %}تنظیمات فروشگاه{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('bot-settings', 'تنظیمات فروشگاه', help='settings-bot') }}
-  </div>
-</div>
-
+<div class="ds ds-settings">
+{% set is_hub = not request.query_params.get('tab') %}
+{{ settings_area_header(tab_nav|default(()), tab, '/shop-settings', 'تنظیمات فروشگاه', 'bot-settings', help='settings-bot', is_hub=is_hub) }}
+{% if is_hub %}
+{{ settings_hub(hub_sections(tab_nav, '/shop-settings', area_icon='bot')) }}
+{% else %}
 {{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path, tab_nav|default(none)) }}
 
-<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','daily_report'] %}can-preview{% endif %}" id="settings-layout">
+<div class="settings-layout">
   <div class="settings-main">
 
   {% if tab == 'notifications' %}
@@ -99,12 +101,12 @@
                 <strong>{{ item.label }}</strong>
               </div>
               <div class="dnd-actions">
-                <button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>
-                <button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
+                <button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا">{{ icon('chev-up', 'ico') }}</button>
+                <button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین">{{ icon('chev-down', 'ico') }}</button>
                 {% if not item.required %}
-                <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+                <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف">{{ icon('close', 'ico') }}</button>
                 {% else %}
-                <span class="icon-btn icon-move icon-fixed" title="همیشه در منو است — با ▲▼ جابه‌جا می‌شود" aria-label="قابل جابه‌جایی، غیرقابل حذف" role="img"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"/></svg></span>
+                <span class="icon-btn icon-move icon-fixed" title="همیشه در منو است — با ▲▼ جابه‌جا می‌شود" aria-label="قابل جابه‌جایی، غیرقابل حذف" role="img">{{ icon('minus', 'ico') }}</span>
                 {% endif %}
               </div>
             </li>
@@ -120,7 +122,7 @@
                 <strong>{{ item.label }}</strong>
               </div>
               <div class="dnd-actions">
-                <button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+                <button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن">{{ icon('plus', 'ico') }}</button>
               </div>
             </li>
             {% endfor %}
@@ -167,20 +169,8 @@
   {% endif %}
 
   </div>
-
-  {% if tab == 'appearance' %}
-  {% include "_tg_preview_appearance.html" %}
-  {% elif tab in ['menu','welcome','messages','buttons','qr','daily_report'] %}
-  {% include "_tg_preview_chat.html" %}
-  {% endif %}
 </div>
 
-{% if tab == 'appearance' %}
-{% include "_tg_preview_appearance_js.html" %}
-{% endif %}
-{% if tab in ['menu','welcome','messages','buttons','qr','daily_report'] %}
-{% include "_tg_preview_chat_js.html" %}
-{% endif %}
 {% if tab == 'menu' %}
 <script>
 (function(){
@@ -200,11 +190,11 @@
     sync();
   }
   function activeControlsHtml(required){
-    return '<button type="button" class="icon-btn icon-move btn-up" title="بالا"><svg class="ico" viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg></button>' +
-      '<button type="button" class="icon-btn icon-move btn-down" title="پایین"><svg class="ico" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg></button>' +
+    return '<button type="button" class="icon-btn icon-move btn-up" title="بالا">{{ icon('chev-up', 'ico') }}</button>' +
+      '<button type="button" class="icon-btn icon-move btn-down" title="پایین">{{ icon('chev-down', 'ico') }}</button>' +
       (required
-        ? '<span class="icon-btn icon-move icon-fixed" title="همیشه در منو است — با ▲▼ جابه‌جا می‌شود" aria-label="قابل جابه‌جایی، غیرقابل حذف" role="img"><svg class="ico" viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg></span>'
-        : '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف"><svg class="ico" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>');
+        ? '<span class="icon-btn icon-move icon-fixed" title="همیشه در منو است — با ▲▼ جابه‌جا می‌شود" aria-label="قابل جابه‌جایی، غیرقابل حذف" role="img">{{ icon('minus', 'ico') }}</span>'
+        : '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف">{{ icon('close', 'ico') }}</button>');
   }
   active.addEventListener('click', (e) => {
     const li = e.target.closest('.dnd-item');
@@ -215,7 +205,7 @@
       pool.appendChild(li);
       li.draggable = false;
       const actions = li.querySelector('.dnd-actions');
-      if (actions) actions.innerHTML = '<button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>';
+      if (actions) actions.innerHTML = '<button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن">{{ icon('plus', 'ico') }}</button>';
       sync();
     }
   });
@@ -258,4 +248,6 @@
 })();
 </script>
 {% endif %}
+{% endif %}
+</div>
 {% endblock %}

@@ -200,6 +200,8 @@ class ReviewActionTests(MiniAppReviewTestCase):
         self.assertEqual((await self.act(11, "reject")).status_code, 400)
         self.notify_payer.assert_awaited_once()
         self.assertEqual(self.notify_payer.await_args.kwargs["shop_id"], OWNER)
+        markup = self.notify_payer.await_args.kwargs["reply_markup"]
+        self.assertEqual([b.callback_data for row in markup.inline_keyboard for b in row], ["nto:nv:s:home"])
 
     async def test_receipt_photo_is_read_with_the_receiving_bots_token(self) -> None:
         response = await self.client.get("/api/mini/review/10/receipt")

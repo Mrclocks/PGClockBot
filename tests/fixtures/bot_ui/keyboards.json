@@ -56,6 +56,12 @@
       ],
       [
         {
+          "callback_data": "bch:l",
+          "text": "📜 تاریخچهٔ ارسال‌ها"
+        }
+      ],
+      [
+        {
           "callback_data": "nv:adm:marketing",
           "text": "⬅️ بازگشت"
         }
@@ -289,6 +295,26 @@
       ],
       [
         {
+          "callback_data": "nv:adm:cb",
+          "text": "💸 کش‌بک"
+        },
+        {
+          "callback_data": "dsc:l",
+          "text": "🏷 تخفیف‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "fnl:v",
+          "text": "📊 رفتار کاربر"
+        },
+        {
+          "callback_data": "tru:l:all:0",
+          "text": "🧪 کاربران تست"
+        }
+      ],
+      [
+        {
           "callback_data": "nv:adm:home",
           "text": "⬅️ بازگشت"
         }
@@ -419,6 +445,16 @@
           "callback_data": "adm:pg:template",
           "style": "primary",
           "text": "📋 ساخت تمپلیت"
+        },
+        {
+          "callback_data": "adm:pg:hosts",
+          "text": "🌐 هاست‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:pg:inbounds",
+          "text": "📡 اینباندها"
         }
       ],
       [
@@ -463,6 +499,16 @@
           "callback_data": "adm:pg:template",
           "style": "primary",
           "text": "📋 ساخت تمپلیت"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:pg:hosts",
+          "text": "🌐 هاست‌ها"
+        },
+        {
+          "callback_data": "adm:pg:inbounds",
+          "text": "📡 اینباندها"
         }
       ],
       [
@@ -781,6 +827,20 @@
         {
           "callback_data": "nv:adm:preview",
           "text": "👁 پیش‌نمایش منوی کاربر"
+        },
+        {
+          "callback_data": "saud:l:0",
+          "text": "🧾 گزارش کارکنان"
+        }
+      ],
+      [
+        {
+          "callback_data": "ssr:l:0",
+          "text": "🏷 تعیین فروشگاه سرویس"
+        },
+        {
+          "callback_data": "scl:h",
+          "text": "🗑 پاکسازی سرویس‌ها"
         }
       ],
       [
@@ -1282,6 +1342,13 @@
       ],
       [
         {
+          "callback_data": "nv:loy:home",
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        }
+      ],
+      [
+        {
           "callback_data": "menu:home",
           "text": "⬅️ بازگشت"
         }
@@ -1624,15 +1691,21 @@
           "text": "➖ کاهش کیف"
         },
         {
-          "callback_data": "adm:resellers:tag:6",
-          "text": "🏷 تگ: 🟢 مطمئن"
+          "callback_data": "adm:resellers:credit:6",
+          "text": "💳 پلن اعتباری"
         }
       ],
       [
         {
+          "callback_data": "adm:resellers:tag:6",
+          "text": "🏷 تگ: 🟢 مطمئن"
+        },
+        {
           "callback_data": "adm:users:svcs:6",
           "text": "🛒 سرویس‌های فروشگاه"
-        },
+        }
+      ],
+      [
         {
           "callback_data": "adm:users:unres:6",
           "text": "🤝 حذف نمایندگی"
@@ -1729,7 +1802,7 @@
         {
           "callback_data": "adm:plans:noop",
           "style": "primary",
-          "text": "پلنی نیست"
+          "text": "هنوز پلنی ساخته نشده است"
         }
       ],
       [
@@ -1751,6 +1824,16 @@
         {
           "callback_data": "adm:users:wdebit:5",
           "text": "➖ کاهش کیف"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:pcredit:5",
+          "text": "⭐ امتیاز +"
+        },
+        {
+          "callback_data": "adm:users:pdebit:5",
+          "text": "⭐ امتیاز −"
         }
       ],
       [
@@ -1804,6 +1887,16 @@
         {
           "callback_data": "adm:users:wdebit:5",
           "text": "➖ کاهش کیف"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:pcredit:5",
+          "text": "⭐ امتیاز +"
+        },
+        {
+          "callback_data": "adm:users:pdebit:5",
+          "text": "⭐ امتیاز −"
         }
       ],
       [

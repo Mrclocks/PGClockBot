@@ -254,6 +254,7 @@ class RenewCurrentCapacityTests(unittest.IsolatedAsyncioTestCase):
                 "app.services.pg_admin_subscription.sync_pg_capacity_from_sub",
                 AsyncMock(),
             ) as sync,
+            patch("app.services.pasarguard.get_pg", return_value=SimpleNamespace(reset_admin_usage=AsyncMock())),
         ):
             result = await renew_subscription(
                 session,
@@ -261,7 +262,6 @@ class RenewCurrentCapacityTests(unittest.IsolatedAsyncioTestCase):
                 plan=plan,
                 payer=None,
                 charge_wallet=False,
-                reset_user_traffic=False,
             )
 
         self.assertEqual(sub.base_gb, 120)

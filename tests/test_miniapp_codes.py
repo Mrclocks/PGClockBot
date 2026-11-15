@@ -57,7 +57,7 @@ class MiniAppCodesTestCase(unittest.IsolatedAsyncioTestCase):
             patch("app.api.miniapp_pages.assert_mini_force_join", AsyncMock()),
             patch("app.api.miniapp_pages.get_all_settings", AsyncMock(side_effect=settings)),
             # Delivery to the panel is not under test: stop once the wallet is debited.
-            patch("app.services.orders._resume_paid_wallet_order", AsyncMock(side_effect=lambda s, o, u: o)),
+            patch("app.services.orders._resume_paid_wallet_order", AsyncMock(side_effect=lambda s, o, u, **_kw: o)),
             patch("app.services.miniapp_auth.is_bot_platform_admin", side_effect=lambda u: u.role == "admin"),
         ]
         for p in self.patches:

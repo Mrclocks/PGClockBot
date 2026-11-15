@@ -8,8 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
-from app.db.models import BotUser, UserService
+from app.bot.service_name_step import show_service_name_step
+from app.db.models import BotUser, Order, UserService
+from app.services.custom_service_name import needs_service_name
 from app.services.service_scope import shop_services_clause
+from app.services.staff_free_checkout import may_take_order_free
 from app.services.users import current_shop_reseller_id, get_all_settings
 import logging
 
@@ -40,6 +43,7 @@ NAV_ADMIN_PRODUCT = "admin_product"
 NAV_ADMIN_MARKETING = "admin_marketing"
 NAV_ADMIN_GIFTS = "admin_gifts"
 NAV_ADMIN_CAMPAIGNS = "admin_campaigns"
+NAV_ADMIN_CASHBACK = "admin_cashback"
 NAV_ADMIN_SYSTEM = "admin_system"
 NAV_ADMIN_PG = "admin_pg"
 NAV_ADMIN_USERS = "admin_users"
@@ -445,6 +449,35 @@ async def restore_main_reply(
     return ui
 
 
+async def acknowledge_receipt(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    text: str,
+    state: FSMContext | None,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+    order=None,
+) -> None:
+    """Confirm a receipt without re-sending the welcome/home screen.
+
+    Leaves the main reply keyboard and keeps the confirmation as a payment record.
+    """
+    from app.services.chat_records import keep_sent
+
+    await clear_checkout_nav(state)
+    main_kb, _ = await buyer_main_reply_keyboard(
+        session,
+        db_user,
+        order=order,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    with keep_sent():
+        await message.answer(text, reply_markup=main_kb)
+
+
 async def show_nav_keyboard(
     message: Message,
     session: AsyncSession,
@@ -548,8 +581,19 @@ async def present_order_pay(
         body = f"{summary.strip()}\n\n{prompt}"
     else:
         body = prompt
+    order = await session.get(Order, int(order_id))
+    if await needs_service_name(session, order):
+        await show_service_name_step(message, state, int(order_id), summary=summary)
+        return
+    staff_free = await may_take_order_free(
+        session,
+        db_user,
+        order,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
     await present_inline_only(
         message,
         text=body,
-        inline=kb.pay_methods(int(order_id), ui),
+        inline=kb.pay_methods(int(order_id), ui, staff_free=staff_free),
     )

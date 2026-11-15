@@ -147,7 +147,7 @@ class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
 
             with patch(
                 "app.services.orders._resume_paid_wallet_order",
-                new=AsyncMock(side_effect=lambda s, o, u: o),
+                new=AsyncMock(side_effect=lambda s, o, u, **_kw: o),
             ):
                 await pay_with_wallet(session, order, buyer)
 
@@ -209,6 +209,7 @@ class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
                 session, 5003, reseller_id=owner.id, code="BUY5003"
             )
             buyer.referred_by_id = referrer.id
+            buyer.referral_shop_id = owner.id  # referred in this shop's bot
             await session.commit()
             await set_setting(
                 session, "referral_bonus", "25000", reseller_id=owner.id

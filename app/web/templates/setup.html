@@ -1,5 +1,7 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% from "_list_input.html" import list_input %}
+{% from "macros.html" import switch %}
 {% block title %}راه‌اندازی اولیه{% endblock %}
 {% block auth %}
 <div class="auth-wrap auth-wrap--atmo">
@@ -8,7 +10,7 @@
     <span class="auth-orb auth-orb-b"></span>
     <span class="auth-grid"></span>
   </div>
-  <div class="auth-panel auth-panel--stage setup-panel">
+  <div class="auth-panel auth-panel--stage setup-panel ds">
     <div class="auth-brand">
       <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" /></span>
       <h1 dir="ltr">MrClockBot</h1>
@@ -124,12 +126,9 @@
         </small>
       </label>
       {% if has_pg_api_key %}
-      <label>
-        <span class="ui-check">
-          <input type="checkbox" name="clear_pg_api_key" value="1" />
-          حذف کلید API (بازگشت به احراز هویت با رمز)
-        </span>
-      </label>
+      <div class="ui-switch-list">
+        {{ switch('clear_pg_api_key', 'حذف کلید API', help='بازگشت به احراز هویت با رمز') }}
+      </div>
       {% endif %}
       <label>پورت وب‌پنل (WEB_PORT)
         <input name="web_port" value="{{ values.WEB_PORT or '9000' }}" required dir="ltr" />
@@ -179,7 +178,7 @@
           <div class="stat">
             <div class="stat-top">
               <span class="stat-ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
+                {{ icon('template') }}
               </span>
               <span>{{ row.label }}</span>
             </div>
@@ -218,7 +217,7 @@
       </div>
       <form method="post" action="/setup/finish" id="setup-finish-form">
         <input type="hidden" name="next" id="setup-finish-next" value="{{ finish_login_url }}" />
-        <button class="btn" type="submit" style="width:100%" id="setup-enter-panel">ورود به پنل</button>
+        <button class="btn btn-block" type="submit" id="setup-enter-panel">ورود به پنل</button>
       </form>
     </div>
 
@@ -388,7 +387,7 @@
       li.classList.toggle('is-on', i === n);
     });
     const bar = document.getElementById('setup-probe-fill');
-    if (bar) bar.style.width = Math.max(8, Math.min(100, fill)) + '%';
+    if (bar) bar.style.setProperty('--p', String(Math.max(8, Math.min(100, fill))));
   }
 
   function runPgAccessProbe(form){

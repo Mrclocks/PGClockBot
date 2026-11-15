@@ -24,6 +24,9 @@ P = ParamSpec("P")
 
 EDIT_ROW_TEXT = "✏️ ویرایش این منو"
 EDIT_CALLBACK_ROOT = "ed"
+# The shop's own categories and plans, edited from the shop screens' edit panels.
+CATALOG_ROW_ROOT = "edr"
+CATALOG_ROW_SCREENS = frozenset({"c.shop", "c.shop.plans", "c.shop.wholesale"})
 
 _active_editor: ContextVar[EditorActor | None] = ContextVar("active_editor", default=None)
 

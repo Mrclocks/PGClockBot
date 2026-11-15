@@ -87,8 +87,18 @@ async def open_admin_marketing_panel(
 
     if not await _deny_unless_owner(message, session, db_user, is_reseller_bot=is_reseller_bot):
         return
-    show = show_gift_panel if level == nav.NAV_ADMIN_GIFTS else show_campaign_panel
-    await show(message, session, state, push=push)
+    if level == nav.NAV_ADMIN_GIFTS:
+        await show_gift_panel(message, session, state, push=push)
+        return
+    if level == nav.NAV_ADMIN_CAMPAIGNS:
+        await show_campaign_panel(message, session, state, push=push)
+        return
+    if level == nav.NAV_ADMIN_CASHBACK:
+        from app.bot.handlers.cashback_tools import open_admin_cashback_panel
+
+        await open_admin_cashback_panel(
+            message, session, db_user, state, push=push, is_reseller_bot=is_reseller_bot
+        )
 
 
 @router.callback_query(F.data == GIFT_PANEL_CALLBACK)

@@ -19,6 +19,7 @@ def _redirect(*, ok: str = "", err: str = "") -> RedirectResponse:
 def register_broadcast_queue_pages(app, *, require_admin, get_db) -> None:
     @app.post("/broadcast/history/{log_id}/cancel")
     async def broadcast_cancel(log_id: int, staff: dict = Depends(require_admin), session=Depends(get_db)):
-        if await cancel_broadcast(session, log_id):
+        # Platform history only — shop rows are cancelled on /shop-broadcast.
+        if await cancel_broadcast(session, log_id, shop_id=None):
             return _redirect(ok="ارسال متوقف شد؛ پیام‌های فرستاده‌شده برنمی‌گردند")
         return _redirect(err="این ارسال دیگر فعال نیست")

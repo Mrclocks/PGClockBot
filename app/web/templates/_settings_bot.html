@@ -1,5 +1,7 @@
+{% from "_icons.html" import icon %}
 {% from "macros.html" import flash_warn_icon, modal_title %}
 {% from "_list_input.html" import list_input %}
+{% from "_ds.html" import ds_modal_head, ds_sec, ds_foot, ds_switch, ico %}
 {% set update_mode = bot_update_mode or env_values.get('BOT_UPDATE_MODE') or 'polling' %}
 {% set wh_url = env_values.get('WEBHOOK_URL','') %}
 {% set wh_path = env_values.get('WEBHOOK_PATH','/telegram/webhook') %}
@@ -26,7 +28,7 @@
     <p class="muted update-card-caption">وضعیت زنده ربات و روش دریافت پیام از تلگرام.</p>
     <div class="bot-conn-row" role="list">
       <div class="bot-conn {% if bot_ok %}is-ok{% else %}is-err{% endif %}" role="listitem">
-        <svg class="bot-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+        {{ icon('shield-check', 'bot-conn-ico') }}
         <span class="bot-conn-text">
           <span class="bot-conn-k">ربات</span>
           <span class="bot-conn-cap muted" dir="ltr" id="bot-status-flash">
@@ -48,7 +50,7 @@
         {% endif %}
       </div>
       <div class="bot-conn {% if update_mode == 'webhook' %}is-ok{% else %}is-neutral{% endif %}" role="listitem" id="bot-mode-status">
-        <svg class="bot-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-6 4 12 2-6h4"/><path d="M4 19h16"/></svg>
+        {{ icon('pulse', 'bot-conn-ico') }}
         <span class="bot-conn-text">
           <span class="bot-conn-k">دریافت پیام</span>
           <span class="bot-conn-cap muted" id="bot-mode-status-cap">
@@ -79,7 +81,7 @@
           <div class="pw-field">
             <input id="bot-token-input" name="BOT_TOKEN" type="password" value="" dir="ltr" autocomplete="off" placeholder="توکن جدید" />
             <button type="button" class="pw-toggle" data-pw-for="bot-token-input" aria-label="نمایش توکن" aria-pressed="false">
-              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              {{ icon('eye', 'pw-ico') }}
             </button>
           </div>
           <small class="muted">خالی بماند تا توکن فعلی حفظ شود{% if bot_token_masked %} · فعلی: <span dir="ltr">{{ bot_token_masked }}</span>{% endif %}</small>
@@ -187,7 +189,7 @@
           <div class="pw-field">
             <input id="pg-password-input" name="PG_PASSWORD" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="خالی بماند تا رمز فعلی حفظ شود" />
             <button type="button" class="pw-toggle" data-pw-for="pg-password-input" aria-label="نمایش رمز" aria-pressed="false">
-              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              {{ icon('eye', 'pw-ico') }}
             </button>
           </div>
           <small class="muted">رمز یا کلید API — حداقل یکی لازم است</small>
@@ -199,7 +201,7 @@
             <input id="pg-api-key-input" name="PG_API_KEY" type="password" value="" dir="ltr" autocomplete="new-password"
               placeholder="{% if pg_api_key_ready %}خالی بماند تا کلید فعلی حفظ شود{% else %}اختیاری — کلید API از پنل پاسارگارد{% endif %}" />
             <button type="button" class="pw-toggle" data-pw-for="pg-api-key-input" aria-label="نمایش کلید API" aria-pressed="false">
-              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              {{ icon('eye', 'pw-ico') }}
             </button>
           </div>
           <small class="muted">
@@ -227,29 +229,32 @@
   </div>
 </form>
 
-<div class="ui-modal" id="modal-bot-restart-confirm" hidden>
+<div class="ui-modal ds ds-dialog" id="modal-bot-restart-confirm" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bot-restart-confirm-title">
-    <div class="ui-modal-head">
-      {{ modal_title('bot-settings', 'تأیید ری‌استارت', caption='اعمال تغییرات با یک‌بار ری‌استارت سرویس', tone='neutral', heading='h3', heading_id='bot-restart-confirm-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    {{ ds_modal_head('bot-settings', 'تأیید ری‌استارت', 'bot-restart-confirm-title', tone='neutral') }}
+    <div class="ds-body">
+      <div class="ds-confirm">
+        <span class="ds-confirm-ico" aria-hidden="true">{{ ico('warn') }}</span>
+        <p>برای اعمال این تغییرات سرویس یک‌بار ری‌استارت می‌شود. چند ثانیه قطعی طبیعی است؛ پیام‌های در صف تلگرام ممکن است از دست بروند. پس از تأیید در همین صفحه می‌مانید.</p>
+      </div>
     </div>
-    <p class="muted">
-      برای اعمال این تغییرات سرویس یک‌بار ری‌استارت می‌شود. چند ثانیه قطعی طبیعی است؛
-      پیام‌های در صف تلگرام ممکن است از دست بروند. پس از تأیید در همین صفحه می‌مانید.
-    </p>
-    <div class="actions">
-      <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      <button type="button" class="btn" id="bot-restart-confirm-btn">تأیید و ری‌استارت</button>
+    <div class="ds-foot">
+      <div class="ds-foot-btns">
+        <button type="button" class="btn" id="bot-restart-confirm-btn">تأیید و ری‌استارت</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
     </div>
   </div>
 </div>
 
-<div class="ui-modal" id="modal-bot-restart-progress" hidden data-modal-no-escape="1">
+<div class="ui-modal ds ds-dialog" id="modal-bot-restart-progress" hidden data-modal-no-escape="1">
   <div class="ui-modal-backdrop"></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bot-restart-progress-title">
-    <div class="ui-modal-head">
-      {{ modal_title('bot-settings', 'در حال اعمال تغییرات', caption='تا پایان عملیات در این صفحه بمانید', tone='neutral', heading='h3', heading_id='bot-restart-progress-title') }}
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('bot-settings', 'در حال اعمال تغییرات', tone='neutral', heading='h3', heading_id='bot-restart-progress-title') }}
+      </div>
     </div>
     <div class="flash warn update-stay-warn flash-has-ico" role="status">
       {{ flash_warn_icon() }}
@@ -260,7 +265,7 @@
     </div>
     <div class="progress-wrap" aria-label="نوار پیشرفت">
       <div class="progress-bar">
-        <div class="progress-fill" id="bot-restart-fill" style="width: 0%"></div>
+        <div class="progress-fill" id="bot-restart-fill"></div>
       </div>
       <div class="progress-meta">
         <span id="bot-restart-step-label">آماده</span>
@@ -448,7 +453,7 @@
       });
     }
     const pct = STEP_PCT[activeKey] || 0;
-    if (fillEl) fillEl.style.width = pct + '%';
+    if (fillEl) fillEl.style.setProperty('--p', String(pct));
     if (pctEl) pctEl.textContent = pct + '٪';
     if (stepLabel) stepLabel.textContent = STEP_LABEL[activeKey] || '…';
   }
@@ -542,7 +547,7 @@
       return;
     }
     setStep('bot', 'bot');
-    if (fillEl) fillEl.style.width = '100%';
+    if (fillEl) fillEl.style.setProperty('--p', '100');
     if (pctEl) pctEl.textContent = '۱۰۰٪';
     await new Promise((r) => setTimeout(r, 500));
     const url = new URL(location.href);

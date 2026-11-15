@@ -8,7 +8,9 @@ from aiogram.types import (
 )
 
 from app.bot.button_sources import is_recording, note_button_source
+from app.bot.edit_mode import editable_screen
 from app.bot.list_pages import page_of, pager_row
+from app.bot.panel_back import BACK_LABEL_KEY, back_callback
 from app.services.catalog_pricing import sale_price
 from app.config import get_settings
 from app.db.models import Plan, Role
@@ -20,6 +22,7 @@ from app.services.support_contacts import (
 from app.services.users import DEFAULT_SETTINGS, on
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 from app.services import bot_feedback_texts as feedback
+from app.services.staff_cards import SERVICE_BUTTON_LIMIT
 
 # Default order for user menu items (drag-and-drop in web panel edits menu_order)
 # guide/faq removed from keyboard — keep texts available via /help if needed.
@@ -659,6 +662,8 @@ def _ikb(
     """Inline button; pass ``style_id`` (not a resolved ``style``) so the color stays editable."""
     if style_id is not None:
         style = _style(ui, style_id, fallback=style_fallback)
+    if label_key == BACK_LABEL_KEY and callback_data is not None:
+        callback_data = back_callback(callback_data)
     button = _build_inline_button(
         text,
         callback_data=callback_data,
@@ -1045,6 +1050,7 @@ REPLY_ACTION_ADM_PLAN_CUSTOM = "adm_plan_custom"
 REPLY_ACTION_ADM_PLAN_TRIAL = "adm_plan_trial"
 
 
+@editable_screen("c.shop")
 def shop_kind_keyboard(
     ui: dict | None = None,
     *,
@@ -1113,16 +1119,22 @@ def shop_kind_keyboard(
             ]
         )
     if custom_on:
-        from app.services.button_styles import resolve_custom_plan_button_style
+        from app.services.button_styles import has_custom_plan_style_override, resolve_custom_plan_button_style
 
+        # The custom plan's own color setting wins; only without it is the catalog color (and the editor's) used.
+        color = (
+            {"style": resolve_custom_plan_button_style(ui)}
+            if has_custom_plan_style_override(ui)
+            else {"style_id": "shop_kind_custom", "style_fallback": "primary"}
+        )
         rows.append(
             [
                 _ikb(
                     _label_or(ui, "btn_shop_kind_custom", "دلخواه"),
                     callback_data="shop:kind:custom",
-                    style=resolve_custom_plan_button_style(ui),
                     ui=ui,
                     label_key="btn_shop_kind_custom",
+                    **color,
                 )
             ]
         )
@@ -1241,6 +1253,7 @@ def admin_plan_kind_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=pack_detail_rows(rows))
 
 
+@editable_screen("c.shop.plans")
 def plans_keyboard(
     plans: list[Plan],
     ui: dict | None = None,
@@ -1257,9 +1270,7 @@ def plans_keyboard(
 
     _ = custom_enabled, wholesale_enabled  # call-site compat
     fallback_kind = kind or "fixed"
-    kind_style = _style(
-        ui, plan_kind_style_id(fallback_kind) or "shop_kind_fixed", fallback="primary"
-    )
+    kind_style_id = plan_kind_style_id(fallback_kind) or "shop_kind_fixed"
     cat_names = category_names or {}
     cat_objs = categories or {}
     rows = []
@@ -1291,7 +1302,9 @@ def plans_keyboard(
                 _ikb(
                     feedback.NO_PLANS,
                     callback_data=back_callback,
-                    style=kind_style,
+                    style_id=kind_style_id,
+                    style_fallback="primary",
+                    ui=ui,
                 )
             ]
         ]
@@ -1300,6 +1313,7 @@ def plans_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("c.shop.wholesale")
 def wholesale_plans_keyboard(
     plans: list[Plan],
     ui: dict | None = None,
@@ -1319,14 +1333,15 @@ def wholesale_plans_keyboard(
             for p in plans
         ]
     )
-    kind_style = _style(ui, "shop_kind_wholesale", fallback="primary")
     if not rows:
         rows = [
             [
                 _ikb(
                     feedback.NO_PLANS,
                     callback_data=back_callback,
-                    style=kind_style,
+                    style_id="shop_kind_wholesale",
+                    style_fallback="primary",
+                    ui=ui,
                 )
             ]
         ]
@@ -1489,8 +1504,17 @@ def _pay_method_button(
     )
 
 
-def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
+STAFF_FREE_BUTTON_TEXT = "🎁 دریافت رایگان (مدیر)"
+
+
+def pay_methods(
+    order_id: int, ui: dict | None = None, *, staff_free: bool = False
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
+    if staff_free:
+        rows.append(
+            [InlineKeyboardButton(text=STAFF_FREE_BUTTON_TEXT, callback_data=f"pay:staff:{order_id}")]
+        )
     if on(_t(ui, "pay_wallet_enabled")):
         rows.append([_pay_method_button(ui, order_id, "wallet", "success")])
     others = [
@@ -2040,6 +2064,12 @@ def admin_reseller_actions(
         [InlineKeyboardButton(text="➖ کاهش کیف", callback_data=f"adm:resellers:wdebit:{user_id}")],
         [
             InlineKeyboardButton(
+                text="💳 پلن اعتباری",
+                callback_data=f"adm:resellers:credit:{user_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 text=f"🏷 تگ: {tag_label}"[:64],
                 callback_data=f"adm:resellers:tag:{user_id}",
             )
@@ -2232,6 +2262,14 @@ def admin_user_actions(
         ],
         [
             InlineKeyboardButton(
+                text="⭐ امتیاز +", callback_data=f"adm:users:pcredit:{user_id}"
+            ),
+            InlineKeyboardButton(
+                text="⭐ امتیاز −", callback_data=f"adm:users:pdebit:{user_id}"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
                 text="📦 سرویس‌ها", callback_data=f"adm:users:svcs:{user_id}"
             ),
             InlineKeyboardButton(
@@ -2247,8 +2285,9 @@ def admin_user_actions(
         ],
     ]
     if has_services:
+        # After wallet + points rows so امتیاز stays next to کیف پول.
         rows.insert(
-            1,
+            2,
             [
                 InlineKeyboardButton(
                     text="🔄 تمدید سریع",
@@ -2331,7 +2370,7 @@ def admin_user_services_keyboard(
     user_id: int, service_ids: list[int]
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
-    for sid in service_ids[:20]:
+    for sid in service_ids[:SERVICE_BUTTON_LIMIT]:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -2547,10 +2586,12 @@ def reseller_app_review(
     ui: dict | None = None,
     *,
     allow_approve: bool = True,
+    user_id: int | None = None,
 ) -> InlineKeyboardMarkup:
     """Message-scoped approve/reject (notifications). No nav chrome.
 
     ``allow_approve=False`` for unpaid (pending_payment) apps — reject only.
+    Optional ``user_id`` adds a platform customer-card button under the review row.
     """
     row: list[InlineKeyboardButton] = []
     if allow_approve:
@@ -2568,7 +2609,17 @@ def reseller_app_review(
             style=_style(ui, "reject", fallback="danger"),
         )
     )
-    return InlineKeyboardMarkup(inline_keyboard=[row])
+    rows: list[list[InlineKeyboardButton]] = [row]
+    if user_id:
+        rows.append(
+            [
+                _ikb(
+                    "👤 کاربر",
+                    callback_data=f"adm:users:view:{int(user_id)}",
+                )
+            ]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def reseller_home(profile=None, ui: dict | None = None) -> InlineKeyboardMarkup:

@@ -85,6 +85,7 @@ class VisibilityTests(MenuCase):
         self.assertTrue(await self.sees(2))
 
     async def test_the_switch_of_one_shop_does_not_reach_the_platform_or_another_shop(self):
+        await self.switch(False)
         await self.switch(True, shop=5)
         self.assertTrue(await self.sees(6, shop=5))
         self.assertFalse(await self.sees(1))

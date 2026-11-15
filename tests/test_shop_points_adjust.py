@@ -206,10 +206,12 @@ class OwnerPointsFormTests(PointsDbHarness):
         key = secrets.token_hex(16)
         async with self.Session() as session:
             user = await session.get(BotUser, 101)
-            await admin_adjust_points(session, user, 5, reason="fix", admin_identity="root", shop_id=None, request_key=key)
+            first = await admin_adjust_points(session, user, 5, reason="fix", admin_identity="root", shop_id=None, request_key=key)
         async with self.Session() as session:
             user = await session.get(BotUser, 101)
-            await admin_adjust_points(session, user, 5, reason="fix", admin_identity="root", shop_id=None, request_key=key)
+            again = await admin_adjust_points(session, user, 5, reason="fix", admin_identity="root", shop_id=None, request_key=key)
+        self.assertFalse(first.replayed)
+        self.assertTrue(again.replayed)
         self.assertEqual(await self._points(101, None), 45)
 
 

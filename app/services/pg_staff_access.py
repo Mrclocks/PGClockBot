@@ -19,6 +19,7 @@ from typing import Any, Literal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.redact import user_safe_error
 from app.db.models import PgStaffAccess, ResellerProfile
 from app.services.pg_read_resilience import READ_COOLDOWN_SEC
 from app.services.web_auth import (
@@ -606,7 +607,7 @@ async def grant_web_access(
         reset_pg()
     except Exception as e:
         return None, (
-            f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}. "
+            f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {user_safe_error(e)}. "
             "علت محتمل: ارتباط با پاسارگارد یا رد شدن رمز توسط قوانین پنل. "
             "راه حل: اتصال و قوانین رمز پاسارگارد را بررسی کنید و دوباره تلاش کنید."
         )
@@ -669,7 +670,7 @@ async def grant_web_access_with_plan(
                 )
                 await session.commit()
             except Exception as e:
-                return row, f"دسترسی وب ساخته شد ولی اشتراک زمانی اعمال نشد: {e}"
+                return row, f"دسترسی وب ساخته شد ولی اشتراک زمانی اعمال نشد: {user_safe_error(e)}"
     return row, None
 
 
@@ -750,7 +751,7 @@ async def update_web_access(
             reset_pg()
         except Exception as e:
             return None, (
-                f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}. "
+                f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {user_safe_error(e)}. "
                 "علت محتمل: ارتباط با پاسارگارد یا رد شدن رمز توسط قوانین پنل. "
                 "راه حل: اتصال و قوانین رمز پاسارگارد را بررسی کنید و دوباره تلاش کنید."
             )
@@ -1028,7 +1029,7 @@ async def change_staff_credentials(
         reset_pg()
     except Exception as e:
         return None, (
-            f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}. "
+            f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {user_safe_error(e)}. "
             "علت محتمل: ارتباط با پاسارگارد یا رد شدن رمز توسط قوانین پنل. "
             "راه حل: اتصال و قوانین رمز پاسارگارد را بررسی کنید و دوباره تلاش کنید."
         )

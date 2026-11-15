@@ -12,8 +12,11 @@ from app.db.models import Base, BotUser, Order, Payment, PaymentStatus
 from app.services.notifications import (
     notify_new_order,
     notify_new_subscription,
+    notify_new_ticket,
     notify_pending_approval,
+    notify_ticket_message,
     notify_wallet_topup_ok,
+    ticket_action_markup,
 )
 
 BUYER_TG = 123456789
@@ -89,6 +92,47 @@ class NumericIdInReportsTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_synthetic_id_is_not_shown(self) -> None:
         await notify_wallet_topup_ok(None, self.session, await self.session.get(Payment, 3), None)
         self.assertNotIn("آیدی", self.last_text())
+
+    async def test_new_ticket_shows_buyer_identity_and_customer_button(self) -> None:
+        await notify_new_ticket(
+            None,
+            self.session,
+            ticket_id=9,
+            subject="کمک",
+            user_name="ignored",
+            ticket_user_id=3,
+            ticket_reseller_id=None,
+        )
+        text = self.last_text()
+        self.assertIn("<b>کاربر:</b> Farid &lt;b&gt;Ghaderi&lt;/b&gt;", text)
+        self.assertIn("<b>یوزرنیم:</b> @farid_g", text)
+        self.assertIn("<b>آیدی:</b> 987654321", text)
+        markup = self.dispatch.await_args.kwargs.get("markup")
+        flat = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        self.assertIn("adm:users:view:3", flat)
+        self.assertIn("tkt:reply:9", flat)
+
+    async def test_ticket_reply_notice_shows_opener_identity(self) -> None:
+        await notify_ticket_message(
+            None,
+            self.session,
+            ticket_id=9,
+            subject="کمک",
+            body="سلام",
+            from_staff=False,
+            ticket_user_id=1,
+            actor_name="ignored",
+            ticket_reseller_id=None,
+        )
+        text = self.last_text()
+        self.assertIn("<b>کاربر:</b> @buyer", text)
+        self.assertIn(f"<b>آیدی:</b> {BUYER_TG}", text)
+
+    def test_ticket_action_markup_adds_shop_customer_button(self) -> None:
+        markup = ticket_action_markup(5, user_id=11, shop_id=22)
+        flat = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        self.assertEqual(flat[0], "res:user:11")
+        self.assertIn("tkt:reply:5", flat)
 
 
 if __name__ == "__main__":

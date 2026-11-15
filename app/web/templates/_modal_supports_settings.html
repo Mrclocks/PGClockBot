@@ -1,18 +1,28 @@
+{% from "_icons.html" import icon %}
 {# Support contacts + support_text modal on /tickets #}
 {% from "macros.html" import modal_title %}
+{% from "_settings_hub.html" import modal_settings_list, modal_shown_section, modal_list_heading, modal_list_back %}
+{% set rows = [
+  {'key': 'contacts', 'label': 'پشتیبان‌های تلگرام', 'desc': 'حساب‌هایی که پیام‌های پشتیبانی را جواب می‌دهند', 'icon': 'users', 'url': 'supports=1&stab=contacts'},
+  {'key': 'text', 'label': 'متن پشتیبانی', 'desc': 'پیامی که کاربر در بخش پشتیبانی می‌بیند', 'icon': 'message', 'url': 'supports=1&stab=text'},
+] %}
+{% set shown = modal_shown_section(rows, request.query_params.get('stab', '') if request is defined else '') %}
 
 {% set open_supports = open_supports_modal %}
 {% set strip_keys = 'settings,supports,stab,saved,ok,err,msg,_' %}
-<div class="ui-modal{% if open_supports %} open{% endif %}" id="modal-supports-settings"
+<div class="ui-modal ds ds-settings{% if open_supports %} open{% endif %}" id="modal-supports-settings"
      {% if not open_supports %}hidden{% endif %}
-     data-modal-strip-keys="{{ strip_keys }}">
+     data-modal-strip-keys="{{ strip_keys }}" data-modal-list data-modal-list-title="پشتیبان‌ها" data-modal-list-url="supports=1">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl settings-modal-panel" role="dialog" aria-modal="true" aria-labelledby="supports-settings-title">
-    <div class="ui-modal-head">
-      {{ modal_title('panel-settings', 'پشتیبان‌ها', caption='مخاطبین و متن پشتیبانی ربات', tone='neutral', heading_id='supports-settings-title') }}
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+      {{ modal_list_back(rows, shown) }}
+      {{ modal_title('tickets', modal_list_heading(rows, shown, 'پشتیبان‌ها'), tone='neutral', heading_id='supports-settings-title') }}
       <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        {{ icon('close', 'ico') }}
       </button>
+      </div>
     </div>
     {% if open_supports and (flash_ok or flash_err) %}
     <div class="settings-modal-flash">
@@ -20,20 +30,16 @@
       {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
     </div>
     {% endif %}
-    <nav class="section-tabs settings-tabs modal-section-tabs" role="tablist" aria-label="تب‌های پشتیبانی" data-modal-tabs>
-      <button type="button" class="tab-btn {% if supports_modal_tab != 'text' %}active{% endif %}" data-modal-tab="contacts" role="tab">پشتیبان‌های تلگرام</button>
-      <button type="button" class="tab-btn {% if supports_modal_tab == 'text' %}active{% endif %}" data-modal-tab="text" role="tab">متن پشتیبانی</button>
-    </nav>
+    {{ modal_settings_list(rows, shown) }}
     <div class="settings-modal-body">
-      <div class="modal-tab-panel" data-modal-tab-panel="contacts" {% if supports_modal_tab == 'text' %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="contacts" {% if shown != 'contacts' %}hidden{% endif %}>
         {% set supports_save = supports_save_action %}
         {% include "_settings_supports.html" %}
       </div>
-      <div class="modal-tab-panel" data-modal-tab-panel="text" {% if supports_modal_tab != 'text' %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="text" {% if shown != 'text' %}hidden{% endif %}>
         {% set settings_form_action = support_text_action %}
         {% set tab_groups = support_text_tab_groups %}
         {% set groups = support_text_groups %}
-        {% set show_pending_orders = false %}
         {% include "_domain_settings_form.html" %}
       </div>
     </div>

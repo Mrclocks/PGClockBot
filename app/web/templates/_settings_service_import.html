@@ -54,4 +54,4 @@
     </table>
   </div>
 </div>
-<script src="/static/service-import-admin.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
+<script src="/static/service-import-admin.js?v={{ asset_v('service-import-admin.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>

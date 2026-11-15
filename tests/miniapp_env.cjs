@@ -54,6 +54,7 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
     body: { classList: element("body").classList, appendChild(el) { toasts.push(el); } },
     getElementById: (id) => element(id),
     querySelectorAll: () => [],
+    querySelector: () => null,
     createElement: () => ({ setAttribute() {}, remove() {}, className: "", textContent: "" }),
     addEventListener() {},
   };

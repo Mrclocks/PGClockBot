@@ -58,11 +58,22 @@ async def _actor_role(
     return None
 
 
-def _thread_preview(ticket: Ticket, *, as_staff: bool) -> str:
+def _thread_preview(
+    ticket: Ticket,
+    *,
+    as_staff: bool,
+    opener: BotUser | None = None,
+) -> str:
+    from app.services.formatting import info_block
+    from app.services.notifications import _buyer_lines
+
     lines = [
         f"🎫 تیکت #{ticket.id} — {html.escape(ticket.subject or '')}",
         "",
     ]
+    if as_staff:
+        lines.append(info_block(_buyer_lines(opener)))
+        lines.append("")
     for m in (ticket.messages or [])[-8:]:
         if as_staff:
             who = "پشتیبانی" if m.is_staff else "کاربر"
@@ -116,7 +127,10 @@ async def tkt_reply_start(
     )
     from app.bot.nav_input import ask_text
 
-    text = _thread_preview(ticket, as_staff=as_staff)
+    opener = None
+    if as_staff and ticket.user_id:
+        opener = await session.get(BotUser, int(ticket.user_id))
+    text = _thread_preview(ticket, as_staff=as_staff, opener=opener)
     await ask_text(
         callback,
         state,

@@ -1,7 +1,6 @@
 """Claim durable cancellation notices before dispatching them outside transactions."""
 from __future__ import annotations
 
-import html
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -11,8 +10,10 @@ from typing import Literal
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, ServiceCancellation, UserService
-from app.services.formatting import format_user_label
+from app.config import get_settings
+from app.db.models import BotUser, Plan, ServiceCancellation, UserService
+from app.services.cancellation_context import cancellation_detail_lines, reason_block
+from app.services.formatting import format_message
 
 logger = logging.getLogger(__name__)
 NOTIFY_KEY = "notify_service_cancellation"
@@ -25,18 +26,20 @@ class CancellationNotice:
     request_id: int
     shop_id: int | None
     text: str
+    user_id: int
+    service_id: int
 
 
-def _notice(row: ServiceCancellation, user: BotUser, username: str) -> CancellationNotice:
-    return CancellationNotice(row.id, row.reseller_id, (
-        "📝 <b>درخواست لغو سرویس</b>\n\n"
-        f"درخواست: #{row.id}\n"
-        f"کاربر: {format_user_label(user)}\n"
-        f"شناسه تلگرام: <code>{user.telegram_id}</code>\n"
-        f"سرویس: <code>{html.escape(username)}</code> (#{row.service_id})\n"
-        f"دلیل لغو:\n{html.escape(row.reason)}\n\n"
-        "برای بررسی و تعیین اعتبار برگشتی، مدیریت مالی ← درخواست‌های لغو را باز کنید."
-    ))
+def _notice(
+    row: ServiceCancellation, user: BotUser, service: UserService, plan_name: str | None,
+) -> CancellationNotice:
+    details = cancellation_detail_lines(row, user, service, plan_name, currency=get_settings().currency)
+    text = format_message(
+        "📝 درخواست لغو سرویس",
+        f"{details}\n\n{reason_block(row.reason)}\n\n"
+        "برای دیدن جزئیات و تصمیم‌گیری، دکمهٔ «بررسی درخواست» را بزنید.",
+    )
+    return CancellationNotice(row.id, row.reseller_id, text, int(row.user_id), int(row.service_id))
 
 
 async def process_cancellation_notifications(
@@ -48,16 +51,16 @@ async def process_cancellation_notifications(
         ServiceCancellation.notification_status == "sending",
         ServiceCancellation.notification_attempted_at < now - timedelta(minutes=5),
     ).values(notification_status="review"))
-    rows = (await session.execute(select(ServiceCancellation, BotUser, UserService.pg_username).join(
+    rows = (await session.execute(select(ServiceCancellation, BotUser, UserService, Plan.name).join(
         BotUser, BotUser.id == ServiceCancellation.user_id,
     ).join(UserService, (UserService.id == ServiceCancellation.service_id) & (
         UserService.bot_user_id == ServiceCancellation.user_id
-    )).where(
+    )).outerjoin(Plan, Plan.id == UserService.plan_id).where(
         ServiceCancellation.notification_status == "pending",
         or_(ServiceCancellation.notification_attempted_at.is_(None),
             ServiceCancellation.notification_attempted_at < now - timedelta(minutes=1)),
     ).order_by(ServiceCancellation.id).limit(NOTICE_BATCH_SIZE))).all()
-    notices = [_notice(row, user, username) for row, user, username in rows]
+    notices = [_notice(row, user, service, plan_name) for row, user, service, plan_name in rows]
     await session.commit()
     for notice in notices:
         try:

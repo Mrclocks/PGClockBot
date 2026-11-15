@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+from tests.template_source import template_with_includes
 
 
 class ResolveUsernameNamingTests(unittest.TestCase):
@@ -80,7 +81,7 @@ class GenerateWithPlanTests(unittest.IsolatedAsyncioTestCase):
 
 class PlansUiNamingTests(unittest.TestCase):
     def test_custom_modal_has_inline_naming_no_settings_link(self):
-        html = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
+        html = template_with_includes("plans.html")
         self.assertNotIn('href="/settings?tab=naming"', html)
         self.assertIn("custom_plan_username_prefix", html)
         self.assertIn("_plan_naming_fields.html", html)

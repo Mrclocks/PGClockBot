@@ -1,8 +1,10 @@
 {# Shared settings groups inside a domain modal panel.
    Expects: settings_form_action, tab_groups, groups, values
-   Optional: show_pending_orders, pending_orders_action, show_cleanup_status (+ cleanup_status)
 #}
+{# Sections that start with an on/off switch: the switch stays visible, the rest of the
+   section shows only while it is on (panel.js toggles data-pay-settings-for). #}
 {% set pay_settings_gate = {
+  'کیف پول': 'pay_wallet_enabled',
   'کارت به کارت': 'pay_card_enabled',
   'تأیید خودکار کارت به کارت': 'pay_card_auto_enabled',
   'درگاه پرداخت': 'pay_gateway_enabled',
@@ -10,31 +12,49 @@
   'بزن به کارت': 'pay_bbc_enabled',
   'رمزارز': 'pay_crypto_enabled',
   'استارز تلگرام': 'pay_stars_enabled',
+  'کد تخفیف': 'pay_discount_enabled',
+  'وضعیت فروش': 'shop_maintenance_enabled',
 } %}
+{% from "macros.html" import setting_help %}
 {% set _pay_on = ['1', 'true', 'yes', 'on'] %}
 <div class="settings-domain-stack">
-{% if show_cleanup_status and cleanup_status %}
-  {% include "_settings_cleanup_status.html" %}
-{% endif %}
 <form method="post" action="{{ settings_form_action }}" enctype="multipart/form-data" class="settings-form">
   {% for group_name in tab_groups %}
   {% set fields = groups[group_name] %}
   {% set gate_key = pay_settings_gate.get(group_name) %}
-  <div class="card settings-card"{% if gate_key %} data-pay-settings-for="{{ gate_key }}"{% if (values.get(gate_key, '')|string|lower) not in _pay_on %} hidden{% endif %}{% endif %}>
+  {% set gated = gate_key and fields and fields[0][0] == gate_key %}
+  <div class="card settings-card">
+    {% if gated %}
+    {# The section's on/off switch is its header, so the title is not repeated as a switch label. #}
+    {% set gate_help = fields[0][3] if fields[0]|length > 3 else '' %}
+    <label class="toggle-row ui-switch-row settings-card-switch">
+      <span class="ui-switch-copy">
+        <h2>{{ group_name }}</h2>
+        {{ setting_help(gate_help) }}
+      </span>
+      <span class="ui-switch">
+        <input type="checkbox" name="s_{{ gate_key }}" value="1" aria-label="{{ fields[0][1] }}" {% if (values.get(gate_key, '')|string|lower) in _pay_on %}checked{% endif %} />
+        <span class="ui-switch-track" aria-hidden="true"></span>
+      </span>
+    </label>
+    <div class="settings-grid" data-pay-settings-for="{{ gate_key }}"{% if (values.get(gate_key, '')|string|lower) not in _pay_on %} hidden{% endif %}>
+    {% for field in fields[1:] %}
+      {% include "_settings_field.html" %}
+    {% endfor %}
+    </div>
+    {% else %}
     <h2>{{ group_name }}</h2>
     <div class="settings-grid">
     {% for field in fields %}
       {% include "_settings_field.html" %}
     {% endfor %}
     </div>
+    {% endif %}
   </div>
   {% endfor %}
   <div class="actions sticky-actions ui-modal-sticky-save">
     <button class="btn" type="submit">ذخیره تنظیمات</button>
   </div>
 </form>
-<script src="/static/settings-show-when.js?v={{ app_version }}" defer></script>
-{% if show_pending_orders %}
-  {% include "_settings_pending_orders.html" %}
-{% endif %}
+<script src="/static/settings-show-when.js?v={{ asset_v('settings-show-when.js') if asset_v is defined else app_version }}" defer></script>
 </div>

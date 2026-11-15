@@ -9,14 +9,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DailyReportCatalogTests(unittest.TestCase):
-    def test_tab_is_second_to_last(self):
+    def test_tab_is_the_last_bot_settings_tab(self):
         from app.services.resellers import RESELLER_SETTINGS_TABS
         from app.services.users import SETTINGS_TABS
 
-        for tabs in (SETTINGS_TABS, RESELLER_SETTINGS_TABS):
-            keys = [k for k, _ in tabs]
-            self.assertEqual(keys[-1], "bot")
-            self.assertEqual(keys[-2], "daily_report")
+        # The Owner's bot connection moved to system settings; a reseller keeps their own bot tab last.
+        self.assertEqual([k for k, _ in SETTINGS_TABS][-1], "daily_report")
+        keys = [k for k, _ in RESELLER_SETTINGS_TABS]
+        self.assertEqual(keys[-1], "bot")
+        self.assertEqual(keys[-2], "daily_report")
 
     def test_notifications_no_longer_owns_daily_keys(self):
         from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, keys_for_tab
@@ -72,13 +73,6 @@ class DailyReportCatalogTests(unittest.TestCase):
         self.assertIn("shop_daily_report_chat_ids", sched)
         self.assertIn("ACTOR_SHOP", sched)
         self.assertIn("open_notify_bot_for_reseller", sched)
-
-    def test_preview_js_has_daily_report(self):
-        js = (ROOT / "app/web/templates/_tg_preview_chat_js.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("daily_report", js)
-        self.assertIn("fillDailyReport", js)
 
     def test_message_variables_catalog_includes_daily_report(self):
         from app.services.message_variables import (

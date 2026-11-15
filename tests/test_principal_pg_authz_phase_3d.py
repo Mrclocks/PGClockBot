@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -470,18 +470,47 @@ class Phase3DProvisionAndCacheTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn((int(a1.id), "l2_a1"), pg_mod._pg_principal_cache)
             self.assertNotIn((int(a1.id), "l1_a"), pg_mod._pg_principal_cache)
 
-    async def test_role_cache_shared_by_id_not_scope(self) -> None:
+    async def test_role_cache_is_partitioned_by_client_identity(self) -> None:
         from app.services import pg_access as pg_acc
+        from app.services.pg_read_cache import (
+            ROLE_FEATURES_PATH,
+            cache_put,
+            clear_store,
+            invalidate_capability_cache,
+        )
 
+        clear_store()
         role = {"id": 80, "name": "Shared", "is_owner": False, "permissions": USERS_VIEW_ONLY}
-        pg_acc._ROLE_CACHE[80] = (9999999999.0, ["pg_users", "pg_overview"], role)
-        features, got = await pg_acc.resolve_reseller_pg_features(80)
-        self.assertIn("pg_users", features)
+        # Poison only shop A's identity; shop B must still probe (fail closed → empty).
+        cache_put(
+            "u:shop_a@https://pg.example:role",
+            ROLE_FEATURES_PATH,
+            {"role_id": 80},
+            {"ok": True, "features": ["pg_users", "pg_overview", "pg_nodes"], "role": role},
+        )
+        client_a = AsyncMock()
+        client_a.base_url = "https://pg.example"
+        client_a._login_username = "shop_a"
+        client_a._read_cache_ident = lambda: "u:shop_a@https://pg.example:role"
+        client_a.get_admin_role = AsyncMock(return_value=role)
+        features_a, _ = await pg_acc.resolve_reseller_pg_features(80, client=client_a)
+        self.assertIn("pg_users", features_a)
+        client_a.get_admin_role.assert_not_awaited()
+
+        client_b = AsyncMock()
+        client_b.base_url = "https://pg.example"
+        client_b._login_username = "shop_b"
+        client_b._read_cache_ident = lambda: "u:shop_b@https://pg.example:role"
+        client_b.get_admin_role = AsyncMock(side_effect=RuntimeError("no share"))
+        client_b.get_admin_roles = AsyncMock(side_effect=RuntimeError("no share"))
+        features_b, role_b = await pg_acc.resolve_reseller_pg_features(80, client=client_b)
+        self.assertEqual(features_b, [])
+        self.assertIsNone(role_b)
         a1 = _l2_staff(11, 10, "a1_pg", role)
         a2 = _l2_staff(12, 10, "a2_pg", role)
         self.assertEqual(a1["pg_permissions"], a2["pg_permissions"])
         self.assertNotEqual(a1["org_visible_principal_ids"], a2["org_visible_principal_ids"])
-        _ = got
+        invalidate_capability_cache()
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ from app.services.shop_manual_adjust import (
     parse_request_key,
     parse_whole_number,
 )
+from app.services.manual_adjust_notices import schedule_wallet_notice
 from app.services.staff_audit import actor_from_staff, add_staff_action
 from app.services.wallet import credit_wallet, debit_wallet, get_wallet_balance
 
@@ -139,7 +140,15 @@ async def adjust_shop_wallet(session: AsyncSession, *, staff: dict, request: Sho
         await rollback_quiet(session)
         raise ShopWalletAdjustError(SHORTFALL if request.direction == "debit" else FAILED) from exc
     balance = await get_wallet_balance(session, customer, shop_id=shop_id)
-    return ShopWalletChange(
+    change = ShopWalletChange(
         shop_id=shop_id, customer_id=int(customer.id), amount=request.amount,
         direction=request.direction, balance_after=int(balance), replayed=False,
     )
+    schedule_wallet_notice(
+        user_id=change.customer_id,
+        mode=change.direction,
+        amount=change.amount,
+        balance=change.balance_after,
+        shop_id=shop_id,
+    )
+    return change

@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 RETIRED_TEXT_DEFAULTS: dict[str, tuple[str, ...]] = {
+    "faq_text": ("❓ حجم تمام شد چه کنم؟\nاز بخش سرویس‌ها → تمدید.\n\n❓ لینک کار نمی‌کند؟\nQR یا لینک را دوباره از سرویس‌های من بگیرید.",),
+    "payment_reject_text": ("پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید.",),
     "btn_adm_users_search": ("🔎 جستجو با آیدی تلگرام",),
     "btn_adm_hub_product": ("📦 محصول و PG",),
     "btn_adm_res_apps": ("📋 درخواست‌های منتظر",),

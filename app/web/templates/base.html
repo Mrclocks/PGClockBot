@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% from "macros.html" import modal_title %}
 {# Header brand; pages rendered without a signed-in person (or by a bare template environment) keep the default. #}
 {% set brand = panel_brand if panel_brand is defined and panel_brand else none %}
@@ -16,7 +17,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="{{ brand_name }}" />
+  <script src="/static/fa-number.js?v={{ asset_v('fa-number.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/panel_widget_request.js?v={{ panel_widget_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/panel_ok_flash.js?v={{ panel_ok_flash_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   {% if csrf_token %}<meta name="csrf-token" content="{{ csrf_token }}" />{% endif %}
   <title>{% block title %}پنل مدیریت{% endblock %} · {{ brand_name }}</title>
   <script{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>
@@ -52,34 +55,33 @@
       .topbar.mobile-only { display: none !important; }
     }
   </style>
-  <link rel="preload" href="/static/panel.css?v={{ app_version }}" as="style" />
-  <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
-  <link rel="stylesheet" href="/static/panel.css?v={{ app_version }}" />
+  <link rel="preload" href="/static/panel.css?v={{ asset_v('panel.css') if asset_v is defined else app_version }}" as="style" />
+  <link rel="stylesheet" href="/static/fonts.css?v={{ asset_v('fonts.css') if asset_v is defined else app_version }}" />
+  <link rel="stylesheet" href="/static/panel.css?v={{ asset_v('panel.css') if asset_v is defined else app_version }}" />
   {# Fixed accent presets, generated from code constants (never from saved text). #}
   {% if panel_brand_css is defined %}<style{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>{{ panel_brand_css }}</style>{% endif %}
-  <link rel="stylesheet" href="/static/list-inputs.css?v={{ app_version }}" />
-  <link rel="stylesheet" href="/static/panel-nav-modes.css?v={{ app_version }}" />
+  <link rel="stylesheet" href="/static/list-inputs.css?v={{ asset_v('list-inputs.css') if asset_v is defined else app_version }}" />
+  <link rel="stylesheet" href="/static/panel-nav-modes.css?v={{ asset_v('panel-nav-modes.css') if asset_v is defined else app_version }}" />
+  <link rel="stylesheet" href="/static/panel-ds.css?v={{ asset_v('panel-ds.css') if asset_v is defined else app_version }}" />
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
   {% block head %}{% endblock %}
 </head>
 <body>
   {% if staff is defined and staff %}
+  {% from "_nav_icons.html" import nav_icon %}
+  {% from "_ds.html" import ds_modal_head, ico %}
   {% set path = request.url.path %}
-  {% set perms = staff.get('permissions') or [] %}
-  {% set pg_nav = staff.get('pg_permissions') or [] %}
-  {% set is_admin = staff.role == 'admin' %}
   {# Owner-gated chrome: sticky role=admin alone must not unlock Owner nav #}
   {% set is_owner = is_owner if is_owner is defined else (identity.kind == 'owner' if identity is defined and identity else false) %}
   {% set is_reseller = staff.role == 'reseller' %}
   {% set is_pg_staff = staff.role == 'pg_staff' %}
   {% set ident = identity if identity is defined and identity else {} %}
-  {% set has_bot = is_admin or (perms|length > 0) or is_reseller %}
-  {% set has_pg = (pg_nav|length > 0) %}
   <div class="shell">
+    {# Phone header: logo, brand and version, and the panel search. The menu opens from «منو» in the bottom bar. #}
     <header class="topbar mobile-only">
       <a class="topbar-brand" href="/home" aria-label="داشبورد">
         <span class="brand-logo{% if brand_custom_logo %} brand-logo--custom{% endif %}" aria-hidden="true"><img src="{{ brand_logo }}" alt="" width="40" height="40" /></span>
-        <div class="topbar-brand-text">
+        <span class="topbar-brand-text">
           <strong dir="auto">{{ brand_name }}</strong>
           {% if is_owner %}
           <span class="topbar-version" dir="ltr">
@@ -88,11 +90,19 @@
             <span class="channel-badge channel-badge-{{ deployed_channel|default('main') }}" title="کانال نصب‌شده فعلی">{{ deployed_channel_label|default('پایدار') }}</span>
           </span>
           {% endif %}
-        </div>
+        </span>
       </a>
-      <button type="button" class="menu-toggle" id="menu-toggle" aria-label="منو" aria-expanded="false" aria-controls="sidebar">
-        <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span>
-      </button>
+      <div class="side-search topbar-search" data-panel-search role="search">
+        <label class="sr-only" for="panel-search-input-top">جستجو در پنل</label>
+        {{ icon('search', 'nav-ico') }}
+        <input id="panel-search-input-top" type="search" autocomplete="off" maxlength="60" placeholder="جستجو…"
+               aria-controls="panel-search-results-top" aria-expanded="false" data-panel-search-input />
+        {# Takes the magnifier's place while the field is open: clears it and folds it back into the circle. #}
+        <button type="button" class="topbar-search-close" aria-label="بستن جستجو" data-panel-search-clear>
+          {{ icon('close', 'nav-ico') }}
+        </button>
+        <div id="panel-search-results-top" class="side-search-results" role="listbox" aria-label="نتیجه‌های جستجو" hidden data-panel-search-results></div>
+      </div>
     </header>
 
     <aside class="side" id="sidebar" aria-label="منوی اصلی">
@@ -110,238 +120,60 @@
           {% endif %}
         </div>
       </a>
+      <div class="side-search" data-panel-search role="search">
+        <label class="sr-only" for="panel-search-input">جستجو در پنل</label>
+        {{ icon('search', 'nav-ico') }}
+        <input id="panel-search-input" type="search" autocomplete="off" maxlength="60" placeholder="جستجوی صفحه یا تنظیم…"
+               aria-controls="panel-search-results" aria-expanded="false" aria-keyshortcuts="Control+K /" data-panel-search-input />
+        <kbd class="side-search-key" aria-hidden="true">/</kbd>
+        <div id="panel-search-results" class="side-search-results" role="listbox" aria-label="نتیجه‌های جستجو" hidden data-panel-search-results></div>
+      </div>
       <div class="side-theme" id="side-theme">
         <button type="button" class="side-theme-btn" id="theme-toggle" aria-haspopup="listbox" aria-expanded="false" aria-label="انتخاب تم">
           <span class="side-theme-main">
-            <svg class="side-theme-ico" id="theme-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+            <span class="side-theme-ico-wrap" id="theme-ico">{{ icon('monitor', 'side-theme-ico') }}</span>
             <span class="side-theme-text" id="theme-label">تم · سیستم</span>
           </span>
-          <svg class="side-theme-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9l5-4 5 4"/><path d="M7 15l5 4 5-4"/></svg>
+          {{ icon('updown', 'side-theme-caret') }}
         </button>
         <div class="side-theme-menu" id="theme-menu" role="listbox" hidden>
           <button type="button" role="option" data-theme-pref="system">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+            {{ icon('monitor') }}
             <span>سیستم</span>
           </button>
           <button type="button" role="option" data-theme-pref="light">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+            {{ icon('sun') }}
             <span>روشن</span>
           </button>
           <button type="button" role="option" data-theme-pref="dark">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
+            {{ icon('moon') }}
             <span>تیره</span>
           </button>
         </div>
       </div>
       <nav class="side-nav" data-side-nav>
-        {% set settings_tab = request.query_params.get('tab') or 'welcome' %}
-        {% set is_panel_settings = path.startswith('/settings') and settings_tab in ['general','backup','pwa','ssl','update'] %}
-        {% if is_owner %}
-        <div class="nav-section is-collapsed nav-section-home" data-nav-mode="system" id="nav-panel-system">
-          <button type="button" class="nav-label nav-label-home nav-label-toggle" data-nav-collapse="system" aria-expanded="false">
-            <span>وب پنل</span>
-            <svg class="nav-label-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
+        {% set nav_dots = {'inbox_alert': inbox_alert, 'tickets_unread': tickets_unread, 'cancel_alert': cancel_alert} %}
+        {# Environments built outside the panel app (template unit tests) have no registry global. #}
+        {% set nav_sections = panel_sidebar(staff, ident, is_owner, marketing_sections if marketing_sections is defined else (), path, request.query_params.get('tab') or '') if panel_sidebar is defined else () %}
+        {% for section in nav_sections %}
+        <div class="nav-section is-collapsed nav-section-{{ section.tone }}" data-nav-mode="{{ section.key }}" id="nav-panel-{{ section.key }}">
+          <button type="button" class="nav-label nav-label-{{ section.tone }} nav-label-toggle" data-nav-collapse="{{ section.key }}" aria-expanded="false">
+            <span>{{ section.label }}</span>
+            {{ icon('chev-down', 'nav-label-caret') }}
           </button>
-          <a href="/home" class="nav-item nav-item-home {% if path=='/home' %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
-            <span>داشبورد</span>
+          {% if section.key != 'system' %}<p class="nav-empty muted">در این بخش آیتمی برای دسترسی شما نیست.</p>{% endif %}
+          {% for item in section.items %}
+          <a href="{{ item.href }}" class="nav-item nav-item-{{ section.tone }}{% if item.active %} active{% endif %}"{% if item.active %} aria-current="page"{% endif %}>
+            {{ nav_icon(item.icon) }}
+            {% if item.dot %}<span class="nav-item-label"><span>{{ item.label }}</span>{% if nav_dots[item.dot] %}<i class="nav-dot" aria-label="{{ nav_dot_labels[item.dot] }}"></i>{% endif %}</span>{% else %}<span>{{ item.label }}</span>{% endif %}
           </a>
-          <a href="/inbox" class="nav-item nav-item-home {% if path.startswith('/inbox') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a5 5 0 0 1 5 5v2.2l1.8 3.3H5.2L7 11.2V9a5 5 0 0 1 5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>
-            <span class="nav-item-label"><span>اعلان‌ها</span>{% if inbox_alert %}<i class="nav-dot" aria-label="اعلان خوانده‌نشده"></i>{% endif %}</span>
-          </a>
-          <a href="/settings?tab=general" class="nav-item nav-item-home {% if is_panel_settings or path.startswith('/security') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 5v4M19 7h1"/><path d="M4 12h3M11 10v4M13 12h7"/><path d="M4 17h11M19 15v4M21 17h-1"/></svg>
-            <span>تنظیمات وب پنل</span>
-          </a>
+          {% endfor %}
         </div>
-        {% else %}
-        <div class="nav-section is-collapsed nav-section-home" data-nav-mode="system" id="nav-panel-system">
-          <button type="button" class="nav-label nav-label-home nav-label-toggle" data-nav-collapse="system" aria-expanded="false">
-            <span>وب پنل</span>
-            <svg class="nav-label-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
-          </button>
-          <a href="/home" class="nav-item nav-item-home {% if path=='/home' %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
-            <span>داشبورد</span>
-          </a>
-          <a href="/inbox" class="nav-item nav-item-home {% if path.startswith('/inbox') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a5 5 0 0 1 5 5v2.2l1.8 3.3H5.2L7 11.2V9a5 5 0 0 1 5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>
-            <span class="nav-item-label"><span>اعلان‌ها</span>{% if inbox_alert %}<i class="nav-dot" aria-label="اعلان خوانده‌نشده"></i>{% endif %}</span>
-          </a>
-          <a href="/security" class="nav-item nav-item-home {% if path.startswith('/security') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 5v4M19 7h1"/><path d="M4 12h3M11 10v4M13 12h7"/><path d="M4 17h11M19 15v4M21 17h-1"/></svg>
-            <span>تنظیمات وب پنل</span>
-          </a>
-          {% if is_pg_staff %}
-          <a href="/tickets" class="nav-item nav-item-home {% if path.startswith('/tickets') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
-            <span class="nav-item-label"><span>پشتیبانی</span>{% if tickets_unread %}<i class="nav-dot" aria-label="پیام خوانده‌نشده"></i>{% endif %}</span>
-          </a>
-          {% endif %}
-        </div>
-        {% endif %}
-        {% if has_bot %}
-        <div class="nav-section is-collapsed nav-section-bot" data-nav-mode="shop" id="nav-panel-shop">
-          <button type="button" class="nav-label nav-label-bot nav-label-toggle" data-nav-collapse="shop" aria-expanded="false">
-            <span>پنل ربات</span>
-            <svg class="nav-label-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
-          </button>
-          <p class="nav-empty muted">در این بخش آیتمی برای دسترسی شما نیست.</p>
-          {% if is_admin or 'dashboard' in perms %}
-          <a href="/dashboard" class="nav-item nav-item-bot {% if path=='/dashboard' %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-            <span>نمای کلی</span>
-          </a>
-          {% endif %}
-          {# A shop owner's own package and sub-representatives belong with the shop, not the web panel. #}
-          {% if is_reseller and not is_owner %}
-          <a href="/my-subscription" class="nav-item nav-item-bot {% if path.startswith('/my-subscription') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18M7 15h3"/></svg>
-            <span>اشتراک من</span>
-          </a>
-          {% endif %}
-          {% if is_owner %}
-          <a href="/users" class="nav-item nav-item-bot {% if path.startswith('/users') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
-            <span>کاربران</span>
-          </a>
-          {% elif 'dashboard' in perms %}
-          <a href="/users" class="nav-item nav-item-bot {% if path.startswith('/users') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
-            <span>مشتریان</span>
-          </a>
-          {% endif %}
-          {% if not is_owner and ident.can_add_representative %}
-          <a href="/resellers" class="nav-item nav-item-bot {% if path.startswith('/resellers') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
-            <span>نمایندگان من</span>
-          </a>
-          {% endif %}
-          {% if is_owner %}
-          {% if ident.can_manage_representatives %}
-          <a href="/resellers" class="nav-item nav-item-bot {% if path.startswith('/resellers') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
-            <span>نمایندگان</span>
-          </a>
-          {% endif %}
-          {% endif %}
-          {% if is_admin or 'orders' in perms or 'payments' in perms %}
-          <a href="/finance" class="nav-item nav-item-bot {% if path.startswith('/finance') or path.startswith('/orders') or path.startswith('/payments') or path.startswith('/service-cancellations') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-1.2 9.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.7L6 4H3"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>
-            <span class="nav-item-label"><span>مدیریت مالی</span>{% if cancel_alert %}<i class="nav-dot" aria-label="درخواست لغو در انتظار"></i>{% endif %}</span>
-          </a>
-          {% endif %}
-          {% if is_admin or 'plans' in perms %}
-          <a href="/plans" class="nav-item nav-item-bot {% if path.startswith('/plans') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/><path d="M18 15v4M16 17h4"/></svg>
-            <span>پلن‌ها</span>
-          </a>
-          {% endif %}
-          {% if is_owner or 'tickets' in perms %}
-          <a href="/tickets" class="nav-item nav-item-bot {% if path.startswith('/tickets') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
-            <span class="nav-item-label"><span>پشتیبانی</span>{% if tickets_unread %}<i class="nav-dot" aria-label="پیام خوانده‌نشده"></i>{% endif %}</span>
-          </a>
-          {% endif %}
-          {% set mk_sections = marketing_sections if marketing_sections is defined else () %}
-          {% if mk_sections %}
-          {% set mk_active = namespace(on=false) %}
-          {% for section in mk_sections if path.startswith(section.href.split('?')[0]) %}{% set mk_active.on = true %}{% endfor %}
-          <a href="{{ mk_sections[0].href }}" class="nav-item nav-item-bot {% if mk_active.on %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M18.8 6.2a8.5 8.5 0 0 1 0 11.6"/></svg>
-            <span>بازاریابی و وفاداری</span>
-          </a>
-          {% endif %}
-          {% if is_owner or staff.role in ('reseller', 'principal') %}
-          <a href="/staff-actions" class="nav-item nav-item-bot {% if path.startswith('/staff-actions') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10a2 2 0 0 1 2 2v14l-3-2-2 2-2-2-2 2-2-2-3 2V6a2 2 0 0 1 2-2z"/><path d="M9 9h6M9 13h4"/></svg>
-            <span>گزارش کارکنان</span>
-          </a>
-          {% endif %}
-          {% if is_owner or 'shop_settings' in perms %}
-          <a href="{% if is_owner %}/settings{% else %}/shop-settings{% endif %}" class="nav-item nav-item-bot {% if (path.startswith('/settings') and not is_panel_settings) or path.startswith('/shop-settings') or path.startswith('/message-variables') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V5H9"/><path d="M2 14h2M20 14h2"/><circle cx="9.5" cy="13.5" r="1.1"/><circle cx="14.5" cy="13.5" r="1.1"/><path d="M9.5 17h5"/></svg>
-            <span>تنظیمات</span>
-          </a>
-          {% endif %}
-          {% if is_owner %}
-          <a href="/connection-status" class="nav-item nav-item-bot {% if path.startswith('/connection-status') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
-            <span>وضعیت اتصال</span>
-          </a>
-          {% endif %}
-        </div>
-        {% endif %}
-
-        {% if has_pg %}
-        <div class="nav-section is-collapsed nav-section-pg" data-nav-mode="pg" id="nav-panel-pg">
-          <button type="button" class="nav-label nav-label-pg nav-label-toggle" data-nav-collapse="pg" aria-expanded="false">
-            <span>پنل پاسارگارد</span>
-            <svg class="nav-label-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
-          </button>
-          <p class="nav-empty muted">در این بخش آیتمی برای دسترسی شما نیست.</p>
-          {% if 'pg_overview' in pg_nav %}
-          <a href="/pg" class="nav-item nav-item-pg {% if path=='/pg' %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-            <span>نمای کلی</span>
-          </a>
-          {% endif %}
-          {% if 'pg_users' in pg_nav %}
-          <a href="/pg/users" class="nav-item nav-item-pg {% if path.startswith('/pg/users') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
-            <span>کاربران</span>
-          </a>
-          {% endif %}
-          {% if 'pg_admins' in pg_nav %}
-          <a href="/pg/admins" class="nav-item nav-item-pg {% if path.startswith('/pg/admins') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.2 2.8 7.2 7 8.5 4.2-1.3 7-4.3 7-8.5V6l-7-3z"/></svg>
-            <span>ادمین</span>
-          </a>
-          {% endif %}
-          {% if 'pg_nodes' in pg_nav %}
-          <a href="/pg/nodes" class="nav-item nav-item-pg {% if path.startswith('/pg/nodes') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
-            <span>نود</span>
-          </a>
-          {% endif %}
-          {% if 'pg_groups' in pg_nav %}
-          <a href="/pg/groups" class="nav-item nav-item-pg {% if path.startswith('/pg/groups') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v10H4z"/><path d="M8 7V5h8v2"/></svg>
-            <span>گروه</span>
-          </a>
-          {% endif %}
-          {% if 'pg_hosts' in pg_nav %}
-          <a href="/pg/hosts" class="nav-item nav-item-pg {% if path.startswith('/pg/hosts') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg>
-            <span>هاست</span>
-          </a>
-          {% endif %}
-          {% if 'pg_templates' in pg_nav %}
-          <a href="/pg/templates" class="nav-item nav-item-pg {% if path.startswith('/pg/templates') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
-            <span>تمپلیت</span>
-          </a>
-          {% endif %}
-          {% if 'pg_inbounds' in pg_nav %}
-          <a href="/pg/inbounds" class="nav-item nav-item-pg {% if path.startswith('/pg/inbounds') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16M12 4v16"/><circle cx="12" cy="12" r="3"/></svg>
-            <span>اینباند</span>
-          </a>
-          {% endif %}
-          {% if is_owner %}
-          <a href="/settings?tab=bot" class="nav-item nav-item-pg {% if path=='/settings' and request.query_params.get('tab')=='bot' %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="17" r="2"/></svg>
-            <span>تنظیمات اتصال</span>
-          </a>
-          {% endif %}
-        </div>
-        {% endif %}
-
+        {% endfor %}
       </nav>
 
       <a href="/help/" class="side-help-btn {% if path.startswith('/help') %}is-active{% endif %}" aria-label="راهنمای پنل">
-        <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.3 1-1.3 1.8V14"/><path d="M12 17h.01"/></svg>
+        {{ icon('help', 'nav-ico') }}
         <span>راهنما</span>
       </a>
 
@@ -377,7 +209,7 @@
         <form method="post" action="/logout" class="logout-form">
           {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
           <button type="submit" class="logout-link">
-          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/><path d="M14 12H4.5M14 12l3-3M14 12l3 3"/></svg>
+          {{ icon('logout', 'nav-ico') }}
           خروج
           </button>
         </form>
@@ -387,7 +219,31 @@
 
     <div class="side-backdrop" id="side-backdrop" aria-hidden="true"></div>
 
-    <main class="main">
+    {# Phone bottom bar: sidebar items in the owner's order (default: the most used) plus «منو» (the full sidebar as a drawer); it becomes the drawer's close button. #}
+    {% set dock = panel_dock(nav_sections, mobile_bar_order|default(())) if (nav_sections and panel_dock is defined) else none %}
+    {% if dock and dock.items %}
+    <div class="bottom-dock" data-bottom-dock>
+      <nav class="bottom-dock-bar" aria-label="دسترسی سریع">
+        {% for item in dock.items %}
+        <a href="{{ item.href }}" class="bottom-dock-item{% if item.active %} is-active{% endif %}"{% if item.active %} aria-current="page"{% endif %}>
+          {{ nav_icon(item.icon) }}
+          <span class="bottom-dock-label">{{ item.short_label }}</span>
+          {% if item.dot and nav_dots[item.dot] %}<i class="nav-dot" aria-label="{{ nav_dot_labels[item.dot] }}"></i>{% endif %}
+        </a>
+        {% endfor %}
+        <button type="button" class="bottom-dock-item{% if dock.more_active %} is-active{% endif %}" data-drawer-open aria-controls="sidebar" aria-expanded="false">
+          {{ nav_icon('menu') }}
+          <span class="bottom-dock-label">منو</span>
+        </button>
+      </nav>
+      {# While the drawer is open the bar folds into this button at its inline end. #}
+      <button type="button" class="bottom-dock-close" data-drawer-close aria-controls="sidebar" aria-label="بستن منو">
+        {{ icon('close', 'nav-ico') }}
+      </button>
+    </div>
+    {% endif %}
+
+    <main class="main ds" id="main">
       <div class="main-body">
         {# Page flashes stay above the title. When an edit/domain/catalog modal
            is reopening, the same message is shown inside the modal instead. #}
@@ -405,9 +261,9 @@
         </div>
         <div class="footer-actions">
           <a class="btn btn-star" href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener noreferrer">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21 8 14 2 9.4h7.6L12 2z"/></svg>
+            {{ icon('loyalty') }}
             ستاره
-            <svg class="btn-star-gh" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.35 6.84 9.71.5.1.68-.22.68-.48 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.31.1-2.73 0 0 .84-.27 2.75 1.05A9.36 9.36 0 0 1 12 6.84c.85.004 1.71.12 2.51.35 1.9-1.32 2.74-1.05 2.74-1.05.55 1.42.2 2.47.1 2.73.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.59.69.48A10.01 10.01 0 0 0 22 12.26C22 6.58 17.52 2 12 2z"/></svg>
+            {{ icon('github', 'btn-star-gh') }}
           </a>
         </div>
       </footer>
@@ -423,13 +279,10 @@
       </span>
     </span>
   </div>
-  <div class="ui-modal" id="modal-inbox-dismiss" hidden>
+  <div class="ui-modal ds ds-dialog" id="modal-inbox-dismiss" hidden>
     <div class="ui-modal-backdrop" data-modal-close></div>
     <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="inbox-dismiss-title">
-      <div class="ui-modal-head">
-        {{ modal_title('inbox', 'حذف اعلان', caption='مدت مخفی‌سازی را انتخاب کنید', tone='neutral', heading_id='inbox-dismiss-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
+      {{ ds_modal_head('inbox', 'حذف اعلان', 'inbox-dismiss-title', tone='neutral') }}
       <form method="post" action="/inbox/dismiss" class="form-stack" id="form-inbox-dismiss" data-panel-validate="0" novalidate>
         {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
         <input type="hidden" name="alert_key" id="inbox-dismiss-key" value="" />
@@ -437,7 +290,8 @@
         <input type="hidden" name="return_to" id="inbox-dismiss-return" value="" />
         {# Explicit mode field — WebKit may omit zero-size radios from native submit #}
         <input type="hidden" name="mode" id="inbox-dismiss-mode" value="24h" />
-        <p class="muted" id="inbox-dismiss-hint">مدت مخفی‌سازی را انتخاب کنید، سپس تأیید کنید.</p>
+        <div class="ds-body ds-stack">
+        <p class="ds-desc" id="inbox-dismiss-hint">مدت مخفی‌سازی را انتخاب کنید، سپس تأیید کنید.</p>
         <div class="inbox-dismiss-options" role="radiogroup" aria-labelledby="inbox-dismiss-hint">
           <label class="inbox-dismiss-option is-selected">
             <input type="radio" name="dismiss_choice" value="24h" checked data-inbox-mode="24h" />
@@ -456,42 +310,54 @@
             </span>
           </label>
         </div>
-        <div class="actions">
-          <button type="submit" class="btn" id="inbox-dismiss-submit">تأیید</button>
-          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        </div>
+        <div class="ds-foot">
+          <div class="ds-foot-btns">
+            <button type="submit" class="btn" id="inbox-dismiss-submit">تأیید</button>
+            <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+          </div>
         </div>
       </form>
     </div>
   </div>
-  <div class="ui-modal" id="modal-confirm" hidden>
+  <div class="ui-modal ds ds-dialog" id="modal-confirm" hidden>
     <div class="ui-modal-backdrop" data-modal-close></div>
     <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-      <div class="ui-modal-head">
-        {{ modal_title('overview', 'تأیید', caption='این عمل را تأیید کنید', tone='neutral', heading_id='confirm-title') }}
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
+      {{ ds_modal_head('overview', 'تأیید', 'confirm-title', tone='neutral') }}
       <form id="confirm-form" class="form-stack" action="#" method="post" data-panel-validate="0" novalidate>
         {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
-        <p id="confirm-message" class="confirm-message"></p>
-        {# Reason field is injected by panel.js only when requireReason=true.
-           Phrase (type-to-confirm) is injected when confirmPhrase is set.
-           novalidate: HTML minlength fights Persian IME composition and showed
-           false "too short" errors; panel.js validates after composition ends. #}
-        <div id="confirm-reason-slot" hidden></div>
-        <div class="actions">
-          <button type="submit" class="btn btn-danger" id="confirm-submit">تأیید</button>
-          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        <div class="ds-body">
+          <div class="ds-confirm">
+            <span class="ds-confirm-ico" aria-hidden="true">{{ ico('warn') }}</span>
+            <p id="confirm-message" class="confirm-message"></p>
+          </div>
+          {# Reason field is injected by panel.js only when requireReason=true.
+             Phrase (type-to-confirm) is injected when confirmPhrase is set.
+             novalidate: HTML minlength fights Persian IME composition and showed
+             false "too short" errors; panel.js validates after composition ends. #}
+          <div id="confirm-reason-slot" hidden></div>
+        </div>
+        <div class="ds-foot">
+          <div class="ds-foot-btns">
+            <button type="submit" class="btn btn-danger" id="confirm-submit">تأیید</button>
+            <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+          </div>
         </div>
       </form>
     </div>
   </div>
   <script src="/static/money-inputs.js?v={{ money_inputs_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
-  <script src="/static/nav-accordion.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/nav-accordion.js?v={{ asset_v('nav-accordion.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/panel-search.js?v={{ asset_v('panel-search.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/page-head.js?v={{ asset_v('page-head.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/modal-list.js?v={{ asset_v('modal-list.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/panel-keyboard.js?v={{ asset_v('panel-keyboard.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/panel.js?v={{ panel_script_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/list-inputs.js?v={{ list_inputs_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
-  <script src="/static/table-list.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/table-list.js?v={{ asset_v('table-list.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/panel-ds.js?v={{ asset_v('panel-ds.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script type="application/json" id="template-variable-specs"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>{{ template_variable_specs(daily_report_actor|default('shop' if shop_mode|default(false) else 'owner', true))|tojson }}</script>
-  <script src="/static/template-variables.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/template-variables.js?v={{ asset_v('template-variables.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   {% block page_scripts %}{% endblock %}
   {% else %}
     {% block auth %}{% endblock %}

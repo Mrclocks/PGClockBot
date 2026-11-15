@@ -20,10 +20,16 @@ from app.db import Base
 from app.db.models import BotUser, ResellerBillingTransaction, ResellerProfile, WalletTransaction
 from app.services import reseller_wallet
 from app.services.billing import KIND_ADJUSTMENT, debit_adjustment
-from app.services.reseller_wallet import WalletChange, adjust_reseller_wallet, change_notice
+from app.services.reseller_wallet import (
+    WalletChange,
+    adjust_reseller_wallet,
+    build_reseller_wallet_idempotency_key,
+    change_notice,
+)
 
 PAYG_SHOP = 5
 FIXED_SHOP = 6
+PAYG_SHOP_B = 7
 
 
 class _Db:
@@ -38,11 +44,13 @@ class _Db:
             session.add_all([
                 BotUser(id=PAYG_SHOP, telegram_id=105, referral_code="p", role="reseller", wallet_balance=50_000),
                 BotUser(id=FIXED_SHOP, telegram_id=106, referral_code="f", role="reseller", wallet_balance=50_000),
+                BotUser(id=PAYG_SHOP_B, telegram_id=107, referral_code="q", role="reseller", wallet_balance=50_000),
             ])
             await session.flush()
             session.add_all([
                 ResellerProfile(user_id=PAYG_SHOP, billing_mode="payg", payg_wallet_linked=True, billing_balance=50_000),
                 ResellerProfile(user_id=FIXED_SHOP, billing_mode="fixed"),
+                ResellerProfile(user_id=PAYG_SHOP_B, billing_mode="payg", payg_wallet_linked=True, billing_balance=50_000),
             ])
             await session.commit()
 
@@ -101,6 +109,15 @@ class DebitAdjustmentTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ValueError):
                 await self.debit(amount)
         self.assertEqual(await self.db.balance(PAYG_SHOP), 50_000)
+
+    async def test_raw_idempotency_key_cannot_replay_another_resellers_row(self) -> None:
+        """Billing ledger keys are global; a hit must belong to the same reseller."""
+        await self.debit(10_000, key="shared-raw", shop=PAYG_SHOP)
+        with self.assertRaises(ValueError):
+            await self.debit(10_000, key="shared-raw", shop=PAYG_SHOP_B)
+        self.assertEqual(await self.db.balance(PAYG_SHOP), 40_000)
+        self.assertEqual(await self.db.balance(PAYG_SHOP_B), 50_000)
+        self.assertEqual(len(await self.db.ledger()), 1)
 
 
 class WalletFormTests(unittest.IsolatedAsyncioTestCase):
@@ -188,6 +205,31 @@ class ResellerWalletServiceTests(unittest.IsolatedAsyncioTestCase):
             reseller_wallet.schedule_followups(again)
         loop.assert_not_called()
 
+    async def test_same_client_key_does_not_collide_across_resellers_or_directions(self) -> None:
+        nonce = "client-nonce-0011"
+        credit_a = build_reseller_wallet_idempotency_key(
+            client_key=nonce, user_id=PAYG_SHOP, mode="credit"
+        )
+        credit_b = build_reseller_wallet_idempotency_key(
+            client_key=nonce, user_id=PAYG_SHOP_B, mode="credit"
+        )
+        debit_a = build_reseller_wallet_idempotency_key(
+            client_key=nonce, user_id=PAYG_SHOP, mode="debit"
+        )
+        self.assertNotEqual(credit_a, credit_b)
+        self.assertNotEqual(credit_a, debit_a)
+
+        first = await self.adjust(PAYG_SHOP, 5_000, "credit", key=nonce)
+        other = await self.adjust(PAYG_SHOP_B, 5_000, "credit", key=nonce)
+        debit = await self.adjust(PAYG_SHOP, 5_000, "debit", key=nonce)
+        self.assertFalse(first.replayed)
+        self.assertFalse(other.replayed)
+        self.assertFalse(debit.replayed)
+        self.assertEqual(await self.db.balance(PAYG_SHOP), 50_000)
+        self.assertEqual(await self.db.balance(PAYG_SHOP_B), 55_000)
+        keys = {tx.idempotency_key for tx in await self.db.ledger()}
+        self.assertEqual(keys, {credit_a, credit_b, debit_a})
+
     async def test_a_legacy_billing_pot_is_merged_once_and_kept(self) -> None:
         async with self.db.Session() as session:
             profile = (await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == PAYG_SHOP))).scalar_one()
@@ -249,7 +291,8 @@ class UserPageResellerWalletTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_a_payg_reseller_changed_from_the_user_page_uses_the_billing_ledger(self) -> None:
         response = self.client.post(
-            f"/users/{PAYG_SHOP}/wallet-credit", data={"amount": "5000", "mode": "debit", "nonce": "n" * 16},
+            f"/users/{PAYG_SHOP}/wallet-credit",
+            data={"amount": "5000", "mode": "debit", "note": "کاهش دستی تست", "nonce": "n" * 16},
             follow_redirects=False,
         )
         self.assertEqual(response.status_code, 303)
@@ -290,10 +333,10 @@ class BotConfirmTextTests(unittest.TestCase):
     def text(self, amount: int, mode: str, *, payg: bool) -> str:
         from types import SimpleNamespace
 
-        from app.bot.handlers.admin import _reseller_wallet_confirm_text
+        from app.bot.handlers.admin_wallet_adjust import _reseller_wallet_confirm_text
 
         user = SimpleNamespace(full_name="<i>shop</i>", telegram_id=1, wallet_balance=50_000)
-        return _reseller_wallet_confirm_text(user, amount, mode, payg=payg)
+        return _reseller_wallet_confirm_text(user, amount, mode, payg=payg, reason="تعدیل دستی تست")
 
     def test_emptying_a_payg_wallet_warns_before_applying(self) -> None:
         self.assertIn("قطع می‌شوند", self.text(50_000, "debit", payg=True))

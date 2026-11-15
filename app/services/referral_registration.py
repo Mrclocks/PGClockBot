@@ -8,6 +8,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser
+from app.services.shop_membership import shop_member_clause
 
 
 class ReferralRequired(ValueError):
@@ -36,11 +37,11 @@ async def find_registration_referrer(
     code = normalize_referral_code(raw_code)
     if not code:
         return None
-    scope_filter = (
-        or_(BotUser.reseller_id == reseller_owner_id, BotUser.id == reseller_owner_id)
-        if reseller_owner_id
-        else BotUser.reseller_id.is_(None)
-    )
+    # A customer of this shop (attributed or a recorded member) or its owner; the club of
+    # every bot the person uses shows them a link, so each link must work in its own bot.
+    scope_filter = shop_member_clause(reseller_owner_id)
+    if reseller_owner_id:
+        scope_filter = or_(scope_filter, BotUser.id == reseller_owner_id)
     return await session.scalar(
         select(BotUser).where(
             BotUser.referral_code == code,

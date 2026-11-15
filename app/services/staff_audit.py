@@ -29,10 +29,12 @@ SHOP_OWNER_ROLES = frozenset({"reseller", "principal"})
 ACTOR_PLATFORM_OWNER = "platform_owner"
 ACTOR_SHOP_OWNER = "shop_owner"
 ACTOR_STAFF = "staff"
+ACTOR_SYSTEM = "system"
 ACTOR_LABELS = {
     ACTOR_PLATFORM_OWNER: "مدیر پلتفرم",
     ACTOR_SHOP_OWNER: "صاحب فروشگاه",
     ACTOR_STAFF: "کارمند",
+    ACTOR_SYSTEM: "سیستم",
 }
 
 # Fixed in code: a record's action is always one of these.
@@ -46,11 +48,26 @@ ACTION_LABELS = {
     "points_debit": "کسر دستی امتیاز",
     "customer_block": "مسدود کردن مشتری در فروشگاه",
     "customer_unblock": "رفع مسدودی مشتری در فروشگاه",
+    "pg_user_disable": "غیرفعال‌سازی کاربر پاسارگارد",
+    "pg_user_enable": "فعال‌سازی کاربر پاسارگارد",
+    "pg_user_reset_usage": "ریست مصرف کاربر پاسارگارد",
+    "pg_user_revoke_sub": "ابطال اشتراک کاربر پاسارگارد",
+    "pg_user_delete": "حذف کاربر پاسارگارد",
+    "service_renew": "تمدید دستی سرویس",
+    "service_extend": "تغییر مانده سرویس",
+    "service_delete": "حذف سرویس",
+    "customer_delete": "حذف مشتری",
+    "service_auto_delete": "حذف خودکار سرویس",
+    "service_cleanup_exempt": "معاف‌کردن سرویس از پاکسازی",
+    "service_cleanup_unexempt": "برگرداندن سرویس به پاکسازی",
+    "service_cleanup_hold": "تمدید مهلت حذف سرویس",
 }
 
 TARGET_LABELS = {
     "gift_code": "کد هدیه",
     "customer": "مشتری",
+    "pg_user": "کاربر پاسارگارد",
+    "service": "سرویس",
 }
 
 

@@ -12,6 +12,7 @@ PAYMENT_METHOD_FA: dict[str, str] = {
     PaymentMethod.STARS.value: "استارز",
     PaymentMethod.PSP.value: "درگاه آنلاین",
     PaymentMethod.BBC.value: "بزن به کارت",
+    PaymentMethod.STAFF_FREE.value: "دریافت رایگان مدیر",
 }
 
 

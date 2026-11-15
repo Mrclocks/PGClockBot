@@ -1,0 +1,11 @@
+/* List → detail inside a settings area (DESIGN_SYSTEM.md §7-1): browsers with cross-document View Transitions fade
+   the page in 180ms. Only opacity moves, so the header and the bottom bar, identical on both pages, look still.
+   They carry no view-transition-name: a named element is a backdrop root, and the glass of a bar inside one would
+   stop blurring the page behind it. Loaded only by settings pages; off under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  ::view-transition-old(root) { animation: vt-out var(--motion-fast) var(--ease-in) both; }
+  ::view-transition-new(root) { animation: vt-in var(--motion-fast) var(--ease-out) both; }
+}
+@keyframes vt-out { to { opacity: 0; } }
+@keyframes vt-in { from { opacity: 0; } }

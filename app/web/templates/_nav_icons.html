@@ -1,0 +1,5 @@
+{% from "_icons.html" import icon %}
+{# Sidebar icons, keyed by the ``icon`` of each item in app/services/panel_nav.py. #}
+{% macro nav_icon(name) -%}
+{{ icon(name, 'nav-ico') }}
+{%- endmacro %}

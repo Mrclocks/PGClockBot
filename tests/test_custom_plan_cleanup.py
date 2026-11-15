@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import update
 
-from app.services.orders import cancel_order, cancel_stale_pending_orders, reject_payment
+from app.services.orders import cancel_order, reject_payment
 from app.services.plans_catalog import list_catalog_plans
 
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
@@ -65,17 +65,22 @@ class CustomPlanCleanupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self._plan_ids(), [1])
         self.assertEqual(await self.session.scalar(select(func.count(Order.id))), 1)
 
-    async def test_stale_pending_cleanup_drops_only_stale_unpaid_custom_plans(self) -> None:
+    async def test_purging_a_stale_unpaid_custom_order_drops_its_plan(self) -> None:
+        from app.services.order_purge import run_purge
+
         stale = await self._custom_order(2, OrderStatus.PENDING.value)
         fresh = await self._custom_order(3, OrderStatus.PENDING.value)
         paid = await self._custom_order(4, OrderStatus.PAID.value)
-        old = datetime.now(timezone.utc) - timedelta(hours=100)
+        old = datetime.now(timezone.utc) - timedelta(days=60)
         await self.session.execute(update(Order).where(Order.id.in_([stale.id, paid.id])).values(created_at=old))
         await self.session.commit()
-        cancelled = await cancel_stale_pending_orders(self.session, older_than_hours=48)
-        self.assertEqual(cancelled, 1)
+        done = await run_purge(
+            self.session, shop_id=None, tags=frozenset({"order:pending"}), days=30
+        )
+        self.assertEqual(done.orders, 1)
         self.assertEqual(await self._plan_ids(), [1, 3, 4])
         self.assertEqual(await self.session.scalar(select(Order.status).where(Order.id == fresh.id)), "pending")
+        self.assertEqual(await self.session.scalar(select(func.count(Order.id)).where(Order.id == stale.id)), 0)
 
     async def test_plan_shared_with_another_order_is_kept(self) -> None:
         order = await self._custom_order(2, OrderStatus.PENDING.value)

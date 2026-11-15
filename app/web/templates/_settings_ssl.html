@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {# دامنه‌ها — دامنهٔ پنل وب، دامنهٔ مینی‌اپ و گواهی SSL مشترک آن‌ها #}
 {% from "macros.html" import modal_title %}
 
@@ -33,7 +34,7 @@
         <span class="muted" id="ssl-progress-pct" dir="ltr">{{ st.progress.pct if st.progress else 0 }}%</span>
       </div>
       <div class="ssl-progress-track" aria-hidden="true">
-        <i id="ssl-progress-bar" style="width:{{ st.progress.pct if st.progress else 0 }}%"></i>
+        <i id="ssl-progress-bar" style="--p: {{ st.progress.pct if st.progress else 0 }}"></i>
       </div>
     </div>
 
@@ -152,7 +153,7 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
 
   {% if st.last_error %}
   <h3 class="ssl-subhead">آخرین خطا</h3>
-  <pre class="update-log" style="display:block" dir="ltr">{{ st.last_error }}</pre>
+  <pre class="update-log is-shown" dir="ltr">{{ st.last_error }}</pre>
   {% endif %}
 
   <p class="muted ssl-status-line">
@@ -165,12 +166,14 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
   </p>
 </div>
 
-<div class="ui-modal" id="ssl-done-modal" hidden>
+<div class="ui-modal ds" id="ssl-done-modal" hidden>
   <div class="ui-modal-backdrop" data-ssl-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="ssl-done-title">
-    <div class="ui-modal-head">
-      {{ modal_title('security', 'گواهی SSL فعال شد', caption='گواهی و دامنه', tone='neutral', heading_id='ssl-done-title') }}
-      <button type="button" class="icon-btn" data-ssl-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('security', 'گواهی SSL فعال شد', tone='neutral', heading_id='ssl-done-title') }}
+        <button type="button" class="icon-btn" data-ssl-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
+      </div>
     </div>
     <div class="form-stack">
       <p class="confirm-message">
@@ -272,7 +275,7 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
       .then(d => {
         if (!box) return;
         box.hidden = false;
-        if (bar) bar.style.width = (d.pct || 0) + '%';
+        if (bar) bar.style.setProperty('--p', String((d.pct || 0)));
         if (msg) msg.textContent = d.message || '';
         if (pctEl) pctEl.textContent = (d.pct || 0) + '%';
         if (d.done && !finished) {
@@ -308,7 +311,7 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
         setBusy(true);
         if (box) box.hidden = false;
         if (msg) msg.textContent = action === 'renew' ? 'در حال تمدید…' : 'در حال دریافت گواهی…';
-        if (bar) bar.style.width = '6%';
+        if (bar) bar.style.setProperty('--p', '6');
         if (pctEl) pctEl.textContent = '6%';
         timer = setInterval(function () { if (!document.hidden) poll(); }, 800);
       }

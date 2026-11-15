@@ -76,11 +76,12 @@ class Ux20SettingsCatalogTests(unittest.TestCase):
         ):
             self.assertIn(key, DEFAULT_SETTINGS)
         self.assertNotIn("brand_primary_color", DEFAULT_SETTINGS)
-        self.assertIn("حالت تعمیرات و رسید", SETTING_GROUPS)
+        self.assertIn("وضعیت فروش", SETTING_GROUPS)
+        self.assertIn("رسیدها", SETTING_GROUPS)
         self.assertIn("گزارش و عملیات", SETTING_GROUPS)
         self.assertIn("گزارش روزانه", SETTING_GROUPS)
         self.assertIn("بکاپ زمان‌بندی", SETTING_GROUPS)
-        self.assertIn("حالت تعمیرات و رسید", TAB_SETTING_GROUPS["payment"])
+        self.assertIn("وضعیت فروش", TAB_SETTING_GROUPS["payment"])
         self.assertIn("بکاپ زمان‌بندی", TAB_SETTING_GROUPS["backup"])
         self.assertIn("گزارش روزانه", TAB_SETTING_GROUPS["daily_report"])
         self.assertNotIn("admin_daily_report_enabled", TAB_SETTING_GROUPS["notifications"])
@@ -118,7 +119,6 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertNotIn("home-panel-bot", home)
         self.assertIn("home-pg-health", home)
         self.assertIn("_home_ops.html", home)
-        self.assertIn("home-portal-bot", Path("app/web/templates/_home_ops.html").read_text(encoding="utf-8"))
         ops = Path("app/web/templates/_home_ops.html").read_text(encoding="utf-8")
         self.assertIn("صف کار", ops)
         self.assertIn("ac.entries", ops)
@@ -130,20 +130,17 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
     def test_inbox_page_and_sidebar(self):
         inbox = Path("app/web/templates/inbox.html").read_text(encoding="utf-8")
         self.assertIn("مرکز اقدام امروز", inbox)
-        self.assertIn("اعلان‌ها و مرکز اقدام", inbox)
+        self.assertIn("'مرکز اقدام'", inbox)
         self.assertIn("نماینده PAYG", inbox)
         self.assertIn("payg_risk", inbox)
         self.assertIn("ac.entries", inbox)
         self.assertNotIn("bot_token", inbox)
         self.assertNotIn("webhook_secret", inbox)
-        base = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn('href="/inbox"', base)
-        self.assertIn("inbox_alert", base)
-        self.assertIn("nav-dot", base)
-        # Inbox sits between dashboard and panel settings in both admin/reseller blocks
-        home_at = base.find('href="/home"')
-        inbox_at = base.find('href="/inbox"')
-        self.assertGreater(inbox_at, home_at)
+        from tests.sidebar_view import hrefs, owner_sidebar, sidebar
+
+        # Inbox sits between dashboard and settings for the owner and for everyone else
+        for system in (owner_sidebar()["system"], sidebar("reseller")["system"]):
+            self.assertEqual(hrefs(system)[:2], ["/home", "/inbox"])
         home_src = Path("app/api/home_pages.py").read_text(encoding="utf-8")
         self.assertIn('"/inbox"', home_src)
         self.assertIn("build_inbox_context", home_src)
@@ -185,8 +182,10 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
 
     def test_behavior_panel_moved_out_of_finance(self):
         html = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
-        self.assertIn("finance?tab=reports", html)
+        tabs = Path("app/web/templates/_finance_tabs.html").read_text(encoding="utf-8")
+        self.assertIn("finance?tab=reports", tabs)
         self.assertNotIn("finance?tab=behavior", html)
+        self.assertNotIn("finance?tab=behavior", tabs)
         self.assertNotIn("_funnel_panel.html", html)
         self.assertIn("_funnel_panel.html", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
         self.assertIn("تحویل ناموفق", html)
@@ -213,13 +212,18 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertNotIn("abandoned_plans", ux)
 
     def test_settings_icons_distinct(self):
-        macros = Path("app/web/templates/macros.html").read_text(encoding="utf-8")
-        self.assertIn("panel-settings", macros)
-        self.assertIn("bot-settings", macros)
-        base = Path("app/web/templates/base.html").read_text(encoding="utf-8")
+        from jinja2 import Environment, FileSystemLoader
+
+        # The two settings areas draw different icons (sliders vs. robot), wherever the title icon comes from.
+        env = Environment(loader=FileSystemLoader("app/web/templates"), autoescape=True)
+        draw = env.from_string('{% from "macros.html" import page_ico %}{{ page_ico(name) }}').render
+        self.assertNotEqual(draw(name="panel-settings"), draw(name="bot-settings"))
+        from app.services.panel_nav import build_sidebar, viewer_from_context
+
         # Panel settings: sliders; bot settings: robot face (not identical gear).
-        self.assertIn("M4 7h9M17 5v4", base)
-        self.assertIn('rx="2.5"', base)
+        owner = build_sidebar(viewer_from_context({"role": "admin"}, {}, is_owner=True), path="/home")
+        icons = {i.key: i.icon for s in owner for i in s.items}
+        self.assertEqual((icons["system_settings"], icons["bot_settings"]), ("gear", "bot"))
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("panel-settings", settings)
         self.assertIn("bot-settings", settings)
@@ -234,17 +238,6 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
     def test_plans_clone_button(self):
         html = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
         self.assertIn("/plans/{{ p.id }}/clone", html)
-
-    def test_preview_no_purchase_simulator(self):
-        html = Path("app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8")
-        js = Path("app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertNotIn("pv-sim-buy", html)
-        self.assertNotIn("شبیه‌ساز خرید", html)
-        self.assertNotIn("tg-sim-bar", html)
-        self.assertNotIn("simStep", js)
-        self.assertNotIn("pv-sim-buy", js)
-        self.assertNotIn(".tg-sim-bar", css)
 
     def test_backup_verify_ui(self):
         html = Path("app/web/templates/_settings_backup.html").read_text(encoding="utf-8")
@@ -395,8 +388,8 @@ class ButtonStyleTests(unittest.TestCase):
         from app.services.resellers import RESELLER_SETTINGS_TABS
         from app.services.users import DEFAULT_SETTINGS, SETTINGS_TABS, keys_for_tab
 
-        self.assertIn(("colors", "رنگبندی دکمه‌ها"), SETTINGS_TABS)
-        self.assertIn(("colors", "رنگبندی دکمه‌ها"), RESELLER_SETTINGS_TABS)
+        self.assertIn(("colors", "رنگ دکمه‌ها"), SETTINGS_TABS)
+        self.assertIn(("colors", "رنگ دکمه‌ها"), RESELLER_SETTINGS_TABS)
         self.assertIn(("appearance", "هویت ربات"), SETTINGS_TABS)
         self.assertIn(("appearance", "هویت ربات"), RESELLER_SETTINGS_TABS)
         keys = keys_for_tab("colors")
@@ -459,17 +452,6 @@ class ButtonStyleTests(unittest.TestCase):
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('tab == \'colors\'', settings)
         self.assertIn("'colors'", settings)
-        self.assertIn("can-preview", settings)
-        self.assertIn("has-preview", Path("app/web/static/panel.css").read_text(encoding="utf-8"))
-        self.assertIn("data-tg-preview-open", Path("app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8"))
-        preview_js = Path("app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        self.assertNotIn("tab === 'colors'", preview_js)
-        self.assertIn("styleTone", preview_js)
-        self.assertIn("hasOwnProperty.call(values", preview_js)
-        self.assertIn('data-tone', preview_js)
-        self.assertIn("openPreview", preview_js)
-        self.assertIn("DEBOUNCE_MS", preview_js)
-        self.assertIn('.tg-key[data-tone="success"]', css)
         self.assertIn("receipt-modal-frame", css)
         admin_py = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
         self.assertIn('_style(ui, "confirm"', admin_py)

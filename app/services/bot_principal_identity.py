@@ -33,6 +33,7 @@ from app.services.org_principals import (
     list_principals_for_bot_user,
 )
 from app.services.org_scope import visible_principal_ids
+from app.services.pg_panel_access import apply_pg_panel_access
 
 
 @dataclass(frozen=True)
@@ -571,6 +572,7 @@ async def _staff_for_reseller_l1(
         or principal.pg_password_enc
         or getattr(principal, "pg_api_key_enc", None)
     )
+    staff = apply_pg_panel_access(staff, profile)
     return attach_org_principal_fields(
         staff, principal, visible_principal_ids=visible
     )
@@ -722,7 +724,7 @@ async def bot_staff_from_org_principal(
         )
         staff["web_owner"] = False
         staff["pg_is_owner"] = False
-        return staff
+        return apply_pg_panel_access(staff, profile)
 
     if depth != DEPTH_ONE:
         return None
@@ -819,6 +821,29 @@ async def resolve_bot_principal_bridge(
         authz=authz_from_staff(staff),
         channel=channel,
     )
+
+
+async def shop_bot_panel_staff(
+    session: AsyncSession,
+    *,
+    profile: ResellerProfile,
+    db_user: BotUser,
+) -> dict[str, Any] | None:
+    """Web-shaped staff for an operator of this shop's bot, with the shop's live panel role.
+
+    Service changes made from the shop bot pass this to the same helpers as the web
+    panel, so the PasarGuard users.* rights and local safety limits apply in both.
+    """
+    resolution = await resolve_bot_principal_bridge(
+        session,
+        db_user=db_user,
+        is_reseller_bot=True,
+        reseller_profile_id=int(profile.id),
+        reseller_owner_id=int(profile.user_id),
+    )
+    if resolution is None:
+        return None
+    return dict(resolution.staff)
 
 
 async def bot_pg_client_for_resolution(

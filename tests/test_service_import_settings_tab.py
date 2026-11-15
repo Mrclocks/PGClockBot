@@ -100,13 +100,16 @@ class TabPageTests(TabHarness):
         for needle in ("s_service_import_paths", "s_service_import_admins"):
             self.assertNotIn(needle, response.text)
 
-    async def test_the_tab_lives_in_the_service_and_sales_group_for_both(self):
+    async def test_the_page_opens_from_its_settings_list_for_both(self):
         owner = await self.call(OWNER_SESSION, "GET", "/settings?tab=service_import")
         shop = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_import")
         for response, base in ((owner, "/settings"), (shop, "/shop-settings")):
             head = response.text.split("settings-layout", 1)[0]
-            self.assertIn(f'href="{base}?tab=service_import" class="active"', head)
-            self.assertIn(f'href="{base}?tab=naming"', head)
+            self.assertIn("<h1>افزودن سرویس قبلی</h1>", head)
+            self.assertIn(f'<a class="page-back" href="{base}"', head)
+        for base, session in (("/settings", OWNER_SESSION), ("/shop-settings", SHOP_SESSION)):
+            listing = await self.call(session, "GET", base)
+            self.assertIn(f'href="{base}?tab=service_import"', listing.text)
 
 
 class SavePlumbingTests(TabHarness):
@@ -132,7 +135,7 @@ class SavePlumbingTests(TabHarness):
         self.assertEqual((shop["service_import_enabled"], shop["service_import_max_per_user"]), ("1", "3"))
         self.assertEqual((shop["service_import_paths"], shop["service_import_admins"]), ("", ""))
         platform = await self.stored(None)
-        self.assertEqual(platform["service_import_enabled"], "0")
+        self.assertEqual(platform["service_import_enabled"], "1")
         self.assertEqual((platform["service_import_paths"], platform["service_import_admins"]), ("", ""))
 
     async def test_a_shops_own_values_never_change_the_platforms(self):

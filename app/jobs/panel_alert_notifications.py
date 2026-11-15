@@ -31,6 +31,7 @@ from app.services.panel_alert_notifications import (
     release_signal,
     update_signal,
 )
+from app.services.service_panel_presence import missing_signals, scan_panel_presence
 from app.services.users import get_all_settings
 from app.services.volume_allocation import volume_threshold_signals
 
@@ -143,6 +144,9 @@ async def run_panel_alert_notifications(bot: Bot) -> None:
                 await announce(bot, session, signal)
             for failure in await failure_signals(session):
                 await announce(bot, session, failure)
+            await scan_panel_presence(session)
+            for missing in await missing_signals(session):
+                await announce(bot, session, missing)
             shops = await _capacity_shops(session)
             gate = asyncio.Semaphore(CAPACITY_READ_CONCURRENCY)
             for shop_id in await capacity_due(session, list(shops)):

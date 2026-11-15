@@ -11,6 +11,7 @@ from jinja2 import ChoiceLoader, DictLoader, Environment, FileSystemLoader, Unde
 
 from app.services.formatting import format_gb, format_money, format_number, format_toman
 from app.services.panel_assets import get_panel_asset_cache_key
+from app.services.numbers import to_fa_digits
 
 
 class RenderedHtml(HTMLParser):
@@ -40,7 +41,7 @@ def template_env() -> Environment:
         ]),
         autoescape=select_autoescape(),
     )
-    env.filters.update(money=format_money, num=format_number, gb=format_gb)
+    env.filters.update(money=format_money, num=format_number, gb=format_gb, fa=to_fa_digits)
     return env
 
 

@@ -19,6 +19,8 @@ def alembic_config(database_url: str | None = None) -> Config:
     if not ALEMBIC_INI.is_file():
         raise FileNotFoundError(f"Missing {ALEMBIC_INI}")
     cfg = Config(str(ALEMBIC_INI))
+    # The app already configured logging; alembic/env.py must not reset it.
+    cfg.attributes["configure_logging"] = False
     cfg.set_main_option("script_location", str(ALEMBIC_DIR))
     if database_url:
         from app.db.engine_url import to_sync_url

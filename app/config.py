@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, List
 
-from pydantic import BeforeValidator, Field, field_validator
+from pydantic import BeforeValidator, Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 import logging
 
@@ -17,6 +17,11 @@ DATA_DIR = ROOT_DIR / "data"
 PG_WEB_READ_BUDGET_DEFAULT_SEC = 4.0
 PG_WEB_READ_BUDGET_MIN_SEC = 1.0
 PG_WEB_READ_BUDGET_MAX_SEC = 15.0
+# PostgreSQL connection pool. One dashboard load opens about five sessions at once (its own, the widgets
+# and the sales trend), and the bots share the pool, so 5 + 10 queued requests under load.
+DB_POOL_SIZE_DEFAULT = 10
+DB_MAX_OVERFLOW_DEFAULT = 20
+DB_POOL_LIMIT = 100
 
 
 def _clean_str(value: object) -> str:
@@ -142,6 +147,8 @@ class Settings(BaseSettings):
         default=f"sqlite+aiosqlite:///{DATA_DIR / 'bot.db'}",
         alias="DATABASE_URL",
     )
+    db_pool_size: int = Field(default=DB_POOL_SIZE_DEFAULT, alias="DB_POOL_SIZE")
+    db_max_overflow: int = Field(default=DB_MAX_OVERFLOW_DEFAULT, alias="DB_MAX_OVERFLOW")
 
     webhook_url: str = Field(default="", alias="WEBHOOK_URL")
     webhook_path: str = Field(default="/telegram/webhook", alias="WEBHOOK_PATH")
@@ -219,6 +226,20 @@ class Settings(BaseSettings):
         except (TypeError, ValueError):
             return 1
         return max(1, min(10, n))
+
+    @field_validator("db_pool_size", "db_max_overflow", mode="before")
+    @classmethod
+    def parse_db_pool(cls, value: object, info: ValidationInfo) -> int:
+        # A typo in .env must not stop the panel from starting.
+        default = DB_POOL_SIZE_DEFAULT if info.field_name == "db_pool_size" else DB_MAX_OVERFLOW_DEFAULT
+        if isinstance(value, bool):
+            return default
+        try:
+            count = int(_clean_str(value) if isinstance(value, str) else value)
+        except (TypeError, ValueError):
+            return default
+        low = 1 if info.field_name == "db_pool_size" else 0
+        return max(low, min(DB_POOL_LIMIT, count))
 
     @field_validator("pg_web_read_budget_sec", mode="before")
     @classmethod
