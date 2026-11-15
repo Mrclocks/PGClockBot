@@ -26,6 +26,7 @@ from app.db.models import (
 from app.services.custom_plans import exclude_custom_order_plans
 from app.services.pasarguard import as_list, get_pg
 from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
+from app.services.pg_read import staff_pg_credentials_ready
 from app.services.shop_scope import ShopScopeError, is_platform_admin, shop_owner_id
 
 log = logging.getLogger(__name__)
@@ -221,6 +222,30 @@ def resolve_user_write_group_ids(
     return ids or None
 
 
+def _platform_role_was_read(staff: dict) -> bool:
+    """True when the platform admin's PasarGuard role came from a live read.
+
+    The role (and its ``access`` block) is attached only after a successful
+    capability probe; a failed probe leaves no ``pg_role`` on the staff dict.
+    """
+    return isinstance(staff.get("pg_role"), dict)
+
+
+def _missing_allow_list_permits(staff: dict) -> bool:
+    """Decide a write when the role has no template/group allow-list.
+
+    PasarGuard stores ``None`` for "no restriction", which is the default for
+    every new role. For the platform admin that answer is only trusted once
+    the role was actually read: the platform client signs in as that same
+    PasarGuard account, so PasarGuard still enforces the role on the write.
+    An unread role stays denied. Resellers and credentialed staff are scoped
+    by their own client.
+    """
+    if is_platform_admin(staff):
+        return _platform_role_was_read(staff)
+    return bool(staff_pg_credentials_ready(staff))
+
+
 def template_allowed_for_staff(staff: dict | None, template_id: int | None) -> bool:
     """Mutation/object check. Missing allow-list is NOT unrestricted for non-Owner (M1)."""
     if template_id is None:
@@ -230,14 +255,7 @@ def template_allowed_for_staff(staff: dict | None, template_id: int | None) -> b
     access = staff.get("pg_access") or {}
     allowed = _allowed_id_set(access.get("allowed_template_ids"))
     if allowed is None:
-        # Unresolved allow-list ≠ unrestricted. Hybrid limited admin → deny.
-        # Reseller / credentialed pg_staff → own-client scopes the ID space.
-        from app.services.pg_read import staff_pg_credentials_ready
-        from app.services.shop_scope import is_platform_admin
-
-        if is_platform_admin(staff):
-            return False
-        return bool(staff_pg_credentials_ready(staff))
+        return _missing_allow_list_permits(staff)
     if not allowed:
         return False
     return int(template_id) in allowed
@@ -252,12 +270,7 @@ def groups_allowed_for_staff(staff: dict | None, group_ids: list[int]) -> bool:
     access = staff.get("pg_access") or {}
     allowed = _allowed_id_set(access.get("allowed_group_ids"))
     if allowed is None:
-        from app.services.pg_read import staff_pg_credentials_ready
-        from app.services.shop_scope import is_platform_admin
-
-        if is_platform_admin(staff):
-            return False
-        return bool(staff_pg_credentials_ready(staff))
+        return _missing_allow_list_permits(staff)
     if not allowed:
         return False
     return all(int(g) in allowed for g in group_ids)
