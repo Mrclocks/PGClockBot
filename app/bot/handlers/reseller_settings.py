@@ -1127,7 +1127,11 @@ async def bot_token_save(message: Message, state: FSMContext, session: AsyncSess
     try:
         from aiogram import Bot as TgBot
 
-        bot = TgBot(token=text)
+        # Validate through the same proxy-aware session used everywhere else —
+        # a raw default session would bypass TG_PROXY and hang behind firewalls.
+        from app.bot import telegram_session
+
+        bot = TgBot(token=text, session=telegram_session())
         try:
             me = await bot.get_me()
             uname = me.username or str(me.id)

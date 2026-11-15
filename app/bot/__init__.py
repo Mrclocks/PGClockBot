@@ -105,6 +105,11 @@ def telegram_session() -> BaseSession | None:
         return None
     from aiogram.client.session.aiohttp import AiohttpSession
 
+    # ``socks5h://`` (remote DNS) is a curl-style alias: python-socks only parses
+    # http/socks4/socks5, and its socks5 default (rdns=True) already resolves the
+    # hostname through the proxy, so normalize instead of failing the session.
+    if proxy.lower().startswith("socks5h://"):
+        proxy = "socks5://" + proxy[len("socks5h://") :]
     return AiohttpSession(proxy=proxy)
 
 

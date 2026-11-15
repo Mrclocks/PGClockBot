@@ -264,12 +264,13 @@ def cmd_doctor(ctx: CliContext) -> int:
     except Exception as e:
         add("database", "FAIL", str(e)[:200], fix="check DATABASE_URL / Postgres")
 
-    # Bot getMe — never print token
+    # Bot getMe — never print token or proxy credentials
     if bot_token:
         try:
             import httpx
 
             from app.config import get_settings
+            from app.services.redact import redact
 
             proxy = (get_settings().tg_proxy or "").strip()
             kwargs: dict[str, object] = {"timeout": 5}
@@ -284,7 +285,9 @@ def cmd_doctor(ctx: CliContext) -> int:
             else:
                 add("bot_getMe", "FAIL", "telegram rejected token", fix="rotate BOT_TOKEN")
         except Exception as e:
-            add("bot_getMe", "FAIL", str(e)[:160], fix="check BOT_TOKEN / network / TG_PROXY")
+            # The exception text can embed the proxy URL (httpx includes it in
+            # connect errors) — redact user:pass before it reaches the console.
+            add("bot_getMe", "FAIL", redact(e)[:160], fix="check BOT_TOKEN / network / TG_PROXY")
     else:
         add("bot_getMe", "WARN", "skipped — no BOT_TOKEN")
 

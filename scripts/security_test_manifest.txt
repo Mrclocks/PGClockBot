@@ -494,3 +494,7 @@ tests/test_random_discount_admin.py
 tests/test_random_discount_migration.py
 tests/test_random_discount_purge.py
 tests/test_random_discount_code_namespace.py
+
+# TG_PROXY: aiogram session proxy-awareness, scheme normalization and redaction.
+tests/test_bot_telegram_session.py
+tests/test_tg_http.py
