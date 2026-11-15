@@ -14,15 +14,20 @@
 {%- endmacro %}
 
 {# Custom / template choice: the hidden select keeps the field name and the change listener. #}
-{% macro pg_mode(select_id, name, use_template, groups_label='گروه‌ها', template_label='تمپلیت آماده') -%}
+{# template_only: the PasarGuard role refuses users built from groups alone, so only «تمپلیت» is offered. #}
+{% macro pg_mode(select_id, name, use_template, groups_label='گروه‌ها', template_label='تمپلیت آماده', template_only=false) -%}
 <select name="{{ name }}" id="{{ select_id }}" data-ui-select="1" hidden>
-  <option value="custom"{% if not use_template %} selected{% endif %}>custom</option>
-  <option value="template"{% if use_template %} selected{% endif %}>template</option>
+  {% if not template_only %}<option value="custom"{% if not use_template %} selected{% endif %}>custom</option>{% endif %}
+  <option value="template"{% if use_template or template_only %} selected{% endif %}>template</option>
 </select>
+{% if template_only %}
+<small class="muted">نقش پاسارگارد این حساب فقط ساخت سرویس با تمپلیت را مجاز می‌داند.</small>
+{% else %}
 <div class="sales-seg ds-seg" role="radiogroup" aria-label="روش ساخت در پاسارگارد" data-ds-choice data-ds-target="#{{ select_id }}">
   <button type="button" role="radio" data-value="custom">{{ groups_label }}</button>
   <button type="button" role="radio" data-value="template">{{ template_label }}</button>
 </div>
+{% endif %}
 {%- endmacro %}
 
 {% macro foot(form_id, label) -%}
@@ -71,7 +76,7 @@
     {% endcall %}
 
     {% call ds_sec('اتصال پاسارگارد', sid='up-sec-pg') %}
-      {{ pg_mode('plan-mode', 'mode', false) }}
+      {{ pg_mode('plan-mode', 'mode', false, template_only=pg_template_only) }}
       <div id="mode-custom" class="form-stack">
         <div class="form-field"><span class="ds-label-text">گروه‌ها</span>{{ group_tags() }}<small class="muted">حداقل یک گروه</small></div>
         {% if can_create_template is not defined or can_create_template %}
@@ -157,7 +162,7 @@
       </div>
     {% endcall %}
     {% call ds_sec('اتصال پاسارگارد', sid='utp-sec-pg') %}
-      {{ pg_mode('trial-mode', 'mode', trial and trial.pg_template_id) }}
+      {{ pg_mode('trial-mode', 'mode', trial and trial.pg_template_id, template_only=pg_template_only) }}
       <div id="trial-mode-custom" class="form-stack">
         <div class="form-field"><span class="ds-label-text">گروه‌ها</span>{{ group_tags(trial_group_ids) }}</div>
       </div>
@@ -222,7 +227,7 @@
       </div>
     {% endcall %}
     {% call ds_sec('اتصال پاسارگارد', sid='ucp-sec-pg') %}
-      {{ pg_mode('custom-mode', 'mode', values.get('custom_plan_template_id'), 'گروه اینباند', 'تمپلیت') }}
+      {{ pg_mode('custom-mode', 'mode', values.get('custom_plan_template_id'), 'گروه اینباند', 'تمپلیت', template_only=pg_template_only) }}
       <div id="custom-mode-groups" class="form-stack">
         <div class="form-field"><span class="ds-label-text">گروه‌ها</span>{{ group_tags(custom_group_ids) }}</div>
       </div>

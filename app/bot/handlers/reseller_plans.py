@@ -16,9 +16,10 @@ from app.bot.list_pages import page_number
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan, ResellerProfile
 from app.services.plans_catalog import (
-    groups_allowed_for_staff,
     load_pg_plan_options,
-    template_allowed_for_staff,
+    plan_groups_denial,
+    plan_template_denial,
+    role_requires_template,
 )
 from app.services.resellers import has_bot_perm
 from app.services import bot_feedback_texts as feedback
@@ -601,7 +602,7 @@ async def _reseller_continue_pg_mode(
     templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
     await state.update_data(templates=templates, groups=groups, owner_id=owner_id)
     rows: list[list[InlineKeyboardButton]] = []
-    if groups:
+    if groups and not role_requires_template(staff):
         rows.append(
             [InlineKeyboardButton(text="📦 انتخاب گروه پاسارگارد", callback_data="res:plan:mode:groups")]
         )
@@ -771,8 +772,9 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
     data = await state.get_data()
     selected = [int(x) for x in (data.get("selected_groups") or [])]
     staff = await _staff_ctx(profile, session)
-    if not selected or not groups_allowed_for_staff(staff, selected):
-        await callback.answer("حداقل یک گروه مجاز انتخاب کنید", show_alert=True)
+    groups_denial = plan_groups_denial(staff, selected) if selected else "حداقل یک گروه مجاز انتخاب کنید"
+    if groups_denial:
+        await callback.answer(groups_denial, show_alert=True)
         return
     cat_raw = data.get("category_id")
     category_id = int(cat_raw) if cat_raw not in (None, "", 0, "0") else None
@@ -837,8 +839,9 @@ async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session:
         return
     tid = int(callback.data.split(":")[-1])
     staff = await _staff_ctx(profile, session)
-    if not template_allowed_for_staff(staff, tid):
-        await callback.answer("به این تمپلیت دسترسی ندارید", show_alert=True)
+    template_denial = plan_template_denial(staff, tid)
+    if template_denial:
+        await callback.answer(template_denial, show_alert=True)
         return
     data = await state.get_data()
     cat_raw = data.get("category_id")

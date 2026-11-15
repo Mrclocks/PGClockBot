@@ -194,6 +194,9 @@
           </li>
           <li class="is-yes">فروشگاه این نصب کامل است (پلن، سفارش، تنظیمات)</li>
         </ul>
+        {% for note in pg_audit.notes or [] %}
+        <div class="flash warn">{{ note }}</div>
+        {% endfor %}
       </div>
       {% elif pg_audit is defined and pg_audit and pg_audit.error %}
       <div class="flash warn">{{ pg_audit.error }}</div>
