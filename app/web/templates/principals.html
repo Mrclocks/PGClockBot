@@ -7,7 +7,7 @@
   {%- if slot == 'primary' and (can_create or can_create_l2) %}
   <button type="button" class="btn" data-modal-open="{{ 'modal-principal-create' if can_create else 'modal-principal-create-l2' }}">{{ act_label('افزودن نماینده', 'نماینده') }}</button>
   {%- elif slot == 'more' and can_create and can_create_l2 %}
-  <button type="button" class="btn btn-ghost" data-modal-open="modal-principal-create-l2">افزودن نماینده</button>
+  <button type="button" class="btn btn-ghost" data-modal-open="modal-principal-create-l2">{{ icon('plus', 'more-ico') }}افزودن نماینده</button>
   {%- endif %}
 {% endcall %}
 

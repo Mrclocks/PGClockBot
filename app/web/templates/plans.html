@@ -7,7 +7,7 @@
   {%- if slot == 'primary' %}
   <button type="button" class="btn" id="btn-add-plan" data-modal-open="modal-plan-unified">{{ act_label('افزودن پلن', 'پلن') }}</button>
   {%- elif slot == 'more' %}
-  <button type="button" class="btn btn-ghost" data-modal-open="modal-plan-categories">برچسب دسته</button>
+  <button type="button" class="btn btn-ghost" data-modal-open="modal-plan-categories">{{ icon('tag', 'more-ico') }}برچسب دسته</button>
   {%- endif %}
 {% endcall %}
 

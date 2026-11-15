@@ -16,7 +16,7 @@
   {%- if slot == 'primary' %}
   <a class="btn" href="/finance/payg.csv">{{ act_label('خروجی CSV', 'CSV', icon_name='download') }}</a>
   {%- elif slot == 'more' %}
-  <a class="btn btn-ghost" href="/payg/charges/review">بازبینی هزینه‌ها</a>
+  <a class="btn btn-ghost" href="/payg/charges/review">{{ icon('receipt', 'more-ico') }}بازبینی هزینه‌ها</a>
   {%- endif %}
 {% endcall %}
 

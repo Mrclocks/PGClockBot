@@ -8,7 +8,7 @@
   {%- if slot == 'primary' and owner_view or can_create_l2 %}
   <button type="button" class="btn" data-modal-open="{{ 'modal-reseller-create' if owner_view else 'modal-reseller-create-child' }}">{{ act_label('افزودن نماینده', 'نماینده') }}</button>
   {%- elif slot == 'more' and not owner_view and can_create_l2 %}
-  <a class="btn btn-ghost" href="/resellers/children-pricing">قیمت و اعتبار زیرمجموعه</a>
+  <a class="btn btn-ghost" href="/resellers/children-pricing">{{ icon('money', 'more-ico') }}قیمت و اعتبار زیرمجموعه</a>
   {%- endif %}
 {% endcall %}
 

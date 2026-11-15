@@ -9,7 +9,7 @@
   {%- elif slot == 'primary' and can_manage_supports %}
   <button type="button" class="btn btn-ghost page-act-icon" data-modal-open="modal-supports-settings">{{ act_label('پشتیبان‌ها', icon_name='users') }}</button>
   {%- elif slot == 'more' and can_create and can_manage_supports %}
-  <button type="button" class="btn btn-ghost" data-modal-open="modal-supports-settings">پشتیبان‌ها</button>
+  <button type="button" class="btn btn-ghost" data-modal-open="modal-supports-settings">{{ icon('user', 'more-ico') }}پشتیبان‌ها</button>
   {%- endif %}
 {% endcall %}
 

@@ -289,7 +289,9 @@
       left: var(--dock-inline);
       display: flex;
       flex-direction: column;
-      min-width: 224px;
+      /* As wide as its longest row (icon and label); the floor keeps a one-word row from looking like a chip. */
+      width: max-content;
+      min-width: 128px;
       max-width: calc(100vw - 2 * var(--dock-inline));
       box-sizing: border-box;
       padding: var(--space-0);
@@ -338,6 +340,13 @@
       text-decoration: none;
     }
     .page-more > form { display: block; }
+    .page-head[data-page-head="capsule"] .page-more .more-ico {
+      display: block;
+      flex: 0 0 auto;
+      width: var(--dock-ico);
+      height: var(--dock-ico);
+      color: var(--muted-fg);
+    }
     .page-head[data-page-head="capsule"] .page-more > .btn:active,
     .page-head[data-page-head="capsule"] .page-more > a.btn:active,
     .page-head[data-page-head="capsule"] .page-more > form > .btn:active { background: color-mix(in srgb, var(--foreground) 7%, transparent); }

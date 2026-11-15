@@ -2644,6 +2644,8 @@ a.btn.btn-ghost:hover {
   margin: 0;
 }
 .page-more-btn { display: none; }
+/* Desktop shows «⋯» actions as plain buttons beside the primary one; their icons belong to the phone menu. */
+.page-more .more-ico { display: none; }
 .page-back {
   display: grid;
   place-items: center;
