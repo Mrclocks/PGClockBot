@@ -282,9 +282,26 @@ def groups_allowed_for_staff(staff: dict | None, group_ids: list[int]) -> bool:
 
 
 PLAN_GROUPS_DENIED_MESSAGE = "به یکی از گروه‌های انتخاب‌شده دسترسی ندارید"
+PLAN_TEMPLATE_DENIED_MESSAGE = "به این تمپلیت دسترسی ندارید"
 ROLE_REQUIRES_TEMPLATE_MESSAGE = (
     "نقش پاسارگارد این حساب ساخت سرویس بدون تمپلیت را اجازه نمی‌دهد؛ پلن را با تمپلیت بسازید."
 )
+PG_ROLE_UNREAD_MESSAGE = (
+    "نقش پاسارگارد این حساب خوانده نشد، پس دسترسی تمپلیت و گروه معلوم نیست. "
+    "اتصال پاسارگارد را در تنظیمات آزمایش کنید و دوباره تلاش کنید."
+)
+
+
+def _platform_role_unread(staff: dict | None) -> bool:
+    """The platform admin's limited PasarGuard role could not be read, so its allow-lists are unknown."""
+    return bool(staff) and is_platform_admin(staff) and not _admin_pg_unrestricted(staff) and not _platform_role_was_read(staff)
+
+
+def plan_template_denial(staff: dict | None, template_id: int | None) -> str | None:
+    """Why a plan cannot use this template, or ``None`` when it can."""
+    if template_allowed_for_staff(staff, template_id):
+        return None
+    return PG_ROLE_UNREAD_MESSAGE if _platform_role_unread(staff) else PLAN_TEMPLATE_DENIED_MESSAGE
 
 
 def role_requires_template(staff: dict | None) -> bool:
@@ -304,8 +321,35 @@ def plan_groups_denial(staff: dict | None, group_ids: list[int]) -> str | None:
     if role_requires_template(staff):
         return ROLE_REQUIRES_TEMPLATE_MESSAGE
     if not groups_allowed_for_staff(staff, group_ids):
-        return PLAN_GROUPS_DENIED_MESSAGE
+        return PG_ROLE_UNREAD_MESSAGE if _platform_role_unread(staff) else PLAN_GROUPS_DENIED_MESSAGE
     return None
+
+
+CUSTOM_PLAN_LABEL = "پلن دلخواه"
+
+
+def group_plans_blocked_by_role(
+    staff: dict | None,
+    plans: Sequence[Plan],
+    *,
+    custom_plan_enabled: bool = False,
+    custom_plan_group_ids: str = "",
+) -> list[str]:
+    """Names of active group plans PasarGuard refuses to deliver for a template-only role.
+
+    Shown on the plans page so operators see which plans need a template
+    before a customer pays for one.
+    """
+    if not role_requires_template(staff):
+        return []
+    names = [
+        str(p.name or p.id)
+        for p in plans
+        if p.is_active and (p.pg_group_ids or "").strip() and not p.pg_template_id
+    ]
+    if custom_plan_enabled and (custom_plan_group_ids or "").strip():
+        names.append(CUSTOM_PLAN_LABEL)
+    return names
 
 
 def staff_can_create_pg_template(staff: dict | None) -> bool:

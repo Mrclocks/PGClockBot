@@ -21,6 +21,7 @@
 
 {# flash_ok / flash_err rendered once in base.html #}
 {% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }} — پلن‌ها را می‌توانید ذخیره کنید ولی تحویل نیاز به اتصال دارد.</div>{% endif %}
+{% if role_blocked_plans %}<div class="flash warn">نقش پاسارگارد این حساب فقط ساخت سرویس با تمپلیت را مجاز می‌داند، پس این پلن‌های گروهی تحویل داده نمی‌شوند تا روی تمپلیت تنظیم شوند: {{ role_blocked_plans | join('، ') }}</div>{% endif %}
 {% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}
 {{ pg_snapshot_limit_board(pg_limit_cards, heading='سقف حساب پاسارگارد', caption='', box_captions=false) }}
 

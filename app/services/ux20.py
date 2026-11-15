@@ -1140,7 +1140,7 @@ async def _validate_import_plan(
     from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
     from app.services.plans_catalog import (
         plan_groups_denial,
-        template_allowed_for_staff,
+        plan_template_denial,
     )
 
     tpl_raw = raw.get("pg_template_id")
@@ -1150,8 +1150,9 @@ async def _validate_import_plan(
             tpl_id = int(tpl_raw)
         except (TypeError, ValueError) as exc:
             raise ValueError("تمپلیت پلن نامعتبر است") from exc
-        if not template_allowed_for_staff(staff, tpl_id):
-            raise ValueError("تمپلیت انتخاب‌شده در دسترس این حساب نیست")
+        template_denial = plan_template_denial(staff, tpl_id)
+        if template_denial:
+            raise ValueError(template_denial)
 
     gids = _parse_import_group_ids(raw.get("pg_group_ids"))
     groups_denial = plan_groups_denial(staff, gids) if gids else None
