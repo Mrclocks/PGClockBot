@@ -10,6 +10,7 @@ menus/actions are clamped to the env ``PG_USERNAME`` role (fail-closed).
 
 from typing import Any, Mapping
 
+from app.services.pasarguard import PasarGuardError, is_panel_outage
 from app.services.redact import user_safe_error
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 import logging
@@ -40,6 +41,18 @@ PG_FEATURE_LABELS: dict[str, str] = {
     "pg_nodes": "نود",
     "pg_admins": "ادمین",
 }
+
+PG_API_KEY_REJECTED_MSG = (
+    "کلید API پاسارگارد پذیرفته نشد. "
+    "علت محتمل: کلید اشتباه، منقضی یا باطل شده، یا به سقف درخواست رسیده است. "
+    "راه حل: در پاسارگارد یک کلید API فعال بسازید و مقدار کامل آن را وارد کنید، "
+    "یا کلید API را حذف کنید تا ورود با رمز انجام شود."
+)
+PG_ADMIN_DISABLED_MSG = (
+    "حساب این ادمین در پاسارگارد غیرفعال است. "
+    "راه حل: ادمین را در پاسارگارد فعال کنید یا اعتبارنامه ادمین دیگری وارد کنید."
+)
+
 
 def clear_platform_pg_capability_cache() -> None:
     """Drop cached PG ACL probes (call after setup / PG credential / permission changes)."""
@@ -193,6 +206,56 @@ def full_pg_owner_features() -> list[str]:
     return out
 
 
+class _CredentialsRejected(Exception):
+    """The panel answered that the probed credentials cannot be used."""
+
+
+def _says_account_disabled(body: Any) -> bool:
+    return "disabled" in str(body or "").lower()
+
+
+def _rejected_credentials_reason(exc: Exception, *, uses_api_key: bool) -> str | None:
+    """Persian reason when the self lookup proves the login unusable, else ``None``.
+
+    A 403 or 404 from a limited role or an older panel is not proof: the
+    caller keeps its fallback lookups for those.
+    """
+    if not isinstance(exc, PasarGuardError):
+        return None
+    if exc.status_code == 401:
+        return PG_API_KEY_REJECTED_MSG if uses_api_key else exc.user_message()
+    if exc.status_code == 403 and _says_account_disabled(exc.body):
+        return PG_ADMIN_DISABLED_MSG
+    return None
+
+
+async def _read_probe_admin(client: Any, uname: str, *, uses_api_key: bool) -> dict:
+    """The signed-in admin's own record for the capability probe.
+
+    ``GET /api/admin`` needs no ``admins.read``, so it comes first. Directory
+    lookups often 403 for roles that only have ``users.create``, and a
+    username stub keeps a valid login from reading as "admin not found".
+    An API key is never checked when the client is built, so this is the
+    first request that can reject it: a refusal or an unreachable panel
+    stops the probe instead of falling through to the stub.
+    """
+    try:
+        current = await client.get_current_admin()
+    except Exception as exc:
+        if is_panel_outage(exc):
+            raise
+        reason = _rejected_credentials_reason(exc, uses_api_key=uses_api_key)
+        if reason:
+            raise _CredentialsRejected(reason) from exc
+        current = None
+    if isinstance(current, dict) and current:
+        return current
+    admin = await client.get_admin(uname)
+    if isinstance(admin, dict):
+        return admin
+    return {"username": uname}
+
+
 async def resolve_platform_pg_capabilities(
     *,
     username: str | None = None,
@@ -294,25 +357,10 @@ async def resolve_platform_pg_capabilities(
             client = get_pg()
 
         await client.ensure_token()
-        # Token success already proves the account exists. Directory lookup
-        # (GET /api/admins, /api/admin/{id}) often 403s for roles that only
-        # have users.create — use GET /api/admin (self) first, then directory,
-        # then a username stub so setup never treats a valid login as
-        # "admin not found / wrong password".
-        admin: dict | None = None
-        try:
-            current = await client.get_current_admin()
-            if isinstance(current, dict) and current:
-                admin = current
-                got = str(current.get("username") or "").strip()
-                if got:
-                    uname = got
-        except Exception:
-            admin = None
-        if not isinstance(admin, dict):
-            admin = await client.get_admin(uname)
-        if not isinstance(admin, dict):
-            admin = {"username": uname}
+        admin = await _read_probe_admin(client, uname, uses_api_key=bool(key))
+        got = str(admin.get("username") or "").strip()
+        if got:
+            uname = got
 
         role_id = None
         nested_role = admin.get("role")
@@ -363,6 +411,9 @@ async def resolve_platform_pg_capabilities(
         if use_cache and not own_client and payload["ok"]:
             cache_put(cache_ident, CAPABILITY_PROBE_PATH, None, dict(payload))
         return payload
+    except _CredentialsRejected as e:
+        empty["error"] = str(e)
+        return empty
     except PasarGuardError as e:
         empty["error"] = e.user_message(fallback=str(e))
         return empty

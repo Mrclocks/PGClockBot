@@ -504,3 +504,4 @@ tests/test_marketing_list.py
 tests/test_settings_modal_list.py
 tests/test_empty_state.py
 tests/test_dashboard_layout.py
+tests/test_pg_capability_probe_credentials.py

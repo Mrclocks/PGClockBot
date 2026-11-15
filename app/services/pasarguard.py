@@ -178,7 +178,7 @@ def is_pg_not_found(exc: BaseException) -> bool:
     return isinstance(exc, PasarGuardError) and exc.status_code == 404
 
 
-def _is_panel_outage(exc: BaseException) -> bool:
+def is_panel_outage(exc: BaseException) -> bool:
     """Unreachable panel or gateway error, as opposed to a definite answer."""
     if isinstance(exc, PasarGuardError):
         return exc.status_code in (502, 503, 504)
@@ -645,7 +645,7 @@ class PasarGuardClient:
             return await self.request("GET", path, cache_max_age=cache_max_age, **extra)
         except (httpx.TransportError, TimeoutError, PasarGuardError) as exc:
             # Bot and job callers have no notice to show, so they keep the error.
-            if not last_good_ok or not last_good_notice_active() or not _is_panel_outage(exc):
+            if not last_good_ok or not last_good_notice_active() or not is_panel_outage(exc):
                 raise
             saved = cache_get_last_good(self._read_cache_ident(), path, params)
             if saved is None:
