@@ -9494,6 +9494,17 @@ html[data-theme="light"] .home-gauge.is-exhausted {
 @media (max-width: 1100px) {
   .home-panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* Stat boxes always fill their row: one or two boxes share it, four sit in a row on wide screens (2 × 2 below),
+   and a single box left over in the last row takes the full width instead of leaving a hole beside it. */
+.home-panel-grid:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+.home-panel-grid:has(> :nth-child(2):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 1101px) {
+  .home-panel-grid:has(> :nth-child(4):last-child) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .home-panel-grid:not(:has(> :nth-child(4):last-child)) > :last-child:nth-child(3n + 1):not(:first-child) { grid-column: 1 / -1; }
+}
+@media (max-width: 1100px) {
+  .home-panel-grid > :last-child:nth-child(odd):not(:first-child) { grid-column: 1 / -1; }
+}
 @media (max-width: 720px) {
   .home-gauges { gap: var(--space-1); }
   .pg-live-rates { gap: var(--space-1); }
@@ -12127,8 +12138,9 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   gap: var(--space-1);
 }
 .order-purge-options {
+  /* The auto-delete switch and the grace period: one full-width column, like every switch list. */
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-1);
   margin-top: var(--space-1);
   align-items: end;
@@ -12147,10 +12159,7 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   line-height: 1.35;
 }
 @media (max-width: 640px) {
-  .order-purge-tags,
-  .order-purge-options {
-    grid-template-columns: 1fr;
-  }
+  .order-purge-tags { grid-template-columns: 1fr; }
 }
 .cleanup-run-actions {
   display: flex;
