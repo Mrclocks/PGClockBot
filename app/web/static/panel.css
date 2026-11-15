@@ -2741,6 +2741,11 @@ a.btn.btn-ghost:hover {
 .cell-name-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
 .table-list-sm .li-only,
 .table-list-sm :is(th.li-head, td.li-more, td.li-only-cell) { display: none; }
+/* In the table a list-only piece stays hidden whatever its own display: inside .ds a badge sets inline-flex at the
+   same weight, so the desktop rule names the cell to outweigh it (the list layout below shows them again). */
+@media (min-width: 881px) {
+  .table-list-sm td .li-only { display: none; }
+}
 @media (max-width: 880px) {
   .table-list-sm,
   .table-list-sm > thead,
