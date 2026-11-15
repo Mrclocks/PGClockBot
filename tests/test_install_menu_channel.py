@@ -24,17 +24,17 @@ class InstallMenuChannelTests(unittest.TestCase):
         self.assertIn("Install dev", src)
         self.assertIn("Update main", src)
         self.assertIn("Update dev", src)
-        self.assertIn("stable 0.5", src)
+        self.assertIn("stable 0.6", src)
         self.assertNotIn("نصب نیست", src)
 
-    def test_readme_is_stable_0_5_not_beta(self):
+    def test_readme_is_stable_0_6_not_beta(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("0.5.0", readme)
+        self.assertIn("0.6.1", readme)
         self.assertIn("Install main", readme)
         self.assertIn("Update main", readme)
         self.assertNotIn("نسخه بتا", readme)
         get_src = GET.read_text(encoding="utf-8")
-        self.assertIn("stable 0.5", get_src)
+        self.assertIn("stable 0.6", get_src)
         self.assertIn('REMOTE_BRANCH="main"', get_src)
 
     def test_status_box_has_no_vertical_borders(self):
