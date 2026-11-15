@@ -382,6 +382,9 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  /* Same order as the phone header: the round logo on the left, the name and version beside it. */
+  direction: ltr;
+  text-align: left;
   /* Extra bottom air before the separator — sidebar .side top uses --topbar-h on mobile */
   padding: var(--space-1) var(--space-1) var(--space-2);
   margin-bottom: var(--space-1);
@@ -419,6 +422,9 @@ a.topbar-brand:focus-visible {
   display: block;
   border-radius: inherit;
 }
+/* The panel's brand mark is round wherever it heads the panel: sidebar, phone header and the brand preview. */
+.brand .brand-logo,
+.brand-preview .brand-logo { border-radius: 50%; }
 /* A logo someone uploaded: shown whole (never cropped) on a neutral tile, not on the brand colour. */
 .brand-logo--custom { background: var(--bg-muted); }
 .brand-logo--custom img { object-fit: contain; }
