@@ -8,7 +8,7 @@
   <button type="button" class="btn" data-modal-open="modal-node-create">{{ act_label('ساخت نود', 'نود') }}</button>
   {%- elif slot == 'more' and can_reconnect %}
   <form method="post" action="/pg/nodes/reconnect-all" class="js-busy-form" data-busy-label="در حال اتصال…">
-    <button class="btn btn-ghost" type="submit">اتصال مجدد همه</button>
+    <button class="btn btn-ghost" type="submit">{{ icon('refresh', 'more-ico') }}اتصال مجدد همه</button>
   </form>
   {%- endif %}
 {% endcall %}

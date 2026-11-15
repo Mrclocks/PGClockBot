@@ -87,3 +87,20 @@ class PageHeaderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PageMoreMenuIconTests(unittest.TestCase):
+    """Every «⋯» row on a phone starts with its own icon (DESIGN_SYSTEM.md §7, «منوی ⋯»)."""
+
+    def test_the_plans_menu_row_carries_the_tag_icon(self) -> None:
+        from tests.test_marketing_nav import OWNER, _page
+
+        html = _page("plans.html", "/plans", OWNER, plans=[], values={})
+        menu = html.split('id="page-more"', 1)[1].split("</div>", 1)[0]
+        self.assertIn('class="more-ico"', menu)
+        self.assertIn("برچسب دسته", menu)
+
+    def test_the_tag_icon_is_drawn(self) -> None:
+        tag = ENV.from_string('{% from "_icons.html" import icon %}{{ icon("tag") }}').render()
+        clock = ENV.from_string('{% from "_icons.html" import icon %}{{ icon("no-such-icon") }}').render()
+        self.assertNotEqual(tag, clock)

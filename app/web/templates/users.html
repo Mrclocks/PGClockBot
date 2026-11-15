@@ -22,7 +22,7 @@
   {%- elif slot == 'more' and ops and flt != 'all' and bulk_count > 0 %}
   <button type="button" class="btn btn-ghost"
           data-modal-open="modal-users-bulk"
-          data-bulk-count="{{ bulk_count }}">پیام گروهی ({{ bulk_count | num }})</button>
+          data-bulk-count="{{ bulk_count }}">{{ icon('megaphone', 'more-ico') }}پیام گروهی ({{ bulk_count | num }})</button>
   {%- endif %}
 {% endcall %}
 {# flash_ok / flash_err rendered once in base.html (above title) #}

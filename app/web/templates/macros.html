@@ -238,7 +238,7 @@
    Actions come from a call block so permission checks, forms and CSRF stay in the page:
      {% call(slot) page_header('plans', 'پلن‌ها', help='plans') %}
        {% if slot == 'primary' %}<button type="button" class="btn" data-modal-open="m">افزودن پلن</button>{% endif %}
-       {% if slot == 'more' %}<button type="button" class="btn btn-ghost" data-modal-open="c">برچسب دسته</button>{% endif %}
+       {% if slot == 'more' %}<button type="button" class="btn btn-ghost" data-modal-open="c">{{ icon('tag', 'more-ico') }}برچسب دسته</button>{% endif %}
      {% endcall %}
    «primary» holds at most one action; everything in «more» sits beside it on desktop and in the «⋯» menu on phones.
    Help is the small «؟» right after the title, never a menu item, so a page with no extra actions has no «⋯».
