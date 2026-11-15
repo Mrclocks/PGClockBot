@@ -1192,17 +1192,12 @@
     if (hasKind || hasAud) {
       applyPlanOpen(btn.getAttribute('data-plan-audience') || 'users', btn.getAttribute('data-plan-kind') || 'fixed');
     } else {
-      const hash = location.hash || '';
-      const preferReseller = isPlatformAdmin && (
-        hash === '#reseller-plans' ||
-        hash === '#reseller-plans-fixed' ||
-        hash === '#reseller-plans-payg' ||
-        hash === '#reseller-plans-addons'
-      );
-      let preferKind = 'fixed';
-      if (hash === '#reseller-plans-payg') preferKind = 'payg';
-      else if (hash === '#reseller-plans-addons') preferKind = 'addon_volume';
-      applyPlanOpen(preferReseller ? 'resellers' : 'users', preferKind);
+      // The open tab decides: «پلن نماینده» starts a reseller plan, «پلن کاربر» a user plan.
+      const tabs = window.PlansTabs;
+      const open = tabs
+        ? tabs.addPlanDefaults(isPlatformAdmin, tabs.activeTab(document), location.hash || '')
+        : { audience: 'users', kind: 'fixed' };
+      applyPlanOpen(open.audience, open.kind);
     }
   });
 
