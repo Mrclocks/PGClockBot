@@ -348,6 +348,36 @@ async def bot_pg_can_create_user(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ) -> bool:
+    """PasarGuard ``users.create`` for this bot actor."""
+    return await bot_pg_user_action_allowed(
+        session, db_user, "create", is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id, reseller_owner_id=reseller_owner_id,
+    )
+
+async def bot_pg_can_list_users(
+    session: AsyncSession | None,
+    db_user: BotUser | None,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+) -> bool:
+    """PasarGuard ``users.read``: the user list and search for this bot actor."""
+    return await bot_pg_user_action_allowed(
+        session, db_user, "read", is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id, reseller_owner_id=reseller_owner_id,
+    )
+
+async def bot_pg_user_action_allowed(
+    session: AsyncSession | None,
+    db_user: BotUser | None,
+    action: str,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+) -> bool:
+    """Whether the bot actor's own PasarGuard role allows this user action."""
     from app.services.bot_principal_identity import (
         bot_pg_family_resolution_ok,
         resolve_bot_principal_bridge,
@@ -381,13 +411,13 @@ async def bot_pg_can_create_user(
     if resolution is None:
         return False
     if is_owner_principal(resolution.principal):
-        return await can_platform_pg_action(db_user, "users", "create")
+        return await can_platform_pg_user_action(db_user, action)
     if not bot_pg_family_resolution_ok(resolution):
         return False
     staff = dict(resolution.staff)
     if is_level1_principal_staff(staff):
         staff = apply_level1_pg_local_safety(staff)
-    return bool(authorize_pg_user_action(staff, "create").allowed)
+    return bool(authorize_pg_user_action(staff, action).allowed)
 
 async def resolve_bot_owner_principal(
     session: AsyncSession | None,
@@ -472,6 +502,18 @@ async def can_platform_pg_action(db_user: BotUser | None, resource: str, action:
     if not caps.get("ok"):
         return False
     return can_pg_action(authz_from_staff(staff_from_platform_caps(caps)), resource, action)
+
+async def can_platform_pg_user_action(db_user: BotUser | None, action: str) -> bool:
+    """PasarGuard user action for the platform account (``read``, ``create``, …)."""
+    if not is_platform_admin(db_user):
+        return False
+    from app.services.authz import authz_from_staff, can_pg_user_action
+    from app.services.pg_access import resolve_platform_pg_capabilities, staff_from_platform_caps
+
+    caps = await resolve_platform_pg_capabilities()
+    if not caps.get("ok"):
+        return False
+    return can_pg_user_action(authz_from_staff(staff_from_platform_caps(caps)), action)
 
 async def platform_pg_quota_staff() -> dict:
     """Staff-shaped dict for the env PG admin, usable with ``app.services.pg_quota``.

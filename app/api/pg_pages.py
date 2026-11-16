@@ -17,6 +17,7 @@ from app.services.customer_action_notices import notify_customers, pg_user_targe
 from app.services.formatting import data_limit_to_gb, pg_expire_fields
 from app.services.numbers import normalize_number_text, parse_float, parse_int, parse_optional_float, parse_optional_int
 from app.services.pasarguard import (
+    PasarGuardClient,
     PasarGuardError,
     as_list,
     build_user_create_payload,
@@ -70,6 +71,10 @@ from app.services.volume_allocation import apply_create_form_oversell
 logger = logging.getLogger(__name__)
 
 PG_STATS_ERROR = "دریافت آمار پاسارگارد ممکن نشد؛ چند لحظهٔ دیگر صفحه را تازه کنید."
+USERS_LIST_DENIED_MSG = (
+    "این حساب در پاسارگارد اجازهٔ دیدن فهرست کاربران را ندارد؛ "
+    "فقط ساخت کاربر ممکن است."
+)
 PG_ADMIN_DELETE_DENIED_MSG = "حساب پاسارگاردی که پنل با آن وصل است اجازهٔ حذف ادمین ندارد؛ چیزی حذف نشد."
 
 def _q(msg: str) -> str:
@@ -222,6 +227,32 @@ def _is_admin(staff: dict) -> bool:
 def _is_pg_owner_principal(staff: dict) -> bool:
     """True PasarGuard owner (Hybrid) — not merely web Owner session."""
     return bool(staff.get("pg_is_owner"))
+
+
+async def _no_user_list() -> dict:
+    """Stands in for the user list when the role may create users but not read them."""
+    return {"users": [], "total": 0}
+
+
+def _is_permission_refusal(result: object) -> bool:
+    """PasarGuard refused the read for this role (403), as opposed to failing."""
+    return isinstance(result, PasarGuardError) and result.status_code == 403
+
+
+async def _groups_for_user_form(pg: PasarGuardClient, staff: dict) -> list[dict] | None:
+    """Groups this staff member may pick in the user form.
+
+    ``[]`` when PasarGuard refuses the list to the role (no ``groups.read_simple``),
+    exactly as PasarGuard's own form then offers none; ``None`` when the read failed.
+    """
+    try:
+        raw = await pg.get_groups_simple()
+    except Exception as exc:
+        if _is_permission_refusal(exc):
+            return []
+        logger.warning("pg users: PasarGuard groups fetch failed", exc_info=True)
+        return None
+    return _filter_groups(raw if isinstance(raw, list) else [], staff)
 
 
 def _pg_owner(staff: dict) -> str:
@@ -578,12 +609,17 @@ def register_pg_pages(
             owner = _pg_owner(staff)
             if not _is_admin(staff) and owner:
                 params["admin"] = owner
+            can_list_users = staff_user_actions(staff)["read"]
+            # PasarGuard's own user form fills its pickers from the simple lists
+            # (templates.read_simple, groups.read_simple), not the full pages.
             data, templates_raw, groups_raw = await asyncio.gather(
-                pg.get_users(**params),
-                pg.get_user_templates(),
-                pg.get_groups(),
+                pg.get_users(**params) if can_list_users else _no_user_list(),
+                pg.get_user_templates_simple(),
+                pg.get_groups_simple(),
                 return_exceptions=True,
             )
+            if not can_list_users:
+                err = err or USERS_LIST_DENIED_MSG
             if isinstance(data, Exception):
                 raise data
             if isinstance(data, dict):
@@ -651,7 +687,10 @@ def register_pg_pages(
                 templates = []
             templates = _filter_templates(templates, staff)
 
-            if isinstance(groups_raw, Exception):
+            if _is_permission_refusal(groups_raw):
+                # The role has no groups.read_simple: no groups to choose, as in PasarGuard.
+                groups = []
+            elif isinstance(groups_raw, Exception):
                 logger.warning(
                     "pg users: PasarGuard groups fetch failed",
                     exc_info=groups_raw,
@@ -848,20 +887,9 @@ def register_pg_pages(
                     return _pg_form_err(getattr(qe, "message", str(qe)), modal="create")
 
                 pg, as_owner = await _staff_pg(session, staff)
-                try:
-                    raw_groups = await pg.get_groups_simple()
-                except Exception:
-                    logger.warning(
-                        "pg users create: PasarGuard groups fetch failed",
-                        exc_info=True,
-                    )
-                    return _pg_form_err(
-                        "خواندن گروه‌های پاسارگارد ناموفق بود؛ دوباره تلاش کنید",
-                        modal="create",
-                    )
-                visible = _filter_groups(
-                    raw_groups if isinstance(raw_groups, list) else [], staff
-                )
+                visible = await _groups_for_user_form(pg, staff)
+                if visible is None:
+                    return _pg_form_err("خواندن گروه‌های پاسارگارد ناموفق بود؛ دوباره تلاش کنید", modal="create")
                 try:
                     resolved_ids = resolve_user_write_group_ids(
                         ids, visible_groups=visible
@@ -1001,21 +1029,11 @@ def register_pg_pages(
             except (ProvisionError, PgQuotaError) as qe:
                 return _pg_form_err(getattr(qe, "message", str(qe)), modal="edit", uid=user_id)
             pg, _as_owner = await _staff_pg(session, staff)
-            try:
-                raw_groups = await pg.get_groups_simple()
-            except Exception:
-                logger.warning(
-                    "pg users edit: PasarGuard groups fetch failed",
-                    exc_info=True,
-                )
+            visible = await _groups_for_user_form(pg, staff)
+            if visible is None:
                 return _pg_form_err(
-                    "خواندن گروه‌های پاسارگارد ناموفق بود؛ دوباره تلاش کنید",
-                    modal="edit",
-                    uid=user_id,
+                    "خواندن گروه‌های پاسارگارد ناموفق بود؛ دوباره تلاش کنید", modal="edit", uid=user_id
                 )
-            visible = _filter_groups(
-                raw_groups if isinstance(raw_groups, list) else [], staff
-            )
             try:
                 resolved_ids = resolve_user_write_group_ids(
                     ids, visible_groups=visible

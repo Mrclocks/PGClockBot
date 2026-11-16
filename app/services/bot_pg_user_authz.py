@@ -31,7 +31,6 @@ from app.services.bot_principal_identity import (
 from app.services.pg_user_scope import filter_pg_users_for_staff, is_full_pg_owner, pg_user_in_staff_scope, pg_user_owner_username
 from app.services.principal_pg_authz import (
     apply_level1_pg_local_safety,
-    authorize_pg_page,
     authorize_pg_user_action,
     is_level1_principal_staff,
     principal_pg_authz_ready,
@@ -228,7 +227,8 @@ def _prepare_staff(resolution: BotPrincipalResolution) -> dict[str, Any] | None:
 
 def _capability_decision(staff: dict[str, Any], action: BotPgUserAction) -> AuthDecision:
     if action in {"list", "search", "read"}:
-        return authorize_pg_page(staff, "pg_users")
+        # PasarGuard lists, searches and shows users only with ``users.read``.
+        return authorize_pg_user_action(staff, "read")
     pg_action = _PG_USER_ACTION.get(str(action))
     if not pg_action:
         return AuthDecision(False, "pg_permission_denied")

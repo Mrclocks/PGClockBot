@@ -516,3 +516,4 @@ tests/test_plan_template_only_role.py
 tests/test_plan_category_board.py
 tests/test_entry_approval.py
 tests/test_platform_pg_admins_page.py
+tests/test_pg_role_parity.py
