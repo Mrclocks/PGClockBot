@@ -1847,12 +1847,16 @@
             ? (btn.textContent || '').trim()
             : 'کپی');
       btn.dataset.copyIdle = idle;
+      // Keep the label's own nodes (a token's left-to-right box, an icon) to put back after «کپی شد».
+      if (!btn._copyNodes) btn._copyNodes = [...btn.childNodes];
       btn.textContent = 'کپی شد';
-      btn.classList.add('btn-ok', 'is-copied');
+      btn.classList.add('is-copied');
       if (btn._copyTimer) clearTimeout(btn._copyTimer);
       btn._copyTimer = setTimeout(() => {
-        btn.textContent = btn.dataset.copyIdle || 'کپی';
-        btn.classList.remove('btn-ok', 'is-copied');
+        if (btn._copyNodes && btn._copyNodes.length) btn.replaceChildren(...btn._copyNodes);
+        else btn.textContent = btn.dataset.copyIdle || 'کپی';
+        btn._copyNodes = null;
+        btn.classList.remove('is-copied');
       }, 1400);
     }
     document.addEventListener('click', (e) => {

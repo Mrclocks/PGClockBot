@@ -357,10 +357,10 @@
     if (!btn) return;
     const prev = btn.textContent;
     btn.textContent = 'کپی شد';
-    btn.classList.add('btn-ok', 'is-copied');
+    btn.classList.add('is-copied');
     setTimeout(function () {
       btn.textContent = prev;
-      btn.classList.remove('btn-ok', 'is-copied');
+      btn.classList.remove('is-copied');
     }, 1500);
   }
 

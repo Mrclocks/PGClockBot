@@ -4011,8 +4011,7 @@ a.btn.btn-star:hover {
 }
 .btn-star svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .btn-star-gh { opacity: 0.9; }
-.btn.is-copied,
-.btn.btn-ok.is-copied {
+.btn.is-copied {
   color: var(--ok-fg) !important;
   border-color: rgba(34, 197, 94, 0.42);
   background: rgba(34, 197, 94, 0.12);
@@ -12528,3 +12527,10 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
   gap: var(--section-gap);
 }
 #main :is(.kpi-strip, .home-main-grid, .home-bottom-grid, .home-panels, .dash-cols, .ov-tables, .fin-charts) > * { margin-top: 0; margin-bottom: 0; }
+
+/* «کپی شد» is always the success green, whatever the copy control looks like at rest (a token, a link, a button). */
+:is([data-copy], [data-copy-from]).is-copied {
+  color: var(--ok-fg);
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}

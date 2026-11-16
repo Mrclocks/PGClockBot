@@ -31,13 +31,14 @@ class Element {
   // Like the DOM: an element's text is its own text followed by its children's.
   get textContent() {return this._text + this.children.map((child) => child.textContent || "").join("");}
   set textContent(value) {this._text = String(value); this.children = [];}
+  get childNodes() {return this.children;}
   setAttribute(name, value) {this.attributes[name] = value;}
   getAttribute(name) {return this.attributes[name] ?? null;}
   hasAttribute(name) {return name in this.attributes;}
   removeAttribute(name) {delete this.attributes[name];}
   append(...children) {this.children.push(...children);}
   appendChild(child) {this.append(child);}
-  replaceChildren(...children) {this.children = children;}
+  replaceChildren(...children) {this._text = ""; this.children = children;}
   after(node) {this.nextElementSibling = node;}
   matches(selector) {return selector === "input, textarea" && ["INPUT", "TEXTAREA"].includes(this.tagName);}
   closest(selector) {return selector === "[data-copy]" && this.hasAttribute("data-copy") ? this : null;}
