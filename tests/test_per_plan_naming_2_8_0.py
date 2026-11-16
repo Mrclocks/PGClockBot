@@ -93,6 +93,18 @@ class GenerateWithPlanTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(name.startswith("_"))
         self.assertRegex(name, r"^[A-Za-z0-9]{8}$")
 
+    async def test_pattern_rendering_only_separators_gets_full_random_name(self):
+        from app.services.orders import generate_pg_username
+
+        settings = {
+            "pg_username_prefix": "",
+            "pg_username_suffix": "",
+            "pg_username_pattern": "{prefix}_{id}",
+        }
+        with patch("app.services.users.get_all_settings", new=AsyncMock(return_value=settings)):
+            name = await generate_pg_username(AsyncMock())
+        self.assertRegex(name, r"^[A-Za-z0-9]{8}$")
+
     async def test_generate_uses_plan_fields(self):
         from app.services.orders import generate_pg_username
 

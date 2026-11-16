@@ -280,7 +280,9 @@ def _fit_panel_username(built: str, *, keep_unique: bool) -> str:
     if len(name) > PG_USERNAME_MAX_LENGTH:
         tail = name[-8:]
         name = name[: PG_USERNAME_MAX_LENGTH - len(tail)] + tail
-    if len(name) < PG_USERNAME_MIN_LENGTH:
+    if not name:
+        name = _random_alnum(8)
+    elif len(name) < PG_USERNAME_MIN_LENGTH:
         name = f"{name}_{_random_alnum(PG_USERNAME_MIN_LENGTH)}"[:PG_USERNAME_MAX_LENGTH]
     return name
 
