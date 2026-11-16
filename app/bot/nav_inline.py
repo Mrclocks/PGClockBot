@@ -862,6 +862,7 @@ def pg_hub_keyboard(
     *,
     features: frozenset[str] | set[str] | None = None,
     can_create_user: bool = True,
+    can_list_users: bool = True,
     back_callback: str = "nv:adm:product",
 ) -> InlineKeyboardMarkup:
     """PG feature hub — leaf buttons reuse ``adm:pg:*``."""
@@ -894,7 +895,7 @@ def pg_hub_keyboard(
             style_id=key, style_fallback="primary",
         )
         for key, text in _pg_submenu_entries(
-            ui, features=features, can_create_user=can_create_user
+            ui, features=features, can_create_user=can_create_user, can_list_users=can_list_users
         )
         if key in cb_map
     ]

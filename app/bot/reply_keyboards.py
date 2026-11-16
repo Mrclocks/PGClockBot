@@ -309,6 +309,7 @@ def _pg_submenu_entries(
     *,
     features: frozenset[str] | set[str] | None = None,
     can_create_user: bool = True,
+    can_list_users: bool = True,
 ) -> list[tuple[str, str]]:
     """PasarGuard reply submenu — filtered by Hybrid PG feature keys when given."""
     feats = features
@@ -326,6 +327,8 @@ def _pg_submenu_entries(
         if feats is not None and feat not in feats:
             continue
         if key == REPLY_ACTION_PG_CREATE and not can_create_user:
+            continue
+        if key in (REPLY_ACTION_PG_USERS, REPLY_ACTION_PG_SEARCH) and not can_list_users:
             continue
         out.append((key, label))
     return out
@@ -937,9 +940,12 @@ def pg_reply_keyboard(
     *,
     features: frozenset[str] | set[str] | None = None,
     can_create_user: bool = True,
+    can_list_users: bool = True,
 ) -> ReplyKeyboardMarkup:
     rows = _pack_reply_rows(
-        _pg_submenu_entries(ui, features=features, can_create_user=can_create_user),
+        _pg_submenu_entries(
+            ui, features=features, can_create_user=can_create_user, can_list_users=can_list_users
+        ),
         ui,
         footer_row=_submenu_footer(ui),
     )

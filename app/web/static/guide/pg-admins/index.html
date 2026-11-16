@@ -93,7 +93,7 @@
             </a>
             
             <a class="guide-nav-link" href="../settings-panel/index.html">
-              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M17 5v4M19 7h1"/><path d="M4 12h3M11 10v4M13 12h7"/><path d="M4 17h11M19 15v4M21 17h-1"/></svg></span>
+              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v16H7.5A2.5 2.5 0 0 0 5 21.5z"/><path d="M5 5.5V21.5"/></svg></span>
               <span class="guide-nav-text">تنظیمات سیستم</span>
             </a>
             
@@ -304,6 +304,9 @@
 <p><strong>راه حل:</strong> نقش ادمین را در PG بررسی کنید؛ با اکانت مالک همان عملیات را تست کنید؛ مجوزهای وب را در فرم دوباره ذخیره کنید.</p></div>
 <div class="guide-callout guide-callout--tip"><strong class="guide-callout-label">نکته</strong><p>قبل از دادن دسترسی گسترده، یک ادمین تست با حداقل مجوز بسازید و ببینید منوی آبی‌اش چیست. منوی PG از نقش پاسارگارد می‌آید، نه از تیک‌های فروشگاه.</p></div>
 <div class="guide-callout guide-callout--info"><strong class="guide-callout-label">راهنما</strong><p>خود <code>pg_staff</code> معمولاً این صفحه را برای ساخت دیگران ندارد؛ مدیریت ادمین‌ها کار مالک است.</p></div>
+<div class="guide-callout guide-callout--error"><strong class="guide-callout-label">خطای رایج</strong><p><strong>مشکل:</strong> مالک وارد شده، ولی «ادمین‌ها» در منوی پاسارگارد نیست؛ «کاربران» و بقیه هست.</p>
+<p><strong>علت:</strong> منوهای پاسارگارد از نقش همان حسابی پیروی می‌کنند که پنل با آن به پاسارگارد وصل است. «ادمین‌ها» وقتی می‌آید که این حساب در پاسارگارد owner باشد یا نقشش خواندن ادمین‌ها را داشته باشد. کلید API که بدون «ارث‌بری دسترسی‌ها» ساخته شده، حتی برای ادمین owner هم owner حساب نمی‌شود.</p>
+<p><strong>راه حل:</strong> در «نمای کلی پاسارگارد» دلیل دقیق نوشته شده است. کلید API با «ارث‌بری دسترسی‌ها» بسازید، کلید را حذف کنید تا با رمز وصل شود، یا در پاسارگارد خواندن ادمین‌ها را به نقش این حساب بدهید. حذف ادمین هم فقط وقتی انجام می‌شود که نقش اجازهٔ حذف ادمین داشته باشد.</p></div>
           </div>
 
           <nav class="guide-pager" aria-label="صفحه قبل و بعد">

@@ -2816,7 +2816,7 @@ async def _renewal_targets(pg, service: UserService, plan: Plan, snapshot: dict 
 
 async def _assert_renewal_provision_gate(
     session: AsyncSession, order: Order, plan: Plan, run: _RenewalRun,
-    *, data_limit: int | None, gate_expire: int | None,
+    *, data_limit: int | None, gate_expire: int | None, to_on_hold: bool = False,
 ) -> None:
     if not order.reseller_id:
         return
@@ -2830,6 +2830,7 @@ async def _assert_renewal_provision_gate(
             data_limit=data_limit,
             expire_ts=gate_expire,
             from_template=bool(plan.pg_template_id) if run.snapshot is None else False,
+            to_on_hold=to_on_hold,
         )
     except ProvisionError as e:
         raise ValueError(e.message) from e
@@ -3015,7 +3016,10 @@ async def apply_renewal(
     try:
         pg = await _renewal_panel_client(session, order, service)
         payload, data_limit, expire, gate_expire = await _renewal_targets(pg, service, plan, snapshot)
-        await _assert_renewal_provision_gate(session, order, plan, run, data_limit=data_limit, gate_expire=gate_expire)
+        await _assert_renewal_provision_gate(
+            session, order, plan, run, data_limit=data_limit, gate_expire=gate_expire,
+            to_on_hold=bool(payload and payload.get("status") == "on_hold"),
+        )
         volume_hold = await _hold_renewal_volume(session, order, service, plan, pg, run, data_limit=data_limit)
         payg_charge = await _charge_renewal(session, order, service, plan, pg, run)
         panel_touched = True

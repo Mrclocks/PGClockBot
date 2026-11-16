@@ -3998,7 +3998,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         else:
             # Demoting a reseller must tear down profile / PG admin / shop bot
             if user.role == Role.RESELLER.value and role != Role.RESELLER.value:
-                from app.services.resellers import notify_reseller_revoked, revoke_reseller
+                from app.services.resellers import (
+                    PanelAdminNotRemoved,
+                    notify_reseller_revoked,
+                    revoke_reseller,
+                )
 
                 try:
                     info = await revoke_reseller(
@@ -4007,6 +4011,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                         delete_pg_admin=True,
                         reason=reason,
                     )
+                except PanelAdminNotRemoved as e:
+                    # The shop and its role stay as they are while its admin is still in PasarGuard.
+                    return _redirect_msg("/users", err=str(e))
                 except ValueError:
                     user.role = role
                     await session.commit()
