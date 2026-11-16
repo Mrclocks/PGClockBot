@@ -18,13 +18,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db import Base
-from app.db.models import BotUser, ResellerProfile
+from app.db.models import BotUser, ResellerPlan, ResellerProfile
 from app.services.pg_admin_roles import (
     AdminRoleError,
     apply_admin_role,
     resolve_new_admin_role_id,
 )
-from app.services.resellers import provision_reseller
+from app.services.resellers import grantable_reseller_plan, provision_reseller
 
 OWNER_ROLE = {"id": 1, "name": "owner", "is_owner": True}
 SHOP_ROLE = {"id": 4, "name": "shop", "is_owner": False}
@@ -124,6 +124,29 @@ class ProvisionWithoutPlanTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             profile = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == 5))
         self.assertIsNone(profile)
+
+    async def test_a_chosen_package_supplies_the_role_when_the_panel_has_several(self) -> None:
+        pg = FakeRoleClient([OWNER_ROLE, SHOP_ROLE, STAFF_ROLE])
+        async with self.Session() as session:
+            session.add(ResellerPlan(
+                id=3, name="payg", price=0, plan_kind="subscription", billing_mode="payg",
+                price_per_gb=1000, pg_role_id=7, is_active=True,
+            ))
+            await session.commit()
+            plan = await grantable_reseller_plan(session, 3)
+            user = await session.get(BotUser, 5)
+            with patch("app.services.pasarguard.get_pg", return_value=pg):
+                await provision_reseller(session, user=user, plan=plan, create_pg_admin=True)
+        self.assertEqual(pg.create_admin.await_args.args[0]["role_id"], 7)
+
+    async def test_inactive_or_addon_packages_cannot_be_granted(self) -> None:
+        async with self.Session() as session:
+            session.add(ResellerPlan(id=8, name="off", price=1, plan_kind="subscription", is_active=False))
+            session.add(ResellerPlan(id=9, name="addon", price=1, plan_kind="addon_volume", is_active=True))
+            await session.commit()
+            for plan_id in (8, 9, 404):
+                with self.assertRaises(ValueError):
+                    await grantable_reseller_plan(session, plan_id)
 
     async def test_failed_create_is_not_retried_without_a_role(self) -> None:
         pg = FakeRoleClient([OWNER_ROLE, SHOP_ROLE])

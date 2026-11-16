@@ -543,6 +543,14 @@ async def list_active_reseller_plans(
     return list(result.scalars().all())
 
 
+async def grantable_reseller_plan(session: AsyncSession, plan_id: int) -> ResellerPlan:
+    """An active subscription package a staff member may grant a new reseller."""
+    plan = await session.get(ResellerPlan, int(plan_id))
+    if plan is None or not plan.is_active or plan.plan_kind != "subscription":
+        raise ValueError("پلن نمایندگی نامعتبر یا غیرفعال است")
+    return plan
+
+
 def normalize_reseller_billing_mode(raw: str | None) -> str:
     from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
 
