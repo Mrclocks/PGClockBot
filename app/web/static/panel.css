@@ -4810,9 +4810,6 @@ form.settings-form > .actions.sticky-actions,
 .settings-modal-body .settings-card {
   margin-top: 0;
 }
-.settings-modal-body .settings-card + .settings-card {
-  margin-top: var(--space-3);
-}
 .modal-tab-panel[hidden] {
   display: none !important;
 }
@@ -10746,7 +10743,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-groups-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--section-gap);
 }
 /* Kill .card flex/gap/padding — those push summary content off true center */
 .colors-groups-stack > .colors-group-details.card,
@@ -11799,7 +11796,7 @@ html[data-theme="light"] .st span { color: color-mix(in srgb, var(--t) 90%, tran
   stroke-linejoin: round;
 }
 html[data-theme="light"] .home-action-empty-ico { stroke: var(--ok-text); }
-.home-sales-card { padding: 18px; }
+.home-sales-card { padding: var(--space-2); }
 .home-sales-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1); margin-bottom: 10px; }
 .home-sales-head h2 { flex: 1 1 auto; }
 .sales-seg { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: var(--control-radius); font-size: var(--fs-2); }
@@ -11932,7 +11929,6 @@ html[data-theme="light"] .sc-tip { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
   .st:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .home-update-note .home-update-go { display: none; }
   .home-main-grid { grid-template-columns: 1fr; gap: 12px; }
-  .home-sales-card { padding: 16px; }
   .sales-plot { height: 176px; margin-right: 0; }
   .sc-ytick { display: none; }
 }
@@ -12511,6 +12507,12 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
   gap: var(--section-gap);
 }
 #main :is(.main-body, .ds-settings, .home-dash, .ov-section, [data-plans-panel], .ticket-tg-section, .ds-page-stack) > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+/* Stacks of boxes inside a page or a settings modal follow the same rule: the stack's gap is the only space between
+   its boxes, so no box brings a margin of its own (a margin added 24 or 16 on top of the gap). */
+:is(.settings-domain-stack, .loyalty-stack, .msg-vars-stack, .colors-groups-stack, .magic-links-stack) > * {
   margin-top: 0;
   margin-bottom: 0;
 }
