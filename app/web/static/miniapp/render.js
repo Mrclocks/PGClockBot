@@ -1069,7 +1069,7 @@
   }
 
   root.PGMini.render = Object.freeze({
-    icon, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
+    icon, badge, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
     brandHeaderHtml, noticeBannerHtml, shortcutsHtml, panelShortcutsHtml, heroHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, buyConfirmHtml, discountedCheckoutHtml,
     validServiceName, randomServiceName, giftFormHtml, renewPlansHtml, renewChoicesHtml, renewCategoryHtml,

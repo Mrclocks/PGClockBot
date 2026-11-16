@@ -135,9 +135,11 @@ class ShopTopupTests(ShopFixture):
         self.assertEqual(response.status_code, 503)
         self.assertIsNone((await self.payment(payment_id)).receipt_file_id)
 
-    async def test_another_shops_customer_cannot_top_up_here(self) -> None:
+    async def test_another_shops_customer_sees_only_this_shops_top_ups(self) -> None:
+        await self.start()
         response = await self.client.get("/api/mini/topup", headers=self.headers(key=OTHER_KEY, token=OTHER_SHOP_TOKEN))
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["recent"], [], "shop 5's top-up never shows in shop 6")
 
 
 if __name__ == "__main__":

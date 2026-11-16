@@ -2,7 +2,7 @@
 (function (root) {
   "use strict";
 
-  const { core, render: R } = root.PGMini;
+  const { core, render: R, onboarding: O } = root.PGMini;
   const doc = root.document;
 
   const SEARCH_DEBOUNCE_MS = 350;
@@ -38,6 +38,9 @@
     checkout: null,
     addonPacks: [],
     clubHistory: null,
+    // The onboarding step on screen (referral, channels or terms), and the code typed for it.
+    onboarding: null,
+    onboardingCode: "",
     reviewImage: null,
     sheet: null,
     sheetSeq: 0,
@@ -1888,7 +1891,11 @@
     syncTelegramBackButton();
   }
 
-  async function boot() {
+  /**
+   * ``afterOnboarding``: the server just said every onboarding step is done. If /me still
+   * reports one, the error is shown instead of going round again.
+   */
+  async function boot(afterOnboarding) {
     els.root.innerHTML = R.loadingHtml(3);
     try {
       if (await core.whenTelegram(SDK_WAIT_MS)) connectTelegram();
@@ -1896,13 +1903,83 @@
       await waitForInitData(6);
       if (!core.getInitData()) throw new core.ApiError("no initData", 401);
       applyMe(await core.api("/api/mini/me"));
+      state.onboarding = null;
       const route = hashRoute();
       go(route.view, route);
+      core.requestWriteAccessOnce();
+    } catch (err) {
+      if (core.isGateError(err) && afterOnboarding !== true) showOnboarding();
+      else showBootError(err);
+    }
+    syncTelegramBackButton();
+  }
+
+  /* ---------- onboarding: referral code, required channels, entry terms ---------- */
+
+  function renderOnboarding(error) {
+    els.nav.innerHTML = "";
+    els.nav.hidden = true;
+    state.nav = { key: "", active: null };
+    els.root.innerHTML = O.stepHtml(state.onboarding, error, state.onboardingCode);
+  }
+
+  /** Show the step the server reports; any other answer means every step is done. */
+  function applyOnboarding(step) {
+    if (!O.isStep(step)) {
+      state.onboarding = null;
+      boot(true);
+      return;
+    }
+    state.onboarding = step;
+    renderOnboarding("");
+  }
+
+  async function showOnboarding() {
+    closeSheet();
+    state.me = null;
+    els.root.innerHTML = R.loadingHtml(3);
+    try {
+      applyOnboarding(await core.api("/api/mini/onboarding"));
     } catch (err) {
       showBootError(err);
     }
     syncTelegramBackButton();
   }
+
+  /** A step's action, sent once per tap; a refusal is shown on the same step to try again. */
+  function sendOnboarding(path, body, button) {
+    return guarded("onboarding", button, async () => {
+      let step;
+      try {
+        step = await core.api(path, { method: "POST", body: body || {} });
+      } catch (err) {
+        // 401 (session lost) and a new gate are handled by the API client's own handlers.
+        if (err.status === 401 || core.isGateError(err)) return;
+        core.haptic("err");
+        renderOnboarding(err.message);
+        return;
+      }
+      core.haptic("ok");
+      applyOnboarding(step);
+    });
+  }
+
+  /** A gate hit after launch (e.g. the person left a required channel): show that step. */
+  function onGate() {
+    if (state.me) showOnboarding();
+  }
+
+  ACTIONS["onboarding-channel"] = (el) => {
+    const url = O.channelUrl(state.onboarding, el.getAttribute("data-index"));
+    if (!url || !core.openTelegramLink(url)) core.toast("لینک کانال معتبر نیست", "err");
+  };
+  ACTIONS["onboarding-join-check"] = (el) => sendOnboarding("/api/mini/onboarding/join-check", {}, el);
+  ACTIONS["onboarding-terms"] = (el) => sendOnboarding("/api/mini/onboarding/terms", {}, el);
+  FORMS["onboarding-referral"] = (form) => {
+    state.onboardingCode = textField(form, "code").slice(0, 64);
+    if (!state.onboardingCode) return renderOnboarding("کد معرف را وارد کنید.");
+    return sendOnboarding("/api/mini/onboarding/referral", { code: state.onboardingCode }, form.querySelector("button[type=submit]"));
+  };
 
   ACTIONS.reload = () => boot();
   ACTIONS["close-app"] = () => {
@@ -1946,6 +2023,7 @@
     els.sheetBody = doc.getElementById("sheet-body");
     els.sheetClose = doc.getElementById("sheet-close");
     core.onAuthLost(onAuthLost);
+    core.onGate(onGate);
     bindEvents();
     attachPullToRefresh();
     boot();

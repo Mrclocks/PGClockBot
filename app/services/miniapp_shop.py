@@ -42,6 +42,10 @@ KEY_BYTES = 16
 # its data from MiniScope.shop_id; every other route stays closed to shops.
 SHOP_ROUTES: frozenset[str] = frozenset({
     "/api/mini/me",
+    "/api/mini/onboarding",
+    "/api/mini/onboarding/referral",
+    "/api/mini/onboarding/join-check",
+    "/api/mini/onboarding/terms",
     "/api/mini/services",
     "/api/mini/service/{service_id}",
     "/api/mini/service/{service_id}/qr",
