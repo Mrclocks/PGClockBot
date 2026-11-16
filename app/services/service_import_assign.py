@@ -189,6 +189,17 @@ async def _target_shop(session: AsyncSession, staff: Mapping[str, Any], user: Bo
     return shop_id
 
 
+def _visible_reason(lookup: ServiceLookup, reason: Reason) -> Reason:
+    """A guessed username under an admin this shop may not attach reads as unknown.
+
+    A link is a secret its holder already has; a username is guessable, and a different answer
+    would tell staff which usernames exist under other shops' admins.
+    """
+    if lookup.kind == KIND_USERNAME and reason is Reason.ADMIN_NOT_ALLOWED:
+        return Reason.NOT_FOUND
+    return reason
+
+
 async def _verify(
     session: AsyncSession, lookup: ServiceLookup, shop_id: int | None, config: ImportSettings
 ) -> VerifiedService:
@@ -200,7 +211,7 @@ async def _verify(
             return await verify_link(session, raw_link=lookup.value, shop_id=shop_id, config=config)
         return await verify_panel_username(session, username=lookup.value, shop_id=shop_id, config=config)
     except ServiceImportError as exc:
-        raise _refused(exc.reason) from None
+        raise _refused(_visible_reason(lookup, exc.reason)) from None
     except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
         if is_not_found_error(exc):
             raise _refused(Reason.NOT_FOUND) from None
