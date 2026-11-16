@@ -27,6 +27,7 @@ from app.db.models import (
 from app.services.db_safe import rollback_quiet
 from app.services.chat_records import keeps_sent
 from app.services.pg_admin_roles import apply_admin_role, resolve_new_admin_role_id
+from app.services.platform_identity import is_explicit_owner_staff
 from app.services.pg_panel_access import (
     close_access_warning,
     may_share_pg_credentials,
@@ -549,6 +550,25 @@ async def grantable_reseller_plan(session: AsyncSession, plan_id: int) -> Resell
     if plan is None or not plan.is_active or plan.plan_kind != "subscription":
         raise ValueError("پلن نمایندگی نامعتبر یا غیرفعال است")
     return plan
+
+
+PLAN_GRANT_OWNER_ONLY = "فقط مالک می‌تواند پلن نمایندگی انتخاب کند"
+
+
+async def reseller_plan_from_form(session: AsyncSession, staff: dict | None, raw: object) -> ResellerPlan | None:
+    """The package chosen on the users page, or ``None`` when none was chosen.
+
+    A package grants its own permissions, limits and panel role, so only the owner may pick one;
+    the form hides the field from everyone else, and this refuses a hand-made request too.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    if not is_explicit_owner_staff(staff):
+        raise ValueError(PLAN_GRANT_OWNER_ONLY)
+    if not text.isascii() or not text.isdigit():
+        raise ValueError("پلن نمایندگی نامعتبر یا غیرفعال است")
+    return await grantable_reseller_plan(session, int(text))
 
 
 def normalize_reseller_billing_mode(raw: str | None) -> str:

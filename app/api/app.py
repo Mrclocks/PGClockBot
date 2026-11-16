@@ -3933,14 +3933,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             from app.services.resellers import (
                 format_credentials_message,
                 get_reseller_panel_base_url,
-                grantable_reseller_plan,
                 provision_reseller,
+                reseller_plan_from_form,
             )
 
-            plan_raw = str(form.get("reseller_plan_id") or "").strip()
             try:
                 # A package brings its own PasarGuard role, limits and permissions.
-                plan = await grantable_reseller_plan(session, int(plan_raw)) if plan_raw.isdigit() else None
+                plan = await reseller_plan_from_form(session, staff, form.get("reseller_plan_id"))
                 perms = None if plan is not None else DEFAULT_FEATURE_PERMS
                 creds = await provision_reseller(
                     session,

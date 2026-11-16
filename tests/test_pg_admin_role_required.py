@@ -24,7 +24,7 @@ from app.services.pg_admin_roles import (
     apply_admin_role,
     resolve_new_admin_role_id,
 )
-from app.services.resellers import grantable_reseller_plan, provision_reseller
+from app.services.resellers import grantable_reseller_plan, provision_reseller, reseller_plan_from_form
 
 OWNER_ROLE = {"id": 1, "name": "owner", "is_owner": True}
 SHOP_ROLE = {"id": 4, "name": "shop", "is_owner": False}
@@ -147,6 +147,21 @@ class ProvisionWithoutPlanTests(unittest.IsolatedAsyncioTestCase):
             for plan_id in (8, 9, 404):
                 with self.assertRaises(ValueError):
                     await grantable_reseller_plan(session, plan_id)
+
+    async def test_only_the_owner_may_pick_a_package_on_the_users_page(self) -> None:
+        owner = {"org_principal_id": 1, "org_depth": 0, "web_owner": True}
+        admins = (None, {"role": "admin"}, {"role": "admin", "org_principal_id": 2, "org_depth": 1})
+        async with self.Session() as session:
+            session.add(ResellerPlan(id=3, name="pro", price=0, plan_kind="subscription", is_active=True))
+            await session.commit()
+            self.assertEqual((await reseller_plan_from_form(session, owner, "3")).id, 3)
+            for staff in admins:
+                with self.assertRaises(ValueError):
+                    await reseller_plan_from_form(session, staff, "3")
+                self.assertIsNone(await reseller_plan_from_form(session, staff, ""))
+            for hostile in ("3.0", "-3", "٣", "3; drop"):
+                with self.assertRaises(ValueError):
+                    await reseller_plan_from_form(session, owner, hostile)
 
     async def test_failed_create_is_not_retried_without_a_role(self) -> None:
         pg = FakeRoleClient([OWNER_ROLE, SHOP_ROLE])
