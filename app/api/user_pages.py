@@ -68,15 +68,15 @@ def user_card_actions(staff: dict, user: BotUser, *, shop_scope: int | None, ope
     """Which actions the user card offers, and where «ویرایش» leads.
 
     Opened from the resellers list by the platform owner, a reseller's card edits the reseller (the reseller edit
-    modal of that page); everywhere else it edits the customer. ``opened_from`` is compared with a fixed value.
+    modal of that page); on the users list it edits the customer for anyone working in a shop, like the list's own
+    «ویرایش». ``opened_from`` is compared with a fixed value.
     """
     from_resellers = str(opened_from or "") == CARD_FROM_RESELLERS
     if from_resellers:
         edit = "reseller" if user.role == "reseller" and is_explicit_owner_staff(staff) else None
     else:
-        in_shop = is_explicit_owner_staff(staff) or shop_scope is not None
-        pg_acts = customer_service_actions(staff)
-        edit = "user" if in_shop and any(pg_acts.get(k) for k in ("create", "update", "delete")) else None
+        # The edit modal opens for anyone working in a shop; each change inside it checks its own permission.
+        edit = "user" if is_explicit_owner_staff(staff) or shop_scope is not None else None
     return {"edit_target": edit, "can_message": not user.is_blocked}
 
 

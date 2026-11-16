@@ -7,7 +7,6 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 import httpx
 from fastapi import FastAPI, Request
@@ -24,7 +23,6 @@ from app.services.users_ops import expire_tone
 ROOT = Path(__file__).resolve().parents[1]
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
 SHOP_A, SHOP_B = 10, 20
-PANEL_ACTIONS = {"create": True, "update": True, "delete": True}
 HOSTILE_NAME = '<script>alert("x")</script>'
 
 
@@ -162,17 +160,33 @@ class UserCardTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_the_same_reseller_from_the_users_list_edits_the_customer(self) -> None:
         self.staff = OWNER.copy()
-        with patch("app.api.user_pages.customer_service_actions", return_value=PANEL_ACTIONS):
-            response = await self.client.get(f"/users/{SHOP_A}/card")
+        response = await self.client.get(f"/users/{SHOP_A}/card")
         self.assertIn('data-modal-open="modal-user-edit"', response.text)
         self.assertNotIn('data-modal-open="modal-reseller-edit"', response.text)
 
     async def test_a_shop_cannot_reach_the_reseller_edit_through_the_resellers_hint(self) -> None:
-        with patch("app.api.user_pages.customer_service_actions", return_value=PANEL_ACTIONS):
-            response = await self.client.get("/users/11/card?from=resellers")
+        response = await self.client.get("/users/11/card?from=resellers")
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("modal-reseller-edit", response.text)
         self.assertNotIn("modal-user-edit", response.text, "the resellers page has no user edit modal")
+
+    async def test_shop_staff_without_panel_service_rights_still_get_edit(self) -> None:
+        response = await self.client.get("/users/11/card")
+        self.assertIn('data-modal-load="/users/11/edit?fragment=1"', response.text)
+
+    async def test_username_and_telegram_id_copy_on_tap(self) -> None:
+        user = await self.session.get(BotUser, 11)
+        user.username = "shop_customer"
+        await self.session.commit()
+        response = await self.client.get("/users/11/card")
+        self.assertIn('data-copy="@shop_customer"', response.text)
+        self.assertIn('data-copy="9011"', response.text)
+
+    async def test_wallet_points_purchases_and_membership_sit_in_one_box(self) -> None:
+        response = await self.client.get("/users/11/card")
+        stats = response.text.split('class="edit-section user-card-stats"')[1].split("</section>")[0]
+        for label in ("کیف پول", "امتیاز", "خرید موفق", "عضویت"):
+            self.assertIn(f"<dt>{label}</dt>", stats)
 
     async def test_a_blocked_customer_gets_no_message_button(self) -> None:
         user = await self.session.get(BotUser, 11)

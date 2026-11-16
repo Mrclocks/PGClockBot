@@ -12,6 +12,8 @@
 {% set manage = can_manage_users if can_manage_users is defined else is_admin %}
 {% set provision = can_provision_users if can_provision_users is defined else manage %}
 {% set edit_svc = can_edit_user_services if can_edit_user_services is defined else provision %}
+{# The edit modal opens for anyone working in a shop (each change inside checks its own permission). #}
+{% set can_open_edit = edit_svc or provision %}
 {% set pg_update = can_pg_update if can_pg_update is defined else false %}
 {% set ops = can_user_ops if can_user_ops is defined else true %}
 {% set bulk_count = rows|length if flt != 'all' else 0 %}
@@ -219,7 +221,7 @@
               <button class="btn btn-sm" type="submit">تمدید</button>
             </form>
             {% endif %}
-            {% if edit_svc %}
+            {% if can_open_edit %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-user-edit"
                     data-modal-load="/users/{{ u.id }}/edit?fragment=1"
@@ -343,7 +345,7 @@
 {% endif %}
 {# The card is read-only, so everyone who sees the list can open it; only the message form needs ops. #}
 {{ user_card_modals(return_filter=flt, return_q=q, with_message=ops) }}
-{% if edit_svc %}
+{% if can_open_edit %}
 <div class="ui-modal ds" id="modal-user-edit" hidden
      data-modal-strip-keys="edit,ok,err,_">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
@@ -398,7 +400,7 @@
     try { focus.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
   }
 
-  {% if edit_svc %}
+  {% if can_open_edit %}
   var titleEl = document.getElementById('user-edit-title');
   var loadSeq = 0;
 

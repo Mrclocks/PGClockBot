@@ -47,8 +47,8 @@ class IdentityHeaderTests(unittest.TestCase):
         html = render_reseller_edit(person(role="reseller"))
         header = html.index(IDENTITY)
         self.assertLess(header, html.index("تگ ریسک"), "the header comes before any setting")
-        self.assertIn('<bdi dir="ltr">@ali_shop</bdi>', html)
-        self.assertIn('<bdi dir="ltr">5501</bdi>', html)
+        self.assertIn('data-copy="@ali_shop"', html)
+        self.assertIn('data-copy="5501"', html)
         self.assertIn('src="/users/7/photo"', html)
         self.assertIn(">نماینده</span>", html)
         self.assertIn(">فعال</span>", html)
@@ -63,6 +63,20 @@ class IdentityHeaderTests(unittest.TestCase):
         self.assertEqual(html.count(IDENTITY), 1)
         self.assertIn('<h3 class="user-identity-name"><bdi>علی</bdi></h3>', html)
         self.assertIn('src="/users/7/photo"', html)
+
+    def test_a_person_without_username_gets_only_the_id_chip(self) -> None:
+        user = person(role="user")
+        user.username = None
+        html = render_user_edit(user)
+        self.assertEqual(html.count('class="user-id-chip"'), 1)
+        self.assertIn('data-copy="5501"', html)
+
+    def test_a_hostile_username_is_escaped_in_the_copy_value(self) -> None:
+        user = person(role="reseller")
+        user.username = 'x"><script>'
+        html = render_reseller_edit(user)
+        self.assertNotIn('<script>', html)
+        self.assertIn('data-copy="@x&#34;&gt;&lt;script&gt;"', html)
 
     def test_a_hostile_name_is_escaped_in_both_headers(self) -> None:
         for html in (render_reseller_edit(person(role="reseller", name=HOSTILE)),

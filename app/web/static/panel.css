@@ -3023,21 +3023,43 @@ a.btn.btn-ghost:hover {
   .table-list-sm .li-child > .li-badge .badge { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 20px; min-height: 0; padding: 0 var(--space-1); font-size: var(--fs-1); font-weight: 600; line-height: 1; }
 }
 
-/* Who the person is (_user_identity.html), at the top of the user card and the user and reseller edit modals. */
-.user-identity { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
-.user-identity-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-.user-identity-main { display: flex; flex-direction: column; gap: var(--space-0); min-width: 0; }
+/* Who the person is (_user_identity.html), at the top of the user card and the user and reseller edit modals:
+   photo and name with badges, then the @username and the id, each a full-width row that copies on tap. */
+.user-identity { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.user-identity-row { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.user-identity-main { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .ds .user-identity-name { margin: 0; font-size: var(--fs-4); font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
-.user-identity-meta { margin: 0; font-size: var(--fs-2); }
-.user-identity-badges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-0) var(--space-1); margin: 0; }
+.user-identity-badges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: 0; }
+.user-identity-ids { display: flex; flex-direction: column; gap: var(--space-2); }
+.user-id-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  height: var(--ctl-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--control-bg);
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--fs-3);
+  cursor: pointer;
+}
+.user-id-chip:hover { background: var(--control-bg-hover); }
+.user-id-chip:focus-visible { outline: 2px solid var(--ring, var(--brand)); outline-offset: 2px; }
+.user-id-chip-label { flex: 0 0 auto; color: var(--muted-fg); font-size: var(--fs-2); }
+.user-id-chip-value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; text-align: end; }
+.user-id-chip-ico { flex: 0 0 auto; width: 16px; height: 16px; color: var(--muted-fg); }
+.user-id-chip.is-copied { justify-content: center; }
 
 /* User card (modal): the identity box, then account facts as label / value lines, then one line per service. */
 .user-card { display: flex; flex-direction: column; gap: var(--space-3); }
 .user-card-photo {
   position: relative;
-  flex: 0 0 48px;
-  width: 48px;
-  height: 48px;
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   overflow: hidden;
   display: inline-flex;
@@ -3050,19 +3072,6 @@ a.btn.btn-ghost:hover {
 }
 .user-card-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--motion-fast) ease; }
 .user-card-photo img.is-loaded { opacity: 1; }
-.kv-list { margin: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-.kv-list > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-1_5);
-  min-height: 44px;
-  padding: var(--space-1) var(--space-2);
-  font-size: var(--fs-3);
-}
-.kv-list > div + div { border-top: 1px solid var(--border); }
-.kv-list dt { color: var(--muted-fg); }
-.kv-list dd { margin: 0; font-weight: 600; text-align: end; font-variant-numeric: tabular-nums; }
 .user-card-service {
   display: flex;
   flex-direction: column;
@@ -3077,16 +3086,23 @@ a.btn.btn-ghost:hover {
 .user-card-service > div.muted { font-size: var(--fs-2); }
 .user-card-service .li-tone-warn { color: var(--warn-fg); font-weight: 600; }
 .user-card-service .li-tone-danger { color: var(--danger); font-weight: 600; }
-/* Inside a section box the facts and services are plain lines split by dividers, not boxes inside a box. */
-.edit-section > .kv-list { border: 0; border-radius: 0; }
-.edit-section > .kv-list > div { padding-inline: 0; }
+/* Wallet, points, purchases and membership: a 2×2 grid of label over value, split by thin lines, not four boxes. */
+.ds .edit-section.user-card-stats { padding: 0; overflow: hidden; }
+.user-card-stats dl { display: grid; grid-template-columns: 1fr 1fr; margin: 0; }
+.user-card-stats dl > div { display: flex; flex-direction: column; gap: var(--space-0); min-width: 0; padding: var(--space-2) var(--space-3); }
+.user-card-stats dl > div:nth-child(even) { border-inline-start: 1px solid var(--border); }
+.user-card-stats dl > div:nth-child(n + 3) { border-top: 1px solid var(--border); }
+.user-card-stats dt { color: var(--muted-fg); font-size: var(--fs-2); }
+.user-card-stats dd { margin: 0; font-size: var(--fs-4); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.user-card-stats dd small { color: var(--muted-fg); font-size: var(--fs-2); font-weight: 400; }
+/* Inside a section box the services are plain lines split by dividers, not boxes inside a box. */
 .edit-section > .user-card-service { padding-inline: 0; border: 0; border-radius: 0; }
 .edit-section > .user-card-service + .user-card-service { margin-top: 0; border-top: 1px solid var(--border); }
 .user-card-empty { margin: 0; }
 .user-card-actions {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: var(--space-1);
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
 }
 .user-card-actions .btn { width: 100%; }
 .user-card-actions .btn:only-child { grid-column: 1 / -1; }
