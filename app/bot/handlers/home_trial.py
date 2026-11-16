@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 router = Router(name="home_trial")
 
 TRIAL_UNAVAILABLE = "پلن تست در دسترس نیست."
+TRIAL_TITLE = "🎁 سرویس تست"
+TRIAL_PREPARING = "در حال آماده‌سازی سرویس تست…"
 
 
 async def _remove_offer(callback: CallbackQuery) -> None:
@@ -54,10 +56,16 @@ async def home_get_trial(
         await callback.answer(TRIAL_UNAVAILABLE, show_alert=True)
         await _remove_offer(callback)
         return
+    if callback.message is None:
+        await callback.answer()
+        return
     if len(plans) == 1:
-        buy = callback.model_copy(update={"data": f"shop:buy:{plans[0].id}"})
+        # The purchase edits the message it was tapped on into its result (delivery, payment or an
+        # error). Give it a message of its own, so removing the offer cannot remove that result.
+        screen = await callback.message.answer(format_message(TRIAL_TITLE, TRIAL_PREPARING))
+        buy = callback.model_copy(update={"data": f"shop:buy:{plans[0].id}", "message": screen})
         await shop_buy(buy, session, db_user, state, reseller_owner_id=reseller_owner_id)
-    elif callback.message is not None:
+    else:
         await callback.answer()
         await callback.message.answer(
             format_message("پلن تست", "پلن تست را انتخاب کنید:"),

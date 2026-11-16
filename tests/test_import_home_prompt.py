@@ -224,8 +224,12 @@ class TrialOfferTests(ImportCase):
                 patch.object(home_trial, "shop_buy", AsyncMock()) as buy,
             ):
                 await home_trial.home_get_trial(callback, session, user, AsyncMock())
-        self.assertEqual(buy.await_args.args[0].data, "shop:buy:900")
+        handed_over = buy.await_args.args[0]
+        self.assertEqual(handed_over.data, "shop:buy:900")
         callback.message.delete.assert_awaited_once()
+        # The purchase result goes to a message of its own, not to the offer that is deleted.
+        self.assertIs(handed_over.message, callback.message.answer.return_value)
+        self.assertIsNot(handed_over.message, callback.message)
 
     async def test_tapping_it_after_the_trial_was_taken_is_refused(self):
         await self._add_trial_plan()
