@@ -10,15 +10,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PlansAddonCategoryUiTests(unittest.TestCase):
-    def test_add_plan_category_sits_with_the_bot_display_options(self):
-        html = template_with_includes("plans.html")
-        fixed = html.split('id="panel-user-fixed"', 1)[1].split(
-            'id="panel-user-trial"', 1
-        )[0]
-        display = fixed.split("نمایش در ربات", 1)[1]
-        self.assertIn("برچسب دسته", display)
-        self.assertIn('data-category-audience="users"', display)
-        self.assertLess(fixed.find("نام پلن"), fixed.find("برچسب دسته"))
+    def test_add_plan_category_sits_right_under_the_plan_name(self):
+        # Rendered form: the category is chosen right after the name (the first thing the bot groups plans by),
+        # before the price, and only once.
+        from app.api.app import templates
+        from app.db.models import PlanCategory
+
+        html = templates.env.get_template("_user_plan_forms.html").render(
+            plan_categories=[PlanCategory(id=1, name="ویژه", audience="users", is_active=True)],
+            plan_category_tones={1: "success"},
+            groups=[], templates=[], values={}, plan_style_options=[], pack_style_options=[],
+        )
+        fixed = html.split('id="panel-user-fixed"', 1)[1].split('id="panel-user-trial"', 1)[0]
+        name, category, price = (fixed.find(f'name="{field}"') for field in ("name", "category_id", "price"))
+        self.assertTrue(0 <= name < category < price)
+        self.assertEqual(fixed.count('name="category_id"'), 1)
+        self.assertIn('data-value="1" data-tone="success"', fixed)
 
     def test_template_missing_warn_wiring(self):
         html = template_with_includes("plans.html")

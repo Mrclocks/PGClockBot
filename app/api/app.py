@@ -2658,6 +2658,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 pg_roles = []
 
         plan_categories: list = []
+        plan_board = None
+        plan_category_tones: dict = {}
         plan_category_map: dict = {}
         reseller_plan_category_map: dict = {}
         category_linked_plans: dict = {}
@@ -2668,10 +2670,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 category_plans_map,
                 list_categories,
             )
+            from app.services.plan_category_board import build_plan_board, category_tones
             from app.services.service_addons import list_packs
 
             if is_platform_admin(staff) or rid:
                 plan_categories = await list_categories(session, staff)
+                plan_board = build_plan_board(sale_plans, plan_categories, ui=values)
+                plan_category_tones = category_tones(plan_categories, values)
                 plan_category_map = await category_map_for_plans(
                     session, staff, sale_plans
                 )
@@ -2725,6 +2730,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "feature_perms": feature_perms,
                 "pg_roles": pg_roles,
                 "plan_categories": plan_categories,
+                "plan_board": plan_board,
+                "plan_category_tones": plan_category_tones,
                 "plan_category_map": plan_category_map,
                 "reseller_plan_category_map": reseller_plan_category_map,
                 "category_linked_plans": category_linked_plans,
@@ -3235,6 +3242,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         else:
             values = await get_all_settings(session, reseller_id=rid)
         from app.services.plan_categories import list_categories
+        from app.services.plan_category_board import category_tones
 
         cats = []
         if is_platform_admin(staff) or rid:
@@ -3274,6 +3282,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "plan": plan,
                 "values": values,
                 "plan_categories": cats,
+                "plan_category_tones": category_tones(cats, values),
                 "plan_vol_packs": plan_vol_packs,
                 "plan_dur_packs": plan_dur_packs,
             },

@@ -194,7 +194,7 @@
 ### انتخاب تک‌گزینه در فرم
 همان نوار ۴۴ (بند ۲):
 - `div.sales-seg.ds-seg` با `data-ds-choice` روی یک `select` پنهان (مثل `pg_mode`).
-- چیپ‌های `ds-chips` فقط برای انتخاب چندتایی است.
+- چیپ‌های `ds-chips` برای انتخاب چندتایی است، و برای انتخاب تک‌گزینه فقط وقتی گزینه‌ها را کاربر می‌سازد و تعدادشان ثابت نیست (مثل دستهٔ پلن): `ds-chips` با `role="radiogroup"` و `data-ds-choice` روی `select` پنهانِ `data-ui-select="1"`. آخرین چیپ «+ جدید» با `data-ds-other` فیلدی باز می‌کند که گزینه را همان‌جا می‌سازد (`_plan_category_field.html`).
 
 ## ۶-۱. جدول در گوشی
 زیر ۸۸۰ پیکسل `table-list-sm` فقط خانه‌های علامت‌خورده را نشان می‌دهد؛ ردیف بی‌علامت در گوشی خالی است.
@@ -412,6 +412,7 @@
 | تب صفحه | `<nav class="section-tabs">` با `a.active`؛ ردیف دوم: `section-tabs settings-subtabs` |
 | تب داخل مودال | `nav.section-tabs.modal-section-tabs` |
 | انتخاب چندگزینه‌ای در فرم | `div.sales-seg.ds-seg` با `data-ds-choice` |
+| فهرست گروه‌بندی‌شده (مثل پلن‌ها زیر دسته‌شان) | سرِ هر گروه یک ردیف `td[colspan]` با محتوای داخل `.plan-cat-cell` است: نوار باریک لبه‌تالبه به رنگ همان گروه (`data-tone`)، نام، تعداد و فقط یک «⋯» (`row_actions`)؛ دلیلِ مخفی بودن در یک خط کم‌رنگ زیرش. ردیف افزودن گروه دکمهٔ خط‌چین تمام‌عرض است. ترتیب گروه‌ها همان ترتیبی است که مشتری می‌بیند |
 | گروه دسترسی‌ها | `ds_perm_groups(feature_perm_groups())` داخل `ds-card ds-card-flush` با `data-ds-perms` |
 | لیست قابل‌ویرایش (ردیف + افزودن) | `ds-list` با `ds-list-head` و `ds-list-row`، دکمهٔ `ds-add` |
 | یادداشت داخل فرم | `<div class="ds-note">` (اطلاع) یا `data-tone="danger"` (کار برگشت‌ناپذیر) |

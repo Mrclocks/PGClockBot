@@ -12511,3 +12511,95 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
   gap: var(--section-gap);
 }
 #main :is(.kpi-strip, .home-main-grid, .home-bottom-grid, .home-panels, .dash-cols, .ov-tables, .fin-charts) > * { margin-top: 0; margin-bottom: 0; }
+
+/* Plans grouped by category (plans page). Each group heading is a thin band in the colour of the category's bot
+   button, edge to edge, so it never reads as a plan row; its order is the order of the buttons in the bot. The id
+   outweighs the phone list rules that centre a full-width cell and grid every row. */
+:is(#plan-category-board > tr, .plan-cat-chips > button)[data-tone] { --plan-cat-tone: var(--muted-fg); }
+:is(#plan-category-board > tr, .plan-cat-chips > button)[data-tone="primary"] { --plan-cat-tone: var(--info); }
+:is(#plan-category-board > tr, .plan-cat-chips > button)[data-tone="success"] { --plan-cat-tone: var(--ok); }
+:is(#plan-category-board > tr, .plan-cat-chips > button)[data-tone="danger"] { --plan-cat-tone: var(--destructive); }
+#plan-category-board > tr:is(.plan-cat-head, .plan-cat-add, .plan-cat-intro) > td { padding: 0; }
+/* Padding sits on the cell's inner box: the phone list forces every full-width cell to padding 0. */
+.plan-cat-cell { padding: var(--space-1) var(--space-2); }
+#plan-category-board > tr.plan-cat-head > td {
+  background: color-mix(in srgb, var(--plan-cat-tone) 10%, var(--card));
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  color: var(--foreground);
+  white-space: normal;
+}
+#plan-category-board > tr.plan-cat-head:first-child > td { border-top: 0; }
+.plan-cat-head-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--space-4);
+}
+.plan-cat-dot {
+  flex: 0 0 auto;
+  width: var(--space-1);
+  height: var(--space-1);
+  border-radius: var(--control-radius);
+  background: var(--plan-cat-tone);
+}
+.plan-cat-name {
+  font-size: var(--fs-3);
+  font-weight: 700;
+  color: color-mix(in srgb, var(--plan-cat-tone) 75%, var(--foreground));
+}
+#plan-category-board > tr[data-tone="default"] .plan-cat-name { color: var(--foreground); }
+.plan-cat-count { font-size: var(--fs-2); color: var(--muted-fg); }
+.plan-cat-actions { margin-inline-start: auto; display: flex; }
+/* The heading menu is always the round «⋯», on desktop too, whatever width the table has. */
+#plan-category-board .plan-cat-actions .row-actions-toggle--label { display: none; }
+#plan-category-board .plan-cat-actions .row-actions-toggle--icon { display: inline-flex; }
+.plan-cat-note { margin: var(--space-0) 0 0; font-size: var(--fs-2); color: var(--muted-fg); }
+#plan-category-board > tr:is(.plan-cat-add, .plan-cat-intro) .plan-cat-cell { padding: var(--space-1_5) var(--space-2); }
+#plan-category-board > tr.plan-cat-add > td,
+#plan-category-board > tr.plan-cat-intro > td {
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: normal;
+}
+.plan-cat-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  width: 100%;
+  height: var(--btn-h);
+  border: 1px dashed color-mix(in srgb, var(--brand) 55%, transparent);
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-size: var(--fs-3);
+  font-weight: var(--btn-fw);
+  cursor: pointer;
+}
+.plan-cat-add-btn .ico { width: 16px; height: 16px; }
+.plan-cat-intro-row { display: flex; align-items: center; gap: var(--space-1_5); }
+.plan-cat-intro-row p { flex: 1; margin: 0; display: flex; flex-direction: column; gap: var(--space-0); }
+.plan-cat-intro-row strong { font-size: var(--fs-3); color: var(--foreground); }
+.plan-cat-intro-row span { font-size: var(--fs-2); color: var(--muted-fg); line-height: 1.8; }
+.plan-cat-intro-row .btn { flex: 0 0 auto; }
+@media (max-width: 880px) {
+  #plan-category-board > tr:is(.plan-cat-head, .plan-cat-add, .plan-cat-intro) { display: block; padding: 0; }
+  .plan-cat-cell, #plan-category-board > tr:is(.plan-cat-add, .plan-cat-intro) .plan-cat-cell { padding: var(--space-1) var(--space-1_5); }
+}
+
+/* Category chips under the plan name: names vary in length, so three across (two on a phone), each cut with an
+   ellipsis and named in full by its title. */
+.ds .ds-chips.plan-cat-chips { --ds-chip-cols: 3; }
+.ds .plan-cat-chips > button { gap: var(--space-1); overflow: hidden; }
+.plan-cat-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.plan-cat-chip-off { font-size: var(--fs-1); color: var(--muted-fg); }
+.ds .plan-cat-chips > .plan-cat-chip-new { color: var(--brand); border-style: dashed; }
+.plan-cat-new { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.plan-cat-new input { flex: 1 1 12rem; min-width: 0; }
+.plan-cat-new-error { flex-basis: 100%; color: var(--destructive); }
+@media (max-width: 480px) {
+  .ds .ds-chips.plan-cat-chips { --ds-chip-cols: 2; }
+}

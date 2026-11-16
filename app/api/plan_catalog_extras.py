@@ -9,7 +9,7 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from fastapi import Depends, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.numbers import to_fa_digits
@@ -24,6 +24,24 @@ def pack_rows_from_form(amounts: list[float], prices: list[int], styles: list[st
         raise ValueError("ردیف‌های بسته کامل نیست")
     colours = styles or ["inherit"] * len(amounts)
     return [PackRow(amount=a, price=p, button_style=c) for a, p, c in zip(amounts, prices, colours, strict=True)]
+
+
+# Where a category action returns: the grouped plans list, or the categories modal it came from.
+CATEGORY_BOARD_URL = "/plans"
+CATEGORY_MODAL_URL = "/plans?categories=1"
+CATEGORY_BOARD_ANCHOR = "#plan-category-board"
+
+
+def category_redirect(back: str, *, ok: str | None = None, err: str | None = None) -> RedirectResponse:
+    """Redirect after a category action. ``back`` is matched against a fixed value, never used as a URL."""
+    to_board = str(back or "").strip() == "list"
+    url = CATEGORY_BOARD_URL if to_board else CATEGORY_MODAL_URL
+    params = [f"{key}={quote(value)}" for key, value in (("ok", ok), ("err", err)) if value]
+    if params:
+        url += ("&" if "?" in url else "?") + "&".join(params)
+    if to_board:
+        url += CATEGORY_BOARD_ANCHOR
+    return RedirectResponse(url, status_code=303)
 
 
 def packs_saved_message(count: int) -> str:
@@ -77,6 +95,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
     @app.post("/plans/categories/{category_id}/toggle")
     async def plans_category_toggle(
         category_id: int,
+        back: str = Form(""),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
@@ -84,17 +103,45 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
 
         cat = await get_owned_category(session, category_id, staff)
         if not cat:
-            return RedirectResponse(
-                f"/plans?categories=1&err={quote('برچسب دسته یافت نشد')}",
-                status_code=303,
-            )
+            return category_redirect(back, err="برچسب دسته یافت نشد")
         cat.is_active = not cat.is_active
         await session.commit()
-        return RedirectResponse("/plans?categories=1", status_code=303)
+        return category_redirect(back, ok="برچسب دسته روشن شد" if cat.is_active else "برچسب دسته خاموش شد")
+
+    @app.post("/plans/categories/{category_id}/move")
+    async def plans_category_move(
+        category_id: int,
+        direction: str = Form(...),
+        staff: dict = Depends(require_perm("plans")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.plan_categories import move_category
+
+        try:
+            moved = await move_category(session, staff, category_id, direction=direction)
+        except (ShopScopeError, ValueError) as e:
+            return category_redirect("list", err=str(e))
+        return category_redirect("list", ok="ترتیب دسته‌ها در ربات عوض شد" if moved else None)
+
+    @app.post("/plans/categories/quick")
+    async def plans_category_quick_create(
+        name: str = Form(""),
+        staff: dict = Depends(require_perm("plans")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Add a user category from inside the plan form; the same name twice returns the first one."""
+        from app.services.plan_categories import find_or_create_user_category
+
+        try:
+            category, created = await find_or_create_user_category(session, staff, name=name)
+        except (ShopScopeError, ValueError) as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        return JSONResponse({"ok": True, "id": int(category.id), "name": category.name, "created": created})
 
     @app.post("/plans/categories/{category_id}/delete")
     async def plans_category_delete(
         category_id: int,
+        back: str = Form(""),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
@@ -103,13 +150,8 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
         try:
             await delete_category(session, staff, category_id)
         except (ShopScopeError, ValueError) as e:
-            return RedirectResponse(
-                f"/plans?categories=1&err={quote(str(e))}", status_code=303
-            )
-        return RedirectResponse(
-            f"/plans?categories=1&ok={quote('برچسب دسته حذف شد')}",
-            status_code=303,
-        )
+            return category_redirect(back, err=str(e))
+        return category_redirect(back, ok="برچسب دسته حذف شد")
 
     @app.post("/plans/categories/{category_id}/edit")
     async def plans_category_edit(
