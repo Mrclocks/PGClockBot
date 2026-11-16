@@ -26,6 +26,13 @@ from app.db.models import (
 )
 from app.services.db_safe import rollback_quiet
 from app.services.chat_records import keeps_sent
+from app.services import pasarguard
+from app.services.pasarguard import PasarGuardError
+from app.services.pg_access import (
+    resolve_platform_pg_capabilities,
+    staff_from_platform_caps,
+    staff_may_delete_pg_admin,
+)
 from app.services.pg_admin_roles import apply_admin_role, resolve_new_admin_role_id
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.pg_panel_access import (
@@ -2423,6 +2430,47 @@ async def reject_application(
     await session.commit()
 
 
+PANEL_ADMIN_DELETE_REFUSED_MSG = (
+    "حساب پاسارگاردی که پنل با آن وصل است اجازهٔ حذف ادمین ندارد؛ نمایندگی حذف نشد."
+)
+PANEL_ADMIN_DELETE_FAILED_MSG = (
+    "حذف ادمین نماینده در پاسارگارد انجام نشد؛ نمایندگی حذف نشد. چند لحظهٔ دیگر دوباره تلاش کنید."
+)
+
+
+class PanelAdminNotRemoved(ValueError):
+    """PasarGuard did not remove a shop's panel admin, so the shop was left as it was."""
+
+
+async def assert_platform_may_delete_pg_admins() -> None:
+    """The connected PasarGuard account must be owner or hold ``admins.delete``."""
+    caps = await resolve_platform_pg_capabilities()
+    if not caps.get("ok"):
+        raise PanelAdminNotRemoved(PANEL_ADMIN_DELETE_FAILED_MSG)
+    if not staff_may_delete_pg_admin(staff_from_platform_caps(caps)):
+        raise PanelAdminNotRemoved(PANEL_ADMIN_DELETE_REFUSED_MSG)
+
+
+async def _remove_shop_pg_admin(pg_username: str) -> bool:
+    """Delete the shop's PasarGuard admin; ``False`` when PasarGuard no longer has it.
+
+    A refusal or an unknown outcome raises, so the caller changes nothing here; a retry
+    is safe because an admin that is already gone answers 404.
+    """
+    try:
+        await pasarguard.get_pg().delete_admin(pg_username)
+    except PasarGuardError as exc:
+        if exc.status_code == 404:
+            return False
+        if exc.status_code == 403:
+            raise PanelAdminNotRemoved(PANEL_ADMIN_DELETE_REFUSED_MSG) from exc
+        raise PanelAdminNotRemoved(PANEL_ADMIN_DELETE_FAILED_MSG) from exc
+    except Exception as exc:  # transport error or timeout: the outcome is unknown
+        logger.warning("revoke_reseller: PasarGuard admin delete failed", exc_info=True)
+        raise PanelAdminNotRemoved(PANEL_ADMIN_DELETE_FAILED_MSG) from exc
+    return True
+
+
 async def revoke_reseller(
     session: AsyncSession,
     user_id: int,
@@ -2430,21 +2478,43 @@ async def revoke_reseller(
     delete_pg_admin: bool = True,
     commit: bool = True,
     reason: str | None = None,
-    _seen_profile_ids: set[int] | None = None,
 ) -> dict:
     """Remove reseller profile, unlink customers, demote role to user.
 
     Does not delete the BotUser row. Optional PasarGuard admin cleanup.
+
+    With ``delete_pg_admin`` the shop's PasarGuard admin (and those of its sub-shops) is
+    removed first. When PasarGuard refuses or cannot answer, ``PanelAdminNotRemoved`` is
+    raised and the session is rolled back, so no shop is removed here while its admin
+    stays in PasarGuard.
+    """
+    if delete_pg_admin:
+        await assert_platform_may_delete_pg_admins()
+    try:
+        return await _revoke_reseller_tree(
+            session, user_id, delete_pg_admin=delete_pg_admin, commit=commit, reason=reason, seen=set()
+        )
+    except PanelAdminNotRemoved:
+        await rollback_quiet(session)
+        raise
+
+
+async def _revoke_reseller_tree(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    delete_pg_admin: bool,
+    commit: bool,
+    reason: str | None,
+    seen: set[int],
+) -> dict:
+    """Revoke one shop and, recursively, the shops under it.
 
     Before deleting ``ResellerProfile``, purges the linked OrgPrincipal tree
     (children, web identities, provisions, owner_principal_id refs) so the
     ``org_principals.reseller_profile_id`` FK cannot block the delete.
     Descendant shop profiles are revoked recursively (no remount as L1).
     """
-    from sqlalchemy import update
-
-    from app.services.pasarguard import get_pg
-
     user = await session.get(BotUser, user_id)
     if not user:
         raise ValueError("کاربر یافت نشد")
@@ -2452,7 +2522,6 @@ async def revoke_reseller(
     if not profile:
         raise ValueError("این کاربر نماینده نیست")
 
-    seen = _seen_profile_ids if _seen_profile_ids is not None else set()
     profile_id = int(profile.id)
     if profile_id in seen:
         return {
@@ -2467,11 +2536,7 @@ async def revoke_reseller(
     pg_username = (profile.pg_admin_username or "").strip() or None
     pg_deleted = False
     if delete_pg_admin and pg_username:
-        try:
-            await get_pg().delete_admin(pg_username)
-            pg_deleted = True
-        except Exception:
-            pg_deleted = False
+        pg_deleted = await _remove_shop_pg_admin(pg_username)
 
     # OrgPrincipal.reseller_profile_id FK — purge tree before profile delete.
     from app.services.org_principals import purge_principal_for_reseller_profile
@@ -2489,17 +2554,19 @@ async def revoke_reseller(
         if child_uid <= 0 or child_uid == int(user_id):
             continue
         try:
-            await revoke_reseller(
+            await _revoke_reseller_tree(
                 session,
                 child_uid,
                 delete_pg_admin=delete_pg_admin,
                 commit=False,
                 reason=reason,
-                _seen_profile_ids=seen,
+                seen=seen,
             )
+        except PanelAdminNotRemoved:
+            raise
         except ValueError:
             # Profile may already be gone / not a reseller — continue.
-            pass
+            logger.debug("revoke_reseller: sub-shop %s already gone", child_uid, exc_info=True)
 
     await session.execute(
         update(BotUser).where(BotUser.reseller_id == user_id).values(reseller_id=None)
