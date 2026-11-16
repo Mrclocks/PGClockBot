@@ -176,12 +176,14 @@ logger = logging.getLogger(__name__)
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
-from app.services.formatting import order_status_fa, ticket_status_fa
+from app.services.formatting import node_status_fa, order_status_fa, pg_user_status_fa, ticket_status_fa
 from app.services.web_numbers import WEB_NUMBER_FILTERS
 
 templates.env.filters.update(WEB_NUMBER_FILTERS)
 templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
+templates.env.filters["node_status"] = node_status_fa
+templates.env.filters["pg_user_status"] = pg_user_status_fa
 templates.env.globals["app_version"] = local_version()
 templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS

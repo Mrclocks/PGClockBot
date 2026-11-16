@@ -41,7 +41,7 @@
           {#- On phones line two: role and status, then users used. -#}
           {% if a.get('role') and a.get('role').get('name') %}{{ a.get('role').get('name') }} · {% endif %}
           {% if a.get('is_sudo') %}دسترسی کامل · {% endif %}
-          {% if a.get('status') %}{{ a.get('status') }}{% endif %}
+          {% if a.get('status') %}<bdi dir="auto">{{ a.get('status') | pg_user_status }}</bdi>{% endif %}
           {% if a.get('note') %}<br class="li-hide"><small class="muted li-hide">{{ a.get('note') }}</small>{% endif %}
           <span class="li-only">· کاربران <bdi dir="ltr">{{ usage.get('users_text') or '—' }}</bdi></span>
         </td>

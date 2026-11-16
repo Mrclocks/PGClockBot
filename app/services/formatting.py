@@ -516,6 +516,7 @@ NODE_STATUS_FA = {
     "unhealthy": "ناسالم",
     "online": "آنلاین",
     "offline": "آفلاین",
+    "disconnected": "قطع",
 }
 
 
@@ -523,6 +524,22 @@ def node_status_fa(status: str | None) -> str:
     if not status:
         return "نامشخص"
     return NODE_STATUS_FA.get(str(status).lower(), str(status))
+
+
+PG_USER_STATUS_FA = {
+    "active": "فعال",
+    "limited": "محدود",
+    "expired": "منقضی",
+    "disabled": "غیرفعال",
+    "on_hold": "در انتظار اتصال",
+}
+
+
+def pg_user_status_fa(status: str | None) -> str:
+    """Persian label for a PasarGuard user or admin status; an unknown status is shown as the panel sent it."""
+    if not status:
+        return "—"
+    return PG_USER_STATUS_FA.get(str(status).strip().lower(), str(status))
 
 
 def format_toman(amount: int, currency: str = "تومان") -> str:

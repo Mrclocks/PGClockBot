@@ -67,7 +67,8 @@
           {% elif u.get('status') == 'on_hold' %}
           <span class="badge warn">در انتظار اتصال</span>
           {% else %}
-          <span class="badge active">{{ u.get('status') or 'فعال' }}</span>
+          {% set st = (u.get('status') or 'active') | string | lower %}
+          <span class="badge {% if st == 'active' %}active{% elif st == 'expired' %}danger{% else %}warn{% endif %}"><bdi dir="auto">{{ st | pg_user_status }}</bdi></span>
           {% endif %}
         </td>
         <td class="mono reseller-quota-cell li-sub" data-sort-value="{{ u.get('used_traffic') if u.get('used_traffic') is not none else '' }}">
