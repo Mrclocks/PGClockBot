@@ -453,6 +453,15 @@ class EndpointTests(RoutesHarness):
         shop = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=limits")
         self.assertIn("s_entry_approval_enabled", shop.text)
 
+    async def test_the_switches_are_the_first_card_after_the_requests_list(self):
+        for session, path in ((OWNER_SESSION, "/settings?tab=limits"), (SHOP_SESSION, "/shop-settings?tab=limits")):
+            page = (await self.call(session, "GET", path)).text
+            requests_at = page.index('id="ea-requests"')
+            switch_at = page.index("s_entry_approval_enabled")
+            referral_at = page.index("s_referral_required")
+            self.assertLess(requests_at, switch_at)
+            self.assertLess(switch_at, referral_at)
+
     async def test_dependent_fields_follow_the_switch_before_saving(self):
         # The switch shows its fields live only when the show-when script is on the page.
         for session, path in ((OWNER_SESSION, "/settings?tab=limits"), (SHOP_SESSION, "/shop-settings?tab=limits")):

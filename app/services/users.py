@@ -2095,8 +2095,9 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "loyalty": ["متن دعوت دوستان"],
     "naming": ["نام‌گذاری سرویس در پاسارگارد", CUSTOM_SERVICE_NAME_GROUP],
     "limits": [
-        "معرف اجباری",
+        # Right under the requests list it controls.
         ENTRY_APPROVAL_GROUP,
+        "معرف اجباری",
         "شماره تماس خرید",
         "اکانت تست",
         "ضدتقلب رسید",
