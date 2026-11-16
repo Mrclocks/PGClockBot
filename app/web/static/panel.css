@@ -1679,6 +1679,14 @@ textarea,
 [contenteditable="true"] {
   font-size: var(--control-fs) !important;
 }
+/* No browser tap box: Android paints a sharp blue rectangle over whatever is tapped, ignoring its shape. A tapped
+   control dims a little instead, in its own shape and colour (touch screens only; hover screens have hover states). */
+html { -webkit-tap-highlight-color: transparent; }
+@media (hover: none) {
+  :is(a[href], button, [role="button"], summary, label:has(input), .ui-select-toggle):active:not(:disabled) {
+    opacity: 0.72;
+  }
+}
 /* Every button speaks the panel font: without this a bare <button> falls back to the browser's (Arial 13.3px). */
 /* Vazirmatn keeps room below the baseline for Persian letters, so a Latin label (an inbound tag, an address) sits
    about 2px above the middle of its capsule. A label that reads left to right is trimmed to its cap height and
@@ -1757,11 +1765,13 @@ textarea {
 [contenteditable="true"] {
   font-size: var(--control-fs);
 }
-input:focus, select:focus, textarea:focus, button:focus, a:focus {
+input:focus, select:focus, textarea:focus, button:focus, a:focus,
+summary:focus, [role="button"]:focus, [tabindex]:focus {
   outline: none;
 }
 /* Box-shadow ring follows border-radius (Android/WebKit outline is often a sharp rect). */
-input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible,
+summary:focus-visible, [role="button"]:focus-visible, [tabindex]:not([tabindex="-1"]):focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 45%, transparent);
 }
