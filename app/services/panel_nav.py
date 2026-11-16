@@ -46,6 +46,7 @@ DOCK_ALIASES: dict[str, tuple[str, ...]] = {
     "tickets": ("tickets", "pg_tickets"),
     "resellers": ("resellers", "my_resellers"),
     "bot_settings": ("bot_settings", "shop_settings"),
+    "pg_admins": ("pg_admins", "pg_role_admins"),
 }
 # Labels in the settings list, which is one flat list in the panel's dropdown: each must say which page it is.
 _DOCK_CHOICE_LABELS: dict[str, str] = {
@@ -182,6 +183,19 @@ def _pg(key: str) -> Rule:
     return lambda v: key in v.pg_perms
 
 
+# Shops and representatives never open the owner admins page (it acts with the platform account).
+_OWN_ADMINS_PAGE_ROLES = frozenset({"reseller", "principal"})
+
+
+def _owner_admins_page(v: NavViewer) -> bool:
+    return "pg_admins" in v.pg_perms and v.role not in _OWN_ADMINS_PAGE_ROLES
+
+
+def _role_admins_page(v: NavViewer) -> bool:
+    """Admins page run with the viewer's own PasarGuard account; one «ادمین‌ها» entry at most."""
+    return "pg_role_admins" in v.pg_perms and not _owner_admins_page(v)
+
+
 def _owner(v: NavViewer) -> bool:
     return v.is_owner
 
@@ -240,7 +254,8 @@ _SHOP_ITEMS: tuple[_ItemSpec, ...] = (
 _PG_ITEMS: tuple[_ItemSpec, ...] = (
     _ItemSpec("pg_overview", "نمای کلی پاسارگارد", "/pg", "shield-check", _pg("pg_overview"), _exact("/pg")),
     _ItemSpec("pg_users", "کاربران", "/pg/users", "user", _pg("pg_users"), _starts("/pg/users")),
-    _ItemSpec("pg_admins", "ادمین‌ها", "/pg/admins", "shield", _pg("pg_admins"), _starts("/pg/admins")),
+    _ItemSpec("pg_admins", "ادمین‌ها", "/pg/admins", "shield", _owner_admins_page, _starts("/pg/admins")),
+    _ItemSpec("pg_role_admins", "ادمین‌ها", "/pg/role-admins", "shield", _role_admins_page, _starts("/pg/role-admins")),
     _ItemSpec("pg_nodes", "نودها", "/pg/nodes", "nodes", _pg("pg_nodes"), _starts("/pg/nodes")),
     _ItemSpec("pg_groups", "گروه‌ها", "/pg/groups", "group", _pg("pg_groups"), _starts("/pg/groups")),
     _ItemSpec("pg_hosts", "هاست‌ها", "/pg/hosts", "globe", _pg("pg_hosts"), _starts("/pg/hosts")),

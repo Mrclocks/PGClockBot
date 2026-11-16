@@ -162,6 +162,7 @@ from app.services.backup_settings import apply_backup_retention, normalize_backu
 from app.services.bbc_settlement import bbc_enable_error
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
+from app.api.pg_role_admin_pages import register_pg_role_admin_pages
 from app.api.service_import_pages import register_service_import_pages
 from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
 from app.api.login_guard import (
@@ -1473,6 +1474,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_pg_perm=require_pg_perm,
         get_db=get_db,
     )
+    register_pg_role_admin_pages(app, render=render, require_pg_perm=require_pg_perm, get_db=get_db)
     from app.api.reseller_pages import register_reseller_pages
     from app.api.security import register_security_pages
     from app.api.shop_settings import register_shop_settings

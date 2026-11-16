@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% from "macros.html" import row_actions, page_header, act_label, empty_state %}
+{% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
+{% block title %}ادمین‌های پاسارگارد{% endblock %}
+{% block content %}
+{% set can_create = admin_actions.get('create') and page.roles %}
+{% call(slot) page_header('admins', 'ادمین‌ها', 'pg') %}
+  {%- if slot == 'primary' and can_create %}
+  <button type="button" class="btn" data-modal-open="modal-role-admin-create">{{ act_label('ساخت ادمین', 'ادمین') }}</button>
+  {%- endif %}
+{% endcall %}
+<p class="muted page-intro">
+  این فهرست با حساب پاسارگارد خودتان خوانده می‌شود؛ هر کاری که نقش شما در پاسارگارد اجازه دهد اینجا هم فعال است.
+  ادمین‌هایی که به وب‌پنل متصل‌اند (فروشگاه‌ها و ادمین‌های فرعی) فقط از طریق مالک پنل تغییر می‌کنند.
+</p>
+{% if admin_actions.get('create') and not page.roles %}
+<div class="flash warn">نقش شما اجازهٔ ساخت ادمین دارد، اما فهرست نقش‌های پاسارگارد برای حساب شما قابل خواندن نیست؛ برای ساخت ادمین، خواندن «نقش‌های ادمین» را به نقش خود اضافه کنید.</div>
+{% endif %}
+{% if page.truncated %}
+<div class="flash warn">فقط {{ page.rows | length | num }} ادمین اول نشان داده می‌شود.</div>
+{% endif %}
+<div class="card card-flush">
+  <h2>لیست ادمین‌ها</h2>
+  <div class="table-wrap">
+  <table class="table-compact table-list-sm">
+    <thead>
+      <tr>
+        <th class="col-name">نام کاربری</th>
+        <th class="col-hide-sm">نقش</th>
+        <th>کاربران</th>
+        <th>حجم</th>
+        <th>وضعیت</th>
+        <th class="col-actions"><span class="sr-only">کارها</span></th>
+        <th class="li-head" scope="col"><span class="li-count">{{ page.rows | length | num }} ادمین</span></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for a in page.rows %}
+      {% set locked = a.is_self or a.is_managed %}
+      <tr>
+        <td class="li-title" dir="ltr">{{ a.username }}</td>
+        <td class="muted col-hide-sm li-sub">{{ a.role_name or '—' }}</td>
+        <td class="mono">{{ a.total_users | num }}</td>
+        <td class="mono li-value">
+          <span class="byte-size">{{ a.used_traffic | bytes }}</span>
+          {% if a.data_limit %}<small class="muted"> از {{ a.data_limit | bytes }}</small>{% endif %}
+        </td>
+        <td>
+          {% if a.is_self %}<span class="badge approved">حساب شما</span>
+          {% elif a.is_managed %}<span class="badge neutral">متصل به وب‌پنل</span>
+          {% elif a.is_disabled %}<span class="badge neutral">غیرفعال</span>
+          {% else %}<span class="badge approved">فعال</span>{% endif %}
+        </td>
+        <td class="col-actions">
+          {% if not locked and (admin_actions.get('update') or admin_actions.get('reset_usage') or admin_actions.get('delete')) %}
+          {% call row_actions() %}
+            {% if admin_actions.get('update') %}
+            <form method="post" action="/pg/role-admins/{{ a.username | urlencode }}/{{ 'enable' if a.is_disabled else 'disable' }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-sm btn-ghost" type="submit">{{ 'فعال کردن' if a.is_disabled else 'غیرفعال کردن' }}</button>
+            </form>
+            {% endif %}
+            {% if admin_actions.get('reset_usage') %}
+            <form method="post" action="/pg/role-admins/{{ a.username | urlencode }}/reset_usage"
+              data-confirm="مصرف ادمین «{{ a.username }}» صفر شود؟ مصرف کاربرانش تغییر نمی‌کند."
+              data-confirm-title="صفر کردن مصرف" data-confirm-label="صفر کردن">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-sm btn-ghost" type="submit">صفر کردن مصرف</button>
+            </form>
+            {% endif %}
+            {% if admin_actions.get('delete') %}
+            <form method="post" action="/pg/role-admins/{{ a.username | urlencode }}/delete"
+              data-confirm="ادمین پاسارگارد «{{ a.username }}» حذف شود؟ این کار برگشت‌ناپذیر است."
+              data-confirm-title="حذف ادمین" data-confirm-danger="1" data-confirm-label="حذف">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-sm btn-danger" type="submit">حذف ادمین</button>
+            </form>
+            {% endif %}
+          {% endcall %}
+          {% endif %}
+        </td>
+        <td class="li-only-cell li-badge">
+          {%- if a.is_disabled %}<span class="badge neutral">غیرفعال</span>{% else %}<span class="badge approved">فعال</span>{% endif -%}
+        </td>
+      </tr>
+    {% else %}
+      {{ empty_state('ادمینی برای نمایش نیست.', icon_name='admins', colspan=7) }}
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% if can_create %}
+<div class="ui-modal ds" id="modal-role-admin-create" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-role-admin-create-title">
+    {{ ds_modal_head('admins', 'ساخت ادمین', 'modal-role-admin-create-title', tone='pg') }}
+    <form method="post" action="/pg/role-admins" class="form-stack ds-body">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% call ds_sec('مشخصات', extra_class='ds-sec-first') %}
+        <label class="form-field">نام کاربری <input name="username" required autocomplete="off" dir="ltr"></label>
+        <label class="form-field">رمز عبور <input name="password" type="password" required autocomplete="new-password" dir="ltr"></label>
+        <label class="form-field">نقش
+          <select name="role_id" required>
+            {% for r in page.roles %}<option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>{% endfor %}
+          </select>
+        </label>
+      {% endcall %}
+      {{ ds_foot('ساخت ادمین') }}
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -51,6 +51,7 @@ NAV_PARTLY_IN_BOT: dict[str, str] = {
 NAV_WEB_ONLY: dict[str, str] = {
     "system_settings": "SSL، دامنه، به‌روزرسانی، بکاپ کامل و وب‌پنل: عملیات سیستمی با فرم و فایل",
     "account": "نام کاربری و رمز ورود به وب",
+    "pg_role_admins": "ادمین‌های پاسارگارد با حساب خود نماینده؛ هنوز در ربات نیست",
 }
 
 # Marketing section -> where the bot offers it, partly, or why not.

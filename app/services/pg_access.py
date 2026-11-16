@@ -27,6 +27,7 @@ PG_FEATURE_KEYS = (
     "pg_hosts",
     "pg_inbounds",
     "pg_nodes",
+    "pg_role_admins",
 )
 
 # Owner-only PG UI (admin management) — never granted from limited role maps.
@@ -41,6 +42,7 @@ PG_FEATURE_LABELS: dict[str, str] = {
     "pg_inbounds": "اینباند",
     "pg_nodes": "نود",
     "pg_admins": "ادمین",
+    "pg_role_admins": "ادمین",
 }
 
 PG_API_KEY_REJECTED_MSG = (
@@ -568,6 +570,18 @@ def _resource_allows(perms: dict | None, resource: str, *actions: str) -> bool:
     return False
 
 
+# Feature key → (PasarGuard resource, actions any of which opens the page).
+_FEATURE_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("pg_overview", "system", ("read",)),
+    ("pg_users", "users", ("read", "read_simple", "create", "update", "delete")),
+    ("pg_templates", "templates", ("read", "read_simple", "create", "update", "delete")),
+    ("pg_groups", "groups", ("read", "read_simple", "create", "update", "delete")),
+    ("pg_hosts", "hosts", ("read", "create", "update")),
+    ("pg_nodes", "nodes", ("read", "read_simple", "reconnect", "stats")),
+    ("pg_role_admins", "admins", ("read", "read_simple")),
+)
+
+
 def map_pg_role_to_features(role: dict | None) -> list[str]:
     """Convert a PasarGuard AdminRoleResponse (or similar) into our feature keys."""
     if not role:
@@ -581,34 +595,30 @@ def map_pg_role_to_features(role: dict | None) -> list[str]:
     if not isinstance(raw, dict):
         return []
 
-    out: list[str] = []
-    if _resource_allows(raw, "system", "read"):
-        out.append("pg_overview")
-    if _resource_allows(raw, "users", "read", "read_simple", "create", "update", "delete"):
-        out.append("pg_users")
-    if _resource_allows(raw, "templates", "read", "read_simple", "create", "update", "delete"):
-        out.append("pg_templates")
-    if _resource_allows(raw, "groups", "read", "read_simple", "create", "update", "delete"):
-        out.append("pg_groups")
-    if _resource_allows(raw, "hosts", "read", "create", "update"):
-        out.append("pg_hosts")
+    granted = {feature for feature, resource, actions in _FEATURE_RULES if _resource_allows(raw, resource, *actions)}
     # Inbounds are typically needed when managing groups — expose with groups or hosts read
-    if "pg_groups" in out or "pg_hosts" in out or _resource_allows(raw, "groups", "read_simple"):
-        out.append("pg_inbounds")
-    if _resource_allows(raw, "nodes", "read", "read_simple", "reconnect", "stats"):
-        out.append("pg_nodes")
+    if granted & {"pg_groups", "pg_hosts"}:
+        granted.add("pg_inbounds")
     # Own-account overview (quota/users) mirrors native PasarGuard home for limited
     # roles that have resource access but lack system.read.
-    if out and "pg_overview" not in out:
-        out.insert(0, "pg_overview")
-    # de-dupe preserve order
-    seen: set[str] = set()
-    ordered = []
-    for k in out:
-        if k not in seen and k in PG_FEATURE_KEYS:
-            seen.add(k)
-            ordered.append(k)
-    return ordered
+    if granted:
+        granted.add("pg_overview")
+    return [k for k in PG_FEATURE_KEYS if k in granted]
+
+
+def role_resource_actions(
+    role: Mapping[str, Any] | None, resource: str, actions: tuple[str, ...]
+) -> dict[str, bool]:
+    """PasarGuard verdict for each of ``actions`` on ``resource``; owner roles allow all."""
+    if not isinstance(role, Mapping):
+        return {action: False for action in actions}
+    if role.get("is_owner"):
+        return {action: True for action in actions}
+    raw = role.get("permissions")
+    block = raw.get(resource) if isinstance(raw, Mapping) else None
+    if not isinstance(block, Mapping):
+        return {action: False for action in actions}
+    return {action: _action_allowed(block.get(action)) for action in actions}
 
 
 def role_user_actions(role: dict | None) -> dict[str, bool]:
