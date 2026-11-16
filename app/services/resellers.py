@@ -67,6 +67,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),
     ("connection_status_manage", "مدیریت تست اتصال"),
     ("service_import", "تأیید افزودن سرویس قبلی"),
+    ("service_import_assign", "افزودن سرویس قبلی به مشتری توسط ادمین"),
     ("orders_purge", "حذف کامل سفارش‌ها و پرداخت‌ها"),
     ("service_cleanup", "پاکسازی خودکار سرویس‌های منقضی"),
     ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
@@ -95,8 +96,8 @@ class FeaturePermGroup:
 # Risky money and data actions sit in their own group and are off by default.
 FEATURE_PERM_LAYOUT: tuple[tuple[str, bool, tuple[str, ...]], ...] = (
     ("فروش و سفارش", False, ("dashboard", "plans", "orders", "payments", "stats", "custom_service_name")),
-    ("مشتریان", False, ("tickets", "customer_notes", "customer_services", "demo_users", "trial_users",
-                        "trial_users_manage", "customers_block", "customers_approve")),
+    ("مشتریان", False, ("tickets", "customer_notes", "customer_services", "service_import_assign", "demo_users",
+                        "trial_users", "trial_users_manage", "customers_block", "customers_approve")),
     ("بازاریابی و وفاداری", False, ("campaigns", "broadcast", "catalog_discounts", "random_discounts", "gift_codes", "cashback",
                                    "loyalty")),
     ("فروشگاه و فنی", False, ("shop_settings", "miniapp", "service_import", "connection_status",

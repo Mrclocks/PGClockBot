@@ -28,6 +28,7 @@ from app.services.shop_wallet_adjust import shop_wallet_form_context
 from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
 from app.services.pg_access import staff_user_actions
 from app.services.platform_identity import is_explicit_owner_staff
+from app.services.service_import_assign import may_assign_existing_services
 from app.services.resellers import list_active_reseller_plans
 from app.services.shop_membership import assert_customer_in_staff_scope
 from app.services.shop_scope import (
@@ -316,6 +317,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "can_pg_create": can_pg_create,
             "can_pg_update": can_pg_update,
             "can_pg_delete": can_pg_delete,
+            "can_assign_existing_services": may_assign_existing_services(staff),
             "color_tags": color_tags_for_ui(),
             "color_tag_meta": color_tag_meta,
         }

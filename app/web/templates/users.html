@@ -394,6 +394,7 @@
 
 {% block page_scripts %}
 <script src="/static/users-link-search.js?v={{ asset_v('users-link-search.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
+<script src="/static/service-import-assign.js?v={{ asset_v('service-import-assign.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 <script>
 (function(){
   function syncSvcMeta(sel){

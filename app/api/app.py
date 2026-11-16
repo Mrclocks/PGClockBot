@@ -163,6 +163,7 @@ from app.services.backup_settings import apply_backup_retention, normalize_backu
 from app.services.bbc_settlement import bbc_enable_error
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
+from app.api.service_import_assign_pages import register_service_import_assign_pages
 from app.api.service_import_pages import register_service_import_pages
 from app.api.entry_approval_pages import register_entry_approval_pages
 from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
@@ -1653,6 +1654,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_panel_brand_pages(app, require_staff=require_staff, get_db=get_db)
     register_mobile_bar_settings(app, require_admin=require_admin, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
+    register_service_import_assign_pages(app, require_staff=require_staff, get_db=get_db)
     register_entry_approval_pages(app, require_staff=require_staff, get_db=get_db)
     register_connection_status_pages(app, render=render, require_staff=require_staff, get_db=get_db)
 

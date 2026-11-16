@@ -2821,9 +2821,10 @@ async def adm_users_services(
                 "این کاربر هنوز سرویسی ندارد.",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
+                        [kb.service_import_button(user_id)],
                         [
                             kb.back_button(None, f"adm:users:view:{user_id}")
-                        ]
+                        ],
                     ]
                 ),
             )

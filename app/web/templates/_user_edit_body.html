@@ -1,4 +1,5 @@
 {% from "macros.html" import num_stepper %}
+{% from "_ds.html" import ds_switch %}
 {% set wallet_amt = display_wallet if display_wallet is defined else (user.wallet_balance or 0) %}
 {% set points_amt = display_points if display_points is defined else 0 %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
@@ -256,6 +257,42 @@
   {% endif %}
 </section>
 
+{% endif %}
+{% if can_assign_existing_services|default(false) %}
+<section class="edit-section" id="user-import-service">
+  <header class="edit-section-head">
+    <h3>افزودن سرویس قبلی</h3>
+    <p class="muted">سرویسی که مشتری از قبل در پنل دارد با لینک اشتراک یا نام کاربری پنل به «سرویس‌های من» او وصل می‌شود. چیزی در پنل تغییر نمی‌کند؛ سرویس قابل تمدید است ولی لغو و بازگشت وجه ندارد.</p>
+  </header>
+  <form method="post" action="/users/{{ user.id }}/import-service" class="form-stack"
+        data-si-assign data-si-preview-url="/users/{{ user.id }}/import-service/preview"
+        data-confirm="سرویس بررسی‌شده به سرویس‌های این مشتری اضافه شود؟ در پنل چیزی تغییر نمی‌کند."
+        data-confirm-title="افزودن سرویس قبلی"
+        data-confirm-reason="1"
+        data-confirm-reason-label="علت افزودن"
+        data-confirm-reason-name="reason"
+        data-confirm-label="افزودن سرویس">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="reason" value="" />
+    <input type="hidden" name="panel_user_id" value="" data-si-assign-id />
+    <label class="form-field">نوع ورودی
+      <select name="kind" class="select-block" data-si-assign-input>
+        <option value="link" selected>لینک اشتراک</option>
+        <option value="username">نام کاربری پنل</option>
+      </select>
+    </label>
+    <div class="user-edit-inline-row">
+      <label class="form-field user-edit-grow">لینک یا نام کاربری
+        <input type="text" name="value" required maxlength="2048" dir="ltr" autocomplete="off" spellcheck="false"
+               data-si-assign-input />
+      </label>
+      <button class="btn btn-ghost" type="button" data-si-assign-check>بررسی</button>
+    </div>
+    <div data-si-assign-result role="status" aria-live="polite" hidden></div>
+    <div class="ds-rows">{{ ds_switch('notify', 'پیام به مشتری', 'بعد از افزودن، ربات با ذکر علت به مشتری خبر می‌دهد', checked=true) }}</div>
+    <div class="actions"><button class="btn" type="submit" data-si-assign-submit disabled>افزودن سرویس</button></div>
+  </form>
+</section>
 {% endif %}
 {% if can_view_services|default(false) %}
 <section class="edit-section" id="user-services">
