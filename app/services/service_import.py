@@ -295,7 +295,8 @@ async def allowed_admins(
     return frozenset(names - {str(a).strip().lower() for a in shop_admins.all() if a})
 
 
-def _is_not_found(exc: Exception) -> bool:
+def is_not_found_error(exc: Exception) -> bool:
+    """A panel answer that means «no such user for this client», not an outage."""
     return getattr(exc, "status_code", None) in {401, 403, 404}
 
 
@@ -311,7 +312,7 @@ async def _subscription_info(pg: Any, link: ParsedLink, paths: tuple[str, ...]) 
         try:
             info = await pg.subscription_info(link.token, subscription_url=f"{prefix}/{link.token}")
         except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
-            if _is_not_found(exc):
+            if is_not_found_error(exc):
                 continue
             raise
         return info, prefix
@@ -355,6 +356,40 @@ async def verify_link(
     return VerifiedService(record=record, token=link.token, prefix=prefix, panel_id=panel_user_id(record))
 
 
+async def verify_panel_username(
+    session: AsyncSession,
+    *,
+    username: str,
+    shop_id: int | None,
+    config: ImportSettings,
+    expected_id: int | None = None,
+) -> VerifiedService:
+    """The panel user named ``username``, checked like a link: an allowed owner admin and a usable link.
+
+    ``expected_id`` also requires the panel id to match, so a user deleted and re-created under the
+    same name is not taken for the one that was looked at earlier.
+    """
+    pg = await panel_client(session, shop_id)
+    admins = await allowed_admins(session, pg, shop_id, config)
+    if not admins:
+        raise ServiceImportError(PANEL_UNAVAILABLE, Reason.IDENTITY_UNKNOWN)
+    record = await pg.get_user_by_username(username)
+    if not isinstance(record, dict) or str(record.get("username") or "").strip().lower() != username.strip().lower():
+        raise ServiceImportError(GENERIC_REFUSAL, Reason.NOT_FOUND)
+    panel_id = panel_user_id(record)
+    if expected_id is not None and panel_id != int(expected_id):
+        raise ServiceImportError(GENERIC_REFUSAL, Reason.NOT_FOUND)
+    owner = pg_user_owner_username(record)
+    if owner not in admins:
+        raise ServiceImportError(GENERIC_REFUSAL, Reason.ADMIN_NOT_ALLOWED, detail={"owner_admin": owner})
+    sub_url = user_subscription_url(record)
+    link = parse_subscription_link(sub_url)
+    if link is None:
+        raise ServiceImportError(GENERIC_REFUSAL, Reason.NOT_FOUND)
+    prefix = subscription_path_from_url(sub_url) or ""
+    return VerifiedService(record=record, token=link.token, prefix=prefix, panel_id=panel_id)
+
+
 async def existing_rows(session: AsyncSession, pg_user_id: int, token: str) -> list[UserService]:
     rows = await session.scalars(
         select(UserService).where(
@@ -392,7 +427,7 @@ async def import_existing_service(
         raise
     except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
         await session.rollback()
-        if _is_not_found(exc):
+        if is_not_found_error(exc):
             # An unknown or out-of-scope link is a failed guess and counts against the budget.
             await _finish_attempt(session, attempt_id, "refused", Reason.NOT_FOUND.value)
             raise ServiceImportError(GENERIC_REFUSAL, Reason.NOT_FOUND) from None
@@ -428,8 +463,13 @@ async def attach_verified(
     renewable: bool,
     config: ImportSettings,
     ask_approval: bool,
+    enforce_cap: bool = True,
 ) -> ImportResult:
-    """Attach a verified panel user to ``user``; with approval on, queue a request instead."""
+    """Attach a verified panel user to ``user``; with approval on, queue a request instead.
+
+    ``enforce_cap=False`` skips the per-customer cap, which limits what customers add themselves,
+    for an attachment staff make on the customer's behalf.
+    """
     # Serialise this customer's imports (no effect on SQLite) so the per-user cap below holds.
     await session.scalar(select(BotUser.id).where(BotUser.id == user.id).with_for_update())
     mine: UserService | None = None
@@ -444,7 +484,7 @@ async def attach_verified(
             return await _commit(session, mine, verified.record, ImportOutcome.UPGRADED)
         return ImportResult(ImportOutcome.ALREADY_YOURS, mine, verified.record)
 
-    if renewable and await _imported_count(session, user.id) >= config.max_per_user:
+    if enforce_cap and renewable and await _imported_count(session, user.id) >= config.max_per_user:
         raise ServiceImportError(LIMIT_REACHED, Reason.LIMIT_REACHED)
     if ask_approval and renewable and config.needs_approval:
         return await _queue_request(session, user, verified, shop_id)

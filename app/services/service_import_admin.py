@@ -65,7 +65,8 @@ def import_scope(staff: Mapping[str, Any], perm: str = "shop_settings") -> int |
     return shop_id
 
 
-def _budget_left(scope: int | None) -> bool:
+def lookup_budget_left(scope: int | None) -> bool:
+    """Spend one staff panel lookup of this shop; ``False`` once the minute's budget is used up."""
     key = str(scope)
     now = time.monotonic()
     calls = [t for t in _test_calls.get(key, []) if now - t < TEST_WINDOW_SECONDS]
@@ -100,7 +101,7 @@ async def status_snapshot(session: AsyncSession, scope: int | None, *, refresh: 
 
 async def test_link(session: AsyncSession, scope: int | None, raw_link: str) -> dict[str, Any]:
     """Run the import checks on a link without attaching anything and say exactly why it fails."""
-    if not _budget_left(scope):
+    if not lookup_budget_left(scope):
         return {"ok": False, "reason": Reason.RATE_LIMITED.value, "label": "تست‌های زیاد؛ کمی بعد دوباره تلاش کنید"}
     config = read_settings(await get_all_settings(session, reseller_id=scope))
     try:
