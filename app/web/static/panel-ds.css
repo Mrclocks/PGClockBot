@@ -194,8 +194,8 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]), .ds select {
   height: var(--ctl-h); min-height: var(--ctl-h); margin: 0; line-height: normal; box-sizing: border-box;
 }
-/* A password field's wrapper starts where a plain field does, so «نام کاربری» and «رمز» side by side line up. */
-.ds .pw-field { margin-top: 0; }
+/* Field wrappers (password, custom select) start where a plain field does, so fields side by side line up. */
+.ds :is(.pw-field, .ui-select) { margin-top: 0; }
 .ds .ui-select-toggle { height: var(--ctl-h); min-height: var(--ctl-h); box-sizing: border-box; }
 .ds textarea { margin: 0; }
 .ds .ds-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); }
