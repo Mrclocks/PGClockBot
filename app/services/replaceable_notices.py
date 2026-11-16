@@ -138,6 +138,32 @@ async def clear_notices(
     return len(stored)
 
 
+async def settle_notices(session: AsyncSession, bot: Bot, replace_key: str, text: str) -> int:
+    """A request was decided: turn its message in every staff chat of this bot into ``text``.
+
+    Unlike :func:`clear_notices` the message stays, without buttons, so each admin sees what
+    was decided. Returns how many messages were found.
+    """
+    try:
+        stored = await _stored(session, int(bot.id), replace_key, None)
+    except SQLAlchemyError:
+        logger.warning("notice settle: read failed key=%s", replace_key, exc_info=True)
+        await rollback_quiet(session)
+        return 0
+    for item in stored:
+        try:
+            await bot.edit_message_text(text=text, chat_id=item.chat_id, message_id=item.message_id, reply_markup=None)
+        except TelegramAPIError:
+            logger.debug("notice settle failed chat=%s message=%s", item.chat_id, item.message_id, exc_info=True)
+    try:
+        await _forget(session, [s.row_id for s in stored])
+        await session.commit()
+    except SQLAlchemyError:
+        logger.warning("notice settle: write failed key=%s", replace_key, exc_info=True)
+        await rollback_quiet(session)
+    return len(stored)
+
+
 async def send_replacing_report(
     session: AsyncSession, bot: Bot, chat_ids: list[int], text: str, *, replace_key: str, **send_kw: Any
 ) -> int:

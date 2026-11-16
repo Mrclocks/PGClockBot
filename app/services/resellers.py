@@ -62,6 +62,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("wallet_adjust", "تنظیم دستی کیف پول مشتری"),
     ("loyalty_adjust", "تغییر دستی امتیاز مشتری"),
     ("customers_block", "مسدودسازی مشتری در فروشگاه"),
+    ("customers_approve", "تأیید ورود مشتریان جدید"),
     ("loyalty", "باشگاه مشتریان"),
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),
     ("connection_status_manage", "مدیریت تست اتصال"),
@@ -95,7 +96,7 @@ class FeaturePermGroup:
 FEATURE_PERM_LAYOUT: tuple[tuple[str, bool, tuple[str, ...]], ...] = (
     ("فروش و سفارش", False, ("dashboard", "plans", "orders", "payments", "stats", "custom_service_name")),
     ("مشتریان", False, ("tickets", "customer_notes", "customer_services", "demo_users", "trial_users",
-                        "trial_users_manage", "customers_block")),
+                        "trial_users_manage", "customers_block", "customers_approve")),
     ("بازاریابی و وفاداری", False, ("campaigns", "broadcast", "catalog_discounts", "random_discounts", "gift_codes", "cashback",
                                    "loyalty")),
     ("فروشگاه و فنی", False, ("shop_settings", "miniapp", "service_import", "connection_status",

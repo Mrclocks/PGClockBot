@@ -32,6 +32,8 @@ from app.services.settings_search import (
     SettingsSearchEntry,
     search_settings,
 )
+from app.bot.entry_gate import ENTRY_APPROVAL_BOT_FIELDS, ENTRY_APPROVAL_SUB, ENTRY_APPROVAL_SUB_TITLE
+from app.services.entry_approval_config import ENTRY_APPROVAL_NUMBER_BOUNDS
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.approval_rule import MAX_MINUTES as APPROVAL_MAX_MINUTES
 from app.services.catalog_pricing import MAX_PRICE
@@ -189,6 +191,7 @@ def settings_actor_required(fn):
 
 # field: (key, short_label, kind)  kind = toggle|text|textarea|number|select
 Field = tuple[str, str, str]
+
 
 SECTIONS: dict[str, dict] = {
     # One subject per section; section ids stay stable so buttons on older messages keep working.
@@ -352,6 +355,7 @@ SECTIONS: dict[str, dict] = {
                 ("referral_required", "معرف اجباری", "toggle"),
                 ("referral_required_text", "پیام دریافت معرف", "textarea"),
             ]),
+            (ENTRY_APPROVAL_SUB, ENTRY_APPROVAL_SUB_TITLE, list(ENTRY_APPROVAL_BOT_FIELDS)),
         ],
     },
     "buy": {
@@ -484,6 +488,7 @@ NUMBER_INT_RANGES: dict[str, tuple[int, int]] = {
     "auto_approve_after_max_amount": (0, MAX_PRICE),
     "admin_daily_report_hour": (0, 23),
     IMPORT_KEY_MAX_PER_USER: (1, IMPORT_MAX_PER_USER_LIMIT),
+    **ENTRY_APPROVAL_NUMBER_BOUNDS,
 }
 
 # Plain one-line texts saved through their service normalizer instead of rich-text packing.

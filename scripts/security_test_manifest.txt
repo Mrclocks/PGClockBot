@@ -511,3 +511,4 @@ tests/test_dashboard_layout.py
 tests/test_pg_capability_probe_credentials.py
 tests/test_platform_pg_access_end_to_end.py
 tests/test_plan_template_only_role.py
+tests/test_entry_approval.py

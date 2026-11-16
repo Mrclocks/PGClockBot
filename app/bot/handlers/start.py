@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import note_throwaway, replace_home
 from app.bot.chat_screen import fresh_keyboard
+from app.bot.entry_gate import run_entry_gate
 from app.bot.import_prompt import send_import_prompt, should_offer_import
 from app.bot.nav_input import delete_user_message
 from app.bot.tg_utils import safe_edit_text
@@ -66,6 +67,10 @@ async def render_home(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
+    if effective_role == "user" and await run_entry_gate(
+        message, session, db_user, ui=ui, shop_id=reseller_owner_id if is_reseller_bot else None
+    ):
+        return
 
     from app.services.rich_text import outbound_setting_text, rich_plain_text
 
@@ -265,6 +270,11 @@ async def cmd_start(
     )
     if entry_prompt is not None:
         await show_terms_prompt(message, entry_prompt, ui)
+        return
+    # Deep links below skip render_home, so admin approval is checked here as well.
+    if role_for_force == "user" and await run_entry_gate(
+        message, session, db_user, ui=ui, shop_id=reseller_owner_id if is_reseller_bot else None
+    ):
         return
     if args.startswith("sub_"):
         token = args[4:].strip()
