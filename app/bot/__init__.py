@@ -11,6 +11,7 @@ from aiogram.types import TelegramObject
 
 from app.bot.chat_screen import ChatScreenMiddleware, install_screen_rules
 from app.bot.edit_mode import EditModeMiddleware
+from app.bot.entry_gate import EntryApprovalMiddleware
 from app.bot.panel_history import PanelHistoryMiddleware
 from app.bot.screen_replay import install_replay_guard, set_dispatcher
 from app.bot.slow_updates import SlowUpdateMiddleware
@@ -129,6 +130,7 @@ def bot_routers() -> list[Router]:
         connection_status,
         customer_orders,
         custom_service_name,
+        entry_approval,
         guide_editor,
         loyalty,
         nav_hubs,
@@ -190,6 +192,8 @@ def bot_routers() -> list[Router]:
         catalog_row_editor.shop_router,
         start.router,
         terms.router,
+        # Before purchase_contact: its phone step takes a contact only while the gate asks for one.
+        entry_approval.router,
         connection_status.router,
         connection_status_admin.router,
         # Reply-keyboard nav early so menu labels win over FSM amount parsers
@@ -274,6 +278,8 @@ def create_dispatcher() -> Dispatcher:
     dp.update.middleware(ChatScreenMiddleware())
     dp.update.middleware(ForceJoinMiddleware())
     dp.update.middleware(TermsEntryMiddleware())
+    # After the join and terms gates: a customer first joins and agrees, then waits for approval.
+    dp.update.middleware(EntryApprovalMiddleware())
     dp.update.middleware(EditModeMiddleware())
     dp.update.middleware(PanelHistoryMiddleware())
 

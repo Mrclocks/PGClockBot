@@ -24,6 +24,7 @@ from app.services.miniapp_shop import (
     is_shop_staff,
     request_scope,
 )
+from app.services.entry_approval import gate_config, resolve_gate, shop_key_of
 from app.services.shop_customer_block import BLOCKED_MESSAGE as SHOP_BLOCKED_MESSAGE, is_blocked_in_shop
 from app.services.platform_identity import is_bot_platform_admin
 from app.services.users import demote_stale_admin, set_shop_reseller_id
@@ -46,6 +47,7 @@ NO_INIT_DATA = "no_init_data"
 BAD_SIGNATURE = "bad_signature"
 EXPIRED = "expired"
 NOT_STARTED = "not_started"
+ENTRY_NOT_APPROVED = "درخواست ورود شما هنوز تأیید نشده است؛ نتیجه را در ربات می‌بینید."
 
 _REJECT_TEXT = {
     NO_INIT_DATA: "اطلاعات ورود تلگرام دریافت نشد؛ مینی‌اپ را از داخل تلگرام باز کنید",
@@ -153,6 +155,7 @@ async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
     # Parity with bot: users cannot use the app until channel membership is confirmed.
     await assert_mini_force_join(session, user, scope=scope)
     await assert_mini_terms_entry(session, user, scope=scope)
+    await assert_mini_entry_approval(session, user, scope=scope)
     request.state.mini_scope = scope
     # The order, catalog and wallet services read the shop from the same context the shop
     # bot sets per update; it is set only after the shop and the person were verified.
@@ -245,6 +248,22 @@ async def assert_mini_terms_entry(session: AsyncSession, user: BotUser, *, scope
             403,
             "ابتدا قوانین ربات را در تلگرام بپذیرید",
         )
+
+async def assert_mini_entry_approval(session: AsyncSession, user: BotUser, *, scope: MiniScope = PLATFORM_SCOPE) -> None:
+    """Mirror the bot's admin-approval gate: a customer not approved yet cannot use the Mini App.
+
+    Nothing is created here; a new customer opens the request by starting the bot.
+    """
+    if not _is_gated_customer(user, scope):
+        return
+    shop_key = shop_key_of(scope.shop_id)
+    config = await gate_config(session, shop_key)
+    if config is None:
+        return
+    state = await resolve_gate(session, user, shop_key=shop_key, config=config, create=False)
+    if not state.is_open:
+        raise HTTPException(403, ENTRY_NOT_APPROVED)
+
 
 async def load_reseller_profile(
     session: AsyncSession, user: BotUser

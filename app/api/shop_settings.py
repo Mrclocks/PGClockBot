@@ -24,7 +24,9 @@ from app.services.resellers import (
     get_reseller_profile,
 )
 from app.api.guide_media_pages import SHOP_BASE, guides_media_view
+from app.services.authz import shop_feature_allowed
 from app.services.chat_cleanup_config import chat_cleanup_payload
+from app.services.entry_approval_config import GROUP_TITLE as ENTRY_APPROVAL_GROUP, PERMISSION as ENTRY_APPROVAL_PERM
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.secret_box import reveal_bot_token
 from app.services.miniapp_shop import (
@@ -243,6 +245,9 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         }
         if tab == "service_import":
             groups.pop("مسیرها و ادمین‌های مجاز", None)
+        if tab == "limits" and not shop_feature_allowed(key=ENTRY_APPROVAL_PERM, staff=staff):
+            # Nobody in the shop could decide the requests, so the switch is not offered.
+            groups.pop(ENTRY_APPROVAL_GROUP, None)
         if tab == "menu":
             for name, fields in list(groups.items()):
                 groups[name] = [f for f in fields if f[0] != "show_reseller_apply"]
