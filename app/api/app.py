@@ -3248,6 +3248,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if is_platform_admin(staff) or rid:
             cats = await list_categories(session, staff, active_only=False)
         from app.services.button_styles import (
+            CATEGORY_BUTTON_STYLE_OPTIONS,
             ITEM_BUTTON_STYLE_OPTIONS,
             PLAN_BUTTON_STYLE_OPTIONS,
         )
@@ -3289,6 +3290,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
         ctx["plan_style_options"] = PLAN_BUTTON_STYLE_OPTIONS
         ctx["pack_style_options"] = ITEM_BUTTON_STYLE_OPTIONS
+        ctx["category_style_options"] = CATEGORY_BUTTON_STYLE_OPTIONS
         return render(request, "plan_edit.html", ctx)
 
     @app.post("/plans/{plan_id}/edit")

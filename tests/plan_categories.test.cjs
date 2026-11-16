@@ -10,7 +10,10 @@ assert.equal(cleanName("x".repeat(NAME_MAX)), "x".repeat(NAME_MAX));
 assert.equal(cleanName("x".repeat(NAME_MAX + 1)), "");
 
 // Only a well-formed answer counts as created; anything else shows a message, never raw server data.
-assert.deepEqual(readQuickResult({ ok: true, id: 7, name: "طلایی", created: true }), { ok: true, id: 7, name: "طلایی" });
+assert.deepEqual(readQuickResult({ ok: true, id: 7, name: "طلایی", created: true, tone: "success" }),
+  { ok: true, id: 7, name: "طلایی", tone: "success" });
+// A tone the panel does not know falls back to the neutral dot.
+assert.equal(readQuickResult({ ok: true, id: 7, name: "x", tone: "url(evil)" }).tone, "default");
 assert.deepEqual(readQuickResult({ ok: false, error: "دسته‌ای با همین نام خاموش است" }),
   { ok: false, error: "دسته‌ای با همین نام خاموش است" });
 assert.equal(readQuickResult({ ok: true, id: "7", name: "x" }).ok, false);
@@ -46,9 +49,10 @@ noneChip.setAttribute("data-value", "");
 chips.appendChild(noneChip);
 
 const hostile = '<img src=x onerror="alert(1)">';
-assert.equal(addCategory(select, chips, doc, { id: 9, name: hostile }), "9");
+assert.equal(addCategory(select, chips, doc, { id: 9, name: hostile, tone: "danger" }), "9");
 const chip = chips.children[0];
 assert.equal(chip.getAttribute("data-value"), "9", "the new chip goes before «بدون دسته»");
+assert.equal(chip.getAttribute("data-tone"), "danger", "the chip wears the colour of its bot button");
 assert.equal(chips.children[1], noneChip);
 assert.equal(chip.textContent, hostile, "the name is text");
 assert.ok(chip.children.every((c) => c.children.length === 0), "no markup was parsed from the name");

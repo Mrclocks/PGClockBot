@@ -7,6 +7,7 @@
   var NAME_MAX = 128;
   var QUICK_URL = '/plans/categories/quick';
   var GENERIC_ERROR = 'افزودن دسته انجام نشد؛ دوباره تلاش کنید.';
+  var TONES = ['default', 'primary', 'success', 'danger'];
 
   /* The category name to send, or '' when there is nothing usable to send. */
   function cleanName(raw) {
@@ -14,10 +15,11 @@
     return name.length > NAME_MAX ? '' : name;
   }
 
-  /* {ok, id, name} from the quick-create answer, or {ok: false, error} with a message safe to show. */
+  /* {ok, id, name, tone} from the quick-create answer, or {ok: false, error} with a message safe to show. */
   function readQuickResult(data) {
     if (data && data.ok === true && Number.isInteger(data.id) && data.id > 0 && typeof data.name === 'string') {
-      return { ok: true, id: data.id, name: data.name };
+      var tone = TONES.indexOf(data.tone) >= 0 ? data.tone : 'default';
+      return { ok: true, id: data.id, name: data.name, tone: tone };
     }
     var error = data && typeof data.error === 'string' && data.error.trim() ? data.error.trim() : GENERIC_ERROR;
     return { ok: false, error: error };
@@ -36,7 +38,7 @@
       chip.type = 'button';
       chip.setAttribute('role', 'radio');
       chip.setAttribute('data-value', value);
-      chip.setAttribute('data-tone', 'default');
+      chip.setAttribute('data-tone', TONES.indexOf(category.tone) >= 0 ? category.tone : 'default');
       chip.title = category.name;
       var dot = doc.createElement('span');
       dot.className = 'plan-cat-dot';
@@ -97,6 +99,8 @@
     try {
       var body = new FormData();
       body.append('name', name);
+      var style = field.querySelector('[data-plan-category-new-style]');
+      body.append('button_style', style && style.value != null ? style.value : 'inherit');
       var res = await root.panelFetch(QUICK_URL, { method: 'POST', body: body });
       var result = readQuickResult(root.panelReadJson ? await root.panelReadJson(res) : null);
       if (!result.ok) {
@@ -105,6 +109,10 @@
       }
       pick(select, addCategory(select, chips, doc, result));
       input.value = '';
+      if (style) {
+        style.value = 'inherit';
+        style.dispatchEvent(new Event('change', { bubbles: true }));
+      }
       var panel = field.querySelector('[data-plan-category-new]');
       if (panel) panel.hidden = true;
     } catch (_) {

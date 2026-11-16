@@ -12619,8 +12619,30 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
 .plan-cat-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .plan-cat-chip-off { font-size: var(--fs-1); color: var(--muted-fg); }
 .ds .plan-cat-chips > .plan-cat-chip-new { color: var(--brand); border-style: dashed; }
+/* Adding a category in the form: name, bot colour and a round «+», one row at field height. */
 .plan-cat-new { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
-.plan-cat-new input { flex: 1 1 12rem; min-width: 0; }
+.plan-cat-new input { flex: 1 1 8rem; min-width: 0; }
+.plan-cat-new-color { flex: 0 0 auto; width: 8.5rem; }
+.plan-cat-new-color .ui-select { width: 100%; margin: 0; }
+.plan-cat-new-color .ui-select[data-tone] { --plan-cat-tone: var(--muted-fg); }
+.plan-cat-new-color .ui-select[data-tone="primary"] { --plan-cat-tone: var(--info); }
+.plan-cat-new-color .ui-select[data-tone="success"] { --plan-cat-tone: var(--ok); }
+.plan-cat-new-color .ui-select[data-tone="danger"] { --plan-cat-tone: var(--destructive); }
+.plan-cat-new-color .ui-select:is([data-tone="primary"], [data-tone="success"], [data-tone="danger"]) .ui-select-toggle {
+  border-color: color-mix(in srgb, var(--plan-cat-tone) 45%, transparent);
+  background: color-mix(in srgb, var(--plan-cat-tone) 14%, transparent);
+  color: color-mix(in srgb, var(--plan-cat-tone) 75%, var(--foreground));
+}
+.ds .plan-cat-new .plan-cat-new-add {
+  flex: 0 0 var(--btn-h);
+  width: var(--btn-h);
+  height: var(--btn-h);
+  border: 1px solid color-mix(in srgb, var(--brand) 55%, transparent);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  color: var(--brand);
+}
+.plan-cat-new-add svg { width: 20px; height: 20px; }
 .plan-cat-new-error { flex-basis: 100%; color: var(--destructive); }
 @media (max-width: 480px) {
   .ds .ds-chips.plan-cat-chips { --ds-chip-cols: 2; }
