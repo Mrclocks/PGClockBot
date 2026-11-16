@@ -29,6 +29,7 @@ from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
 from app.services.pg_access import staff_user_actions
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.service_import_assign import may_assign_existing_services
+from app.services.resellers import list_active_reseller_plans
 from app.services.shop_membership import assert_customer_in_staff_scope
 from app.services.shop_scope import (
     ShopScopeError,
@@ -302,6 +303,9 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             **shop_points_form_context(staff),
             **(await shop_block_form_context(session, staff, user)),
             "plans": plans,
+            "reseller_plans": (
+                await list_active_reseller_plans(session) if is_explicit_owner_staff(staff) else []
+            ),
             "format_toman": format_toman,
             "flash_ok": request.query_params.get("ok"),
             "flash_err": request.query_params.get("err"),

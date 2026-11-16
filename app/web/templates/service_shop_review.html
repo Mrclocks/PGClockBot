@@ -20,7 +20,7 @@
       <tbody>
       {% for row in rows %}
         <tr>
-          <td class="li-title" dir="ltr">{{ row.pg_username }} <span class="muted">#{{ row.service_id }}</span></td>
+          <td class="li-title"><bdi dir="ltr">{{ row.pg_username }}</bdi> <span class="muted">#{{ row.service_id }}</span></td>
           <td class="li-value"><span class="li-only">مشتری </span>{{ row.customer_id }}</td>
           <td class="li-sub"><span class="li-only">منتسب به</span> {{ 'پلتفرم' if row.attributed_shop is none else row.attributed_shop }} <span class="li-only">· خرید از {% for s in row.order_shops %}{{ 'پلتفرم' if s is none else s }}{% if not loop.last %}، {% endif %}{% else %}—{% endfor %}</span></td>
           <td>{% for s in row.order_shops %}{{ 'پلتفرم' if s is none else s }}{% if not loop.last %}، {% endif %}{% else %}—{% endfor %}</td>

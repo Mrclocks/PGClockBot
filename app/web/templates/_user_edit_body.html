@@ -104,6 +104,17 @@
       </label>
       <button class="btn" type="submit">اعمال نقش</button>
     </div>
+    {% if user.role != 'reseller' %}
+    <label class="form-field">پلن نمایندگی
+      <select name="reseller_plan_id" class="select-block">
+        <option value="">— بدون پلن —</option>
+        {% for p in reseller_plans or [] %}
+        <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}</option>
+        {% endfor %}
+      </select>
+      <small class="muted">فقط برای نقش «نماینده». نقش پاسارگارد، سقف‌ها و دسترسی‌ها از همین پلن گرفته می‌شود؛ اگر پنل چند نقش دارد، انتخاب پلن لازم است.</small>
+    </label>
+    {% endif %}
   </form>
 </section>
 

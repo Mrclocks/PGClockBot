@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import note_throwaway, replace_home
 from app.bot.chat_screen import fresh_keyboard
+from app.bot.entry_gate import run_entry_gate
 from app.bot.import_prompt import send_import_prompt, should_offer_import
 from app.bot.nav_input import delete_user_message
 from app.bot.tg_utils import safe_edit_text
@@ -20,6 +21,7 @@ from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
 from app.services.referral_scope import is_referral_of_shop
 from app.services.service_import_offer import is_offer_dismissed
+from app.services.trial_offer import offerable_trial_plans
 from app.services.service_scope import customer_may_use_service, list_customer_services, shop_services_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
@@ -65,11 +67,16 @@ async def render_home(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
+    if effective_role == "user" and await run_entry_gate(
+        message, session, db_user, ui=ui, shop_id=reseller_owner_id if is_reseller_bot else None
+    ):
+        return
 
     from app.services.rich_text import outbound_setting_text, rich_plain_text
 
     home_send_kw: dict = {}
     offer_import = False
+    offer_trial = False
     if effective_role == "admin":
         from app.bot.menu_nav import build_main_reply_keyboard
 
@@ -127,10 +134,13 @@ async def render_home(
             reseller_owner_id=reseller_owner_id,
             ui=ui,
         )
+        has_services = await _has_services(session, int(db_user.id))
+        offer_trial = not has_services and bool(await offerable_trial_plans(session, ui, int(db_user.id)))
         offer_import = should_offer_import(
             ui,
-            has_services=await _has_services(session, int(db_user.id)),
+            has_services=has_services,
             dismissed=await is_offer_dismissed(session, int(db_user.id), current_shop_reseller_id()),
+            trial_available=offer_trial,
         )
 
     # Home is a fresh start: a new welcome with the menu at the bottom; the older welcome and
@@ -142,7 +152,7 @@ async def render_home(
         home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
     await replace_home(home, sweep=True)
     if offer_import:
-        await send_import_prompt(message, ui)
+        await send_import_prompt(message, ui, trial_available=offer_trial)
     _ = seed_reply_kb
 
 
@@ -260,6 +270,11 @@ async def cmd_start(
     )
     if entry_prompt is not None:
         await show_terms_prompt(message, entry_prompt, ui)
+        return
+    # Deep links below skip render_home, so admin approval is checked here as well.
+    if role_for_force == "user" and await run_entry_gate(
+        message, session, db_user, ui=ui, shop_id=reseller_owner_id if is_reseller_bot else None
+    ):
         return
     if args.startswith("sub_"):
         token = args[4:].strip()

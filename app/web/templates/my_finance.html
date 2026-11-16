@@ -141,7 +141,7 @@
       <tbody>{% for c in charges %}<tr>
         <td class="li-title">{{ charge_events.get(c.event, c.event) }}{% if c.quantity and c.quantity > 1 %} × <bdi dir="ltr">{{ c.quantity }}</bdi>{% endif %}</td>
         <td class="col-hide-sm li-sub"><bdi dir="ltr">{{ c.pg_username or '—' }}</bdi><span class="li-only"> · <bdi dir="ltr">{{ c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '—' }}</bdi></span></td>
-        <td class="col-hide-sm mono" dir="ltr">{{ c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '—' }}</td>
+        <td class="col-hide-sm mono"><bdi dir="ltr">{{ c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '—' }}</bdi></td>
         <td class="cell-tight li-value"><bdi dir="ltr">{{ c.amount | money }}</bdi></td>
         <td class="cell-tight li-badge"><span class="badge {{ charge_tones.get(c.status, 'neutral') }}">{{ charge_labels.get(c.status, c.status) }}</span></td>
       </tr>{% else %}{{ empty_state('هزینه‌ای ثبت نشده است', 'wallet', colspan=5) }}{% endfor %}</tbody>

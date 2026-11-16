@@ -35,7 +35,7 @@
       {% for g in groups %}
       {% set row = g.l1 %}
       <tr>
-        <td class="mono" dir="ltr" data-sort-value="{{ row.principal_id }}">{{ row.principal_id }}</td>
+        <td class="mono" data-sort-value="{{ row.principal_id }}"><bdi dir="ltr">{{ row.principal_id }}</bdi></td>
         <td class="li-badge" data-sort-value="{{ row.status }}">
           {% if row.status == 'active' %}
           <span class="badge approved">فعال</span>
@@ -47,7 +47,7 @@
           <span class="role-tag role-tag-principal">{{ row.hierarchy_label }}</span>
           <span class="li-only">{% if row.pg_role_name %}· {{ row.pg_role_name }} {% endif %}· {{ row.web_identity_label }}</span>
         </td>
-        <td class="mono col-hide-sm li-title" dir="ltr" data-sort-value="{{ row.pg_username or '' }}">{{ row.pg_username or '—' }} <span class="li-only li-id">(#{{ row.principal_id }})</span></td>
+        <td class="mono col-hide-sm li-title" data-sort-value="{{ row.pg_username or '' }}"><bdi dir="ltr">{{ row.pg_username or '—' }}</bdi> <span class="li-only li-id">(#{{ row.principal_id }})</span></td>
         <td class="col-hide-sm">—</td>
         <td class="col-hide-sm" data-sort-value="{{ row.pg_role_name or '' }}">
           {% if row.pg_role_name %}
@@ -58,7 +58,7 @@
         </td>
         <td class="col-hide-sm" data-sort-value="{{ row.web_identity_status }}">{{ row.web_identity_label }}</td>
         <td class="col-hide-sm">—</td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ row.created_at or '' }}">{{ row.created_at or '—' }}</td>
+        <td class="mono col-hide-sm" data-sort-value="{{ row.created_at or '' }}"><bdi dir="ltr">{{ row.created_at or '—' }}</bdi></td>
         <td class="col-actions">
           {% call row_actions() %}
             <a class="btn btn-ghost btn-sm" href="/principals?detail={{ row.principal_id }}">جزئیات</a>
@@ -67,7 +67,7 @@
       </tr>
       {% for child in g.children %}
       <tr class="principal-row-l2">
-        <td class="mono" dir="ltr" data-sort-value="{{ child.principal_id }}">{{ child.principal_id }}</td>
+        <td class="mono" data-sort-value="{{ child.principal_id }}"><bdi dir="ltr">{{ child.principal_id }}</bdi></td>
         <td class="li-badge" data-sort-value="{{ child.status }}">
           {% if child.status == 'active' %}
           <span class="badge approved">فعال</span>
@@ -79,8 +79,8 @@
           <span class="role-tag role-tag-principal">{{ child.hierarchy_label }}</span>
           <span class="li-only">{% if child.pg_role_name %}· {{ child.pg_role_name }} {% endif %}· {{ child.web_identity_label }}</span>
         </td>
-        <td class="mono col-hide-sm li-title" dir="ltr" data-sort-value="{{ child.pg_username or '' }}">{{ child.pg_username or '—' }} <span class="li-only li-id">(#{{ child.principal_id }})</span></td>
-        <td class="mono col-hide-sm" dir="ltr">{{ child.parent_username or row.pg_username or '—' }}</td>
+        <td class="mono col-hide-sm li-title" data-sort-value="{{ child.pg_username or '' }}"><bdi dir="ltr">{{ child.pg_username or '—' }}</bdi> <span class="li-only li-id">(#{{ child.principal_id }})</span></td>
+        <td class="mono col-hide-sm"><bdi dir="ltr">{{ child.parent_username or row.pg_username or '—' }}</bdi></td>
         <td class="col-hide-sm" data-sort-value="{{ child.pg_role_name or '' }}">
           {% if child.pg_role_name %}
           <span class="identity-pg-role">نقش پاسارگارد: {{ child.pg_role_name }}</span>
@@ -90,7 +90,7 @@
         </td>
         <td class="col-hide-sm" data-sort-value="{{ child.web_identity_status }}">{{ child.web_identity_label }}</td>
         <td class="col-hide-sm">{{ child.bot_binding_label }}</td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ child.created_at or '' }}">{{ child.created_at or '—' }}</td>
+        <td class="mono col-hide-sm" data-sort-value="{{ child.created_at or '' }}"><bdi dir="ltr">{{ child.created_at or '—' }}</bdi></td>
         <td class="col-actions">
           {% call row_actions() %}
             <a class="btn btn-ghost btn-sm" href="/principals?detail={{ child.principal_id }}">جزئیات</a>
@@ -104,7 +104,7 @@
     {% else %}
       {% for child in l2_rows %}
       <tr>
-        <td class="mono" dir="ltr" data-sort-value="{{ child.principal_id }}">{{ child.principal_id }}</td>
+        <td class="mono" data-sort-value="{{ child.principal_id }}"><bdi dir="ltr">{{ child.principal_id }}</bdi></td>
         <td class="li-badge" data-sort-value="{{ child.status }}">
           {% if child.status == 'active' %}
           <span class="badge approved">فعال</span>
@@ -116,8 +116,8 @@
           <span class="role-tag role-tag-principal">{{ child.hierarchy_label }}</span>
           <span class="li-only">{% if child.pg_role_name %}· {{ child.pg_role_name }} {% endif %}· {{ child.web_identity_label }}</span>
         </td>
-        <td class="mono col-hide-sm li-title" dir="ltr" data-sort-value="{{ child.pg_username or '' }}">{{ child.pg_username or '—' }} <span class="li-only li-id">(#{{ child.principal_id }})</span></td>
-        <td class="mono col-hide-sm" dir="ltr">{{ child.parent_username or '—' }}</td>
+        <td class="mono col-hide-sm li-title" data-sort-value="{{ child.pg_username or '' }}"><bdi dir="ltr">{{ child.pg_username or '—' }}</bdi> <span class="li-only li-id">(#{{ child.principal_id }})</span></td>
+        <td class="mono col-hide-sm"><bdi dir="ltr">{{ child.parent_username or '—' }}</bdi></td>
         <td class="col-hide-sm" data-sort-value="{{ child.pg_role_name or '' }}">
           {% if child.pg_role_name %}
           <span class="identity-pg-role">نقش پاسارگارد: {{ child.pg_role_name }}</span>
@@ -127,7 +127,7 @@
         </td>
         <td class="col-hide-sm" data-sort-value="{{ child.web_identity_status }}">{{ child.web_identity_label }}</td>
         <td class="col-hide-sm">{{ child.bot_binding_label }}</td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ child.created_at or '' }}">{{ child.created_at or '—' }}</td>
+        <td class="mono col-hide-sm" data-sort-value="{{ child.created_at or '' }}"><bdi dir="ltr">{{ child.created_at or '—' }}</bdi></td>
         <td class="col-actions">
           {% call row_actions() %}
             <a class="btn btn-ghost btn-sm" href="/principals?detail={{ child.principal_id }}">جزئیات</a>

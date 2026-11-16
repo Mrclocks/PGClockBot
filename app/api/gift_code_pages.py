@@ -10,6 +10,7 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.gift_codes import (
+    MAX_EXPIRY_DAYS,
     describe_code,
     gift_code_plan_options,
     gift_code_scope,
@@ -53,6 +54,7 @@ def register_gift_code_pages(
                 "gift_codes": codes,
                 "gift_code_details": {code.id: describe_code(code, plan_names) for code in codes},
                 "gift_code_plans": plans,
+                "gift_code_max_days": MAX_EXPIRY_DAYS,
                 "flash_ok": DONE_MESSAGE if flash_ok == "1" else flash_ok,
                 "flash_err": request.query_params.get("err"),
             },

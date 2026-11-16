@@ -1,5 +1,5 @@
 {# «مینی‌اپ» settings tab (platform and shop).
-   Expects: values, csrf_token, miniapp_brand_action, settings_base, shop_mode;
+   Expects: values, csrf_token, miniapp_brand_action, settings_base, shop_mode, main_app (or None);
    platform: miniapp_url; shop: miniapp_available, miniapp_on, miniapp_url (for _shop_miniapp_switch).
    Global: miniapp_accent_presets. A saved colour that is not a preset shows as the default. #}
 {% set presets = miniapp_accent_presets %}
@@ -10,6 +10,7 @@
 {% if shop_mode %}
   {% include "_shop_miniapp_switch.html" %}
 {% endif %}
+{% include "_miniapp_main_app_guide.html" %}
 
 <form method="post" action="{{ miniapp_brand_action }}" class="settings-form" id="miniapp-brand-form">
   {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}

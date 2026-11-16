@@ -169,7 +169,7 @@
         <tr>
           <td class="li-title">{{ m.label }}</td>
           <td class="mono li-sub"><span>{{ m.count | num }} پرداخت</span> <span class="li-only">· سهم <bdi dir="ltr">{{ m.share_pct }}%</bdi></span></td>
-          <td class="mono li-value" dir="ltr">{{ m.amount | money }}</td>
+          <td class="mono li-value">{{ m.amount | money }}</td>
           <td class="finance-method-share">
             <div class="ov-meter" data-tone="neutral" role="img" aria-label="{{ m.label }}: {{ (m.share_pct) | fa }}٪ از فروش">
               <div class="ov-meter-top"><small dir="ltr">{{ m.share_pct }}%</small></div>
