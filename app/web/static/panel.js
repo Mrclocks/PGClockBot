@@ -947,6 +947,8 @@
       if (sel.disabled) toggle.disabled = true;
       const label = document.createElement('span');
       label.className = 'ui-select-label';
+      // A Latin option (grpc, a username) reads left to right and is centred on its letters (panel.css).
+      label.dir = 'auto';
       toggle.appendChild(label);
       const caret = document.createElement('span');
       caret.innerHTML = '<svg class="ui-select-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6L8 3l3.5 3"/><path d="M4.5 10L8 13l3.5-3"/></svg>';

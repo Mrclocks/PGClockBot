@@ -10,7 +10,7 @@
   {% else %}
   <div class="checks">
     {% for item in inbounds %}
-      <span class="badge">{{ item if item is string else (item.get('tag') or item.get('name') or item) }}</span>
+      <span class="badge"><bdi dir="ltr">{{ item if item is string else (item.get('tag') or item.get('name') or item) }}</bdi></span>
     {% endfor %}
   </div>
   {% endif %}

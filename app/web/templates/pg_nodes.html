@@ -55,7 +55,8 @@
         <td class="li-badge" data-sort-value="{{ (n.get('status') or n.get('connection_status') or '')|string|lower }}">
           {% set st = (n.get('status') or n.get('connection_status') or '')|string|lower %}
           <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled','disconnected'] %}danger{% else %}neutral{% endif %}">
-            {{ n.get('status') or n.get('connection_status') or '—' }}
+            {%- set node_status_fa = {'connected': 'متصل', 'online': 'متصل', 'healthy': 'متصل', 'connecting': 'در حال اتصال', 'error': 'خطا', 'unhealthy': 'خطا', 'offline': 'قطع', 'disconnected': 'قطع', 'disabled': 'غیرفعال'} %}
+            {%- if st in node_status_fa %}{{ node_status_fa[st] }}{% elif st %}<bdi dir="ltr">{{ n.get('status') or n.get('connection_status') }}</bdi>{% else %}—{% endif %}
           </span>
         </td>
         <td class="mono reseller-quota-cell" data-sort-value="{{ n.get('_traffic_up') if n.get('_traffic_up') is not none else '' }}">

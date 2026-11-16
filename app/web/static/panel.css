@@ -1680,6 +1680,21 @@ textarea,
   font-size: var(--control-fs) !important;
 }
 /* Every button speaks the panel font: without this a bare <button> falls back to the browser's (Arial 13.3px). */
+/* Vazirmatn keeps room below the baseline for Persian letters, so a Latin label (an inbound tag, an address) sits
+   about 2px above the middle of its capsule. A label that reads left to right is trimmed to its cap height and
+   baseline, so the capsule centres the letters themselves; Persian labels keep the font's own box. */
+:is(.ui-switch-chip, .btn, .badge, .ds-badge, .ds-tag, .template-variable-token, .reseller-chip, .ui-select-toggle) :is([dir="ltr"], [dir="auto"]):dir(ltr),
+:is(.list-editor-chip, .list-editor-value):dir(ltr) {
+  text-box: trim-both cap alphabetic;
+}
+/* A select showing a Latin value: its label becomes a centred block so the same trim applies, still starting on
+   the right like every RTL field. */
+.ui-select-label:dir(ltr) {
+  display: block;
+  align-self: center;
+  text-align: right;
+  text-box: trim-both cap alphabetic;
+}
 button { font-family: inherit; }
 input, select, textarea {
   width: 100%;

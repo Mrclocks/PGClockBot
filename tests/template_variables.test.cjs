@@ -15,7 +15,7 @@ class Element {
     this.dataset = {};
     this.style = {};
     this.className = "";
-    this.textContent = "";
+    this._text = "";
     this.classList = {
       contains: (name) => this.className.split(" ").includes(name),
       add: (...names) => names.forEach((name) => this.classList.toggle(name, true)),
@@ -28,6 +28,9 @@ class Element {
       },
     };
   }
+  // Like the DOM: an element's text is its own text followed by its children's.
+  get textContent() {return this._text + this.children.map((child) => child.textContent || "").join("");}
+  set textContent(value) {this._text = String(value); this.children = [];}
   setAttribute(name, value) {this.attributes[name] = value;}
   getAttribute(name) {return this.attributes[name] ?? null;}
   hasAttribute(name) {return name in this.attributes;}
@@ -202,7 +205,8 @@ test("invalid tokens and metadata remain text even when they contain hostile mar
   const hostile = '<img src=x onerror="alert(1)">';
   const ui = panel({value: "{" + hostile + "}", specs: {welcome_text: {name: hostile}}});
   assert.equal(ui.badges()[0].textContent, "{" + hostile + "}");
-  assert.ok(ui.badges().every((badge) => badge.children.length === 0));
+  // The token's only child is the plain-text <bdi> the script builds; hostile markup never becomes elements.
+  assert.ok(ui.badges().every((badge) => badge.children.every((child) => child.tagName === "BDI" && child.children.length === 0)));
   assert.match(ui.badges()[1].title, /<img/);
   assert.equal(ui.badges()[0].getAttribute("data-copy"), null);
 });
