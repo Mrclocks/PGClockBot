@@ -7007,14 +7007,9 @@ td.byte-size {
   font-weight: 700;
   font-size: var(--fs-3);
 }
-/* A number written left to right (dir="ltr") in the RTL panel still lines up on the right edge with the text
-   around it: table cells and transaction amounts. The phone list keeps its own placement for value cells. */
-td[dir="ltr"],
-th[dir="ltr"],
+/* A transaction amount written left to right still lines up on the right edge with the text around it. Table
+   cells stay right to left and isolate a Latin value in <bdi dir="ltr">, so they need no rule here. */
 .wallet-tx-amount { text-align: right; }
-@media (max-width: 880px) {
-  .table-list-sm td[dir="ltr"] { text-align: left; }
-}
 .wallet-tx-amount.is-credit { color: var(--ok-solid); }
 .wallet-tx-amount.is-debit { color: #dc2626; }
 .wallet-tx-reason {

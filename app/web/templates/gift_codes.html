@@ -53,7 +53,7 @@
             <span>هر کاربر: {{ c.max_uses_per_user if c.max_uses_per_user is not none else 'نامحدود' }}</span>{% if c.kind == 'discount' %}<span class="muted"> · {{ 'فقط خرید اول' if c.first_purchase_only else d.get('purchase_label', 'همه خریدها') }}{% if c.plan_ids %} · {{ d.get('plans_label', '') }}{% endif %}</span>{% endif %}
             <span class="li-only">· <bdi dir="ltr">{{ d.get('expiry_label', 'بدون انقضا') }}</bdi>{% if c.note %} · <span dir="auto">{{ c.note }}</span>{% endif %}</span>
           </td>
-          <td dir="ltr">{{ d.get('expiry_label', 'بدون انقضا') }}</td>
+          <td><bdi dir="auto">{{ d.get('expiry_label', 'بدون انقضا') }}</bdi></td>
           <td class="li-badge"><span class="badge {{ 'active' if d.get('state', 'فعال') == 'فعال' else 'warn' }}">{{ d.get('state', 'فعال' if c.is_active else 'خاموش') }}</span></td>
           <td class="col-actions">
             {% call row_actions() %}

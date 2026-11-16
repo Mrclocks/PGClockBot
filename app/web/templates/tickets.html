@@ -70,7 +70,7 @@
         <td class="li-badge">
           <span class="badge {{ status_badge.get(t.status, 'neutral') }}">{{ panel_tkt_status(t.status) }}</span>
         </td>
-        <td class="muted mono" dir="ltr">{{ t.updated_at }}</td>
+        <td class="muted mono"><bdi dir="ltr">{{ t.updated_at }}</bdi></td>
         <td class="col-actions">
           <a class="btn btn-sm btn-ghost li-hide" href="/tickets?view={{ t.id }}">مشاهده</a>
           <a class="li-only li-open" href="/tickets?view={{ t.id }}" aria-label="مشاهده تیکت #{{ t.id }}">{{ icon('chev', 'ico') }}</a>
@@ -119,7 +119,7 @@
               {{ tkt_status(t.status) }}
             </span>
           </td>
-          <td class="muted mono" dir="ltr">{{ t.updated_at or t.created_at }}</td>
+          <td class="muted mono"><bdi dir="ltr">{{ t.updated_at or t.created_at }}</bdi></td>
           <td class="col-actions">
             <a class="btn btn-sm btn-ghost li-hide" href="/tickets?tg={{ t.id }}">مشاهده</a>
             <a class="li-only li-open" href="/tickets?tg={{ t.id }}" aria-label="مشاهده تیکت #{{ t.id }}">{{ icon('chev', 'ico') }}</a>

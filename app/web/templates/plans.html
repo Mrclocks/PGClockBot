@@ -54,7 +54,7 @@
           </span>
         </td>
         <td class="col-hide-sm muted">{% if p.category_id and plan_category_map and plan_category_map.get(p.category_id) %}{{ plan_category_map.get(p.category_id).name }}{% else %}—{% endif %}</td>
-        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="mono li-value">{{ p.price | money }}</td>
         <td class="col-hide-sm">{% if p.duration_days %}{{ (p.duration_days) | fa }} روز{% else %}نامحدود{% endif %}</td>
         <td class="li-sub">
           {#- On phones line two: the warnings, then volume · duration · category. -#}
@@ -216,7 +216,7 @@
           <span class="li-only">· {% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %} · {% if a.is_general or not a.category_id %}عمومی{% elif plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</span>
         </td>
         <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
-        <td class="mono li-value" dir="ltr">{{ a.price | money }}</td>
+        <td class="mono li-value">{{ a.price | money }}</td>
         <td class="li-badge">{% if a.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -291,7 +291,7 @@
         {{ table_select_cell(p.id) }}
         {% set is_system_plan = p.is_system or (p.plan_kind or '') == 'current_capacity' %}
         <td class="li-title"><span dir="auto">{{ p.name }}</span>{% if is_system_plan %} <span class="badge li-hide">سیستمی</span>{% endif %}{% if p.description %}<br class="li-hide"><small class="muted li-hide">{{ p.description }}</small>{% endif %}</td>
-        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="mono li-value">{{ p.price | money }}</td>
         <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -343,7 +343,7 @@
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
         <td class="li-title"><span dir="auto">{{ p.name }}</span>{% if p.description %}<br class="li-hide"><small class="muted li-hide">{{ p.description }}</small>{% endif %}</td>
-        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="mono li-value">{{ p.price | money }}</td>
         <td class="col-hide-sm li-sub"><span class="li-only">هر گیگ</span> <bdi dir="ltr">{% if p.price_per_gb %}{{ p.price_per_gb | money }}{% else %}—{% endif %}</bdi> <span class="li-only">· گروه <bdi dir="ltr">{{ p.pg_group_ids or '—' }}</bdi></span></td>
         <td class="mono col-hide-sm">{{ p.pg_group_ids or '—' }}</td>
         <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
@@ -402,7 +402,7 @@
           <span class="li-only">· {% if p.plan_kind == 'addon_users' %}+{{ (p.addon_users or 0) | fa }} کاربر{% else %}+{{ (p.addon_gb or 0) | fa }} گیگ{% endif %}{% if p.category_id and reseller_plan_category_map and reseller_plan_category_map.get(p.category_id) %} · {{ reseller_plan_category_map.get(p.category_id).name }}{% endif %}</span>
         </td>
         <td class="mono">{% if p.plan_kind == 'addon_users' %}+{{ (p.addon_users or 0) | fa }} کاربر{% else %}+{{ (p.addon_gb or 0) | fa }} گیگ{% endif %}</td>
-        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="mono li-value">{{ p.price | money }}</td>
         <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -789,7 +789,7 @@
             <td class="col-hide-sm muted">{% if a.is_general or not a.category_id %}عمومی{% elif plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
             <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
             <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
-            <td class="mono" dir="ltr">{{ a.price | money }}</td>
+            <td class="mono">{{ a.price | money }}</td>
             <td>{% if a.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
             <td class="col-actions">
               {% call row_actions() %}

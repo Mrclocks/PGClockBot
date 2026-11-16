@@ -175,7 +175,7 @@
             </span>
           </div>
         </td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
+        <td class="mono col-hide-sm" data-sort-value="{{ u.telegram_id }}"><bdi dir="ltr">{{ u.telegram_id }}</bdi></td>
         <td class="col-hide-sm" data-sort-value="{{ u.role }}">
           <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
             {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
@@ -213,8 +213,8 @@
             {% endif %}
           </div>
         </td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ p.web_username or '' }}">{{ p.web_username or '—' }}</td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ p.bot_username or '' }}">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
+        <td class="mono col-hide-sm" data-sort-value="{{ p.web_username or '' }}"><bdi dir="ltr">{{ p.web_username or '—' }}</bdi></td>
+        <td class="mono col-hide-sm" data-sort-value="{{ p.bot_username or '' }}"><bdi dir="ltr">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</bdi></td>
         <td class="col-hide-sm" data-sort-value="{% if p.setup_completed_at %}2{% elif p.web_username %}1{% else %}0{% endif %}">{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
