@@ -16,7 +16,6 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import func, select, update
@@ -25,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models import BotUser, BotUserShop, EntryApproval, Order, Role
+from app.py_compat import StrEnum
 from app.services.authz import authz_from_staff, can_shop
 from app.services.entry_approval_config import (
     KEY_ENABLED,
