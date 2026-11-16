@@ -94,27 +94,28 @@
         data-confirm="نقش این کاربر تغییر کند؟"
         data-confirm-title="تأیید تغییر نقش"
         data-confirm-label="اعمال نقش">
-    <div class="user-edit-inline-row">
-      <label class="form-field user-edit-grow">نقش جدید
-        <select name="role" class="select-block">
-          <option value="user" {% if user.role=='user' %}selected{% endif %}>کاربر</option>
-          <option value="reseller" {% if user.role=='reseller' %}selected{% endif %}>نماینده</option>
-          <option value="admin" {% if user.role=='admin' %}selected{% endif %}>مدیر</option>
-        </select>
-      </label>
-      <button class="btn" type="submit">اعمال نقش</button>
-    </div>
+    <label class="form-field">نقش جدید
+      <select name="role" id="user-{{ user.id }}-role" class="select-block">
+        <option value="user" {% if user.role=='user' %}selected{% endif %}>کاربر</option>
+        <option value="reseller" {% if user.role=='reseller' %}selected{% endif %}>نماینده</option>
+        <option value="admin" {% if user.role=='admin' %}selected{% endif %}>مدیر</option>
+      </select>
+    </label>
     {% if user.role != 'reseller' %}
-    <label class="form-field">پلن نمایندگی
+    {# Only a new reseller takes a package, so the field shows right under the role once «نماینده» is picked. #}
+    <label class="form-field" data-ds-show-when="#user-{{ user.id }}-role:reseller" hidden>پلن نمایندگی
       <select name="reseller_plan_id" class="select-block">
         <option value="">— بدون پلن —</option>
         {% for p in reseller_plans or [] %}
         <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}</option>
         {% endfor %}
       </select>
-      <small class="muted">فقط برای نقش «نماینده». نقش پاسارگارد، سقف‌ها و دسترسی‌ها از همین پلن گرفته می‌شود؛ اگر پنل چند نقش دارد، انتخاب پلن لازم است.</small>
+      <small class="muted">نقش پاسارگارد، سقف‌ها و دسترسی‌ها از همین پلن گرفته می‌شود؛ اگر پنل چند نقش دارد، انتخاب پلن لازم است.</small>
     </label>
     {% endif %}
+    <div class="actions">
+      <button class="btn" type="submit">اعمال نقش</button>
+    </div>
   </form>
 </section>
 
