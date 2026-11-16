@@ -278,6 +278,17 @@ class CategoryRouteTests(_CategoryDbCase):
         # A new category goes last in the bot.
         self.assertEqual((await self._order(SHOP))[-1], "طلایی")
 
+    async def test_quick_create_saves_the_chosen_colour_and_answers_with_its_tone(self):
+        made = (await self.client.post(
+            "/plans/categories/quick", data={"name": "سبز", "button_style": "success"}
+        )).json()
+        self.assertEqual(made["tone"], "success")
+        async with self.Session() as session:
+            self.assertEqual((await session.get(PlanCategory, made["id"])).button_style, "success")
+        # A repeat with another colour returns the first category as it is.
+        again = (await self.client.post("/plans/categories/quick", data={"name": "سبز", "button_style": "danger"})).json()
+        self.assertEqual((again["id"], again["tone"], again["created"]), (made["id"], "success", False))
+
     async def test_quick_create_keeps_shops_apart(self):
         self.staff = _reseller(OTHER_SHOP)
         made = (await self.client.post("/plans/categories/quick", data={"name": "الف"})).json()

@@ -49,7 +49,7 @@
       <label class="form-field"><span class="ds-label-text">نام پلن <span class="ds-req" aria-hidden="true">*</span></span>
         <input name="name" required placeholder="مثلاً ویژه ۴۰ گیگ" data-ds-label="نام پلن" />
       </label>
-      {{ plan_category_field(plan_categories, plan_category_tones or {}) }}
+      {{ plan_category_field(plan_categories, plan_category_tones or {}, style_options=category_style_options or []) }}
       <label class="form-field"><span class="ds-label-text">قیمت <span class="ds-req" aria-hidden="true">*</span></span>
         <span class="ds-unit"><input name="price" type="number" data-money min="0" required placeholder="150,000" inputmode="numeric" dir="ltr" data-ds-label="قیمت" /><span class="ds-unit-label">تومان</span></span>
       </label>

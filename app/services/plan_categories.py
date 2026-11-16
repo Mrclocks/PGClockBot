@@ -373,12 +373,13 @@ async def update_category(
 
 
 async def find_or_create_user_category(
-    session: AsyncSession, staff: dict | None, *, name: str
+    session: AsyncSession, staff: dict | None, *, name: str, button_style: str | None = None
 ) -> tuple[PlanCategory, bool]:
     """A user-audience category of the staff shop with this name, created when there is none.
 
     The plan form adds categories in place; a second tap or a retried request with the same name returns the
-    category already made instead of a duplicate. Returns (category, created).
+    category already made (with its own colour) instead of a duplicate. ``button_style`` is the bot button colour
+    of a new one, None to inherit the «ثابت» colour. Returns (category, created).
     """
     owner_id = require_catalog_owner_id(staff)
     cleaned = (name or "").strip()
@@ -398,7 +399,9 @@ async def find_or_create_user_category(
         if not existing.is_active:
             raise ValueError("دسته‌ای با همین نام هست ولی خاموش است؛ از فهرست دسته‌ها روشنش کنید")
         return existing, False
-    category = await create_category(session, staff, name=cleaned, audience=AUDIENCE_USERS)
+    category = await create_category(
+        session, staff, name=cleaned, audience=AUDIENCE_USERS, button_style=button_style
+    )
     return category, True
 
 

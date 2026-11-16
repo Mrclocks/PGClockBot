@@ -125,17 +125,29 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
     @app.post("/plans/categories/quick")
     async def plans_category_quick_create(
         name: str = Form(""),
+        button_style: str = Form("inherit"),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        """Add a user category from inside the plan form; the same name twice returns the first one."""
+        """Add a user category from inside the plan form; the same name twice returns the first one.
+
+        The answer carries the tone of the category's bot button, so the new chip shows its colour at once.
+        """
         from app.services.plan_categories import find_or_create_user_category
+        from app.services.plan_category_board import category_tone
+        from app.services.users import get_all_settings
 
         try:
-            category, created = await find_or_create_user_category(session, staff, name=name)
+            category, created = await find_or_create_user_category(
+                session, staff, name=name, button_style=category_style_from_form(button_style)
+            )
         except (ShopScopeError, ValueError) as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
-        return JSONResponse({"ok": True, "id": int(category.id), "name": category.name, "created": created})
+        ui = await get_all_settings(session, reseller_id=category.owner_reseller_id)
+        return JSONResponse({
+            "ok": True, "id": int(category.id), "name": category.name, "created": created,
+            "tone": category_tone(ui, category),
+        })
 
     @app.post("/plans/categories/{category_id}/delete")
     async def plans_category_delete(
