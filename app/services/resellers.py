@@ -868,6 +868,7 @@ _OPEN_APPLICATION_STATUSES = frozenset(
 # Stuck ``provisioning`` may be reclaimed only after this lease (AGENTS.md lease+expiry).
 PROVISION_LEASE = timedelta(minutes=5)
 ALREADY_RESELLER = "این کاربر از قبل نماینده فعال دارد"
+PG_ROLE_REQUIRED = "برای ساخت ادمین پاسارگارد یک نقش (Role) انتخاب کنید؛ پاسارگارد بدون نقش ادمین نمی‌سازد"
 
 # Order statuses that mean the linked reseller-app checkout is dead.
 _DEAD_ORDER_STATUSES = frozenset(
@@ -1195,6 +1196,9 @@ async def provision_reseller(
     else:
         do_pg = True
 
+    if do_pg and not role_id:
+        raise ValueError(PG_ROLE_REQUIRED)
+
     do_web = True if create_web_access is None else bool(create_web_access)
     if share_pg_panel_url is not None:
         share_pg = bool(share_pg_panel_url)
@@ -1275,10 +1279,7 @@ async def provision_reseller(
         tid = deliverable_telegram_id(getattr(user, "telegram_id", None))
         if tid is not None:
             payload["telegram_id"] = tid
-        if role_id:
-            payload["role_id"] = int(role_id)
-        else:
-            payload["is_sudo"] = False
+        payload["role_id"] = int(role_id)
         if plan is not None and is_subscription_plan(plan):
             # Refuse before anything exists, and create the admin with the package's limits:
             # a PasarGuard admin without ``data_limit`` is unlimited until something sets one.
@@ -1287,15 +1288,8 @@ async def provision_reseller(
         try:
             await get_pg().create_admin(payload)
         except Exception as e:
-            if "role_id" in payload:
-                payload.pop("role_id", None)
-                payload["is_sudo"] = False
-                try:
-                    await get_pg().create_admin(payload)
-                except Exception as e2:
-                    raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e2)}") from e2
-            else:
-                raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e)}") from e
+            # Retrying without the role would hide the panel's real reason (bad role, limits).
+            raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e)}") from e
 
     web_username = None
     web_password = None

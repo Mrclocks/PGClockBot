@@ -328,7 +328,9 @@ class ProvisionTests(unittest.IsolatedAsyncioTestCase):
             user = await session.get(BotUser, 5)
             plan = await session.get(ResellerPlan, 1)
             with patch("app.services.pasarguard.get_pg", return_value=pg):
-                creds = await provision_reseller(session, user=user, plan=plan, panel_base_url="https://panel")
+                creds = await provision_reseller(
+                    session, user=user, plan=plan, pg_role_id=7, panel_base_url="https://panel"
+                )
             profile = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == 5))
         sent = pg.create_admin.await_args.args[0]["password"]
         self.assertNotEqual(sent, creds["web_password"])
@@ -340,6 +342,31 @@ class ProvisionTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(profile.allow_pg_panel_access)
         self.assertFalse(profile.share_pg_panel_url)
         self.assertEqual(decrypt_secret(profile.pg_admin_password_enc), sent)
+
+    async def test_missing_role_is_refused_before_the_panel_is_called(self) -> None:
+        pg = SimpleNamespace(create_admin=AsyncMock(return_value={"id": 2}))
+        async with self.Session() as session:
+            user = await session.get(BotUser, 5)
+            plan = await session.get(ResellerPlan, 1)
+            with patch("app.services.pasarguard.get_pg", return_value=pg):
+                with self.assertRaises(ValueError) as ctx:
+                    await provision_reseller(session, user=user, plan=plan, panel_base_url="https://panel")
+        self.assertIn("نقش", str(ctx.exception))
+        pg.create_admin.assert_not_awaited()
+
+    async def test_panel_rejection_is_reported_once_with_the_role_kept(self) -> None:
+        pg = SimpleNamespace(create_admin=AsyncMock(side_effect=RuntimeError("role not found")))
+        async with self.Session() as session:
+            user = await session.get(BotUser, 5)
+            plan = await session.get(ResellerPlan, 1)
+            with patch("app.services.pasarguard.get_pg", return_value=pg):
+                with self.assertRaises(ValueError):
+                    await provision_reseller(
+                        session, user=user, plan=plan, pg_role_id=7, panel_base_url="https://panel"
+                    )
+        self.assertEqual(pg.create_admin.await_count, 1)
+        self.assertEqual(pg.create_admin.await_args.args[0]["role_id"], 7)
+        self.assertNotIn("is_sudo", pg.create_admin.await_args.args[0])
 
 
 def _load_migration():
