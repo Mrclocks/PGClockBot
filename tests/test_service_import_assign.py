@@ -228,6 +228,11 @@ class RefusalTests(AssignCase):
         await self.assert_refused(self.preview(1, link("tok-unknown-0000000")))
         await self.assert_refused(self.preview(1, ServiceLookup("username", "nobody")))
 
+    async def test_a_username_of_another_admin_reads_like_an_unknown_one(self):
+        unknown = await self.assert_refused(self.preview(1, ServiceLookup("username", "nobody")))
+        foreign = await self.assert_refused(self.preview(1, ServiceLookup("username", "shop-one")))
+        self.assertEqual(foreign, unknown)
+
     async def test_a_panel_outage_is_a_safe_message_without_the_token(self):
         self.platform_panel.fail_with = PasarGuardError("boom https://p.example/sub/tok-plat-0000001", status_code=500)
         message = await self.assert_refused(self.assign(1))
