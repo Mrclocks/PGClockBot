@@ -510,11 +510,14 @@ async def _section_panel(session: AsyncSession, sec_id: str, reseller_id: int) -
             )
             return text, _kb(rows)
 
-        hidden = await _subs_without_permission(session, reseller_id)
+        subs = sec.get("subs") or []
+        # Only a section with a permission-bound subsection needs the shop's profile.
+        gated = any(sub_id in SUB_PERMISSIONS for sub_id, *_ in subs)
+        hidden = await _subs_without_permission(session, reseller_id) if gated else set()
         rows = kb.pack_long_list(
             [
                 InlineKeyboardButton(text=label, callback_data=f"res:st:sub:{sec_id}:{sub_id}")
-                for sub_id, label, _fields in sec.get("subs") or []
+                for sub_id, label, _fields in subs
                 if sub_id not in hidden
             ]
         )
