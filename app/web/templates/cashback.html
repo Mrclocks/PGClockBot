@@ -126,7 +126,7 @@
       <tr>
         <td class="li-title"><span dir="auto">{{ r.name }}</span></td>
         <td class="cell-tight li-value"><bdi dir="ltr">{% if r.mode == 'fixed' %}{{ r.fixed_amount | money }}{% else %}{{ (r.percent_bps / 100) | round(2) }}%{% endif %}</bdi></td>
-        <td class="col-hide-sm" dir="ltr">{{ (r.max_per_order | money) if r.max_per_order is not none else '—' }}</td>
+        <td class="col-hide-sm">{{ (r.max_per_order | money) if r.max_per_order is not none else '—' }}</td>
         <td class="col-hide-sm li-sub">{{ purchases }}</td>
         <td class="cell-tight li-badge"><span class="badge {{ 'ok' if r.enabled else 'neutral' }}">{{ 'روشن' if r.enabled else 'خاموش' }}</span></td>
         <td class="col-actions">

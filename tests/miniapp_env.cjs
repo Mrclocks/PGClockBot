@@ -5,7 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const STATIC = path.join(__dirname, "../app/web/static");
-const SCRIPTS = ["catalog_price.js", "miniapp/core.js", "miniapp/render.js", "miniapp/pull.js", "miniapp/app.js"];
+const SCRIPTS = ["catalog_price.js", "miniapp/core.js", "miniapp/render.js", "miniapp/onboarding.js", "miniapp/pull.js", "miniapp/app.js"];
 
 function fakeElement(id) {
   const classes = new Set();

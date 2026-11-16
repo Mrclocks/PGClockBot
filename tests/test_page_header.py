@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import unittest
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
@@ -12,6 +13,7 @@ from jinja2 import Environment, FileSystemLoader
 ENV = Environment(loader=FileSystemLoader("app/web/templates"), autoescape=True)
 ENV.globals["guide_topics"] = {"plans": {"href": "/help/plans/"}}
 IMPORT = '{% from "macros.html" import page_header, act_label %}'
+SPAN = re.compile(r'<span class="(?P<cls>act-long|act-short)"(?P<attrs>[^>]*)>(?P<text>[^<]*)</span>')
 
 
 def render(body: str) -> str:
@@ -81,8 +83,16 @@ class PageHeaderTests(unittest.TestCase):
 
     def test_the_short_label_is_hidden_from_screen_readers(self) -> None:
         html = render("{{ act_label('کاربر جدید', 'کاربر') }}")
-        self.assertIn('<span class="act-long">کاربر جدید</span>', html)
-        self.assertIn('<span class="act-short" aria-hidden="true">کاربر</span>', html)
+        spans = {match["cls"]: match for match in SPAN.finditer(html)}
+        self.assertEqual(spans["act-long"]["text"], "کاربر جدید")
+        self.assertNotIn("aria-hidden", spans["act-long"]["attrs"])
+        self.assertEqual(spans["act-short"]["text"], "کاربر")
+        self.assertIn('aria-hidden="true"', spans["act-short"]["attrs"])
+
+    def test_action_labels_follow_their_own_reading_direction(self) -> None:
+        html = render("{{ act_label('New user', 'User') }}")
+        for match in SPAN.finditer(html):
+            self.assertIn('dir="auto"', match["attrs"])
 
 
 if __name__ == "__main__":

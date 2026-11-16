@@ -34,11 +34,11 @@
       {% endif %}
       <tr data-bulk-ops="{{ ns.ops.rstrip(',') }}">
         {% if can_update or can_delete %}{% if h.get('id') %}{{ table_select_cell(h.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
-        <td class="mono" dir="ltr">{{ h.get('id') or '—' }}</td>
+        <td class="mono"><bdi dir="ltr">{{ h.get('id') or '—' }}</bdi></td>
         <td class="li-title"><span dir="auto">{{ h.get('remark') or h.get('name') or '—' }}</span> <span class="li-only li-id" dir="ltr">(#{{ h.get('id') or '—' }})</span></td>
         <td class="mono col-hide-sm li-sub"><bdi dir="ltr">{{ addr_text or '—' }}<span class="li-only">{% if h.get('port') %}:{{ h.get('port') }}{% endif %}</span></bdi><span class="li-only">· <bdi dir="ltr">{{ h.get('inbound_tag') or '—' }}</bdi></span></td>
-        <td class="mono col-hide-sm" dir="ltr">{{ h.get('port') or '—' }}</td>
-        <td class="mono col-hide-sm" dir="ltr">{{ h.get('inbound_tag') or '—' }}</td>
+        <td class="mono col-hide-sm"><bdi dir="ltr">{{ h.get('port') or '—' }}</bdi></td>
+        <td class="mono col-hide-sm"><bdi dir="ltr">{{ h.get('inbound_tag') or '—' }}</bdi></td>
         <td class="li-badge">{% if h.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
         <td class="col-actions">
           {% if (can_update or can_delete) and h.get('id') %}

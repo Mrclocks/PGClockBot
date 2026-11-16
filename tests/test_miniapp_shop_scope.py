@@ -154,12 +154,25 @@ class ShopScopeTests(unittest.IsolatedAsyncioTestCase):
                 with self.subTest(key=key):
                     self.assertEqual((await self.call(init_data, key=key)).status_code, 401)
 
-    async def test_only_the_shops_own_customers_get_in(self) -> None:
+    async def test_opening_a_shop_mini_app_joins_that_shop_like_start(self) -> None:
+        # Opening the shop bot's own Mini App (signed by that bot) is the same visit as /start
+        # in that bot: the person becomes the shop's customer and sees only this shop's data.
         with self.open_probe():
-            for telegram_id in (PLATFORM_CUSTOMER, OTHER_CUSTOMER):
+            for telegram_id, user_id in ((PLATFORM_CUSTOMER, 11), (OTHER_CUSTOMER, 12)):
                 with self.subTest(telegram_id=telegram_id):
                     response = await self.call(signed(SHOP_TOKEN, telegram_id), key=KEY)
-                    self.assertEqual((response.status_code, response.json()["detail"]), (403, NOT_A_CUSTOMER))
+                    self.assertEqual(response.json(), {"user": user_id, "shop": SHOP})
+        async with self.Session() as session:
+            other = await session.get(BotUser, 12)
+            self.assertEqual(other.reseller_id, OTHER_SHOP, "an existing attribution never moves")
+            joined = set(await session.scalars(sa.select(BotUserShop.bot_user_id).where(BotUserShop.shop_id == SHOP)))
+            self.assertLessEqual({12}, joined)
+
+    async def test_someone_the_shop_bot_would_not_admit_stays_out(self) -> None:
+        # Another shop's owner is not turned into this shop's customer, in the bot or here.
+        with self.open_probe():
+            response = await self.call(signed(SHOP_TOKEN, 6006), key=KEY)
+        self.assertEqual((response.status_code, response.json()["detail"]), (403, NOT_A_CUSTOMER))
 
     async def test_every_switch_and_bad_key_closes_the_shop_the_same_way(self) -> None:
         async def turn_off(session):

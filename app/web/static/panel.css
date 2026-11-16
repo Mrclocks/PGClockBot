@@ -1679,7 +1679,30 @@ textarea,
 [contenteditable="true"] {
   font-size: var(--control-fs) !important;
 }
+/* No browser tap box: Android paints a sharp blue rectangle over whatever is tapped, ignoring its shape. A tapped
+   control dims a little instead, in its own shape and colour (touch screens only; hover screens have hover states). */
+html { -webkit-tap-highlight-color: transparent; }
+@media (hover: none) {
+  :is(a[href], button, [role="button"], summary, label:has(input), .ui-select-toggle):active:not(:disabled) {
+    opacity: 0.72;
+  }
+}
 /* Every button speaks the panel font: without this a bare <button> falls back to the browser's (Arial 13.3px). */
+/* Vazirmatn keeps room below the baseline for Persian letters, so a Latin label (an inbound tag, an address) sits
+   about 2px above the middle of its capsule. A label that reads left to right is trimmed to its cap height and
+   baseline, so the capsule centres the letters themselves; Persian labels keep the font's own box. */
+:is(.ui-switch-chip, .btn, .badge, .ds-badge, .ds-tag, .template-variable-token, .reseller-chip, .ui-select-toggle) :is([dir="ltr"], [dir="auto"]):dir(ltr),
+:is(.list-editor-chip, .list-editor-value):dir(ltr) {
+  text-box: trim-both cap alphabetic;
+}
+/* A select showing a Latin value: its label becomes a centred block so the same trim applies, still starting on
+   the right like every RTL field. */
+.ui-select-label:dir(ltr) {
+  display: block;
+  align-self: center;
+  text-align: right;
+  text-box: trim-both cap alphabetic;
+}
 button { font-family: inherit; }
 input, select, textarea {
   width: 100%;
@@ -1742,11 +1765,13 @@ textarea {
 [contenteditable="true"] {
   font-size: var(--control-fs);
 }
-input:focus, select:focus, textarea:focus, button:focus, a:focus {
+input:focus, select:focus, textarea:focus, button:focus, a:focus,
+summary:focus, [role="button"]:focus, [tabindex]:focus {
   outline: none;
 }
 /* Box-shadow ring follows border-radius (Android/WebKit outline is often a sharp rect). */
-input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible,
+summary:focus-visible, [role="button"]:focus-visible, [tabindex]:not([tabindex="-1"]):focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 45%, transparent);
 }
@@ -3996,8 +4021,7 @@ a.btn.btn-star:hover {
 }
 .btn-star svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .btn-star-gh { opacity: 0.9; }
-.btn.is-copied,
-.btn.btn-ok.is-copied {
+.btn.is-copied {
   color: var(--ok-fg) !important;
   border-color: rgba(34, 197, 94, 0.42);
   background: rgba(34, 197, 94, 0.12);
@@ -4016,13 +4040,6 @@ a.btn.btn-star:hover {
 .settings-grid > .form-field,
 .settings-grid > .setting-item {
   min-width: 0;
-}
-/* Gift expiry uses a plain text input (same chrome as siblings). Do not use a
-   native date-time picker here — mobile WebViews ignore width / crush the UI. */
-.form-field.gift-expires-field {
-  min-width: 0;
-  max-width: 100%;
-  grid-column: 1 / -1;
 }
 .setting-item.full { grid-column: 1 / -1; }
 .plan-name-cell {
@@ -4794,9 +4811,6 @@ form.settings-form > .actions.sticky-actions,
 }
 .settings-modal-body .settings-card {
   margin-top: 0;
-}
-.settings-modal-body .settings-card + .settings-card {
-  margin-top: var(--space-3);
 }
 .modal-tab-panel[hidden] {
   display: none !important;
@@ -6986,14 +7000,9 @@ td.byte-size {
   font-weight: 700;
   font-size: var(--fs-3);
 }
-/* A number written left to right (dir="ltr") in the RTL panel still lines up on the right edge with the text
-   around it: table cells and transaction amounts. The phone list keeps its own placement for value cells. */
-td[dir="ltr"],
-th[dir="ltr"],
+/* A transaction amount written left to right still lines up on the right edge with the text around it. Table
+   cells stay right to left and isolate a Latin value in <bdi dir="ltr">, so they need no rule here. */
 .wallet-tx-amount { text-align: right; }
-@media (max-width: 880px) {
-  .table-list-sm td[dir="ltr"] { text-align: left; }
-}
 .wallet-tx-amount.is-credit { color: var(--ok-solid); }
 .wallet-tx-amount.is-debit { color: #dc2626; }
 .wallet-tx-reason {
@@ -10731,7 +10740,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-groups-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--section-gap);
 }
 /* Kill .card flex/gap/padding — those push summary content off true center */
 .colors-groups-stack > .colors-group-details.card,
@@ -11784,7 +11793,7 @@ html[data-theme="light"] .st span { color: color-mix(in srgb, var(--t) 90%, tran
   stroke-linejoin: round;
 }
 html[data-theme="light"] .home-action-empty-ico { stroke: var(--ok-text); }
-.home-sales-card { padding: 18px; }
+.home-sales-card { padding: var(--space-2); }
 .home-sales-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1); margin-bottom: 10px; }
 .home-sales-head h2 { flex: 1 1 auto; }
 .sales-seg { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: var(--control-radius); font-size: var(--fs-2); }
@@ -11917,7 +11926,6 @@ html[data-theme="light"] .sc-tip { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
   .st:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .home-update-note .home-update-go { display: none; }
   .home-main-grid { grid-template-columns: 1fr; gap: 12px; }
-  .home-sales-card { padding: 16px; }
   .sales-plot { height: 176px; margin-right: 0; }
   .sc-ytick { display: none; }
 }
@@ -12499,6 +12507,12 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
   margin-top: 0;
   margin-bottom: 0;
 }
+/* Stacks of boxes inside a page or a settings modal follow the same rule: the stack's gap is the only space between
+   its boxes, so no box brings a margin of its own (a margin added 24 or 16 on top of the gap). */
+:is(.settings-domain-stack, .loyalty-stack, .msg-vars-stack, .colors-groups-stack, .magic-links-stack) > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
 /* A wrapper that only groups blocks (the .ds scope around a page) passes the same gap through. */
 #main .main-body > .ds:not(.ui-modal):not(.ds-settings) {
   display: flex;
@@ -12647,3 +12661,9 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
 @media (max-width: 480px) {
   .ds .ds-chips.plan-cat-chips { --ds-chip-cols: 2; }
 }
+
+/* «کپی شد» is always the success green, whatever the copy control looks like at rest (a token, a link, a button). */
+:is([data-copy], [data-copy-from]).is-copied {
+  color: var(--ok-fg);
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);

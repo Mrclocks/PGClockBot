@@ -19,6 +19,14 @@ from app.services.screen_titles import SCREEN_TEXT_TAB, screen_text_defaults, sc
 from app.services.settings_button_labels import appearance_button_subs, shop_button_subs
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
+from app.services.entry_approval_config import (
+    ENTRY_APPROVAL_DEFAULTS,
+    GROUP_TITLE as ENTRY_APPROVAL_GROUP,
+    entry_approval_setting_fields,
+    entry_approval_visibility,
+    prepare_saved_values as prepare_entry_approval_values,
+    touches_entry_approval,
+)
 from app.services.psp_gateways import KEY_PSP_GATEWAYS, merge_submitted_psp_gateways
 from app.services.retired_text_defaults import refresh_retired_defaults
 from app.services.user_purge import purge_user_references
@@ -597,6 +605,10 @@ async def set_setting(
     )
     from app.services.rich_text import is_button_label_key
 
+    if touches_entry_approval({key: value}):
+        # The gate records when it was switched on; the bulk path does that in one place.
+        await set_settings_bulk(session, {key: value}, reseller_id=reseller_id)
+        return
     rid = _effective_reseller_id(reseller_id)
     alias_extra: dict[str, str] | None = None
     if key != ALIAS_SETTING_KEY and is_button_label_key(key):
@@ -695,6 +707,8 @@ async def set_settings_bulk(
                 values[legacy] = merged[legacy]
     rid = _effective_reseller_id(reseller_id)
     values = await _keep_saved_psp_credentials(session, values, rid)
+    if touches_entry_approval(values):
+        values = prepare_entry_approval_values(values, await get_all_settings(session, reseller_id=rid))
     if any(is_button_label_key(k) for k in values if k != ALIAS_SETTING_KEY):
         existing_ui = await get_all_settings(session, reseller_id=rid)
         alias_extra = merge_alias_updates_for_payload(
@@ -1226,6 +1240,7 @@ DEFAULT_SETTINGS = {
 DEFAULT_SETTINGS.update(button_style_defaults())
 DEFAULT_SETTINGS.update(screen_text_defaults())
 DEFAULT_SETTINGS.update(MONITOR_TEXT_DEFAULTS)
+DEFAULT_SETTINGS.update(ENTRY_APPROVAL_DEFAULTS)
 
 # field kinds: text | textarea | toggle | select | number | image
 # (key, label, kind, help?, options?)
@@ -1294,6 +1309,7 @@ SETTING_VISIBILITY: dict[str, tuple[str, tuple[str, ...]]] = {
     "crypto_rate_api_url": ("crypto_rate_mode", ("api",)),
     "crypto_rate_api_path": ("crypto_rate_mode", ("api",)),
     "crypto_rate_api_divisor": ("crypto_rate_mode", ("api",)),
+    **entry_approval_visibility(),
 }
 
 # Main-bot switch only: a shop gets the name step from its package permission instead.
@@ -2033,6 +2049,7 @@ SETTING_GROUPS = {
     ],
 }
 SETTING_GROUPS.update(screen_text_setting_groups())
+SETTING_GROUPS[ENTRY_APPROVAL_GROUP] = entry_approval_setting_fields()
 
 
 def _remaining_button_label_groups(groups: dict[str, list]) -> dict[str, list[tuple[str, str, str, str]]]:
@@ -2079,6 +2096,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "naming": ["نام‌گذاری سرویس در پاسارگارد", CUSTOM_SERVICE_NAME_GROUP],
     "limits": [
         "معرف اجباری",
+        ENTRY_APPROVAL_GROUP,
         "شماره تماس خرید",
         "اکانت تست",
         "ضدتقلب رسید",

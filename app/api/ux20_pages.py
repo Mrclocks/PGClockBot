@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from urllib.parse import quote
 
 from fastapi import Depends, File, Form, Request, UploadFile
@@ -15,7 +16,7 @@ from app.db.models import BotUser, ChargeCode, Order
 from app.services.authz import authz_from_staff, can_shop
 from app.services.customer_marks import has_customer_notes_permission, save_marks
 from app.services.db_safe import rollback_quiet
-from app.services.gift_codes import gift_code_scope
+from app.services.gift_codes import gift_code_scope, parse_expiry_days
 from app.services.staff_audit import actor_from_staff, add_staff_action
 from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope
 from app.services.users import set_setting
@@ -32,9 +33,7 @@ logger = logging.getLogger(__name__)
 MAX_SHOP_BUNDLE_BYTES = 5 * 1024 * 1024
 
 
-def _gift_rules(form) -> dict:
-    from app.services.gift_codes import parse_expiry
-
+def _gift_rules(form, *, current_expiry: datetime | None = None) -> dict:
     def number(name, default=None):
         raw = str(form.get(name) or "").strip().replace(",", "").replace("٬", "")
         try:
@@ -47,7 +46,11 @@ def _gift_rules(form) -> dict:
         percent=number("percent", 0), max_discount_toman=number("max_discount_toman"),
         max_uses=number("max_uses", 1 if "max_uses" not in form else None),
         max_uses_per_user=number("max_uses_per_user"),
-        expires_at=parse_expiry(str(form.get("expires_at") or "")),
+        expires_at=parse_expiry_days(
+            str(form.get("expires_in_days") or ""),
+            current=current_expiry,
+            shown=str(form.get("expires_in_days_shown") or ""),
+        ),
         first_purchase_only=str(form.get("first_purchase_only") or "") in {"1", "on", "true"},
         purchase_types=form.getlist("purchase_types"),
         plan_ids=form.getlist("plan_ids"),
@@ -234,7 +237,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             if not row:
                 return RedirectResponse("/gift-codes", status_code=303)
             form = await request.form()
-            rules = validate_rules(**_gift_rules(form))
+            rules = validate_rules(**_gift_rules(form, current_expiry=row.expires_at))
             if rules["kind"] != row.kind:
                 raise ValueError("نوع کد پس از ساخت قابل تغییر نیست؛ یک کد جدید بسازید")
             await check_code_plans(session, rules["plan_ids"], shop_id=rid)
