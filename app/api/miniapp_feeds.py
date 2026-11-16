@@ -74,6 +74,7 @@ def catalog_plan_row(plan: Plan) -> dict:
     return {
         "id": plan.id,
         "name": plan.name,
+        "description": plan.description or "",
         **displayed_quote(plan).payload(),
         "days": plan.duration_days,
         "gb": plan.data_limit_gb,
