@@ -104,7 +104,7 @@
         {% for p in recent_payments %}
           <tr>
             <td class="mono col-id">{{ p.id }}</td>
-            <td class="mono col-amount" dir="ltr">{{ p.amount | money }}</td>
+            <td class="mono col-amount">{{ p.amount | money }}</td>
             <td class="col-type">{% if p.is_wallet_topup %}شارژ کیف{% else %}خرید{% endif %}</td>
             <td class="col-status"><span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">{{ pay_status(p.status) }}</span></td>
           </tr>
@@ -133,7 +133,7 @@
           {% set waiting = o.status in ['pending', 'awaiting_receipt', 'awaiting_approval'] %}
           <tr>
             <td class="mono col-id">{{ o.id }}</td>
-            <td class="mono col-amount" dir="ltr">{{ o.amount | money }}</td>
+            <td class="mono col-amount">{{ o.amount | money }}</td>
             <td class="col-status">
               <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif waiting %}pending{% elif o.status in ['rejected','cancelled'] %}rejected{% else %}neutral{% endif %}">
                 {%- if waiting %}در انتظار{% elif o.status == 'delivered' %}تحویل شد{% elif o.status == 'paid' %}پرداخت شد{% elif o.status == 'rejected' %}رد شد{% elif o.status == 'cancelled' %}لغو{% else %}{{ o.status }}{% endif -%}

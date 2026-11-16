@@ -49,6 +49,7 @@ from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.miniapp_branding import ACCENT_PRESETS
+from app.services.miniapp_main_app import platform_main_app_guide
 from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 from app.services.payer_notify import notify_payer
 from app.services.pg_panel_access import apply_pg_panel_access, is_pg_panel_blocked, pg_panel_allowed
@@ -177,12 +178,14 @@ logger = logging.getLogger(__name__)
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
-from app.services.formatting import order_status_fa, ticket_status_fa
+from app.services.formatting import node_status_fa, order_status_fa, pg_user_status_fa, ticket_status_fa
 from app.services.web_numbers import WEB_NUMBER_FILTERS
 
 templates.env.filters.update(WEB_NUMBER_FILTERS)
 templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
+templates.env.filters["node_status"] = node_status_fa
+templates.env.filters["pg_user_status"] = pg_user_status_fa
 templates.env.globals["app_version"] = local_version()
 templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
@@ -1594,6 +1597,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     from app.api.miniapp_feeds import register_miniapp_feeds
     from app.api.miniapp_guides import register_miniapp_guides
     from app.api.miniapp_loyalty import register_miniapp_loyalty
+    from app.api.miniapp_onboarding import register_miniapp_onboarding
     from app.api.miniapp_pages import register_miniapp_pages
     from app.api.miniapp_renewal import register_miniapp_renewal
     from app.api.miniapp_reseller import register_miniapp_reseller
@@ -1611,6 +1615,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_miniapp_loyalty(app, get_db=get_db)
     register_miniapp_reseller(app, get_db=get_db)
     register_miniapp_review(app, get_db=get_db)
+    register_miniapp_onboarding(app, get_db=get_db)
     from app.api.customer_features import register_customer_features
 
     register_customer_features(app, render=render, require_staff=require_staff, get_db=get_db)
@@ -3936,14 +3941,19 @@ def create_api_app(lifespan=None) -> FastAPI:
                 format_credentials_message,
                 get_reseller_panel_base_url,
                 provision_reseller,
+                reseller_plan_from_form,
             )
 
             try:
+                # A package brings its own PasarGuard role, limits and permissions.
+                plan = await reseller_plan_from_form(session, staff, form.get("reseller_plan_id"))
+                perms = None if plan is not None else DEFAULT_FEATURE_PERMS
                 creds = await provision_reseller(
                     session,
                     user=user,
-                    web_permissions=DEFAULT_FEATURE_PERMS,
-                    bot_permissions=DEFAULT_FEATURE_PERMS,
+                    plan=plan,
+                    web_permissions=perms,
+                    bot_permissions=perms,
                     create_pg_admin=True,
                     panel_base_url=await get_reseller_panel_base_url(session),
                 )
@@ -4639,6 +4649,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["ssl"] = st
         elif tab == "miniapp":
             ctx["miniapp_url"] = get_settings().miniapp_url
+            ctx["main_app"] = await platform_main_app_guide()
         elif tab == "appearance":
             from app.services.bot_appearance import load_appearance_context
             from app.services.setup_wizard import current_setup_values

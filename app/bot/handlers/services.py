@@ -41,6 +41,7 @@ from app.services.service_scope import customer_may_use_service, list_customer_s
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
 from app.services.service_live_info import fetch_live_service_info, with_stored_quota
+from app.services.catalog_descriptions import with_descriptions
 from app.services.plan_categories import shop_category_map
 from app.services.service_renewals import RenewalChoices, load_renewal_choices
 from app.services.wireguard_delivery import REASON_DISABLED, REASON_UNAVAILABLE, fetch_wireguard, has_wireguard
@@ -668,9 +669,12 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     await callback.answer()
     ui = await get_all_settings(session)
     hint = RENEWAL_GROUPED_HINT if choices.categories and choices.current else RENEWAL_HINT
+    described = [*choices.categories, choices.current] if choices.categories and choices.current else (choices.categories or choices.options)
     if callback.message:
         await safe_edit_text(
-            callback.message, hint, reply_markup=renewal_keyboard(svc_id, choices, ui, categories)
+            callback.message,
+            with_descriptions(html.escape(hint), described),
+            reply_markup=renewal_keyboard(svc_id, choices, ui, categories)
         )
 
 
@@ -693,7 +697,7 @@ async def svc_renew_category(callback: CallbackQuery, session: AsyncSession, db_
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message(title, RENEWAL_HINT),
+            format_message(title, with_descriptions(RENEWAL_HINT, plans)),
             reply_markup=renewal_category_keyboard(svc.id, plans, choices, ui, categories),
         )
 

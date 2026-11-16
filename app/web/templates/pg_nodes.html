@@ -49,13 +49,13 @@
       {% endif %}
       <tr data-bulk-ops="{{ ns.ops.rstrip(',') }}">
         {% if can_reconnect or can_update or can_delete %}{% if n.get('id') %}{{ table_select_cell(n.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
-        <td class="mono" dir="ltr" data-sort-value="{{ n.get('id') or 0 }}">{{ n.get('id') }}</td>
+        <td class="mono" data-sort-value="{{ n.get('id') or 0 }}"><bdi dir="ltr">{{ n.get('id') }}</bdi></td>
         <td class="li-title" data-sort-value="{{ n.get('name') or '' }}"><span dir="auto">{{ n.get('name') or '—' }}</span> <span class="li-only li-id" dir="ltr">(#{{ n.get('id') }})</span></td>
         <td class="mono li-sub" data-sort-value="{{ n.get('address') or n.get('host') or '' }}"><bdi dir="ltr">{{ n.get('address') or n.get('host') or '—' }}{% if n.get('port') %}:{{ n.get('port') }}{% endif %}</bdi></td>
         <td class="li-badge" data-sort-value="{{ (n.get('status') or n.get('connection_status') or '')|string|lower }}">
           {% set st = (n.get('status') or n.get('connection_status') or '')|string|lower %}
           <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled','disconnected'] %}danger{% else %}neutral{% endif %}">
-            {{ n.get('status') or n.get('connection_status') or '—' }}
+            <bdi dir="auto">{{ (n.get('status') or n.get('connection_status')) | node_status }}</bdi>
           </span>
         </td>
         <td class="mono reseller-quota-cell" data-sort-value="{{ n.get('_traffic_up') if n.get('_traffic_up') is not none else '' }}">

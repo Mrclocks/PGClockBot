@@ -10,6 +10,7 @@ from app.services.formatting import (
     format_bytes_rate,
     format_bytes_rate_parts,
     format_bytes_ratio_parts,
+    node_status_fa,
 )
 from app.services.host_gauges import tone_class
 from app.services.host_metrics import format_memory_ratio
@@ -315,7 +316,7 @@ def node_overview_card(node: dict) -> dict[str, Any]:
     return {
         "id": nid,
         "name": name,
-        "status": str(node.get("_status") or node.get("status") or node.get("connection_status") or "—"),
+        "status": node_status_fa(node.get("_status") or node.get("status") or node.get("connection_status")),
         "status_kind": node.get("_status_kind") or _status_kind(node.get("status")),
         "cpu_percent": node.get("_cpu_percent"),
         "cpu_text": node.get("_cpu_text") or "—",

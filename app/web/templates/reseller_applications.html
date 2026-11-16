@@ -32,7 +32,7 @@
           {% if a.user %}<span class="li-only li-id" dir="ltr">({{ a.user.telegram_id }})</span>{% endif %}
         </td>
         <td class="col-hide-sm li-sub"><span>{{ a.plan.name if a.plan else '—' }}</span> <span class="li-only">· درخواست <bdi dir="ltr">#{{ a.id }}</bdi></span></td>
-        <td class="mono li-value" dir="ltr">{{ (a.plan.price if a.plan else 0) | money }}</td>
+        <td class="mono li-value">{{ (a.plan.price if a.plan else 0) | money }}</td>
         <td class="li-badge">
           {% if a.status == 'awaiting_approval' %}<span class="badge pending">منتظر تأیید</span>
           {% elif a.status == 'pending_payment' %}<span class="badge pending">منتظر پرداخت</span>

@@ -18,7 +18,12 @@ from app.db.models import (
     Plan,
     ServiceAddonPack,
 )
-from app.services.gift_codes import parse_expiry, expiry_input, validate_rules
+from app.services.gift_codes import (
+    MAX_EXPIRY_DAYS,
+    expiry_days_input,
+    parse_expiry_days,
+    validate_rules,
+)
 from app.services.orders import (
     apply_discount_to_order,
     cancel_order,
@@ -509,20 +514,85 @@ class GiftCodeRulesTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("err=", response.headers["location"])
 
 
+    async def test_routes_set_expiry_in_days_and_an_edit_keeps_it(self):
+        import httpx
+        from fastapi import FastAPI
+        from app.api.ux20_pages import register_ux20_pages
+
+        staff = {"role": "admin", "id": 1, "org_principal_id": 1, "org_depth": 0, "org_parent_id": None,
+                 "org_status": "active"}
+
+        async def get_db():
+            async with self.Session() as session:
+                yield session
+
+        app = FastAPI()
+        register_ux20_pages(app, render=lambda *a, **k: None, require_staff=lambda: staff,
+                            require_admin=lambda: staff, get_db=get_db)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            before = datetime.now(timezone.utc)
+            response = await client.post(
+                "/plans/gift-codes", data={"kind": "wallet", "amount": "1000", "expires_in_days": "30", "code": "DAYS30"}
+            )
+            self.assertIn("ok=", response.headers["location"])
+            async with self.Session() as session:
+                code = (await session.execute(select(ChargeCode).where(ChargeCode.code == "DAYS30"))).scalar_one()
+                created_expiry = code.expires_at.replace(tzinfo=timezone.utc)
+                code_id = code.id
+            self.assertLessEqual(abs(created_expiry - (before + timedelta(days=30))), timedelta(minutes=1))
+
+            shown = expiry_days_input(created_expiry)
+            await client.post(f"/plans/gift-codes/{code_id}/edit", data={
+                "kind": "wallet", "amount": "2000", "expires_in_days": shown, "expires_in_days_shown": shown,
+            })
+            async with self.Session() as session:
+                code = await session.get(ChargeCode, code_id)
+                self.assertEqual((code.amount, code.expires_at.replace(tzinfo=timezone.utc)), (2000, created_expiry))
+
+            await client.post(f"/plans/gift-codes/{code_id}/edit", data={
+                "kind": "wallet", "amount": "2000", "expires_in_days": "", "expires_in_days_shown": shown,
+            })
+            async with self.Session() as session:
+                self.assertIsNone((await session.get(ChargeCode, code_id)).expires_at)
+
+            response = await client.post(
+                "/plans/gift-codes", data={"kind": "wallet", "amount": "1000", "expires_in_days": "0"}
+            )
+            self.assertIn("err=", response.headers["location"])
+
 class GiftCodeValidationTests(unittest.TestCase):
-    def test_tehran_expiry_roundtrip(self):
+    NOW = datetime(2030, 1, 1, 8, 30, tzinfo=timezone.utc)
+
+    def test_expiry_counts_whole_days_from_now(self):
+        self.assertEqual(parse_expiry_days("30", now=self.NOW), self.NOW + timedelta(days=30))
+        self.assertEqual(parse_expiry_days(" 1 ", now=self.NOW), self.NOW + timedelta(days=1))
+        self.assertIsNone(parse_expiry_days("", now=self.NOW))
+
+    def test_expiry_days_out_of_range_or_not_whole_are_rejected(self):
+        for raw in ["0", "-3", str(MAX_EXPIRY_DAYS + 1), "1.5", "abc", "true"]:
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                parse_expiry_days(raw, now=self.NOW)
+
+    def test_saving_the_days_shown_keeps_the_exact_expiry(self):
+        current = self.NOW + timedelta(days=4, hours=3)
+        shown = expiry_days_input(current, now=self.NOW)
+        self.assertEqual(shown, "5")
+        self.assertEqual(parse_expiry_days(shown, current=current, shown=shown, now=self.NOW), current)
         self.assertEqual(
-            parse_expiry("2030-01-01T12:00"),
-            datetime(2030, 1, 1, 8, 30, tzinfo=timezone.utc),
+            parse_expiry_days("6", current=current, shown=shown, now=self.NOW), self.NOW + timedelta(days=6)
         )
-        self.assertEqual(
-            parse_expiry("2030-01-01 12:00"),
-            datetime(2030, 1, 1, 8, 30, tzinfo=timezone.utc),
-        )
-        self.assertEqual(
-            expiry_input(parse_expiry("2030-01-01T12:00")), "2030-01-01 12:00"
-        )
-        self.assertIsNone(parse_expiry(""))
+        self.assertIsNone(parse_expiry_days("", current=current, shown=shown, now=self.NOW))
+
+    def test_an_expired_code_is_not_revived_by_an_unrelated_edit(self):
+        past = self.NOW - timedelta(hours=1)
+        shown = expiry_days_input(past, now=self.NOW)
+        self.assertEqual(shown, "0")
+        self.assertEqual(parse_expiry_days(shown, current=past, shown=shown, now=self.NOW), past)
+
+    def test_days_shown_round_up_and_no_expiry_is_empty(self):
+        self.assertEqual(expiry_days_input(None, now=self.NOW), "")
+        self.assertEqual(expiry_days_input(self.NOW + timedelta(hours=36), now=self.NOW), "2")
+        self.assertEqual(expiry_days_input(self.NOW + timedelta(days=30), now=self.NOW), "30")
 
     def test_conflicting_and_invalid_rules(self):
         for rules in [

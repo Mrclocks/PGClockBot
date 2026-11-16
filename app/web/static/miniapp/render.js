@@ -20,6 +20,7 @@
     auto: '<path d="M20 11a8 8 0 0 0-14.5-4.5L4 8"/><path d="M4 4v4h4"/><path d="M12 8v4l2 2"/>',
     cancel: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>',
     chevron: '<path d="m15 6-6 6 6 6"/>',
+    shortcut: '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M12 9v6M9 12h6"/>',
     // RTL: "back" points right.
     back: '<path d="m9 6 6 6-6 6"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -334,7 +335,7 @@
       const checked = id === Number(selectedId);
       return `<label class="plan-option${checked ? " is-selected" : ""}">
         <input type="radio" name="plan" value="${id}" data-action="select-plan" data-id="${id}"${checked ? " checked" : ""}>
-        <span class="plan-meta"><strong>${esc(p.name)}</strong>${p.is_trial ? badge("تست", "ok") : ""}<span class="muted sm">${esc(planMetaText(p))}</span></span>
+        <span class="plan-meta"><strong>${esc(p.name)}</strong>${p.is_trial ? badge("تست", "ok") : ""}<span class="muted sm">${esc(planMetaText(p))}</span>${p.description ? `<span class="muted sm pre-line">${esc(p.description)}</span>` : ""}</span>
         <span class="plan-price">${priceHtml(p)}</span>
       </label>`;
     }).join("")}</div>`;
@@ -448,7 +449,7 @@
   function renewPlanButton(p, serviceId) {
     const relation = RENEWAL_RELATIONS[p.relation];
     return `<button type="button" class="plan-option" data-action="preview-renew" data-id="${Number(serviceId) || 0}" data-plan="${Number(p.id) || 0}">
-        <span class="plan-meta"><strong>${relation ? badge(relation[0], relation[1]) + " " : ""}${esc(p.name)}</strong><span class="muted sm">${esc(planMetaText(p))}</span></span>
+        <span class="plan-meta"><strong>${relation ? badge(relation[0], relation[1]) + " " : ""}${esc(p.name)}</strong><span class="muted sm">${esc(planMetaText(p))}</span>${p.description ? `<span class="muted sm pre-line">${esc(p.description)}</span>` : ""}</span>
         <span class="plan-price">${priceHtml(p)}</span>
       </button>`;
   }
@@ -460,9 +461,9 @@
       <div class="plan-list">${list.map((p) => renewPlanButton(p, serviceId)).join("")}</div>`;
   }
 
-  function renewCategoryButton(serviceId, key, name, count) {
+  function renewCategoryButton(serviceId, key, name, count, description) {
     return `<button type="button" class="plan-option" data-action="renew-category" data-id="${Number(serviceId) || 0}" data-cat="${esc(key)}">
-        <span class="plan-meta"><strong>${esc(name)}</strong><span class="muted sm">${esc(num(count))} پلن</span></span>
+        <span class="plan-meta"><strong>${esc(name)}</strong><span class="muted sm">${esc(num(count))} پلن</span>${description ? `<span class="muted sm pre-line">${esc(description)}</span>` : ""}</span>
       </button>`;
   }
 
@@ -473,7 +474,7 @@
     const categories = (d.categories || []).filter((c) => (c.plans || []).length);
     const other = d.other || [];
     if (!d.current && !categories.length && !other.length) return emptyHtml("پلنی برای تمدید فعال نیست.");
-    const buttons = categories.map((c) => renewCategoryButton(serviceId, String(Number(c.id) || 0), c.name, c.plans.length));
+    const buttons = categories.map((c) => renewCategoryButton(serviceId, String(Number(c.id) || 0), c.name, c.plans.length, c.description));
     if (other.length) buttons.push(renewCategoryButton(serviceId, OTHER_CATEGORY, "سایر", other.length));
     return `<p class="muted sm">پلن فعلی را تمدید کنید یا از دسته‌ها پلن دیگری انتخاب کنید؛ پیش از پرداخت، نتیجه را می‌بینید.</p>
       ${d.current ? `<div class="plan-list">${renewPlanButton(d.current, serviceId)}</div>` : ""}
@@ -488,6 +489,7 @@
       : (d.categories || []).find((c) => String(Number(c.id) || 0) === String(key));
     if (!category || !(category.plans || []).length) return null;
     return `<p><strong>${esc(category.name)}</strong></p>
+      ${category.description ? `<p class="muted sm pre-line">${esc(category.description)}</p>` : ""}
       <div class="plan-list">${category.plans.map((p) => renewPlanButton(p, serviceId)).join("")}</div>
       <button type="button" class="btn ghost block" data-action="renew-groups" data-id="${Number(serviceId) || 0}">بازگشت به دسته‌ها</button>`;
   }
@@ -1069,7 +1071,7 @@
   }
 
   root.PGMini.render = Object.freeze({
-    icon, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
+    icon, badge, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
     brandHeaderHtml, noticeBannerHtml, shortcutsHtml, panelShortcutsHtml, heroHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, buyConfirmHtml, discountedCheckoutHtml,
     validServiceName, randomServiceName, giftFormHtml, renewPlansHtml, renewChoicesHtml, renewCategoryHtml,

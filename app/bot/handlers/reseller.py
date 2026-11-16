@@ -30,6 +30,7 @@ from app.services.home_overview import reseller_shop_summary
 from app.services.formatting import (
     bot_user_panel_label,
     format_message,
+    format_user_label,
     format_number,
     format_toman,
     order_status_fa,
@@ -1097,7 +1098,7 @@ async def res_payments(
         return
     for payment, user in rows:
         caption = (
-            f"رسید #{payment.id}\nکاربر: {user.full_name}\n"
+            f"رسید #{payment.id}\nکاربر: {format_user_label(user)}\n"
             f"مبلغ: {format_toman(payment.amount, get_settings().currency)}"
         )
         try:

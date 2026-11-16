@@ -93,7 +93,7 @@
 
 {% macro switch_chip(name, label, checked=false, value='1') -%}
 <label class="ui-switch-chip">
-  <span class="ui-switch-copy"><strong>{{ label }}</strong></span>
+  <span class="ui-switch-copy"><strong dir="auto">{{ label }}</strong></span>
   <span class="ui-switch">
     <input type="checkbox" name="{{ name }}" value="{{ value }}"{% if checked %} checked{% endif %} />
     <span class="ui-switch-track" aria-hidden="true"></span>
@@ -282,7 +282,7 @@
 {# Label of a page's primary action: the full label on desktop and for screen readers; «+» and a short label in the
    phone capsule, «+» alone under 360 pixels. ``icon_name`` other than «plus» marks a frequent non-create action. #}
 {% macro act_label(label, short=None, icon_name='plus') -%}
-{{ icon(icon_name, 'act-ico') }}<span class="act-long">{{ label }}</span>{% if short %}<span class="act-short" aria-hidden="true">{{ short }}</span>{% endif %}
+{{ icon(icon_name, 'act-ico') }}<span class="act-long" dir="auto">{{ label }}</span>{% if short %}<span class="act-short" dir="auto" aria-hidden="true">{{ short }}</span>{% endif %}
 {%- endmacro %}
 
 {# Long field helps collapse behind «راهنما»; short ones stay inline. #}

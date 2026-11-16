@@ -63,6 +63,7 @@ from app.services.miniapp_auth import (
 from app.services.miniapp_branding import platform_brand, shop_brand
 from app.services.miniapp_badges import home_badges
 from app.services.miniapp_home import customer_home_summary
+from app.services.miniapp_main_app import clean_bot_username, platform_bot_username
 from app.services.miniapp_shop import (
     KEY_PATTERN,
     PLATFORM_SCOPE,
@@ -72,6 +73,7 @@ from app.services.miniapp_shop import (
     is_shop_miniapp_owner,
     mini_scope,
     resolve_shop_scope,
+    shop_bot_username,
     shop_display_name,
     shop_nav,
 )
@@ -612,7 +614,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
     @app.get("/miniapp", response_class=HTMLResponse)
     async def miniapp_index(request: Request):
         assert_miniapp_feature_enabled()
-        resp = render(request, "miniapp.html", {})
+        resp = render(request, "miniapp.html", {"mini_bot_username": platform_bot_username()})
         # Never let intermediaries / SW-ish caches serve a shell without WebApp context.
         try:
             resp.headers["Cache-Control"] = "no-store"
@@ -628,7 +630,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         if not KEY_PATTERN.fullmatch(shop_key):
             raise HTTPException(404, SHOP_UNAVAILABLE)
         await resolve_shop_scope(session, shop_key)
-        resp = render(request, "miniapp.html", {})
+        username = clean_bot_username(await shop_bot_username(session, shop_key))
+        resp = render(request, "miniapp.html", {"mini_bot_username": username})
         resp.headers["Cache-Control"] = "no-store"
         return resp
 

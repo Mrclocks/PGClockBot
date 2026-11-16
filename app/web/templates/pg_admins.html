@@ -36,16 +36,16 @@
       {% set src = st.get('source') or 'none' %}
       <tr>
         <td class="mono col-hide-sm">{{ a.get('id') or '—' }}</td>
-        <td class="li-title" dir="ltr">{{ uname or '—' }}</td>
+        <td class="li-title"><bdi dir="ltr">{{ uname or '—' }}</bdi></td>
         <td class="mono muted col-hide-sm li-sub">
           {#- On phones line two: role and status, then users used. -#}
           {% if a.get('role') and a.get('role').get('name') %}{{ a.get('role').get('name') }} · {% endif %}
           {% if a.get('is_sudo') %}دسترسی کامل · {% endif %}
-          {% if a.get('status') %}{{ a.get('status') }}{% endif %}
+          {% if a.get('status') %}<bdi dir="auto">{{ a.get('status') | pg_user_status }}</bdi>{% endif %}
           {% if a.get('note') %}<br class="li-hide"><small class="muted li-hide">{{ a.get('note') }}</small>{% endif %}
           <span class="li-only">· کاربران <bdi dir="ltr">{{ usage.get('users_text') or '—' }}</bdi></span>
         </td>
-        <td class="mono" dir="ltr" title="مصرف / سقف کاربران">{{ usage.get('users_text') or '—' }}</td>
+        <td class="mono" title="مصرف / سقف کاربران"><bdi dir="ltr">{{ usage.get('users_text') or '—' }}</bdi></td>
         <td class="mono reseller-quota-cell li-value" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
           <div class="reseller-quota byte-stack">
             <span class="reseller-quota-line byte-size">{{ usage.get('traffic_text') or '—' }}</span>

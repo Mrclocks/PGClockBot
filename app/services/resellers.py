@@ -26,6 +26,8 @@ from app.db.models import (
 )
 from app.services.db_safe import rollback_quiet
 from app.services.chat_records import keeps_sent
+from app.services.pg_admin_roles import apply_admin_role, resolve_new_admin_role_id
+from app.services.platform_identity import is_explicit_owner_staff
 from app.services.pg_panel_access import (
     close_access_warning,
     may_share_pg_credentials,
@@ -541,6 +543,33 @@ async def list_active_reseller_plans(
         q = q.where(ResellerPlan.billing_mode == mode)
     result = await session.execute(q.order_by(ResellerPlan.sort_order, ResellerPlan.id))
     return list(result.scalars().all())
+
+
+async def grantable_reseller_plan(session: AsyncSession, plan_id: int) -> ResellerPlan:
+    """An active subscription package a staff member may grant a new reseller."""
+    plan = await session.get(ResellerPlan, int(plan_id))
+    if plan is None or not plan.is_active or plan.plan_kind != "subscription":
+        raise ValueError("پلن نمایندگی نامعتبر یا غیرفعال است")
+    return plan
+
+
+PLAN_GRANT_OWNER_ONLY = "فقط مالک می‌تواند پلن نمایندگی انتخاب کند"
+
+
+async def reseller_plan_from_form(session: AsyncSession, staff: dict | None, raw: object) -> ResellerPlan | None:
+    """The package chosen on the users page, or ``None`` when none was chosen.
+
+    A package grants its own permissions, limits and panel role, so only the owner may pick one;
+    the form hides the field from everyone else, and this refuses a hand-made request too.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    if not is_explicit_owner_staff(staff):
+        raise ValueError(PLAN_GRANT_OWNER_ONLY)
+    if not text.isascii() or not text.isdigit():
+        raise ValueError("پلن نمایندگی نامعتبر یا غیرفعال است")
+    return await grantable_reseller_plan(session, int(text))
 
 
 def normalize_reseller_billing_mode(raw: str | None) -> str:
@@ -1276,10 +1305,8 @@ async def provision_reseller(
         tid = deliverable_telegram_id(getattr(user, "telegram_id", None))
         if tid is not None:
             payload["telegram_id"] = tid
-        if role_id:
-            payload["role_id"] = int(role_id)
-        else:
-            payload["is_sudo"] = False
+        role_id = await resolve_new_admin_role_id(get_pg(), int(role_id) if role_id else None)
+        apply_admin_role(payload, role_id)
         if plan is not None and is_subscription_plan(plan):
             # Refuse before anything exists, and create the admin with the package's limits:
             # a PasarGuard admin without ``data_limit`` is unlimited until something sets one.
@@ -1288,15 +1315,8 @@ async def provision_reseller(
         try:
             await get_pg().create_admin(payload)
         except Exception as e:
-            if "role_id" in payload:
-                payload.pop("role_id", None)
-                payload["is_sudo"] = False
-                try:
-                    await get_pg().create_admin(payload)
-                except Exception as e2:
-                    raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e2)}") from e2
-            else:
-                raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e)}") from e
+            # No second create: the first one may have succeeded on the panel.
+            raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e)}") from e
 
     web_username = None
     web_password = None

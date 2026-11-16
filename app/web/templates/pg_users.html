@@ -60,14 +60,15 @@
       {% endif %}
       <tr data-bulk-ops="{{ ns.ops.rstrip(',') }}">
         {% if can_disable or can_enable or can_reset or can_revoke or can_delete %}{% if uid %}{{ table_select_cell(uid) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
-        <td class="mono li-title" dir="ltr" data-sort-value="{{ u.get('username') or '' }}">{{ u.get('username') or '—' }}</td>
+        <td class="mono li-title" data-sort-value="{{ u.get('username') or '' }}"><bdi dir="ltr">{{ u.get('username') or '—' }}</bdi></td>
         <td class="li-badge" data-sort-value="{{ '0' if disabled else '1' }}">
           {% if disabled %}
           <span class="badge warn">غیرفعال</span>
           {% elif u.get('status') == 'on_hold' %}
           <span class="badge warn">در انتظار اتصال</span>
           {% else %}
-          <span class="badge active">{{ u.get('status') or 'فعال' }}</span>
+          {% set st = (u.get('status') or 'active') | string | lower %}
+          <span class="badge {% if st == 'active' %}active{% elif st == 'expired' %}danger{% else %}warn{% endif %}"><bdi dir="auto">{{ st | pg_user_status }}</bdi></span>
           {% endif %}
         </td>
         <td class="mono reseller-quota-cell li-sub" data-sort-value="{{ u.get('used_traffic') if u.get('used_traffic') is not none else '' }}">
@@ -80,15 +81,15 @@
           {% else %}—{% endif %}
           </span>
         </td>
-        <td class="mono muted col-hide-sm li-value" dir="ltr" data-sort-value="{{ days_left if days_left is not none else 9999 }}">
+        <td class="mono muted col-hide-sm li-value" data-sort-value="{{ days_left if days_left is not none else 9999 }}">
           <span class="li-only">{% if days_left is not none %}{{ (days_left) | fa }} روز{% else %}—{% endif %}</span><span class="li-hide">
-          {% if u.get('_expire_text') %}{{ u.get('_expire_text') }}{% elif u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}</span>
+          {% if u.get('_expire_text') %}{{ u.get('_expire_text') | fa }}{% elif u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}</span>
         </td>
         {% if is_admin %}
         {% set adm = u.get('admin') %}
         {% set adm_name = adm.get('username') if adm is mapping else (adm or u.get('owner_username') or '') %}
-        <td class="mono muted col-hide-sm" dir="ltr" data-sort-value="{{ adm_name or '' }}">
-          {{ adm_name or '—' }}
+        <td class="mono muted col-hide-sm" data-sort-value="{{ adm_name or '' }}">
+          <bdi dir="ltr">{{ adm_name or '—' }}</bdi>
         </td>
         {% endif %}
         <td class="col-actions">
@@ -357,10 +358,10 @@
     if (!btn) return;
     const prev = btn.textContent;
     btn.textContent = 'کپی شد';
-    btn.classList.add('btn-ok', 'is-copied');
+    btn.classList.add('is-copied');
     setTimeout(function () {
       btn.textContent = prev;
-      btn.classList.remove('btn-ok', 'is-copied');
+      btn.classList.remove('is-copied');
     }, 1500);
   }
 
