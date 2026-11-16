@@ -20,6 +20,7 @@ from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
 from app.services.referral_scope import is_referral_of_shop
 from app.services.service_import_offer import is_offer_dismissed
+from app.services.trial_offer import offerable_trial_plans
 from app.services.service_scope import customer_may_use_service, list_customer_services, shop_services_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
@@ -70,6 +71,7 @@ async def render_home(
 
     home_send_kw: dict = {}
     offer_import = False
+    offer_trial = False
     if effective_role == "admin":
         from app.bot.menu_nav import build_main_reply_keyboard
 
@@ -127,10 +129,13 @@ async def render_home(
             reseller_owner_id=reseller_owner_id,
             ui=ui,
         )
+        has_services = await _has_services(session, int(db_user.id))
+        offer_trial = not has_services and bool(await offerable_trial_plans(session, ui, int(db_user.id)))
         offer_import = should_offer_import(
             ui,
-            has_services=await _has_services(session, int(db_user.id)),
+            has_services=has_services,
             dismissed=await is_offer_dismissed(session, int(db_user.id), current_shop_reseller_id()),
+            trial_available=offer_trial,
         )
 
     # Home is a fresh start: a new welcome with the menu at the bottom; the older welcome and
@@ -142,7 +147,7 @@ async def render_home(
         home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
     await replace_home(home, sweep=True)
     if offer_import:
-        await send_import_prompt(message, ui)
+        await send_import_prompt(message, ui, trial_available=offer_trial)
     _ = seed_reply_kb
 
 
