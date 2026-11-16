@@ -214,6 +214,7 @@ tests/test_service_import_settings_tab.py
 tests/test_service_import_approval.py
 tests/test_service_import_notify.py
 tests/test_service_import_assign.py
+tests/test_service_import_assign_bot.py
 tests/test_reseller_capacity_snapshot.py
 tests/test_reseller_capacity_view.py
 tests/test_random_payment_card.py

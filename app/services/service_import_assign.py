@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -55,7 +55,7 @@ from app.services.service_import_config import ImportSettings, read_settings
 from app.services.service_import_store import STATUS_APPROVED, STATUS_PENDING
 from app.services.shop_membership import assert_customer_in_staff_scope, is_shop_customer
 from app.services.shop_scope import resolve_shop_scope_id
-from app.services.staff_audit import actor_from_staff
+from app.services.staff_audit import StaffActor, actor_from_staff
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -264,12 +264,18 @@ async def preview_existing_service(
 
 
 async def assign_existing_service(
-    session: AsyncSession, *, staff: Mapping[str, Any], user: BotUser, request: AssignRequest
+    session: AsyncSession,
+    *,
+    staff: Mapping[str, Any],
+    user: BotUser,
+    request: AssignRequest,
+    actor: StaffActor | None = None,
 ) -> AssignResult:
     """Attach the previewed panel service to ``user``; safe to repeat.
 
     A repeat, or a simultaneous second click, returns the same service as ``ALREADY_YOURS`` and
-    writes no second log record or customer notice.
+    writes no second log record or customer notice. ``actor`` names the person in the staff log
+    (the bot passes its Telegram label); by default it comes from the web session in ``staff``.
     """
     user_id, telegram_id = int(user.id), user.telegram_id
     shop_id, config, verified = await _checked_lookup(session, staff, user, request.lookup)
@@ -295,10 +301,17 @@ async def assign_existing_service(
             if request.notify_customer and telegram_id else []
         )
         await log_and_notify(
-            session, actor_from_staff(dict(staff), shop_id=shop_id), action=STAFF_ACTION,
+            session, _log_actor(actor, staff, shop_id), action=STAFF_ACTION,
             target_type="service", target_id=assigned.service_id, reason=request.reason, targets=targets,
         )
     return assigned
+
+
+def _log_actor(actor: StaffActor | None, staff: Mapping[str, Any], shop_id: int | None) -> StaffActor:
+    """The log record always belongs to the shop resolved here, whoever built ``actor``."""
+    if actor is None:
+        return actor_from_staff(dict(staff), shop_id=shop_id)
+    return actor if actor.shop_id == shop_id else replace(actor, shop_id=shop_id)
 
 
 def _username(verified: VerifiedService) -> str:
