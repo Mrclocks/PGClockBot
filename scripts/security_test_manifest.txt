@@ -517,3 +517,5 @@ tests/test_plan_category_board.py
 tests/test_entry_approval.py
 tests/test_platform_pg_admins_page.py
 tests/test_pg_role_parity.py
+tests/test_reseller_revoke_panel_admin.py
+tests/test_pg_quota_parity.py

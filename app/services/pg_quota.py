@@ -110,19 +110,19 @@ def extract_admin_capacity(admin: dict | None, role: dict | None = None) -> tupl
     return data_limit, max_users
 
 
+def _first_set(limits: Mapping[str, Any], keys: tuple[str, ...]) -> int | None:
+    """First limit that is set; PasarGuard treats ``0`` as a set limit, only ``None`` as unset."""
+    for key in keys:
+        value = _as_int(limits.get(key))
+        if value is not None:
+            return value
+    return None
+
+
 def hwid_bounds(limits: dict[str, Any]) -> tuple[int | None, int | None]:
     """Return (min_hwid, max_hwid) from role limits (aliases supported)."""
-    hmin = (
-        _as_int(limits.get("min_hwid_per_user"))
-        or _as_int(limits.get("hwid_limit_min"))
-        or _as_int(limits.get("min_devices"))
-    )
-    hmax = (
-        _as_int(limits.get("max_hwid_per_user"))
-        or _as_int(limits.get("hwid_limit_max"))
-        or _as_int(limits.get("max_devices"))
-        or _as_int(limits.get("device_limit"))
-    )
+    hmin = _first_set(limits, ("min_hwid_per_user", "hwid_limit_min", "min_devices"))
+    hmax = _first_set(limits, ("max_hwid_per_user", "hwid_limit_max", "max_devices", "device_limit"))
     return hmin, hmax
 
 
@@ -130,12 +130,11 @@ def _admin_is_limited(admin: dict) -> bool:
     status = str(admin.get("status") or "").strip().lower()
     if status == "limited" or admin.get("is_limited") is True:
         return True
-    # Defensive: treat exhausted admin traffic as limited even if status lags.
+    # PasarGuard marks the admin limited on its next usage pass; block in the meantime
+    # so a shop cannot sell past an exhausted traffic pool.
     data_limit = _as_int(admin.get("data_limit"))
     used = _as_int(admin.get("used_traffic")) or _as_int(admin.get("traffic_used")) or 0
-    if data_limit is not None and data_limit > 0 and used >= data_limit:
-        return True
-    return False
+    return data_limit is not None and data_limit > 0 and used >= data_limit
 
 
 def _admin_is_disabled(admin: dict) -> bool:
@@ -178,17 +177,17 @@ def _check_data_limit_bounds(
     data_min = _as_int(limits.get("data_limit_min"))
     unlimited = data_limit is None or data_limit <= 0
 
-    if data_max is not None and data_max > 0 and require_finite and unlimited:
+    if data_max is not None and require_finite and unlimited:
         raise PgQuotaError(
             f"حجم کاربر نمی‌تواند نامحدود باشد؛ حداکثر {format_bytes(data_max)}"
         )
     if not unlimited:
         assert data_limit is not None
-        if data_min is not None and data_min > 0 and data_limit < data_min:
+        if data_min is not None and data_limit < data_min:
             raise PgQuotaError(
                 f"حجم کاربر باید حداقل {format_bytes(data_min)} باشد"
             )
-        if data_max is not None and data_max > 0 and data_limit > data_max:
+        if data_max is not None and data_limit > data_max:
             raise PgQuotaError(
                 f"حجم کاربر نمی‌تواند بیشتر از {format_bytes(data_max)} باشد"
             )
@@ -204,7 +203,7 @@ def _check_expire_bounds(
     expire_min = _as_int(limits.get("expire_min"))
     unlimited = expire_ts is None or expire_ts <= 0
 
-    if expire_max is not None and expire_max > 0 and require_finite and unlimited:
+    if expire_max is not None and require_finite and unlimited:
         raise PgQuotaError(
             f"مدت کاربر نمی‌تواند نامحدود باشد؛ حداکثر {_format_duration_fa(expire_max)} از الان"
         )
@@ -212,11 +211,11 @@ def _check_expire_bounds(
         assert expire_ts is not None
         now = datetime.now(timezone.utc).timestamp()
         seconds = float(expire_ts) - now
-        if expire_min is not None and expire_min > 0 and seconds < expire_min:
+        if expire_min is not None and seconds < expire_min:
             raise PgQuotaError(
                 f"مدت کاربر باید حداقل {_format_duration_fa(expire_min)} از الان باشد"
             )
-        if expire_max is not None and expire_max > 0 and seconds > expire_max:
+        if expire_max is not None and seconds > expire_max:
             raise PgQuotaError(
                 f"مدت کاربر نمی‌تواند بیشتر از {_format_duration_fa(expire_max)} از الان باشد"
             )
@@ -228,26 +227,29 @@ def _check_hwid_bounds(
     *,
     require_finite: bool,
 ) -> None:
-    """Enforce PasarGuard RoleLimits min/max HWID (device) per user."""
+    """Enforce PasarGuard RoleLimits min/max HWID (device) per user.
+
+    As in PasarGuard, ``0`` is an unlimited device count: it fails a set maximum and is
+    still compared with a set minimum.
+    """
     hmin, hmax = hwid_bounds(limits)
-    # None or 0 ⇒ unlimited (common PG / panel convention)
     unlimited = hwid_limit is None or hwid_limit <= 0
 
-    if hmax is not None and hmax > 0 and require_finite and unlimited:
+    if hmax is not None and require_finite and unlimited:
         raise PgQuotaError(
             f"سقف دستگاه (HWID) نمی‌تواند نامحدود باشد؛ حداکثر {hmax}"
         )
-    if not unlimited:
-        assert hwid_limit is not None
-        if hmin is not None and hmin > 0 and hwid_limit < hmin:
+    if hwid_limit is not None:
+        if hmin is not None and hwid_limit < hmin:
             raise PgQuotaError(f"سقف دستگاه (HWID) باید حداقل {hmin} باشد")
-        if hmax is not None and hmax > 0 and hwid_limit > hmax:
+        if hmax is not None and hwid_limit > hmax:
             raise PgQuotaError(f"سقف دستگاه (HWID) نمی‌تواند بیشتر از {hmax} باشد")
 
 
 def _check_max_users(admin: dict, limits: dict[str, Any], *, need: int = 1) -> None:
-    max_users = _as_int(limits.get("max_users")) or _as_int(admin.get("max_users"))
-    if max_users is None or max_users <= 0:
+    """PasarGuard's ``max_users`` from role limits and overrides; ``0`` allows no new user."""
+    max_users = _as_int(limits.get("max_users"))
+    if max_users is None:
         return
     current = (
         _as_int(admin.get("total_users"))
@@ -262,6 +264,80 @@ def _check_max_users(admin: dict, limits: dict[str, Any], *, need: int = 1) -> N
             + (f" — ظرفیت باقی‌مانده {remain}" if remain else "")
             + ")"
         )
+
+
+MANUAL_WRITE_DENIED_MSG = (
+    "نقش شما در پاسارگارد فقط ساخت و تغییر کاربر با تمپلیت را اجازه می‌دهد"
+)
+
+
+def _role_is_owner(admin: Mapping[str, Any], role: Mapping[str, Any] | None) -> bool:
+    """PasarGuard skips every role limit for its owner role."""
+    for source in (role, admin.get("role")):
+        if isinstance(source, Mapping) and source.get("is_owner"):
+            return True
+    return False
+
+
+def _role_requires_template(admin: Mapping[str, Any], role: Mapping[str, Any] | None) -> bool:
+    """``access.require_template``: PasarGuard refuses manual user create and modify."""
+    for source in (role, admin.get("role")):
+        access = source.get("access") if isinstance(source, Mapping) else None
+        if isinstance(access, Mapping):
+            return bool(access.get("require_template"))
+    return False
+
+
+def _hwid_settings_value(admin: Mapping[str, Any], role: Mapping[str, Any] | None) -> tuple[bool, int | None]:
+    """The device limit PasarGuard applies when a request names none.
+
+    Returns ``(known, value)``. Known from the role alone when its HWID mode is
+    ``disabled`` (no limit) or ``override`` with a fallback; otherwise PasarGuard falls
+    back to its global settings, which this panel does not read, so it stays unknown.
+    """
+    for source in (role, admin.get("role")):
+        hwid = source.get("hwid") if isinstance(source, Mapping) else None
+        if not isinstance(hwid, Mapping):
+            continue
+        mode = str(hwid.get("mode") or "use_global")
+        if mode == "disabled":
+            return True, None
+        if mode == "override" and hwid.get("fallback_limit") is not None:
+            return True, _as_int(hwid.get("fallback_limit"))
+        return False, None
+    return False, None
+
+
+def _check_on_hold_timeout_not_required(limits: dict[str, Any]) -> None:
+    """This panel never sends ``on_hold_timeout``.
+
+    PasarGuard then refuses a manual create, or a move to on-hold, whenever the role
+    sets ``on_hold_timeout_max``, because the timeout would be unlimited.
+    """
+    timeout_max = _as_int(limits.get("on_hold_timeout_max"))
+    if timeout_max is not None:
+        raise PgQuotaError(
+            "نقش شما در پاسارگارد مهلت شروع (on-hold) نامحدود را نمی‌پذیرد؛ "
+            f"حداکثر {_format_duration_fa(timeout_max)}. این کار از این پنل ممکن نیست."
+        )
+
+
+def _check_sent_hwid(
+    admin: Mapping[str, Any], role: Mapping[str, Any] | None, limits: dict[str, Any], hwid_limit: int | None
+) -> None:
+    """Check the device limit PasarGuard will apply to this write.
+
+    The payload builders never send ``0``: it reaches PasarGuard as "no limit given",
+    and PasarGuard then uses its HWID fallback. When that fallback depends on global
+    settings this panel cannot read, PasarGuard alone decides.
+    """
+    sent = hwid_limit if hwid_limit is not None and hwid_limit > 0 else None
+    if sent is not None:
+        _check_hwid_bounds(limits, sent, require_finite=True)
+        return
+    known, fallback = _hwid_settings_value(admin, role)
+    if known:
+        _check_hwid_bounds(limits, fallback, require_finite=True)
 
 
 def _staff_uses_env_pg_client(staff: dict) -> bool:
@@ -652,6 +728,8 @@ async def assert_can_create_user(
 
     admin, role = await _load_admin_and_role(staff, session=session, client=client)
     assert_admin_can_write(admin, role)
+    if _role_is_owner(admin, role):
+        return
     limits = merge_role_limits(admin, role)
     _check_max_users(admin, limits, need=max(1, int(quantity or 1)))
 
@@ -659,18 +737,13 @@ async def assert_can_create_user(
         # PasarGuard: template create only checks max_users (+ write gate).
         # HWID/volume come from the template; PG enforces when authenticated as admin.
         return
+    if _role_requires_template(admin, role):
+        raise PgQuotaError(MANUAL_WRITE_DENIED_MSG)
 
     _check_data_limit_bounds(limits, data_limit, require_finite=True)
     _check_expire_bounds(limits, expire_ts, require_finite=True)
-    # When the form omits HWID but the role caps devices, default to the role max
-    # so existing UIs do not accidentally create unlimited-device users.
-    hmin, hmax = hwid_bounds(limits)
-    effective_hwid = hwid_limit
-    if (effective_hwid is None or effective_hwid <= 0) and hmax is not None and hmax > 0:
-        effective_hwid = hmax
-    elif (effective_hwid is None or effective_hwid <= 0) and hmin is not None and hmin > 0:
-        effective_hwid = hmin
-    _check_hwid_bounds(limits, effective_hwid, require_finite=True)
+    _check_sent_hwid(admin, role, limits, hwid_limit)
+    _check_on_hold_timeout_not_required(limits)
 
 
 async def assert_can_modify_user(
@@ -682,6 +755,7 @@ async def assert_can_modify_user(
     data_limit_changed: bool = True,
     expire_changed: bool = True,
     hwid_changed: bool = True,
+    to_on_hold: bool = False,
     session: Any | None = None,
     client: Any | None = None,
 ) -> None:
@@ -691,6 +765,10 @@ async def assert_can_modify_user(
 
     admin, role = await _load_admin_and_role(staff, session=session, client=client)
     assert_admin_can_write(admin, role)
+    if _role_is_owner(admin, role):
+        return
+    if _role_requires_template(admin, role):
+        raise PgQuotaError(MANUAL_WRITE_DENIED_MSG)
     limits = merge_role_limits(admin, role)
 
     _check_data_limit_bounds(
@@ -704,7 +782,9 @@ async def assert_can_modify_user(
         require_finite=expire_changed,
     )
     if hwid_changed:
-        _check_hwid_bounds(limits, hwid_limit, require_finite=True)
+        _check_sent_hwid(admin, role, limits, hwid_limit)
+    if to_on_hold:
+        _check_on_hold_timeout_not_required(limits)
 
 
 async def assert_can_mutate_owned_users(
@@ -777,6 +857,7 @@ async def assert_reseller_can_renew(
     expire_ts: int | None = None,
     hwid_limit: int | None = None,
     from_template: bool = False,
+    to_on_hold: bool = False,
     session: Any | None = None,
     reseller_user_id: int | None = None,
     client: Any | None = None,
@@ -812,6 +893,7 @@ async def assert_reseller_can_renew(
         data_limit_changed=data_limit is not None,
         expire_changed=expire_ts is not None,
         hwid_changed=hwid_limit is not None,
+        to_on_hold=to_on_hold,
         session=session,
         client=own_client,
     )
