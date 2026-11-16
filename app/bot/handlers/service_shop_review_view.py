@@ -18,7 +18,7 @@ from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.user_errors import domain_error_text
 from app.services import bot_feedback_texts as feedback
-from app.services.formatting import format_message, info_block, kv_line
+from app.services.formatting import format_message, format_user_label, info_block, kv_line
 from app.services.service_shop_review import (
     ReviewRow,
     assign_service_shop,
@@ -110,9 +110,11 @@ async def show_service(callback: CallbackQuery, session: AsyncSession, db_user: 
     last_page = max(0, (len(ordered) - 1) // PAGE_SIZE)
     page = min(int(parts[3]) if len(parts) > 3 else 0, last_page)
     evidence = "، ".join(_shop_text(s, shops) for s in row.order_shops) or "—"
+    customer = await session.get(BotUser, int(row.customer_id))
+    customer_text = format_user_label(customer) if customer is not None else f"#{row.customer_id}"
     lines = [
         kv_line("📦", "سرویس", f"<code>{html.escape(row.pg_username)}</code> (#{row.service_id})"),
-        kv_line("👤", "مشتری", f"#{row.customer_id}"),
+        kv_line("👤", "مشتری", customer_text),
         kv_line("🏬", "فروشگاه منتسب به مشتری", _shop_text(row.attributed_shop, shops)),
         kv_line("🧾", "فروشگاه سفارش‌های مشتری", evidence),
     ]

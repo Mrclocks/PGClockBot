@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, UserService
 from app.services.authz import authz_from_staff, can_shop
+from app.services.formatting import identity_text
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 from app.services.users import get_all_settings, on, set_settings_bulk
 
@@ -308,14 +309,15 @@ async def _preview_rows(
         found = (
             await session.execute(
                 select(UserService.id, UserService.pg_username, column, BotUser.full_name, BotUser.username,
-                       UserService.cleanup_claimed_at, BotUser.id, UserService.cleanup_hold_until)
+                       UserService.cleanup_claimed_at, BotUser.id, UserService.cleanup_hold_until,
+                       BotUser.telegram_id)
                 .join(BotUser, BotUser.id == UserService.bot_user_id)
                 .where(shop_services_clause(shop_id), *eligible_clauses(), not_held_clause(now + soon), clause)
                 .order_by(column.asc(), UserService.id)
                 .limit(PREVIEW_SAMPLE)
             )
         ).all()
-        for service_id, username, since, full_name, handle, claimed_at, user_id, hold in found:
+        for service_id, username, since, full_name, handle, claimed_at, user_id, hold, telegram_id in found:
             started = since if since.tzinfo else since.replace(tzinfo=timezone.utc)
             deadline = max(started, enabled_at or started) + timedelta(days=days)
             if hold is not None:  # a staff hold can only push the deadline later
@@ -325,7 +327,7 @@ async def _preview_rows(
                     service_id=int(service_id),
                     user_id=int(user_id),
                     username=str(username or "")[:USERNAME_PREVIEW_MAX],
-                    customer=str(full_name or (f"@{handle}" if handle else "—"))[:USERNAME_PREVIEW_MAX],
+                    customer=identity_text(full_name=full_name, username=handle, telegram_id=telegram_id),
                     kind=label,
                     since=local_date(since),
                     deadline=local_date(deadline),

@@ -18,21 +18,27 @@ def copyable(value: Any, *, empty: str = "—") -> str:
     return f"<code>{html_mod.escape(text)}</code>"
 
 
+def identity_text(
+    *, full_name: str | None = None, username: str | None = None, telegram_id: int | None = None
+) -> str:
+    """Plain text «name · @username · id»; parts that are unknown are left out, «—» when none is known."""
+    handle = (username or "").strip().lstrip("@")
+    parts = [
+        (full_name or "").strip(),
+        f"@{handle}" if handle else "",
+        str(telegram_id) if telegram_id else "",
+    ]
+    return " · ".join(part for part in parts if part) or "—"
+
+
 def format_user_label(user: Any = None, *, telegram_id: int | None = None) -> str:
-    """Prefer @username; fall back to full name, then numeric id."""
-    if user is not None:
-        uname = (getattr(user, "username", None) or "").strip()
-        if uname:
-            return f"@{html_mod.escape(uname.lstrip('@'))}"
-        name = (getattr(user, "full_name", None) or "").strip()
-        if name:
-            return html_mod.escape(name)
-        tid = getattr(user, "telegram_id", None)
-        if tid:
-            return str(tid)
-    if telegram_id:
-        return str(telegram_id)
-    return "—"
+    """Telegram-HTML label with name, @username and numeric id of a bot user."""
+    text = identity_text(
+        full_name=getattr(user, "full_name", None),
+        username=getattr(user, "username", None),
+        telegram_id=getattr(user, "telegram_id", None) or telegram_id,
+    )
+    return html_mod.escape(text)
 
 
 def bot_user_panel_label(user: Any = None, *, fallback_id: int | None = None) -> str:
