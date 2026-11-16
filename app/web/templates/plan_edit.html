@@ -162,10 +162,10 @@
     function render(){
       const sample = root.querySelector('[data-naming-sample]');
       if (!sample) return;
-      const gPrefix = root.getAttribute('data-global-prefix') || 'clk';
+      const gPrefix = root.getAttribute('data-global-prefix') ?? 'clk';
       const gSuffix = root.getAttribute('data-global-suffix') || '';
       const gPattern = root.getAttribute('data-global-pattern') || '{prefix}_{random}{suffix}';
-      const prefix = ((root.querySelector('[data-naming-prefix]') || {}).value || '').trim() || gPrefix || 'clk';
+      const prefix = ((root.querySelector('[data-naming-prefix]') || {}).value || '').trim() || gPrefix;
       const suffix = ((root.querySelector('[data-naming-suffix]') || {}).value || '').trim() || gSuffix || '';
       const pattern = ((root.querySelector('[data-naming-pattern]') || {}).value || '').trim() || gPattern || '{prefix}_{random}{suffix}';
       const form = root.closest('form');
@@ -183,9 +183,9 @@
           .replaceAll('{plan_unit}', 'GB')
           .replaceAll('{username}', 'ali_user');
       } catch (e) {
-        out = prefix + '_' + rnd() + suffix;
+        out = (prefix ? prefix + '_' : '') + rnd() + suffix;
       }
-      sample.textContent = out;
+      sample.textContent = out.replace(/^_+|_+$/g, '');
     }
     const form = root.closest('form') || root;
     form.addEventListener('input', render);

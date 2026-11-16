@@ -232,6 +232,7 @@ async def _reseller_pg_link(
 
 
 DEFAULT_USERNAME_PATTERN = "{prefix}_{random}{suffix}"
+DEFAULT_USERNAME_PREFIX = "clk"
 # PasarGuard answers 409 when the username exists; nothing is created.
 USERNAME_TAKEN_STATUS = 409
 # Longest buyer-chosen name; a taken name keeps this length after its random ending.
@@ -272,18 +273,22 @@ def _fit_panel_username(built: str, *, keep_unique: bool) -> str:
     per-purchase variable.
     """
     name = "".join(ch if ch in _PG_USERNAME_ALLOWED else "_" for ch in built.strip())
+    # An empty {prefix}/{suffix} leaves a dangling separator ("_a8k2x9q1").
+    name = name.strip("_")
     if keep_unique:
         name = f"{name}_{_random_alnum(4)}" if name else _random_alnum(8)
     if len(name) > PG_USERNAME_MAX_LENGTH:
         tail = name[-8:]
         name = name[: PG_USERNAME_MAX_LENGTH - len(tail)] + tail
-    if len(name) < PG_USERNAME_MIN_LENGTH:
+    if not name:
+        name = _random_alnum(8)
+    elif len(name) < PG_USERNAME_MIN_LENGTH:
         name = f"{name}_{_random_alnum(PG_USERNAME_MIN_LENGTH)}"[:PG_USERNAME_MAX_LENGTH]
     return name
 
 
 def _random_username(
-    prefix: str = "clk",
+    prefix: str = DEFAULT_USERNAME_PREFIX,
     suffix: str = "",
     pattern: str | None = None,
     *,
@@ -304,7 +309,7 @@ def _random_username(
     """
     random_part = chosen_name or _random_alnum(8)
     id_part = "" if user_id is None else str(user_id)
-    prefix = (prefix or "clk").strip() or "clk"
+    prefix = (prefix or "").strip()
     suffix = suffix or ""
     if chosen_name and "{random}" not in (pattern or ""):
         # A pattern without {random} would drop the buyer's name; use the default shape.
@@ -327,7 +332,7 @@ def _random_username(
         if built and "{" not in built:
             is_per_purchase = "{random}" in pattern or "{id}" in pattern
             return _fit_panel_username(built, keep_unique=not is_per_purchase)
-    base = f"{prefix}_{random_part}"
+    base = f"{prefix}_{random_part}" if prefix else random_part
     return _fit_panel_username(f"{base}{suffix}" if suffix else base, keep_unique=False)
 
 
@@ -340,7 +345,9 @@ def resolve_username_naming(
 ) -> tuple[str, str, str]:
     """Merge optional per-plan overrides with global settings.
 
-    Empty / None plan fields inherit the matching global setting.
+    Empty / None plan fields inherit the matching global setting. A global
+    prefix the admin saved as empty means "no prefix"; the built-in default
+    applies only when the setting was never stored.
     """
 
     def _pick(plan_val: str | None, key: str, default: str) -> str:
@@ -349,7 +356,11 @@ def resolve_username_naming(
             return raw
         return (settings.get(key) or default).strip() or default
 
-    prefix = _pick(plan_prefix, "pg_username_prefix", "clk") or "clk"
+    plan_prefix_value = (plan_prefix or "").strip()
+    if plan_prefix_value:
+        prefix = plan_prefix_value
+    else:
+        prefix = str(settings.get("pg_username_prefix", DEFAULT_USERNAME_PREFIX) or "").strip()
     suffix = _pick(plan_suffix, "pg_username_suffix", "")
     pattern = _pick(
         plan_pattern,
