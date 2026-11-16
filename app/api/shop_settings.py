@@ -27,6 +27,7 @@ from app.api.guide_media_pages import SHOP_BASE, guides_media_view
 from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.secret_box import reveal_bot_token
+from app.services.miniapp_main_app import main_app_guide
 from app.services.miniapp_shop import (
     SHOP_SWITCH,
     set_shop_miniapp,
@@ -63,13 +64,18 @@ from app.services.users import (
 async def _miniapp_switch_context(session: AsyncSession, profile: ResellerProfile | None) -> dict:
     """The shop's Mini App switch: whether it may be turned on, whether it is, and its address."""
     if profile is None:
-        return {"miniapp_available": False, "miniapp_blocker": "", "miniapp_on": False, "miniapp_url": ""}
+        return {"miniapp_available": False, "miniapp_blocker": "", "miniapp_on": False, "miniapp_url": "", "main_app": None}
     on_now = (await get_setting(session, SHOP_SWITCH, "0", reseller_id=int(profile.user_id))) == "1"
+    url = shop_miniapp_url(profile.miniapp_key or "")
     return {
         "miniapp_available": await shop_miniapp_available(session, profile),
         "miniapp_blocker": await shop_miniapp_blocker(session, profile),
         "miniapp_on": on_now,
-        "miniapp_url": shop_miniapp_url(profile.miniapp_key or ""),
+        "miniapp_url": url,
+        # The «Open» in search only works while the shop's Mini App itself is on.
+        "main_app": await main_app_guide(
+            reveal_bot_token(profile.bot_token or ""), url=url, known_username=profile.bot_username
+        ) if on_now and url else None,
     }
 
 

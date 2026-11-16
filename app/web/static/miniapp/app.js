@@ -2,7 +2,7 @@
 (function (root) {
   "use strict";
 
-  const { core, render: R } = root.PGMini;
+  const { core, render: R, onboarding: O } = root.PGMini;
   const doc = root.document;
 
   const SEARCH_DEBOUNCE_MS = 350;
@@ -38,6 +38,11 @@
     checkout: null,
     addonPacks: [],
     clubHistory: null,
+    // The onboarding step on screen (referral, channels or terms), and the code typed for it.
+    onboarding: null,
+    onboardingCode: "",
+    // The person tapped «افزودن به صفحهٔ اصلی»; Telegram's "added" then gets a confirmation.
+    homeScreenAsked: false,
     reviewImage: null,
     sheet: null,
     sheetSeq: 0,
@@ -714,11 +719,13 @@
           ${R.icon("chat")}<span class="list-row-label">پشتیبانی و تیکت‌ها</span>${R.icon("chevron", 16)}</button>` : "",
       can("club") ? `<button type="button" class="list-row" data-action="goto" data-view="club">
           ${R.icon("gift")}<span class="list-row-label">امتیاز، جوایز و دعوت دوستان</span>${R.icon("chevron", 16)}</button>` : "",
+      core.canAddToHomeScreen() ? `<button type="button" class="list-row" data-action="add-home-screen">
+          ${R.icon("shortcut")}<span class="list-row-label">افزودن به صفحهٔ اصلی</span>${R.icon("chevron", 16)}</button>` : "",
     ].join("");
     return viewHead(user.name || "حساب من", "حساب")
       + R.walletCardHtml(customer(), { features: features() })
       + (topups && topups.status === "ready" ? R.recentTopupsHtml(topups.data.recent) : "")
-      + (links ? `<section class="card list-card" aria-label="پشتیبانی">${links}</section>` : "")
+      + (links ? `<section class="card list-card" aria-label="میانبرهای حساب">${links}</section>` : "")
       + `<section class="card" aria-label="تراکنش‌ها"><h2 class="card-title">تراکنش‌ها</h2>${rows}
           ${canMore ? '<button type="button" class="btn ghost block" data-action="activity-more">تراکنش‌های بیشتر</button>' : ""}</section>`;
   }
@@ -1864,6 +1871,10 @@
   function showBootError(err) {
     els.nav.innerHTML = "";
     state.nav = { key: "", active: null };
+    if (core.outsideTelegram()) {
+      els.root.innerHTML = O.outsideTelegramHtml(core.botUsername(), core.sdkFailed());
+      return;
+    }
     const reopen = needsReopen(err);
     const code = err && err.code ? err.code : "";
     els.root.innerHTML = R.errorHtml(bootErrorText(err), reopen ? "close-app" : "reload", {
@@ -1888,7 +1899,11 @@
     syncTelegramBackButton();
   }
 
-  async function boot() {
+  /**
+   * ``afterOnboarding``: the server just said every onboarding step is done. If /me still
+   * reports one, the error is shown instead of going round again.
+   */
+  async function boot(afterOnboarding) {
     els.root.innerHTML = R.loadingHtml(3);
     try {
       if (await core.whenTelegram(SDK_WAIT_MS)) connectTelegram();
@@ -1896,15 +1911,98 @@
       await waitForInitData(6);
       if (!core.getInitData()) throw new core.ApiError("no initData", 401);
       applyMe(await core.api("/api/mini/me"));
+      state.onboarding = null;
       const route = hashRoute();
       go(route.view, route);
+      core.requestWriteAccessOnce();
+    } catch (err) {
+      if (core.isGateError(err) && afterOnboarding !== true) showOnboarding();
+      else showBootError(err);
+    }
+    syncTelegramBackButton();
+  }
+
+  /* ---------- onboarding: referral code, required channels, entry terms ---------- */
+
+  function renderOnboarding(error) {
+    els.nav.innerHTML = "";
+    els.nav.hidden = true;
+    state.nav = { key: "", active: null };
+    els.root.innerHTML = O.stepHtml(state.onboarding, error, state.onboardingCode);
+  }
+
+  /** Show the step the server reports; any other answer means every step is done. */
+  function applyOnboarding(step) {
+    if (!O.isStep(step)) {
+      state.onboarding = null;
+      boot(true);
+      return;
+    }
+    state.onboarding = step;
+    renderOnboarding("");
+  }
+
+  async function showOnboarding() {
+    closeSheet();
+    state.me = null;
+    els.root.innerHTML = R.loadingHtml(3);
+    try {
+      applyOnboarding(await core.api("/api/mini/onboarding"));
     } catch (err) {
       showBootError(err);
     }
     syncTelegramBackButton();
   }
 
+  /** A step's action, sent once per tap; a refusal is shown on the same step to try again. */
+  function sendOnboarding(path, body, button) {
+    return guarded("onboarding", button, async () => {
+      let step;
+      try {
+        step = await core.api(path, { method: "POST", body: body || {} });
+      } catch (err) {
+        // 401 (session lost) and a new gate are handled by the API client's own handlers.
+        if (err.status === 401 || core.isGateError(err)) return;
+        core.haptic("err");
+        renderOnboarding(err.message);
+        return;
+      }
+      core.haptic("ok");
+      applyOnboarding(step);
+    });
+  }
+
+  /** A gate hit after launch (e.g. the person left a required channel): show that step. */
+  function onGate() {
+    if (state.me) showOnboarding();
+  }
+
+  ACTIONS["onboarding-channel"] = (el) => {
+    const url = O.channelUrl(state.onboarding, el.getAttribute("data-index"));
+    if (!url || !core.openTelegramLink(url)) core.toast("لینک کانال معتبر نیست", "err");
+  };
+  ACTIONS["onboarding-join-check"] = (el) => sendOnboarding("/api/mini/onboarding/join-check", {}, el);
+  ACTIONS["onboarding-terms"] = (el) => sendOnboarding("/api/mini/onboarding/terms", {}, el);
+  FORMS["onboarding-referral"] = (form) => {
+    state.onboardingCode = textField(form, "code").slice(0, 64);
+    if (!state.onboardingCode) return renderOnboarding("کد معرف را وارد کنید.");
+    return sendOnboarding("/api/mini/onboarding/referral", { code: state.onboardingCode }, form.querySelector("button[type=submit]"));
+  };
+
   ACTIONS.reload = () => boot();
+  ACTIONS["add-home-screen"] = () => {
+    state.homeScreenAsked = core.addToHomeScreen();
+    if (!state.homeScreenAsked) core.toast("این نسخهٔ تلگرام افزودن به صفحهٔ اصلی را پشتیبانی نمی‌کند", "err");
+  };
+
+  /** The account tab shows the shortcut row only while Telegram can still add one. */
+  function onHomeScreenChange(status) {
+    if (status === "added" && state.homeScreenAsked) {
+      state.homeScreenAsked = false;
+      core.toast("به صفحهٔ اصلی اضافه شد");
+    }
+    if (state.me && state.view === "account") renderView();
+  }
   ACTIONS["close-app"] = () => {
     if (!core.closeApp()) core.toast("مینی‌اپ را ببندید و دوباره از دکمهٔ «Open» باز کنید.");
   };
@@ -1946,6 +2044,8 @@
     els.sheetBody = doc.getElementById("sheet-body");
     els.sheetClose = doc.getElementById("sheet-close");
     core.onAuthLost(onAuthLost);
+    core.onGate(onGate);
+    core.onHomeScreenChange(onHomeScreenChange);
     bindEvents();
     attachPullToRefresh();
     boot();

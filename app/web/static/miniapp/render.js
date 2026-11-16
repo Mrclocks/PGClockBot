@@ -20,6 +20,7 @@
     auto: '<path d="M20 11a8 8 0 0 0-14.5-4.5L4 8"/><path d="M4 4v4h4"/><path d="M12 8v4l2 2"/>',
     cancel: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>',
     chevron: '<path d="m15 6-6 6 6 6"/>',
+    shortcut: '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M12 9v6M9 12h6"/>',
     // RTL: "back" points right.
     back: '<path d="m9 6 6 6-6 6"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -1070,7 +1071,7 @@
   }
 
   root.PGMini.render = Object.freeze({
-    icon, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
+    icon, badge, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
     brandHeaderHtml, noticeBannerHtml, shortcutsHtml, panelShortcutsHtml, heroHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, buyConfirmHtml, discountedCheckoutHtml,
     validServiceName, randomServiceName, giftFormHtml, renewPlansHtml, renewChoicesHtml, renewCategoryHtml,

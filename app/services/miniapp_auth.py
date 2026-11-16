@@ -7,6 +7,7 @@ import hmac
 import json
 import logging
 import time
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import parse_qsl
 
@@ -22,8 +23,11 @@ from app.services.miniapp_shop import (
     assert_shop_member,
     assert_shop_route,
     is_shop_staff,
+    mini_scope,
     request_scope,
 )
+from app.services.miniapp_registration import ensure_mini_user, referral_code_from_start_param, telegram_profile
+from app.services.referral_registration import ReferralRequired
 from app.services.shop_customer_block import BLOCKED_MESSAGE as SHOP_BLOCKED_MESSAGE, is_blocked_in_shop
 from app.services.platform_identity import is_bot_platform_admin
 from app.services.users import demote_stale_admin, set_shop_reseller_id
@@ -45,19 +49,26 @@ ERROR_HEADER = "X-Mini-Error"
 NO_INIT_DATA = "no_init_data"
 BAD_SIGNATURE = "bad_signature"
 EXPIRED = "expired"
-NOT_STARTED = "not_started"
+# Steps the person can finish inside the Mini App (``/api/mini/onboarding``), as in the bot.
+REFERRAL_REQUIRED = "referral_required"
+FORCE_JOIN = "force_join"
+TERMS = "terms"
+BLOCKED = "blocked"
 
 _REJECT_TEXT = {
     NO_INIT_DATA: "اطلاعات ورود تلگرام دریافت نشد؛ مینی‌اپ را از داخل تلگرام باز کنید",
     BAD_SIGNATURE: "اعتبار ورود تأیید نشد؛ مینی‌اپ را از دکمهٔ «Open» همین ربات باز کنید",
     EXPIRED: "نشست مینی‌اپ منقضی شده؛ مینی‌اپ را ببندید و دوباره باز کنید",
-    NOT_STARTED: "ابتدا ربات را استارت کنید، سپس مینی‌اپ را دوباره باز کنید",
+    REFERRAL_REQUIRED: "برای ثبت‌نام، کد معرف معتبر لازم است",
+    FORCE_JOIN: "ابتدا در کانال‌های اجباری عضو شوید",
+    TERMS: "ابتدا قوانین را بپذیرید",
+    BLOCKED: "دسترسی شما مسدود شده است",
 }
 
 
-def mini_reject(status: int, code: str) -> HTTPException:
+def mini_reject(status: int, code: str, *, text: str | None = None) -> HTTPException:
     """A refusal with Persian text and a machine-readable reason for the page."""
-    return HTTPException(status, _REJECT_TEXT[code], headers={ERROR_HEADER: code})
+    return HTTPException(status, text or _REJECT_TEXT[code], headers={ERROR_HEADER: code})
 
 
 def validate_webapp_init_data(init_data: str, *, bot_token: str | None = None) -> dict[str, Any]:
@@ -107,6 +118,15 @@ def _assert_fresh(raw_auth_date: str | None) -> None:
         raise mini_reject(401, EXPIRED)
 
 
+def start_param_from_init_data(init_data: str) -> str:
+    """The ``startapp`` parameter Telegram signed into initData, or "" when there is none.
+
+    Read only after ``validate_webapp_init_data`` accepted the same string: the value is then
+    covered by Telegram's signature and cannot be forged by the page.
+    """
+    return dict(parse_qsl(init_data or "", keep_blank_values=True)).get("start_param", "")
+
+
 def init_data_from_request(request: Request) -> str:
     """Header only — never accept initData in query strings (logs/history leakage)."""
     init_data = request.headers.get("X-Telegram-Init-Data") or ""
@@ -124,35 +144,66 @@ def assert_miniapp_feature_enabled() -> None:
 
 
 async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
-    """Validate initData and load the BotUser row (must have /start'd).
+    """The verified person, once they passed force-join and the entry terms (parity with the bot).
+
+    Each unfinished step is refused with its own ``X-Mini-Error`` code so the page can show
+    that step (``/api/mini/onboarding``) instead of a dead end.
+    """
+    try:
+        user = await load_mini_principal(session, request)
+    except ReferralRequired:
+        raise mini_reject(403, REFERRAL_REQUIRED) from None
+    scope = mini_scope(request)
+    await assert_mini_force_join(session, user, scope=scope)
+    await assert_mini_terms_entry(session, user, scope=scope)
+    return user
+
+
+async def verified_telegram_id(session: AsyncSession, request: Request) -> int:
+    """Who signed this request's initData, checked before anyone is registered (for rate limits)."""
+    assert_miniapp_feature_enabled()
+    set_shop_reseller_id(None)
+    scope = await request_scope(session, request)
+    tg_user = validate_webapp_init_data(init_data_from_request(request), bot_token=scope.bot_token or None)
+    try:
+        return telegram_profile(tg_user).telegram_id
+    except ValueError:
+        raise mini_reject(401, BAD_SIGNATURE) from None
+
+
+async def load_mini_principal(
+    session: AsyncSession, request: Request, *, referral_code: str | None = None
+) -> BotUser:
+    """Verify initData and load (or register) the person, without the onboarding gates.
 
     A shop's Mini App (``X-Mini-Shop``) is verified with that shop bot's token, admits only
     the shop's customers and staff, and reaches only the routes opened for shops; the
-    verified scope is left on ``request.state.mini_scope``. Blocked accounts are rejected;
-    end-users must pass force-join and the terms (parity with the bot's middlewares).
+    verified scope is left on ``request.state.mini_scope``. Someone who never sent ``/start``
+    is registered the way ``/start`` would; ``ReferralRequired`` is raised when this bot only
+    admits people with a valid referral code. Blocked accounts are rejected.
     """
     assert_miniapp_feature_enabled()
     # Start every request on the platform: platform settings (the shop-Mini-App switch among
     # them) must never be read through a shop context left from an earlier request.
     set_shop_reseller_id(None)
     scope = await request_scope(session, request)
-    tg_user = validate_webapp_init_data(init_data_from_request(request), bot_token=scope.bot_token or None)
-    tg_id = tg_user.get("id")
-    result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise mini_reject(404, NOT_STARTED)
+    # Before anyone is registered: a route a shop's Mini App may not reach joins nobody to the shop.
+    assert_shop_route(scope, request)
+    init_data = init_data_from_request(request)
+    tg_user = validate_webapp_init_data(init_data, bot_token=scope.bot_token or None)
+    code = referral_code or referral_code_from_start_param(start_param_from_init_data(init_data))
+    try:
+        profile = telegram_profile(tg_user)
+    except ValueError:
+        raise mini_reject(401, BAD_SIGNATURE) from None
+    user = await ensure_mini_user(session, profile, scope=scope, referral_code=code)
     if bool(getattr(user, "is_blocked", False)):
-        raise HTTPException(403, "دسترسی شما مسدود شده است")
+        raise mini_reject(403, BLOCKED)
     if await demote_stale_admin(session, user):
         await session.commit()
     await assert_shop_member(session, scope, user)
     if scope.is_shop and not is_shop_staff(scope, user) and await is_blocked_in_shop(session, int(user.id), scope.shop_id):
-        raise HTTPException(403, SHOP_BLOCKED_MESSAGE)
-    assert_shop_route(scope, request)
-    # Parity with bot: users cannot use the app until channel membership is confirmed.
-    await assert_mini_force_join(session, user, scope=scope)
-    await assert_mini_terms_entry(session, user, scope=scope)
+        raise mini_reject(403, BLOCKED, text=SHOP_BLOCKED_MESSAGE)
     request.state.mini_scope = scope
     # The order, catalog and wallet services read the shop from the same context the shop
     # bot sets per update; it is set only after the shop and the person were verified.
@@ -169,24 +220,42 @@ def resolve_mini_persona(user: BotUser) -> str:
     return "user"
 
 
-def _is_gated_customer(user: BotUser, scope: MiniScope) -> bool:
+def is_gated_customer(user: BotUser, scope: MiniScope) -> bool:
     """Customers pass force-join and terms; staff (platform, or this shop's) do not."""
     if scope.is_shop:
         return not is_shop_staff(scope, user)
     return resolve_mini_persona(user) == "user"
 
 
-async def assert_mini_force_join(session: AsyncSession, user: BotUser, *, scope: MiniScope = PLATFORM_SCOPE) -> None:
-    """Mirror bot ForceJoinMiddleware for Mini App commerce (users only).
+@dataclass(frozen=True, slots=True)
+class ForceJoinCheck:
+    """The required channels of this Mini App's bot and which of them the person has not joined."""
+
+    entries: tuple[dict[str, Any], ...]
+    channels: tuple[str, ...]
+    missing: tuple[str, ...]
+    unverified: tuple[str, ...]
+
+    @property
+    def passed(self) -> bool:
+        return not self.missing and not self.unverified
+
+
+async def mini_force_join_check(
+    session: AsyncSession, user: BotUser, *, scope: MiniScope = PLATFORM_SCOPE, fresh: bool = False
+) -> ForceJoinCheck | None:
+    """Membership of the required channels, or None when force-join does not apply to this person.
 
     Admin/reseller personas are not gated (same as Telegram middleware). In a shop's Mini
-    App the shop's channels apply, checked through the shop's bot.
+    App the shop's channels apply, checked through the shop's bot. ``fresh`` drops the short
+    positive cache first, as the bot's «عضو شدم» button does.
     """
-    if not _is_gated_customer(user, scope):
-        return
+    if not is_gated_customer(user, scope):
+        return None
+    # Local import: the membership check still lives in the bot layer, which services must not load at import time.
     from aiogram import Bot
 
-    from app.bot.middlewares import check_force_join_all
+    from app.bot.middlewares import check_force_join_all, clear_force_join_member_cache
     from app.services.users import (
         get_all_settings,
         on,
@@ -196,36 +265,40 @@ async def assert_mini_force_join(session: AsyncSession, user: BotUser, *, scope:
 
     ui = await get_all_settings(session, reseller_id=scope.shop_id)
     if not on(ui.get("force_join_enabled")):
-        return
+        return None
     raw_channels = ui.get("force_join_channel")
     channels = parse_force_join_channels(raw_channels)
     if not channels:
-        return
+        return None
     entries = parse_force_join_entries(raw_channels)
     token = (scope.bot_token or get_settings().bot_token or "").strip()
     if not token:
         raise HTTPException(503, "bot token missing")
+    if fresh:
+        clear_force_join_member_cache(int(user.telegram_id))
     bot = Bot(token=token)
     try:
-        missing, unverified = await check_force_join_all(
-            bot,
-            int(user.telegram_id),
-            channels,
-            entries=entries,
-        )
+        missing, unverified = await check_force_join_all(bot, int(user.telegram_id), channels, entries=entries)
     finally:
         await bot.session.close()
-    if missing or unverified:
-        raise HTTPException(
-            403,
-            "ابتدا در کانال‌های اجباری عضو شوید و از ربات عضویت را تأیید کنید",
-        )
+    return ForceJoinCheck(
+        entries=tuple(entries),
+        channels=tuple(channels),
+        missing=tuple(missing),
+        unverified=tuple(unverified),
+    )
 
+
+async def assert_mini_force_join(session: AsyncSession, user: BotUser, *, scope: MiniScope = PLATFORM_SCOPE) -> None:
+    """Mirror bot ForceJoinMiddleware for the Mini App (users only)."""
+    check = await mini_force_join_check(session, user, scope=scope)
+    if check is not None and not check.passed:
+        raise mini_reject(403, FORCE_JOIN)
 
 
 async def assert_mini_terms_entry(session: AsyncSession, user: BotUser, *, scope: MiniScope = PLATFORM_SCOPE) -> None:
     """Mirror bot TermsEntryMiddleware for Mini App (users only); a shop's own terms in its Mini App."""
-    if not _is_gated_customer(user, scope):
+    if not is_gated_customer(user, scope):
         return
     from app.services.terms import needs_entry_gate
     from app.services.users import get_all_settings
@@ -239,12 +312,8 @@ async def assert_mini_terms_entry(session: AsyncSession, user: BotUser, *, scope
         reseller_owner_id=scope.shop_id,
     )
     if prompt is not None:
-        from fastapi import HTTPException
+        raise mini_reject(403, TERMS)
 
-        raise HTTPException(
-            403,
-            "ابتدا قوانین ربات را در تلگرام بپذیرید",
-        )
 
 async def load_reseller_profile(
     session: AsyncSession, user: BotUser

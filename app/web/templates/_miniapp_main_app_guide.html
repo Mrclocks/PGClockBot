@@ -1,0 +1,48 @@
+{# «Open» beside the bot in Telegram search and on its profile (BotFather's «Main Mini App»).
+   Telegram offers no API for it, so this card only guides: the steps, the address to paste and
+   the status Telegram reports. Expects: main_app (MainAppGuide) or nothing. #}
+{% if main_app %}
+<div class="card settings-card" id="miniapp-main-app">
+  <h2>دکمهٔ «Open» در جستجوی تلگرام</h2>
+  <p class="muted update-card-caption">
+    با روشن کردن «Main Mini App» در BotFather، کنار نام ربات در نتایج جستجو و در پروفایل ربات دکمهٔ «Open» می‌آید
+    و کاربر بدون استارت ربات، مینی‌اپ را باز می‌کند؛ گزینهٔ «Add to Home Screen» هم در منوی مینی‌اپ ظاهر می‌شود.
+    این تنظیم فقط از BotFather انجام می‌شود و پنل آن را تغییر نمی‌دهد.
+  </p>
+  <p>
+    وضعیت در تلگرام:
+    {% if main_app.enabled %}<span class="badge ok">روشن</span>
+    {% elif main_app.enabled is none %}<span class="badge neutral">نامشخص</span>
+    <span class="muted">— پاسخ تلگرام دریافت نشد؛ صفحه را کمی بعد دوباره باز کنید.</span>
+    {% else %}<span class="badge warn">خاموش</span>{% endif %}
+  </p>
+  {% if main_app.url %}
+  <div class="magic-link-item">
+    <span class="magic-link-label" id="main-app-url-label">آدرس مینی‌اپ برای BotFather</span>
+    <div class="magic-link-field has-copy" dir="ltr">
+      <input class="magic-link-input" type="text" readonly value="{{ main_app.url }}" id="main-app-url"
+             title="{{ main_app.url }}" aria-labelledby="main-app-url-label" />
+      <button type="button" class="magic-link-copy" data-copy="{{ main_app.url }}" data-copy-from="#main-app-url"
+              data-copy-idle="کپی" aria-label="کپی آدرس مینی‌اپ">کپی</button>
+    </div>
+  </div>
+  <ol class="update-steps">
+    <li class="done"><span class="step-dot"></span><span>در تلگرام <span dir="ltr">@BotFather</span> را باز کنید و <span dir="ltr">/mybots</span> را بفرستید.</span></li>
+    <li class="done"><span class="step-dot"></span><span>ربات {% if main_app.bot_username %}<span dir="ltr">@{{ main_app.bot_username }}</span>{% else %}خودتان{% endif %} را انتخاب کنید.</span></li>
+    <li class="done"><span class="step-dot"></span><span>به ترتیب <span dir="ltr">Bot Settings</span> ← <span dir="ltr">Configure Mini App</span> ← <span dir="ltr">Enable Mini App</span> را بزنید.</span></li>
+    <li class="done"><span class="step-dot"></span><span>آدرس بالا را دقیقاً همان‌طور بفرستید (با https و / آخر). در نسخهٔ جدید BotFather همین گزینه در تنظیمات ربات، بخش Mini App است.</span></li>
+  </ol>
+  {% if shop_mode %}
+  <p class="muted">آدرس مینی‌اپ پلتفرم را در ربات فروشگاه وارد نکنید؛ ورود مشتری‌ها با امضای همین ربات بررسی می‌شود و با آدرس دیگری رد می‌شود.</p>
+  {% endif %}
+  {% if main_app.open_link %}
+  <p class="muted">
+    برای امتحان: <a href="{{ main_app.open_link }}" target="_blank" rel="noopener" dir="ltr">{{ main_app.open_link }}</a>
+    — این لینک را می‌توانید در کانال یا بیو هم بگذارید.
+  </p>
+  {% endif %}
+  {% else %}
+  <p class="flash warn">هنوز آدرس HTTPS مینی‌اپ آماده نیست؛ اول دامنه و گواهی را در تنظیمات سیستم فعال کنید.</p>
+  {% endif %}
+</div>
+{% endif %}
