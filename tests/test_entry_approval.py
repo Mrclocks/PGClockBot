@@ -453,6 +453,22 @@ class EndpointTests(RoutesHarness):
         shop = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=limits")
         self.assertIn("s_entry_approval_enabled", shop.text)
 
+    async def test_the_switches_are_the_first_card_after_the_requests_list(self):
+        for session, path in ((OWNER_SESSION, "/settings?tab=limits"), (SHOP_SESSION, "/shop-settings?tab=limits")):
+            page = (await self.call(session, "GET", path)).text
+            requests_at = page.index('id="ea-requests"')
+            switch_at = page.index("s_entry_approval_enabled")
+            referral_at = page.index("s_referral_required")
+            self.assertLess(requests_at, switch_at)
+            self.assertLess(switch_at, referral_at)
+
+    async def test_dependent_fields_follow_the_switch_before_saving(self):
+        # The switch shows its fields live only when the show-when script is on the page.
+        for session, path in ((OWNER_SESSION, "/settings?tab=limits"), (SHOP_SESSION, "/shop-settings?tab=limits")):
+            page = (await self.call(session, "GET", path)).text
+            self.assertIn('data-show-when="s_entry_approval_enabled:1"', page)
+            self.assertIn("/static/settings-show-when.js", page)
+
     async def test_a_shop_without_the_permission_does_not_see_the_switch(self):
         async with self.Session() as session:
             await session.execute(update(ResellerProfile).where(ResellerProfile.user_id == 5).values(web_permissions="dashboard,shop_settings"))

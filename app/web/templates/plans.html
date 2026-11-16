@@ -1415,7 +1415,7 @@
             <span dir="auto">{{ p.name }}</span>
           </span>
         </td>
-        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="mono li-value"><bdi dir="ltr">{{ p.price | money }}</bdi></td>
         <td class="col-hide-sm">{% if p.duration_days %}{{ (p.duration_days) | fa }} روز{% else %}نامحدود{% endif %}</td>
         <td class="li-sub">
           {#- On phones line two: the warnings, then volume · duration (the category is the group the row sits in). -#}
