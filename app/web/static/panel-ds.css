@@ -218,7 +218,7 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds .ds-unit.is-unlimited input { color: transparent; caret-color: transparent; }
 /* «نامحدود» shows where the number would: on the right. */
 .ds .ds-unit.is-unlimited::after {
-  content: attr(data-unlimited-label); position: absolute; inset-block: 0; left: 56px; right: var(--g3); display: flex; align-items: center; justify-content: flex-end;
+  content: attr(data-unlimited-label); position: absolute; inset-block: 0; left: 56px; right: var(--g3); display: flex; align-items: center; justify-content: flex-start;
   font-size: var(--fs-3); color: var(--muted-fg); pointer-events: none;
 }
 .ds .ds-mini {
