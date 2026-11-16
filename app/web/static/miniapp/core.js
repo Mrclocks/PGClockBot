@@ -51,6 +51,28 @@
     ]);
   }
 
+  /**
+   * True when the page was opened in a browser, not by Telegram: no sign-in, no Telegram launch
+   * parameters, and the SDK (if it loaded at all) reports no Telegram platform.
+   */
+  function outsideTelegram() {
+    if (getInitData()) return false;
+    const l = launch();
+    if (l && l.inTelegram) return false;
+    const w = webApp();
+    return !w || !w.platform || w.platform === "unknown";
+  }
+
+  const BOT_USERNAME = /^[A-Za-z][A-Za-z0-9_]{3,31}$/;
+
+  /** This Mini App's bot, from the page (public), or "" when the server did not say. */
+  function botUsername() {
+    const doc = root.document;
+    const meta = doc && typeof doc.querySelector === "function" ? doc.querySelector('meta[name="pg-mini-bot"]') : null;
+    const value = meta && typeof meta.getAttribute === "function" ? String(meta.getAttribute("content") || "") : "";
+    return BOT_USERNAME.test(value) ? value : "";
+  }
+
   /** The SDK's initData, else the one Telegram put in the address. */
   function getInitData() {
     const w = webApp();
@@ -468,7 +490,7 @@
   }
 
   const core = Object.freeze({
-    webApp, getInitData, whenTelegram, sdkPending, sdkFailed, shopKey, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, formatRelative, faDigits,
+    webApp, getInitData, outsideTelegram, botUsername, whenTelegram, sdkPending, sdkFailed, shopKey, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, formatRelative, faDigits,
     haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, onAuthLost, onGate, isGateError, closeApp, copyText, markCopied,
     applyTheme, applyBrand, inkFor, initTelegram, requestWriteAccessOnce,
   });

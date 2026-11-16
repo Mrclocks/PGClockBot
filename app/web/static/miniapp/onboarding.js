@@ -85,5 +85,25 @@
     return /^https:\/\/t\.me\/[^\s]+$/i.test(url) ? url : "";
   }
 
-  root.PGMini.onboarding = Object.freeze({ stepHtml, isStep, channelUrl });
+  const VPN_HINT = "اگر همین حالا داخل تلگرام هستید و فقط از پروکسی داخل تلگرام استفاده می‌کنید، "
+    + "VPN سیستم را روشن کنید و مینی‌اپ را دوباره باز کنید.";
+
+  /**
+   * Opened in a browser: say so, and open the same Mini App in Telegram when the bot is known.
+   * ``sdkBlocked``: telegram.org did not load, so a Telegram window behind a proxy looks the same.
+   */
+  function outsideTelegramHtml(botUsername, sdkBlocked) {
+    const name = /^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(String(botUsername || "")) ? botUsername : "";
+    const link = name ? `https://t.me/${name}?startapp` : "";
+    return `<div class="error-box" role="alert">
+        <p>این صفحه فقط داخل تلگرام کار می‌کند؛ ورود شما را خود تلگرام تأیید می‌کند.</p>
+        ${link
+          ? `<a class="btn sm" href="${esc(link)}" rel="noopener">باز کردن در تلگرام</a>
+             <p class="muted sm" dir="ltr">@${esc(name)}</p>`
+          : "<p>مینی‌اپ را از دکمهٔ «Open» ربات در تلگرام باز کنید.</p>"}
+        ${sdkBlocked ? `<p class="muted sm">${esc(VPN_HINT)}</p>` : ""}
+      </div>`;
+  }
+
+  root.PGMini.onboarding = Object.freeze({ stepHtml, isStep, channelUrl, outsideTelegramHtml });
 })(typeof window === "object" ? window : globalThis);

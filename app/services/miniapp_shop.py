@@ -219,6 +219,11 @@ async def ensure_shop_key(session: AsyncSession, profile: ResellerProfile) -> st
     return str(profile.miniapp_key)
 
 
+async def shop_bot_username(session: AsyncSession, key: str) -> str:
+    """The shop bot's public username, for the page's «open in Telegram» link."""
+    return (await session.scalar(select(ResellerProfile.bot_username).where(ResellerProfile.miniapp_key == key))) or ""
+
+
 def shop_miniapp_url(key: str) -> str:
     """The shop's Mini App address, or "" while the panel has no HTTPS address."""
     base = get_settings().miniapp_url

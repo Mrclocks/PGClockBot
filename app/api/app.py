@@ -49,6 +49,7 @@ from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.miniapp_branding import ACCENT_PRESETS
+from app.services.miniapp_main_app import platform_main_app_guide
 from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 from app.services.payer_notify import notify_payer
 from app.services.pg_panel_access import apply_pg_panel_access, is_pg_panel_blocked, pg_panel_allowed
@@ -4639,6 +4640,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["ssl"] = st
         elif tab == "miniapp":
             ctx["miniapp_url"] = get_settings().miniapp_url
+            ctx["main_app"] = await platform_main_app_guide()
         elif tab == "appearance":
             from app.services.bot_appearance import load_appearance_context
             from app.services.setup_wizard import current_setup_values

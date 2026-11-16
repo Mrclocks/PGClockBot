@@ -1867,6 +1867,10 @@
   function showBootError(err) {
     els.nav.innerHTML = "";
     state.nav = { key: "", active: null };
+    if (core.outsideTelegram()) {
+      els.root.innerHTML = O.outsideTelegramHtml(core.botUsername(), core.sdkFailed());
+      return;
+    }
     const reopen = needsReopen(err);
     const code = err && err.code ? err.code : "";
     els.root.innerHTML = R.errorHtml(bootErrorText(err), reopen ? "close-app" : "reload", {

@@ -104,6 +104,57 @@ test("Telegram's parameters are not a route; a route before them still opens", a
   assert.equal(deep.mini.app.state.view, "support");
 });
 
+/** A browser visit: no Telegram parameters, an SDK that reports no platform, and the page's bot meta. */
+async function browserVisit({ bot = "PlatformBot", sdk = true, launch = { initData: "", inTelegram: false, sdk: Promise.resolve(sdk) } } = {}) {
+  const env = loadMiniApp({ routes, telegram: false, initData: "", launch });
+  if (sdk) env.context.Telegram = { WebApp: { ...fakeTelegram([]), platform: "unknown" } };
+  env.context.document.querySelector = (selector) => (selector === 'meta[name="pg-mini-bot"]'
+    ? { getAttribute: (name) => (name === "content" ? bot : null) } : null);
+  env.mini.app.start();
+  await settle();
+  return env;
+}
+
+test("launch.js tells a Telegram launch from a browser visit by Telegram's own parameters", () => {
+  assert.equal(loadLaunch(TG_HASH).inTelegram, true);
+  assert.equal(loadLaunch("#tgWebAppVersion=8.0&tgWebAppPlatform=ios").inTelegram, true);
+  for (const hash of ["", "#services", "#notTgWebAppData=1", "#x=tgWebAppData"]) {
+    assert.equal(loadLaunch(hash).inTelegram, false, hash);
+  }
+});
+
+test("a browser visit offers to open the same Mini App in Telegram, and never signs in", async () => {
+  const env = await browserVisit();
+  const html = env.element("root").innerHTML;
+  assert.ok(html.includes('href="https://t.me/PlatformBot?startapp"'));
+  assert.ok(!html.includes('data-action="close-app"'), "a browser tab cannot be closed by the page");
+  assert.ok(!html.includes("VPN"));
+  assert.equal(meCall(env), undefined);
+});
+
+test("an unsafe or missing bot name gives no link, only the instruction", async () => {
+  for (const bot of ["", '"><img src=x onerror=alert(1)>', "javascript:alert(1)"]) {
+    const html = (await browserVisit({ bot })).element("root").innerHTML;
+    assert.ok(!html.includes("href="), bot);
+    assert.ok(!html.includes("<img"), bot);
+    assert.ok(html.includes("«Open»"), bot);
+  }
+});
+
+test("a blocked telegram.org in a browser still offers Telegram, with the VPN hint", async () => {
+  const env = await browserVisit({ sdk: false });
+  const html = env.element("root").innerHTML;
+  assert.ok(html.includes("https://t.me/PlatformBot?startapp"));
+  assert.ok(html.includes("VPN"));
+});
+
+test("inside Telegram without a sign-in the page does not claim to be in a browser", async () => {
+  const env = await browserVisit({ launch: { initData: "", inTelegram: true, sdk: Promise.resolve(true) } });
+  const html = env.element("root").innerHTML;
+  assert.ok(!html.includes("t.me/PlatformBot"));
+  assert.ok(html.includes("«Open»"));
+});
+
 (async () => {
   for (const [name, fn] of tests) {
     try {

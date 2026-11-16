@@ -10,6 +10,13 @@
 
   const PARAM = "tgWebAppData";
   const MAX_CHARS = 8192;
+  // Telegram adds tgWebAppVersion, tgWebAppPlatform… to the address of every Mini App it opens.
+  const TELEGRAM_PARAM = /(?:^|[#&?])tgWebApp[A-Za-z]+=/;
+
+  /** True when Telegram opened this page (its launch parameters are in the address). */
+  function openedByTelegram(hash) {
+    return TELEGRAM_PARAM.test(String(hash || ""));
+  }
 
   /** initData from a ``#…tgWebAppData=…`` address (route prefixes allowed), or "". */
   function initDataFromHash(hash) {
@@ -37,7 +44,9 @@
 
   root.PGMiniLaunch = Object.freeze({
     initData: initDataFromHash(root.location && root.location.hash),
+    inTelegram: openedByTelegram(root.location && root.location.hash),
     sdk: trackSdk(root.document),
     initDataFromHash,
+    openedByTelegram,
   });
 })(typeof window === "object" ? window : globalThis);
