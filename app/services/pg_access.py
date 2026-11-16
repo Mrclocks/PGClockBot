@@ -9,9 +9,11 @@ menus/actions are clamped to the env ``PG_USERNAME`` role (fail-closed).
 """
 
 import asyncio
+from dataclasses import dataclass
 from typing import Any, Mapping
 
 from app.services.pasarguard import PasarGuardError, is_panel_outage
+from app.services.platform_identity import is_explicit_owner_staff
 from app.services.redact import user_safe_error
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 import logging
@@ -196,6 +198,38 @@ async def resolve_acl_from_client(
             else:
                 role = {"is_owner": True, "id": role_id}
     return list(features or []), role, admin
+
+
+PG_ADMINS_PAGE = "pg_admins"
+
+
+def role_allows_admins_read(role: Mapping[str, Any] | None) -> bool:
+    """PasarGuard ``admins.read``: the admin list the «ادمین‌ها» page opens on."""
+    if not isinstance(role, Mapping):
+        return False
+    raw = role.get("permissions")
+    if hasattr(raw, "model_dump"):
+        raw = raw.model_dump()
+    if not isinstance(raw, dict):
+        return False
+    return any(_resource_allows(raw, key, "read") for key in ("admins", "admin"))
+
+
+def with_platform_admins_page(features: list[str], role: Mapping[str, Any] | None) -> list[str]:
+    """Add «ادمین‌ها» for the platform account when its PasarGuard role may read admins.
+
+    Only the platform login (the web owner's own PasarGuard account) gets the page from a role
+    permission. Shops, PasarGuard staff and principals keep it owner-only, because the page also
+    grants web-panel access, which a PasarGuard permission must not hand out. PasarGuard still
+    enforces create, update and delete on every request the page sends.
+    """
+    if PG_ADMINS_PAGE in features or not role_allows_admins_read(role):
+        return list(features)
+    out = list(features)
+    if "pg_overview" not in out:
+        out.insert(0, "pg_overview")
+    out.append(PG_ADMINS_PAGE)
+    return out
 
 
 def full_pg_owner_features() -> list[str]:
@@ -438,6 +472,8 @@ async def resolve_platform_pg_capabilities(
                     role["is_owner"] = True
             elif role:
                 features = map_pg_role_to_features(role)
+        if not pg_is_owner:
+            features = with_platform_admins_page(list(features or []), role)
 
         payload = {
             "ok": True,
@@ -535,6 +571,8 @@ async def enrich_platform_admin_staff(user: dict) -> dict:
         out["pg_admin_username"] = caps["username"]
     if caps.get("pg_role_id") is not None:
         out["pg_role_id"] = caps["pg_role_id"]
+    if caps.get("auth_method"):
+        out["pg_auth_method"] = caps["auth_method"]
     # Owner-equivalent: ensure action matrices are fully open
     if out.get("pg_is_owner"):
         out["pg_permissions"] = full_pg_owner_features()
@@ -542,6 +580,46 @@ async def enrich_platform_admin_staff(user: dict) -> dict:
         out["pg_user_actions"] = role_user_actions({"is_owner": True})
         out["pg_writes"] = map_pg_role_writes({"is_owner": True})
     return out
+
+
+ADMINS_PAGE_HINT_TITLE = "منوی «ادمین‌ها» نمایش داده نمی‌شود"
+ADMINS_PAGE_HINT_API_KEY = (
+    "پنل با کلید API به پاسارگارد وصل است. پاسارگارد این کلید را owner حساب نمی‌کند و خواندن ادمین‌ها "
+    "را هم به آن نداده است. اگر این ادمین در پاسارگارد owner است، برای کلید «ارث‌بری دسترسی‌ها» را روشن کنید "
+    "یا کلید را حذف کنید تا با رمز وصل شود؛ وگرنه خواندن ادمین‌ها را به نقش این کلید بدهید."
+)
+ADMINS_PAGE_HINT_ROLE = (
+    "حساب پاسارگاردی که پنل با آن وصل است owner نیست و نقشش خواندن ادمین‌ها را ندارد. "
+    "منوهای پاسارگارد همیشه از نقش همین حساب پیروی می‌کنند. اعتبارنامهٔ حساب owner را وارد کنید "
+    "یا در پاسارگارد خواندن ادمین‌ها را به نقش این حساب بدهید."
+)
+ADMINS_PAGE_HINT_HREF = "/settings?tab=bot"
+
+
+@dataclass(frozen=True, slots=True)
+class AdminsPageHint:
+    """Why the web owner does not see «ادمین‌ها», and where to fix it."""
+
+    title: str
+    detail: str
+    href: str
+
+
+def admins_page_hint(staff: Mapping[str, Any] | None) -> AdminsPageHint | None:
+    """Reason for the web owner when the connected PasarGuard account cannot open «ادمین‌ها».
+
+    ``None`` when the page is shown, when the probe failed (the outage banner covers that),
+    or for anyone but the explicit owner, who alone can change the panel credentials.
+    """
+    if not staff or not is_explicit_owner_staff(dict(staff)):
+        return None
+    if not staff.get("pg_capabilities_ok") or staff.get("pg_is_owner"):
+        return None
+    if PG_ADMINS_PAGE in (staff.get("pg_permissions") or []):
+        return None
+    uses_api_key = staff.get("pg_auth_method") == "api_key"
+    detail = ADMINS_PAGE_HINT_API_KEY if uses_api_key else ADMINS_PAGE_HINT_ROLE
+    return AdminsPageHint(title=ADMINS_PAGE_HINT_TITLE, detail=detail, href=ADMINS_PAGE_HINT_HREF)
 
 
 def _action_allowed(value: Any) -> bool:
@@ -925,15 +1003,15 @@ def public_pg_access_audit(caps: Mapping[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def staff_has_pg_admins_create(staff: Mapping[str, Any] | None) -> bool:
-    """True only for actual PasarGuard ``admins.create`` — not page visibility."""
+def _staff_has_pg_admins_action(staff: Mapping[str, Any] | None, action: str) -> bool:
+    """True only for an actual PasarGuard ``admins.<action>`` — not page visibility."""
     if not staff:
         return False
     actions = staff.get("pg_actions")
     if isinstance(actions, Mapping):
         for key in ("admins", "admin"):
             block = actions.get(key)
-            if isinstance(block, Mapping) and _action_allowed(block.get("create")):
+            if isinstance(block, Mapping) and _action_allowed(block.get(action)):
                 return True
     role = staff.get("pg_role")
     if isinstance(role, Mapping):
@@ -941,9 +1019,25 @@ def staff_has_pg_admins_create(staff: Mapping[str, Any] | None) -> bool:
         if isinstance(raw, Mapping):
             for key in ("admins", "admin"):
                 block = raw.get(key)
-                if isinstance(block, Mapping) and _action_allowed(block.get("create")):
+                if isinstance(block, Mapping) and _action_allowed(block.get(action)):
                     return True
     return False
+
+
+def staff_has_pg_admins_create(staff: Mapping[str, Any] | None) -> bool:
+    """True only for actual PasarGuard ``admins.create`` — not page visibility."""
+    return _staff_has_pg_admins_action(staff, "create")
+
+
+def staff_may_delete_pg_admin(staff: Mapping[str, Any] | None) -> bool:
+    """PasarGuard owner, or a role with ``admins.delete``.
+
+    Deleting an admin also revokes its shop here, so it is checked before anything changes
+    rather than left for PasarGuard to refuse after the shop is gone.
+    """
+    if not staff:
+        return False
+    return bool(staff.get("pg_is_owner")) or _staff_has_pg_admins_action(staff, "delete")
 
 
 def enrich_staff_pg_from_role(user: dict, features: list[str], role: dict | None) -> dict:

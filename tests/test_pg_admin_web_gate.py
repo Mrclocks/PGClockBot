@@ -142,7 +142,7 @@ class PurgeOrphanTests(unittest.IsolatedAsyncioTestCase):
             get_pg.return_value.get_admins = AsyncMock(
                 return_value=[{"username": "alive"}]
             )
-            n = await purge_orphaned_staff_access(session)
+            n = await purge_orphaned_staff_access(session, sees_every_admin=True)
         self.assertEqual(n, 1)
         detach.assert_awaited_once_with(session, 2)
         session.delete.assert_awaited()

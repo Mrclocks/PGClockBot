@@ -28,7 +28,13 @@ from app.services.pasarguard import (
 )
 from app.services.pg_admin_roles import AdminRoleError, apply_admin_role, resolve_new_admin_role_id
 from app.services.pg_overview_view import overview_view, owner_user_counts
-from app.services.pg_access import staff_pg_action, staff_pg_writes, staff_user_actions
+from app.services.pg_access import (
+    admins_page_hint,
+    staff_may_delete_pg_admin,
+    staff_pg_action,
+    staff_pg_writes,
+    staff_user_actions,
+)
 from app.services.pg_read_cache import DASHBOARD_COUNT_MAX_AGE_SEC, NODE_LIST_MAX_AGE_SEC
 from app.services.pg_quota import (
     PgQuotaError,
@@ -64,6 +70,7 @@ from app.services.volume_allocation import apply_create_form_oversell
 logger = logging.getLogger(__name__)
 
 PG_STATS_ERROR = "دریافت آمار پاسارگارد ممکن نشد؛ چند لحظهٔ دیگر صفحه را تازه کنید."
+PG_ADMIN_DELETE_DENIED_MSG = "حساب پاسارگاردی که پنل با آن وصل است اجازهٔ حذف ادمین ندارد؛ چیزی حذف نشد."
 
 def _q(msg: str) -> str:
     return quote(str(msg), safe="")
@@ -319,6 +326,7 @@ def register_pg_pages(
             "ticket_alert": ticket_alert,
             "staff_remediation": staff_remediation,
             "pg_external_url": pg_external_url or None,
+            "admins_hint": admins_page_hint(staff),
         }
 
     async def _pg_display_widgets(staff: dict, session: AsyncSession) -> dict:
@@ -2007,7 +2015,7 @@ def register_pg_pages(
                     logger.debug("pg_admins: ignored failure", exc_info=True)
             # Drop web rows for PG admins that no longer exist in PasarGuard
             try:
-                await purge_orphaned_staff_access(session)
+                await purge_orphaned_staff_access(session, sees_every_admin=bool(staff.get("pg_is_owner")))
             except Exception:
                 logger.debug("pg_admins: ignored failure", exc_info=True)
             pg = get_pg()
@@ -2626,6 +2634,8 @@ def register_pg_pages(
         pg_u = (username or "").strip()
         if not pg_u:
             return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
+        if not staff_may_delete_pg_admin(staff):
+            return RedirectResponse(f"/pg/admins?err={_q(PG_ADMIN_DELETE_DENIED_MSG)}", status_code=303)
 
         reseller = await reseller_by_pg_username(session, pg_u)
         staff_row = await access_by_pg_username(session, pg_u)
