@@ -272,6 +272,8 @@ tests/test_manual_approve_undelivered.py
 tests/test_reseller_package.py
 tests/test_reseller_expire_claim.py
 tests/test_reseller_provision_limits.py
+tests/test_pg_admin_role_required.py
+tests/test_bot_make_reseller_plan.py
 tests/test_reseller_approve_idempotent.py
 tests/test_reseller_soft_deactivate_bot.py
 tests/test_reseller_phase5_failclosed.py
