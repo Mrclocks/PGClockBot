@@ -59,7 +59,11 @@
     badge.type = 'button';
     badge.className = 'template-variable-token ' + status;
     badge.dir = 'ltr';
-    badge.textContent = shortToken(item.token);
+    // The token reads left to right in its own inline box, so the capsule centres its letters (panel.css).
+    const text = document.createElement('bdi');
+    text.dir = 'ltr';
+    text.textContent = shortToken(item.token);
+    badge.appendChild(text);
     badge.disabled = !item.valid;
     badge.title = item.token + ': ' + (item.valid
       ? item.title + ' — برای کپی کلیک کنید'

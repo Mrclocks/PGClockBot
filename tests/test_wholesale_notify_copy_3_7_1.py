@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.services.formatting import copyable, format_user_label, service_card
+from app.services.formatting import copyable, format_user_label, identity_text, service_card
 from app.services.resellers import format_credentials_message
 
 
@@ -23,18 +23,30 @@ class CopyableTests(unittest.TestCase):
 
 
 class UserLabelTests(unittest.TestCase):
-    def test_prefers_username(self):
+    def test_shows_name_username_and_id(self):
         u = SimpleNamespace(username="alice", full_name="Alice", telegram_id=123)
-        self.assertEqual(format_user_label(u), "@alice")
+        self.assertEqual(format_user_label(u), "Alice · @alice · 123")
 
-    def test_falls_back_name(self):
+    def test_skips_missing_parts(self):
         u = SimpleNamespace(username=None, full_name="علی", telegram_id=9)
-        self.assertEqual(format_user_label(u), "علی")
+        self.assertEqual(format_user_label(u), "علی · 9")
+
+    def test_escapes_hostile_name(self):
+        u = SimpleNamespace(username="bob", full_name="<b>x</b>", telegram_id=5)
+        self.assertEqual(format_user_label(u), "&lt;b&gt;x&lt;/b&gt; · @bob · 5")
 
     def test_falls_back_id(self):
         u = SimpleNamespace(username="", full_name="", telegram_id=42)
         self.assertEqual(format_user_label(u), "42")
         self.assertEqual(format_user_label(None, telegram_id=7), "7")
+
+
+class IdentityTextTests(unittest.TestCase):
+    def test_joins_known_parts_and_strips_at_sign(self):
+        self.assertEqual(identity_text(full_name="Ali", username="@ali", telegram_id=7), "Ali · @ali · 7")
+
+    def test_unknown_everything_is_dash(self):
+        self.assertEqual(identity_text(), "—")
 
 
 class ServiceCardCopyableTests(unittest.TestCase):

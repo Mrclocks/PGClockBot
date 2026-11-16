@@ -95,7 +95,7 @@
           <span>{{ pname }}</span>
           <span class="li-only">· {% if o.payment_method=='card' %}کارت به کارت{% elif o.payment_method=='wallet' %}کیف پول{% elif o.payment_method=='psp' %}درگاه آنلاین{% elif o.payment_method=='bbc' %}بزن به کارت{% elif o.payment_method=='gateway' %}درگاه لینک{% elif o.payment_method=='crypto' %}رمزارز{% elif o.payment_method=='stars' %}استارز{% else %}{{ o.payment_method or "—" }}{% endif %} · <bdi dir="ltr">{{ (o.created_at|string)[:16] }}</bdi></span>
         </td>
-        <td class="mono li-value" data-sort-value="{{ o.amount }}" dir="ltr">{{ o.amount | money }}</td>
+        <td class="mono li-value" data-sort-value="{{ o.amount }}">{{ o.amount | money }}</td>
         <td class="li-badge" data-sort-value="{{ o.status }}">
           <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled','failed'] %}rejected{% else %}neutral{% endif %}">
             {{ ord_status(o.status) }}
@@ -247,7 +247,7 @@
           {% endif %}
           <span class="li-only li-id" dir="ltr">(#{{ p.id }})</span>
         </td>
-        <td class="mono li-value" data-sort-value="{{ p.amount }}" dir="ltr">{{ p.amount | money }}</td>
+        <td class="mono li-value" data-sort-value="{{ p.amount }}">{{ p.amount | money }}</td>
         <td class="col-hide-sm li-sub" data-sort-value="{{ 'wallet' if p.is_wallet_topup else 'buy' }}">
           {#- On phones line two: the tags that matter, then kind · order. -#}
           {% if payer and payer.is_demo %}<span class="li-only badge neutral">دمو</span>{% endif %}

@@ -27,6 +27,7 @@ from app.services.org_principals import (
     is_owner_principal,
 )
 from app.services.org_scope import visible_principal_ids
+from app.services.pg_admin_roles import AdminRoleError, resolve_new_admin_role_id
 from app.services.platform_identity import is_explicit_owner_staff
 
 log = logging.getLogger(__name__)
@@ -233,7 +234,10 @@ async def _resolve_pg_role_via_parent(
     """Resolve role via parent's PG client. Role *name* never grants hierarchy."""
     _ = role_name
     if pg_role_id is None:
-        return None, None
+        try:
+            return await resolve_new_admin_role_id(parent_pg, None), None
+        except AdminRoleError as exc:
+            raise ChildProvisionError(str(exc), code="role_required") from None
     try:
         rid = int(pg_role_id)
     except (TypeError, ValueError) as exc:

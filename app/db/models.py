@@ -2240,6 +2240,31 @@ class ServiceImportOfferDismissal(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class EntryApproval(Base):
+    """Admin approval of a new customer before the bot opens its menus to them.
+
+    One row per customer and shop (``shop_key`` 0 is the platform). ``status`` moves from
+    ``pending`` to ``approved``, ``rejected`` or ``blocked`` through atomic claims; a row
+    created ``approved`` records a customer who joined before the gate was switched on.
+    """
+
+    __tablename__ = "entry_approvals"
+    __table_args__ = (
+        UniqueConstraint("bot_user_id", "shop_key", name="uq_entry_approvals_user_shop"),
+        Index("ix_entry_approvals_shop_status", "shop_key", "status", "requested_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
+    shop_key: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    status: Mapped[str] = mapped_column(String(16), server_default="pending")
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Set once by the first sender, so the admins hear about each request one time.
+    admin_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class CatalogDiscount(Base):
     """Shop price adjustments, with a deduplicated announcement campaign."""
 

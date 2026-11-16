@@ -55,6 +55,11 @@ class TemplateRuleTests(unittest.TestCase):
     def test_inline_styles_are_found(self) -> None:
         self.assertEqual(rules(template_findings('<p style="margin-top: 7px">x</p>')), ["inline-style"])
 
+    def test_a_left_to_right_table_cell_is_found_and_an_isolated_value_is_not(self) -> None:
+        self.assertEqual(rules(template_findings('<td class="mono" dir="ltr">{{ u.username }}</td>')), ["cell-direction"])
+        self.assertEqual(rules(template_findings('<th dir="auto">x</th>')), ["cell-direction"])
+        self.assertEqual(template_findings('<td class="mono"><bdi dir="ltr">{{ u.username }}</bdi></td>'), [])
+
     def test_a_layout_transition_is_found_and_compositor_motion_is_not(self) -> None:
         self.assertEqual(rules(css_findings(".bar i { transition: width 0.3s ease; }")), ["layout-motion"])
         self.assertEqual(rules(css_findings(".dock { transition: right var(--motion-med); }")), ["layout-motion"])

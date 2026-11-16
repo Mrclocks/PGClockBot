@@ -98,6 +98,12 @@ NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
         "1",
     ),
     (
+        "notify_entry_approval",
+        "درخواست ورود کاربر جدید",
+        "وقتی «ورود فقط با تأیید ادمین» روشن است و کاربر تازه درخواست می‌دهد؛ با دکمه‌های تأیید، رد و مسدود",
+        "1",
+    ),
+    (
         "notify_new_subscription",
         "اشتراک جدید / تمدید",
         "وقتی اشتراک جدید یا تمدید سرویس تحویل شد (خرید کیف‌پول یا تأیید پرداخت)",
@@ -174,6 +180,7 @@ SHOP_NOTIFY_PERM_MAP: dict[str, frozenset[str]] = {
     "notify_panel_delivery_failures": frozenset({"orders"}),
     "notify_service_panel_missing": frozenset({"orders"}),
     "notify_service_import_request": frozenset({"service_import"}),
+    "notify_entry_approval": frozenset({"customers_approve"}),
     "notify_new_subscription": frozenset({"orders", "payments"}),
     "notify_pending_approval": frozenset({"payments"}),
     "notify_new_order": frozenset({"orders"}),

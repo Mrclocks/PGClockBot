@@ -11,6 +11,7 @@ from aiogram.types import TelegramObject
 
 from app.bot.chat_screen import ChatScreenMiddleware, install_screen_rules
 from app.bot.edit_mode import EditModeMiddleware
+from app.bot.entry_gate import EntryApprovalMiddleware
 from app.bot.panel_history import PanelHistoryMiddleware
 from app.bot.screen_replay import install_replay_guard, set_dispatcher
 from app.bot.slow_updates import SlowUpdateMiddleware
@@ -117,6 +118,7 @@ def bot_routers() -> list[Router]:
         admin_points_adjust,
         admin_settings,
         admin_wallet_adjust,
+        make_reseller_plan,
         reseller_plan_extra_packs_admin,
         automation_review,
         button_colors,
@@ -129,6 +131,7 @@ def bot_routers() -> list[Router]:
         connection_status,
         customer_orders,
         custom_service_name,
+        entry_approval,
         guide_editor,
         loyalty,
         nav_hubs,
@@ -156,6 +159,7 @@ def bot_routers() -> list[Router]:
         reseller_customer_services,
         reseller_settings,
         screen_editor,
+        home_trial,
         service_import,
         service_search,
         service_cleanup_bot,
@@ -190,6 +194,8 @@ def bot_routers() -> list[Router]:
         catalog_row_editor.shop_router,
         start.router,
         terms.router,
+        # Before purchase_contact: its phone step takes a contact only while the gate asks for one.
+        entry_approval.router,
         connection_status.router,
         connection_status_admin.router,
         # Reply-keyboard nav early so menu labels win over FSM amount parsers
@@ -215,6 +221,7 @@ def bot_routers() -> list[Router]:
         wallet.router,
         customer_orders.router,
         service_import.router,
+        home_trial.router,
         service_search.router,
         subscription_lookup.router,
         services.router,
@@ -258,6 +265,7 @@ def bot_routers() -> list[Router]:
         # Before admin.router so adjust callbacks and FSM win over the large admin module.
         admin_wallet_adjust.router,
         admin_points_adjust.router,
+        make_reseller_plan.router,
         admin.router,
         stale_menu.router,
     ]
@@ -274,6 +282,8 @@ def create_dispatcher() -> Dispatcher:
     dp.update.middleware(ChatScreenMiddleware())
     dp.update.middleware(ForceJoinMiddleware())
     dp.update.middleware(TermsEntryMiddleware())
+    # After the join and terms gates: a customer first joins and agrees, then waits for approval.
+    dp.update.middleware(EntryApprovalMiddleware())
     dp.update.middleware(EditModeMiddleware())
     dp.update.middleware(PanelHistoryMiddleware())
 
@@ -294,6 +304,7 @@ def create_dispatcher() -> Dispatcher:
         admin_wallet_adjust,
         button_colors,
         connection_status_admin,
+        make_reseller_plan,
         connection_status_admin_input,
         catalog_row_editor,
         guide_editor,
@@ -306,6 +317,7 @@ def create_dispatcher() -> Dispatcher:
     owner_gate = _RequireBotOwnerPrincipal()
     for r in (
         admin.router,
+        make_reseller_plan.router,
         admin_points_adjust.router,
         admin_backup.router,
         admin_settings.router,
