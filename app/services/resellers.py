@@ -2438,8 +2438,25 @@ PANEL_ADMIN_DELETE_FAILED_MSG = (
 )
 
 
+PANEL_ADMIN_DELETE_PARTIAL_MSG = (
+    "ادمین پاسارگارد این نمایندگی حذف شد، ولی حذف ادمین یکی از زیرنماینده‌ها انجام نشد؛ "
+    "نمایندگی در پنل باقی ماند. تا دوباره تلاش نکنید ربات این فروشگاه به پاسارگارد وصل نمی‌شود. "
+    "همین حالا دوباره تلاش کنید."
+)
+
+
 class PanelAdminNotRemoved(ValueError):
     """PasarGuard did not remove a shop's panel admin, so the shop was left as it was."""
+
+
+@dataclass(slots=True)
+class _RevokeRun:
+    """One ``revoke_reseller`` call: shops already visited and PasarGuard admins already removed."""
+
+    delete_pg_admin: bool
+    seen: set[int]
+    removed_pg_admins: list[str]
+    capability_checked: bool = False
 
 
 async def assert_platform_may_delete_pg_admins() -> None:
@@ -2451,24 +2468,35 @@ async def assert_platform_may_delete_pg_admins() -> None:
         raise PanelAdminNotRemoved(PANEL_ADMIN_DELETE_REFUSED_MSG)
 
 
-async def _remove_shop_pg_admin(pg_username: str) -> bool:
+async def _remove_shop_pg_admin(run: _RevokeRun, pg_username: str) -> bool:
     """Delete the shop's PasarGuard admin; ``False`` when PasarGuard no longer has it.
 
-    A refusal or an unknown outcome raises, so the caller changes nothing here; a retry
-    is safe because an admin that is already gone answers 404.
+    PasarGuard is only consulted for a shop that has an admin there: the capability check
+    runs once, right before the first delete. A refusal or an unknown outcome raises, so
+    the caller changes nothing here; a retry is safe because an admin that is already gone
+    answers 404.
     """
+    if not run.capability_checked:
+        await assert_platform_may_delete_pg_admins()
+        run.capability_checked = True
     try:
         await pasarguard.get_pg().delete_admin(pg_username)
     except PasarGuardError as exc:
         if exc.status_code == 404:
             return False
-        if exc.status_code == 403:
-            raise PanelAdminNotRemoved(PANEL_ADMIN_DELETE_REFUSED_MSG) from exc
-        raise PanelAdminNotRemoved(PANEL_ADMIN_DELETE_FAILED_MSG) from exc
+        raise PanelAdminNotRemoved(_not_removed_message(run, refused=exc.status_code == 403)) from exc
     except Exception as exc:  # transport error or timeout: the outcome is unknown
         logger.warning("revoke_reseller: PasarGuard admin delete failed", exc_info=True)
-        raise PanelAdminNotRemoved(PANEL_ADMIN_DELETE_FAILED_MSG) from exc
+        raise PanelAdminNotRemoved(_not_removed_message(run, refused=False)) from exc
+    run.removed_pg_admins.append(pg_username)
     return True
+
+
+def _not_removed_message(run: _RevokeRun, *, refused: bool) -> str:
+    """Say so when an admin of this tree is already gone from PasarGuard: the shop needs a retry."""
+    if run.removed_pg_admins:
+        return PANEL_ADMIN_DELETE_PARTIAL_MSG
+    return PANEL_ADMIN_DELETE_REFUSED_MSG if refused else PANEL_ADMIN_DELETE_FAILED_MSG
 
 
 async def revoke_reseller(
@@ -2486,14 +2514,11 @@ async def revoke_reseller(
     With ``delete_pg_admin`` the shop's PasarGuard admin (and those of its sub-shops) is
     removed first. When PasarGuard refuses or cannot answer, ``PanelAdminNotRemoved`` is
     raised and the session is rolled back, so no shop is removed here while its admin
-    stays in PasarGuard.
+    stays in PasarGuard. A shop without a PasarGuard admin never touches PasarGuard.
     """
-    if delete_pg_admin:
-        await assert_platform_may_delete_pg_admins()
+    run = _RevokeRun(delete_pg_admin=delete_pg_admin, seen=set(), removed_pg_admins=[])
     try:
-        return await _revoke_reseller_tree(
-            session, user_id, delete_pg_admin=delete_pg_admin, commit=commit, reason=reason, seen=set()
-        )
+        return await _revoke_reseller_tree(session, user_id, run=run, commit=commit, reason=reason)
     except PanelAdminNotRemoved:
         await rollback_quiet(session)
         raise
@@ -2503,10 +2528,9 @@ async def _revoke_reseller_tree(
     session: AsyncSession,
     user_id: int,
     *,
-    delete_pg_admin: bool,
+    run: _RevokeRun,
     commit: bool,
     reason: str | None,
-    seen: set[int],
 ) -> dict:
     """Revoke one shop and, recursively, the shops under it.
 
@@ -2523,7 +2547,7 @@ async def _revoke_reseller_tree(
         raise ValueError("این کاربر نماینده نیست")
 
     profile_id = int(profile.id)
-    if profile_id in seen:
+    if profile_id in run.seen:
         return {
             "user_id": user_id,
             "telegram_id": user.telegram_id,
@@ -2531,12 +2555,12 @@ async def _revoke_reseller_tree(
             "pg_admin_deleted": False,
             "reason": (reason or "").strip() or None,
         }
-    seen.add(profile_id)
+    run.seen.add(profile_id)
 
     pg_username = (profile.pg_admin_username or "").strip() or None
     pg_deleted = False
-    if delete_pg_admin and pg_username:
-        pg_deleted = await _remove_shop_pg_admin(pg_username)
+    if run.delete_pg_admin and pg_username:
+        pg_deleted = await _remove_shop_pg_admin(run, pg_username)
 
     # OrgPrincipal.reseller_profile_id FK — purge tree before profile delete.
     from app.services.org_principals import purge_principal_for_reseller_profile
@@ -2545,7 +2569,7 @@ async def _revoke_reseller_tree(
 
     # Cascade: child shops under this principal must not remount as L1.
     for child_profile_id in purge_info.detached_reseller_profile_ids:
-        if int(child_profile_id) == profile_id or int(child_profile_id) in seen:
+        if int(child_profile_id) == profile_id or int(child_profile_id) in run.seen:
             continue
         child_profile = await session.get(ResellerProfile, int(child_profile_id))
         if child_profile is None:
@@ -2554,14 +2578,7 @@ async def _revoke_reseller_tree(
         if child_uid <= 0 or child_uid == int(user_id):
             continue
         try:
-            await _revoke_reseller_tree(
-                session,
-                child_uid,
-                delete_pg_admin=delete_pg_admin,
-                commit=False,
-                reason=reason,
-                seen=seen,
-            )
+            await _revoke_reseller_tree(session, child_uid, run=run, commit=False, reason=reason)
         except PanelAdminNotRemoved:
             raise
         except ValueError:

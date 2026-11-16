@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.services.pasarguard import PasarGuardError
 from app.services.resellers import (
+    PANEL_ADMIN_DELETE_PARTIAL_MSG,
     PANEL_ADMIN_DELETE_REFUSED_MSG,
     PanelAdminNotRemoved,
     assert_platform_may_delete_pg_admins,
@@ -41,7 +42,9 @@ class RevokeResellerPanelAdminTests(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
         self._tmpdir.cleanup()
 
-    async def _seed_shop(self, *, with_child: bool = False) -> tuple[int, list[int]]:
+    async def _seed_shop(
+        self, *, with_child: bool = False, pg_admins: tuple[bool, bool] = (True, True)
+    ) -> tuple[int, list[int]]:
         from app.db.models import BotUser, ResellerProfile, Role
         from app.services.org_principals import (
             DEPTH_ONE,
@@ -56,12 +59,14 @@ class RevokeResellerPanelAdminTests(unittest.IsolatedAsyncioTestCase):
             parent_id = int(owner.id)
             uids: list[int] = []
             profile_ids: list[int] = []
-            for depth, tg in ((DEPTH_ONE, 960001), (DEPTH_TWO, 960002))[: 2 if with_child else 1]:
+            levels = ((DEPTH_ONE, 960001, pg_admins[0]), (DEPTH_TWO, 960002, pg_admins[1]))
+            for depth, tg, has_pg_admin in levels[: 2 if with_child else 1]:
                 user = BotUser(telegram_id=tg, username=f"s{tg}", full_name="shop",
                                role=Role.RESELLER.value, referral_code=f"RS{tg}")
                 session.add(user)
                 await session.flush()
-                profile = ResellerProfile(user_id=int(user.id), pg_admin_username=f"pg{tg}", is_active=True)
+                pg_name = f"pg{tg}" if has_pg_admin else None
+                profile = ResellerProfile(user_id=int(user.id), pg_admin_username=pg_name, is_active=True)
                 session.add(profile)
                 await session.flush()
                 principal = await create_principal(
@@ -102,11 +107,46 @@ class RevokeResellerPanelAdminTests(unittest.IsolatedAsyncioTestCase):
             await self._revoke_with(uid, AsyncMock(side_effect=httpx.ReadTimeout("slow")))
         await self._assert_untouched(uid, profiles)
 
-    async def test_sub_shop_refusal_keeps_parent_and_sub_shop(self) -> None:
+    async def test_sub_shop_refusal_keeps_parent_and_sub_shop_and_asks_for_a_retry(self) -> None:
         uid, profiles = await self._seed_shop(with_child=True)
         refuse_child = AsyncMock(side_effect=[None, PasarGuardError("no", 403)])
-        with self.assertRaises(PanelAdminNotRemoved):
+        with self.assertRaises(PanelAdminNotRemoved) as ctx:
             await self._revoke_with(uid, refuse_child)
+        # The parent's admin is already gone from PasarGuard, so the message asks for a retry.
+        self.assertEqual(str(ctx.exception), PANEL_ADMIN_DELETE_PARTIAL_MSG)
+        await self._assert_untouched(uid, profiles)
+
+    async def test_shop_without_panel_admin_never_touches_pasarguard(self) -> None:
+        from app.db.models import ResellerProfile
+
+        uid, profiles = await self._seed_shop(pg_admins=(False, False))
+        probe = AsyncMock(return_value={"ok": False})
+        pg = AsyncMock()
+        with (
+            patch("app.services.resellers.resolve_platform_pg_capabilities", new=probe),
+            patch("app.services.pasarguard.get_pg", return_value=pg),
+        ):
+            async with self.Session() as session:
+                info = await revoke_reseller(session, uid, delete_pg_admin=True, reason="test")
+        self.assertFalse(info["pg_admin_deleted"])
+        probe.assert_not_awaited()
+        pg.delete_admin.assert_not_awaited()
+        async with self.Session() as session:
+            self.assertIsNone(await session.get(ResellerProfile, profiles[0]))
+
+    async def test_sub_shop_with_panel_admin_still_needs_the_permission(self) -> None:
+        uid, profiles = await self._seed_shop(with_child=True, pg_admins=(False, True))
+        caps = {"ok": True, "pg_is_owner": False, "features": [],
+                "role": {"is_owner": False, "permissions": {"admins": {"read": True}}}}
+        pg = AsyncMock()
+        with (
+            patch("app.services.resellers.resolve_platform_pg_capabilities", new=AsyncMock(return_value=caps)),
+            patch("app.services.pasarguard.get_pg", return_value=pg),
+        ):
+            async with self.Session() as session:
+                with self.assertRaises(PanelAdminNotRemoved):
+                    await revoke_reseller(session, uid, delete_pg_admin=True, reason="test")
+        pg.delete_admin.assert_not_awaited()
         await self._assert_untouched(uid, profiles)
 
     async def test_admin_already_gone_finishes_the_cleanup(self) -> None:
