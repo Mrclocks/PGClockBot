@@ -42,7 +42,7 @@ async def notify_service_import_request(
         "➕ درخواست افزودن سرویس قبلی",
         info_block([
             kv_line("🔢", "درخواست", f"#{int(request_id)}"),
-            kv_line("👤", "مشتری", html.escape(format_user_label(user))),
+            kv_line("👤", "مشتری", format_user_label(user)),
             kv_line("🧾", "کاربر پنل", f"<code>{html.escape(panel_username or '—')}</code>"),
         ]) + "\n\nتأیید یا رد در تب «افزودن سرویس قبلی» تنظیمات انجام می‌شود.",
     )
