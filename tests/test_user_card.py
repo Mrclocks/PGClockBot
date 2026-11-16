@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import httpx
 from fastapi import FastAPI, Request
@@ -23,6 +24,7 @@ from app.services.users_ops import expire_tone
 ROOT = Path(__file__).resolve().parents[1]
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
 SHOP_A, SHOP_B = 10, 20
+PANEL_ACTIONS = {"create": True, "update": True, "delete": True}
 HOSTILE_NAME = '<script>alert("x")</script>'
 
 
@@ -119,8 +121,8 @@ class UserCardTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_latin_name_keeps_the_header_right_to_left(self) -> None:
         self.staff = OWNER.copy()
         response = await self.client.get("/users/1/card")
-        self.assertIn("<strong><bdi>Platform customer</bdi></strong>", response.text)
-        self.assertNotIn('<strong dir="auto">', response.text)
+        self.assertIn('<h3 class="user-identity-name"><bdi>Platform customer</bdi></h3>', response.text)
+        self.assertNotIn('dir="auto"', response.text)
 
     async def test_owner_sees_the_platform_purse_and_services(self) -> None:
         self.staff = OWNER.copy()
@@ -142,6 +144,56 @@ class UserCardTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([s.pg_username for s in card.services], ["shop_a_service"])
         self.assertEqual(card.services[0].plan_name, "Monthly")
         self.assertEqual(card.services[0].expire_tone, "warn")
+
+
+    async def test_the_card_is_section_boxes_with_the_status_once_in_the_header(self) -> None:
+        response = await self.client.get("/users/11/card")
+        self.assertIn('<section class="edit-section edit-section--identity">', response.text)
+        self.assertEqual(response.text.count('<section class="edit-section'), 3)
+        self.assertEqual(response.text.count(">فعال<"), 1)
+        self.assertNotIn("<dt>وضعیت</dt>", response.text)
+
+    async def test_owner_opening_a_reseller_from_the_resellers_list_edits_the_reseller(self) -> None:
+        self.staff = OWNER.copy()
+        response = await self.client.get(f"/users/{SHOP_A}/card?from=resellers")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(f'data-edit-url="/resellers/{SHOP_A}/edit?fragment=1"', response.text)
+        self.assertNotIn('data-modal-open="modal-user-edit"', response.text)
+
+    async def test_the_same_reseller_from_the_users_list_edits_the_customer(self) -> None:
+        self.staff = OWNER.copy()
+        with patch("app.api.user_pages.customer_service_actions", return_value=PANEL_ACTIONS):
+            response = await self.client.get(f"/users/{SHOP_A}/card")
+        self.assertIn('data-modal-open="modal-user-edit"', response.text)
+        self.assertNotIn('data-modal-open="modal-reseller-edit"', response.text)
+
+    async def test_a_shop_cannot_reach_the_reseller_edit_through_the_resellers_hint(self) -> None:
+        with patch("app.api.user_pages.customer_service_actions", return_value=PANEL_ACTIONS):
+            response = await self.client.get("/users/11/card?from=resellers")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("modal-reseller-edit", response.text)
+        self.assertNotIn("modal-user-edit", response.text, "the resellers page has no user edit modal")
+
+    async def test_a_blocked_customer_gets_no_message_button(self) -> None:
+        user = await self.session.get(BotUser, 11)
+        user.is_blocked = True
+        await self.session.commit()
+        response = await self.client.get("/users/11/card")
+        self.assertNotIn("modal-user-message", response.text)
+        self.assertIn(">مسدود<", response.text)
+
+    async def test_a_message_sent_from_the_resellers_list_returns_there(self) -> None:
+        self.staff = OWNER.copy()
+        response = await self.client.post(f"/users/{SHOP_A}/message", data={"body": "", "return_page": "resellers"})
+        self.assertEqual(response.status_code, 303)
+        self.assertTrue(response.headers["location"].startswith("/resellers?err="))
+
+    async def test_an_unknown_return_page_falls_back_to_the_users_list(self) -> None:
+        self.staff = OWNER.copy()
+        response = await self.client.post(
+            f"/users/{SHOP_A}/message", data={"body": "", "return_page": "https://evil.example"}
+        )
+        self.assertTrue(response.headers["location"].startswith("/users"))
 
 
 class ExpireToneTests(unittest.TestCase):

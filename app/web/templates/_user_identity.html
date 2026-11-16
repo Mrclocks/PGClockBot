@@ -1,0 +1,24 @@
+{# Who the person is, at the top of the user card, the user edit modal and the reseller edit modal: the Telegram photo
+   (its initial until the photo loads, or when there is none), the name, @username and Telegram id. The caller adds
+   badges with caller('badges') and anything that sits under the identity with caller('after'). #}
+{% macro user_identity(user) -%}
+{% set display_name = user.full_name or user.username or "—" %}
+<div class="user-identity">
+  <div class="user-identity-row">
+    <span class="user-card-photo" aria-hidden="true">
+      <span>{{ display_name[:1] }}</span>
+      <img src="/users/{{ user.id }}/photo" alt="" width="48" height="48" decoding="async" data-user-photo>
+    </span>
+    <div class="user-identity-main">
+      <h3 class="user-identity-name"><bdi>{{ display_name }}</bdi></h3>
+      <p class="user-identity-meta muted">
+        {% if user.username %}<bdi dir="ltr">@{{ user.username }}</bdi> · {% endif %}آیدی <bdi dir="ltr">{{ user.telegram_id }}</bdi>
+      </p>
+      {%- if caller %}{% set badges = caller('badges') %}{% if badges | trim %}
+      <p class="user-identity-badges">{{ badges }}</p>
+      {%- endif %}{% endif %}
+    </div>
+  </div>
+  {%- if caller %}{{ caller('after') }}{% endif %}
+</div>
+{%- endmacro %}

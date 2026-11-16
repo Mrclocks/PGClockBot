@@ -1,23 +1,19 @@
 {% from "macros.html" import num_stepper %}
 {% from "_ds.html" import ds_switch %}
+{% from "_user_identity.html" import user_identity %}
 {% set wallet_amt = display_wallet if display_wallet is defined else (user.wallet_balance or 0) %}
 {% set points_amt = display_points if display_points is defined else 0 %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
 <section class="edit-section edit-section--identity">
-  <div class="user-edit-identity">
-    <div class="user-edit-identity-main">
-      <h3 class="user-edit-name">{{ user.full_name or user.username or 'کاربر' }}</h3>
-      <p class="user-edit-meta muted">
-        <span dir="ltr" class="mono">{{ user.telegram_id }}</span>
-        {% if user.username %}<span>@{{ user.username }}</span>{% endif %}
-        {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
-        {% if user.is_demo %}<span class="badge neutral">دمو</span>{% endif %}
-        {% set tag = color_tag_meta(marks.tag) if (color_tag_meta is defined and marks is defined) else none %}
-        {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
-      </p>
-    </div>
+  {% call(part) user_identity(user) %}
+    {%- if part == 'badges' -%}
+    {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
+    {% if user.is_demo %}<span class="badge neutral">دمو</span>{% endif %}
+    {% set tag = color_tag_meta(marks.tag) if (color_tag_meta is defined and marks is defined) else none %}
+    {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
+    {%- elif part == 'after' -%}
     <div class="user-edit-wallet-pill{% if wallet_amt > 0 %} is-positive{% elif wallet_amt < 0 %} is-negative{% endif %}"
          dir="ltr">
       <span class="user-edit-wallet-label muted">کیف پول</span>
@@ -27,7 +23,8 @@
       <span class="user-edit-wallet-label muted">امتیاز</span>
       <strong class="user-edit-wallet-amt"><span dir="ltr">{{ points_amt | num }}</span></strong>
     </div>
-  </div>
+    {%- endif -%}
+  {% endcall %}
 </section>
 
 {% set manage_user = can_manage_users if can_manage_users is defined else false %}

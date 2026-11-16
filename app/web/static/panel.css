@@ -3023,12 +3023,16 @@ a.btn.btn-ghost:hover {
   .table-list-sm .li-child > .li-badge .badge { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 20px; min-height: 0; padding: 0 var(--space-1); font-size: var(--fs-1); font-weight: 600; line-height: 1; }
 }
 
-/* User card (modal): account facts as label / value lines, then one block per service. */
-.user-card { display: flex; flex-direction: column; gap: var(--space-2); }
-.user-card-head { display: flex; align-items: center; gap: var(--space-3); }
-.user-card-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.user-card-who strong { font-size: var(--fs-4); font-weight: 700; }
-.user-card-who .muted { font-size: var(--fs-2); }
+/* Who the person is (_user_identity.html), at the top of the user card and the user and reseller edit modals. */
+.user-identity { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.user-identity-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.user-identity-main { display: flex; flex-direction: column; gap: var(--space-0); min-width: 0; }
+.ds .user-identity-name { margin: 0; font-size: var(--fs-4); font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.user-identity-meta { margin: 0; font-size: var(--fs-2); }
+.user-identity-badges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-0) var(--space-1); margin: 0; }
+
+/* User card (modal): the identity box, then account facts as label / value lines, then one line per service. */
+.user-card { display: flex; flex-direction: column; gap: var(--space-3); }
 .user-card-photo {
   position: relative;
   flex: 0 0 48px;
@@ -3046,7 +3050,6 @@ a.btn.btn-ghost:hover {
 }
 .user-card-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--motion-fast) ease; }
 .user-card-photo img.is-loaded { opacity: 1; }
-.user-card-label { margin: 0 0 var(--space-1); font-size: var(--fs-3); font-weight: 600; color: var(--muted-fg); }
 .kv-list { margin: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .kv-list > div {
   display: flex;
@@ -3074,6 +3077,11 @@ a.btn.btn-ghost:hover {
 .user-card-service > div.muted { font-size: var(--fs-2); }
 .user-card-service .li-tone-warn { color: var(--warn-fg); font-weight: 600; }
 .user-card-service .li-tone-danger { color: var(--danger); font-weight: 600; }
+/* Inside a section box the facts and services are plain lines split by dividers, not boxes inside a box. */
+.edit-section > .kv-list { border: 0; border-radius: 0; }
+.edit-section > .kv-list > div { padding-inline: 0; }
+.edit-section > .user-card-service { padding-inline: 0; border: 0; border-radius: 0; }
+.edit-section > .user-card-service + .user-card-service { margin-top: 0; border-top: 1px solid var(--border); }
 .user-card-empty { margin: 0; }
 .user-card-actions {
   display: grid;
@@ -6500,24 +6508,6 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-stic
   margin: 0;
   font-size: var(--fs-2);
   line-height: 1.45;
-}
-.user-edit-identity {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-2);
-}
-.user-edit-name {
-  margin: 0 0 var(--space-0);
-  font-size: var(--fs-4);
-}
-.user-edit-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-0) var(--space-1);
-  margin: 0;
-  font-size: var(--fs-2);
 }
 .user-edit-wallet-pill {
   display: flex;

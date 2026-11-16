@@ -2,6 +2,7 @@
 {% from "_icons.html" import icon %}
 {% from "macros.html" import switch, oversell_create_switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label, empty_state, search_submit %}
 {% from "_ds.html" import ds_perm_groups %}
+{% from "_user_card_modals.html" import user_card_modals %}
 {% block title %}{% if owner_view %}نمایندگان{% else %}نمایندگان من{% endif %}{% endblock %}
 {% block content %}
 {% call(slot) page_header('resellers' if owner_view else 'users', 'نمایندگان' if owner_view else 'نمایندگان من', help='resellers') %}
@@ -166,7 +167,15 @@
             <span class="cell-name-primary">
               {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
               {% set oversold = owner_view and oversold_shop_ids and u.id in oversold_shop_ids %}
+              {% if owner_view %}
+              <button type="button" class="cell-name-text cell-name-link"
+                      data-modal-open="modal-user-card"
+                      data-modal-load="/users/{{ u.id }}/card?from=resellers"
+                      data-modal-load-target="user-card-body"
+                      dir="auto">{{ u.full_name or u.username or '—' }}</button>
+              {% else %}
               <span class="cell-name-text" dir="auto">{{ u.full_name or u.username or '—' }}</span>
+              {% endif %}
               <span class="li-only li-id" dir="ltr">({{ u.telegram_id }})</span>
               {% if tag %}<span class="badge badge-risk-tag li-hide" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
               {% if oversold %}
@@ -402,6 +411,8 @@
   </div>
 </div>
 
+{% if owner_view %}{{ user_card_modals(return_page='resellers') }}{% endif %}
+
 <div class="ui-modal ds" id="modal-reseller-color" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="reseller-color-title">
@@ -419,6 +430,7 @@
 {% endblock %}
 
 {% block page_scripts %}
+{% if owner_view %}<script src="/static/user-message.js?v={{ asset_v('user-message.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>{% endif %}
 <script>
 (function(){
   function bindFragmentModal(modalId, bodyId, titleId, openAttr){
