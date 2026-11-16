@@ -123,8 +123,8 @@
           id="user-{{ u.id }}"
           data-bulk-ops="{% if manage and not u.is_blocked %}block,{% endif %}{% if manage and u.is_blocked %}unblock,{% endif %}{% if ops and pg_update and row.service_count > 0 %}renew,{% endif %}{% if manage and u.role != 'admin' %}delete{% endif %}">
         {% if manage or ops %}{{ table_select_cell(u.id) }}{% endif %}
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.id }}">{{ u.id }}</td>
-        <td class="mono col-tg col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
+        <td class="mono col-hide-sm" data-sort-value="{{ u.id }}"><bdi dir="ltr">{{ u.id }}</bdi></td>
+        <td class="mono col-tg col-hide-sm" data-sort-value="{{ u.telegram_id }}"><bdi dir="ltr">{{ u.telegram_id }}</bdi></td>
         <td class="col-name li-title" data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">
             <span class="cell-name-primary">
@@ -187,7 +187,7 @@
         </td>
         <td class="col-vol users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
         <td class="col-exp users-exp-cell li-value li-tone-{{ row.expire_tone or 'none' }}" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
-        <td class="mono col-wallet" dir="ltr" data-sort-value="{{ row.wallet_balance }}">{{ row.wallet_balance | money }}</td>
+        <td class="mono col-wallet" data-sort-value="{{ row.wallet_balance }}">{{ row.wallet_balance | money }}</td>
         <td class="col-status li-badge" data-sort-value="{{ '1' if u.is_blocked else '0' }}">
           {% if u.is_blocked %}
           <span class="badge blocked">مسدود</span>

@@ -480,10 +480,10 @@
         const prev = btn.getAttribute('data-copy-label') || btn.textContent;
         btn.setAttribute('data-copy-label', prev);
         btn.textContent = 'کپی شد';
-        btn.classList.add('btn-ok', 'is-copied');
+        btn.classList.add('is-copied');
         setTimeout(() => {
           btn.textContent = prev;
-          btn.classList.remove('btn-ok', 'is-copied');
+          btn.classList.remove('is-copied');
         }, 1200);
       } else {
         showErr('کپی انجام نشد — متن را دستی انتخاب کنید.');

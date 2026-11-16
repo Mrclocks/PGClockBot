@@ -62,9 +62,9 @@
           </span>
         </span>
         {% if update_mode == 'webhook' %}
-        <span class="badge ok bot-conn-badge" id="bot-mode-status-badge">Webhook</span>
+        <span class="badge ok bot-conn-badge" id="bot-mode-status-badge"><bdi dir="ltr">Webhook</bdi></span>
         {% else %}
-        <span class="badge info bot-conn-badge" id="bot-mode-status-badge">Polling</span>
+        <span class="badge info bot-conn-badge" id="bot-mode-status-badge"><bdi dir="ltr">Polling</bdi></span>
         {% endif %}
       </div>
     </div>
@@ -357,7 +357,10 @@
       modeStatus.classList.toggle('is-neutral', !webhook);
     }
     if (modeStatusBadge) {
-      modeStatusBadge.textContent = webhook ? 'Webhook' : 'Polling';
+      const modeName = document.createElement('bdi');
+      modeName.dir = 'ltr';
+      modeName.textContent = webhook ? 'Webhook' : 'Polling';
+      modeStatusBadge.replaceChildren(modeName);
       modeStatusBadge.className = 'badge bot-conn-badge ' + (webhook ? 'ok' : 'info');
     }
     if (modeStatusCap) {

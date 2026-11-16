@@ -30,7 +30,7 @@
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
         <td class="li-title"><span dir="auto">{{ p.name }}</span>{% if p.description %}<br class="li-hide"><small class="muted li-hide">{{ p.description }}</small>{% endif %}</td>
-        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="mono li-value">{{ p.price | money }}</td>
         <td class="li-badge"><span class="li-hide">{{ "فعال" if p.is_active else "خاموش" }}</span><span class="li-only badge {{ 'active' if p.is_active else 'warn' }}">{{ "فعال" if p.is_active else "خاموش" }}</span></td>
         <td class="col-actions">
           {% call row_actions() %}

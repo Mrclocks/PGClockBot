@@ -51,15 +51,19 @@
   min-width: 0;
 }
 .list-editor-chip {
+  /* A value in the closed field: a capsule like every chip in the panel. */
+  display: inline-flex;
+  align-items: center;
   max-width: min(100%, 180px);
+  height: var(--space-4);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: var(--space-0) var(--space-1);
+  padding: 0 var(--space-1_5);
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--control-radius);
-  font-size: var(--fs-3);
+  font-size: var(--fs-2);
 }
 /* Same up/down chevron as the panel's select, drawn as an image so it centres exactly. */
 .list-editor-caret {
@@ -75,18 +79,23 @@
 /* Keep the editor in the form's flow so modal scrolling and mobile keyboards
    cannot clip its interactive rows or detach them from their field. */
 .list-editor-panel {
+  /* A box like every other: 16 inside, its parts 8 apart, no margins of their own. */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
   margin-top: var(--space-1);
-  padding: var(--space-1_5);
+  padding: var(--space-2);
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--menu-radius);
+  border-radius: var(--inner-radius);
 }
+.list-editor-panel > * { margin: 0; }
 .list-editor-panel[hidden],
 .list-editor-panel [hidden] {
   display: none;
 }
 .list-editor-draft-label {
-  margin-bottom: var(--space-1);
+  font-weight: 600;
 }
 .list-editor-entry {
   display: flex;
@@ -101,7 +110,14 @@
   margin: 0;
   font-size: var(--control-fs);
 }
-.list-editor-entry > .icon-btn,
+.list-editor-entry > .icon-btn {
+  /* The round «+» is as tall as the field beside it (a circle is a control-height button). */
+  flex: 0 0 auto;
+  width: var(--btn-h);
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  margin: 0;
+}
 .list-editor-actions > .icon-btn {
   flex: 0 0 auto;
   width: var(--space-4_5);
@@ -114,25 +130,36 @@
   outline-offset: 2px;
 }
 .list-editor-items {
-  display: grid;
-  gap: var(--space-0);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
   max-height: 240px;
-  margin: var(--space-1) 0;
   padding: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   list-style: none;
 }
 .list-editor-row {
+  /* Each value is a capsule of control height, its edit and delete circles inside the end. */
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-0) var(--space-1);
+  box-sizing: border-box;
+  min-height: var(--btn-h);
+  padding-block: 0;
+  padding-inline: var(--space-2) var(--space-0);
   background: var(--control-bg);
-  border-radius: var(--menu-item-radius);
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+}
+.list-editor-row.is-confirming {
+  padding-block: var(--space-1);
+  border-radius: var(--inner-radius);
 }
 .list-editor-value {
+  /* An LTR value still starts at the row's right edge, like the field's text. */
+  text-align: right;
   flex: 1 1 80px;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -149,7 +176,6 @@
   font-size: var(--fs-2);
 }
 .list-editor-empty {
-  margin: var(--space-1) 0;
   font-size: var(--fs-2);
 }
 .list-editor-panel > small.muted {
