@@ -16,7 +16,7 @@
     <label class="form-field"><span class="ds-label-text">نام پلن <span class="ds-req" aria-hidden="true">*</span></span>
       <input name="name" required value="{{ plan.name }}" data-ds-label="نام پلن" />
     </label>
-    {{ plan_category_field(plan_categories, plan_category_tones or {}, selected=plan.category_id, field_id="edit-plan-category") }}
+    {{ plan_category_field(plan_categories, plan_category_tones or {}, selected=plan.category_id, field_id="edit-plan-category", style_options=category_style_options or []) }}
     <label class="form-field"><span class="ds-label-text">قیمت <span class="ds-req" aria-hidden="true">*</span></span>
       <span class="ds-unit"><input name="price" type="number" data-money min="0" required value="{{ plan.price }}" inputmode="numeric" dir="ltr" data-ds-label="قیمت" /><span class="ds-unit-label">تومان</span></span>
     </label>
