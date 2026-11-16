@@ -12,6 +12,7 @@ from fastapi import Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.button_styles import parse_plan_button_style_form
 from app.services.numbers import to_fa_digits
 from app.services.service_addons import PackRow
 from app.services.shop_scope import ShopScopeError
@@ -32,16 +33,29 @@ CATEGORY_MODAL_URL = "/plans?categories=1"
 CATEGORY_BOARD_ANCHOR = "#plan-category-board"
 
 
-def category_redirect(back: str, *, ok: str | None = None, err: str | None = None) -> RedirectResponse:
-    """Redirect after a category action. ``back`` is matched against a fixed value, never used as a URL."""
+def category_redirect(
+    back: str, *, ok: str | None = None, err: str | None = None, category_id: int | None = None
+) -> RedirectResponse:
+    """Redirect after a category action. ``back`` is matched against a fixed value, never used as a URL.
+
+    Back on the list, the page lands on the category's own group when there is one (plan-categories.js
+    highlights it), else on the list.
+    """
     to_board = str(back or "").strip() == "list"
     url = CATEGORY_BOARD_URL if to_board else CATEGORY_MODAL_URL
     params = [f"{key}={quote(value)}" for key, value in (("ok", ok), ("err", err)) if value]
     if params:
         url += ("&" if "?" in url else "?") + "&".join(params)
     if to_board:
-        url += CATEGORY_BOARD_ANCHOR
+        url += f"#plan-cat-{int(category_id)}" if category_id is not None and not err else CATEGORY_BOARD_ANCHOR
     return RedirectResponse(url, status_code=303)
+
+
+def category_style_from_form(button_style: str) -> str | None:
+    """None inherits the «ثابت» colour; "" is Telegram's plain white; anything else a named style."""
+    if str(button_style).strip() == "":
+        return ""
+    return parse_plan_button_style_form({"button_style": button_style}, field="button_style")
 
 
 def packs_saved_message(count: int) -> str:
@@ -54,43 +68,28 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
 
     @app.post("/plans/categories")
     async def plans_category_create(
-        request: Request,
         name: str = Form(...),
         description: str = Form(""),
-        sort_order: int = Form(0),
         audience: str = Form("users"),
         button_style: str = Form("inherit"),
+        back: str = Form(""),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.button_styles import parse_plan_button_style_form
         from app.services.plan_categories import create_category
 
         try:
-            style = parse_plan_button_style_form(
-                {"button_style": button_style}, field="button_style"
-            )
-            # parse returns None for inherit; distinguish explicit white "" via form
-            raw = str(button_style).strip().lower()
-            if raw == "":
-                style = ""
-            await create_category(
+            category = await create_category(
                 session,
                 staff,
                 name=name,
                 description=description,
-                sort_order=sort_order,
                 audience=audience,
-                button_style=style,
+                button_style=category_style_from_form(button_style),
             )
         except (ShopScopeError, ValueError) as e:
-            return RedirectResponse(
-                f"/plans?categories=1&err={quote(str(e))}", status_code=303
-            )
-        return RedirectResponse(
-            f"/plans?categories=1&ok={quote('برچسب دسته ذخیره شد')}",
-            status_code=303,
-        )
+            return category_redirect(back, err=str(e))
+        return category_redirect(back, ok="برچسب دسته ذخیره شد", category_id=int(category.id))
 
     @app.post("/plans/categories/{category_id}/toggle")
     async def plans_category_toggle(
@@ -158,40 +157,28 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
         category_id: int,
         name: str = Form(...),
         description: str = Form(""),
-        sort_order: int = Form(0),
         audience: str = Form("users"),
         button_style: str = Form("inherit"),
+        back: str = Form(""),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.button_styles import parse_plan_button_style_form
+        # The order is not part of this form: it changes only with «بالاتر / پایین‌تر در ربات».
         from app.services.plan_categories import update_category
 
         try:
-            style = parse_plan_button_style_form(
-                {"button_style": button_style}, field="button_style"
-            )
-            raw = str(button_style).strip().lower()
-            if raw == "":
-                style = ""
             await update_category(
                 session,
                 staff,
                 category_id,
                 name=name,
                 description=description,
-                sort_order=sort_order,
                 audience=audience,
-                button_style=style,
+                button_style=category_style_from_form(button_style),
             )
         except (ShopScopeError, ValueError) as e:
-            return RedirectResponse(
-                f"/plans?categories=1&err={quote(str(e))}", status_code=303
-            )
-        return RedirectResponse(
-            f"/plans?categories=1&ok={quote('برچسب دسته به‌روزرسانی شد')}",
-            status_code=303,
-        )
+            return category_redirect(back, err=str(e))
+        return category_redirect(back, ok="برچسب دسته به‌روزرسانی شد", category_id=category_id)
 
     # —— Service addon packs ——
 

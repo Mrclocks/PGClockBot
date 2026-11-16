@@ -57,7 +57,15 @@
     select.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
-  var api = { cleanName: cleanName, readQuickResult: readQuickResult, addCategory: addCategory, NAME_MAX: NAME_MAX };
+  /* The category id a returning page should land on ("#plan-cat-12" -> "plan-cat-12"), or null. */
+  function arrivalId(hash) {
+    var match = /^#(plan-cat-[1-9][0-9]{0,9})$/.exec(String(hash || ''));
+    return match ? match[1] : null;
+  }
+
+  var api = {
+    cleanName: cleanName, readQuickResult: readQuickResult, addCategory: addCategory, arrivalId: arrivalId, NAME_MAX: NAME_MAX
+  };
   if (typeof module === 'object' && module.exports) {
     module.exports = api;
     return;
@@ -123,6 +131,10 @@
       }, 0);
       return;
     }
+    // Opened from the plans list, the categories modal returns there after saving; from anywhere else it stays open.
+    var opener = event.target.closest('[data-modal-open="modal-plan-categories"]');
+    var back = doc.getElementById('plan-category-back');
+    if (opener && back) back.value = opener.getAttribute('data-category-back') === 'list' ? 'list' : '';
     // «دستهٔ جدید» / «ساخت دسته»: the categories modal starts as an empty «add» form even after an edit.
     if (event.target.closest('[data-category-new]')) {
       root.setTimeout(function () {
@@ -133,6 +145,20 @@
       }, 0);
     }
   });
+
+  // Back from saving a category: bring its group into view and mark it for a moment.
+  var arrived = arrivalId(root.location && root.location.hash);
+  var arrivedRow = arrived && doc.getElementById(arrived);
+  if (arrivedRow) {
+    // After load: the browser's own jump to the anchor runs late and would put the group at the very top.
+    var land = function () {
+      arrivedRow.scrollIntoView({ block: 'center' });
+      arrivedRow.classList.add('is-arrived');
+      arrivedRow.addEventListener('animationend', function () { arrivedRow.classList.remove('is-arrived'); }, { once: true });
+    };
+    if (doc.readyState === 'complete') root.requestAnimationFrame(land);
+    else root.addEventListener('load', function () { root.requestAnimationFrame(land); }, { once: true });
+  }
 
   // Enter in the new-category name adds it instead of submitting the whole plan form.
   doc.addEventListener('keydown', function (event) {

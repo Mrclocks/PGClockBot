@@ -227,17 +227,35 @@ async def get_owned_category(
     return cat
 
 
+def _same_owner(owner_id: int | None) -> ColumnElement[bool]:
+    """Categories of one catalog: the platform's (NULL owner) or one shop's."""
+    if owner_id is None:
+        return PlanCategory.owner_reseller_id.is_(None)
+    return PlanCategory.owner_reseller_id == int(owner_id)
+
+
+async def _next_sort_order(session: AsyncSession, owner_id: int | None, audience: str) -> int:
+    """One past the last category of this catalog and audience."""
+    last = await session.scalar(
+        select(func.max(PlanCategory.sort_order)).where(
+            _same_owner(owner_id), PlanCategory.audience == normalize_audience(audience)
+        )
+    )
+    return int(last) + 1 if last is not None else 0
+
+
 async def create_category(
     session: AsyncSession,
     staff: dict | None,
     *,
     name: str,
     description: str | None = None,
-    sort_order: int = 0,
+    sort_order: int | None = None,
     audience: str = AUDIENCE_USERS,
     button_style: str | None = None,
     icon_custom_emoji_id: str | None | object = ...,
 ) -> PlanCategory:
+    """A new category of the staff shop; without ``sort_order`` it goes last, so it is the last bot button."""
     owner_id = require_catalog_owner_id(staff)
     cleaned = (name or "").strip()
     if not cleaned:
@@ -273,7 +291,9 @@ async def create_category(
         description=desc,
         audience=aud,
         owner_reseller_id=owner_id,
-        sort_order=int(sort_order or 0),
+        sort_order=(
+            int(sort_order) if sort_order is not None else await _next_sort_order(session, owner_id, aud)
+        ),
         button_style=style_val,
         icon_custom_emoji_id=icon_val,
         is_active=True,
@@ -352,13 +372,6 @@ async def update_category(
     return cat
 
 
-def _same_owner(owner_id: int | None) -> ColumnElement[bool]:
-    """Categories of one catalog: the platform's (NULL owner) or one shop's."""
-    if owner_id is None:
-        return PlanCategory.owner_reseller_id.is_(None)
-    return PlanCategory.owner_reseller_id == int(owner_id)
-
-
 async def find_or_create_user_category(
     session: AsyncSession, staff: dict | None, *, name: str
 ) -> tuple[PlanCategory, bool]:
@@ -385,17 +398,7 @@ async def find_or_create_user_category(
         if not existing.is_active:
             raise ValueError("دسته‌ای با همین نام هست ولی خاموش است؛ از فهرست دسته‌ها روشنش کنید")
         return existing, False
-    sort_order = int(
-        await session.scalar(
-            select(func.coalesce(func.max(PlanCategory.sort_order), -1) + 1).where(
-                _same_owner(owner_id), PlanCategory.audience == AUDIENCE_USERS
-            )
-        )
-        or 0
-    )
-    category = await create_category(
-        session, staff, name=cleaned, audience=AUDIENCE_USERS, sort_order=sort_order
-    )
+    category = await create_category(session, staff, name=cleaned, audience=AUDIENCE_USERS)
     return category, True
 
 

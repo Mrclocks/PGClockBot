@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { cleanName, readQuickResult, addCategory, NAME_MAX } = require("../app/web/static/plan-categories.js");
+const { cleanName, readQuickResult, addCategory, arrivalId, NAME_MAX } = require("../app/web/static/plan-categories.js");
 
 // The name sent is trimmed; nothing usable means nothing is sent.
 assert.equal(cleanName("  ویژه "), "ویژه");
@@ -59,4 +59,11 @@ assert.equal(select.options[1].value, "9");
 addCategory(select, chips, doc, { id: 9, name: hostile });
 assert.equal(select.options.length, 2);
 assert.equal(chips.children.length, 2);
+// Only a category anchor brings a group into view; anything else in the address is ignored.
+assert.equal(arrivalId("#plan-cat-12"), "plan-cat-12");
+assert.equal(arrivalId("#plan-category-board"), null);
+assert.equal(arrivalId("#plan-cat-0"), null);
+assert.equal(arrivalId("#plan-cat-12x"), null);
+assert.equal(arrivalId('#plan-cat-1"><img'), null);
+assert.equal(arrivalId(""), null);
 console.log("plan_categories tests passed");

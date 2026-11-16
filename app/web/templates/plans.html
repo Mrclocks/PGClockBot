@@ -50,7 +50,7 @@
         {{ category_head(g, loop.first, loop.last) }}
         {% for p in g.plans %}{{ fixed_plan_row(p) }}{% endfor %}
       {% endfor %}
-      <tr class="plan-cat-add"><td colspan="8"><div class="plan-cat-cell"><button type="button" class="plan-cat-add-btn" data-modal-open="modal-plan-categories" data-category-new>{{ icon('plus', 'ico') }}دستهٔ جدید</button></div></td></tr>
+      <tr class="plan-cat-add"><td colspan="8"><div class="plan-cat-cell"><button type="button" class="plan-cat-add-btn" data-modal-open="modal-plan-categories" data-category-new data-category-back="list">{{ icon('plus', 'ico') }}دستهٔ جدید</button></div></td></tr>
       {% if board.other_plans %}
         <tr class="plan-cat-head" data-tone="default">
           <td colspan="8"><div class="plan-cat-cell">
@@ -68,7 +68,7 @@
         <td colspan="8"><div class="plan-cat-cell">
           <div class="plan-cat-intro-row">
             <p><strong>دسته‌بندی پلن‌ها</strong><span>با دسته، مشتری در ربات اول دسته را انتخاب می‌کند (مثلاً «ویژه» یا «اقتصادی») و بعد پلن را.</span></p>
-            <button type="button" class="btn btn-sm" data-modal-open="modal-plan-categories" data-category-new>ساخت دسته</button>
+            <button type="button" class="btn btn-sm" data-modal-open="modal-plan-categories" data-category-new data-category-back="list">ساخت دسته</button>
           </div>
         </div></td>
       </tr>
@@ -526,6 +526,8 @@
     </div>
     {% endif %}
     <form method="post" action="/plans/categories" class="form-stack ds-body plan-cat-form" id="plan-category-form" data-create-action="/plans/categories">
+      {# "list" when opened from the plans list, so saving goes back there (plan-categories.js). #}
+      <input type="hidden" name="back" id="plan-category-back" value="" />
       <section class="ds-sec ds-sec-first"><div class="ds-card">
       <div class="settings-grid">
         <label class="form-field">نام برچسب
@@ -539,9 +541,6 @@
             {% endif %}
           </select>
           <small class="muted">در «افزودن پلن» فقط برای همین مخاطب دیده می‌شود</small>
-        </label>
-        <label class="form-field">ترتیب
-          <input name="sort_order" id="plan-category-sort" type="number" value="0" />
         </label>
         <label class="form-field">توضیح (اختیاری)
           <input name="description" id="plan-category-desc" maxlength="255" placeholder="نمایش داخلی" />
@@ -571,7 +570,6 @@
               <th>مخاطب</th>
               <th class="col-hide-sm">رنگ دکمه</th>
               <th class="col-hide-sm">پلن‌ها</th>
-              <th class="col-hide-sm">ترتیب</th>
               <th>وضعیت</th>
               <th class="col-actions"></th>
             </tr>
@@ -610,7 +608,6 @@
                   <div class="muted">بسته‌ها: {{ linked_packs | map(attribute='name') | join('، ') }}</div>
                 {% endif %}
               </td>
-              <td class="col-hide-sm mono">{{ c.sort_order }}</td>
               <td>{% if c.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
               <td class="col-actions">
                 {% call row_actions() %}
@@ -618,7 +615,6 @@
                           data-category-edit
                           data-id="{{ c.id }}"
                           data-name="{{ c.name }}"
-                          data-sort="{{ c.sort_order }}"
                           data-audience="{{ c.audience or 'users' }}"
                           data-description="{{ c.description or '' }}"
                           data-button-style="{% if c.button_style is none %}inherit{% else %}{{ c.button_style }}{% endif %}">ویرایش</button>
@@ -641,7 +637,7 @@
               </td>
             </tr>
           {% else %}
-            {{ empty_state('هنوز برچسبی نیست — از فرم بالا بسازید.', 'plans', colspan=7) }}
+            {{ empty_state('هنوز برچسبی نیست — از فرم بالا بسازید.', 'plans', colspan=6) }}
           {% endfor %}
           </tbody>
         </table>
@@ -1290,7 +1286,6 @@
     if (!form) return;
     const createAction = form.getAttribute('data-create-action') || '/plans/categories';
     const nameEl = document.getElementById('plan-category-name');
-    const sortEl = document.getElementById('plan-category-sort');
     const descEl = document.getElementById('plan-category-desc');
     const audEl = document.getElementById('plan-category-audience');
     const styleEl = form.querySelector('select[name="button_style"]');
@@ -1299,7 +1294,6 @@
     function resetCreate(){
       form.action = createAction;
       if (nameEl) nameEl.value = '';
-      if (sortEl) sortEl.value = '0';
       if (descEl) descEl.value = '';
       if (audEl) audEl.value = 'users';
       if (styleEl) {
@@ -1314,7 +1308,6 @@
         const id = btn.getAttribute('data-id');
         form.action = '/plans/categories/' + id + '/edit';
         if (nameEl) nameEl.value = btn.getAttribute('data-name') || '';
-        if (sortEl) sortEl.value = btn.getAttribute('data-sort') || '0';
         if (descEl) descEl.value = btn.getAttribute('data-description') || '';
         if (audEl) {
           const aud = btn.getAttribute('data-audience') || 'users';
@@ -1489,9 +1482,9 @@
         <button type="button" class="btn btn-ghost btn-sm"
                 data-modal-open="modal-plan-categories"
                 data-category-edit
+                data-category-back="list"
                 data-id="{{ c.id }}"
                 data-name="{{ c.name }}"
-                data-sort="{{ c.sort_order }}"
                 data-audience="{{ c.audience or 'users' }}"
                 data-description="{{ c.description or '' }}"
                 data-button-style="{% if c.button_style is none %}inherit{% else %}{{ c.button_style }}{% endif %}">ویرایش نام و رنگ</button>

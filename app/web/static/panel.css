@@ -12590,6 +12590,28 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
   .plan-cat-cell, #plan-category-board > tr:is(.plan-cat-add, .plan-cat-intro) .plan-cat-cell { padding: var(--space-1) var(--space-1_5); }
 }
 
+/* Back from saving a category, its group lights up once in its own colour and fades (opacity only). */
+#plan-category-board > tr.plan-cat-head > td { position: relative; }
+/* Landing on a group from its anchor leaves room for the floating header and the bottom bar. */
+#plan-category-board > tr.plan-cat-head {
+  scroll-margin-top: calc(var(--hdr-top) + var(--dock-h) + var(--section-gap));
+  scroll-margin-bottom: calc(var(--dock-h) + var(--section-gap));
+}
+#plan-category-board > tr.plan-cat-head.is-arrived > td::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--plan-cat-tone) 28%, transparent);
+  pointer-events: none;
+  animation: plan-cat-arrive calc(var(--motion-slow) * 4) ease-out both;
+}
+@keyframes plan-cat-arrive {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #plan-category-board > tr.plan-cat-head.is-arrived > td::after { animation-duration: 1ms; }
+}
 /* Category chips under the plan name: names vary in length, so three across (two on a phone), each cut with an
    ellipsis and named in full by its title. */
 .ds .ds-chips.plan-cat-chips { --ds-chip-cols: 3; }

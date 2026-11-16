@@ -230,6 +230,43 @@ class CategoryRouteTests(_CategoryDbCase):
         response = await self.client.post("/plans/categories/1/toggle", data={"back": "https://evil.example"})
         self.assertTrue(response.headers["location"].startswith("/plans?categories=1"))
 
+    async def test_a_category_made_from_the_list_goes_last_and_the_page_lands_on_it(self):
+        response = await self.client.post("/plans/categories", data={"name": "پرسرعت", "back": "list"})
+        location = response.headers["location"]
+        async with self.Session() as session:
+            made = await session.scalar(select(PlanCategory).where(PlanCategory.name == "پرسرعت"))
+        self.assertTrue(location.startswith("/plans?ok="))
+        self.assertTrue(location.endswith(f"#plan-cat-{made.id}"))
+        self.assertEqual((made.owner_reseller_id, made.audience), (SHOP, "users"))
+        self.assertEqual((await self._order(SHOP))[-1], "پرسرعت")
+
+    async def test_a_category_made_in_the_modal_keeps_the_modal_open(self):
+        response = await self.client.post("/plans/categories", data={"name": "مودال"})
+        self.assertTrue(response.headers["location"].startswith("/plans?categories=1&ok="))
+
+    async def test_editing_a_category_keeps_its_place_in_the_bot(self):
+        await self.client.post("/plans/categories/2/move", data={"direction": "up"})
+        response = await self.client.post(
+            "/plans/categories/2/edit", data={"name": "ب تازه", "button_style": "danger", "back": "list"}
+        )
+        self.assertTrue(response.headers["location"].endswith("#plan-cat-2"))
+        self.assertEqual(await self._order(SHOP), ["ب تازه", "الف", "ج"])
+        async with self.Session() as session:
+            self.assertEqual((await session.get(PlanCategory, 2)).button_style, "danger")
+
+    async def test_a_failed_save_from_the_list_returns_to_the_list_without_a_target(self):
+        response = await self.client.post("/plans/categories", data={"name": "  ", "back": "list"})
+        location = response.headers["location"]
+        self.assertTrue(location.startswith("/plans?err="))
+        self.assertTrue(location.endswith("#plan-category-board"))
+
+    async def test_another_shop_cannot_edit_a_category(self):
+        self.staff = _reseller(OTHER_SHOP)
+        response = await self.client.post("/plans/categories/1/edit", data={"name": "ربوده"})
+        self.assertIn("err=", response.headers["location"])
+        async with self.Session() as session:
+            self.assertEqual((await session.get(PlanCategory, 1)).name, "الف")
+
     async def test_quick_create_returns_the_category_and_a_repeat_returns_the_same_one(self):
         first = (await self.client.post("/plans/categories/quick", data={"name": " طلایی "})).json()
         again = (await self.client.post("/plans/categories/quick", data={"name": "طلایی"})).json()
