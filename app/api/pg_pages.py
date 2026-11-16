@@ -26,6 +26,7 @@ from app.services.pasarguard import (
     user_group_ids,
     user_subscription_url,
 )
+from app.services.pg_admin_roles import AdminRoleError, apply_admin_role, resolve_new_admin_role_id
 from app.services.pg_overview_view import overview_view, owner_user_counts
 from app.services.pg_access import staff_pg_action, staff_pg_writes, staff_user_actions
 from app.services.pg_read_cache import DASHBOARD_COUNT_MAX_AGE_SEC, NODE_LIST_MAX_AGE_SEC
@@ -2168,7 +2169,10 @@ def register_pg_pages(
                     f"/pg/admins?err={_q('ساخت ادمین با دسترسی sudo از پنل مجاز نیست — یک نقش غیرمالک انتخاب کنید')}",
                     status_code=303,
                 )
-            payload["is_sudo"] = False
+            try:
+                apply_admin_role(payload, await resolve_new_admin_role_id(get_pg(), None))
+            except AdminRoleError as exc:
+                return RedirectResponse(f"/pg/admins?err={_q(str(exc))}", status_code=303)
         if data_limit_gb:
             try:
                 gb = parse_float(data_limit_gb)

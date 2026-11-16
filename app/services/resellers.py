@@ -26,6 +26,7 @@ from app.db.models import (
 )
 from app.services.db_safe import rollback_quiet
 from app.services.chat_records import keeps_sent
+from app.services.pg_admin_roles import apply_admin_role, resolve_new_admin_role_id
 from app.services.pg_panel_access import (
     close_access_warning,
     may_share_pg_credentials,
@@ -1275,10 +1276,8 @@ async def provision_reseller(
         tid = deliverable_telegram_id(getattr(user, "telegram_id", None))
         if tid is not None:
             payload["telegram_id"] = tid
-        if role_id:
-            payload["role_id"] = int(role_id)
-        else:
-            payload["is_sudo"] = False
+        role_id = await resolve_new_admin_role_id(get_pg(), int(role_id) if role_id else None)
+        apply_admin_role(payload, role_id)
         if plan is not None and is_subscription_plan(plan):
             # Refuse before anything exists, and create the admin with the package's limits:
             # a PasarGuard admin without ``data_limit`` is unlimited until something sets one.
@@ -1287,15 +1286,8 @@ async def provision_reseller(
         try:
             await get_pg().create_admin(payload)
         except Exception as e:
-            if "role_id" in payload:
-                payload.pop("role_id", None)
-                payload["is_sudo"] = False
-                try:
-                    await get_pg().create_admin(payload)
-                except Exception as e2:
-                    raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e2)}") from e2
-            else:
-                raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e)}") from e
+            # No second create: the first one may have succeeded on the panel.
+            raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e)}") from e
 
     web_username = None
     web_password = None
