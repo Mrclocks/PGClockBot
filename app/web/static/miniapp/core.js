@@ -465,6 +465,54 @@
     }
   }
 
+  // Telegram's answers about a home-screen shortcut (Bot API 8.0); "unsupported" until it says otherwise.
+  const HOME_SCREEN_STATUSES = new Set(["unsupported", "unknown", "added", "missed"]);
+  let homeScreenStatus = "unsupported";
+  let homeScreenHandler = null;
+
+  function onHomeScreenChange(handler) {
+    homeScreenHandler = typeof handler === "function" ? handler : null;
+  }
+
+  function setHomeScreenStatus(status) {
+    const next = HOME_SCREEN_STATUSES.has(status) ? status : "unsupported";
+    if (next === homeScreenStatus) return;
+    homeScreenStatus = next;
+    if (homeScreenHandler) homeScreenHandler(next);
+  }
+
+  /** Older Telegram apps load the same SDK but ignore these calls, so the version decides. */
+  function homeScreenApi(tg) {
+    return !!tg && typeof tg.checkHomeScreenStatus === "function" && typeof tg.addToHomeScreen === "function"
+      && typeof tg.isVersionAtLeast === "function" && tg.isVersionAtLeast("8.0");
+  }
+
+  /** True when Telegram can add a shortcut and the person does not have one yet. */
+  function canAddToHomeScreen() {
+    return homeScreenStatus === "missed" || homeScreenStatus === "unknown";
+  }
+
+  /** Telegram's own prompt; false when this Telegram cannot add a shortcut. */
+  function addToHomeScreen() {
+    const tg = webApp();
+    if (!homeScreenApi(tg) || !canAddToHomeScreen()) return false;
+    try {
+      tg.addToHomeScreen();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function watchHomeScreen(tg) {
+    if (!homeScreenApi(tg)) return;
+    try {
+      tg.onEvent("homeScreenAdded", () => setHomeScreenStatus("added"));
+      tg.onEvent("homeScreenChecked", (event) => setHomeScreenStatus(event && event.status));
+      tg.checkHomeScreenStatus(setHomeScreenStatus);
+    } catch (_) {}
+  }
+
   let telegramInitialized = false;
 
   /** Once, as soon as the SDK is there (it may arrive after the first screen). */
@@ -487,12 +535,14 @@
       tg.onEvent("themeChanged", applyTheme);
       tg.onEvent("fullscreenChanged", applyFullscreen);
     } catch (_) {}
+    watchHomeScreen(tg);
   }
 
   const core = Object.freeze({
     webApp, getInitData, outsideTelegram, botUsername, whenTelegram, sdkPending, sdkFailed, shopKey, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, formatRelative, faDigits,
     haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, onAuthLost, onGate, isGateError, closeApp, copyText, markCopied,
     applyTheme, applyBrand, inkFor, initTelegram, requestWriteAccessOnce,
+    onHomeScreenChange, canAddToHomeScreen, addToHomeScreen,
   });
   root.PGMini = Object.assign(root.PGMini || {}, { core });
 })(typeof window === "object" ? window : globalThis);

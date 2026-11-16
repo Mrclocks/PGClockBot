@@ -41,6 +41,8 @@
     // The onboarding step on screen (referral, channels or terms), and the code typed for it.
     onboarding: null,
     onboardingCode: "",
+    // The person tapped «افزودن به صفحهٔ اصلی»; Telegram's "added" then gets a confirmation.
+    homeScreenAsked: false,
     reviewImage: null,
     sheet: null,
     sheetSeq: 0,
@@ -717,11 +719,13 @@
           ${R.icon("chat")}<span class="list-row-label">پشتیبانی و تیکت‌ها</span>${R.icon("chevron", 16)}</button>` : "",
       can("club") ? `<button type="button" class="list-row" data-action="goto" data-view="club">
           ${R.icon("gift")}<span class="list-row-label">امتیاز، جوایز و دعوت دوستان</span>${R.icon("chevron", 16)}</button>` : "",
+      core.canAddToHomeScreen() ? `<button type="button" class="list-row" data-action="add-home-screen">
+          ${R.icon("shortcut")}<span class="list-row-label">افزودن به صفحهٔ اصلی</span>${R.icon("chevron", 16)}</button>` : "",
     ].join("");
     return viewHead(user.name || "حساب من", "حساب")
       + R.walletCardHtml(customer(), { features: features() })
       + (topups && topups.status === "ready" ? R.recentTopupsHtml(topups.data.recent) : "")
-      + (links ? `<section class="card list-card" aria-label="پشتیبانی">${links}</section>` : "")
+      + (links ? `<section class="card list-card" aria-label="میانبرهای حساب">${links}</section>` : "")
       + `<section class="card" aria-label="تراکنش‌ها"><h2 class="card-title">تراکنش‌ها</h2>${rows}
           ${canMore ? '<button type="button" class="btn ghost block" data-action="activity-more">تراکنش‌های بیشتر</button>' : ""}</section>`;
   }
@@ -1986,6 +1990,19 @@
   };
 
   ACTIONS.reload = () => boot();
+  ACTIONS["add-home-screen"] = () => {
+    state.homeScreenAsked = core.addToHomeScreen();
+    if (!state.homeScreenAsked) core.toast("این نسخهٔ تلگرام افزودن به صفحهٔ اصلی را پشتیبانی نمی‌کند", "err");
+  };
+
+  /** The account tab shows the shortcut row only while Telegram can still add one. */
+  function onHomeScreenChange(status) {
+    if (status === "added" && state.homeScreenAsked) {
+      state.homeScreenAsked = false;
+      core.toast("به صفحهٔ اصلی اضافه شد");
+    }
+    if (state.me && state.view === "account") renderView();
+  }
   ACTIONS["close-app"] = () => {
     if (!core.closeApp()) core.toast("مینی‌اپ را ببندید و دوباره از دکمهٔ «Open» باز کنید.");
   };
@@ -2028,6 +2045,7 @@
     els.sheetClose = doc.getElementById("sheet-close");
     core.onAuthLost(onAuthLost);
     core.onGate(onGate);
+    core.onHomeScreenChange(onHomeScreenChange);
     bindEvents();
     attachPullToRefresh();
     boot();
