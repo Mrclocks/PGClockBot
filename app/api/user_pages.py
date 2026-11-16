@@ -60,6 +60,26 @@ def _redirect_user(user_id: int, *, ok: str | None = None, err: str | None = Non
     return RedirectResponse(f"/users?{'&'.join(qs)}", status_code=303)
 
 
+# The list a user card was opened from; anything else is the users list.
+CARD_FROM_RESELLERS = "resellers"
+
+
+def user_card_actions(staff: dict, user: BotUser, *, shop_scope: int | None, opened_from: str | None) -> dict:
+    """Which actions the user card offers, and where «ویرایش» leads.
+
+    Opened from the resellers list by the platform owner, a reseller's card edits the reseller (the reseller edit
+    modal of that page); on the users list it edits the customer for anyone working in a shop, like the list's own
+    «ویرایش». ``opened_from`` is compared with a fixed value.
+    """
+    from_resellers = str(opened_from or "") == CARD_FROM_RESELLERS
+    if from_resellers:
+        edit = "reseller" if user.role == "reseller" and is_explicit_owner_staff(staff) else None
+    else:
+        # The edit modal opens for anyone working in a shop; each change inside it checks its own permission.
+        edit = "user" if is_explicit_owner_staff(staff) or shop_scope is not None else None
+    return {"edit_target": edit, "can_message": not user.is_blocked}
+
+
 def _list_return_from_form(form) -> tuple[str, str | None]:
     from app.services.users_ops import normalize_users_filter
 
@@ -77,8 +97,11 @@ def _redirect_list_form(
 ):
     from app.services.users_ops import users_list_href
 
-    fk, q = _list_return_from_form(form)
-    href = users_list_href(filter_key=fk, uid=uid, q=q)
+    if str(form.get("return_page") or "") == CARD_FROM_RESELLERS:
+        href = "/resellers"
+    else:
+        fk, q = _list_return_from_form(form)
+        href = users_list_href(filter_key=fk, uid=uid, q=q)
     bits = []
     if err:
         bits.append(f"err={_q(err)}")
@@ -348,15 +371,12 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             shop_id=shop_scope,
             show_private_marks=True,
         )
-        pg_acts = customer_service_actions(staff)
-        in_shop = is_explicit_owner_staff(staff) or shop_scope is not None
         return render(
             request,
             "_user_card_body.html",
             {
                 "card": card,
-                "can_edit": in_shop and any(pg_acts.get(k) for k in ("create", "update", "delete")),
-                "can_message": not loaded.is_blocked,
+                **user_card_actions(staff, loaded, shop_scope=shop_scope, opened_from=request.query_params.get("from")),
             },
         )
 

@@ -1,8 +1,19 @@
 {% from "macros.html" import switch %}
 {% from "_ds.html" import ds_perm_groups %}
 {% from "_list_input.html" import list_input %}
+{% from "_user_identity.html" import user_identity %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+
+{# The same header as the user edit modal: whose account this is, before any setting. #}
+<section class="edit-section edit-section--identity">
+  {% call(part) user_identity(user) %}
+    {%- if part == 'badges' -%}
+    <span class="badge neutral">نماینده</span>
+    {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
+    {%- endif -%}
+  {% endcall %}
+</section>
 
 <section class="edit-section">
   <header class="edit-section-head">

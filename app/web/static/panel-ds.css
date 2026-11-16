@@ -101,6 +101,9 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ui-modal.ds .ui-modal-scroll > .ds-sec:first-of-type,
 .ui-modal.ds .ds-body > .ds-sec, .ui-modal.ds .ds-sec { padding: 0; margin: 0; scroll-margin-top: 160px; }
 
+/* Fragment bodies (user card, user and reseller edit) sit 16 below the header like a form body, not against its line. */
+.ui-modal.ds .edit-modal-body { padding-top: var(--g4); }
+
 /* Footer: pinned, same padding for one or two buttons, safe area included. */
 .ui-modal.ds .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save,
 .ui-modal.ds .ds-foot {
