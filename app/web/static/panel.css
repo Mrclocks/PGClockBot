@@ -4041,13 +4041,6 @@ a.btn.btn-star:hover {
 .settings-grid > .setting-item {
   min-width: 0;
 }
-/* Gift expiry uses a plain text input (same chrome as siblings). Do not use a
-   native date-time picker here — mobile WebViews ignore width / crush the UI. */
-.form-field.gift-expires-field {
-  min-width: 0;
-  max-width: 100%;
-  grid-column: 1 / -1;
-}
 .setting-item.full { grid-column: 1 / -1; }
 .plan-name-cell {
   display: inline-flex;

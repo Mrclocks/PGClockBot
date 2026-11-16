@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -34,6 +35,8 @@ PURCHASE_TYPES = {
 }
 MAX_AMOUNT = 50_000_000
 MAX_USES = 1000
+# A gift code lasts at most ten years; the form asks for whole days.
+MAX_EXPIRY_DAYS = 3650
 GIFT_CODE_LIST_LIMIT = 200
 # A code limited to plans names at most this many; the form lists at most PLAN_OPTION_LIMIT.
 MAX_CODE_PLANS = 40
@@ -60,21 +63,36 @@ def expiry_input(value: datetime | None) -> str:
     return utc(value).astimezone(TEHRAN).strftime("%Y-%m-%d %H:%M") if value else ""
 
 
-def parse_expiry(raw: str) -> datetime | None:
+def expiry_days_input(value: datetime | None, *, now: datetime | None = None) -> str:
+    """Whole days left before ``value``, rounded up, as the form shows them: "" for no expiry, "0" once expired."""
+    if not value:
+        return ""
+    left = utc(value) - (now or datetime.now(timezone.utc))
+    if left <= timedelta(0):
+        return "0"
+    return str(math.ceil(left / timedelta(days=1)))
+
+
+def parse_expiry_days(
+    raw: str, *, current: datetime | None = None, shown: str = "", now: datetime | None = None
+) -> datetime | None:
+    """Expiry from a number of days counted from now; empty means no expiry.
+
+    The edit form shows the days left of ``current``. Saving that same number keeps ``current`` exactly, so
+    editing another field neither moves the expiry nor revives an expired code.
+    """
     text = (raw or "").strip()
     if not text:
         return None
-    # Accept "YYYY-MM-DD HH:MM", "YYYY-MM-DDTHH:MM", and ISO with seconds/offset.
-    normalized = text
-    if "T" not in normalized and " " in normalized:
-        normalized = normalized.replace(" ", "T", 1)
+    if current is not None and text == (shown or "").strip():
+        return utc(current)
     try:
-        value = datetime.fromisoformat(normalized)
+        days = int(text)
     except ValueError as exc:
-        raise ValueError("تاریخ انقضا نامعتبر است") from exc
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=TEHRAN)
-    return utc(value)
+        raise ValueError("مدت اعتبار باید تعداد روز (عدد صحیح) باشد") from exc
+    if not 1 <= days <= MAX_EXPIRY_DAYS:
+        raise ValueError("مدت اعتبار باید بین ۱ تا ۳٬۶۵۰ روز باشد")
+    return (now or datetime.now(timezone.utc)) + timedelta(days=days)
 
 
 def _plan_id_list(plan_ids) -> list[int]:
@@ -531,7 +549,7 @@ def describe_code(row: ChargeCode, plan_names: Mapping[int, str] | None = None) 
         if key in PURCHASE_TYPES
     ]
     return dict(
-        expiry_input=expiry_input(expiry),
+        expiry_days=expiry_days_input(expiry),
         expiry_label=expiry.astimezone(TEHRAN).strftime("%Y/%m/%d %H:%M")
         if expiry
         else "بدون انقضا",
