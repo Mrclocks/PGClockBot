@@ -48,6 +48,8 @@ BAD_SIGNATURE = "bad_signature"
 EXPIRED = "expired"
 NOT_STARTED = "not_started"
 ENTRY_NOT_APPROVED = "درخواست ورود شما هنوز تأیید نشده است؛ نتیجه را در ربات می‌بینید."
+# The page tells «waiting for an admin» apart from other refusals by this code, not by the text.
+ENTRY_PENDING = "entry_pending"
 
 _REJECT_TEXT = {
     NO_INIT_DATA: "اطلاعات ورود تلگرام دریافت نشد؛ مینی‌اپ را از داخل تلگرام باز کنید",
@@ -172,7 +174,7 @@ def resolve_mini_persona(user: BotUser) -> str:
     return "user"
 
 
-def _is_gated_customer(user: BotUser, scope: MiniScope) -> bool:
+def is_gated_customer(user: BotUser, scope: MiniScope) -> bool:
     """Customers pass force-join and terms; staff (platform, or this shop's) do not."""
     if scope.is_shop:
         return not is_shop_staff(scope, user)
@@ -185,7 +187,7 @@ async def assert_mini_force_join(session: AsyncSession, user: BotUser, *, scope:
     Admin/reseller personas are not gated (same as Telegram middleware). In a shop's Mini
     App the shop's channels apply, checked through the shop's bot.
     """
-    if not _is_gated_customer(user, scope):
+    if not is_gated_customer(user, scope):
         return
     from aiogram import Bot
 
@@ -228,7 +230,7 @@ async def assert_mini_force_join(session: AsyncSession, user: BotUser, *, scope:
 
 async def assert_mini_terms_entry(session: AsyncSession, user: BotUser, *, scope: MiniScope = PLATFORM_SCOPE) -> None:
     """Mirror bot TermsEntryMiddleware for Mini App (users only); a shop's own terms in its Mini App."""
-    if not _is_gated_customer(user, scope):
+    if not is_gated_customer(user, scope):
         return
     from app.services.terms import needs_entry_gate
     from app.services.users import get_all_settings
@@ -254,7 +256,7 @@ async def assert_mini_entry_approval(session: AsyncSession, user: BotUser, *, sc
 
     Nothing is created here; a new customer opens the request by starting the bot.
     """
-    if not _is_gated_customer(user, scope):
+    if not is_gated_customer(user, scope):
         return
     shop_key = shop_key_of(scope.shop_id)
     config = await gate_config(session, shop_key)
@@ -262,7 +264,7 @@ async def assert_mini_entry_approval(session: AsyncSession, user: BotUser, *, sc
         return
     state = await resolve_gate(session, user, shop_key=shop_key, config=config, create=False)
     if not state.is_open:
-        raise HTTPException(403, ENTRY_NOT_APPROVED)
+        raise HTTPException(403, ENTRY_NOT_APPROVED, headers={ERROR_HEADER: ENTRY_PENDING})
 
 
 async def load_reseller_profile(

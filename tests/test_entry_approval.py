@@ -28,7 +28,7 @@ from app.db.models import BotUser, BotUserShop, EntryApproval, Order, PurchaseCo
 from app.services import entry_approval as ea
 from app.services.entry_approval_config import KEY_SINCE, prepare_saved_values, read_config
 from app.services.entry_approval_notify import parse_admin_callback, request_text
-from app.services.miniapp_auth import assert_mini_entry_approval
+from app.services.miniapp_auth import ENTRY_PENDING, ERROR_HEADER, assert_mini_entry_approval
 from app.services.miniapp_shop import MiniScope
 from app.services.users import clear_settings_cache, get_all_settings, set_settings_bulk
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION, RoutesHarness
@@ -380,6 +380,7 @@ class MiniAppTests(GateCase):
             with self.assertRaises(HTTPException) as caught:
                 await assert_mini_entry_approval(session, await session.get(BotUser, 2), scope=scope)
             self.assertEqual(caught.exception.status_code, 403)
+            self.assertEqual(caught.exception.headers, {ERROR_HEADER: ENTRY_PENDING})
             await assert_mini_entry_approval(session, await session.get(BotUser, 1), scope=scope)
         self.assertEqual([r.bot_user_id for r in await self.rows()], [1])
 
