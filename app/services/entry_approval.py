@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.db.models import BotUser, BotUserShop, EntryApproval, Role
+from app.db.models import BotUser, BotUserShop, EntryApproval, Order, Role
 from app.services.authz import authz_from_staff, can_shop
 from app.services.entry_approval_config import (
     KEY_ENABLED,
@@ -168,7 +168,13 @@ async def _joined_before(session: AsyncSession, user: BotUser, shop_key: int, si
     first_seen = await session.scalar(
         select(func.min(BotUserShop.created_at)).where(BotUserShop.bot_user_id == int(user.id), shop_clause)
     )
-    candidates = [as_utc(first_seen)] if first_seen else []
+    # Visits to a second bot were only recorded recently, so an older order in this shop
+    # also proves the person was already its customer.
+    order_clause = Order.reseller_id.is_(None) if not shop_key else Order.reseller_id == shop_key
+    first_order = await session.scalar(
+        select(func.min(Order.created_at)).where(Order.user_id == int(user.id), order_clause)
+    )
+    candidates = [as_utc(seen) for seen in (first_seen, first_order) if seen]
     if shop_key_of(user.reseller_id) == shop_key and user.created_at:
         candidates.append(as_utc(user.created_at))
     return bool(candidates) and min(candidates) < since

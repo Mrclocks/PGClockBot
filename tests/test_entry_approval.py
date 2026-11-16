@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.bot import entry_gate
 from app.db import Base
-from app.db.models import BotUser, BotUserShop, EntryApproval, PurchaseContact, ResellerProfile, ResellerSetting, Setting
+from app.db.models import BotUser, BotUserShop, EntryApproval, Order, PurchaseContact, ResellerProfile, ResellerSetting, Setting
 from app.services import entry_approval as ea
 from app.services.entry_approval_config import KEY_SINCE, prepare_saved_values, read_config
 from app.services.entry_approval_notify import parse_admin_callback, request_text
@@ -140,6 +140,13 @@ class GateTests(GateCase):
             session.add(BotUserShop(bot_user_id=2, shop_id=5, created_at=LONG_AGO))
             await session.commit()
         self.assertTrue((await self.gate(2, 5)).is_open)
+        self.assertEqual((await self.gate(6, 5)).step, ea.GateStep.PENDING)
+
+    async def test_a_shop_customer_who_bought_from_the_platform_before_walks_in(self):
+        async with self.Session() as session:
+            session.add(Order(user_id=6, reseller_id=None, amount=1000, status="delivered", created_at=LONG_AGO))
+            await session.commit()
+        self.assertTrue((await self.gate(6)).is_open)
         self.assertEqual((await self.gate(6, 5)).step, ea.GateStep.PENDING)
 
     async def test_a_new_customer_waits_and_the_admins_are_told_once(self):
