@@ -24,6 +24,7 @@ from app.db.models import (
     DeliveryFailure,
     Order,
     OrderStatus,
+    delivered_stamp,
     Payment,
     PaymentStatus,
     ResellerApplication,
@@ -120,7 +121,7 @@ async def _claim(session: AsyncSession, order: Order, new_status: str, now: date
             Order.updated_at <= now - STALE_AFTER,
         )
         # A closed renewal or add-on no longer blocks other changes to its service.
-        .values(status=new_status, service_mutation_pending=False),
+        .values(status=new_status, service_mutation_pending=False, **delivered_stamp(new_status, now=now)),
         execution_options={"synchronize_session": False},
     )
     if result.rowcount != 1:

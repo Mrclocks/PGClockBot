@@ -763,13 +763,19 @@ async def record_funnel_event(
 
 
 async def funnel_summary(
-    session: AsyncSession, *, reseller_id: int | None = None, days: int = 7
+    session: AsyncSession,
+    *,
+    reseller_id: int | None = None,
+    days: int = 7,
+    window: tuple[datetime, datetime] | None = None,
 ) -> dict[str, int]:
-    """Step counts for the behavior panel (7d default)."""
-    since = _utcnow() - timedelta(days=max(1, min(90, days)))
+    """Step counts for the behavior panel: the last ``days`` days, or the half-open ``window``."""
+    since, until = window or (_utcnow() - timedelta(days=max(1, min(90, days))), None)
     q = select(FunnelEvent.step, func.count()).where(
         FunnelEvent.created_at >= since, non_demo_customer(FunnelEvent.user_id),
     )
+    if until is not None:
+        q = q.where(FunnelEvent.created_at < until)
     if reseller_id is None:
         q = q.where(FunnelEvent.reseller_id.is_(None))
     else:
@@ -785,6 +791,8 @@ async def funnel_summary(
         oq = select(Order.status, func.count()).where(
             Order.created_at >= since, non_demo_customer(Order.user_id),
         )
+        if until is not None:
+            oq = oq.where(Order.created_at < until)
         if reseller_id is None:
             oq = oq.where(Order.reseller_id.is_(None))
         else:

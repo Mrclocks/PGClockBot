@@ -1,7 +1,7 @@
 {
   "action_center_expire_days": "3",
   "admin_daily_report_enabled": "1",
-  "admin_daily_report_hour": "0",
+  "admin_daily_report_hour": "4",
   "admin_daily_report_last": "",
   "admin_daily_report_metrics": "",
   "admin_daily_report_template": "",
