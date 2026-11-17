@@ -86,7 +86,8 @@ class PlanButtonTests(unittest.IsolatedAsyncioTestCase):
                 make_button(ButtonInput("plan", plan=plan_id), rules)
         spec = make_button(ButtonInput("plan", plan="2"), rules)
         self.assertEqual((spec.kind, spec.target), (KIND_PLAN, "2"))
-        self.assertEqual(build_keyboard([spec])[0][0].callback_data, "nto:shop:plan:2")
+        # Checkout creates an order, so the plan is opened like a tap in the shop, not as a replayable panel.
+        self.assertEqual(build_keyboard([spec])[0][0].callback_data, "shop:plan:2")
 
     async def test_a_plan_no_longer_sold_is_dropped_from_a_queued_message(self) -> None:
         stored = dump_buttons([make_button(ButtonInput("plan", plan="2"), ButtonRules(plan_ids=frozenset({2})))])

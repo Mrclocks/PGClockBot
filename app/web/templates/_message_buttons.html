@@ -6,7 +6,7 @@
 {% from "_icons.html" import icon as icon_svg %}
 
 {% macro button_item(groups, styles, plans) -%}
-<details class="ds-acc msg-btn" data-msg-btn-row open>
+<details class="msg-btn ds-acc" data-msg-btn-row open>
   <summary>
     <span class="msg-btn-dot" data-msg-btn-dot data-tone="default" aria-hidden="true"></span>
     <span class="ds-acc-title" data-msg-btn-title dir="auto">دکمهٔ تازه</span>
@@ -92,7 +92,8 @@
 </div>
 {%- endmacro %}
 
-{# Saved sets: list with delete, and a form to save a new set (same editor). Opened from the page's «⋯». #}
+{# Saved sets: list with delete, and a form to save a new set (same editor). Opened from the page's «⋯».
+   ``limit`` arrives formatted: this file is also imported where the panel's number filters are not loaded. #}
 {% macro presets_modal(presets=[], groups=[], styles=[], plans=[], limit=30, max=4) -%}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
 <div class="ui-modal ds" id="modal-msg-presets" hidden>
@@ -125,7 +126,7 @@
         {% call ds_sec('قالب تازه') %}
           <label class="form-field">نام قالب
             <input type="text" name="name" required maxlength="40" dir="auto" />
-            <small class="muted">با همین نام، قالب قبلی جایگزین می‌شود؛ حداکثر {{ limit | fa }} قالب.</small>
+            <small class="muted">با همین نام، قالب قبلی جایگزین می‌شود؛ حداکثر {{ limit }} قالب.</small>
           </label>
           <div class="form-field">
             <span>دکمه‌ها</span>

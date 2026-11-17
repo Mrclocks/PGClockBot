@@ -33,8 +33,6 @@ NOTICE_SCREEN_PREFIXES: tuple[str, ...] = (
     "svc:auto:",
     "svc:renew:",
     "svc:addon:",
-    # A plan offered under a group message: its handler shows only the shop's own catalog plans.
-    "shop:plan:",
 )
 
 

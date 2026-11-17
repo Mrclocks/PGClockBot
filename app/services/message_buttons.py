@@ -203,11 +203,17 @@ def load_buttons(stored: str | None, rules: ButtonRules) -> list[ButtonSpec]:
     return out[:BUTTONS_MAX]
 
 
+def _callback_data(spec: ButtonSpec) -> str:
+    """A screen opens in a panel under the message; a plan starts checkout like a tap in the shop, so it is not
+    a replayable panel (its handler creates the order and checks the plan against the bot's catalog)."""
+    if spec.kind == KIND_PLAN:
+        return f"{PLAN_CALLBACK_PREFIX}{int(spec.target)}"
+    return notice_open_data(_screen_data(spec))
+
+
 def _screen_data(spec: ButtonSpec) -> str:
     if spec.kind == KIND_SCREEN:
         return SCREENS[spec.target][0]
-    if spec.kind == KIND_PLAN:
-        return f"{PLAN_CALLBACK_PREFIX}{int(spec.target)}"
     return f"svc:renew:{int(spec.target)}"
 
 
@@ -217,7 +223,7 @@ def build_keyboard(buttons: list[ButtonSpec]) -> list[list[InlineKeyboardButton]
         extra = {"style": spec.style} if spec.style else {}
         if spec.kind == KIND_URL:
             return InlineKeyboardButton(text=spec.label, url=spec.target, **extra)
-        return InlineKeyboardButton(text=spec.label, callback_data=notice_open_data(_screen_data(spec)), **extra)
+        return InlineKeyboardButton(text=spec.label, callback_data=_callback_data(spec), **extra)
 
     keyboard = [button(spec) for spec in buttons]
     return [keyboard[i:i + PER_ROW] for i in range(0, len(keyboard), PER_ROW)]
