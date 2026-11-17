@@ -38,7 +38,9 @@ SETTING_KEY = "pg_link_alerts_enabled"
 SETTING_DEFAULT = "1"
 # Keep-alive drops and a single slow /api/system answer are common; wait for a
 # sustained outage (and a sustained recovery) before Telegram messages.
-DOWN_CONFIRM_SEC = 2 * 60
+# With a 60s watchdog and a streak of two failures, 60s here keeps a real
+# outage around two to three minutes before the owner is paged — not ~four.
+DOWN_CONFIRM_SEC = 60
 UP_CONFIRM_SEC = 90
 THROTTLE_SEC = 30 * 60
 

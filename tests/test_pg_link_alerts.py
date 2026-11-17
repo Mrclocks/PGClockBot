@@ -79,8 +79,8 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, alerts.ALERT_DOWN)
         self.assertEqual(len(self.sent), 1)
         self.assertIn(health.KIND_LABELS["connect"], self.sent[0])
-        # Confirm moment is 12:02 UTC → 15:32 Asia/Tehran
-        self.assertIn("15:32:00", self.sent[0])
+        # Confirm moment is 12:01 UTC → 15:31 Asia/Tehran
+        self.assertIn("15:31:00", self.sent[0])
 
     async def test_flapping_within_confirm_and_throttle_does_not_spam(self) -> None:
         await self._confirm_down()
