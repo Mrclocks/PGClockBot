@@ -821,6 +821,119 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .hub-desc { overflow: hidden; color: var(--muted-fg); font-size: var(--fs-2); line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .ds .hub-chev { display: grid; flex: 0 0 auto; color: var(--muted-fg); }
 
+/* Settings list on a desktop (900 and up, DESIGN_SYSTEM.md §6-2): each page is its own tile, all tiles the same
+   height (two lines of description kept), in fixed columns so every group lines up with the others: two, and four
+   from 1400. Groups stack with their title above. Phones keep the list above. */
+@media (min-width: 900px) {
+  .ds.ds-settings > .settings-hub { grid-template-columns: minmax(0, 1fr); gap: var(--g6); }
+  .ds.ds-settings > .settings-hub .hub-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--g3);
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+  .ds.ds-settings > .settings-hub .hub-row {
+    align-items: flex-start;
+    height: 100%;
+    padding: var(--g4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    box-sizing: border-box;
+  }
+  .ds.ds-settings > .settings-hub .hub-row + .hub-row::before { content: none; }
+  .ds.ds-settings > .settings-hub .hub-row:hover { border-color: color-mix(in srgb, var(--tile-tone) 45%, var(--border)); }
+  .ds.ds-settings > .settings-hub .hub-ico { flex-basis: var(--ctl-h); width: var(--ctl-h); height: var(--ctl-h); }
+  .ds.ds-settings > .settings-hub .hub-text { gap: var(--g1); }
+  .ds.ds-settings > .settings-hub .hub-desc {
+    display: -webkit-box;
+    min-height: 3.2em;
+    line-height: 1.6;
+    white-space: normal;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .ds.ds-settings > .settings-hub .hub-chev { align-self: center; }
+}
+@media (min-width: 1400px) {
+  .ds.ds-settings > .settings-hub .hub-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* Settings pages on a desktop (1200 and up, DESIGN_SYSTEM.md §6-2): the area's list becomes a menu beside the page
+   (settings_menu), so moving between pages is one click and the open one is marked. The header spans both columns;
+   everything else of the page sits in the content column, at most --settings-pane-w wide. The menu spans the content
+   rows, so the grid has no row gap (empty spanned rows would each add one): the header keeps 16 under it and every
+   later block keeps the page's 16 above it as a margin instead. Below 1200 the menu is hidden and the page keeps its back button to the list. */
+.ds .settings-nav { display: none; }
+@media (min-width: 1200px) {
+  #main .ds.ds-settings:has(> .settings-nav) {
+    --settings-nav-w: 272px;
+    --settings-pane-w: 880px;
+    display: grid;
+    grid-template-columns: var(--settings-nav-w) minmax(0, var(--settings-pane-w));
+    column-gap: var(--g6);
+    row-gap: 0;
+    align-items: start;
+  }
+  #main .ds.ds-settings:has(> .settings-nav) > * { grid-column: 2; min-width: 0; margin-top: var(--section-gap); }
+  /* The header carries the 16 above the menu and the first block (a section-tab row cannot take a margin). */
+  #main .ds.ds-settings:has(> .settings-nav) > .page-head { grid-column: 1 / -1; margin: 0 0 var(--section-gap); }
+  #main .ds.ds-settings > .settings-nav,
+  #main .ds.ds-settings > .settings-nav + * { margin-top: 0; }
+  .ds.ds-settings:has(> .settings-nav) > .page-head .page-back { display: none; }
+  #main .ds.ds-settings > .settings-nav {
+    position: sticky;
+    top: var(--g4);
+    grid-column: 1;
+    grid-row: 2 / span 60;
+    display: flex;
+    flex-direction: column;
+    gap: var(--g3);
+    max-height: calc(100vh - 2 * var(--g4));
+    overflow-y: auto;
+    padding: var(--g2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    box-sizing: border-box;
+  }
+}
+.ds .settings-nav { --tile-tone: var(--bot-line); }
+.ds .settings-nav--neutral { --tile-tone: var(--foreground); }
+.ds .settings-nav-group { display: flex; flex-direction: column; gap: 0; }
+.ds .settings-nav-title { margin: 0; padding: var(--g1) var(--g2); color: var(--muted-fg); font-size: var(--fs-1); font-weight: 600; line-height: 1.4; }
+.ds .settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--g2);
+  min-height: var(--cmp-h);
+  padding: var(--g1) var(--g2);
+  border-radius: var(--control-radius);
+  color: var(--foreground);
+  font-size: var(--fs-2);
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+.ds .settings-nav-item:hover { background: color-mix(in srgb, var(--foreground) 5%, transparent); }
+.ds .settings-nav-item:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.ds .settings-nav-item[aria-current="page"] { background: var(--sel-bg); color: var(--sel-fg); font-weight: 700; }
+.ds .settings-nav-ico {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--tile-tone) 10%, transparent);
+  color: var(--tile-tone);
+}
+.ds .settings-nav-item[aria-current="page"] .settings-nav-ico { background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--sel-fg); }
+.ds .settings-nav-ico svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ds .settings-nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* A settings modal as list → section (DESIGN_SYSTEM.md §3): the same rows, one column, as buttons that open the
    section in place. While a section is open the back circle takes the place of the title icon. */
 .ds .modal-list { grid-template-columns: minmax(0, 1fr); }

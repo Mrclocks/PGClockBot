@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% from "macros.html" import page_header %}
-{% from "_settings_hub.html" import settings_area_header %}
+{% from "_settings_hub.html" import settings_area_header, settings_menu %}
 {% block title %}{% if is_owner %}تنظیمات سیستم{% else %}حساب و امنیت{% endif %}{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
 {% if staff.role == 'admin' %}
 {{ settings_area_header(system_settings_groups('security'), 'security', '/settings?tab=system', 'تنظیمات سیستم', 'panel-settings', 'neutral', help='settings-panel') }}
+{{ settings_menu(system_settings_nav('security'), tone='neutral') }}
 {% else %}
 {{ page_header('panel-settings', 'حساب و امنیت', 'neutral', help='settings-panel') }}
 {% endif %}

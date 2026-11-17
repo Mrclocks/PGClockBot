@@ -25,6 +25,36 @@
 </div>
 {%- endmacro %}
 
+{# The settings menu beside every page of an area on a wide screen (DESIGN_SYSTEM.md §6-2): the list's groups and rows,
+   compact, the open page marked. ``nav`` comes from settings_nav() / system_settings_nav(). Below the desktop width
+   it is hidden and the page keeps its back button to the list. #}
+{% macro settings_menu(nav, tone='brand') -%}
+{%- if nav.sections %}
+<nav class="settings-nav settings-nav--{{ tone }}" aria-label="صفحه‌های تنظیمات">
+  {%- for section in nav.sections %}
+  <div class="settings-nav-group">
+    {%- if section.label %}<p class="settings-nav-title">{{ section.label }}</p>{% endif %}
+    {%- for row in section.rows %}
+    <a class="settings-nav-item" href="{{ row.href }}"{% if row.href == nav.active_href %} aria-current="page"{% endif %}>
+      <span class="settings-nav-ico" aria-hidden="true">{{ icon(row.icon) }}</span>
+      <span class="settings-nav-label">{{ row.label }}</span>
+    </a>
+    {%- endfor %}
+  </div>
+  {%- endfor %}
+</nav>
+{%- endif %}
+{%- endmacro %}
+
+{# On a wide screen the list is the menu beside each page, so the list page opens its first page instead
+   (settings-nav.js). It runs before the list is drawn; a page that carries a message (ok/err) stays. #}
+{% macro settings_open_first(sections, nonce=none) -%}
+{%- set first = first_settings_href(sections) -%}
+{%- if first %}
+<script src="/static/settings-nav.js?v={{ asset_v('settings-nav.js') if asset_v is defined else app_version }}"{% if nonce %} nonce="{{ nonce }}"{% endif %} data-settings-first="{{ first }}"></script>
+{%- endif %}
+{%- endmacro %}
+
 {# The header of a settings area: the area itself on its list, or the page with a way back to the list. #}
 {% macro settings_area_header(groups, active, base, area_title, area_icon, tone='brand', help=None, is_hub=false) -%}
 {%- set place = none if is_hub else settings_place(groups, active) -%}
