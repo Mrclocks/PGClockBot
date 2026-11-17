@@ -108,6 +108,13 @@ class ActiveItemTests(unittest.TestCase):
         # A shop whose only marketing page is group messages gets no empty «بازاریابی» entry.
         self.assertNotIn("marketing", items)
 
+    def test_campaigns_light_marketing_for_staff_without_group_messages(self) -> None:
+        campaigns_only = viewer("reseller", perms=("campaigns",), marketing=("/campaigns",))
+        self.assertEqual(active(campaigns_only, "/campaigns"), ["بازاریابی"])
+        both = viewer("reseller", perms=("campaigns", "broadcast"), marketing=("/campaigns", "/shop-broadcast"))
+        self.assertEqual(active(both, "/campaigns"), ["پیام گروهی"])
+        self.assertNotIn("بازاریابی", labels(both)["shop"])
+
     def test_group_messages_entry_follows_the_route_guard(self) -> None:
         self.assertNotIn("پیام گروهی", labels(RESELLER)["shop"])
 

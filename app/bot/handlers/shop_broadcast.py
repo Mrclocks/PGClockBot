@@ -17,7 +17,6 @@ from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
 from app.services.broadcast import clear_broadcast_history, delete_broadcast_log, list_broadcast_history
-from app.services.authz import GROUP_MESSAGE_PERMISSIONS
 from app.services.broadcast_audience import describe, make_spec
 from app.services.broadcast_queue import STATUS_LABELS, cancel_broadcast
 from app.bot.message_button_picker import ask_for_buttons, register_flow
@@ -67,8 +66,7 @@ async def resolve_shop_id(
     )
     if not owner_id or not profile:
         return None
-    # Campaigns were merged into group messages: either permission opens them (authz.GROUP_MESSAGE_PERMISSIONS).
-    if not any(can_shop_feature(key, profile=profile, db_user=db_user) for key in GROUP_MESSAGE_PERMISSIONS):
+    if not can_shop_feature("broadcast", profile=profile, db_user=db_user):
         return None
     return int(owner_id)
 

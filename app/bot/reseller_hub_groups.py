@@ -41,6 +41,7 @@ RESELLER_GROUPS: tuple[ResellerGroup, ...] = (
         (
             "res_plans",
             "res_loyalty",
+            "res_campaigns",
             "res_gift_codes",
             "res_discounts",
             "res_cashback",
@@ -65,9 +66,12 @@ RESELLER_GROUPS: tuple[ResellerGroup, ...] = (
 )
 # Entries shown on the panel home itself, under the groups: used often enough to skip a level.
 RESELLER_HOME_ACTIONS: tuple[str, ...] = ("res_broadcast",)
-# Entries opened from another screen, and where their «بازگشت» leads: campaigns live in the group-message hub
-# (handlers/shop_broadcast.CB_HUB; a string here so this module imports nothing from the handlers).
+# Entries opened from another screen for staff who may open that screen, and where their «بازگشت» leads: campaigns
+# live in the group-message hub (handlers/shop_broadcast.CB_HUB; a string here so this module imports nothing from
+# the handlers). Staff without group messages find the entry in its group instead.
 NESTED_ACTIONS: dict[str, str] = {"res_campaigns": "shp:bc:hub"}
+# The entry whose presence moves a nested entry out of its group.
+_NESTED_UNDER: dict[str, str] = {"res_campaigns": "res_broadcast"}
 _BY_ID = {group.id: group for group in RESELLER_GROUPS}
 _BY_ACTION = {action: group for group in RESELLER_GROUPS for action in group.actions}
 # Screens reached from a queue shortcut rather than a hub entry.
@@ -79,9 +83,13 @@ def reseller_group(group_id: str) -> ResellerGroup | None:
 
 
 def group_entries(group: ResellerGroup, entries: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """The hub entries of ``group``, in the group's order."""
+    """The hub entries of ``group``, in the group's order; a nested entry is left to its parent screen."""
     by_action = dict(entries)
-    return [(action, by_action[action]) for action in group.actions if by_action.get(action)]
+    return [
+        (action, by_action[action])
+        for action in group.actions
+        if by_action.get(action) and _NESTED_UNDER.get(action) not in by_action
+    ]
 
 
 def home_entries(entries: list[tuple[str, str]]) -> list[tuple[str, str]]:
@@ -90,9 +98,9 @@ def home_entries(entries: list[tuple[str, str]]) -> list[tuple[str, str]]:
     return [(action, by_action[action]) for action in RESELLER_HOME_ACTIONS if by_action.get(action)]
 
 
-def back_callback_for(action: str) -> str:
-    """Where «بازگشت» on the screen behind ``action`` leads: its group, else the panel."""
-    if action in NESTED_ACTIONS:
+def back_callback_for(action: str, *, nested: bool = True) -> str:
+    """Where «بازگشت» on the screen behind ``action`` leads: its parent screen when ``nested``, its group, else the panel."""
+    if nested and action in NESTED_ACTIONS:
         return NESTED_ACTIONS[action]
     group = _BY_ACTION.get(action)
     return group.callback if group else RESELLER_HOME_CALLBACK

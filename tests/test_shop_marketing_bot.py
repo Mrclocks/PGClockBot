@@ -213,6 +213,10 @@ class HubEntryTests(unittest.TestCase):
             found = callbacks(reseller_group_hub_keyboard("shop", MagicMock(), dict(DEFAULT_SETTINGS)))
         for expected in ("res:gc", "dsc:l", "fnl:v"):
             self.assertIn(expected, found)
-        # Campaigns were merged into group messages and open from that hub instead.
+        # Staff without group messages open campaigns here; with group messages they open from that hub instead.
+        self.assertIn("res:cmp", found)
+        self.assertTrue(set(view.SHOP_LEAF_OPENERS) <= set(reseller_group("shop").actions))
+        with patch("app.bot.reply_keyboards._reseller_submenu_entries", return_value=[*entries, ("res_broadcast", "b")]):
+            found = callbacks(reseller_group_hub_keyboard("shop", MagicMock(), dict(DEFAULT_SETTINGS)))
         self.assertNotIn("res:cmp", found)
-        self.assertTrue(set(view.SHOP_LEAF_OPENERS) <= set(reseller_group("shop").actions) | set(NESTED_ACTIONS))
+        self.assertIn("res_campaigns", NESTED_ACTIONS)

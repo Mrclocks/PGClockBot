@@ -278,7 +278,10 @@ def _broadcast_item(spec: _ItemSpec, viewer: NavViewer, loc: NavLocation) -> Nav
 
 def _marketing_item(spec: _ItemSpec, viewer: NavViewer, loc: NavLocation) -> NavItem | None:
     """One entry for every other marketing section the viewer may open; it opens the list of those sections."""
-    hrefs = [href for href in viewer.marketing_hrefs if href not in (*BROADCAST_HREFS, CAMPAIGNS_HREF)]
+    # Campaigns open from the group-message page when the viewer has one; otherwise they stay in this list.
+    has_group_page = any(href in viewer.marketing_hrefs for href in BROADCAST_HREFS)
+    nested = (*BROADCAST_HREFS, CAMPAIGNS_HREF) if has_group_page else BROADCAST_HREFS
+    hrefs = [href for href in viewer.marketing_hrefs if href not in nested]
     if not hrefs:
         return None
     paths = (MARKETING_LIST_HREF, *(href.split("?")[0] for href in hrefs))

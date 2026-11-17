@@ -74,11 +74,12 @@ class AudienceCountTests(PageCase):
         response = await self.call(NO_PERMISSION, "GET", "/shop-broadcast/audience?segment=all")
         self.assertEqual(response.status_code, 403)
 
-    async def test_campaigns_were_merged_so_their_permission_opens_group_messages(self) -> None:
-        response = await self.call(CAMPAIGNS_ONLY, "GET", "/shop-broadcast/audience?segment=all")
-        self.assertEqual(response.json()["count"], 2)
-        html = (await self.call(CAMPAIGNS_ONLY, "GET", "/shop-broadcast")).text
-        self.assertIn('href="/campaigns"', html)
+    async def test_the_campaigns_permission_alone_does_not_open_group_messages(self) -> None:
+        for method, path in (("GET", "/shop-broadcast"), ("GET", "/shop-broadcast/audience?segment=all"),
+                             ("POST", "/shop-broadcast/history/clear")):
+            with self.subTest(path=path):
+                response = await self.call(CAMPAIGNS_ONLY, method, path)
+                self.assertEqual(response.status_code, 403)
         html = (await self.call(SHOP_STAFF, "GET", "/shop-broadcast")).text
         self.assertNotIn('href="/campaigns"', html)
 

@@ -13,7 +13,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.broadcast_pages import SHOP_PATH, BroadcastPage, redirect, register_broadcast_routes
-from app.services.authz import authz_from_staff, can_group_message
+from app.services.authz import authz_from_staff, can_shop
 from app.services.broadcast_queue import cancel_broadcast
 from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
 
@@ -21,8 +21,8 @@ SHOP_BROADCAST_PATH = SHOP_PATH
 
 
 def shop_broadcast_scope(staff: dict) -> int:
-    """Same rule as the sidebar entry: ``broadcast`` or ``campaigns`` permission plus a concrete shop id."""
-    if not can_group_message(authz_from_staff(staff)):
+    """Same rule as the sidebar entry: ``broadcast`` permission plus a concrete shop id."""
+    if not can_shop(authz_from_staff(staff), "broadcast"):
         raise HTTPException(403)
     try:
         scope = resolve_shop_scope_id(staff)

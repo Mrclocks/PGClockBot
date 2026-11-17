@@ -589,7 +589,7 @@ def _reseller_submenu_entries(
     show_owner_creds: bool = False,
     ui: dict | None = None,
 ) -> list[tuple[str, str]]:
-    from app.services.authz import GROUP_MESSAGE_PERMISSIONS, shop_feature_allowed
+    from app.services.authz import shop_feature_allowed
 
     # Fail closed: without a live profile show nothing (matches reply_action_map)
     if profile is None:
@@ -618,8 +618,8 @@ def _reseller_submenu_entries(
     for perm, action, label_key in _RESELLER_FEATURE_LEAVES:
         if shop_feature_allowed(key=perm, profile=profile):
             entries.append((action, _t(ui, label_key)))
-    # Campaigns were merged into group messages: either permission shows the group-message entry.
-    if any(shop_feature_allowed(key=key, profile=profile) for key in GROUP_MESSAGE_PERMISSIONS):
+    # Group messages sit on the panel home itself (reseller_hub_groups.RESELLER_HOME_ACTIONS).
+    if shop_feature_allowed(key="broadcast", profile=profile):
         entries.append(("res_broadcast", _t(ui, "btn_res_broadcast")))
     # Login card: shop owner only (never bot_admin assistants).
     if show_owner_creds:
