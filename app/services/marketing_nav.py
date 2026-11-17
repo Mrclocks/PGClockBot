@@ -156,7 +156,8 @@ class MarketingGroup:
 _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("club", "باشگاه مشتریان", (CLUB, CLUB_TRANSACTIONS)),
     ("offers", "تخفیف و کد هدیه", (DISCOUNTS, RANDOM_DISCOUNTS, GIFT_CODES, CASHBACK)),
-    ("messages", "پیام و کمپین", (BROADCAST, SHOP_BROADCAST, CAMPAIGNS)),
+    # Group messages have their own sidebar entry (panel_nav.BROADCAST_KEY), so they are not listed here.
+    ("messages", "پیام و کمپین", (CAMPAIGNS,)),
     ("trials", "کاربران تست", (TRIAL_USERS,)),
     ("funnel", "رفتار کاربر", (FUNNEL,)),
 )
@@ -196,8 +197,8 @@ SECTION_ICONS: dict[str, str] = {
     GIFT_CODES: "gift",
     CASHBACK: "wallet",
     CAMPAIGNS: "megaphone",
-    BROADCAST: "megaphone",
-    SHOP_BROADCAST: "megaphone",
+    BROADCAST: "broadcast",
+    SHOP_BROADCAST: "broadcast",
     TRIAL_USERS: "users",
     FUNNEL: "sales",
 }

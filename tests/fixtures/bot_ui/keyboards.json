@@ -62,7 +62,7 @@
       ],
       [
         {
-          "callback_data": "nv:adm:marketing",
+          "callback_data": "nv:adm:home",
           "text": "⬅️ بازگشت"
         }
       ]
@@ -104,6 +104,12 @@
           "callback_data": "cma:home:0",
           "style": "primary",
           "text": "📡 وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:broadcast",
+          "text": "📢 پیام گروهی"
         }
       ],
       [
@@ -179,6 +185,12 @@
           "callback_data": "cma:home:0",
           "style": "primary",
           "text": "📡 وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:broadcast",
+          "text": "📢 پیام گروهی"
         }
       ],
       [
@@ -291,35 +303,31 @@
           "text": "⭐ باشگاه مشتریان"
         },
         {
-          "callback_data": "nv:adm:broadcast",
-          "text": "📢 پیام گروهی"
+          "callback_data": "nv:adm:gc",
+          "text": "🎁 کدهای هدیه"
         }
       ],
       [
-        {
-          "callback_data": "nv:adm:gc",
-          "text": "🎁 کدهای هدیه"
-        },
         {
           "callback_data": "nv:adm:cmp",
           "text": "📣 کمپین‌ها"
-        }
-      ],
-      [
+        },
         {
           "callback_data": "nv:adm:cb",
           "text": "💸 کش‌بک"
-        },
-        {
-          "callback_data": "dsc:l",
-          "text": "🏷 تخفیف‌ها"
         }
       ],
       [
         {
+          "callback_data": "dsc:l",
+          "text": "🏷 تخفیف‌ها"
+        },
+        {
           "callback_data": "fnl:v",
           "text": "📊 رفتار کاربر"
-        },
+        }
+      ],
+      [
         {
           "callback_data": "tru:l:all:0",
           "text": "🧪 کاربران تست"
@@ -996,6 +1004,13 @@
       ],
       [
         {
+          "callback_data": "shp:bc:hub",
+          "style": "primary",
+          "text": "📢 پیام گروهی"
+        }
+      ],
+      [
+        {
           "callback_data": "qlk:v",
           "text": "🔗 لینک‌های سریع"
         }
@@ -1033,6 +1048,13 @@
           "callback_data": "nv:res:grp:account",
           "style": "primary",
           "text": "💼 حساب من"
+        }
+      ],
+      [
+        {
+          "callback_data": "shp:bc:hub",
+          "style": "primary",
+          "text": "📢 پیام گروهی"
         }
       ],
       [
@@ -3261,6 +3283,11 @@
       ],
       [
         {
+          "text": "📢 پیام گروهی"
+        }
+      ],
+      [
+        {
           "text": "⬅️ بازگشت"
         },
         {
@@ -3361,9 +3388,6 @@
         {
           "style": "success",
           "text": "⭐ باشگاه مشتریان"
-        },
-        {
-          "text": "📢 پیام گروهی"
         }
       ],
       [

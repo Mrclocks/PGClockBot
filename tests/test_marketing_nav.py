@@ -223,7 +223,9 @@ class MarketingGroupsTests(unittest.TestCase):
         self.assertEqual([g.label for g in groups],
                          ["باشگاه مشتریان", "تخفیف و کد هدیه", "پیام و کمپین", "کاربران تست", "رفتار کاربر"])
         keys = [s.key for g in groups for s in g.sections]
-        self.assertEqual(sorted(keys), sorted(s.key for s in marketing_sections(OWNER)))
+        # Group messages have their own sidebar entry, so the marketing list leaves them out.
+        expected = [s.key for s in marketing_sections(OWNER) if s.key not in (BROADCAST, SHOP_BROADCAST)]
+        self.assertEqual(sorted(keys), sorted(expected))
 
     def test_a_topic_without_allowed_pages_is_left_out(self):
         groups = marketing_groups(marketing_sections(_reseller(["campaigns", "loyalty"])))
@@ -277,10 +279,11 @@ def _page(name: str, path: str, staff: dict, **extra) -> str:
 class MarketingNavRenderedPageTests(unittest.TestCase):
     """The real ``render()`` path: the sidebar entry and the way back to the list follow the role."""
 
-    def test_owner_gets_sidebar_entry_and_way_back_on_broadcast(self):
+    def test_owner_gets_both_sidebar_entries_and_broadcast_is_a_top_level_page(self):
         html = _page("broadcast.html", "/broadcast", OWNER)
         self.assertIn('<a href="/marketing" class="nav-item', html)
-        self.assertIn('href="/marketing" aria-label="بازگشت به بازاریابی"', html)
+        self.assertIn('<a href="/broadcast" class="nav-item', html)
+        self.assertNotIn('aria-label="بازگشت به بازاریابی"', html)
 
     def test_reseller_with_campaigns_only_gets_no_broadcast_or_club_links(self):
         staff = _reseller(["campaigns"])

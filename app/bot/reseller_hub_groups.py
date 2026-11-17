@@ -41,7 +41,6 @@ RESELLER_GROUPS: tuple[ResellerGroup, ...] = (
         (
             "res_plans",
             "res_loyalty",
-            "res_broadcast",
             "res_campaigns",
             "res_gift_codes",
             "res_discounts",
@@ -65,6 +64,8 @@ RESELLER_GROUPS: tuple[ResellerGroup, ...] = (
         ),
     ),
 )
+# Entries shown on the panel home itself, under the groups: used often enough to skip a level.
+RESELLER_HOME_ACTIONS: tuple[str, ...] = ("res_broadcast",)
 _BY_ID = {group.id: group for group in RESELLER_GROUPS}
 _BY_ACTION = {action: group for group in RESELLER_GROUPS for action in group.actions}
 # Screens reached from a queue shortcut rather than a hub entry.
@@ -79,6 +80,12 @@ def group_entries(group: ResellerGroup, entries: list[tuple[str, str]]) -> list[
     """The hub entries of ``group``, in the group's order."""
     by_action = dict(entries)
     return [(action, by_action[action]) for action in group.actions if by_action.get(action)]
+
+
+def home_entries(entries: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """The hub entries shown on the panel home, in ``RESELLER_HOME_ACTIONS`` order."""
+    by_action = dict(entries)
+    return [(action, by_action[action]) for action in RESELLER_HOME_ACTIONS if by_action.get(action)]
 
 
 def back_callback_for(action: str) -> str:
