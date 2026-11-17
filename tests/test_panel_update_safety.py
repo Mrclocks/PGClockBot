@@ -215,6 +215,18 @@ class PanelUpdateFlowTests(_GitInstall):
         self.assertEqual(self.restarts, [])
 
 
+class BackupStepTests(unittest.TestCase):
+    def test_backup_failure_is_reported_with_secrets_redacted(self) -> None:
+        error = RuntimeError("pg_dump failed for postgresql://bot:hunter2@127.0.0.1/pgclock")
+        with patch("app.services.backup.create_backup", side_effect=error):
+            with self.assertRaises(guard.UpdateStepError) as ctx:
+                guard.backup_database(log=lambda _: None)
+        message = str(ctx.exception)
+        self.assertIn("چیزی تغییر نکرد", message)
+        self.assertIn("pg_dump failed", message)
+        self.assertNotIn("hunter2", message)
+
+
 class ArchiveOverlayTests(unittest.TestCase):
     def test_restore_puts_replaced_files_back_and_removes_added_ones(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
