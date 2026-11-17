@@ -103,51 +103,69 @@ restore_runtime() {
   fi
 }
 
-force_sync_to_remote() {
-  local target="${REMOTE_REF:-origin/${REMOTE_BRANCH}}"
-  info "Syncing hard to ${target} (keeps .env + data)..."
-  backup_runtime
-  local bak="$RUNTIME_BAK"
-
-  git remote set-url origin "$REPO_URL" 2>/dev/null || git remote add origin "$REPO_URL" 2>/dev/null || true
-  # Targeted fetch (no tags / no --all) — much faster on weak VPS links.
-  # Explicit refspec is required: a single-branch clone only tracks main, so
-  # `git fetch origin dev` succeeds onto FETCH_HEAD but never creates origin/dev.
+# Fetch the target and print its commit; nothing in the work tree changes yet.
+fetch_sync_target() {
   if [[ -n "$REMOTE_REF" ]]; then
-    if [[ "$REMOTE_REF" == -* ]]; then
+    if [[ "$REMOTE_REF" == -* || "$REMOTE_REF" =~ [[:space:]] ]]; then
       err "PGCLOCK_REF is not a valid tag or commit: ${REMOTE_REF}"
       return 1
     fi
     # The ref lands on FETCH_HEAD; a --no-tags clone has no local tag to check out.
-    git fetch --no-tags origin "$REMOTE_REF"
-    local pinned
-    if ! pinned="$(git rev-parse --verify -q 'FETCH_HEAD^{commit}')"; then
+    if ! git fetch --no-tags origin "$REMOTE_REF" >&2; then
+      err "Could not fetch ${REMOTE_REF}. Use an existing tag or a full commit SHA."
+      return 1
+    fi
+    if ! git rev-parse --verify -q 'FETCH_HEAD^{commit}'; then
       err "${REMOTE_REF} does not point at a commit"
       return 1
     fi
-    git checkout -f --detach "$pinned"
-    git reset --hard "$pinned"
-  else
-    if ! git config --get-all remote.origin.fetch 2>/dev/null \
-        | grep -qx "+refs/heads/${REMOTE_BRANCH}:refs/remotes/origin/${REMOTE_BRANCH}"; then
-      git config --add remote.origin.fetch \
-        "+refs/heads/${REMOTE_BRANCH}:refs/remotes/origin/${REMOTE_BRANCH}" 2>/dev/null || true
-    fi
-    git fetch --no-tags origin \
-      "+refs/heads/${REMOTE_BRANCH}:refs/remotes/origin/${REMOTE_BRANCH}" \
-      || git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
-    if ! git rev-parse --verify "origin/${REMOTE_BRANCH}" >/dev/null 2>&1; then
-      err "origin/${REMOTE_BRANCH} missing after fetch"
-      return 1
-    fi
-    # Detach local dirty state safely
-    git checkout -f -B "$REMOTE_BRANCH" "origin/${REMOTE_BRANCH}"
-    git reset --hard "origin/${REMOTE_BRANCH}"
+    return 0
   fi
-  git clean -fd --exclude=.env --exclude=data --exclude=.venv --exclude='.env.bak.*' --exclude='.env.restored.*'
+  # Explicit refspec is required: a single-branch clone only tracks main, so
+  # `git fetch origin dev` succeeds onto FETCH_HEAD but never creates origin/dev.
+  local refspec="+refs/heads/${REMOTE_BRANCH}:refs/remotes/origin/${REMOTE_BRANCH}"
+  if ! git config --get-all remote.origin.fetch 2>/dev/null | grep -qx "$refspec"; then
+    git config --add remote.origin.fetch "$refspec" 2>/dev/null || true
+  fi
+  # Targeted fetch (no tags / no --all) — much faster on weak VPS links.
+  if ! git fetch --no-tags origin "$refspec" >&2 \
+      && ! git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*' >&2; then
+    err "Could not fetch origin/${REMOTE_BRANCH}. Check network / GitHub access."
+    return 1
+  fi
+  if ! git rev-parse --verify -q "origin/${REMOTE_BRANCH}^{commit}"; then
+    err "origin/${REMOTE_BRANCH} missing after fetch"
+    return 1
+  fi
+}
 
+force_sync_to_remote() {
+  local target="${REMOTE_REF:-origin/${REMOTE_BRANCH}}"
+  info "Syncing hard to ${target} (keeps .env + data)..."
+  git remote set-url origin "$REPO_URL" 2>/dev/null || git remote add origin "$REPO_URL" 2>/dev/null || true
+  local commit
+  # Fetch before touching anything: a network failure leaves the tree as it was.
+  commit="$(fetch_sync_target)" || return 1
+
+  backup_runtime
+  local bak="$RUNTIME_BAK" switched=0
+  if [[ -n "$REMOTE_REF" ]]; then
+    git checkout -f -q --detach "$commit" && git reset --hard -q "$commit" && switched=1
+  else
+    # Start from the remote-tracking ref so the branch keeps its upstream.
+    git checkout -f -q -B "$REMOTE_BRANCH" "origin/${REMOTE_BRANCH}" \
+      && git reset --hard -q "$commit" && switched=1
+  fi
+  if [[ "$switched" -eq 1 ]]; then
+    git clean -fd --exclude=.env --exclude=data --exclude=.venv --exclude='.env.bak.*' \
+      --exclude='.env.restored.*' >/dev/null || true
+  fi
   restore_runtime "$bak"
-  ok "Code synced to ${target}"
+  if [[ "$switched" -ne 1 ]]; then
+    err "Could not switch the code to ${target}"
+    return 1
+  fi
+  ok "Code synced to ${target} (${commit:0:12})"
 }
 
 git_update() {
@@ -192,6 +210,26 @@ panel_service_running() {
     && systemctl is-active --quiet pgclockbot 2>/dev/null
 }
 
+# Clone next to the folder first: if the clone fails, the old folder (with
+# .env and data/) is still there untouched.
+reclone_in_place() {
+  local staging="${ROOT}.clone.$$"
+  rm -rf "$staging"
+  if ! git clone -b "$REMOTE_BRANCH" --single-branch "$REPO_URL" "$staging"; then
+    rm -rf "$staging"
+    err "Clone failed — ${ROOT} was left as it was."
+    exit 1
+  fi
+  backup_runtime
+  local bak="$RUNTIME_BAK"
+  cd "$(dirname "$ROOT")"
+  rm -rf "$ROOT"
+  mv "$staging" "$ROOT"
+  cd "$ROOT"
+  restore_runtime "$bak"
+  ok "Re-cloned and restored runtime files (branch: ${REMOTE_BRANCH})"
+}
+
 ensure_repo() {
   if [[ -d "$ROOT" ]]; then
     cd "$ROOT"
@@ -211,14 +249,7 @@ ensure_repo() {
       exit 1
     else
       warn "Folder exists without .git — re-cloning into place"
-      backup_runtime
-      local bak="$RUNTIME_BAK"
-      cd ..
-      rm -rf "$ROOT"
-      git clone -b "$REMOTE_BRANCH" --single-branch "$REPO_URL" "$ROOT"
-      cd "$ROOT"
-      restore_runtime "$bak"
-      ok "Re-cloned and restored runtime files (branch: ${REMOTE_BRANCH})"
+      reclone_in_place
     fi
     return 0
   fi

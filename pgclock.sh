@@ -12,14 +12,27 @@ if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
   _PGCLOCK_SOURCED=1
 fi
 
+# /dev/tty can exist without a controlling terminal (cron, ssh without -t, the
+# web panel): probe it once. Fd 3 carries everything meant for the operator, so
+# output still shows without a terminal and never leaks into $(...) captures.
+if { : >/dev/tty; } 2>/dev/null; then
+  PGCLOCK_HAS_TTY=1
+  exec 3>/dev/tty
+else
+  PGCLOCK_HAS_TTY=0
+  exec 3>&1
+fi
+
 # curl|bash leaves stdin as a dead pipe. For interactive menus, attach to TTY.
-# Install, update, status, help and Xray setup can run without a TTY.
+# Install, update, status, doctor, help and Xray setup can run without a TTY.
 _CMD="${1:-}"
 if [[ "$_PGCLOCK_SOURCED" -eq 0 && ! -t 0 ]]; then
   case "${_CMD}" in
-    install|i|update|u|status|s|xray|help|h|-h|--help) ;;
+    install|i|install-main|install_main|install-dev|install_dev) ;;
+    update|u|update-main|update_main|update-dev|update_dev) ;;
+    status|s|doctor|d|xray|help|h|-h|--help) ;;
     *)
-      if [[ -r /dev/tty ]]; then
+      if [[ "$PGCLOCK_HAS_TTY" -eq 1 ]]; then
         exec </dev/tty
       else
         echo "  x No interactive terminal (TTY). Run: bash pgclock.sh install" >&2
@@ -37,14 +50,9 @@ Y=$'\033[1;33m'; B=$'\033[1;37m'; D=$'\033[2m'; N=$'\033[0m'
 BOLD=$'\033[1m'
 DIM_LINE=$'\033[38;5;240m'
 
-# Prefer /dev/tty so menus stay clean when stdout is captured; fall back so
-# SUCCESS banners still appear under curl|bash / no-TTY edge cases.
+# Operator messages go to fd 3 (the terminal, or stdout without one).
 _tty() {
-  if [[ -w /dev/tty ]]; then
-    printf '%b' "$*" > /dev/tty 2>/dev/null || printf '%b' "$*"
-  else
-    printf '%b' "$*"
-  fi
+  printf '%b' "$*" >&3
 }
 info()  { _tty "  ${C}>${N} $*\n"; }
 ok()    { _tty "  ${G}+${N} $*\n"; }
@@ -52,7 +60,8 @@ warn()  { _tty "  ${Y}!${N} $*\n"; }
 err()   { _tty "  ${R}x${N} $*\n"; }
 step()  { _tty "\n${BOLD}${C}-- $* --${N}\n\n"; }
 pause() {
-  printf '\n  Press Enter to continue... ' > /dev/tty
+  [[ "$PGCLOCK_HAS_TTY" -eq 1 ]] || return 0
+  printf '\n  Press Enter to continue... ' >&3
   read -r _ < /dev/tty || true
 }
 
@@ -62,8 +71,8 @@ prompt_read() {
   # -e enables readline so Backspace / arrows work when editing mistakes
   local __var="$1"
   shift
-  printf '%b' "$*" > /dev/tty
-  if ! read -e -r "$__var" < /dev/tty; then
+  printf '%b' "$*" >&3
+  if [[ "$PGCLOCK_HAS_TTY" -ne 1 ]] || ! read -e -r "$__var" < /dev/tty; then
     printf -v "$__var" '%s' ""
   fi
 }
@@ -98,6 +107,10 @@ ask() {
         printf '%s\n' "$var"
         return
       fi
+      if [[ "$PGCLOCK_HAS_TTY" -ne 1 ]]; then
+        err "${prompt}: required, and there is no interactive terminal to ask."
+        return 1
+      fi
       err "This field is required."
     done
   else
@@ -125,9 +138,13 @@ ask_secret() {
   local prompt="$1"
   local var
   while true; do
-    printf '  %b: ' "${B}${prompt}${N}" > /dev/tty
+    if [[ "$PGCLOCK_HAS_TTY" -ne 1 ]]; then
+      err "${prompt}: an interactive terminal is required."
+      return 1
+    fi
+    printf '  %b: ' "${B}${prompt}${N}" >&3
     read -r -s var < /dev/tty || true
-    printf '\n' > /dev/tty
+    printf '\n' >&3
     # strip accidental CR / leading-trailing whitespace from paste
     var="${var//$'\r'/}"
     var="${var#"${var%%[![:space:]]*}"}"
@@ -256,7 +273,7 @@ prompt_install_port_and_ssl() {
   local port_in mode_in
   if [[ -n "${PGCLOCK_WEB_PORT:-}" ]]; then
     WEB_PORT="${PGCLOCK_WEB_PORT}"
-  elif [[ -r /dev/tty ]]; then
+  elif [[ "$PGCLOCK_HAS_TTY" -eq 1 ]]; then
     while true; do
       port_in="$(ask "Panel TCP port" "${WEB_PORT:-9000}")"
       if [[ "$port_in" =~ ^[0-9]+$ ]] && (( port_in >= 1 && port_in <= 65535 )); then
@@ -279,11 +296,11 @@ prompt_install_port_and_ssl() {
         return 1
         ;;
     esac
-  elif [[ -r /dev/tty ]]; then
+  elif [[ "$PGCLOCK_HAS_TTY" -eq 1 ]]; then
     info "SSL certificate for the panel:"
-    printf '    %s1%s) Domain — Let'\''s Encrypt (DNS → this server, port 80 free)\n' "$B" "$N" > /dev/tty
-    printf '    %s2%s) Temporary self-signed for this server IP (browser warning OK)\n' "$B" "$N" > /dev/tty
-    printf '    %s3%s) No certificate — HTTP only\n' "$B" "$N" > /dev/tty
+    printf '    %s1%s) Domain — Let'\''s Encrypt (DNS → this server, port 80 free)\n' "$B" "$N" >&3
+    printf '    %s2%s) Temporary self-signed for this server IP (browser warning OK)\n' "$B" "$N" >&3
+    printf '    %s3%s) No certificate — HTTP only\n' "$B" "$N" >&3
     while true; do
       mode_in="$(ask "Select SSL mode" "3")"
       case "${mode_in,,}" in
@@ -299,7 +316,7 @@ prompt_install_port_and_ssl() {
 
   if [[ "$INSTALL_SSL_MODE" == "domain" ]]; then
     if [[ -z "$INSTALL_SSL_DOMAIN" ]]; then
-      if [[ ! -r /dev/tty ]]; then
+      if [[ "$PGCLOCK_HAS_TTY" -ne 1 ]]; then
         err "PGCLOCK_SSL_DOMAIN is required for domain SSL in non-interactive mode."
         return 1
       fi
@@ -317,7 +334,7 @@ prompt_install_port_and_ssl() {
       done
     fi
     if [[ -z "$INSTALL_SSL_EMAIL" ]]; then
-      if [[ ! -r /dev/tty ]]; then
+      if [[ "$PGCLOCK_HAS_TTY" -ne 1 ]]; then
         err "PGCLOCK_SSL_EMAIL is required for domain SSL in non-interactive mode."
         return 1
       fi
@@ -427,7 +444,7 @@ apply_install_ssl() {
 
   info "SSL progress will print below (success or error)…"
   local result_json
-  # Progress lines go to stderr → /dev/tty; final JSON on stdout.
+  # Progress lines go to stderr → operator (fd 3); final JSON on stdout.
   result_json="$(
     cd "$SCRIPT_DIR" && \
     PGCLOCK_SSL_INSTALL=1 \
@@ -437,7 +454,7 @@ apply_install_ssl() {
     PGCLOCK_INSTALL_SSL_IP="$ip" \
     PGCLOCK_INSTALL_WEB_PORT="${WEB_PORT}" \
     PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" \
-    "$py" - <<'PY' 2>/dev/tty
+    "$py" - <<'PY' 2>&3
 import json, os, sys
 from app.services.ssl_certs import configure_for_install, verify_tls_material
 
@@ -1219,13 +1236,16 @@ ensure_venv() {
   fi
   if [[ ! -d .venv ]]; then
     info "Creating virtualenv with $SYSTEM_PY…"
-    "$SYSTEM_PY" -m venv .venv
+    if ! "$SYSTEM_PY" -m venv .venv; then
+      err "Could not create the virtualenv (is ${SYSTEM_PY}-venv installed?)."
+      return 1
+    fi
     ok "venv created"
   else
     ok "venv exists"
   fi
   # shellcheck disable=SC1091
-  source .venv/bin/activate
+  source .venv/bin/activate || return 1
   local hash_file=".venv/.requirements.sha256"
   local new_hash=""
   if command -v sha256sum >/dev/null 2>&1; then
@@ -1241,7 +1261,11 @@ ensure_venv() {
     fi
     # No -q: weak VPS look "stuck" after venv; show pip progress.
     info "Installing Python packages (first run can take several minutes)…"
-    pip install -r requirements.txt --disable-pip-version-check --no-input
+    # Explicit return: callers run this inside `if`, where set -e is off.
+    if ! pip install -r requirements.txt --disable-pip-version-check --no-input; then
+      err "Python packages could not be installed (pip failed)."
+      return 1
+    fi
     if [[ -n "$new_hash" ]]; then
       printf '%s\n' "$new_hash" > "$hash_file"
     fi
@@ -1386,9 +1410,12 @@ sync_code_to_channel() {
     warn "Try: git fetch origin '+refs/heads/${ch}:refs/remotes/origin/${ch}'"
     return 1
   fi
-  # Keep runtime files; hard-sync tree to the channel tip.
-  git checkout -f -B "$ch" "origin/${ch}"
-  git reset --hard "origin/${ch}"
+  # Keep runtime files; hard-sync tree to the channel tip. Explicit returns:
+  # cmd_update calls this inside `if`, where set -e does not stop on failure.
+  if ! git checkout -f -B "$ch" "origin/${ch}" || ! git reset --hard "origin/${ch}"; then
+    err "Could not switch the code to origin/${ch}."
+    return 1
+  fi
   git_clean_keep_runtime
   ok "Code synced to origin/${ch}"
 }
@@ -1423,8 +1450,10 @@ sync_code_to_ref() {
     err "${ref} does not point at a commit."
     return 1
   fi
-  git checkout -f -q --detach "$commit"
-  git reset --hard -q "$commit"
+  if ! git checkout -f -q --detach "$commit" || ! git reset --hard -q "$commit"; then
+    err "Could not switch the code to ${ref}."
+    return 1
+  fi
   git_clean_keep_runtime
   ok "Code pinned to ${ref} (${commit:0:12})"
 }
@@ -1703,6 +1732,11 @@ cmd_install() {
   INSTALL_SSL_DOMAIN=""
   INSTALL_SSL_EMAIL=""
 
+  # Re-install over a live panel: stop it so the code is not swapped under the
+  # running process (it is started again below).
+  if panel_is_installed; then
+    stop_service_if_any
+  fi
   sync_code_to_channel "$INSTALL_CHANNEL" || return 1
   # Re-resolve interpreter after possible channel sync (venv may need recreate).
   ensure_python || return 1
@@ -2014,10 +2048,15 @@ update_recover() {
     if [[ -z "$UPDATE_PREV_SCHEMA" || "$schema_now" != "$UPDATE_PREV_SCHEMA" ]]; then
       err "Database schema is no longer the pre-update one (${UPDATE_PREV_SCHEMA:-unknown} → ${schema_now:-unknown}); previous code was not restored."
       warn "Logs:    journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
-      warn "Backups: pgclock backup --list   ·   Undo: pgclock restore <backup_id>"
+      warn "Undo:    pgclock backup --list, then pgclock restore <backup_id> --no-restart"
+      [[ -n "$UPDATE_PREV_COMMIT" ]] && \
+        warn "         then: git -C ${SCRIPT_DIR} checkout -f ${UPDATE_PREV_COMMIT} && sudo systemctl restart ${SERVICE_NAME}"
       return 1
     fi
   fi
+  # A new version that crashed is restarted by systemd (Restart=always): stop it
+  # so the code is not swapped under a starting process.
+  stop_service_if_any
   if [[ -n "$UPDATE_PREV_COMMIT" ]] \
       && [[ "$(git rev-parse -q --verify HEAD 2>/dev/null || true)" != "$UPDATE_PREV_COMMIT" ]]; then
     if ! restore_previous_code "$UPDATE_PREV_COMMIT" "$UPDATE_PREV_BRANCH"; then
@@ -2121,10 +2160,12 @@ cmd_edit_env() {
     editor="vi"
   fi
   info "Opening with ${editor}..."
-  "$editor" .env
+  if ! "$editor" .env; then
+    warn "${editor} exited with an error — check .env before restarting"
+  fi
   echo ""
   if ask_yn "Restart service to apply changes?" "Y"; then
-    restart_service_if_any
+    restart_service_if_any || return 1
   fi
   print_success "Configuration saved" \
     "Edited:     .env"
@@ -2134,12 +2175,16 @@ cmd_edit_env() {
 cmd_web_panel() {
   while true; do
     banner_small "Web panel"
-    local port user ip
+    local port user scheme curl_tls=()
     port="$(env_get WEB_PORT 9000)"
     user="$(web_username)"
-    ip="$(detect_server_ip)"
-    echo -e "  Login URL : ${B}http://${ip}:${port}/login${N}"
-    echo -e "  Health    : ${B}http://127.0.0.1:${port}/health${N}"
+    scheme="http"
+    if ssl_is_enabled_on_disk; then
+      scheme="https"
+      curl_tls=(-k)
+    fi
+    echo -e "  Login URL : ${B}$(panel_public_base_url)/login${N}"
+    echo -e "  Health    : ${B}${scheme}://127.0.0.1:${port}/health${N}"
     echo -e "  Username  : ${B}${user}${N}"
     echo ""
     echo -e "  ${B}1)${N} Reset web password"
@@ -2154,16 +2199,19 @@ cmd_web_panel() {
         if [[ ! -f .venv/bin/python ]]; then
           err "venv missing. Run Install first."
         else
-          "$PY" scripts/set_web_password.py
-          restart_service_if_any
-          print_success "Web password updated"
+          if "$PY" scripts/set_web_password.py && restart_service_if_any; then
+            print_success "Web password updated"
+          else
+            err "Web password was not updated — see the messages above."
+          fi
         fi
         pause
         ;;
       2)
         if command -v curl >/dev/null 2>&1; then
           echo ""
-          curl -sS "http://127.0.0.1:${port}/health" || err "Health check failed (is the bot running?)"
+          curl -sS "${curl_tls[@]}" --max-time 5 "${scheme}://127.0.0.1:${port}/health" \
+            || err "Health check failed (is the bot running?)"
           echo ""
           echo ""
           ok "Health check finished"
@@ -2222,23 +2270,27 @@ cmd_service() {
         ;;
       2)
         if ! service_installed; then
-          install_systemd "$(whoami)"
-        else
-          sudo_wrap systemctl enable --now "$SERVICE_NAME"
+          install_systemd "$(whoami)" || err "Could not install the systemd unit."
+        elif sudo_wrap systemctl enable --now "$SERVICE_NAME"; then
           ok "Started"
+        else
+          err "systemctl could not start ${SERVICE_NAME}"
         fi
-        print_success "Service start requested"
         pause
         ;;
       3)
-        restart_service_if_any
-        print_success "Service restart requested"
+        if restart_service_if_any; then
+          print_success "Service restarted"
+        fi
         pause
         ;;
       4)
         if service_installed; then
-          sudo_wrap systemctl stop "$SERVICE_NAME"
-          ok "Stopped"
+          if sudo_wrap systemctl stop "$SERVICE_NAME"; then
+            ok "Stopped"
+          else
+            err "systemctl could not stop ${SERVICE_NAME}"
+          fi
         else
           warn "Service not installed."
         fi
@@ -2246,7 +2298,10 @@ cmd_service() {
         ;;
       5)
         if service_installed; then
-          journalctl -u "$SERVICE_NAME" -f
+          # Ctrl+C ends the log view only, not the menu.
+          trap 'true' INT
+          journalctl -u "$SERVICE_NAME" -f || true
+          trap - INT
         else
           warn "Service not installed."
           pause
@@ -2256,8 +2311,13 @@ cmd_service() {
         if [[ ! -d .venv ]]; then
           err "Run Install first."
         else
-          install_systemd "$(ask "System user" "$(whoami)")"
-          print_success "systemd unit installed"
+          local unit_user
+          unit_user="$(ask "System user" "$(whoami)")"
+          if install_systemd "$unit_user"; then
+            print_success "systemd unit installed"
+          else
+            err "Could not install the systemd unit."
+          fi
         fi
         pause
         ;;
@@ -2316,18 +2376,22 @@ cmd_uninstall() {
   fi
 
   local root="$SCRIPT_DIR"
+  if [[ -z "$root" || "$root" == "/" || "$root" == "${HOME:-/}" || ! -f "${root}/pgclock.sh" ]]; then
+    err "Refusing to delete ${root:-<empty>}: it does not look like a PGClockBot folder."
+    return 1
+  fi
   info "Deleting project folder: ${root}"
   cd / || cd "$HOME" || true
   rm -rf "$root"
 
-  printf '\n' > /dev/tty
-  printf '%s==========================================%s\n' "$G" "$N" > /dev/tty
-  printf '%s  SUCCESS · Full uninstall complete%s\n' "$G" "$N" > /dev/tty
-  printf '%s==========================================%s\n' "$G" "$N" > /dev/tty
-  printf '  Removed: %s\n' "$root" > /dev/tty
-  printf '  Reinstall:\n' > /dev/tty
-  printf '    bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)\n' > /dev/tty
-  printf '%s==========================================%s\n\n' "$G" "$N" > /dev/tty
+  printf '\n' >&3
+  printf '%s==========================================%s\n' "$G" "$N" >&3
+  printf '%s  SUCCESS · Full uninstall complete%s\n' "$G" "$N" >&3
+  printf '%s==========================================%s\n' "$G" "$N" >&3
+  printf '  Removed: %s\n' "$root" >&3
+  printf '  Reinstall:\n' >&3
+  printf '    bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)\n' >&3
+  printf '%s==========================================%s\n\n' "$G" "$N" >&3
   exit 0
 }
 
@@ -2418,8 +2482,11 @@ PY
     else
       health="$(curl -sS --max-time 3 "http://127.0.0.1:${port}/health" 2>/dev/null || true)"
     fi
-    if [[ -n "$health" ]]; then
+    if health_body_is_ok "$health"; then
       ok "Local health: ${health}"
+    elif [[ -n "$health" ]]; then
+      warn "Local health: not OK — ${health:0:200}"
+      warn "Logs: journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
     else
       warn "Local health: unreachable on 127.0.0.1:${port}"
       warn "Logs: journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
@@ -2510,7 +2577,7 @@ ART
     printf '%s\n' "$N"
     printf '  %sPasarGuard Telegram Shop · CLI manager · stable 0.5%s\n' "$D" "$N"
     echo ""
-  } > /dev/tty
+  } >&3
 }
 
 banner_small() {
@@ -2524,7 +2591,7 @@ banner_small() {
     fi
     printf '%s──────────────────────────────────────────────%s\n' "$O" "$N"
     echo ""
-  } > /dev/tty
+  } >&3
 }
 
 print_status_box() {
@@ -2558,19 +2625,19 @@ print_status_box() {
     printf '  Host    : %s%s MiB RAM · %s CPU%s\n' "$D" "$mem_mib" "$cores" "$N"
     printf '  %s────────────────────────────────────────%s\n' "$DIM_LINE" "$N"
     echo ""
-  } > /dev/tty
+  } >&3
   if hw_is_minimal; then
     {
       printf '  %s! Low resources: 1 CPU and ≈1 GiB RAM detected.%s\n' "$Y" "$N"
       printf '  %s  Install may be slow or fail (pip / PostgreSQL / panel).%s\n' "$Y" "$N"
       printf '  %s  A VPS with 2+ GB RAM and 2+ CPU cores is recommended.%s\n' "$Y" "$N"
       echo ""
-    } > /dev/tty
+    } >&3
   fi
 }
 
 show_menu() {
-  clear > /dev/tty 2>/dev/null || printf '\033c' > /dev/tty
+  clear >&3 2>/dev/null || printf '\033c' >&3
   banner
   print_status_box
   {
@@ -2589,7 +2656,21 @@ show_menu() {
     printf '  %s11)%s Setup Xray     Install/repair the connection-test core\n' "$O" "$N"
     printf '  %s0)%s  Exit\n' "$O" "$N"
     echo ""
-  } > /dev/tty
+  } >&3
+}
+
+# Run one menu option in a subshell with set -e still on: a failure ends that
+# option (not the whole menu) and `cmd || true` would have disabled set -e inside.
+menu_action() {
+  local rc=0
+  set +e
+  ( set -e; "$@" )
+  rc=$?
+  set -e
+  if [[ "$rc" -ne 0 ]]; then
+    err "Stopped with an error (exit ${rc}) — see the messages above."
+  fi
+  return 0
 }
 
 run_menu() {
@@ -2598,20 +2679,25 @@ run_menu() {
     local choice=""
     prompt_read choice "  ${B}Select option${N}: "
     case "${choice}" in
-      1|install-main|install_main) cmd_install main ; pause ;;
-      2|install-dev|install_dev)   cmd_install dev  ; pause ;;
-      3|update-main|update_main)   cmd_update main  ; pause ;;
-      4|update-dev|update_dev)     cmd_update dev   ; pause ;;
-      5|env|edit)  cmd_edit_env ; pause ;;
-      6|web)       cmd_web_panel ;;
-      7|service)   cmd_service ;;
-      8|status)    cmd_status ; pause ;;
-      9|doctor)    cmd_doctor ; pause ;;
-      10|uninstall) cmd_uninstall ; pause ;;
-      11|xray) cmd_xray ; pause ;;
+      1|install-main|install_main) menu_action cmd_install main ; pause ;;
+      2|install-dev|install_dev)   menu_action cmd_install dev  ; pause ;;
+      3|update-main|update_main)   menu_action cmd_update main  ; pause ;;
+      4|update-dev|update_dev)     menu_action cmd_update dev   ; pause ;;
+      5|env|edit)  menu_action cmd_edit_env ; pause ;;
+      6|web)       menu_action cmd_web_panel ;;
+      7|service)   menu_action cmd_service ;;
+      8|status)    menu_action cmd_status ; pause ;;
+      9|doctor)    menu_action cmd_doctor ; pause ;;
+      10|uninstall)
+        menu_action cmd_uninstall
+        # The option runs in a subshell: leave the menu once the folder is gone.
+        [[ -d "$SCRIPT_DIR" ]] || exit 0
+        pause
+        ;;
+      11|xray) menu_action cmd_xray ; pause ;;
       # Back-compat shortcuts — honor .env / PGCLOCK_CHANNEL when set
-      install|i) cmd_install "" ; pause ;;
-      update|u)  cmd_update ""  ; pause ;;
+      install|i) menu_action cmd_install "" ; pause ;;
+      update|u)  menu_action cmd_update ""  ; pause ;;
       0|exit|q|quit)
         echo ""
         ok "Bye."

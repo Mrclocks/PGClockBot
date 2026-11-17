@@ -187,7 +187,9 @@ PY=/bin/true
 """
 
 
-class SafeUpdateTests(PgclockShellHarness):
+class _UpdateFixture(PgclockShellHarness):
+    """An installed old version with a newer commit published upstream."""
+
     def setUp(self) -> None:
         super().setUp()
         self.old = self.publish("old")
@@ -211,6 +213,8 @@ class SafeUpdateTests(PgclockShellHarness):
     def head(self) -> str:
         return _git(self.install, "rev-parse", "HEAD")
 
+
+class SafeUpdateTests(_UpdateFixture):
     def test_successful_update_backs_up_first_and_starts_new_code(self) -> None:
         rc, calls = self.update(MIGRATE_TO="0101")
         self.assertEqual(rc, 0)
@@ -258,6 +262,66 @@ class SafeUpdateTests(PgclockShellHarness):
         self.assertEqual(rc, 1)
         self.assertEqual(self.head(), self.new)
         self.assertEqual([c for c in calls if c.startswith("restart")], [f"restart {self.new[:7]}"])
+
+
+class UpdateFailureDetectionTests(_UpdateFixture):
+    """Failures inside the real helpers must stop the update (set -e is off in `if`)."""
+
+    def _real_venv_update(self, pip_body: str) -> tuple[int, list[str], str]:
+        (self.author / "requirements.txt").write_text("demo==1\n", encoding="utf-8")
+        self.new = self.publish("new-with-requirements")
+        venv_bin = self.install / ".venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        (venv_bin / "activate").write_text("", encoding="utf-8")
+        fake_py = venv_bin / "python"
+        fake_py.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        fake_py.chmod(0o755)
+        stubs = UPDATE_STUBS.replace(
+            'ensure_venv() { echo "venv $(git rev-parse --short HEAD)" >> "$calls"; [[ "${FAIL_AT:-}" != venv ]]; }\n',
+            "",
+        )
+        snippet = (
+            stubs
+            + "SYSTEM_PY=/bin/true\n_python_is_supported() { return 0; }\n"
+            + f"pip() {{ {pip_body}; }}\n"
+            + 'cmd_update main && echo "RC=0" || echo "RC=1"'
+        )
+        res = self.run_pgclock(self.install, snippet)
+        calls_file = self.tmp / "calls.log"
+        calls = calls_file.read_text(encoding="utf-8").split("\n")[:-1] if calls_file.exists() else []
+        return (0 if "RC=0" in res.stdout else 1), calls, res.stdout
+
+    def test_failed_pip_stops_update_and_restores_previous_version(self) -> None:
+        rc, calls, out = self._real_venv_update("return 1")
+        self.assertEqual(rc, 1, out)
+        self.assertNotIn("Python dependencies installed", out)
+        self.assertEqual(self.head(), self.old)
+        self.assertNotIn("SUCCESS Update complete", calls)
+        self.assertFalse((self.install / ".venv" / ".requirements.sha256").exists())
+
+    def test_working_pip_records_requirements_hash(self) -> None:
+        rc, calls, out = self._real_venv_update("return 0")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.head(), self.new)
+        self.assertTrue((self.install / ".venv" / ".requirements.sha256").exists())
+
+    def test_failed_checkout_stops_update_and_restores_previous_version(self) -> None:
+        snippet = (
+            UPDATE_STUBS
+            + 'git() { if [[ "$1" == checkout && "${3:-}" == -B && "${4:-}" == main ]]; then return 1; fi; command git "$@"; }\n'
+            + 'cmd_update main && echo "RC=0" || echo "RC=1"'
+        )
+        res = self.run_pgclock(self.install, snippet)
+        self.assertIn("RC=1", res.stdout, res.stdout + res.stderr)
+        self.assertNotIn("Code synced", res.stdout)
+        calls = (self.tmp / "calls.log").read_text(encoding="utf-8")
+        self.assertNotIn("SUCCESS", calls)
+
+    def test_failed_restart_stops_crashing_new_version_before_restoring(self) -> None:
+        rc, calls = self.update(FAIL_AT="restart")
+        self.assertEqual(rc, 1)
+        first_restart = calls.index(f"restart {self.new[:7]}")
+        self.assertIn("stop", calls[first_restart:])
 
 
 class BackupBeforeUpdateTests(PgclockShellHarness):
@@ -316,7 +380,9 @@ class HealthBodyTests(PgclockShellHarness):
                 self.assertEqual(res.stdout.strip().splitlines()[-1], expected)
 
 
-class GetShTests(_RepoFixture):
+class _GetShFixture(_RepoFixture):
+    """A stub systemctl and a private TMPDIR for get.sh runs."""
+
     def setUp(self) -> None:
         super().setUp()
         self.bin = self.tmp / "bin"
@@ -350,6 +416,8 @@ class GetShTests(_RepoFixture):
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
         return res
 
+
+class GetShTests(_GetShFixture):
     def test_fresh_server_clones_and_hands_off_to_manager(self) -> None:
         tip = self.publish("one")
         res = self.run_get("status")
@@ -390,6 +458,116 @@ class GetShTests(_RepoFixture):
         self.publish("two")
         res = self.run_get(PGCLOCK_REF="v1.0.0")
         self.assertIn(f"MANAGER head={tagged} ref=v1.0.0", res.stdout)
+
+
+
+class NoTerminalTests(_RepoFixture):
+    """Commands allowed without a TTY must work from cron, ssh or the web panel."""
+
+    def run_script(self, *args: str) -> subprocess.CompletedProcess[str]:
+        install = self.tmp / "noterm"
+        install.mkdir(exist_ok=True)
+        shutil.copy(PGCLOCK_SH, install / "pgclock.sh")
+        return subprocess.run(
+            ["bash", str(install / "pgclock.sh"), *args],
+            cwd=install,
+            env=_env(),
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            timeout=120,
+        )
+
+    def test_help_and_update_print_to_stdout_without_a_terminal(self) -> None:
+        res = self.run_script("help")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertNotIn("/dev/tty", res.stderr)
+        res = self.run_script("update", "main")
+        self.assertEqual(res.returncode, 1)
+        self.assertIn(".env not found", res.stdout)
+        self.assertIn("Update (main)", res.stdout)
+        self.assertNotIn("/dev/tty", res.stderr)
+
+    def test_interactive_command_explains_missing_terminal(self) -> None:
+        res = self.run_script("env")
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("No interactive terminal", res.stderr)
+
+
+class MenuActionTests(PgclockShellHarness):
+    def test_failed_option_returns_to_menu_and_keeps_set_e_inside(self) -> None:
+        self.publish("one")
+        install = self.clone_install()
+        snippet = (
+            "failing() { false; echo AFTER_FALSE; }\n"
+            "menu_action failing\n"
+            "echo MENU_STILL_RUNNING\n"
+        )
+        res = self.run_pgclock(install, snippet)
+        self.assertIn("MENU_STILL_RUNNING", res.stdout)
+        self.assertNotIn("AFTER_FALSE", res.stdout)
+        self.assertIn("Stopped with an error", res.stdout)
+
+
+class GetShFailureTests(_GetShFixture):
+    def test_unreachable_remote_leaves_tree_and_no_secret_copy(self) -> None:
+        old = self.publish("one")
+        install = self.clone_install()
+        (install / ".env").write_text('BOT_TOKEN="secret"\n', encoding="utf-8")
+        res = subprocess.run(
+            ["bash", str(GET_SH)],
+            cwd=self.tmp,
+            env=_env(
+                PGCLOCK_REPO=str(self.tmp / "missing.git"),
+                PGCLOCK_CHANNEL="main",
+                PATH=f"{self.bin}:{os.environ['PATH']}",
+                TMPDIR=str(self.tmpdir),
+            ),
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            timeout=120,
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertEqual(_git(install, "rev-parse", "HEAD"), old)
+        self.assertEqual((install / ".env").read_text(encoding="utf-8"), 'BOT_TOKEN="secret"\n')
+        self.assertEqual(list(self.tmpdir.glob("pgclock-runtime.*")), [])
+
+    def test_failed_reclone_keeps_folder_without_git(self) -> None:
+        self.publish("one")
+        folder = self.tmp / "PGClockBot"
+        folder.mkdir()
+        (folder / "run.py").write_text("", encoding="utf-8")
+        (folder / ".env").write_text('BOT_TOKEN="secret"\n', encoding="utf-8")
+        res = subprocess.run(
+            ["bash", str(GET_SH)],
+            cwd=self.tmp,
+            env=_env(
+                PGCLOCK_REPO=str(self.tmp / "missing.git"),
+                PATH=f"{self.bin}:{os.environ['PATH']}",
+                TMPDIR=str(self.tmpdir),
+            ),
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            timeout=120,
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertEqual((folder / ".env").read_text(encoding="utf-8"), 'BOT_TOKEN="secret"\n')
+        self.assertEqual(list(self.tmp.glob("PGClockBot.clone.*")), [])
+
+    def test_successful_reclone_keeps_runtime_files(self) -> None:
+        tip = self.publish("one")
+        folder = self.tmp / "PGClockBot"
+        folder.mkdir()
+        (folder / "run.py").write_text("", encoding="utf-8")
+        (folder / ".env").write_text('BOT_TOKEN="secret"\n', encoding="utf-8")
+        self.run_get()
+        self.assertEqual(_git(folder, "rev-parse", "HEAD"), tip)
+        self.assertEqual((folder / ".env").read_text(encoding="utf-8"), 'BOT_TOKEN="secret"\n')
 
 
 if __name__ == "__main__":
