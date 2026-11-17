@@ -28,6 +28,7 @@ from app.db.models import (
 )
 from app.services.broadcast_audience import (
     AudienceSpec,
+    StoredAudienceError,
     audience_clause,
     checked_spec,
     is_broad,
@@ -237,12 +238,18 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             make_spec("everyone_everywhere", shop_id=None)
 
-    def test_a_saved_spec_round_trips_and_a_broken_one_falls_back_to_the_legacy_audience(self) -> None:
+    def test_a_saved_spec_round_trips_and_a_row_without_one_keeps_the_legacy_audience(self) -> None:
         spec = make_spec("expired", shop_id=SHOP, days="14", min_wallet="10", as_of=NOW)
         again = load_spec(spec.to_json(), "expired", shop_id=SHOP)
         self.assertEqual((again.segment, again.days, again.min_wallet, again.as_of), ("expired", 14, 10, NOW))
-        self.assertEqual(load_spec("{broken", "users", shop_id=None).segment, "users")
         self.assertEqual(load_spec(None, "admins", shop_id=SHOP).segment, "all")
+
+    def test_an_unreadable_saved_spec_is_refused_rather_than_widened(self) -> None:
+        unknown = json.dumps({"segment": "gone", "as_of": NOW.isoformat()})
+        for stored in ("{broken", "[]", json.dumps({"segment": "expiring"}), unknown):
+            with self.subTest(stored=stored), self.assertRaises(StoredAudienceError):
+                load_spec(stored, "users", shop_id=None)
+        self.assertEqual(stored_label("{broken", "expiring", shop_id=SHOP), "نزدیک انقضا")
 
     def test_rows_queued_before_filters_keep_their_old_platform_audience(self) -> None:
         # Old platform rows did not apply the promotional opt-out; they still do not.
@@ -304,6 +311,14 @@ class QueueAndWorkerTests(AudienceCase):
                 if not await process_broadcast_batch(session, log.id, bot, delay=0):
                     break
         self.assertEqual(sorted(bot.sent), [1021, 1022])
+
+    async def test_a_row_whose_saved_audience_is_unreadable_fails_without_sending(self) -> None:
+        stored = json.dumps({"segment": "removed_segment", "as_of": NOW.isoformat()})
+        self.session.add(BroadcastLog(id=98, audience="all", audience_spec=stored, text="hi", total=5, status="queued"))
+        await self.session.commit()
+        self.assertEqual((await self.send_all(98)).sent, [])
+        async with self.Session() as session:
+            self.assertEqual(await session.scalar(select(BroadcastLog.status).where(BroadcastLog.id == 98)), "failed")
 
     async def test_an_old_row_without_a_spec_still_sends_to_its_audience(self) -> None:
         self.session.add(BroadcastLog(id=99, audience="admins", text="hi", total=1, status="queued"))

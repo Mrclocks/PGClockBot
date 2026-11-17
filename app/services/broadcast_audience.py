@@ -76,6 +76,10 @@ SEGMENTS: dict[str, Segment] = {segment.key: segment for segment in _SEGMENT_LIS
 SEGMENT_LABELS: dict[str, str] = {segment.key: segment.label for segment in _SEGMENT_LIST}
 
 
+class StoredAudienceError(ValueError):
+    """A queued broadcast's saved audience cannot be read; it must not be widened to a default audience."""
+
+
 @dataclass(frozen=True, slots=True)
 class AudienceSpec:
     """One audience: a segment, its day window, optional plan and wallet filters, and the notice flag."""
@@ -183,11 +187,14 @@ def legacy_spec(audience: str, *, shop_id: int | None, as_of: datetime | None = 
 
 
 def load_spec(stored: str | None, audience: str, *, shop_id: int | None) -> AudienceSpec:
-    """The audience of a queued broadcast; a missing or malformed spec falls back to the legacy key."""
+    """The audience of a queued broadcast. A row without a spec was queued before specs existed and keeps its legacy
+    key; a spec that cannot be read raises ``StoredAudienceError`` instead of falling back to a wider audience."""
+    if not stored:
+        return legacy_spec(audience, shop_id=shop_id)
     try:
-        data = json.loads(stored) if stored else None
+        data = json.loads(stored)
         if not isinstance(data, dict):
-            return legacy_spec(audience, shop_id=shop_id)
+            raise StoredAudienceError("saved audience is not an object")
         as_of = datetime.fromisoformat(str(data["as_of"]))
         spec = make_spec(
             str(data.get("segment")),
@@ -198,8 +205,8 @@ def load_spec(stored: str | None, audience: str, *, shop_id: int | None) -> Audi
             notice=bool(data.get("notice")) and shop_id is None,
             as_of=as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc),
         )
-    except (ValueError, KeyError, TypeError):
-        return legacy_spec(audience, shop_id=shop_id)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise StoredAudienceError("saved audience cannot be read") from exc
     return replace(spec, label=str(data.get("label") or "")[:200])
 
 
@@ -378,7 +385,11 @@ def describe(spec: AudienceSpec, *, plan_name: str = "") -> str:
 
 def stored_label(stored: str | None, audience: str, *, shop_id: int | None) -> str:
     """The audience summary of a queued broadcast: its saved label, else the segment name."""
-    return load_spec(stored, audience, shop_id=shop_id).label or SEGMENT_LABELS.get(audience, audience)
+    try:
+        label = load_spec(stored, audience, shop_id=shop_id).label
+    except StoredAudienceError:
+        label = ""
+    return label or SEGMENT_LABELS.get(audience, audience)
 
 
 def is_broad(spec: AudienceSpec) -> bool:

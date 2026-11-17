@@ -27,6 +27,7 @@ from app.db.models import BotUser, BroadcastLog
 from app.services.broadcast import shop_scope_filter
 from app.services.broadcast_audience import (
     AudienceSpec,
+    StoredAudienceError,
     audience_clause,
     checked_spec,
     count_audience,
@@ -343,7 +344,13 @@ async def process_broadcast_batch(
         ).one()
         audience, stored_spec, text, cursor, shop_id, total, ok_count, fail_count, review_count, buttons = row
         tenant = int(shop_id) if shop_id is not None else None
-        spec = load_spec(stored_spec, audience, shop_id=tenant)
+        try:
+            spec = load_spec(stored_spec, audience, shop_id=tenant)
+        except StoredAudienceError:
+            # Sending to a guessed audience could reach people the sender never chose; stop the message instead.
+            logger.warning("broadcast %s: saved audience cannot be read; marking failed", log_id, exc_info=True)
+            await mark_broadcast_failed(session, log_id, shop_id=tenant)
+            return False
         progress = int(ok_count) + int(fail_count) + int(review_count)
         if progress >= int(total):
             await _finish(session, log_id, token)
