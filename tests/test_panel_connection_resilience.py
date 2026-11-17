@@ -326,22 +326,27 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         calls = []
         dns_threads = []
 
+        # The lookup outlasts the budget by a wide margin, so a busy CI worker
+        # (parallel tests, a GC pause) cannot blur "gave up on time" into
+        # "waited for DNS".
+        dns_seconds = 0.5
+
         def slow_dns(*args: Any, **kwargs: Any) -> list[tuple[int, int, int, str, tuple[str, int]]]:
             dns_threads.append(threading.current_thread())
-            time.sleep(0.06)
+            time.sleep(dns_seconds)
             return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443))]
 
         with patch("socket.getaddrinfo", side_effect=slow_dns):
             client = await self.make_client(lambda request: calls.append(request) or httpx.Response(200, json={}))
             started = time.monotonic()
-            with resilience.web_read_budget(seconds=0.02):
+            with resilience.web_read_budget(seconds=0.05):
                 read = asyncio.create_task(client.get_current_admin())
                 await asyncio.sleep(0.005)
                 self.assertFalse(read.done())
                 with self.assertRaises(resilience.PgReadUnavailable):
                     await read
-            self.assertLess(time.monotonic() - started, 0.05)
-            await asyncio.sleep(0.07)
+            self.assertLess(time.monotonic() - started, dns_seconds * 0.6)
+            await asyncio.sleep(dns_seconds + 0.1)
         self.assertEqual(calls, [])
         self.assertEqual(len(dns_threads), 1)
         self.assertIsNot(dns_threads[0], threading.main_thread())
