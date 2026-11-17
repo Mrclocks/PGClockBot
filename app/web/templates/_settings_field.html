@@ -147,6 +147,15 @@
     />
     {{ setting_help(help) }}
   </label>
+  {% elif kind == 'number_unlimited' %}
+  {# «نامحدود» button as in the plan and gift-code forms: it empties the field, and an empty field saves as no limit. #}
+  {% set capped = val is string and val.isdigit() %}
+  <div class="form-field">
+    <span class="ds-label-row"><span class="ds-label-text">{{ label }}</span>
+      <button type="button" class="ds-mini" aria-pressed="{{ 'false' if capped else 'true' }}" data-ds-unlimited="#s-{{ key }}" data-ds-empty-is-unlimited aria-label="{{ label }} نامحدود">نامحدود</button></span>
+    <span class="ds-unit{% if not capped %} is-unlimited{% endif %}" data-unlimited-label="نامحدود"><input name="s_{{ key }}" id="s-{{ key }}" type="number" min="1" step="1" value="{{ val if capped else '' }}" inputmode="numeric" dir="ltr" aria-label="{{ label }}"{% if not capped %} readonly{% endif %} /><span class="ds-unit-label">عدد</span></span>
+    {{ setting_help(help) }}
+  </div>
   {% elif kind == 'image' %}
   <div class="image-setting">
     <strong>{{ label }}</strong>

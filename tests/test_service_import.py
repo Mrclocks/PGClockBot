@@ -288,8 +288,8 @@ class OwnershipTests(ImportCase):
         await self._set(service_import_max_per_user="3")
         self.assertEqual((await self.run_import(1, "tok-plat-0000001")).outcome, ImportOutcome.ADDED)
 
-    async def test_a_zero_cap_lets_a_customer_add_past_the_old_ceiling_of_twenty(self):
-        await self._set(service_import_max_per_user="0")
+    async def test_an_unlimited_cap_lets_a_customer_add_past_the_old_ceiling_of_twenty(self):
+        await self._set(service_import_max_per_user="unlimited")
         await self._seed_imported(25)
         self.assertEqual((await self.run_import(1, "tok-plat-0000001")).outcome, ImportOutcome.ADDED)
 

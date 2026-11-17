@@ -45,7 +45,9 @@ from app.services.service_import_config import (
     KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
     KEY_MODE as IMPORT_KEY_MODE,
     MAX_PER_USER_LIMIT as IMPORT_MAX_PER_USER_LIMIT,
-    UNLIMITED_PER_USER as IMPORT_UNLIMITED_PER_USER,
+    MIN_PER_USER as IMPORT_MIN_PER_USER,
+    UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
+    UNLIMITED_WORDS as IMPORT_UNLIMITED_WORDS,
 )
 from app.services.user_errors import domain_error_text
 from app.services.settings_button_labels import (
@@ -488,9 +490,13 @@ NUMBER_INT_RANGES: dict[str, tuple[int, int]] = {
     "auto_approve_after_minutes": (0, APPROVAL_MAX_MINUTES),
     "auto_approve_after_max_amount": (0, MAX_PRICE),
     "admin_daily_report_hour": (0, 23),
-    IMPORT_KEY_MAX_PER_USER: (IMPORT_UNLIMITED_PER_USER, IMPORT_MAX_PER_USER_LIMIT),
+    IMPORT_KEY_MAX_PER_USER: (IMPORT_MIN_PER_USER, IMPORT_MAX_PER_USER_LIMIT),
     **ENTRY_APPROVAL_NUMBER_BOUNDS,
 }
+
+# Number settings that also take «نامحدود» (stored as the value here), like the web field's button.
+NUMBER_UNLIMITED_VALUES: dict[str, str] = {IMPORT_KEY_MAX_PER_USER: IMPORT_UNLIMITED_VALUE}
+UNLIMITED_LABEL = "نامحدود"
 
 # Plain one-line texts saved through their service normalizer instead of rich-text packing.
 TEXT_NORMALIZERS = {MINIAPP_NOTICE: normalize_notice}
@@ -514,6 +520,30 @@ def _is_toggleable_setting_key(key: str) -> bool:
         return True
     meta = FIELDS.get(key)
     return bool(meta and meta[2] == "toggle")
+
+
+def _number_range_hint(key: str) -> str:
+    lo, hi = NUMBER_INT_RANGES[key]
+    hint = f"یک عدد صحیح بین {lo} و {hi} بفرستید"
+    return hint + (f" یا «{UNLIMITED_LABEL}»." if key in NUMBER_UNLIMITED_VALUES else ".")
+
+
+def _parse_number_setting(key: str, text: str) -> str:
+    """Stored text of a number setting; ``ValueError`` carries the Persian hint to show."""
+    raw = text.replace(",", "").replace("٬", "")
+    if key in NUMBER_UNLIMITED_VALUES and raw.strip().lower() in IMPORT_UNLIMITED_WORDS:
+        return NUMBER_UNLIMITED_VALUES[key]
+    bounds = NUMBER_INT_RANGES.get(key)
+    if bounds is not None:
+        try:
+            return str(_parse_bounded_int(raw, bounds[0], bounds[1]))
+        except ValueError:
+            raise ValueError(_number_range_hint(key)) from None
+    try:
+        float(raw)
+    except ValueError:
+        raise ValueError(feedback.ENTER_VALID_NUMBER_SHORT) from None
+    return raw
 
 
 def _parse_bounded_int(raw: str, lo: int, hi: int) -> int:
@@ -1327,12 +1357,12 @@ async def settings_edit_ask(
         from app.services.users import format_force_join_for_edit
 
         cur = format_force_join_for_edit(cur)
+    cur = UNLIMITED_LABEL if cur and cur == NUMBER_UNLIMITED_VALUES.get(key) else cur
     loc = _owner_screen_for_key(key)
     await callback.answer()
     await state.update_data(edit_key=key, edit_loc=loc)
     if kind == "number" and key in NUMBER_INT_RANGES:
-        lo, hi = NUMBER_INT_RANGES[key]
-        hint = f"یک عدد صحیح بین {lo} و {hi} بفرستید."
+        hint = _number_range_hint(key)
     elif kind == "number":
         hint = "عدد بفرستید."
     else:
@@ -1393,22 +1423,11 @@ async def settings_edit_save(
         await delete_user_message(message)
         await set_setting(session, key, text)
     elif kind == "number":
-        raw = text.replace(",", "").replace("٬", "")
-        bounds = NUMBER_INT_RANGES.get(key)
-        if bounds is not None:
-            try:
-                text = str(_parse_bounded_int(raw, bounds[0], bounds[1]))
-            except ValueError:
-                lo, hi = bounds
-                await message.answer(f"یک عدد صحیح بین {lo} و {hi} بفرستید.")
-                return
-        else:
-            try:
-                float(raw)
-            except ValueError:
-                await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
-                return
-            text = raw
+        try:
+            text = _parse_number_setting(key, text)
+        except ValueError as exc:
+            await message.answer(str(exc))
+            return
         await set_setting(session, key, text)
     elif key in TEXT_NORMALIZERS:
         try:

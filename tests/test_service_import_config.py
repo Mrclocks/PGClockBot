@@ -226,14 +226,16 @@ class SettingNormalizationTests(unittest.TestCase):
     def test_the_cap_is_clamped_and_garbage_falls_back_to_the_default(self):
         huge = str(cfg.MAX_PER_USER_LIMIT + 1)
         for raw, expected in (
-            ("3", 3), ("0", 0), ("-4", 5), ("21", 21), ("999", 999), (huge, cfg.MAX_PER_USER_LIMIT),
+            ("3", 3), ("۷", 7), ("0", 1), ("-4", 1), ("21", 21), ("999", 999), (huge, cfg.MAX_PER_USER_LIMIT),
             ("x", 5), ("", 5), (None, 5), ("2.5", 5), (True, 5),
+            ("unlimited", None), ("نامحدود", None),
         ):
             with self.subTest(raw=raw):
                 self.assertEqual(cfg.normalize_max_per_user(raw), expected)
 
-    def test_a_zero_cap_reads_as_unlimited(self):
-        self.assertTrue(cfg.read_settings({cfg.KEY_MAX_PER_USER: "0"}).is_unlimited)
+    def test_only_the_unlimited_value_reads_as_unlimited(self):
+        self.assertTrue(cfg.read_settings({cfg.KEY_MAX_PER_USER: cfg.UNLIMITED_VALUE}).is_unlimited)
+        self.assertFalse(cfg.read_settings({cfg.KEY_MAX_PER_USER: "0"}).is_unlimited)
         self.assertFalse(cfg.read_settings({cfg.KEY_MAX_PER_USER: "20"}).is_unlimited)
         self.assertFalse(cfg.read_settings({}).is_unlimited)
 
@@ -241,7 +243,10 @@ class SettingNormalizationTests(unittest.TestCase):
         self.assertEqual(cfg.normalize_setting_value(cfg.KEY_PATHS, "sub,/hamid/"), "/sub\n/hamid")
         self.assertEqual(cfg.normalize_setting_value(cfg.KEY_ADMINS, "A, b"), "a\nb")
         self.assertEqual(cfg.normalize_setting_value(cfg.KEY_MAX_PER_USER, "50"), "50")
-        self.assertEqual(cfg.normalize_setting_value(cfg.KEY_MAX_PER_USER, "0"), "0")
+        self.assertEqual(cfg.normalize_setting_value(cfg.KEY_MAX_PER_USER, "0"), "1")
+        # The web field's «نامحدود» button posts an empty value.
+        self.assertEqual(cfg.normalize_setting_value(cfg.KEY_MAX_PER_USER, ""), cfg.UNLIMITED_VALUE)
+        self.assertEqual(cfg.normalize_setting_value(cfg.KEY_MAX_PER_USER, "نامحدود"), cfg.UNLIMITED_VALUE)
         self.assertEqual(cfg.normalize_setting_value("service_import_enabled", "1"), "1")
 
     def test_defaults_when_nothing_is_stored(self):
