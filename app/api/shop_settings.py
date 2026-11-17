@@ -311,7 +311,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         elif tab == "miniapp":
             ctx.update(await _miniapp_switch_context(session, profile))
         elif tab == "links":
-            from app.services.ux20 import build_magic_links_context
+            from app.services.quick_links import build_magic_links_context
 
             ctx.update(await build_magic_links_context(session, staff))
         elif tab == "appearance":

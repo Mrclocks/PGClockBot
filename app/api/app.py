@@ -4652,7 +4652,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             )
             ctx["webhook_full_url"] = (wh_base + wh_path) if wh_base else ""
         elif tab == "links":
-            from app.services.ux20 import build_magic_links_context
+            from app.services.quick_links import build_magic_links_context
 
             ctx.update(await build_magic_links_context(session, staff))
         elif tab == "ssl":
