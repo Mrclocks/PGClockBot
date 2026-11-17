@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import re
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
@@ -17,11 +18,13 @@ from datetime import datetime, timedelta, timezone
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, BroadcastLog, Role
 from app.services.broadcast import AUDIENCE_LABELS, shop_scope_filter
 from app.services.shop_membership import shop_member_clause
+from app.services.telegram_html import normalize_telegram_html
 
 logger = logging.getLogger("pgclock.broadcast")
 
@@ -44,6 +47,20 @@ STATUS_LABELS = {
     STATUS_FAILED: "ناموفق",
 }
 OUTCOME_OK, OUTCOME_FAILED, OUTCOME_UNKNOWN = "ok", "failed", "unknown"
+PLATFORM_REQUEST_KEY_PREFIX = "platform-"
+REQUEST_TOKEN_BYTES = 16
+_REQUEST_TOKEN_RE = re.compile(r"[0-9a-f]{32}")
+
+
+def new_request_token() -> str:
+    """A token a confirm screen or form carries, so a repeated submit queues one broadcast."""
+    return secrets.token_hex(REQUEST_TOKEN_BYTES)
+
+
+def platform_request_key(token: object) -> str | None:
+    """The stored key for a platform broadcast token; None for a missing or malformed one."""
+    raw = str(token or "").strip().lower()
+    return f"{PLATFORM_REQUEST_KEY_PREFIX}{raw}" if _REQUEST_TOKEN_RE.fullmatch(raw) else None
 
 
 def _audience_clause(audience: str, *, shop_id: int | None = None):
@@ -63,27 +80,39 @@ def _audience_clause(audience: str, *, shop_id: int | None = None):
     return clause
 
 
+async def count_platform_targets(session: AsyncSession, audience: str) -> int:
+    """How many people a platform broadcast to ``audience`` reaches now."""
+    if audience not in AUDIENCE_LABELS:
+        raise ValueError("گروه مخاطبان نامعتبر است")
+    return int(await session.scalar(select(func.count()).select_from(BotUser).where(*_audience_clause(audience))) or 0)
+
+
 async def queue_broadcast(
     session: AsyncSession,
     *,
     text: str,
     audience: str,
     created_by: str | None,
+    request_token: object = None,
 ) -> BroadcastLog:
-    """Record a platform broadcast and its audience size; the worker sends it."""
-    body = (text or "").strip()
+    """Record a platform broadcast and its audience size; the worker sends it.
+
+    The text is normalized to HTML Telegram accepts, so one stray ``<`` cannot fail the broadcast
+    for every recipient. A repeated ``request_token`` returns the broadcast it already queued.
+    """
+    body = normalize_telegram_html((text or "").strip())
     if not body:
         raise ValueError("متن پیام خالی است")
     if len(body) > MAX_TEXT_LENGTH:
         raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
     if audience not in AUDIENCE_LABELS:
         raise ValueError("گروه مخاطبان نامعتبر است")
-    total = int(
-        await session.scalar(
-            select(func.count()).select_from(BotUser).where(*_audience_clause(audience))
-        )
-        or 0
-    )
+    key = platform_request_key(request_token)
+    if key is not None:
+        existing = await session.scalar(select(BroadcastLog).where(BroadcastLog.request_key == key))
+        if existing is not None:
+            return existing
+    total = await count_platform_targets(session, audience)
     if not total:
         raise ValueError("مخاطبی برای این گروه وجود ندارد")
     log = BroadcastLog(
@@ -93,9 +122,18 @@ async def queue_broadcast(
         created_by=(created_by or "")[:128] or None,
         status=STATUS_QUEUED,
         shop_id=None,
+        request_key=key,
     )
     session.add(log)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # A concurrent submit with the same token won the insert; return its broadcast.
+        await session.rollback()
+        again = await session.scalar(select(BroadcastLog).where(BroadcastLog.request_key == key)) if key else None
+        if again is None:
+            raise
+        return again
     return log
 
 

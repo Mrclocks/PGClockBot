@@ -109,6 +109,7 @@ def bot_routers() -> list[Router]:
     from app.bot.handlers import (
         admin,
         admin_backup,
+        admin_broadcast_confirm,
         admin_plans,
         admin_resplan_payg,
         admin_pg_hosts,
@@ -238,6 +239,7 @@ def bot_routers() -> list[Router]:
         stuck_orders.router,
         trial_users_view.router,
         staff_audit_view.router,
+        admin_broadcast_confirm.router,
         quick_links_view.router,
         service_shop_review_view.router,
         payg_charge_review.router,

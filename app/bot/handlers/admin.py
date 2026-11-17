@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
+from app.bot.handlers.admin_broadcast_confirm import preview_broadcast
 from app.bot.auth import (
     platform_can_manage_representatives,
     require_bot_owner_handler,
@@ -4930,7 +4931,8 @@ async def adm_broadcast_audience(callback: CallbackQuery, db_user: BotUser, stat
     }.get(audience, audience)
     if callback.message:
         await callback.message.edit_text(
-            f"📢 مخاطب: <b>{audience_fa}</b>\nمتن پیام را بفرستید (HTML ساده).\nبرای لغو: انصراف"
+            f"📢 مخاطب: <b>{audience_fa}</b>\nمتن پیام را بفرستید؛ بولد، لینک و قالب‌بندی تلگرام حفظ می‌شود.\n"
+            "پیش از ارسال، پیش‌نمایش را می‌بینید و تأیید می‌کنید.\nبرای لغو: انصراف"
         )
         from app.bot.nav_input import ask_text
 
@@ -4972,24 +4974,7 @@ async def adm_broadcast_send(message: Message, state: FSMContext, session: Async
         return
     data = await state.get_data()
     audience = data.get("broadcast_audience") or "all"
-    await state.set_state(None)
-    from app.services.broadcast_queue import queue_broadcast
-
-    back = with_inline_back(None, await get_all_settings(session), "nv:adm:broadcast")
-    try:
-        log = await queue_broadcast(session, text=message.text or "", audience=audience, created_by=str(db_user.telegram_id))
-    except ValueError as e:
-        await _show_outcome(message, state, f"⚠️ {user_safe_error(e)}", back)
-        return
-    await _show_outcome(
-        message,
-        state,
-        f"✅ در صف ارسال قرار گرفت\nمخاطبان: {log.total}\nارسال به‌تدریج انجام می‌شود؛ پیشرفت را از «تاریخچهٔ ارسال‌ها» ببینید.",
-        InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📜 وضعیت این ارسال", callback_data=f"bch:v:{log.id}")],
-            *back.inline_keyboard,
-        ]),
-    )
+    await preview_broadcast(message, state, session, audience=audience)
 
 @router.callback_query(F.data == "adm:pg:stats")
 @require_bot_owner_handler

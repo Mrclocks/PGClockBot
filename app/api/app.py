@@ -5321,7 +5321,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.broadcast import AUDIENCE_LABELS, list_broadcast_history
-        from app.services.broadcast_queue import STATUS_LABELS
+        from app.services.broadcast_queue import STATUS_LABELS, new_request_token
 
         history = await list_broadcast_history(session, limit=40)
         return render(
@@ -5332,6 +5332,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "history": history,
                 "audience_labels": AUDIENCE_LABELS,
                 "status_labels": STATUS_LABELS,
+                "broadcast_request_token": new_request_token(),
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -5344,6 +5345,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
         text: str = Form(...),
         audience: str = Form("all"),
+        request_token: str = Form(""),
     ):
         from app.services.broadcast_queue import queue_broadcast
 
@@ -5352,7 +5354,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             audience = "all"
         try:
             log = await queue_broadcast(
-                session, text=text, audience=audience, created_by=str(staff.get("username") or "admin")
+                session,
+                text=text,
+                audience=audience,
+                created_by=str(staff.get("username") or "admin"),
+                request_token=request_token,
             )
         except ValueError as e:
             return _redirect_msg("/broadcast", err=str(e))
