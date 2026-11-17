@@ -87,6 +87,8 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("app.services.pasarguard.get_pg", return_value=client),
             patch("app.services.pg_staff_access._PG_GATE_CACHE", {}),
+            # A confirmation left by another test would keep access during the outage.
+            patch("app.services.pg_staff_access._PG_GATE_LAST_OK", {}),
             patch("app.services.pg_staff_access.revoke_web_access", new=AsyncMock()) as revoke,
             resilience.web_read_budget(),
         ):
@@ -374,6 +376,7 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(pg_staff_access, "time", SimpleNamespace(monotonic=lambda: now[0])),
             patch.object(pg_staff_access, "_PG_GATE_CACHE", {}),
+            patch.object(pg_staff_access, "_PG_GATE_LAST_OK", {}),
             patch.object(pg_staff_access, "fetch_pg_admin_gate", gate),
         ):
             self.assertFalse((await enforce_pg_admin_web_gate(AsyncMock(), "shop_a"))[0])
