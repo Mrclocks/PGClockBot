@@ -3162,14 +3162,14 @@
             '<div class="pay-dest-fields">' +
               '<label>نام درگاه<input type="text" class="pay-dest-psp-name" maxlength="64" value="' + attrEsc(item.name) + '" autocomplete="off" /></label>' +
               '<label>ارائه‌دهنده<select class="pay-dest-psp-provider">' +
-                optionsHtml([['zarinpal', 'زرین‌پال'], ['sunpay', 'سان‌پی (SunPay)'], ['mock', 'Mock (فقط تست محلی)']], provider) +
+                optionsHtml([['zarinpal', 'زرین‌پال'], ['sunpay', 'سان‌پی (SunPay)'], ['tonpays', 'تون‌پی (TonPays)'], ['mock', 'Mock (فقط تست محلی)']], provider) +
               '</select></label>' +
               '<label>مرچنت / کلید API<input type="password" class="pay-dest-psp-key" dir="ltr" value="" autocomplete="new-password" placeholder="' + attrEsc(keyHint) + '" /></label>' +
               '<label>آدرس پایه (فقط سان‌پی)<input type="text" class="pay-dest-psp-url" dir="ltr" value="' + attrEsc(item.pay_url) + '" placeholder="https://pay.example.com" autocomplete="off" /></label>' +
               '<label>روش درخواست سان‌پی<select class="pay-dest-psp-method">' +
                 optionsHtml([['GET', 'GET (مستند)'], ['POST', 'POST']], item.request_method || 'GET') +
               '</select></label>' +
-              '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-sandbox"' + (item.sandbox ? ' checked' : '') + ' /> سندباکس زرین‌پال</label>' +
+              '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-sandbox"' + (item.sandbox ? ' checked' : '') + ' /> سندباکس</label>' +
               '<label class="pay-dest-check"><input type="checkbox" class="pay-dest-psp-enabled"' + (item.enabled === false ? '' : ' checked') + ' /> فعال</label>' +
             '</div>' +
             '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +

@@ -1,13 +1,12 @@
-# PGClockBot engineering rules
+# Gozargah engineering rules
 
 These rules apply to every change, whether written by a person or by an AI agent. Read this file before editing code. When a rule conflicts with a quick fix, follow the rule and explain the trade-off in the pull request.
-
 Rules marked **MUST** are required. Rules marked **SHOULD** are the default and need a reason to skip. The cleanup of code that does not meet these rules yet is tracked in [docs/ENGINEERING_REMEDIATION_PLAN.md](docs/ENGINEERING_REMEDIATION_PLAN.md); do not fold that cleanup into a feature change.
 
 ## 1. Core rules
 
-- Implement features independently within PGClockBot's existing architecture, naming conventions, service boundaries, and UI patterns.
-- Commit messages, code comments, identifiers, tests, release notes, and product documentation should describe PGClockBot behavior and the concrete problem or feature being implemented.
+- Implement features independently within Gozargah's existing architecture, naming conventions, service boundaries, and UI patterns.
+- Commit messages, code comments, identifiers, tests, release notes, and product documentation should describe Gozargah behavior and the concrete problem or feature being implemented.
 - Preserve shop isolation, scoped wallet balances, authorization checks, and idempotent payment and delivery behavior when extending commerce flows.
 - Introduce changes incrementally and verify affected behavior with focused tests before expanding the scope.
 - Retain required notices for existing dependencies and assets.
@@ -87,7 +86,7 @@ Money, quota and access paths are the most expensive place to be wrong.
 
 ## 7. Performance
 
-PGClockBot serves many shops and customers from one process and one PasarGuard panel. Assume tables grow and the panel is slow.
+Gozargah serves many shops and customers from one process and one PasarGuard panel. Assume tables grow and the panel is slow.
 
 - **No N+1 queries.** Never run a query inside a loop over rows. Load related rows with `selectinload`/`joinedload`, or fetch them in one `WHERE id IN (...)` query and index the result in a dict. Review any `await session.get/scalar/execute` inside a `for` loop.
 - **Bound every query.** Every list endpoint and job loop has a `LIMIT`, and large scans use keyset pagination (`WHERE id > :last ORDER BY id LIMIT :n`) instead of `OFFSET` or `.all()` on a whole table. Do not load full rows when you need one column or a count (`select(func.count())`, `select(Model.id)`).
@@ -114,7 +113,7 @@ PGClockBot serves many shops and customers from one process and one PasarGuard p
 ## 9. User interface, Persian text and accessibility
 
 - **MUST** build every web panel page, modal and component to [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md). It is the single source for sizes, spacing, dividers, colours, motion and the cancel-button rule, and its "Building a new page or modal" section lists the markup and macros to start from. A new UI pattern is added to that document first, in the same pull request; do not invent one-off spacing, sizes or colours.
-- **MUST** keep `python scripts/design_check.py` passing: a template or stylesheet you change must not gain design findings (modal outside `.ds`, «انصراف» in a form modal, inline `style=`, literal colours in CSS). CI runs it on every pull request.
+- **MUST** keep `python scripts/design_check.py` passing: a template or stylesheet you change must not gain design findings (modal outside `.ds`, "انصراف" in a form modal, inline `style=`, literal colours in CSS). CI runs it on every pull request.
 - User-facing strings are Persian and RTL. Use `dir="ltr"` for URLs, usernames and numbers inside RTL text. Use the shared number and date formatters instead of hand-formatting.
 - Reuse the existing CSS variables (`var(--space-*)`, `var(--card)`, `var(--border)`) and component classes (`.card`, `.btn`, `.form-field`). Do not add one-off colors or inline styles.
 - Templates extend `base.html`, include the CSRF token in every POST form, and rely on autoescape. Inline scripts must be compatible with the CSP nonce handling in `csp_nonce.py`; prefer an external file.

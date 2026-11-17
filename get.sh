@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# PGClockBot bootstrap — clone if missing, update if present, then open the menu.
+# Gozargah bootstrap — clone if missing, update if present, then open the menu.
 #
-# Default channel is main (stable 0.5). Development builds use PGCLOCK_CHANNEL=dev.
+# Default channel is main (stable 1.0). Development builds use GOZARGAH_CHANNEL=dev.
 #
 # Fresh or existing server (from any directory):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
-#   PGCLOCK_CHANNEL=dev bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/dev/get.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/bluedock/Gozargah/main/get.sh)
+#   GOZARGAH_CHANNEL=dev bash <(curl -fsSL https://raw.githubusercontent.com/bluedock/Gozargah/dev/get.sh)
 #
 # Also works (TTY is reattached automatically):
-#   curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/bluedock/Gozargah/main/get.sh | bash
 #
 # Or locally (inside / next to the repo):
 #   bash get.sh
@@ -17,14 +17,14 @@
 #
 set -euo pipefail
 
-REPO_URL="${PGCLOCK_REPO:-https://github.com/Mrclocks/PGClockBot.git}"
-DIR_NAME="${PGCLOCK_DIR:-PGClockBot}"
-# Channel: main (stable) or dev. PGCLOCK_CHANNEL aliases PGCLOCK_BRANCH.
+REPO_URL="${GOZARGAH_REPO:-https://github.com/bluedock/Gozargah.git}"
+DIR_NAME="${GOZARGAH_DIR:-Gozargah}"
+# Channel: main (stable) or dev. GOZARGAH_CHANNEL aliases GOZARGAH_BRANCH.
 CHANNEL_FROM_ENV=0
-if [[ -n "${PGCLOCK_CHANNEL:-${PGCLOCK_BRANCH:-}}" ]]; then
+if [[ -n "${GOZARGAH_CHANNEL:-${GOZARGAH_BRANCH:-}}" ]]; then
   CHANNEL_FROM_ENV=1
 fi
-_raw_branch="${PGCLOCK_CHANNEL:-${PGCLOCK_BRANCH:-main}}"
+_raw_branch="${GOZARGAH_CHANNEL:-${GOZARGAH_BRANCH:-main}}"
 case "$(printf '%s' "$_raw_branch" | tr '[:upper:]' '[:lower:]')" in
   dev|develop|development|unstable) REMOTE_BRANCH="dev" ;;
   *) REMOTE_BRANCH="main" ;;
@@ -32,11 +32,11 @@ esac
 unset _raw_branch
 # Only export when the operator set a channel — otherwise keep the interactive prompt.
 if [[ "$CHANNEL_FROM_ENV" -eq 1 ]]; then
-  export PGCLOCK_CHANNEL="$REMOTE_BRANCH"
+  export GOZARGAH_CHANNEL="$REMOTE_BRANCH"
 fi
 # Optional pin: tag or commit SHA (e.g. v10.0.0). When set, sync checks out this
 # ref instead of tracking the branch tip — prefer for production installs.
-REMOTE_REF="${PGCLOCK_REF:-}"
+REMOTE_REF="${GOZARGAH_REF:-}"
 
 info() { echo "  > $*"; }
 ok()   { echo "  + $*"; }
@@ -44,7 +44,7 @@ warn() { echo "  ! $*"; }
 err()  { echo "  x $*" >&2; }
 
 # Resolve project root
-if [[ -f "./pgclock.sh" || -f "./install.sh" || -f "./run.py" ]]; then
+if [[ -f "./gozargah.sh" || -f "./install.sh" || -f "./run.py" ]]; then
   ROOT="$(pwd)"
 else
   ROOT="$(pwd)/${DIR_NAME}"
@@ -52,7 +52,7 @@ fi
 
 backup_runtime() {
   # Preserve config + DB outside of git reset
-  RUNTIME_BAK="$(mktemp -d /tmp/pgclock-runtime.XXXXXX)"
+  RUNTIME_BAK="$(mktemp -d /tmp/gozargah-runtime.XXXXXX)"
   mkdir -p "$RUNTIME_BAK"
   # Never copy .venv — it can be hundreds of MB and slows force-sync badly.
   for item in .env data; do
@@ -174,11 +174,11 @@ ensure_repo() {
 
     if [[ -d .git ]]; then
       git_update
-    elif [[ ! -f pgclock.sh && ! -f run.py ]]; then
+    elif [[ ! -f gozargah.sh && ! -f run.py ]]; then
       err "Folder exists but is empty/incomplete and has no .git: ${ROOT}"
       err "Remove or rename it, then re-run:"
-      err "  mv ${DIR_NAME} ${DIR_NAME}.bak.\$(date +%Y%m%d)"
-      err "  bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)"
+      err "  mv ${DIR_NAME} ${DIR_NAME}.bak.$(date +%Y%m%d)"
+      err "  bash <(curl -fsSL https://raw.githubusercontent.com/bluedock/Gozargah/main/get.sh)"
       exit 1
     else
       warn "Folder exists without .git — re-cloning into place"
@@ -203,25 +203,25 @@ ensure_repo() {
 ensure_repo
 
 # Final safety: if manager still missing, force sync once more
-if [[ ! -f pgclock.sh ]]; then
-  warn "pgclock.sh missing after update — forcing sync to origin/${REMOTE_BRANCH}"
+if [[ ! -f gozargah.sh ]]; then
+  warn "gozargah.sh missing after update — forcing sync to origin/${REMOTE_BRANCH}"
   if [[ -d .git ]]; then
     force_sync_to_remote
   fi
 fi
 
-if [[ ! -f pgclock.sh ]]; then
-  err "pgclock.sh still missing in ${ROOT}"
+if [[ ! -f gozargah.sh ]]; then
+  err "gozargah.sh still missing in ${ROOT}"
   err "Manual fix:"
-  err "  cd ~ && mv ${DIR_NAME} ${DIR_NAME}.bak.\$(date +%Y%m%d)"
-  err "  bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)"
+  err "  cd ~ && mv ${DIR_NAME} ${DIR_NAME}.bak.$(date +%Y%m%d)"
+  err "  bash <(curl -fsSL https://raw.githubusercontent.com/bluedock/Gozargah/main/get.sh)"
   exit 1
 fi
 
-chmod +x pgclock.sh get.sh install.sh update.sh 2>/dev/null || true
+chmod +x gozargah.sh get.sh install.sh update.sh 2>/dev/null || true
 
-# When the operator set PGCLOCK_CHANNEL=dev|main, rewrite bare install/update
-# so pgclock.sh does not fall back to main and undo the channel sync above.
+# When the operator set GOZARGAH_CHANNEL=dev|main, rewrite bare install/update
+# so gozargah.sh does not fall back to main and undo the channel sync above.
 _args=("$@")
 if [[ "$CHANNEL_FROM_ENV" -eq 1 && ${#_args[@]} -ge 1 ]]; then
   case "${_args[0]}" in
@@ -233,6 +233,6 @@ fi
 # Pass through optional subcommand (install/update/...), default = menu
 # Re-attach TTY so the menu can read keyboard even when launched via curl|bash
 if [[ ! -t 0 && -r /dev/tty ]]; then
-  exec bash pgclock.sh "${_args[@]}" </dev/tty
+  exec bash gozargah.sh "${_args[@]}" </dev/tty
 fi
-exec bash pgclock.sh "${_args[@]}"
+exec bash gozargah.sh "${_args[@]}"

@@ -87,7 +87,7 @@ class ParseAndFormTests(unittest.TestCase):
     def test_hostile_rows_are_normalised(self) -> None:
         rows = [gateway("a", provider="evil"), gateway("a"), gateway("bad id!"), "x", *[gateway(f"g{i}") for i in range(20)]]
         parsed = parse_psp_gateways(json.dumps(rows))
-        self.assertEqual(parsed[0].provider, "zarinpal")
+        self.assertEqual(parsed[0].provider, "tonpays")
         self.assertEqual(len({g.id for g in parsed}), len(parsed))
         self.assertNotIn("bad id!", {g.id for g in parsed})
         self.assertEqual(len(parsed), MAX_PSP_GATEWAYS)
@@ -149,6 +149,7 @@ class GatewayCheckoutTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             await set_setting(session, "pay_psp_enabled", "1")
             await set_setting(session, "psp_merchant_id", "legacy-merchant")
+            await set_setting(session, "psp_provider", "zarinpal")
             await set_setting(
                 session, "psp_gateways", gateways_json(gateway("a", "merchant-a"), gateway("b", "merchant-b"))
             )

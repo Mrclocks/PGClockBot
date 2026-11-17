@@ -421,7 +421,7 @@ def _checkout_gateway(ui: dict, gateway_id: str | None) -> PspGateway:
     gateway = choose_psp_gateway(ui, gateway_id)
     if gateway.provider == "mock" and not settlement_mock_allowed():
         raise ValueError(
-            "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را zarinpal یا sunpay بگذارید"
+            "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را tonpays یا sunpay بگذارید"
         )
     return gateway
 
@@ -1285,7 +1285,7 @@ PSP_POLL_BACKOFF: tuple[tuple[timedelta, timedelta], ...] = (
     (timedelta(hours=12), timedelta(minutes=15)),
 )
 PSP_POLL_BACKOFF_MAX = timedelta(minutes=45)
-_PSP_POLLABLE = frozenset({"sunpay", "zarinpal"})
+_PSP_POLLABLE = frozenset({"sunpay", "zarinpal", "tonpays"})
 
 
 def _psp_poll_callback_params(settlement: PaymentSettlement) -> dict[str, Any] | None:
@@ -1300,7 +1300,7 @@ def _psp_poll_callback_params(settlement: PaymentSettlement) -> dict[str, Any] |
             "token": token,
             "invoice_id": str(int(settlement.id)),
         }
-    # zarinpal
+    # zarinpal / tonpays: both echo the authority/invoice id as the token.
     return {"Status": "OK", "Authority": token}
 
 

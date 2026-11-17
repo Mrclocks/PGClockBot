@@ -472,6 +472,38 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
             )
         reseller_id = pre.shop_owner_id
 
+        # TonPays webhook: POST with JSON body + X-TonPays-Signature. Verify the
+        # gateway signature before trusting the callback. Enforced only when the shop
+        # has configured a webhook secret; otherwise falls through to the read-only
+        # provider verify (already secure, talks to TonPays directly). Invalid
+        # signature -> reject without touching the settlement.
+        if provider_l == "tonpays" and request.method.upper() == "POST":
+            signature = (request.headers.get("x-tonpays-signature") or "").strip()
+            if signature:
+                from app.services.payment_providers.tonpays import (
+                    verify_webhook as _tonpays_verify_webhook,
+                )
+                from app.services.users import get_all_settings as _tp_get_all_settings
+
+                body = await request.body()
+                tp_ui = await _tp_get_all_settings(session, reseller_id=reseller_id)
+                wh = await _tonpays_verify_webhook(
+                    api_key=str(tp_ui.get("psp_merchant_id") or ""),
+                    body=body,
+                    signature=signature,
+                    webhook_secret=str(tp_ui.get("tonpays_webhook_secret") or "") or None,
+                )
+                if wh is not None and not wh.ok:
+                    return await _status(
+                        request,
+                        session,
+                        shop_owner_id=reseller_id,
+                        kind="error",
+                        title="تأیید وب‌هوک ناموفق",
+                        message="امضای وب‌هوک تون پی نامعتبر است.",
+                        http_status=400,
+                    )
+
         try:
             settlement = await complete_psp_return(
                 session,
