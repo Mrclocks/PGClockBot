@@ -213,8 +213,8 @@ class AlertJobTests(AlertCase):
         bot = await self.run_job()
         calls = [c for c in bot.send_message.await_args_list if c.args[0] == 1001]
         self.assertEqual(len(calls), 2)
-        time_call = next(c for c in calls if "زمان سرویس" in c.args[1])
-        traffic_call = next(c for c in calls if "حجم باقی‌مانده" in c.args[1])
+        time_call = next(c for c in calls if "⏰" in c.args[1])
+        traffic_call = next(c for c in calls if "📉" in c.args[1])
         self.assertEqual(buttons(time_call.kwargs["reply_markup"]), ["nto:svc:renew:10", TOPUP_CALLBACK, *HELP])
         self.assertIn("کیف پول برای تمدید", time_call.args[1])
         self.assertEqual(
@@ -249,7 +249,7 @@ class AlertJobTests(AlertCase):
             await jobs.check_expiring_services(AsyncMock())
         calls = {c.args[0]: c for c in shop_bot.send_message.await_args_list}
         self.assertEqual(set(calls), {1004})
-        traffic = next(c for c in shop_bot.send_message.await_args_list if "حجم باقی‌مانده" in c.args[1])
+        traffic = next(c for c in shop_bot.send_message.await_args_list if "📉" in c.args[1])
         self.assertEqual(
             buttons(traffic.kwargs["reply_markup"]), ["nto:svc:addon:11:volume", "nto:svc:renew:11", TOPUP_CALLBACK, *HELP]
         )
@@ -314,7 +314,7 @@ class AlertThresholdCorrectnessTests(AlertJobTests):
         bot = AsyncMock()
         with patch.object(jobs, "SessionLocal", self.Session), patch.object(jobs, "get_pg", return_value=pg):
             await jobs.check_expiring_services(bot)
-        return [c for c in bot.send_message.await_args_list if c.args[0] == 1001 and "زمان سرویس" in c.args[1]]
+        return [c for c in bot.send_message.await_args_list if c.args[0] == 1001 and "⏰" in c.args[1]]
 
     async def test_a_renewed_service_is_not_alerted_early_because_of_its_old_creation_date(self):
         await self.set_created(100)  # 25 of the 30 plan days left, but 20% of the time since creation

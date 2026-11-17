@@ -92,6 +92,7 @@ from app.services.psp_gateways import psp_gateways_form_json
 from app.services.panel_assets import asset_version, get_panel_asset_cache_key
 from app.services.redact import operator_error
 from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.usage_alert_messages import ALERT_NUMBER_KEYS, clamp_alert_setting
 from app.services.mobile_bar import load_bar_form, load_bar_order
 from app.services.panel_brand import (
     BRAND_PRESET_CSS,
@@ -5211,10 +5212,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                     from app.services.button_styles import normalize_style
 
                     val = normalize_style(val)
-                if key in ("user_alert_low_traffic_pct", "user_alert_low_time_pct"):
-                    from app.services.users import clamp_alert_percent
-
-                    val = clamp_alert_percent(val)
+                if key in ALERT_NUMBER_KEYS:
+                    val = clamp_alert_setting(key, val)
                 if key == "force_join_channel":
                     from app.services.users import normalize_force_join_channel_value
 

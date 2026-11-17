@@ -44,6 +44,7 @@ from app.services.panel_brand import load_own_values
 from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
 from app.services.rich_text import merge_rich_settings_on_save, prepare_settings_values_for_web
 from app.services.screen_titles import SCREEN_TEXT_TAB, platform_only_screen_text_keys, validate_screen_text_settings
+from app.services.usage_alert_messages import ALERT_NUMBER_KEYS, clamp_alert_setting
 from app.services.users import (
     IMAGE_KEYS,
     PLATFORM_ONLY_SETTING_GROUPS,
@@ -500,10 +501,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                     from app.services.button_styles import normalize_style
 
                     val = normalize_style(val)
-                if key in ("user_alert_low_traffic_pct", "user_alert_low_time_pct"):
-                    from app.services.users import clamp_alert_percent
-
-                    val = clamp_alert_percent(val)
+                if key in ALERT_NUMBER_KEYS:
+                    val = clamp_alert_setting(key, val)
                 if key == "force_join_channel":
                     from app.services.users import normalize_force_join_channel_value
 
