@@ -1,8 +1,9 @@
 {# A customer's name in any panel table opens the read-only user card. Import with context, because whether the
    name is a link depends on the signed-in staff:
      {% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
-   - user_card_link(user_id, name, page, title=false): the name as a button that opens the card, or plain text
-     without the right; ``title`` for the bold name cell of a list (cell-name-text).
+   - user_card_link(user_id, name, page, title=false, context=none): the name as a button that opens the card, or
+     plain text without the right; ``title`` for the bold name cell of a list (cell-name-text). When the row has a
+     «⋯» menu, user-card-actions.js copies its actions into the card under «اقدام‌های {context}» (e.g. «پرداخت #۱۲»).
    - user_card_button(user_id, label, page): the same card behind a row-menu or toolbar button.
    - user_card_hint(): one muted line above the table saying that a name opens the card.
    - user_card_modals(return_page=page): the card and the message form, once per page. ``page`` is a key of
@@ -10,12 +11,13 @@
 {% from "_icons.html" import icon %}
 {% from "macros.html" import modal_title %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
-{% macro user_card_link(user_id, name, page, title=false) -%}
+{% macro user_card_link(user_id, name, page, title=false, context=none) -%}
 {%- if user_id and staff is defined and can_open_user_card is defined and can_open_user_card(staff) -%}
 <button type="button" class="{{ 'cell-name-text cell-name-link' if title else 'cell-user-link' }}"
         data-modal-open="modal-user-card"
         data-modal-load="/users/{{ user_id | int }}/card?from={{ page }}"
-        data-modal-load-target="user-card-body"
+        data-modal-load-target="user-card-body"{% if context %}
+        data-card-context="{{ context }}"{% endif %}
         dir="auto">{{ name }}</button>
 {%- else -%}
 <span{% if title %} class="cell-name-text"{% endif %} dir="auto">{{ name }}</span>
@@ -73,6 +75,7 @@
   </div>
 </div>
 {% endif %}
+<script src="/static/user-card-actions.js?v={{ asset_v('user-card-actions.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 <script src="/static/user-message.js?v={{ asset_v('user-message.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 {% endif %}
 {% endmacro %}

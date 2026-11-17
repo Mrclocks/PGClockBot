@@ -76,7 +76,7 @@
         {% if selectable %}{{ table_select_cell(row.user_id) }}{% endif %}
         <td class="mono col-hide-sm" data-sort-value="{{ row.trial_order_id }}"><bdi dir="ltr">{{ row.trial_order_id }}</bdi></td>
         <td class="li-title" data-sort-value="{{ row.name }}">
-          {{ user_card_link(row.user_id, row.name, 'trials') }}
+          {{ user_card_link(row.user_id, row.name, 'trials', context='کاربر تست') }}
           <span class="li-only li-id" dir="ltr">({{ row.telegram_id }})</span>
         </td>
         <td class="mono col-tg col-hide-sm" data-sort-value="{{ row.telegram_id }}"><bdi dir="ltr">{{ row.telegram_id }}</bdi></td>

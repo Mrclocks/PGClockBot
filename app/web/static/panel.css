@@ -3124,6 +3124,12 @@ a.btn.btn-ghost:hover {
   gap: var(--space-2);
 }
 .user-card-actions .btn { width: 100%; }
+/* The row's «⋯» actions copied into the card (user-card-actions.js): two equal columns of full-width buttons;
+   a form is one cell, so its button lines up with the plain buttons. */
+.user-card-row-actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.user-card-row-actions-grid > form { display: flex; margin: 0; min-width: 0; }
+.user-card-row-actions-grid :is(.btn, button) { width: 100%; }
+.user-card-row-actions-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 .user-card-actions .btn:only-child { grid-column: 1 / -1; }
 
 .card > .table-wrap {

@@ -77,10 +77,10 @@ class UsersQuickUiTests(unittest.TestCase):
     def test_finance_tickets_deep_links(self):
         # A customer's name opens the user card in place (rendering is covered by test_user_card_links).
         fin = (ROOT / "app/web/templates/finance.html").read_text(encoding="utf-8")
-        self.assertIn("user_card_link(o.user.id, uname, 'finance')", fin)
-        self.assertIn("user_card_link(payer.id, uname, 'finance')", fin)
+        self.assertIn("user_card_link(o.user.id, uname, 'finance'", fin)
+        self.assertIn("user_card_link(payer.id, uname, 'finance'", fin)
         tix = (ROOT / "app/web/templates/tickets.html").read_text(encoding="utf-8")
-        self.assertIn("user_card_link(row.user_id, row.user_label, 'tickets')", tix)
+        self.assertIn("user_card_link(row.user_id, row.user_label, 'tickets'", tix)
         for source in (fin, tix):
             self.assertNotIn("/users?uid=", source)
 

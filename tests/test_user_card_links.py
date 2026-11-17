@@ -57,6 +57,23 @@ class UserCardLinkTests(unittest.TestCase):
         self.assertNotIn("../", html)
 
 
+class UserCardRowContextTests(unittest.TestCase):
+    def test_the_row_label_travels_with_the_link(self) -> None:
+        html = str(macros(OWNER).user_card_link(42, "Aboli", "finance", context="پرداخت ۱۲"))
+        self.assertIn('data-card-context="پرداخت ۱۲"', html)
+
+    def test_no_label_attribute_without_a_context(self) -> None:
+        self.assertNotIn("data-card-context", str(macros(OWNER).user_card_link(42, "Aboli", "finance")))
+
+    def test_a_hostile_label_is_escaped(self) -> None:
+        html = str(macros(OWNER).user_card_link(42, "Aboli", "cleanup", context='سرویس x"><script>'))
+        self.assertNotIn("<script>", html)
+        self.assertIn('data-card-context="سرویس x&#34;&gt;&lt;script&gt;"', html)
+
+    def test_the_modals_load_the_row_actions_script(self) -> None:
+        self.assertIn('src="/static/user-card-actions.js', str(macros(OWNER).user_card_modals(return_page="finance")))
+
+
 class UserCardButtonTests(unittest.TestCase):
     def test_a_row_button_opens_the_card_instead_of_the_users_list(self) -> None:
         html = str(macros(OWNER).user_card_button(42, "مشاهده کاربر", "cleanup"))
@@ -84,6 +101,28 @@ class UserCardHintTests(unittest.TestCase):
         self.assertIn('id="modal-user-card"', html)
         self.assertIn('<input type="hidden" name="return_page" value="finance" />', html)
         self.assertIn('src="/static/user-message.js', html)
+
+
+class ApplicationsPageTests(unittest.TestCase):
+    def test_an_applicant_name_opens_the_card_with_its_request_label(self) -> None:
+        from types import SimpleNamespace
+
+        from app.api.app import templates
+
+        applicant = SimpleNamespace(id=7, full_name="Aboli", username="ab", telegram_id=55)
+        application = SimpleNamespace(
+            id=5, user=applicant, plan=SimpleNamespace(name="پایه"), amount=1000, status="awaiting_approval",
+            payment_method="card",
+        )
+        request = SimpleNamespace(url=SimpleNamespace(path="/resellers/applications"), state=SimpleNamespace(),
+                                  query_params={})
+        html = templates.env.get_template("reseller_applications.html").render(
+            request=request, staff=OWNER, csrf_token="t", tabs=[], tab="pending", apps=[application],
+        )
+        self.assertIn('data-modal-load="/users/7/card?from=applications"', html)
+        self.assertIn('data-card-context="درخواست ۵"', html)
+        self.assertIn('id="modal-user-card"', html)
+        self.assertIn(HINT, html)
 
 
 class UserCardPageTests(unittest.TestCase):

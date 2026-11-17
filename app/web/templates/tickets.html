@@ -108,7 +108,7 @@
           <td class="mono">{{ t.id }}</td>
           <td class="li-sub">
             {#- On phones line two: who asked (with Telegram id) and when. -#}
-            {{ user_card_link(row.user_id, row.user_label, 'tickets') }}
+            {{ user_card_link(row.user_id, row.user_label, 'tickets', context='تیکت ' ~ (t.id | num)) }}
             <span class="li-only">· <bdi dir="ltr">{{ ((t.updated_at or t.created_at)|string)[:16] }}</bdi></span>
           </td>
           <td class="li-title"><span dir="auto">{{ t.subject }}</span> <span class="li-only li-id" dir="ltr">(#{{ t.id }})</span></td>

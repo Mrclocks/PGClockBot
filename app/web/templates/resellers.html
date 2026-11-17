@@ -168,7 +168,7 @@
             <span class="cell-name-primary">
               {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
               {% set oversold = owner_view and oversold_shop_ids and u.id in oversold_shop_ids %}
-              {{ user_card_link(u.id if owner_view else none, u.full_name or u.username or '—', 'resellers', title=true) }}
+              {{ user_card_link(u.id if owner_view else none, u.full_name or u.username or '—', 'resellers', title=true, context='این نماینده') }}
               <span class="li-only li-id" dir="ltr">({{ u.telegram_id }})</span>
               {% if tag %}<span class="badge badge-risk-tag li-hide" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
               {% if oversold %}

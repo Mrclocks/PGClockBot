@@ -82,7 +82,7 @@
         <td class="mono" data-sort-value="{{ o.id }}">{{ o.id }}</td>
         <td class="li-title" data-sort-value="{{ uname }}">
           {% if o.user and o.user.id %}
-          {{ user_card_link(o.user.id, uname, 'finance') }}
+          {{ user_card_link(o.user.id, uname, 'finance', context='سفارش ' ~ (o.id | num)) }}
           <span class="li-only li-id" dir="ltr">(#{{ o.id }})</span>
           {% if o.user.is_demo %}<span class="badge neutral li-hide" title="در گزارش‌های مالی محاسبه نمی‌شود">دمو</span>{% endif %}
           {% else %}
@@ -243,7 +243,7 @@
         <td class="mono" data-sort-value="{{ p.id }}">{{ p.id }}</td>
         <td class="li-title" data-sort-value="{{ uname }}">
           {% if payer and payer.id %}
-          {{ user_card_link(payer.id, uname, 'finance') }}
+          {{ user_card_link(payer.id, uname, 'finance', context='پرداخت ' ~ (p.id | num)) }}
           {% if payer.is_demo %}<span class="badge neutral li-hide" title="در گزارش‌های مالی محاسبه نمی‌شود">دمو</span>{% endif %}
           {% else %}
           <span dir="auto">{{ uname }}</span>
@@ -366,7 +366,7 @@
       <tr data-bulk-ops="retry">
         {{ table_select_cell(oid) }}
         <td class="mono" data-sort-value="{{ oid }}">#{{ oid }} <span class="badge warn badge-inline">گیرکرده</span></td>
-        <td class="li-title" data-sort-value="{{ uname }}">{{ user_card_link(o.user.id if o and o.user else none, uname, 'finance') }} <span class="li-only li-id" dir="ltr">(#{{ oid }})</span></td>
+        <td class="li-title" data-sort-value="{{ uname }}">{{ user_card_link(o.user.id if o and o.user else none, uname, 'finance', context='سفارش ' ~ (oid | num)) }} <span class="li-only li-id" dir="ltr">(#{{ oid }})</span></td>
         <td class="li-sub" data-sort-value="{{ diag.kind if diag else 'stuck' }}">
           <span class="li-only badge warn">گیرکرده</span>
           {% set why = (stuck_reasons or {}).get(oid) %}
@@ -399,7 +399,7 @@
       <tr data-bulk-ops="retry,dismiss">
         {{ table_select_cell(f.order_id) }}
         <td class="mono" data-sort-value="{{ f.order_id }}">#{{ f.order_id }}{% if f.order_id in (stuck_order_ids or []) %} <span class="badge warn badge-inline">گیرکرده</span>{% endif %}</td>
-        <td class="li-title" data-sort-value="{{ uname }}">{{ user_card_link(o.user.id if o and o.user else none, uname, 'finance') }} <span class="li-only li-id" dir="ltr">(#{{ f.order_id }})</span></td>
+        <td class="li-title" data-sort-value="{{ uname }}">{{ user_card_link(o.user.id if o and o.user else none, uname, 'finance', context='سفارش ' ~ (f.order_id | num)) }} <span class="li-only li-id" dir="ltr">(#{{ f.order_id }})</span></td>
         <td class="li-sub" data-sort-value="{{ diag.kind if diag else 'fail' }}">
           {% if f.order_id in (stuck_order_ids or []) %}<span class="li-only badge warn">گیرکرده</span>{% endif %}
           {% if diag and diag.kind == 'approved_resend' %}

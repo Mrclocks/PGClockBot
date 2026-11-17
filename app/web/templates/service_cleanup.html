@@ -111,7 +111,7 @@
           <td class="col-name li-title" data-sort-value="{{ r.customer }}">
             <div class="cell-name">
               <span class="cell-name-primary">
-                {{ user_card_link(r.user_id, r.customer, 'cleanup', title=true) }}
+                {{ user_card_link(r.user_id, r.customer, 'cleanup', title=true, context='سرویس ' ~ r.username) }}
               </span>
             </div>
           </td>
@@ -174,7 +174,7 @@
           <td class="col-name li-title" data-sort-value="{{ r.customer }}">
             <div class="cell-name">
               <span class="cell-name-primary">
-                {{ user_card_link(r.user_id, r.customer, 'cleanup', title=true) }}
+                {{ user_card_link(r.user_id, r.customer, 'cleanup', title=true, context='سرویس ' ~ r.username) }}
               </span>
             </div>
           </td>

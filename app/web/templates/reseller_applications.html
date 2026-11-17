@@ -29,7 +29,7 @@
         {{ table_select_cell(a.id) }}
         <td class="mono">{{ a.id }}</td>
         <td class="li-title">
-          {{ user_card_link(a.user.id if a.user else none, (a.user.full_name or a.user.username or '—') if a.user else '—', 'applications') }}
+          {{ user_card_link(a.user.id if a.user else none, (a.user.full_name or a.user.username or '—') if a.user else '—', 'applications', context='درخواست ' ~ (a.id | num)) }}
           <br class="li-hide"><small class="muted mono li-hide">{{ a.user.telegram_id if a.user else '' }}</small>
           {% if a.user %}<span class="li-only li-id" dir="ltr">({{ a.user.telegram_id }})</span>{% endif %}
         </td>

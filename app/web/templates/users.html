@@ -133,7 +133,7 @@
           <div class="cell-name">
             <span class="cell-name-primary">
               {% set tag = color_tag_meta((marks_by_uid or {}).get(u.id).tag if (marks_by_uid or {}).get(u.id) else none) if color_tag_meta is defined else none %}
-              {{ user_card_link(u.id, u.full_name or u.username or "—", 'users', title=true) }}
+              {{ user_card_link(u.id, u.full_name or u.username or "—", 'users', title=true, context='این کاربر') }}
               <span class="li-only li-id" dir="ltr">({{ u.telegram_id }})</span>
               {% if row.has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
             </span>
