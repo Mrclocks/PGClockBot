@@ -999,18 +999,42 @@ html[data-theme="light"] .badge.badge-risk-tag {
   border-color: color-mix(in srgb, var(--accent, #38bdf8) 40%, var(--border));
   font-weight: 600;
 }
-.users-row.is-focus > td {
-  background: color-mix(in srgb, var(--accent, #38bdf8) 12%, transparent);
-}
-a.cell-user-link {
+/* A customer's name in a table: a quiet underline says it opens the user card. */
+.cell-user-link {
   color: inherit;
   text-decoration: none;
   border-bottom: 1px solid color-mix(in srgb, var(--muted-fg) 35%, transparent);
 }
-a.cell-user-link:hover {
+button.cell-user-link {
+  padding: 0;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.cell-user-link:hover {
   color: var(--foreground);
   border-bottom-color: var(--foreground);
 }
+.cell-user-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+/* One muted line above a table whose names open the user card. */
+.user-card-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-2);
+  color: var(--muted-fg);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+/* 16 above and below the line: the search bar already leaves 16 under itself and a flush title 8, so the hint
+   adds only what is missing on top. */
+.card.card-flush > .user-card-hint { margin: 0; padding: var(--space-2) var(--card-pad); }
+.card.card-flush > .search-bar ~ .user-card-hint { padding-top: 0; }
+.card.card-flush > .card-flush-head ~ .user-card-hint { padding-top: var(--space-1); }
+.user-card-hint-ico { flex: 0 0 auto; width: 16px; height: 16px; }
 
 .side-foot {
   margin-top: 0;
@@ -2455,10 +2479,11 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
   max-width: 100%;
   min-width: 0;
   text-decoration: none !important;
-  /* Main actions (save, confirm, add, select) follow the panel brand colour: strong edge, light fill. */
-  color: var(--brand-fg) !important;
-  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
-  background: color-mix(in srgb, var(--brand) 8%, transparent);
+  /* Main actions (save, confirm, add, select) follow the panel brand colour: strong edge, light fill.
+     A coloured notice sets --btn-tone / --btn-fg, so its buttons take the notice's colour, text included. */
+  color: var(--btn-fg, var(--brand-fg)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--btn-tone, var(--brand)) 72%, transparent);
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 8%, transparent);
   box-sizing: border-box;
   transition:
     background var(--motion-fast) var(--ease-standard),
@@ -2469,7 +2494,7 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
     box-shadow var(--motion-fast) var(--ease-standard);
 }
 .btn:hover, a.btn:hover {
-  background: color-mix(in srgb, var(--brand) 15%, transparent);
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent);
   opacity: 1;
   transform: translateY(-1px);
 }
@@ -2507,13 +2532,13 @@ a.btn.btn-ghost:hover {
   transform: translateY(-1px);
 }
 .btn-ok {
-  color: var(--brand-fg) !important;
-  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
-  background: color-mix(in srgb, var(--brand) 8%, transparent);
+  color: var(--btn-fg, var(--brand-fg)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--btn-tone, var(--brand)) 72%, transparent);
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 8%, transparent);
   font-weight: var(--btn-fw);
 }
 .btn-ok:hover {
-  background: color-mix(in srgb, var(--brand) 15%, transparent);
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent);
   opacity: 1;
   transform: translateY(-1px);
 }
@@ -2942,7 +2967,6 @@ a.btn.btn-ghost:hover {
   }
   .table-list-sm > tbody > tr > td.li-sub > * { flex: 0 0 auto; }
   .table-list-sm .li-sub .users-svc-name { display: inline-flex; align-items: center; gap: var(--space-0); }
-  .table-list-sm .li-sub .cell-user-link { border: 0; text-decoration: none; color: inherit; }
 
   /* Side column: the value on line one, the status on line two, both at the inline end. */
   .table-list-sm .li-value {
@@ -3105,6 +3129,12 @@ a.btn.btn-ghost:hover {
   gap: var(--space-2);
 }
 .user-card-actions .btn { width: 100%; }
+/* The row's «⋯» actions copied into the card (user-card-actions.js): two equal columns of full-width buttons;
+   a form is one cell, so its button lines up with the plain buttons. */
+.user-card-row-actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.user-card-row-actions-grid > form { display: flex; margin: 0; min-width: 0; }
+.user-card-row-actions-grid :is(.btn, button) { width: 100%; }
+.user-card-row-actions-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 .user-card-actions .btn:only-child { grid-column: 1 / -1; }
 
 .card > .table-wrap {
@@ -3406,6 +3436,11 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 .flash.ok { background: rgba(34, 197, 94, 0.1); color: var(--ok-text); border-color: rgba(34, 197, 94, 0.28); }
 .flash.err { background: rgba(239, 68, 68, 0.1); color: var(--danger-text); border-color: rgba(239, 68, 68, 0.28); }
 .flash.warn { background: rgba(234, 179, 8, 0.1); color: var(--warn-text); border-color: rgba(234, 179, 8, 0.28); }
+/* A main-action button inside a coloured notice is that notice's colour, text and edge alike (never brand-orange
+   text on a yellow notice). Red and ghost buttons keep their own colour: they say something else. */
+.flash.ok { --btn-tone: var(--ok); --btn-fg: var(--ok-text); }
+.flash.err { --btn-tone: var(--destructive); --btn-fg: var(--danger-text); }
+.flash.warn { --btn-tone: var(--warn); --btn-fg: var(--warn-text); }
 
 /* Icon box — same footprint as .stat-ico; shape encodes severity */
 .flash.ok::before,
@@ -9816,9 +9851,6 @@ html[data-theme="light"] .alert-dot {
 }
 html[data-theme="light"] .users-ops-stats > .stat:hover {
   background: rgba(0, 0, 0, 0.03);
-}
-html[data-theme="light"] .users-row.is-focus > td {
-  background: color-mix(in srgb, var(--accent, #0284c7) 10%, transparent);
 }
 html[data-theme="light"] .ticket-attach {
   background: rgba(0, 0, 0, 0.02);

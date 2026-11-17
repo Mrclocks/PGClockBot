@@ -133,7 +133,18 @@ class GateTests(GateCase):
     async def test_a_customer_from_before_the_switch_walks_in(self):
         self.assertTrue((await self.gate(1)).is_open)
         (row,) = await self.rows()
-        self.assertEqual((row.status, row.decided_by), ("approved", "exempt"))
+        self.assertEqual((row.status, row.decided_by), ("approved", ea.EXEMPT_MEMBER))
+
+    async def test_someone_who_joins_in_the_second_of_the_switch_still_waits(self):
+        # SQLite stores whole seconds; the switch moment carries microseconds.
+        async with self.Session() as session:
+            session.add(BotUser(id=9, telegram_id=109, referral_code="u9", role="user", created_at=SWITCHED_ON))
+            await session.execute(
+                update(Setting).where(Setting.key == KEY_SINCE).values(value=(SWITCHED_ON + timedelta(microseconds=600_000)).isoformat())
+            )
+            await session.commit()
+        clear_settings_cache()
+        self.assertEqual((await self.gate(9)).step, ea.GateStep.PENDING)
 
     async def test_a_shop_member_from_before_the_switch_walks_in_but_a_new_one_waits(self):
         async with self.Session() as session:
@@ -174,6 +185,8 @@ class GateTests(GateCase):
             await session.commit()
         self.assertTrue((await self.gate(4)).is_open)
         self.assertEqual((await self.gate(8)).step, ea.GateStep.PENDING)
+        reasons = {row.bot_user_id: row.decided_by for row in await self.rows()}
+        self.assertEqual(reasons[4], ea.EXEMPT_INVITED)
 
     async def test_the_phone_comes_before_the_request_when_asked(self):
         await self.settings({"entry_approval_require_phone": "1"})

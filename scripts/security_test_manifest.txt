@@ -300,6 +300,7 @@ tests/test_shop_notify_isolation.py
 tests/test_user_search.py
 tests/test_psp_gateways.py
 tests/test_user_card.py
+tests/test_user_card_links.py
 tests/test_user_photo.py
 tests/test_custom_plan_shop_limits.py
 tests/test_custom_plan_cleanup.py
@@ -511,6 +512,7 @@ tests/test_settings_modal_list.py
 tests/test_empty_state.py
 tests/test_dashboard_layout.py
 tests/test_pg_capability_probe_credentials.py
+tests/test_pg_capability_outage_hold.py
 tests/test_platform_pg_access_end_to_end.py
 tests/test_plan_template_only_role.py
 tests/test_plan_category_board.py

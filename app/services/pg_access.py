@@ -13,6 +13,14 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from app.services.pasarguard import PasarGuardError, is_panel_outage
+from app.services.pg_read_cache import (
+    CAPABILITY_OUTAGE_HOLD_SEC,
+    CAPABILITY_OUTAGE_PATH,
+    CAPABILITY_PROBE_MAX_AGE_SEC,
+    CAPABILITY_PROBE_PATH,
+    cache_get,
+    cache_put,
+)
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.redact import user_safe_error
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
@@ -302,6 +310,23 @@ def _rejected_credentials_reason(exc: Exception, *, uses_api_key: bool) -> str |
     return None
 
 
+def _cached_capabilities(cache_ident: str) -> dict[str, Any] | None:
+    """A recent successful probe, or a probe failure held during a panel outage."""
+    hit = cache_get(cache_ident, CAPABILITY_PROBE_PATH, None, max_age=CAPABILITY_PROBE_MAX_AGE_SEC)
+    if isinstance(hit, dict) and hit.get("ok") is True:
+        return dict(hit)
+    held = cache_get(cache_ident, CAPABILITY_OUTAGE_PATH, None, max_age=CAPABILITY_OUTAGE_HOLD_SEC)
+    return dict(held) if isinstance(held, dict) else None
+
+
+def _hold_outage(
+    cache_ident: str, exc: BaseException, failure: dict[str, Any], *, shared_cache: bool
+) -> None:
+    """Hold a failed shared-client probe briefly when PasarGuard is unreachable."""
+    if shared_cache and is_panel_outage(exc):
+        cache_put(cache_ident, CAPABILITY_OUTAGE_PATH, None, dict(failure))
+
+
 async def _read_probe_admin(client: Any, uname: str, *, uses_api_key: bool) -> dict:
     """The signed-in admin's own record for the capability probe.
 
@@ -383,13 +408,6 @@ async def resolve_platform_pg_capabilities(
     from app.config import get_settings
     from app.services.pasarguard import PasarGuardClient, PasarGuardError, new_panel_http_client
 
-    from app.services.pg_read_cache import (
-        CAPABILITY_PROBE_MAX_AGE_SEC,
-        CAPABILITY_PROBE_PATH,
-        cache_get,
-        cache_put,
-    )
-
     settings = get_settings()
     env_username = getattr(settings, "pg_username", None)
     env_password = getattr(settings, "pg_password", None)
@@ -414,15 +432,10 @@ async def resolve_platform_pg_capabilities(
         username=uname,
         partition="platform",
     )
-    if use_cache and not own_client:
-        hit = cache_get(
-            cache_ident,
-            CAPABILITY_PROBE_PATH,
-            None,
-            max_age=CAPABILITY_PROBE_MAX_AGE_SEC,
-        )
-        if isinstance(hit, dict) and hit.get("ok") is True:
-            return dict(hit)
+    shared_cache = use_cache and not own_client
+    held = _cached_capabilities(cache_ident) if shared_cache else None
+    if held is not None:
+        return held
 
     empty: dict[str, Any] = {
         "ok": False,
@@ -537,11 +550,13 @@ async def resolve_platform_pg_capabilities(
         return empty
     except PasarGuardError as e:
         empty["error"] = e.user_message(fallback=str(e))
+        _hold_outage(cache_ident, e, empty, shared_cache=shared_cache)
         return empty
     except Exception as e:
         # Transport errors carry internal hosts and ports; show a mapped Persian cause only.
         logger.warning("PasarGuard capability probe failed", exc_info=True)
         empty["error"] = user_safe_error(e, fallback="خطا در خواندن نقش پاسارگارد")
+        _hold_outage(cache_ident, e, empty, shared_cache=shared_cache)
         return empty
     finally:
         if own_client and client is not None:

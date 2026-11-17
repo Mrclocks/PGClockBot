@@ -45,6 +45,7 @@ from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.panel_nav import DOT_LABELS as NAV_DOT_LABELS
 from app.services.panel_nav import build_dock, sidebar_for_template
 from app.services.resellers import feature_perm_groups
+from app.services.user_card import can_open_user_card
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
@@ -224,6 +225,7 @@ templates.env.globals["panel_sidebar"] = sidebar_for_template
 templates.env.globals["panel_dock"] = build_dock
 templates.env.globals["nav_dot_labels"] = NAV_DOT_LABELS
 templates.env.globals["feature_perm_groups"] = feature_perm_groups
+templates.env.globals["can_open_user_card"] = can_open_user_card
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["template_variable_specs"] = template_variable_specs
 
@@ -3897,7 +3899,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "users": [r.user for r in rows],
                 "counts": counts,
                 "filter": filter_key,
-                "focus_uid": focus_uid,
                 "filter_href": _users_href,
                 "q": search_q,
                 "color_filter": color_filter,

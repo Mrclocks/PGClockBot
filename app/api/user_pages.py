@@ -35,7 +35,13 @@ from app.services.shop_scope import (
     ShopScopeError,
     resolve_shop_scope_id,
 )
-from app.services.user_card import build_user_card
+from app.services.user_card import (
+    DEFAULT_CARD_PAGE,
+    USER_CARD_PAGES,
+    USER_CARD_PERMISSION,
+    build_user_card,
+    user_card_page,
+)
 from app.services.user_photo import photo_bot, user_photo
 
 
@@ -60,23 +66,23 @@ def _redirect_user(user_id: int, *, ok: str | None = None, err: str | None = Non
     return RedirectResponse(f"/users?{'&'.join(qs)}", status_code=303)
 
 
-# The list a user card was opened from; anything else is the users list.
-CARD_FROM_RESELLERS = "resellers"
-
-
 def user_card_actions(staff: dict, user: BotUser, *, shop_scope: int | None, opened_from: str | None) -> dict:
     """Which actions the user card offers, and where «ویرایش» leads.
 
-    Opened from the resellers list by the platform owner, a reseller's card edits the reseller (the reseller edit
-    modal of that page); on the users list it edits the customer for anyone working in a shop, like the list's own
-    «ویرایش». ``opened_from`` is compared with a fixed value.
+    - Resellers list: the platform owner edits a reseller in that page's reseller edit modal.
+    - Users list: the customer edit modal of that page.
+    - Any other table (payments, tickets, …): a link to the users list with the customer's edit modal open.
+    Customer edit is offered to anyone working in a shop; each change inside it checks its own permission.
+    ``opened_from`` only ever selects one of the known pages.
     """
-    from_resellers = str(opened_from or "") == CARD_FROM_RESELLERS
-    if from_resellers:
+    page = user_card_page(opened_from)
+    in_shop = is_explicit_owner_staff(staff) or shop_scope is not None
+    if page == "resellers":
         edit = "reseller" if user.role == "reseller" and is_explicit_owner_staff(staff) else None
+    elif page == DEFAULT_CARD_PAGE:
+        edit = "user" if in_shop else None
     else:
-        # The edit modal opens for anyone working in a shop; each change inside it checks its own permission.
-        edit = "user" if is_explicit_owner_staff(staff) or shop_scope is not None else None
+        edit = "user_link" if in_shop else None
     return {"edit_target": edit, "can_message": not user.is_blocked}
 
 
@@ -97,8 +103,9 @@ def _redirect_list_form(
 ):
     from app.services.users_ops import users_list_href
 
-    if str(form.get("return_page") or "") == CARD_FROM_RESELLERS:
-        href = "/resellers"
+    return_page = str(form.get("return_page") or "")
+    if return_page in USER_CARD_PAGES and return_page != DEFAULT_CARD_PAGE:
+        href = USER_CARD_PAGES[return_page]
     else:
         fk, q = _list_return_from_form(form)
         href = users_list_href(filter_key=fk, uid=uid, q=q)
@@ -140,6 +147,7 @@ async def _require_scoped_user(
 
 def register_user_pages(app, *, render, require_admin, get_db, require_perm=None) -> None:
     require_ops = require_perm("dashboard") if require_perm else require_admin
+    require_card = require_perm(USER_CARD_PERMISSION) if require_perm else require_admin
     require_service_ops = (
         require_perm(CUSTOMER_SERVICES_PERMISSION) if require_perm else require_admin
     )
@@ -352,7 +360,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
     async def user_card(
         user_id: int,
         request: Request,
-        staff: dict = Depends(require_ops),
+        staff: dict = Depends(require_card),
         session: AsyncSession = Depends(get_db),
     ):
         """Read-only user card for the users list (modal fragment)."""

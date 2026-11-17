@@ -1,6 +1,7 @@
 {% from "_icons.html" import icon %}
 {# Lucky wheel editor — used inside loyalty settings modal #}
 {% from "macros.html" import switch, empty_state %}
+{% from "_user_card_modals.html" import user_card_link, user_card_hint with context %}
 {% set submenu_labels = {
   'loy_referral': 'دعوت دوستان',
   'loy_points': 'امتیاز من',
@@ -159,6 +160,7 @@
 
   <div class="card settings-card">
     <h2>چرخش‌های اخیر</h2>
+    {{ user_card_hint() }}
     <div class="table-wrap">
       <table class="table-compact table-list-sm">
         <thead>
@@ -175,7 +177,7 @@
           {% for row in wheel_spins %}
           <tr>
             <td class="mono">#{{ row.id }}</td>
-            <td class="li-title"><span dir="auto">{{ row.user_label }}</span> <span class="li-only li-id" dir="ltr">(#{{ row.id }})</span></td>
+            <td class="li-title">{{ user_card_link(row.user_id, row.user_label, 'loyalty') }} <span class="li-only li-id" dir="ltr">(#{{ row.id }})</span></td>
             <td class="li-sub"><span dir="auto">{{ row.prize_label_snapshot }}</span> <span class="muted">({{ wheel_prize_type_labels.get(row.prize_type, row.prize_type) }})</span></td>
             <td class="mono li-value">{% if row.used_free_spin %}رایگان{% else %}{{ row.cost_points | num }}{% endif %}</td>
             <td class="li-badge"><span class="badge neutral">{{ row.status }}</span></td>
