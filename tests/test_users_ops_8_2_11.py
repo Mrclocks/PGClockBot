@@ -122,7 +122,8 @@ class UsersOpsUiTests(unittest.TestCase):
             css.split(".users-svc-select-wrap", 1)[1].split("}", 1)[0],
         )
         self.assertIn(".alert-dot", css)
-        self.assertIn(".users-row.is-focus", css)
+        # A user is shown in the card, never by tinting each cell of a row in the users list.
+        self.assertNotIn(".users-row.is-focus", css)
         self.assertIn(".cell-name-tags", css)
         self.assertIn(".cell-name-primary", css)
         self.assertNotIn(".users-row.has-alert > td:first-child", css)
